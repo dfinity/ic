@@ -72,7 +72,7 @@ impl RosettaClient {
             })?;
 
             let signed_bytes = signer_keypair.sign(&signable_bytes);
-            let hex_bytes = hex::encode(signed_bytes.clone());
+            let hex_bytes = hex::encode(&signed_bytes);
 
             let signature = Signature {
                 signing_payload: payload,

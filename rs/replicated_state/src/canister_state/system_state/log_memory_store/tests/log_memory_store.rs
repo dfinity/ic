@@ -974,28 +974,32 @@ fn test_next_idx_preserved_when_appending_empty_delta_log() {
     assert_eq!(store.next_idx(), next_idx);
 }
 
-fn assert_memory_usage_for_limit(limit: usize) {
-    let mut s = LogMemoryStore::new();
-    s.resize_for_testing(limit);
-    assert_eq!(
-        s.memory_usage_for_limit(NumBytes::new(limit as u64)).get() as usize,
-        s.memory_usage(),
-    );
-}
-
 #[test]
-fn memory_usage_for_limit_zero_limit() {
-    assert_memory_usage_for_limit(0);
-}
+fn test_append_delta_log_drains_delta_log() {
+    for log_memory_limit in [0, TEST_LOG_MEMORY_LIMIT] {
+        let mut store = LogMemoryStore::new();
+        store.resize_for_testing(log_memory_limit);
 
-#[test]
-fn memory_usage_for_limit_at_minimum() {
-    assert_memory_usage_for_limit(EXPECTED_DATA_CAPACITY_MIN);
-}
+        let mut delta = CanisterLog::new_delta_with_next_index(TEST_NEXT_IDX, 4096);
+        delta.add_record(1001, b"a".to_vec());
+        delta.add_record(1002, b"b".to_vec());
+        let byte_capacity = delta.byte_capacity();
 
-#[test]
-fn memory_usage_for_limit_above_minimum() {
-    assert_memory_usage_for_limit(TEST_LOG_MEMORY_LIMIT);
+        store.append_delta_log(&mut delta);
+
+        // The records are removed, but the next index and capacity are kept.
+        assert!(delta.is_empty());
+        assert_eq!(delta.bytes_used(), 0);
+        assert_eq!(delta.next_idx(), TEST_NEXT_IDX + 2);
+        assert_eq!(delta.byte_capacity(), byte_capacity);
+        assert_eq!(store.next_idx(), TEST_NEXT_IDX + 2);
+
+        // Appending the drained delta log again has no effect.
+        let records = store.records(None);
+        store.append_delta_log(&mut delta);
+        assert_eq!(store.records(None), records);
+        assert_eq!(store.next_idx(), TEST_NEXT_IDX + 2);
+    }
 }
 
 #[test]

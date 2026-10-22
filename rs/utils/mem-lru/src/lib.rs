@@ -1,6 +1,7 @@
 //! A minimal, fixed-capacity, in-memory LRU cache that tracks hit/miss counts.
 
 use std::hash::Hash;
+use std::num::NonZeroUsize;
 
 /// A fixed-capacity LRU cache that additionally tracks hit/miss statistics.
 ///
@@ -32,9 +33,15 @@ pub struct LruCacheWithStats<K, V> {
 
 impl<K: Eq + Hash, V> LruCacheWithStats<K, V> {
     /// Create a new cache holding at most `max_size` entries.
+    ///
+    /// # Panics
+    /// Panics if `max_size` is zero: a zero-capacity LRU cache can never hold
+    /// anything, so that is a programming error rather than a valid configuration.
     pub fn with_size(max_size: usize) -> Self {
         Self {
-            cache: lru::LruCache::new(max_size),
+            cache: lru::LruCache::new(
+                NonZeroUsize::new(max_size).expect("LRU cache size must be non-zero"),
+            ),
             hits: 0,
             misses: 0,
         }

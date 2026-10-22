@@ -347,7 +347,7 @@ impl ChainKeyPayloadBuilderImpl {
                 .take_any_while(|(callback_id, candidate)| {
                     let candidate_size = callback_id.count_bytes() + candidate.count_bytes();
                     accumulated_size_estimate
-                        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current_size| {
+                        .try_update(Ordering::Relaxed, Ordering::Relaxed, |current_size| {
                             let new_size = current_size + candidate_size;
                             if new_size > max_payload_size.get() as usize {
                                 return None;

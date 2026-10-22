@@ -13,6 +13,7 @@ use ic_config::{
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_cup_utils::make_registry_cup;
+use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilderImpl;
 use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool, crypto::SignVerify};
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_test_utils_ni_dkg::{
@@ -32,7 +33,7 @@ use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
-    canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
+    canister_http::{CanisterHttpChangeAction, CanisterHttpPool, ResponseVisibility},
     certification::{Verifier, VerifierError},
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
@@ -86,12 +87,9 @@ use ic_protobuf::{
         routing_table::v1::{
             CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
         },
-        subnet::v1::CatchUpPackageContents,
+        subnet::v1::{CatchUpPackageContents, GenesisArgs, catch_up_package_contents::CupType},
     },
-    types::{
-        v1 as pb,
-        v1::{PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
-    },
+    types::v1::{self as pb, PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
 };
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -158,7 +156,7 @@ use ic_types::{
     },
     consensus::{
         block_maker::SubnetRecords,
-        certification::{Certification, CertificationContent},
+        certification::{Certification, CertificationContent, SignedCertificationContent},
     },
     crypto::{
         AlgorithmId, CombinedThresholdSig, CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
@@ -186,8 +184,9 @@ use ic_types::{
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_xnet_payload_builder::{
-    RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
+    RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics,
     certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,
+    testing::XNetPayloadBuilderTesting,
 };
 
 use maplit::btreemap;
@@ -234,7 +233,7 @@ impl Verifier for FakeVerifier {
     fn validate(
         &self,
         _: SubnetId,
-        _: &Certification,
+        _: &SignedCertificationContent,
         _: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
         Ok(())
@@ -353,16 +352,15 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
         .unwrap();
 
     // replica version record
-    let replica_version = test_replica_version();
     let replica_version_record = ReplicaVersionRecord {
-        replica_version_id: Some(replica_version.to_string()),
+        replica_version_id: test_replica_version().to_string(),
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
         guest_launch_measurements: None,
     };
     registry_data_provider
         .add(
-            &make_replica_version_key(replica_version),
+            &make_replica_version_key(&replica_version_record.replica_version_id),
             registry_version,
             Some(replica_version_record),
         )
@@ -590,6 +588,7 @@ fn add_cup_contents_and_key_record(
     let cup_contents = CatchUpPackageContents {
         initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript.into()),
         initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript.into()),
+        cup_type: Some(CupType::Genesis(GenesisArgs {})),
         ..Default::default()
     };
     registry_data_provider
@@ -817,6 +816,8 @@ struct PocketXNetImpl {
     subnets: Arc<dyn Subnets>,
     /// The certified slice pool of the `StateMachine` for which the XNet layer is mocked.
     pool: Arc<Mutex<CertifiedSlicePool>>,
+    /// Used for validating the slices before pooling them.
+    certified_stream_store: Arc<dyn CertifiedStreamStore>,
     /// The subnet ID of the `StateMachine` for which the XNet layer is mocked.
     own_subnet_id: SubnetId,
 }
@@ -825,18 +826,20 @@ impl PocketXNetImpl {
     fn new(
         subnets: Arc<dyn Subnets>,
         pool: Arc<Mutex<CertifiedSlicePool>>,
+        certified_stream_store: Arc<dyn CertifiedStreamStore>,
         own_subnet_id: SubnetId,
     ) -> Self {
         Self {
             subnets,
             pool,
+            certified_stream_store,
             own_subnet_id,
         }
     }
 
     fn refill(&self, registry_version: RegistryVersion, log: ReplicaLogger) {
         let refill_stream_slice_indices =
-            refill_stream_slice_indices(self.pool.clone(), self.own_subnet_id);
+            refill_stream_slice_indices(&self.pool.lock().unwrap(), self.own_subnet_id);
 
         for (subnet_id, indices) in refill_stream_slice_indices {
             // When restoring a PocketIC instance from its state,
@@ -853,18 +856,26 @@ impl PocketXNetImpl {
                     Ok(slice) => {
                         if indices.witness_begin != indices.msg_begin {
                             // Pulled a stream suffix, append to pooled slice.
-                            self.pool
-                                .lock()
-                                .unwrap()
-                                .append(subnet_id, slice, registry_version, log.clone())
-                                .unwrap();
+                            CertifiedSlicePool::append(
+                                &self.pool,
+                                subnet_id,
+                                slice,
+                                self.certified_stream_store.as_ref(),
+                                registry_version,
+                                &log,
+                            )
+                            .unwrap();
                         } else {
                             // Pulled a complete stream, replace pooled slice (if any).
-                            self.pool
-                                .lock()
-                                .unwrap()
-                                .put(subnet_id, slice, registry_version, log.clone())
-                                .unwrap();
+                            CertifiedSlicePool::put(
+                                &self.pool,
+                                subnet_id,
+                                slice,
+                                self.certified_stream_store.as_ref(),
+                                registry_version,
+                                &log,
+                            )
+                            .unwrap();
                         }
                     }
                     Err(EncodeStreamError::NoStreamForSubnet(_)) => (),
@@ -1019,6 +1030,7 @@ impl StateMachineNode {
 #[allow(clippy::large_enum_variant)]
 enum SignatureSecretKey {
     EcdsaSecp256k1(ic_secp256k1::PrivateKey),
+    EcdsaSecp256r1(ic_secp256r1::PrivateKey),
     SchnorrBip340(ic_secp256k1::PrivateKey),
     Ed25519(ic_ed25519::DerivedPrivateKey),
     VetKD(ic_crypto_test_utils_vetkd::PrivateKey),
@@ -1273,6 +1285,7 @@ pub struct StateMachine {
     query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
     local_query_execution_stats: Arc<QueryStatsCollector>,
     chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
+    upgrade_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
 }
@@ -1776,26 +1789,25 @@ impl StateMachineBuilder {
         let refill_task_handle = RefillTaskHandle(Mutex::new(refill_trigger));
 
         // Instantiate a `XNetPayloadBuilderImpl`.
-        // We need to use a deterministic PRNG - so we use an arbitrary fixed seed, e.g., 42.
-        let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
         let certified_stream_store: Arc<dyn CertifiedStreamStore> = sm.state_manager.clone();
         let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-            certified_stream_store,
             &sm.metrics_registry,
-        )));
-        let xnet_slice_pool_impl = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
-        let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
-        let xnet_payload_builder = Arc::new(XNetPayloadBuilderImpl::new_from_components(
-            sm.state_manager.clone(),
-            sm.state_manager.clone(),
-            sm.registry_client.clone(),
-            rng,
-            None,
-            xnet_slice_pool_impl,
-            refill_task_handle,
-            metrics,
             sm.replica_logger.clone(),
-        ));
+        )));
+        let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
+        let xnet_payload_builder = Arc::new(
+            XNetPayloadBuilderImpl::new_from_components(
+                sm.state_manager.clone(),
+                sm.state_manager.clone(),
+                sm.registry_client.clone(),
+                certified_slice_pool.clone(),
+                refill_task_handle,
+                metrics,
+                sm.replica_logger.clone(),
+            )
+            // We need to use a deterministic PRNG - so we use an arbitrary fixed seed, e.g., 42.
+            .with_deterministic_rng(StdRng::seed_from_u64(42)),
+        );
 
         let adapters_config = AdaptersConfig {
             bitcoin_mainnet_uds_path: None,
@@ -1824,13 +1836,21 @@ impl StateMachineBuilder {
             bitcoin_clients.doge_testnet_client,
             sm.subnet_id,
             sm.registry_client.clone(),
-            BitcoinPayloadBuilderConfig::default(),
+            // Tolerate slow responses from the adapters on loaded test machines.
+            BitcoinPayloadBuilderConfig {
+                adapter_timeout: Duration::from_secs(1),
+            },
             sm.replica_logger.clone(),
         ));
 
         // Put `PocketXNetImpl` into `StateMachine`
         // which contains no `PocketXNetImpl` after creation.
-        let pocket_xnet_impl = PocketXNetImpl::new(subnets, certified_slice_pool, subnet_id);
+        let pocket_xnet_impl = PocketXNetImpl::new(
+            subnets,
+            certified_slice_pool,
+            certified_stream_store,
+            subnet_id,
+        );
         *sm.pocket_xnet.write().unwrap() = Some(pocket_xnet_impl);
         // Instantiate a `PayloadBuilderImpl` and put it into `StateMachine`
         // which contains no `PayloadBuilderImpl` after creation.
@@ -1844,6 +1864,7 @@ impl StateMachineBuilder {
             sm.canister_http_payload_builder.clone(),
             sm.query_stats_payload_builder.clone(),
             sm.chain_key_payload_builder.clone(),
+            sm.upgrade_payload_builder.clone(),
             sm.metrics_registry.clone(),
             sm.replica_logger.clone(),
         ));
@@ -2198,6 +2219,7 @@ impl StateMachine {
         ));
 
         let chain_key_payload_builder = Arc::new(MockBatchPayloadBuilder::new().expect_noop());
+        let upgrade_payload_builder = Arc::new(UpgradePayloadBuilderImpl);
 
         let cancellation_token = tokio_util::sync::CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
@@ -2288,26 +2310,48 @@ impl StateMachine {
 
                     (public_key, private_key)
                 }
-                MasterPublicKeyId::Ecdsa(id) => {
-                    use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
+                MasterPublicKeyId::Ecdsa(id) => match id.curve {
+                    EcdsaCurve::Secp256k1 => {
+                        use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
 
-                    let path =
-                        DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
+                        let path =
+                            DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
 
-                    // We use a fixed seed here so that all subnets in PocketIC share the same keys.
-                    let private_key = PrivateKey::generate_from_seed(&[42; 32])
-                        .derive_subkey(&path)
-                        .0;
+                        // We use a fixed seed here so that all subnets in PocketIC share the same keys.
+                        let private_key = PrivateKey::generate_from_seed(&[42; 32])
+                            .derive_subkey(&path)
+                            .0;
 
-                    let public_key = MasterPublicKey {
-                        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                        public_key: private_key.public_key().serialize_sec1(true),
-                    };
+                        let public_key = MasterPublicKey {
+                            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                            public_key: private_key.public_key().serialize_sec1(true),
+                        };
 
-                    let private_key = SignatureSecretKey::EcdsaSecp256k1(private_key);
+                        let private_key = SignatureSecretKey::EcdsaSecp256k1(private_key);
 
-                    (public_key, private_key)
-                }
+                        (public_key, private_key)
+                    }
+                    EcdsaCurve::Secp256r1 => {
+                        use ic_secp256r1::{DerivationIndex, DerivationPath, PrivateKey};
+
+                        let path =
+                            DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
+
+                        // We use a fixed seed here so that all subnets in PocketIC share the same keys.
+                        let private_key = PrivateKey::generate_insecure_key_for_testing(42)
+                            .derive_subkey(&path)
+                            .0;
+
+                        let public_key = MasterPublicKey {
+                            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256r1,
+                            public_key: private_key.public_key().serialize_sec1(true),
+                        };
+
+                        let private_key = SignatureSecretKey::EcdsaSecp256r1(private_key);
+
+                        (public_key, private_key)
+                    }
+                },
                 MasterPublicKeyId::Schnorr(id) => match id.algorithm {
                     SchnorrAlgorithm::Bip340Secp256k1 => {
                         use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
@@ -2464,6 +2508,7 @@ impl StateMachine {
             query_stats_payload_builder: pocket_query_stats_payload_builder,
             local_query_execution_stats: execution_services.local_query_execution_stats,
             chain_key_payload_builder,
+            upgrade_payload_builder,
             remove_old_states,
             cycles_account_manager: execution_services.cycles_account_manager,
         }
@@ -2659,6 +2704,29 @@ impl StateMachine {
         self.state_manager.get_latest_state().take()
     }
 
+    /// Sets the `cooling_down` flag of this subnet's registry record, at a new
+    /// registry version, and updates this subnet's registry client to it. The
+    /// flag takes effect in the next round, when the network topology is
+    /// repopulated from the registry.
+    pub fn set_cooling_down(&self, cooling_down: bool) {
+        let registry_version = self.registry_client.get_latest_version();
+        let mut subnet_record = self
+            .registry_client
+            .get_subnet_record(self.subnet_id, registry_version)
+            .expect("malformed subnet record")
+            .expect("missing subnet record");
+        subnet_record.cooling_down = cooling_down;
+        add_single_subnet_record(
+            &self.registry_data_provider,
+            registry_version.increment().get(),
+            self.subnet_id,
+            subnet_record,
+        );
+
+        self.reload_registry();
+        self.registry_client.update_to_latest_version();
+    }
+
     /// Generates a certified stream slice to a remote subnet.
     fn generate_certified_stream_slice(
         &self,
@@ -2826,7 +2894,11 @@ impl StateMachine {
                 signature,
             };
             self.canister_http_pool.write().unwrap().apply(vec![
-                CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
+                CanisterHttpChangeAction::AddToValidated(
+                    share.clone(),
+                    response.clone(),
+                    ResponseVisibility::Withhold,
+                ),
             ]);
         }
     }
@@ -2854,28 +2926,47 @@ impl StateMachine {
     ) -> Result<SignWithECDSAReply, UserError> {
         assert!(context.is_ecdsa());
 
-        if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
-            self.chain_key_subnet_secret_keys.get(&context.key_id())
-        {
-            let path = ic_secp256k1::DerivationPath::from_canister_id_and_path(
-                context.request.sender.get().as_slice(),
-                &context.derivation_path,
-            );
-            let dk = k.derive_subkey(&path).0;
-            let signature = dk
-                .sign_digest_with_ecdsa(&context.ecdsa_args().message_hash)
-                .to_vec();
-            Ok(SignWithECDSAReply { signature })
-        } else {
-            Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "Subnet {} does not hold threshold key {}.",
-                    self.subnet_id,
-                    context.key_id()
-                ),
-            ))
-        }
+        let message_hash = &context.ecdsa_args().message_hash;
+        let signature = match self.chain_key_subnet_secret_keys.get(&context.key_id()) {
+            Some(SignatureSecretKey::EcdsaSecp256k1(k)) => {
+                let path = ic_secp256k1::DerivationPath::from_canister_id_and_path(
+                    context.request.sender.get().as_slice(),
+                    &context.derivation_path,
+                );
+                let dk = k.derive_subkey(&path).0;
+                dk.sign_digest_with_ecdsa(message_hash).to_vec()
+            }
+            Some(SignatureSecretKey::EcdsaSecp256r1(k)) => {
+                let path = ic_secp256r1::DerivationPath::from_canister_id_and_path(
+                    context.request.sender.get().as_slice(),
+                    &context.derivation_path,
+                );
+                let dk = k.derive_subkey(&path).0;
+                let signature = dk
+                    .sign_digest(message_hash)
+                    .expect("a 32-byte message hash is long enough to be signed");
+                // Unlike `ic_secp256r1`, the IC normalizes `s` for all curves.
+                let signature = p256::ecdsa::Signature::from_slice(&signature)
+                    .expect("a freshly produced signature is well-formed");
+                signature
+                    .normalize_s()
+                    .unwrap_or(signature)
+                    .to_bytes()
+                    .to_vec()
+            }
+            _ => {
+                return Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "Subnet {} does not hold threshold key {}.",
+                        self.subnet_id,
+                        context.key_id()
+                    ),
+                ));
+            }
+        };
+
+        Ok(SignWithECDSAReply { signature })
     }
 
     fn build_sign_with_schnorr_reply(
@@ -3186,7 +3277,7 @@ impl StateMachine {
         let batch = Batch {
             batch_number,
             batch_summary,
-            blockmaker_metrics,
+            blockmaker_metrics: Some(blockmaker_metrics),
             content,
             randomness: Randomness::from(seed),
             registry_version: self.registry_client.get_latest_version(),
@@ -5451,7 +5542,7 @@ fn certify_hash(
         CombinedThresholdSigOf::from(CombinedThresholdSig(signature.as_ref().to_vec()));
     Certification {
         height: *height,
-        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: Signed {
             content: CertificationContent { hash: hash.clone() },
             signature: ThresholdSignature {
@@ -5460,7 +5551,7 @@ fn certify_hash(
                     dealer_subnet: subnet_id,
                     target_subnet: NiDkgTargetSubnet::Local,
                     start_block_height: *height,
-                    dkg_tag: NiDkgTag::LowThreshold,
+                    dkg_tag: NiDkgTag::HighThreshold,
                 },
             },
         },

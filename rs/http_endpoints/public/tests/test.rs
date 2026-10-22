@@ -38,12 +38,14 @@ use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::CertifiedStateSnapshot;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::crypto::v1::{
     AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
 };
 use ic_read_state_response_parser::parse_subnet_read_state_response;
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
 use ic_replicated_state::ReplicatedState;
+use ic_test_utilities_metrics::{HistogramStats, MetricVec, fetch_histogram_vec_stats, metric_vec};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{NODE_1, canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{
@@ -58,13 +60,15 @@ use ic_types::{
         },
     },
     ingress::WasmResult,
+    malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
-        HttpRequestEnvelope,
+        HttpRequestEnvelope, RawSignedSenderInfo,
     },
     signature::ThresholdSignature,
     time::current_time,
 };
+use ic_types::{PlatformVersion, ReplicaVersion};
 use prost::Message;
 use reqwest::header::CONTENT_TYPE;
 use rstest::rstest;
@@ -102,6 +106,9 @@ fn test_healthy_behind() {
         ..Default::default()
     };
 
+    let guestos_version = ReplicaVersion::try_from("guestos-version-under-test").unwrap();
+    let replica_version = ReplicaVersion::try_from("replica-version-under-test").unwrap();
+
     // We use this atomic to make sure that the health transition is from healthy -> certified_state_behind
     let healthy = Arc::new(AtomicBool::new(false));
     let healthy_c = healthy.clone();
@@ -136,6 +143,10 @@ fn test_healthy_behind() {
     HttpEndpointBuilder::new(rt.handle().clone(), config)
         .with_registry_client(mock_registry_client)
         .with_consensus_cache(mock_consensus_cache)
+        .with_platform_version(PlatformVersion {
+            guestos_version: guestos_version.clone(),
+            replica_version: replica_version.clone(),
+        })
         .run();
 
     rt.block_on(async {
@@ -169,6 +180,15 @@ fn test_healthy_behind() {
         assert_eq!(
             replica_health_status,
             &CBOR::Text("certified_state_behind".to_string())
+        );
+
+        assert_eq!(
+            replica_status.get(&CBOR::Text("impl_version".to_string())),
+            Some(&CBOR::Text(replica_version.to_string()))
+        );
+        assert_eq!(
+            replica_status.get(&CBOR::Text("guestos_version".to_string())),
+            Some(&CBOR::Text(guestos_version.to_string()))
         );
     })
 }
@@ -788,7 +808,7 @@ fn can_retrieve_subnet_metrics(
         let state: Arc<ReplicatedState> = Arc::new(ReplicatedStateBuilder::new().build());
         let certification = Certification {
             height: Height::from(1),
-            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 signature: ThresholdSignature {
                     signer: NiDkgId {
@@ -1296,7 +1316,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
 
                     let certification = Certification {
                         height: Height::from(1),
-                        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+                        height_witness: Witness::new_for_testing(Digest([0; 32])),
                         signed: Signed {
                             signature: ThresholdSignature {
                                 signer: NiDkgId {
@@ -2096,4 +2116,162 @@ fn test_call_v4_subnet_wrong_canister_or_method(
             )
         );
     });
+}
+
+const VALIDATED_SENDER_INFO_SIZE_METRIC: &str = "replica_http_validated_sender_info_size_bytes";
+const SENDER_INFO_SIZE: usize = 42;
+
+fn sender_info() -> RawSignedSenderInfo {
+    RawSignedSenderInfo {
+        info: Blob(vec![1; SENDER_INFO_SIZE]),
+        signer: Blob(canister_test_id(42).get().into_vec()),
+        sig: Blob(vec![2; 3]),
+    }
+}
+
+/// Returns the stats of the histogram of validated `sender_info` sizes, by request type.
+fn validated_sender_info_size_stats(metrics: &MetricsRegistry) -> MetricVec<HistogramStats> {
+    fetch_histogram_vec_stats(metrics, VALIDATED_SENDER_INFO_SIZE_METRIC)
+}
+
+/// Returns the expected stats of the histogram of validated `sender_info` sizes:
+/// a single observation of `SENDER_INFO_SIZE` with the given request type, if `observed`.
+fn expected_validated_sender_info_size_stats(
+    request_type: &str,
+    observed: bool,
+) -> MetricVec<HistogramStats> {
+    if observed {
+        metric_vec(&[(
+            &[("request_type", request_type)],
+            HistogramStats {
+                count: 1,
+                sum: SENDER_INFO_SIZE as f64,
+            },
+        )])
+    } else {
+        MetricVec::new()
+    }
+}
+
+fn malicious_flags(disable_ingress_validation: bool) -> MaliciousFlags {
+    MaliciousFlags {
+        maliciously_disable_ingress_validation: disable_ingress_validation,
+        ..Default::default()
+    }
+}
+
+/// Tests that the size of the `info` blob of `sender_info` is observed (under
+/// `request_type="call"`) only for update calls that passed validation.
+///
+/// A valid `sender_info` requires canister signatures, so ingress validation is
+/// disabled (via malicious flags) to let a request with `sender_info` pass validation.
+#[rstest]
+#[case::no_sender_info(false, false, StatusCode::ACCEPTED, false)]
+#[case::rejected_sender_info(true, false, StatusCode::BAD_REQUEST, false)]
+#[case::validated_sender_info(true, true, StatusCode::ACCEPTED, true)]
+fn test_call_validated_sender_info_size_metric(
+    #[case] with_sender_info: bool,
+    #[case] disable_ingress_validation: bool,
+    #[case] expected_status: StatusCode,
+    #[case] expect_observed: bool,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_malicious_flags(malicious_flags(disable_ingress_validation))
+        .run();
+    let metrics = handlers.metrics.clone();
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(Ok(())))
+        }
+    });
+
+    let mut message = IngressMessage::default();
+    if with_sender_info {
+        message = message.with_sender_info(sender_info());
+    }
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = Call::V2.call(addr, message).await;
+
+        assert_eq!(
+            expected_status,
+            response.status(),
+            "{:?}",
+            response.text().await
+        );
+    });
+
+    assert_eq!(
+        validated_sender_info_size_stats(&metrics),
+        expected_validated_sender_info_size_stats("call", expect_observed)
+    );
+}
+
+/// Tests that the size of the `info` blob of `sender_info` is observed (under
+/// `request_type="query"`) only for queries that passed validation.
+///
+/// A valid `sender_info` requires canister signatures, so ingress validation is
+/// disabled (via malicious flags) to let a request with `sender_info` pass validation.
+#[rstest]
+#[case::no_sender_info(false, false, StatusCode::OK, false)]
+#[case::rejected_sender_info(true, false, StatusCode::BAD_REQUEST, false)]
+#[case::validated_sender_info(true, true, StatusCode::OK, true)]
+fn test_query_validated_sender_info_size_metric(
+    #[case] with_sender_info: bool,
+    #[case] disable_ingress_validation: bool,
+    #[case] expected_status: StatusCode,
+    #[case] expect_observed: bool,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_malicious_flags(malicious_flags(disable_ingress_validation))
+        .run();
+    let metrics = handlers.metrics.clone();
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.query_execution.next_request().await.unwrap();
+            resp.send_response(Ok((Ok(WasmResult::Reply(vec![])), current_time())))
+        }
+    });
+
+    let mut query = Query::new(
+        PrincipalId::default(),
+        PrincipalId::default(),
+        query::Version::V2,
+    );
+    if with_sender_info {
+        query = query.with_sender_info(sender_info());
+    }
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = query.query(addr).await;
+
+        assert_eq!(
+            expected_status,
+            response.status(),
+            "{:?}",
+            response.text().await
+        );
+    });
+
+    assert_eq!(
+        validated_sender_info_size_stats(&metrics),
+        expected_validated_sender_info_size_stats("query", expect_observed)
+    );
 }

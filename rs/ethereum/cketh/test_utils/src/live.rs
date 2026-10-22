@@ -50,10 +50,17 @@
 
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_cketh_minter::endpoints::events::{Event, EventPayload, TransactionStatus};
+use ic_cketh_minter::asset::Asset;
+use ic_cketh_minter::balance_scan::batcher::{
+    Delegation, decode_delegation_batch, encode_delegation_batch,
+};
+use ic_cketh_minter::deposit_address::DepositAddress;
+use ic_cketh_minter::endpoints::events::{
+    Asset as EventAsset, Event, EventPayload, TransactionStatus,
+};
 use ic_cketh_minter::endpoints::{
-    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
-    DepositStatus, MinterInfo,
+    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositEthArg,
+    DepositEthError, DepositEthResponse, DepositEthStatus, DepositMode, DepositStatus, MinterInfo,
 };
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
@@ -134,6 +141,14 @@ const CREDIT_TICKS: u32 = 6;
 
 const FUNDING_TICKS: u32 = 6;
 
+/// The EIP-2718 type of a sweep that still installs a delegation, and so carries an EIP-7702
+/// authorization list.
+pub const DELEGATING_SWEEP_TRANSACTION_TYPE: u64 = 4;
+
+/// The EIP-2718 type of a sweep of addresses all delegated already, which carries no authorization
+/// and so is a plain EIP-1559 transaction.
+pub const PLAIN_SWEEP_TRANSACTION_TYPE: u64 = 2;
+
 pub struct DepositPlan {
     pub owner: Principal,
     pub subaccount: [u8; 32],
@@ -146,6 +161,20 @@ pub struct CexDeposit {
     pub owner: Principal,
     pub subaccount: [u8; 32],
     pub token: Erc20Token,
+    pub amount: u128,
+    pub address: Address,
+}
+
+pub struct EthDepositPlan {
+    pub owner: Principal,
+    pub subaccount: [u8; 32],
+    pub amount: u128,
+}
+
+#[derive(Clone)]
+pub struct EthCexDeposit {
+    pub owner: Principal,
+    pub subaccount: [u8; 32],
     pub amount: u128,
     pub address: Address,
 }
@@ -237,30 +266,60 @@ impl LiveSetup<CkErc20Setup> {
         self.fixture.supported_erc20_tokens.clone()
     }
 
-    pub fn minimum_deposit_amount(&self, token: &Erc20Token) -> u128 {
-        let minimum = self
-            .get_minter_info()
-            .minimum_deposit_amounts
-            .expect("BUG: the minter reports no minimum deposit amounts")
-            .into_iter()
-            .find(|minimum| {
-                Address::from_str(&minimum.erc20_contract_address)
-                    .expect("BUG: the minter reported an invalid token address")
-                    == contract_address(token)
-            })
-            .unwrap_or_else(|| {
-                panic!(
-                    "BUG: the minter reports no minimum deposit amount for {}",
-                    token.contract.address
-                )
-            });
-        let no_minimum_sentinel: Nat = Erc20Value::MAX.into();
-        assert_ne!(
-            minimum.minimum_deposit_amount, no_minimum_sentinel,
-            "the minter reports no real minimum deposit amount for {}",
-            token.contract.address
-        );
-        nat_to_u128(minimum.minimum_deposit_amount)
+    /// The minimum balance `asset`'s deposit address must hold for the balance scan to flag it,
+    /// as `get_minter_info` reports it.
+    pub fn minimum_deposit_amount(&self, asset: impl Into<Asset>) -> u128 {
+        let info = self.get_minter_info();
+        let minimum = match asset.into() {
+            Asset::Eth => info
+                .minimum_eth_deposit_amount
+                .expect("BUG: the minter reports no ETH minimum deposit amount"),
+            Asset::Erc20(token_address) => {
+                let minimum = info
+                    .minimum_deposit_amounts
+                    .expect("BUG: the minter reports no minimum deposit amounts")
+                    .into_iter()
+                    .find(|minimum| {
+                        Address::from_str(&minimum.erc20_contract_address)
+                            .expect("BUG: the minter reported an invalid token address")
+                            == token_address
+                    })
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "BUG: the minter reports no minimum deposit amount for {token_address}"
+                        )
+                    });
+                let no_minimum_sentinel: Nat = Erc20Value::MAX.into();
+                assert_ne!(
+                    minimum.minimum_deposit_amount, no_minimum_sentinel,
+                    "the minter reports no real minimum deposit amount for {token_address}"
+                );
+                minimum.minimum_deposit_amount
+            }
+        };
+        nat_to_u128(minimum)
+    }
+
+    /// Calls `deposit_eth` as `caller`, which registers (idempotently) that user's
+    /// `(address, ETH)` pair for balance scanning and reports its scan progress.
+    fn deposit_eth(&self, caller: Principal, subaccount: [u8; 32]) -> DepositEthResponse {
+        let arg = DepositEthArg {
+            mode: DepositMode::Unsponsored {
+                subaccount: Some(subaccount),
+            },
+        };
+        let reply = self
+            .env()
+            .update_call(
+                self.minter_id(),
+                caller,
+                "deposit_eth",
+                Encode!(&arg).unwrap(),
+            )
+            .expect("BUG: deposit_eth was rejected");
+        Decode!(&reply, Result<DepositEthResponse, DepositEthError>)
+            .unwrap()
+            .expect("BUG: deposit_eth returned an error")
     }
 
     /// Calls `deposit_erc20` as `caller`, which registers (idempotently) that user's
@@ -395,6 +454,64 @@ impl LiveSetup<CkErc20Setup> {
         )
     }
 
+    pub fn await_eth_detection(
+        &self,
+        caller: Principal,
+        subaccount: [u8; 32],
+    ) -> DepositEthResponse {
+        self.await_eth_deposit_status(caller, subaccount, "the ETH deposit was not detected", {
+            |status| matches!(status, DepositEthStatus::AwaitingSweep(_))
+        })
+    }
+
+    /// The ETH pendant of [`Self::await_scan`]: waits until the pair was scanned at a block
+    /// where its funding is visible, observed through `deposit_eth`'s own status.
+    pub fn await_eth_scan(&self, caller: Principal, subaccount: [u8; 32]) -> DepositEthResponse {
+        let funded_by = Nat::from(self.anvil.block_number());
+        self.await_eth_deposit_status(
+            caller,
+            subaccount,
+            &format!("the ETH deposit address was not scanned at or past block {funded_by}"),
+            |status| match status {
+                DepositEthStatus::Scanning {
+                    scan_count,
+                    last_scanned_block,
+                    ..
+                } => {
+                    *scan_count >= 1
+                        && last_scanned_block
+                            .as_ref()
+                            .is_some_and(|block| *block >= funded_by)
+                }
+                DepositEthStatus::AwaitingSweep(_) => true,
+            },
+        )
+    }
+
+    fn await_eth_deposit_status(
+        &self,
+        caller: Principal,
+        subaccount: [u8; 32],
+        what: &str,
+        is_done: impl Fn(&DepositEthStatus) -> bool,
+    ) -> DepositEthResponse {
+        let mut reached = None;
+        self.drive_until_with(
+            SCAN_TICK,
+            SCAN_TICKS,
+            |_| what.to_string(),
+            |setup| {
+                let progress = setup.deposit_eth(caller, subaccount);
+                let done = is_done(&progress.status);
+                if done {
+                    reached = Some(progress);
+                }
+                done
+            },
+        );
+        reached.expect("drive_until_with returns only once observe held")
+    }
+
     fn await_deposit_status(
         &self,
         caller: Principal,
@@ -467,6 +584,113 @@ impl LiveSetup<CkErc20Setup> {
         );
     }
 
+    pub fn call_minter_deposit_eth(
+        self,
+        plans: impl IntoIterator<Item = EthDepositPlan>,
+    ) -> DepositEthCalls {
+        let responses = plans
+            .into_iter()
+            .map(|plan| {
+                let response = self.deposit_eth(plan.owner, plan.subaccount);
+                (plan, response)
+            })
+            .collect();
+        DepositEthCalls {
+            setup: self,
+            responses,
+        }
+    }
+
+    /// Funds each ETH deposit with a plain transfer from the CEX-style dev account, the shape an
+    /// exchange withdrawal has: no calldata, no principal, just value.
+    pub fn credit_eth_deposits_from_cex(self, deposits: &[EthCexDeposit]) -> EthCexCredit<'_> {
+        let cex = address_from_hex(DEV_ACCOUNT);
+        for deposit in deposits {
+            self.anvil.send_eth(&cex, &deposit.address, deposit.amount);
+        }
+        EthCexCredit {
+            setup: self,
+            deposits,
+        }
+    }
+
+    pub fn expect_cketh_mints(self, deposits: &[EthCexDeposit]) -> Self {
+        let ledger_id = self.fixture.cketh_ledger_id();
+        let mut credits: BTreeMap<(Principal, Option<[u8; 32]>), u128> = BTreeMap::new();
+        for deposit in deposits {
+            *credits
+                .entry((deposit.owner, Some(deposit.subaccount)))
+                .or_default() += deposit.amount;
+        }
+        for ((owner, subaccount), amount) in credits {
+            self.await_credited(ledger_id, Account { owner, subaccount }, amount);
+        }
+        self
+    }
+
+    pub fn assert_eth_sweeps_batched(self, deposits: &[EthCexDeposit]) -> Self {
+        let swept: BTreeSet<Address> = self
+            .minter_events()
+            .into_iter()
+            .filter_map(|event| match event.payload {
+                EventPayload::AcceptedSweepRequest {
+                    asset: EventAsset::Eth,
+                    items,
+                    ..
+                } => Some(
+                    items
+                        .iter()
+                        .map(|item| {
+                            Address::from_str(&item.deposit)
+                                .expect("BUG: the sweep names an invalid deposit address")
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+
+        let expected: BTreeSet<Address> = deposits.iter().map(|deposit| deposit.address).collect();
+        assert_eq!(
+            swept, expected,
+            "every ETH deposit address must appear in exactly one sweep"
+        );
+        self
+    }
+
+    /// The minter's main address ETH balance, as a baseline for
+    /// [`Self::assert_minter_received_swept_eth_total`]: the address also holds the residue of
+    /// the funding deposit, so only the delta attributes the swept ETH.
+    pub fn minter_eth_balance(&self) -> u128 {
+        self.anvil.balance(&self.minter_address)
+    }
+
+    pub fn assert_minter_received_swept_eth_total(
+        self,
+        deposits: &[EthCexDeposit],
+        balance_before: u128,
+    ) -> Self {
+        let total: u128 = deposits.iter().map(|deposit| deposit.amount).sum();
+        assert_eq!(
+            self.anvil.balance(&self.minter_address),
+            balance_before + total,
+            "the minter's main address should have received all swept ETH"
+        );
+        self
+    }
+
+    pub fn assert_eth_addresses_swept_empty(self, deposits: &[EthCexDeposit]) -> Self {
+        for deposit in deposits {
+            assert_eq!(
+                self.anvil.balance(&deposit.address),
+                0,
+                "the swept deposit address must hold no ETH"
+            );
+        }
+        self
+    }
+
     pub fn call_minter_deposit_erc20(
         self,
         plans: impl IntoIterator<Item = DepositPlan>,
@@ -485,13 +709,21 @@ impl LiveSetup<CkErc20Setup> {
     }
 
     pub fn assert_deposit_addresses_bare(self, deposits: &[CexDeposit]) -> Self {
-        for deposit in deposits {
+        self.assert_addresses_bare(deposits.iter().map(|deposit| deposit.address))
+    }
+
+    pub fn assert_eth_deposit_addresses_bare(self, deposits: &[EthCexDeposit]) -> Self {
+        self.assert_addresses_bare(deposits.iter().map(|deposit| deposit.address))
+    }
+
+    fn assert_addresses_bare(self, addresses: impl IntoIterator<Item = Address>) -> Self {
+        for address in addresses {
             assert!(
-                self.anvil.code(&deposit.address).is_empty(),
+                self.anvil.code(&address).is_empty(),
                 "a deposit address starts with no code"
             );
             assert_eq!(
-                self.anvil.balance(&deposit.address),
+                self.anvil.balance(&address),
                 0,
                 "a deposit address never needs ETH of its own"
             );
@@ -504,7 +736,11 @@ impl LiveSetup<CkErc20Setup> {
             .minter_events()
             .into_iter()
             .filter_map(|event| match event.payload {
-                EventPayload::AcceptedSweepRequest { token, items, .. } => Some((
+                EventPayload::AcceptedSweepRequest {
+                    asset: EventAsset::Erc20(token),
+                    items,
+                    ..
+                } => Some((
                     Address::from_str(&token).expect("BUG: the sweep names an invalid token"),
                     items.len(),
                 )),
@@ -554,14 +790,49 @@ impl LiveSetup<CkErc20Setup> {
     }
 
     pub fn assert_delegations_installed(self, deposits: &[CexDeposit], delegate: &Address) -> Self {
+        self.assert_delegations_installed_at(deposits.iter().map(|d| d.address), delegate)
+    }
+
+    pub fn assert_eth_delegations_installed(
+        self,
+        deposits: &[EthCexDeposit],
+        delegate: &Address,
+    ) -> Self {
+        self.assert_delegations_installed_at(deposits.iter().map(|d| d.address), delegate)
+    }
+
+    /// Checks the delegations the sweep installed twice over: as the code each address holds, and
+    /// as the delegation batcher reads them back in one call, since the batcher is the minter's
+    /// only consumer that must read a designator through `EXTCODECOPY` rather than run it.
+    fn assert_delegations_installed_at(
+        self,
+        addresses: impl IntoIterator<Item = Address>,
+        delegate: &Address,
+    ) -> Self {
+        let addresses: Vec<Address> = addresses.into_iter().collect();
         let designator = delegation_designator(delegate);
-        for deposit in deposits {
+        for address in &addresses {
             assert_eq!(
-                self.anvil.code(&deposit.address),
+                self.anvil.code(address),
                 designator,
                 "the sweep should have installed the delegation"
             );
         }
+        let deposit_addresses: Vec<DepositAddress> =
+            addresses.iter().copied().map(DepositAddress::new).collect();
+        let read = self
+            .anvil
+            .eth_call_create(
+                &address_from_hex(DEV_ACCOUNT),
+                &encode_delegation_batch(&deposit_addresses),
+            )
+            .expect("the delegation batcher must read delegated addresses without reverting");
+        assert_eq!(
+            decode_delegation_batch(&read, deposit_addresses.len())
+                .expect("the delegation batcher must return one word per address"),
+            vec![Delegation::Delegated(*delegate); deposit_addresses.len()],
+            "the delegation batcher must classify every swept address as delegated"
+        );
         self
     }
 
@@ -726,6 +997,10 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         self.cketh().get_all_events()
     }
 
+    pub fn minter_count_events(&self, filter: impl Fn(&Event) -> bool) -> usize {
+        self.cketh().minter_count_events(filter)
+    }
+
     pub fn get_minter_info(&self) -> MinterInfo {
         self.cketh().get_minter_info()
     }
@@ -835,6 +1110,16 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         self.env()
             .start_canister(minter_id, None)
             .expect("starting the minter must succeed");
+    }
+
+    /// Points the minter at `delegate`, as an operator replacing the sweeper contract does. The
+    /// addresses already delegated to the old one are re-delegated lazily, by the sweeps that
+    /// happen anyway.
+    pub fn rotate_delegate_to(&self, delegate: &Address) {
+        self.upgrade_minter_with(UpgradeArg {
+            ethereum_sweeper_contract_address: Some(delegate.to_string()),
+            ..Default::default()
+        });
     }
 
     /// Gives the minter [`TICK_SETTLE`] of *real* time to carry out whatever the last tick started,
@@ -1165,6 +1450,88 @@ impl DepositErc20Calls {
 }
 
 #[must_use]
+pub struct DepositEthCalls {
+    setup: LiveSetup<CkErc20Setup>,
+    responses: Vec<(EthDepositPlan, DepositEthResponse)>,
+}
+
+impl DepositEthCalls {
+    pub fn expect_deposit_responses(self) -> (LiveSetup<CkErc20Setup>, Vec<EthCexDeposit>) {
+        let deposits: Vec<EthCexDeposit> = self
+            .responses
+            .into_iter()
+            .map(|(plan, response)| EthCexDeposit {
+                address: Address::from_str(&response.address)
+                    .expect("BUG: minter returned an invalid deposit address"),
+                owner: plan.owner,
+                subaccount: plan.subaccount,
+                amount: plan.amount,
+            })
+            .collect();
+        let accounts: BTreeSet<(Principal, [u8; 32])> = deposits
+            .iter()
+            .map(|deposit| (deposit.owner, deposit.subaccount))
+            .collect();
+        let addresses: BTreeSet<Address> = deposits.iter().map(|deposit| deposit.address).collect();
+        assert_eq!(
+            addresses.len(),
+            accounts.len(),
+            "every account must get its own deposit address"
+        );
+        (self.setup, deposits)
+    }
+}
+
+#[must_use]
+pub struct EthCexCredit<'a> {
+    setup: LiveSetup<CkErc20Setup>,
+    deposits: &'a [EthCexDeposit],
+}
+
+impl<'a> EthCexCredit<'a> {
+    pub fn expect_deposit_balances_on_anvil(self) -> EthDetectionWatch<'a> {
+        for deposit in self.deposits {
+            assert_eq!(
+                self.setup.anvil.balance(&deposit.address),
+                deposit.amount,
+                "the deposited ETH should be readable on anvil"
+            );
+        }
+        EthDetectionWatch {
+            setup: self.setup,
+            deposits: self.deposits,
+        }
+    }
+}
+
+#[must_use]
+pub struct EthDetectionWatch<'a> {
+    pub setup: LiveSetup<CkErc20Setup>,
+    deposits: &'a [EthCexDeposit],
+}
+
+impl EthDetectionWatch<'_> {
+    pub fn expect_each_awaiting_sweep(self) -> LiveSetup<CkErc20Setup> {
+        for deposit in self.deposits {
+            let detected = match self
+                .setup
+                .await_eth_detection(deposit.owner, deposit.subaccount)
+                .status
+            {
+                DepositEthStatus::AwaitingSweep(detected) => detected,
+                status => panic!("BUG: await_eth_detection returned {status:?}"),
+            };
+            assert_eq!(
+                detected.scanned_balance,
+                Nat::from(deposit.amount),
+                "the detected balance must match the deposited amount"
+            );
+        }
+        self.setup
+    }
+}
+
+#[must_use]
 pub struct CexCredit<'a> {
     setup: LiveSetup<CkErc20Setup>,
     deposits: &'a [CexDeposit],
@@ -1222,12 +1589,30 @@ pub struct SweepsSent {
 }
 
 impl SweepsSent {
+    /// Asserts every sweep succeeded riding a type-4 transaction, as a sweep still installing a
+    /// delegation must.
     pub fn expect_all_delegating_sweeps(self) -> (LiveSetup<CkErc20Setup>, Vec<SentTransaction>) {
-        for sweep in &self.sweeps {
+        let delegating = vec![DELEGATING_SWEEP_TRANSACTION_TYPE; self.sweeps.len()];
+        self.expect_sweeps_of_types(&delegating)
+    }
+
+    /// Asserts every sweep succeeded riding the transaction type its position in `expected` names:
+    /// type 4 while it still delegates an address it sweeps, type 2 once they are all delegated.
+    pub fn expect_sweeps_of_types(
+        self,
+        expected: &[u64],
+    ) -> (LiveSetup<CkErc20Setup>, Vec<SentTransaction>) {
+        assert_eq!(
+            self.sweeps.len(),
+            expected.len(),
+            "expected {} sweeps, got {:?}",
+            expected.len(),
+            self.sweeps
+        );
+        for (sweep, expected_type) in self.sweeps.iter().zip(expected) {
             assert_eq!(
-                sweep.transaction_type, 4,
-                "a sweep here always carries its EIP-7702 authorizations, installed or re-sent, \
-                 so it must be a type-4 transaction: {sweep:?}"
+                sweep.transaction_type, *expected_type,
+                "the sweep did not ride the expected transaction type: {sweep:?}"
             );
             assert!(sweep.succeeded, "the sweep reverted: {sweep:?}");
         }

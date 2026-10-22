@@ -3,10 +3,12 @@ use crate::deposit_address::DepositAddress;
 use crate::state::automatic_deposits::{DepositRequest, ScanProgress};
 use crate::test_fixtures;
 use crate::test_fixtures::mock::MockTimeProvider;
-use evm_rpc_types::{ConsensusStrategy, Hex, MultiRpcResult, RpcServices};
-use ic_canister_runtime::{IcError, StubRuntime};
+use crate::test_fixtures::stub_rpc_client;
+use evm_rpc_types::{Hex, MultiRpcResult};
+use ic_canister_runtime::IcError;
 use icrc_ledger_types::icrc1::account::Account;
 use std::str::FromStr;
+use std::time::Duration;
 
 const TOKEN_A: Address = Address::new([0x22; 20]);
 
@@ -18,54 +20,110 @@ fn account(owner: u64) -> Account {
 }
 
 #[test]
+fn eth_has_its_own_minimum_deposit() {
+    assert_eq!(
+        min_deposit(&Asset::Eth),
+        Erc20Value::new(5_000_000_000_000_000)
+    );
+}
+
+#[test]
 fn unsupported_token_has_an_unreachable_minimum_deposit() {
     // A token absent from MIN_DEPOSITS gets Erc20Value::MAX as its threshold, so no real balance
     // (below the u256 max) ever clears it and it is never a candidate.
-    assert_eq!(min_deposit(&TOKEN_A), Erc20Value::MAX);
-    assert!(Erc20Value::from(u128::MAX) < min_deposit(&TOKEN_A));
+    assert_eq!(min_deposit(&Asset::Erc20(TOKEN_A)), Erc20Value::MAX);
+    assert!(Erc20Value::from(u128::MAX) < min_deposit(&Asset::Erc20(TOKEN_A)));
 }
 
 #[test]
 fn should_have_a_min_deposit_for_every_deployed_supported_token() {
-    // Independently transcribed list of the ckERC20 contract addresses the mainnet
-    // (sv3dd-oaaaa-aaaar-qacoa-cai) and Sepolia (jzenf-aiaaa-aaaar-qaa7q-cai) minters currently
-    // support (hex form, so it does not share the byte-array representation of `MIN_DEPOSITS`). A
-    // supported token missing from `MIN_DEPOSITS` would be scanned but never flagged, so its
-    // deposits would go undetected; this test catches a dropped or typo'd entry.
-    let deployed: &[(&str, &str)] = &[
+    let expected: &[(&str, &str, u128)] = &[
         // --- mainnet ---
-        ("ckUSDC", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
-        ("ckLINK", "0x514910771AF9Ca656af840dff83E8264EcF986CA"),
-        ("ckPEPE", "0x6982508145454Ce325dDbE47a25d4ec3d2311933"),
-        ("ckOCT", "0xF5cFBC74057C610c8EF151A439252680AC68c6dc"),
-        ("ckSHIB", "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE"),
-        ("ckWBTC", "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"),
-        ("ckUSDT", "0xdAC17F958D2ee523a2206206994597C13D831ec7"),
-        ("ckWSTETH", "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
-        ("ckUNI", "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"),
-        ("ckEURC", "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c"),
-        ("ckXAUT", "0x68749665FF8D2d112Fa859AA293F07A622782F38"),
+        (
+            "ckUSDC",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            10_000_000,
+        ),
+        (
+            "ckLINK",
+            "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+            1_000_000_000_000_000_000,
+        ),
+        (
+            "ckPEPE",
+            "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
+            3_500_000_000_000_000_000_000_000,
+        ),
+        (
+            "ckOCT",
+            "0xF5cFBC74057C610c8EF151A439252680AC68c6dc",
+            5_000_000_000_000_000_000_000,
+        ),
+        (
+            "ckSHIB",
+            "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+            2_000_000_000_000_000_000_000_000,
+        ),
+        (
+            "ckWBTC",
+            "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+            15_000,
+        ),
+        (
+            "ckUSDT",
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            10_000_000,
+        ),
+        (
+            "ckWSTETH",
+            "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+            4_000_000_000_000_000,
+        ),
+        (
+            "ckUNI",
+            "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+            2_500_000_000_000_000_000,
+        ),
+        (
+            "ckEURC",
+            "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c",
+            8_000_000,
+        ),
+        (
+            "ckXAUT",
+            "0x68749665FF8D2d112Fa859AA293F07A622782F38",
+            2_500,
+        ),
+        (
+            "ckBAT",
+            "0x0D8775F648430679A709E98d2b0Cb6250d2887EF",
+            135_000_000_000_000_000_000,
+        ),
         // --- sepolia ---
         (
             "ckSepoliaUSDC",
             "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+            10_000_000,
         ),
         (
             "ckSepoliaLINK",
             "0x779877A7B0D9E8603169DdbD7836e478b4624789",
+            1_000_000_000_000_000_000,
         ),
         (
             "ckSepoliaPEPE",
             "0x560ef9f39e4b08f9693987cad307f6fbfd97b2f6",
+            3_500_000_000_000_000_000_000_000,
         ),
     ];
 
-    for (symbol, address) in deployed {
+    for (symbol, address, min) in expected {
         let contract = Address::from_str(address)
             .unwrap_or_else(|e| panic!("{symbol}: invalid test address {address}: {e}"));
-        assert!(
-            MIN_DEPOSITS.iter().any(|(c, _)| *c == contract),
-            "{symbol} ({address}) has no MIN_DEPOSITS entry"
+        assert_eq!(
+            min_deposit(&Asset::Erc20(contract)),
+            Erc20Value::new(*min),
+            "{symbol} ({address}) has a missing or wrong MIN_DEPOSITS threshold"
         );
     }
 }
@@ -97,7 +155,7 @@ async fn should_skip_without_scanning() {
         seed_state(case.latest_block, MIN_DEPOSITS[0].0, &case.holders, now);
 
         // No stub responses: the scan must short-circuit before any outcall.
-        scan(now, stub_client(vec![]), &records_no_event()).await;
+        scan(now, stub_rpc_client(vec![]), &records_no_event()).await;
 
         // A skipped scan advances no watchlist entry.
         for (account, _) in &case.holders {
@@ -122,7 +180,7 @@ async fn should_advance_scanned_non_candidate_pairs() {
     // and nothing is moved to the sweep queue.
     scan(
         now,
-        stub_client(vec![ok_balances(&[below_min, below_min])]),
+        stub_rpc_client(vec![ok_balances(&[below_min, below_min])]),
         &records_no_event(),
     )
     .await;
@@ -133,6 +191,14 @@ async fn should_advance_scanned_non_candidate_pairs() {
         assert_eq!(entry.last_scanned_block, Some(latest));
     }
     assert_eq!(read_state(|s| s.automatic_deposits.sweep_len()), 0);
+    assert_eq!(
+        read_state(|s| s.sweep_observations.last_balance_scan_age(now)),
+        Some(Duration::ZERO)
+    );
+    assert_eq!(
+        read_state(|s| s.sweep_observations.balance_scan_chunks_read()),
+        1
+    );
 }
 
 #[tokio::test]
@@ -158,7 +224,7 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
     // whole set advances (no sweep events), letting the test assert the chunk split directly.
     scan(
         now,
-        stub_client(vec![
+        stub_rpc_client(vec![
             ok_balances(&vec![below_min; MAX_CALLS_PER_BATCH]),
             ok_balances(&vec![below_min; extra]),
         ]),
@@ -185,17 +251,23 @@ async fn should_not_advance_pairs_when_the_chunk_fails() {
     struct Case {
         name: &'static str,
         response: Result<MultiRpcResult<Hex>, IcError>,
+        call_errors: u64,
+        decode_errors: u64,
     }
 
     let cases = vec![
         Case {
             name: "rpc call fails",
             response: Err(IcError::CallPerformFailed),
+            call_errors: 1,
+            decode_errors: 0,
         },
         Case {
             // A one-call chunk expects a single 32-byte word; five bytes cannot decode.
             name: "response fails to decode",
             response: Ok(MultiRpcResult::Consistent(Ok(Hex::from(vec![0_u8; 5])))),
+            call_errors: 0,
+            decode_errors: 1,
         },
     ];
 
@@ -205,7 +277,12 @@ async fn should_not_advance_pairs_when_the_chunk_fails() {
         let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
         seed_state(Some(latest), MIN_DEPOSITS[0].0, &[holder], now);
 
-        scan(now, stub_client(vec![case.response]), &records_no_event()).await;
+        scan(
+            now,
+            stub_rpc_client(vec![case.response]),
+            &records_no_event(),
+        )
+        .await;
 
         let entry = live_entry(now, &holder.0, MIN_DEPOSITS[0].0);
         assert_eq!(
@@ -214,6 +291,30 @@ async fn should_not_advance_pairs_when_the_chunk_fails() {
             case.name
         );
         assert_eq!(entry.last_scanned_block, None, "case: {}", case.name);
+        assert_eq!(
+            read_state(|s| s.sweep_observations.last_balance_scan_age(now)),
+            None,
+            "case '{}': a pass that read nothing must not look fresh",
+            case.name
+        );
+        assert_eq!(
+            read_state(|s| s.sweep_observations.balance_scan_chunks_read()),
+            0,
+            "case: {}",
+            case.name
+        );
+        assert_eq!(
+            read_state(|s| s.sweep_observations.balance_scan_call_errors()),
+            case.call_errors,
+            "case: {}",
+            case.name
+        );
+        assert_eq!(
+            read_state(|s| s.sweep_observations.balance_scan_decode_errors()),
+            case.decode_errors,
+            "case: {}",
+            case.name
+        );
     }
 }
 
@@ -232,15 +333,20 @@ async fn should_detect_a_funded_pair_from_pre_scan_targets_even_after_eviction()
 
     // The funded pair is still detected: scan_balances works off the captured targets alone, so the
     // detection is never lost to a mid-scan eviction.
-    let outcomes = scan_balances(&targets, latest, stub_client(vec![ok_balances(&[min])])).await;
+    let pass = scan_balances(
+        &targets,
+        latest,
+        &stub_rpc_client(vec![ok_balances(&[min])]),
+    )
+    .await;
 
     assert_eq!(
-        outcomes,
+        pass.outcomes,
         vec![ScanOutcome::Detected(AutomaticDeposit {
             owner: holder.0.owner,
             subaccount: holder.0.subaccount,
             address: holder.1,
-            erc20_contract_address: token,
+            asset: Asset::Erc20(token),
             last_scanned_block: latest,
             scan_count: 1,
             scanned_balance: min,
@@ -258,12 +364,18 @@ async fn should_yield_nothing_found_for_a_below_minimum_pair() {
     seed_state(Some(latest), token, &[holder], now);
 
     let targets = due_targets(now, latest);
-    let outcomes = scan_balances(&targets, latest, stub_client(vec![ok_balances(&[below])])).await;
+    let pass = scan_balances(
+        &targets,
+        latest,
+        &stub_rpc_client(vec![ok_balances(&[below])]),
+    )
+    .await;
 
     assert_eq!(
-        outcomes,
+        pass.outcomes,
         vec![ScanOutcome::NothingFound(DepositRequest::new(
-            holder.0, token
+            holder.0,
+            Asset::Erc20(token)
         ))]
     );
 }
@@ -276,22 +388,22 @@ async fn should_yield_no_outcome_for_a_pair_whose_chunk_failed() {
     seed_state(Some(latest), MIN_DEPOSITS[0].0, &[holder], now);
 
     let targets = due_targets(now, latest);
-    let outcomes = scan_balances(
+    let pass = scan_balances(
         &targets,
         latest,
-        stub_client(vec![Err(IcError::CallPerformFailed)]),
+        &stub_rpc_client(vec![Err(IcError::CallPerformFailed)]),
     )
     .await;
 
-    assert!(outcomes.is_empty(), "a failed chunk must yield no outcome");
+    assert!(
+        pass.outcomes.is_empty(),
+        "a failed chunk must yield no outcome"
+    );
+    assert_eq!(pass.errors, ScanErrors { decode: 0, call: 1 });
 }
 
-fn due_targets(now: Timestamp, latest: BlockNumber) -> Vec<ScanTarget> {
-    read_state(|s| {
-        s.automatic_deposits
-            .scan_targets_iter(now, latest)
-            .collect()
-    })
+fn due_targets(now: Timestamp, latest: BlockNumber) -> Vec<ScanTarget<Erc20Asset>> {
+    read_state(|s| s.automatic_deposits.due_scan_targets(now, latest).erc20)
 }
 
 #[tokio::test]
@@ -308,7 +420,12 @@ async fn should_timestamp_a_detected_deposit_with_the_current_time() {
         .times(1)
         .return_const(DETECTED_AT_NANOS);
 
-    scan(now, stub_client(vec![ok_balances(&[min])]), &time_provider).await;
+    scan(
+        now,
+        stub_rpc_client(vec![ok_balances(&[min])]),
+        &time_provider,
+    )
+    .await;
 
     let recorded = last_recorded_event().expect("the detected deposit should be recorded");
     assert_eq!(recorded.timestamp, DETECTED_AT_NANOS);
@@ -339,30 +456,10 @@ fn seed_state(
     for (account, address) in holders {
         state
             .automatic_deposits
-            .watch_deposit(now, *account, token, *address)
+            .watch_deposit(now, *account, Asset::Erc20(token), *address)
             .expect("BUG: failed to arm deposit");
     }
     test_fixtures::init_state(state);
-}
-
-fn stub_client(
-    responses: Vec<Result<MultiRpcResult<Hex>, IcError>>,
-) -> EvmRpcClient<StubRuntime, CandidResponseConverter, DoubleCycles> {
-    let mut runtime = StubRuntime::new();
-    for response in responses {
-        runtime = match response {
-            Ok(result) => runtime.add_stub_response(result),
-            Err(error) => runtime.add_stub_error(error),
-        };
-    }
-    EvmRpcClient::builder(runtime, candid::Principal::anonymous())
-        .with_rpc_sources(RpcServices::EthMainnet(None))
-        .with_consensus_strategy(ConsensusStrategy::Threshold {
-            total: Some(4),
-            min: 3,
-        })
-        .with_retry_strategy(DoubleCycles::with_max_num_retries(10))
-        .build()
 }
 
 fn ok_balances(balances: &[Erc20Value]) -> Result<MultiRpcResult<Hex>, IcError> {
@@ -373,7 +470,7 @@ fn ok_balances(balances: &[Erc20Value]) -> Result<MultiRpcResult<Hex>, IcError> 
 fn live_entry(now: Timestamp, account: &Account, token: Address) -> ScanProgress {
     read_state(|s| {
         s.automatic_deposits
-            .get_entry(now, &DepositRequest::new(*account, token))
+            .get_entry(now, &DepositRequest::new(*account, Asset::Erc20(token)))
             .cloned()
     })
     .expect("BUG: expected a live watchlist entry")

@@ -1,6 +1,9 @@
 use std::{
     collections::BTreeSet,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use ic_base_types::{NodeId, RegistryVersion};
@@ -11,6 +14,8 @@ use rustls::{ClientConfig, ServerConfig};
 pub struct PeerRestrictedTlsConfig {
     allowed_peers: Arc<Mutex<Vec<NodeId>>>,
     crypto: Arc<dyn TlsConfig>,
+    /// Number of client configs handed out, i.e. number of outbound connection attempts.
+    client_config_calls: AtomicUsize,
 }
 
 impl PeerRestrictedTlsConfig {
@@ -19,11 +24,16 @@ impl PeerRestrictedTlsConfig {
         Self {
             allowed_peers: Arc::new(Mutex::new(Vec::new())),
             crypto,
+            client_config_calls: AtomicUsize::new(0),
         }
     }
 
     pub fn set_allowed_peers(&self, peers: Vec<NodeId>) {
         *self.allowed_peers.lock().unwrap() = peers;
+    }
+
+    pub fn client_config_calls(&self) -> usize {
+        self.client_config_calls.load(Ordering::Relaxed)
     }
 }
 
@@ -51,6 +61,7 @@ impl TlsConfig for PeerRestrictedTlsConfig {
         server: NodeId,
         registry_version: RegistryVersion,
     ) -> Result<ClientConfig, TlsConfigError> {
+        self.client_config_calls.fetch_add(1, Ordering::Relaxed);
         self.crypto.client_config(server, registry_version)
     }
 }

@@ -661,11 +661,14 @@ mod tests {
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_metrics::MetricsRegistry;
-    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
+    use ic_protobuf::registry::subnet::v1::{
+        CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetSplittingArgs,
+        catch_up_package_contents::CupType,
+    };
     use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_platform_version};
     use ic_types::{
         NodeId, RegistryVersion, SubnetId,
         consensus::{
@@ -673,6 +676,7 @@ mod tests {
             dkg::{SplittingArgs, SubnetSplittingStatus},
         },
         crypto::crypto_hash,
+        subnet_id_into_protobuf,
     };
     use rstest::rstest;
     use std::collections::BTreeMap;
@@ -856,7 +860,7 @@ mod tests {
                     node_id: local_node_id,
                     // The local node always starts in the source subnet.
                     subnet_id: source_subnet_id,
-                    replica_version: test_replica_version(),
+                    platform_version: test_platform_version(),
                 })
                 .build();
 
@@ -891,6 +895,11 @@ mod tests {
                                 initial_ni_dkg_transcript_high_threshold: Some(transcript_record(
                                     NiDkgTag::HighThreshold,
                                 )),
+                                cup_type: Some(CupType::SubnetSplitting(SubnetSplittingArgs {
+                                    destination_subnet_id: Some(subnet_id_into_protobuf(
+                                        destination_subnet_id,
+                                    )),
+                                })),
                                 ..Default::default()
                             }),
                         )

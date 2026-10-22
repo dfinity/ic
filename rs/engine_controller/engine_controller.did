@@ -1,7 +1,15 @@
+// State limits for a new engine subnet, in bytes. A null field keeps the
+// protocol default.
+type EngineResourceLimits = record {
+  maximum_state_size : opt nat64;
+  maximum_state_delta : opt nat64;
+};
+
 type CreateEngineArgs = record {
   node_ids : vec principal;
   subnet_admins : vec principal;
   replica_version_id : text;
+  resource_limits : opt EngineResourceLimits;
 };
 
 type DeleteEngineArgs = record {
@@ -43,9 +51,10 @@ type ResourceLimits = record {
 
 // Mirror of the subset of registry types referenced by UpdateSubnetPayload.
 // The engine controller forwards the payload unchanged to the registry, but
-// only `subnet_id` and `subnet_admins` may be set; every other field must be
+// besides `subnet_id` only `subnet_admins`, `is_halted`, `cooling_down` and the
+// state limits in `resource_limits` may be set; every other field must be
 // `null`/`false` or the call is rejected.
-type EcdsaCurve = variant { secp256k1 };
+type EcdsaCurve = variant { secp256k1; secp256r1 };
 type EcdsaKeyId = record { curve : EcdsaCurve; name : text };
 type SchnorrAlgorithm = variant { bip340secp256k1; ed25519 };
 type SchnorrKeyId = record { algorithm : SchnorrAlgorithm; name : text };

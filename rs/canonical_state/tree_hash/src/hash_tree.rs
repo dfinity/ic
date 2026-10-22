@@ -1288,7 +1288,7 @@ pub fn hash_lazy_tree<'a>(
                 let mut next = Vec::with_capacity((nodes.len() as f64 / 2.0).ceil() as usize);
                 ht.reserve_forks(nodes.len() - 1);
                 loop {
-                    for pair in nodes.chunks_exact(2) {
+                    for pair in nodes.as_chunks::<2>().0 {
                         let mut h = Hasher::for_domain("ic-hashtree-fork");
                         h.update(ht.digest(pair[0]).as_bytes());
                         h.update(ht.digest(pair[1]).as_bytes());

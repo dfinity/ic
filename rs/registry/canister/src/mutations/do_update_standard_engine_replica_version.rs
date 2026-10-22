@@ -190,7 +190,7 @@ mod tests {
                 result.maybe_apply_mutation_internal(vec![insert(
                     make_replica_version_key(version),
                     ReplicaVersionRecord {
-                        replica_version_id: Some(version.to_string()),
+                        replica_version_id: version.to_string(),
                         release_package_sha256_hex: "".into(),
                         release_package_urls: vec![],
                         // Versions of the StandardEngineReplicaVersionRecord must
@@ -487,7 +487,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Using a version that isn't elected.")]
+    #[should_panic(expected = "Using a replica version that isn't elected")]
     fn should_panic_if_new_version_not_elected() {
         // Step 1: Prepare the world.
         let mut registry = REGISTRY.clone();
@@ -507,7 +507,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Using a version that isn't elected.")]
+    #[should_panic(expected = "Using a replica version that isn't elected")]
     fn should_panic_if_old_version_not_elected() {
         // Step 1: Prepare the world.
         let mut registry = REGISTRY.clone();

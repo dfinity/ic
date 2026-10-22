@@ -274,7 +274,7 @@ mod tests {
     use ic_test_utilities_state::get_initial_state;
     use ic_test_utilities_types::ids::{
         NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2, node_test_id, subnet_test_id,
-        test_replica_version,
+        test_platform_version, test_replica_version,
     };
     use ic_types::{
         Height, NodeId, RegistryVersion,
@@ -809,7 +809,7 @@ mod tests {
             .with_replica_config(ReplicaConfig {
                 node_id,
                 subnet_id,
-                replica_version: test_replica_version(),
+                platform_version: test_platform_version(),
             })
             .build();
             state_manager

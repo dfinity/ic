@@ -79,7 +79,7 @@ pub struct CryptoHash(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
 impl fmt::Debug for CryptoHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "CryptoHash(0x{})", hex::encode(self.0.clone()))
+        write!(f, "CryptoHash(0x{})", hex::encode(&self.0))
     }
 }
 
@@ -278,6 +278,7 @@ impl From<EcdsaCurve> for AlgorithmId {
     fn from(curve: EcdsaCurve) -> Self {
         match curve {
             EcdsaCurve::Secp256k1 => AlgorithmId::ThresholdEcdsaSecp256k1,
+            EcdsaCurve::Secp256r1 => AlgorithmId::ThresholdEcdsaSecp256r1,
         }
     }
 }

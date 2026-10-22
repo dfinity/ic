@@ -15,7 +15,7 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_types::{CanisterLog, NumBytes};
+use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::sync::Arc;
@@ -262,17 +262,6 @@ impl LogMemoryStore {
             .unwrap_or(0)
     }
 
-    /// Returns the projected memory usage after `resize(limit)` would complete,
-    /// without mutating any state.
-    pub fn memory_usage_for_limit(&self, limit: NumBytes) -> NumBytes {
-        if limit == NumBytes::new(0) {
-            return NumBytes::new(0);
-        }
-        // Mirror resize_impl's capacity clamping exactly.
-        let target_capacity = data_capacity_for_limit(limit.get() as usize);
-        NumBytes::new(self.virtual_memory_for_data_capacity(target_capacity) as u64)
-    }
-
     /// Single source of truth for the ring-buffer memory layout formula.
     ///
     /// Returns the total virtual bytes consumed by a ring buffer whose data
@@ -397,6 +386,9 @@ impl LogMemoryStore {
     }
 
     /// Appends a delta log to the ring buffer if it exists.
+    ///
+    /// The records are removed from the delta log even if there is no ring
+    /// buffer, so that appending the same delta log again has no effect.
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
         if delta_log.is_empty() {
             // No records to append, but still carry the monotone index forward.
@@ -413,6 +405,7 @@ impl LogMemoryStore {
             // No ring buffer exists (e.g., log_memory_limit is zero), but still
             // carry the monotone index forward so consumers can track progress.
             self.persistent_next_idx = self.persistent_next_idx.max(delta_log.next_idx());
+            delta_log.take_records();
             return;
         };
         // If the delta overflowed and evicted records, there is a gap between the
@@ -424,7 +417,7 @@ impl LogMemoryStore {
             ring_buffer.clear();
         }
         // Append the delta records and persist the ring buffer.
-        ring_buffer.append_log(delta_log.records_mut().drain(..));
+        ring_buffer.append_log(delta_log.take_records());
         self.save_ring_buffer(ring_buffer);
     }
 

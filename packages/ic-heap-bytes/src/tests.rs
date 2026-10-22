@@ -568,6 +568,24 @@ fn result_basic_total_bytes() {
 }
 
 #[test]
+fn arc_total_bytes() {
+    use std::sync::Arc;
+
+    // Only the pointer is inline; the `ArcInner` allocation adds two `usize`
+    // counters plus the pointee (here a `u64` with no further heap).
+    assert_eq!(
+        deterministic_total_bytes(&Arc::new(42_u64)),
+        size_of::<Arc<u64>>() + 2 * size_of::<usize>() + size_of::<u64>()
+    );
+
+    // A pointee that itself owns heap: its own heap is added on top.
+    assert_eq!(
+        deterministic_total_bytes(&Arc::new(vec![0_u8; 10])),
+        size_of::<Arc<Vec<u8>>>() + 2 * size_of::<usize>() + size_of::<Vec<u8>>() + 10
+    );
+}
+
+#[test]
 fn mixed_struct() {
     #[derive(DeterministicHeapBytes, Default)]
     struct S {

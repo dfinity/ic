@@ -34,7 +34,6 @@ DEPENDENCIES = [
     "//rs/registry/client",
     "//rs/registry/helpers",
     "//rs/registry/local_store",
-    "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/state_manager",
@@ -45,12 +44,10 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:libc",
     "@crate_index//:nix",
-    "@crate_index//:num_cpus",
     "@crate_index//:pprof",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:regex",
-    "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:tikv-jemalloc-ctl",
     "@crate_index//:tikv-jemallocator",
@@ -117,14 +114,10 @@ rust_test(
     tags = [],
     deps = DEPENDENCIES + [
         # Keep sorted.
-        "//rs/interfaces/registry/mocks",
         "//rs/rust_canisters/canister_test",
-        "//rs/test_utilities",
-        "//rs/types/management_canister_types",
         "@crate_index//:assert_cmd",
         "@crate_index//:criterion",
         "@crate_index//:predicates",
-        "@crate_index//:wat",
     ],
 )
 
@@ -135,14 +128,10 @@ rust_test_suite(
     tags = [],
     deps = [":replica_lib"] + DEPENDENCIES + [
         # Keep sorted.
-        "//rs/interfaces/registry/mocks",
         "//rs/rust_canisters/canister_test",
-        "//rs/test_utilities",
-        "//rs/types/management_canister_types",
         "@crate_index//:assert_cmd",
         "@crate_index//:criterion",
         "@crate_index//:predicates",
-        "@crate_index//:wat",
     ],
 )
 

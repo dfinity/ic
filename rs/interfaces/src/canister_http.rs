@@ -206,11 +206,27 @@ pub enum CanisterHttpPayloadValidationFailure {
 pub type CanisterHttpPayloadValidationError =
     ValidationError<InvalidCanisterHttpPayloadReason, CanisterHttpPayloadValidationFailure>;
 
+/// Whether the response of a share is passed on to peers: gossiped along with the
+/// share, and served to a peer that pulls the artifact later.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ResponseVisibility {
+    /// The peers of an outcall that is not fully replicated cannot produce the
+    /// response themselves, so they need ours.
+    Publish,
+    /// Either every replica of a fully replicated outcall produces the response
+    /// itself, or the outcall has already been answered and its response is of no
+    /// use to anyone.
+    Withhold,
+}
+
 #[derive(Debug)]
 pub enum CanisterHttpChangeAction {
-    AddToValidated(CanisterHttpResponseShare, CanisterHttpResponse),
-    AddToValidatedAndGossipResponse(CanisterHttpResponseShare, CanisterHttpResponse),
-    MoveToValidated(CanisterHttpResponseShare),
+    AddToValidated(
+        CanisterHttpResponseShare,
+        CanisterHttpResponse,
+        ResponseVisibility,
+    ),
+    MoveToValidated(CanisterHttpResponseShare, ResponseVisibility),
     RemoveValidated(CanisterHttpResponseId),
     RemoveUnvalidated(CanisterHttpResponseId),
     RemoveContent(CryptoHashOf<CanisterHttpResponse>),
@@ -222,14 +238,16 @@ pub type CanisterHttpChangeSet = Vec<CanisterHttpChangeAction>;
 /// Artifact pool for the Canister HTTP messages (query interface)
 pub trait CanisterHttpPool: Send + Sync {
     fn get_validated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;
+
     fn get_unvalidated_artifacts(
         &self,
     ) -> Box<dyn Iterator<Item = &CanisterHttpResponseArtifact> + '_>;
+
     fn get_unvalidated_artifact(
         &self,
         share: &CanisterHttpResponseShare,
     ) -> Option<&CanisterHttpResponseArtifact>;
-    // TODO: Likely not needed
+
     fn get_response_content_items(
         &self,
     ) -> Box<dyn Iterator<Item = (&CryptoHashOf<CanisterHttpResponse>, &CanisterHttpResponse)> + '_>;
@@ -237,7 +255,7 @@ pub trait CanisterHttpPool: Send + Sync {
     fn get_response_content_by_hash(
         &self,
         hash: &CryptoHashOf<CanisterHttpResponse>,
-    ) -> Option<CanisterHttpResponse>;
+    ) -> Option<&CanisterHttpResponse>;
 
     fn lookup_validated(
         &self,

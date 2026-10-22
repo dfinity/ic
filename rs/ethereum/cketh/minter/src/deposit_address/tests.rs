@@ -1,5 +1,5 @@
 use crate::address::ecdsa_public_key_to_address;
-use crate::deposit_address::{DepositAddressSchema, deposit_address, sweeper_address};
+use crate::deposit_address::{deposit_address, sweeper_address};
 use crate::test_fixtures::arb::arb_principal;
 use candid::Principal;
 use ic_secp256k1::{PrivateKey, PublicKey};
@@ -19,14 +19,12 @@ proptest! {
     ) {
         let (pk, cc) = master_key();
 
-        for schema in [DepositAddressSchema::CkErc20, DepositAddressSchema::CkEth] {
-            let addresses: BTreeSet<_> = owners
-                .iter()
-                .map(|owner| deposit_address(&pk, &cc, schema, &account(*owner, subaccount)))
-                .collect();
+        let addresses: BTreeSet<_> = owners
+            .iter()
+            .map(|owner| deposit_address(&pk, &cc, &account(*owner, subaccount)))
+            .collect();
 
-            prop_assert_eq!(addresses.len(), owners.len());
-        }
+        prop_assert_eq!(addresses.len(), owners.len());
     }
 
     #[test]
@@ -36,14 +34,12 @@ proptest! {
     ) {
         let (pk, cc) = master_key();
 
-        for schema in [DepositAddressSchema::CkErc20, DepositAddressSchema::CkEth] {
-            let addresses: BTreeSet<_> = subaccounts
-                .iter()
-                .map(|subaccount| deposit_address(&pk, &cc, schema, &account(owner, Some(*subaccount))))
-                .collect();
+        let addresses: BTreeSet<_> = subaccounts
+            .iter()
+            .map(|subaccount| deposit_address(&pk, &cc, &account(owner, Some(*subaccount))))
+            .collect();
 
-            prop_assert_eq!(addresses.len(), subaccounts.len());
-        }
+        prop_assert_eq!(addresses.len(), subaccounts.len());
     }
 
     #[test]
@@ -54,27 +50,11 @@ proptest! {
         let (pk, cc) = master_key();
         let main_address = ecdsa_public_key_to_address(&pk);
         let sweeper = sweeper_address(&pk, &cc);
-        let account = account(owner, subaccount);
 
-        for schema in [DepositAddressSchema::CkErc20, DepositAddressSchema::CkEth] {
-            let deposit = deposit_address(&pk, &cc, schema, &account);
-            prop_assert_ne!(deposit.as_address(), &main_address);
-            prop_assert_ne!(deposit.as_address(), &sweeper);
-        }
-    }
+        let deposit = deposit_address(&pk, &cc, &account(owner, subaccount));
 
-    #[test]
-    fn should_derive_distinct_addresses_for_distinct_schemas(
-        owner in arb_principal(),
-        subaccount in option::of(uniform32(any::<u8>())),
-    ) {
-        let (pk, cc) = master_key();
-        let account = account(owner, subaccount);
-
-        let ckerc20 = deposit_address(&pk, &cc, DepositAddressSchema::CkErc20, &account);
-        let cketh = deposit_address(&pk, &cc, DepositAddressSchema::CkEth, &account);
-
-        prop_assert_ne!(ckerc20, cketh);
+        prop_assert_ne!(deposit.as_address(), &main_address);
+        prop_assert_ne!(deposit.as_address(), &sweeper);
     }
 }
 
@@ -87,43 +67,17 @@ fn should_derive_stable_addresses() {
     let mut s2 = [0_u8; 32];
     s2[31] = 1;
 
-    // (owner, subaccount, expected ckERC20 address, expected ckETH address)
     let cases = [
-        (
-            p1,
-            s1,
-            "0xD89FE581Db8Dbcb45736c5A9d6abdBE78913bD89",
-            "0xBdB75DE85a7E7221525180d559F57FdE80a3709f",
-        ),
-        (
-            p1,
-            s2,
-            "0xB4fB9b1fA6820deF3E4417a074497000F58ef167",
-            "0x8c08A03915F5E15AC41381500219100f92d8e4d5",
-        ),
-        (
-            p2,
-            s1,
-            "0x98c8C7b65485928e6cffDAA806a8eE27Cf1fF39C",
-            "0xE9400F21Ef90d541A605725114F59037919E05b7",
-        ),
-        (
-            p2,
-            s2,
-            "0x5D396800716451E5202Fb935e436Ab82aCe52881",
-            "0x7513b3849F4B53301f620487cD5304240A5E963d",
-        ),
+        (p1, s1, "0xD89FE581Db8Dbcb45736c5A9d6abdBE78913bD89"),
+        (p1, s2, "0xB4fB9b1fA6820deF3E4417a074497000F58ef167"),
+        (p2, s1, "0x98c8C7b65485928e6cffDAA806a8eE27Cf1fF39C"),
+        (p2, s2, "0x5D396800716451E5202Fb935e436Ab82aCe52881"),
     ];
 
-    for (owner, subaccount, expected_ckerc20, expected_cketh) in cases {
-        let account = account(owner, Some(subaccount));
+    for (owner, subaccount, expected) in cases {
         assert_eq!(
-            deposit_address(&pk, &cc, DepositAddressSchema::CkErc20, &account).to_string(),
-            expected_ckerc20
-        );
-        assert_eq!(
-            deposit_address(&pk, &cc, DepositAddressSchema::CkEth, &account).to_string(),
-            expected_cketh
+            deposit_address(&pk, &cc, &account(owner, Some(subaccount))).to_string(),
+            expected
         );
     }
 }
@@ -143,9 +97,7 @@ fn account(owner: Principal, subaccount: Option<Subaccount>) -> Account {
 }
 
 mod derive_public_key {
-    use crate::deposit_address::{
-        DepositAddressSchema, deposit_address, derive_public_key, sweeper_derivation_path,
-    };
+    use crate::deposit_address::{AddressSchema, deposit_address, derive_public_key};
     use crate::{MAIN_DERIVATION_PATH, address::ecdsa_public_key_to_address};
     use candid::Principal;
     use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
@@ -159,15 +111,13 @@ mod derive_public_key {
         let master = master_private_key().public_key();
         let account = account();
 
-        for schema in [DepositAddressSchema::CkErc20, DepositAddressSchema::CkEth] {
-            let path = super::super::deposit_derivation_path(schema, &account);
-            let derived = derive_public_key(&master, &CHAIN_CODE, &path);
+        let path = AddressSchema::Deposit(account).derivation_path();
+        let derived = derive_public_key(&master, &CHAIN_CODE, &path);
 
-            assert_eq!(
-                &ecdsa_public_key_to_address(&derived),
-                deposit_address(&master, &CHAIN_CODE, schema, &account).as_address()
-            );
-        }
+        assert_eq!(
+            &ecdsa_public_key_to_address(&derived),
+            deposit_address(&master, &CHAIN_CODE, &account).as_address()
+        );
     }
 
     #[test]
@@ -189,8 +139,8 @@ mod derive_public_key {
         let digest = [0x42_u8; 32];
 
         for path in [
-            super::super::deposit_derivation_path(DepositAddressSchema::CkErc20, &account()),
-            sweeper_derivation_path(),
+            AddressSchema::Deposit(account()).derivation_path(),
+            AddressSchema::Sweeper.derivation_path(),
         ] {
             let (signing_key, _chain_code) =
                 master.derive_subkey_with_chain_code(&to_derivation_path(&path), &CHAIN_CODE);

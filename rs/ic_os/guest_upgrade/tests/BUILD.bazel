@@ -5,12 +5,16 @@ package(default_visibility = ["//visibility:public"])
 rust_test(
     name = "guest_upgrade_tests",
     srcs = glob(["src/**/*.rs"]),
+    # Each test runs a full TLS key exchange, moving a 16 MiB LUKS header, on its own runtime
+    # thread. Limit the number of concurrent test threads and reserve matching CPU cores so the
+    # exchanges are not starved on a busy machine.
+    env = {"RUST_TEST_THREADS": "4"},
+    exec_properties = {"test.cpu": "4"},
     deps = [
         "//rs/ic_os/config/types:config_types",
         "//rs/ic_os/guest_upgrade/client:lib",
         "//rs/ic_os/guest_upgrade/server",
         "//rs/ic_os/guest_upgrade/shared",
-        "//rs/ic_os/os_tools/guest_disk:guest_disk_lib",
         "//rs/ic_os/sev/attestation",
         "//rs/ic_os/sev/guest",
         "//rs/ic_os/sev/guest/testing",
@@ -26,6 +30,7 @@ rust_test(
         "@crate_index//:futures",
         "@crate_index//:rand",
         "@crate_index//:rustls",
+        "@crate_index//:sev",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
     ],

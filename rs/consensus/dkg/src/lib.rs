@@ -88,14 +88,12 @@ impl DkgImpl {
         logger: ReplicaLogger,
     ) -> Self {
         let ReplicaConfig {
-            node_id,
-            subnet_id,
-            replica_version,
+            node_id, subnet_id, ..
         } = replica_config;
         Self {
             node_id,
             subnet_id,
-            replica_version,
+            replica_version: replica_config.replica_version().clone(),
             registry_client,
             state_reader,
             crypto,
@@ -450,7 +448,7 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_state::get_initial_state;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_platform_version};
     use ic_types::{
         RegistryVersion, ReplicaVersion,
         batch::ValidationContext,
@@ -483,12 +481,12 @@ mod tests {
             let bouncer = bouncer_factory.new_bouncer(&dkg_pool);
 
             let height_500_id = DkgMessageId {
-                hash: CryptoHash(vec![0]).into(),
                 height: Height::from(500),
+                hash: CryptoHash(vec![0]).into(),
             };
             let height_1000_id = DkgMessageId {
-                hash: CryptoHash(vec![1]).into(),
                 height: Height::from(1000),
+                hash: CryptoHash(vec![1]).into(),
             };
             assert_eq!(bouncer(&height_500_id), BouncerValue::Wants);
             assert_eq!(bouncer(&height_1000_id), BouncerValue::MaybeWantsLater);
@@ -835,7 +833,7 @@ mod tests {
                         // Node Id = 1, who is a dealer
                         node_id: node_test_id(1),
                         subnet_id: subnet_test_id(0),
-                        replica_version: test_replica_version(),
+                        platform_version: test_platform_version(),
                     })
                     .without_state_manager_expectations()
                     .build();
@@ -1056,7 +1054,6 @@ mod tests {
                 for dkg_id in summary.dkg.configs.keys() {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                 }
-                assert_eq!(summary.dkg.transcripts_for_remote_subnets.as_ref(), None);
                 // Verify that the remote_dkg_attempts are set to `Completed`.
                 assert_eq!(
                     summary.dkg.remote_dkg_attempts.get(&target_id),
@@ -1110,7 +1107,7 @@ mod tests {
                     .with_replica_config(ReplicaConfig {
                         node_id: node_test_id(1),
                         subnet_id: subnet_test_id(0),
-                        replica_version: test_replica_version(),
+                        platform_version: test_platform_version(),
                     })
                     .build();
                 let Dependencies {
@@ -1124,7 +1121,7 @@ mod tests {
                         // This is not a dealer!
                         node_id: node_test_id(0),
                         subnet_id: subnet_test_id(0),
-                        replica_version: test_replica_version(),
+                        platform_version: test_platform_version(),
                     })
                     .build();
                 for state_manager in [&state_manager_1, &state_manager_2] {
@@ -1572,7 +1569,7 @@ mod tests {
                         .with_replica_config(ReplicaConfig {
                             node_id: node_test_id(1),
                             subnet_id: subnet_test_id(0),
-                            replica_version: test_replica_version(),
+                            platform_version: test_platform_version(),
                         })
                         .without_state_manager_expectations()
                         .build();
@@ -1581,7 +1578,7 @@ mod tests {
                         .with_replica_config(ReplicaConfig {
                             node_id: node_test_id(2),
                             subnet_id: subnet_test_id(0),
-                            replica_version: test_replica_version(),
+                            platform_version: test_platform_version(),
                         })
                         .without_state_manager_expectations()
                         .build();
@@ -2164,7 +2161,7 @@ mod tests {
                         // Node 2 is a non-dealer receiver
                         node_id: node_test_id(2),
                         subnet_id: subnet_test_id(0),
-                        replica_version: test_replica_version(),
+                        platform_version: test_platform_version(),
                     })
                     .with_dkg_interval_length(dkg_interval_length)
                     .without_state_manager_expectations()

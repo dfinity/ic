@@ -15,13 +15,14 @@ pub type SignedSweepTransaction = Signed<SweepTransaction>;
 /// A transaction sent from the minter's dedicated sweeper address: a plain EIP-1559 transaction
 /// (`0x02`), or an EIP-7702 one (`0x04`) whose authorization list additionally installs the
 /// delegation to the sweeper contract of those deposit addresses it sweeps that are not delegated
-/// yet. The ones already delegated are swept without an authorization tuple, so the list can be
-/// shorter than the set of addresses swept.
+/// to that contract yet. The ones already delegated to it are swept without an
+/// authorization, so the list can be shorter than the set of addresses swept.
 ///
-/// A deposit address is delegated once and stays delegated, so a sweep needs type `0x04` only as
-/// long as it still touches an address no earlier sweep delegated. The
-/// [`SweepTransaction::Eip7702`] variant therefore always carries a non-empty authorization list:
-/// [`SweepTransaction::new`] is what decides the variant, and it decides on exactly that.
+/// A deposit address stays delegated to the contract its last applied authorization named, so a
+/// sweep needs type `0x04` only while it touches an address not yet delegated to the configured
+/// contract: one never delegated, or one still on a contract the minter has since moved away from.
+/// The [`SweepTransaction::Eip7702`] variant therefore always carries a non-empty authorization
+/// list: [`SweepTransaction::new`] is what decides the variant, and it decides on exactly that.
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub enum SweepTransaction {
     #[n(0)]
@@ -69,7 +70,11 @@ impl<'b, C> minicbor::Decode<'b, C> for DelegatingSweep {
 
 impl SweepTransaction {
     /// The sweep `transaction`, installing the delegations `authorizations` attests to: type
-    /// `0x04` if there are any to install, and type `0x02` if there are none.
+    /// `0x04` if there are any to install, and type `0x02` if there are none. The fallback is not
+    /// a saving but a requirement: [EIP-7702] declares a type-`0x04` transaction with an empty
+    /// authorization list invalid.
+    ///
+    /// [EIP-7702]: https://eips.ethereum.org/EIPS/eip-7702
     pub fn new(
         transaction: Eip1559TransactionRequest,
         authorizations: Vec<SignedAuthorization>,

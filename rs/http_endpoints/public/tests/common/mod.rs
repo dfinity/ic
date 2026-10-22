@@ -46,9 +46,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterQueues, NetworkTopology, RefundPool, ReplicatedState, SystemMetadata,
 };
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_platform_version};
 use ic_types::{
-    CanisterId, CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
+    CanisterId, CryptoHashOfPartialState, Height, PlatformVersion, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
     batch::RawQueryStats,
     consensus::certification::{Certification, CertificationContent},
@@ -192,7 +192,7 @@ pub fn default_read_certified_state(
     let mht = hash_tree.witness::<MixedHashTree>(&partial_tree).unwrap();
     let cert = Certification {
         height,
-        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: Signed {
             signature: ThresholdSignature {
                 signer: NiDkgId {
@@ -433,6 +433,7 @@ pub struct HttpEndpointHandles {
     pub query_execution: QueryExecutionHandle,
     pub terminal_state_ingress_messages: Sender<(MessageId, Height)>,
     pub certified_height_watcher: watch::Sender<Height>,
+    pub metrics: MetricsRegistry,
 }
 
 pub struct HttpEndpointBuilder {
@@ -447,6 +448,8 @@ pub struct HttpEndpointBuilder {
     certified_height: Option<Height>,
     ingress_pool_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_channel_capacity: usize,
+    platform_version: Option<PlatformVersion>,
+    malicious_flags: MaliciousFlags,
 }
 
 impl HttpEndpointBuilder {
@@ -463,7 +466,14 @@ impl HttpEndpointBuilder {
             tls_config: Arc::new(MockTlsConfig::new()),
             certified_height: None,
             ingress_channel_capacity: MAX_P2P_IO_CHANNEL_SIZE,
+            platform_version: None,
+            malicious_flags: MaliciousFlags::default(),
         }
+    }
+
+    pub fn with_platform_version(mut self, platform_version: PlatformVersion) -> Self {
+        self.platform_version = Some(platform_version);
+        self
     }
 
     pub fn with_state_manager(
@@ -520,6 +530,11 @@ impl HttpEndpointBuilder {
         self
     }
 
+    pub fn with_malicious_flags(mut self, malicious_flags: MaliciousFlags) -> Self {
+        self.malicious_flags = malicious_flags;
+        self
+    }
+
     pub fn run(self) -> HttpEndpointHandles {
         let metrics = MetricsRegistry::new();
         let log = no_op_logger();
@@ -542,7 +557,7 @@ impl HttpEndpointBuilder {
         let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
 
         let node_id = node_test_id(1);
-        let replica_version = test_replica_version();
+        let platform_version = self.platform_version.unwrap_or_else(test_platform_version);
 
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
@@ -564,12 +579,12 @@ impl HttpEndpointBuilder {
             sig_verifier,
             node_id,
             subnet_id,
-            replica_version,
+            platform_version,
             nns_subnet_id,
             log,
             self.consensus_cache,
             SubnetType::Application,
-            MaliciousFlags::default(),
+            self.malicious_flags,
             nns_delegation_reader,
             self.pprof_collector,
             ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
@@ -584,6 +599,7 @@ impl HttpEndpointBuilder {
             query_execution: query_exe_handler,
             terminal_state_ingress_messages: terminal_state_ingress_messages_tx,
             certified_height_watcher: certified_height_watcher_tx,
+            metrics,
         }
     }
 }

@@ -32,6 +32,9 @@ pub mod hashed;
 pub mod idkg;
 mod payload;
 pub mod thunk;
+pub mod upgrade;
+
+pub use upgrade::{UpgradeAuthorizationShare, UpgradePermitRequest};
 
 pub use catchup::*;
 use hashed::Hashed;
@@ -921,6 +924,27 @@ pub enum ConsensusMessage {
     EquivocationProof(EquivocationProof),
 }
 
+impl ConsensusMessage {
+    /// Loads whatever the message holds lazily, i.e. the payload of the block that a
+    /// block proposal or a catch-up package carries (see [`Payload::load`]).
+    pub fn load(&self) {
+        match self {
+            ConsensusMessage::BlockProposal(proposal) => proposal.as_ref().payload.load(),
+            ConsensusMessage::CatchUpPackage(cup) => cup.content.block.as_ref().payload.load(),
+            ConsensusMessage::RandomBeacon(_)
+            | ConsensusMessage::Finalization(_)
+            | ConsensusMessage::Notarization(_)
+            | ConsensusMessage::RandomBeaconShare(_)
+            | ConsensusMessage::NotarizationShare(_)
+            | ConsensusMessage::FinalizationShare(_)
+            | ConsensusMessage::RandomTape(_)
+            | ConsensusMessage::RandomTapeShare(_)
+            | ConsensusMessage::CatchUpPackageShare(_)
+            | ConsensusMessage::EquivocationProof(_) => {}
+        }
+    }
+}
+
 impl IdentifiableArtifact for ConsensusMessage {
     const NAME: &'static str = "consensus";
     type Id = ConsensusMessageId;
@@ -1298,6 +1322,7 @@ impl From<&Block> for pb::Block {
             canister_http_payload_bytes,
             query_stats_payload_bytes,
             chain_key_payload_bytes,
+            upgrade_payload_bytes,
             idkg_payload,
         ) = if payload.is_summary() {
             (
@@ -1305,6 +1330,7 @@ impl From<&Block> for pb::Block {
                 None,
                 None,
                 None,
+                vec![],
                 vec![],
                 vec![],
                 vec![],
@@ -1320,6 +1346,7 @@ impl From<&Block> for pb::Block {
                 batch.canister_http.clone(),
                 batch.query_stats.clone(),
                 batch.chain_key.clone(),
+                batch.upgrade.clone(),
                 payload.as_data().idkg.as_ref().map(|idkg| idkg.into()),
             )
         };
@@ -1338,6 +1365,7 @@ impl From<&Block> for pb::Block {
             canister_http_payload_bytes,
             query_stats_payload_bytes,
             chain_key_payload_bytes,
+            upgrade_payload_bytes,
             idkg_payload,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
@@ -1369,6 +1397,7 @@ impl TryFrom<pb::Block> for Block {
             canister_http: block.canister_http_payload_bytes,
             query_stats: block.query_stats_payload_bytes,
             chain_key: block.chain_key_payload_bytes,
+            upgrade: block.upgrade_payload_bytes,
         };
 
         let payload = match dkg_payload {

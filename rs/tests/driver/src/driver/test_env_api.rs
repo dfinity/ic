@@ -304,7 +304,7 @@ impl std::fmt::Display for TopologySnapshot {
                 "\tNode id={}, ipv6={:<width$}, domain_name={}, index={}",
                 n.node_id,
                 n.get_ip_addr(),
-                n.get_domain().map_or("n/a".to_string(), |domain| domain),
+                n.get_domain().unwrap_or_else(|| "n/a".to_string()),
                 idx,
                 width = max_length_ipv6,
             )
@@ -522,7 +522,7 @@ impl TopologySnapshot {
         )
     }
 
-    pub fn replica_version_records(&self) -> Result<Vec<(String, ReplicaVersionRecord)>> {
+    pub fn replica_version_records(&self) -> Result<Vec<ReplicaVersionRecord>> {
         self.local_registry
             .get_all_replica_version_records(self.registry_version)?
             .context("get_all_replica_version_records always returns Some (and it did not)")
@@ -1679,6 +1679,13 @@ pub fn execute_bash_script_from_session(session: &Session, script: &str) -> Resu
     channel.read_to_string(&mut out)?;
     let mut err = String::new();
     channel.stderr().read_to_string(&mut err)?;
+    // The server may send the exit status after its EOF but always before closing the channel.
+    // Wait for the close, as otherwise exit_status() may return its default of 0.
+    channel.wait_close().map_err(|e| {
+        anyhow!(
+            "block_on_bash_script: failed to wait for the channel to close: {e}. Output: {out} Err: {err}"
+        )
+    })?;
     let exit_status = channel.exit_status()?;
     if exit_status != 0 {
         bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
@@ -2816,10 +2823,10 @@ pub async fn install_nns_canisters(
             builder.enable_swapping_feature_for_subnet(subnet);
         }
         if registry_canister_init_payload
-            .is_blank_replica_version_id_for_cloud_engines_enabled
+            .is_subnet_splitting_enabled
             .unwrap_or_default()
         {
-            builder.enable_blank_replica_version_id_for_cloud_engines();
+            builder.enable_subnet_splitting();
         }
 
         builder

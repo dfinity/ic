@@ -356,6 +356,17 @@ http_file(
     url = "https://snapshot.debian.org/archive/debian/20260403T143651Z/pool/main/e/edk2/ovmf-amdsev_2025.11-5_all.deb",
 )
 
+# ntpd-rs, the NTS time server the local system-test backend serves its VMs'
+# clocks from (see `rs/tests/driver/src/driver/local_backend.rs`). Its releases
+# ship no plain binary archive, so we extract the daemon from the `.deb`, like
+# OVMF above.
+http_file(
+    name = "ntpd_rs_deb",
+    downloaded_file_path = "ntpd-rs.deb",
+    sha256 = "bfb1cb83bdc3705ef6a945ed81b00d8da2443057e57dfb8e7f4b61f695317a4d",
+    url = "https://github.com/pendulum-project/ntpd-rs/releases/download/v1.9.0/ntpd-rs_1.9.0-1_amd64.deb",
+)
+
 # TLA+ tools
 bazel_dep(name = "rules_java", version = "9.3.0")
 
@@ -1472,23 +1483,3 @@ archive_override(
 
 motoko = use_extension("@rules_motoko//motoko:extensions.bzl", "motoko")
 motoko.toolchain(version = "1.11.0")  # NOTE: keep version in line with Dockerfile
-
-# Universal VM and Prometheus VM disk images for the Local system-test backend.
-# These are vendored copies of the same artifacts the Farm backend references
-# from `rs/tests/driver/src/driver/{resource.rs,prometheus_vm.rs}`. The SHA256s
-# below must match `DEFAULT_UNIVERSAL_VM_IMG_SHA256` and
-# `DEFAULT_PROMETHEUS_VM_IMG_SHA256` respectively. See
-# `rs/tests/driver/src/driver/local_backend.rs` for usage.
-http_file(
-    name = "farm_universal_vm_img",
-    downloaded_file_path = "universal-vm.img.zst",
-    sha256 = "ba8b49004163fa15f13c8ebac1e7cb99499043cda9f0a5dee00eca1b95187aee",
-    url = "https://download.dfinity.systems/farm/universal-vm/ba8b49004163fa15f13c8ebac1e7cb99499043cda9f0a5dee00eca1b95187aee/x86_64-linux/universal-vm.img.zst",
-)
-
-http_file(
-    name = "farm_prometheus_vm_img",
-    downloaded_file_path = "prometheus-vm.img.zst",
-    sha256 = "6dc09a214f1975ce55a42a560b67b44ac58a61b52e3c3e9cf03dc2d7fbdd5f02",
-    url = "https://download.dfinity.systems/farm/prometheus-vm/6dc09a214f1975ce55a42a560b67b44ac58a61b52e3c3e9cf03dc2d7fbdd5f02/x86_64-linux/prometheus-vm.img.zst",
-)

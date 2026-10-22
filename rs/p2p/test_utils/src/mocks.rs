@@ -1,18 +1,106 @@
 use async_trait::async_trait;
 use axum::http::{Request, Response};
 use bytes::Bytes;
-use ic_interfaces::p2p::{
-    consensus::{
-        ArtifactAssembler, AssembleResult, Bouncer, BouncerFactory, Peers, ValidatedPoolReader,
+use ic_interfaces::{
+    canister_http::CanisterHttpPool,
+    p2p::{
+        consensus::{
+            ArtifactAssembler, AssembleResult, Bouncer, BouncerFactory, Peers, ValidatedPoolReader,
+        },
+        state_sync::{
+            AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient,
+        },
     },
-    state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient},
 };
 use ic_quic_transport::{ConnId, P2PError, Transport};
 use ic_types::NodeId;
-use ic_types::artifact::IdentifiableArtifact;
+use ic_types::artifact::{CanisterHttpResponseId, IdentifiableArtifact};
+use ic_types::canister_http::{
+    CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseShare,
+};
+use ic_types::crypto::CryptoHashOf;
 use mockall::mock;
+use std::collections::BTreeMap;
 
 use crate::consensus::U64Artifact;
+
+/// A canister HTTP pool that serves the response contents it was built with, and
+/// nothing else.
+///
+/// Hand-written rather than a `mock!` because
+/// [`CanisterHttpPool::get_response_content_by_hash`] returns a reference into the
+/// pool, which a mock cannot hand back for data it owns itself.
+pub struct FakeCanisterHttpPool {
+    contents: BTreeMap<CryptoHashOf<CanisterHttpResponse>, CanisterHttpResponse>,
+    /// Whether looking up a response content fails the test.
+    never_get_response_content: bool,
+}
+
+impl FakeCanisterHttpPool {
+    pub fn new(responses: impl IntoIterator<Item = CanisterHttpResponse>) -> Self {
+        Self {
+            contents: responses
+                .into_iter()
+                .map(|response| (ic_types::crypto::crypto_hash(&response), response))
+                .collect(),
+            never_get_response_content: false,
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self::new(std::iter::empty())
+    }
+
+    /// Makes any later call to [`CanisterHttpPool::get_response_content_by_hash`]
+    /// panic, like `.never()` does for an expectation of a mock.
+    pub fn expect_never_get_response_content_by_hash(&mut self) {
+        self.never_get_response_content = true;
+    }
+}
+
+impl CanisterHttpPool for FakeCanisterHttpPool {
+    fn get_validated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_> {
+        Box::new(std::iter::empty())
+    }
+
+    fn get_unvalidated_artifacts(
+        &self,
+    ) -> Box<dyn Iterator<Item = &CanisterHttpResponseArtifact> + '_> {
+        Box::new(std::iter::empty())
+    }
+
+    fn get_unvalidated_artifact(
+        &self,
+        _share: &CanisterHttpResponseShare,
+    ) -> Option<&CanisterHttpResponseArtifact> {
+        None
+    }
+
+    fn get_response_content_items(
+        &self,
+    ) -> Box<dyn Iterator<Item = (&CryptoHashOf<CanisterHttpResponse>, &CanisterHttpResponse)> + '_>
+    {
+        Box::new(self.contents.iter())
+    }
+
+    fn get_response_content_by_hash(
+        &self,
+        hash: &CryptoHashOf<CanisterHttpResponse>,
+    ) -> Option<&CanisterHttpResponse> {
+        assert!(
+            !self.never_get_response_content,
+            "Unexpected lookup of the canister http response content {hash:?}"
+        );
+        self.contents.get(hash)
+    }
+
+    fn lookup_validated(
+        &self,
+        _msg_id: &CanisterHttpResponseId,
+    ) -> Option<CanisterHttpResponseShare> {
+        None
+    }
+}
 
 mock! {
     pub StateSync<T: Send> {}

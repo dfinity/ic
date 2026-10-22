@@ -10,7 +10,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::deposit_address::{DepositAddressSchema, deposit_derivation_path};
+use crate::deposit_address::AddressSchema;
 use crate::eth_logs::encode_principal;
 use crate::eth_rpc::Hash;
 use crate::runtime::CanisterRuntime;
@@ -70,7 +70,7 @@ impl AttestationRequest {
     }
 
     pub fn derivation_path(&self) -> Vec<ByteBuf> {
-        deposit_derivation_path(DepositAddressSchema::CkErc20, &self.account)
+        AddressSchema::Deposit(self.account).derivation_path()
     }
 
     /// `"ck-deposit-owner" || chain_id || deposit_helper || principal || subaccount`, exactly what

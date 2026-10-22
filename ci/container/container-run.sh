@@ -255,7 +255,8 @@ CACHE_DIR="${CACHE_DIR:-${HOME}/.cache}"
 # ~/.aws, ~/.ssh: credentials forwarded to the container
 # $CACHE_DIR (~/.cache or -c/--cache-dir): caches persisted across containers (bazel, cargo, etc)
 # ~/.claude: persisted claude settings
-mkdir -p ~/.{aws,ssh,claude} "$CACHE_DIR"
+# ~/.config: user tool configs, e.g. gh's login (~/.config/gh/hosts.yml)
+mkdir -p ~/.{aws,ssh,claude,config} "$CACHE_DIR"
 
 RUNTIME_RUN_ARGS=(
     -w "$WORKDIR"
@@ -287,6 +288,7 @@ RUNTIME_RUN_ARGS=(
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.claude",target="${CTR_HOME}/.claude"
+    --mount type=bind,source="${HOME}/.config",target="${CTR_HOME}/.config"
 
     --mount type=tmpfs,target="/tmp/containers" # expected by ic-os build
 )
@@ -349,7 +351,10 @@ if [ "$RUNTIME" = docker ]; then
 else
     # Privileged rootful podman is required due to requirements of IC-OS guest build;
     # additionally, we need to use hosts's cgroups and network.
-    RUNTIME_RUN_ARGS+=(--pids-limit=-1 --privileged --network=host --cgroupns=host)
+    #
+    # `--pids-limit=-1` turns into `--pids-limit=1` somewhere down the podman -> runc
+    # stack, so use a very high positive limit instead.
+    RUNTIME_RUN_ARGS+=(--pids-limit=4194304 --privileged --network=host --cgroupns=host)
 fi
 
 # In the devenv, inject some extra files into the container for convenience

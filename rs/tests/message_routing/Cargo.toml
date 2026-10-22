@@ -15,8 +15,10 @@ ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-management-canister-types = { workspace = true }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-subnet-merging = { path = "../../recovery/subnet_merging" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
+ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-utils = { workspace = true }
 itertools = { workspace = true }
 rand = { workspace = true }
@@ -54,3 +56,7 @@ path = "rejoin_test.rs"
 [[bin]]
 name = "state_sync_malicious_chunk_test"
 path = "state_sync_malicious_chunk_test.rs"
+
+[[bin]]
+name = "subnet_cooling_down_test"
+path = "subnet_cooling_down_test.rs"

@@ -1,7 +1,7 @@
 //! Defines types that allow outdated replicas to catch up to the latest state.
 
 use crate::{
-    CryptoHashOfState, Height, RegistryVersion, ReplicaVersion,
+    CryptoHashOfState, Height, RegistryVersion, ReplicaVersion, Time,
     consensus::{
         Block, Committee, ConsensusMessageHashable, HasCommittee, HasHeight, HasVersion,
         HashedBlock, HashedRandomBeacon, ThresholdSignature, ThresholdSignatureShare,
@@ -402,24 +402,66 @@ impl SignedBytesWithoutDomainSeparator for CatchUpContentProtobufBytes {
     }
 }
 
-pub struct SubnetSplittingArgs {
-    pub destination_subnet_id: SubnetId,
+/// The purpose of a registry `CatchUpPackageContents` record: the kind of CUP the record
+/// describes, together with the parameters specific to that kind.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum CupType {
+    /// Initial CUP used to bootstrap a subnet.
+    Genesis,
+    /// A CUP used to recover a subnet.
+    Recovery {
+        /// The blockchain height that the CUP should have.
+        height: Height,
+        /// Block time for the CUP's block.
+        time: Time,
+        /// The hash of the state that the subnet should use.
+        state_hash: CryptoHashOfState,
+    },
+    /// A CUP used to indicate a subnet to split into two. This type is set on both the source and
+    /// destination subnets.
+    SubnetSplitting {
+        // The ID of the destination subnet that is being split off from the source subnet.
+        destination_subnet_id: SubnetId,
+    },
 }
 
-impl TryFrom<subnet_pb::SubnetSplittingArgs> for SubnetSplittingArgs {
+impl TryFrom<subnet_pb::catch_up_package_contents::CupType> for CupType {
     type Error = ProxyDecodeError;
 
     fn try_from(
-        subnet_pb::SubnetSplittingArgs {
-            destination_subnet_id,
-        }: subnet_pb::SubnetSplittingArgs,
+        cup_type: subnet_pb::catch_up_package_contents::CupType,
     ) -> Result<Self, Self::Error> {
-        let destination_subnet_id =
-            subnet_id_try_from_option(destination_subnet_id, "destination_subnet_id")?;
+        use subnet_pb::catch_up_package_contents::CupType as CupTypePb;
 
-        Ok(SubnetSplittingArgs {
-            destination_subnet_id,
+        Ok(match cup_type {
+            CupTypePb::Genesis(subnet_pb::GenesisArgs {}) => CupType::Genesis,
+            CupTypePb::Recovery(subnet_pb::RecoveryArgs {
+                height,
+                time,
+                state_hash,
+            }) => CupType::Recovery {
+                height: Height::new(height),
+                time: Time::from_nanos_since_unix_epoch(time),
+                state_hash: CryptoHashOfState::from(CryptoHash(state_hash)),
+            },
+            CupTypePb::SubnetSplitting(subnet_splitting_args) => CupType::SubnetSplitting {
+                destination_subnet_id: subnet_id_try_from_option(
+                    subnet_splitting_args.destination_subnet_id,
+                    "SubnetSplittingArgs::destination_subnet_id",
+                )?,
+            },
         })
+    }
+}
+
+impl TryFrom<&subnet_pb::CatchUpPackageContents> for CupType {
+    type Error = ProxyDecodeError;
+
+    fn try_from(cup_contents: &subnet_pb::CatchUpPackageContents) -> Result<Self, Self::Error> {
+        try_from_option_field(
+            cup_contents.cup_type.clone(),
+            "CatchUpPackageContents::cup_type",
+        )
     }
 }
 
@@ -437,6 +479,11 @@ pub enum CatchUpPackageType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_matches::assert_matches;
+    use ic_base_types::subnet_id_into_protobuf;
+    use ic_types_test_utils::ids::subnet_test_id;
+    use rstest::rstest;
+    use subnet_pb::catch_up_package_contents::CupType as CupTypePb;
 
     #[test]
     fn test_catch_up_package_param_partial_ord() {
@@ -473,5 +520,60 @@ mod tests {
         assert_eq!(c4.partial_cmp(&c1), Some(Ordering::Greater));
         // c5 does not compare to c1
         assert_eq!(c5.partial_cmp(&c1), None);
+    }
+
+    #[rstest]
+    #[case::genesis(CupTypePb::Genesis(subnet_pb::GenesisArgs {}), CupType::Genesis)]
+    #[case::recovery(
+        CupTypePb::Recovery(subnet_pb::RecoveryArgs {
+            height: 54321,
+            time: 1_000,
+            state_hash: vec![1, 2, 3],
+        }),
+        CupType::Recovery {
+            height: Height::new(54321),
+            time: Time::from_nanos_since_unix_epoch(1_000),
+            state_hash: CryptoHashOfState::from(CryptoHash(vec![1, 2, 3])),
+        },
+    )]
+    #[case::subnet_splitting(
+        CupTypePb::SubnetSplitting(subnet_pb::SubnetSplittingArgs {
+            destination_subnet_id: Some(subnet_id_into_protobuf(subnet_test_id(42))),
+        }),
+        CupType::SubnetSplitting {
+            destination_subnet_id: subnet_test_id(42),
+        },
+    )]
+    fn test_cup_type_from_proto(#[case] cup_type_pb: CupTypePb, #[case] expected: CupType) {
+        assert_matches!(CupType::try_from(cup_type_pb), Ok(cup_type) if cup_type == expected);
+    }
+
+    #[test]
+    fn test_cup_type_from_proto_fails_without_destination_subnet_id() {
+        let cup_type_pb = CupTypePb::SubnetSplitting(subnet_pb::SubnetSplittingArgs {
+            destination_subnet_id: None,
+        });
+
+        assert_matches!(
+            CupType::try_from(cup_type_pb),
+            Err(ProxyDecodeError::MissingField(
+                "SubnetSplittingArgs::destination_subnet_id"
+            ))
+        );
+    }
+
+    #[test]
+    fn test_cup_type_from_cup_contents_fails_without_cup_type() {
+        let cup_contents = subnet_pb::CatchUpPackageContents {
+            cup_type: None,
+            ..Default::default()
+        };
+
+        assert_matches!(
+            CupType::try_from(&cup_contents),
+            Err(ProxyDecodeError::MissingField(
+                "CatchUpPackageContents::cup_type"
+            ))
+        );
     }
 }

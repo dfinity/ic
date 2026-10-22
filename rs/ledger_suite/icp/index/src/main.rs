@@ -660,7 +660,7 @@ fn get_account_identifier_transactions(
         .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(msg_caller())) as u64)
         .min(usize::MAX as u64) as usize;
     // TODO: deal with the user setting start to u64::MAX
-    let start = arg.start.map_or(u64::MAX, |n| n);
+    let start = arg.start.unwrap_or(u64::MAX);
     let key = account_identifier_block_ids_key(arg.account_identifier, start);
     let mut settled_transactions = vec![];
     let indices = with_account_identifier_block_ids(|account_identifier_block_ids| {

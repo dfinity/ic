@@ -1469,6 +1469,9 @@ fn load_canister_snapshot_does_not_work_when_sender_does_not_control_originating
     );
 
     let initial_canister_state = test.canister_state(canister_id_2).clone();
+    let controllers_1 = &test.canister_state(canister_id_1).system_state.controllers;
+    assert_eq!(controllers_1.len(), 1);
+    let controller_1 = *controllers_1.first().unwrap();
 
     // Loading a snapshot belonging to `canister_id_1` into `canister_id_2` fails because
     // the controller of `canister_id_2` does not control `canister_id_1`.
@@ -1477,12 +1480,14 @@ fn load_canister_snapshot_does_not_work_when_sender_does_not_control_originating
     let error = test
         .subnet_message("load_canister_snapshot", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+    assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
     let message = format!(
-        "Only a controller of the canister that snapshot {} belongs to can load it on canister {}. Sender: {}",
-        snapshot_id, canister_id_2, test.user_id().get()
-    )
-    .to_string();
+        "Only the controllers of the canister {canister_id_1} can load its snapshot {snapshot_id} into the canister {canister_id_2}.\n\
+        Canister's controllers: {}\n\
+        Sender's ID: {}",
+        controller_1,
+        test.user_id().get()
+    );
     assert!(error.description().contains(&message));
     assert_eq!(
         initial_canister_state,
@@ -1990,7 +1995,7 @@ fn take_canister_snapshot_records_nominal_cycles_on_free_subnet() {
         };
         (
             instructions(canister_metrics.consumed_cycles_by_use_cases()),
-            instructions(canister_metrics.consumed_cycles_by_use_cases_as_counters()),
+            instructions(canister_metrics.consumed_cycles_by_use_cases_monotonic()),
         )
     };
 
@@ -2444,6 +2449,13 @@ fn read_canister_snapshot_metadata_fails_invalid_controller() {
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+    assert!(
+        error.description().contains(&format!(
+            "Caller {} is not allowed to call read_canister_snapshot_metadata",
+            user_test_id(42).get()
+        )),
+        "{error}"
+    );
 }
 
 fn read_canister_snapshot_data(

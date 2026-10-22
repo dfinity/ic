@@ -5,7 +5,8 @@ fn method_names_larger_than_allowed_payload_rejected() {
     let sender = CanisterId::from(1);
     let callee_source = 0;
     let callee_size = 10;
-    let heap = vec![0; 1024];
+    let mut heap_bytes = vec![0; 1024];
+    let heap = Heap::unchecked(&mut heap_bytes);
     let method_name_source = 0;
     let method_name_len = 100;
     let callback = WasmClosure::new(0, 0);
@@ -32,7 +33,8 @@ fn method_names_larger_than_max_sum_exported_function_names_rejected() {
     let sender = CanisterId::from(1);
     let callee_source = 0;
     let callee_size = 1;
-    let heap = vec![0; 1024];
+    let mut heap_bytes = vec![0; 1024];
+    let heap = Heap::unchecked(&mut heap_bytes);
     let method_name_source = 0;
     let max_sum_exported_function_name_lengths = 1000;
     let method_name_len = max_sum_exported_function_name_lengths + 1;
@@ -59,7 +61,8 @@ fn large_callee_rejected() {
     let sender = CanisterId::from(1);
     let callee_source = 0;
     let callee_size = 100;
-    let heap = vec![0; 1024];
+    let mut heap_bytes = vec![0; 1024];
+    let heap = Heap::unchecked(&mut heap_bytes);
     let method_name_source = 0;
     let method_name_len = 1;
     let callback = WasmClosure::new(0, 0);
@@ -86,7 +89,8 @@ fn payloads_larger_than_intra_limit_rejected() {
     let sender = CanisterId::from(1);
     let callee_source = 0;
     let callee_size = 1;
-    let heap = vec![0; 1024];
+    let mut heap_bytes = vec![0; 1024];
+    let heap = Heap::unchecked(&mut heap_bytes);
     let method_name_source = 0;
     let method_name_len = 1;
     let callback = WasmClosure::new(0, 0);
@@ -115,7 +119,8 @@ fn make_request_in_prep() -> RequestInPrep {
     let sender = CanisterId::from(1);
     let callee_source = 0;
     let callee_size = 1;
-    let heap = vec![0; 1024];
+    let mut heap_bytes = vec![0; 1024];
+    let heap = Heap::unchecked(&mut heap_bytes);
     let method_name_source = 0;
     let method_name_len = 1;
     let callback = WasmClosure::new(0, 0);

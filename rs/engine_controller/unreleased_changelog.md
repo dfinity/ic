@@ -9,6 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
+* `create_engine` takes an optional `resource_limits` (`maximum_state_size`,
+  `maximum_state_delta`), forwarded to the new subnet's `CreateSubnetPayload`.
+  Omitted, the subnet keeps the protocol defaults as before.
+
 * New `change_subnet_membership` update method that proxies to the registry's
   `change_subnet_membership` endpoint. The registry restricts this to
   `CloudEngine` subnets when the caller is the engine controller canister.
@@ -19,8 +23,15 @@ on the process that this file is part of, see
   (super admin) into the `subnet_admins` list. The supplied list is now
   forwarded to the registry as-is.
 
-* `update_subnet` rejects the new `UpdateSubnetPayload.cooling_down` field:
-  only `subnet_admins` and `is_halted` remain in the engine controller's scope.
+* `update_subnet` accepts the new `UpdateSubnetPayload.cooling_down` field, so
+  the engine controller can make a cloud engine subnet cool down (and stop
+  cooling down again). Its scope is now `subnet_admins`, `is_halted` and
+  `cooling_down`; every other field is still rejected.
+
+* `update_subnet` accepts the state limits in `resource_limits`
+  (`maximum_state_size`, `maximum_state_delta`), so the engine controller can
+  resize a cloud engine subnet's state limits after its nodes change. The query
+  limits are still rejected.
 
 ## Deprecated
 
