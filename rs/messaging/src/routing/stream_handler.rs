@@ -676,8 +676,10 @@ impl StreamHandlerImpl {
                 #[cfg(debug_assertions)]
                 let (balance_before, msg_cycles, reject_signals_before) = (
                     state.balance_with_messages(),
-                    // Cycles attached to messages from a remote engine are never credited
-                    // nor accounted for as lost.
+                    // An accepted message is expected to add its cycles to the balance
+                    // (credited or accounted for as lost). Cycles attached to messages from
+                    // a remote engine are neither (see `induct_message`), so an accepted
+                    // message from a remote engine leaves the balance unchanged.
                     if self.is_from_remote_engine(remote_subnet_id, &state) {
                         Cycles::zero()
                     } else {
@@ -759,9 +761,9 @@ impl StreamHandlerImpl {
         // Loopback (own-subnet) messages are excluded: an engine's own messages are always
         // inducted normally.
         //
-        // Cycles attached to messages from a remote engine (which are not allowed to carry
-        // any) are not real cycles: if such a message is dropped, its cycles are not
-        // accounted for as lost.
+        // Engines are not allowed to attach cycles to messages crossing the engine boundary,
+        // so any cycles attached to a message from a remote engine are illegitimate: if such
+        // a message is dropped, its cycles are not accounted for as lost.
         let is_from_remote_engine = self.is_from_remote_engine(remote_subnet_id, state);
         let own_is_engine = state.metadata.own_subnet_type == SubnetType::CloudEngine;
         // At an engine boundary iff this is a cross-subnet message and either side is an engine.

@@ -2765,8 +2765,8 @@ fn induct_stream_slices_with_refunds() {
 }
 
 /// Tests that a refund arriving in a slice across an engine boundary is dropped,
-/// its cycles are not observed as lost (they come from an engine, so they are not
-/// real cycles), and a critical error is raised. With subnet
+/// its cycles are not observed as lost (engines are not allowed to attach
+/// cycles to messages crossing the engine boundary), and a critical error is raised. With subnet
 /// types fixed at creation, an honest peer would never produce such a refund —
 /// arrival here implies a malicious or buggy sender.
 #[test]
@@ -3479,8 +3479,8 @@ fn induct_stream_slices_engine_src_best_effort_response_inducted() {
 /// before the genuine response from the real respondent could arrive.
 ///
 /// Expected: sender-subnet validation must fail closed even at the engine boundary;
-/// the forged response is dropped, its cycles are not accounted for as lost (they come
-/// from an engine, so they are not real cycles), and the `sender_subnet_mismatch`
+/// the forged response is dropped, its cycles are not accounted for as lost (engines are
+/// not allowed to attach cycles to messages crossing the engine boundary), and the `sender_subnet_mismatch`
 /// critical error is raised.
 #[test]
 fn induct_stream_slices_engine_boundary_drops_forged_response() {
@@ -3542,7 +3542,7 @@ fn induct_stream_slices_engine_boundary_drops_forged_response() {
 
 /// Tests that a guaranteed-response response which should not exist at the engine
 /// boundary — here one carrying cycles, from a CloudEngine subnet — has its cycles
-/// stripped (and not observed as lost, as they are not real cycles) but is still inducted, so a waiting caller is not stranded
+/// stripped (and not observed as lost, as engines are not allowed to attach cycles) but is still inducted, so a waiting caller is not stranded
 /// forever by our bug. The `illegal_engine_message` critical error is raised. The
 /// sender subnet matches and a matching callback exists, so the (now cycle-free)
 /// response is inducted rather than reaching the sender-subnet-mismatch path.
@@ -3621,7 +3621,7 @@ fn induct_stream_slices_engine_boundary_strips_and_inducts_guaranteed_response()
 
 /// Tests that a best-effort response carrying cycles which should not exist at the
 /// engine boundary, from a CloudEngine subnet, is dropped (not inducted): its cycles
-/// are stripped (and not observed as lost, as they are not real cycles), an accept signal is pushed, and the `illegal_engine_message`
+/// are stripped (and not observed as lost, as engines are not allowed to attach cycles), an accept signal is pushed, and the `illegal_engine_message`
 /// critical error is raised. Unlike a guaranteed response, a best-effort response is
 /// not delivered — the caller will time out on its own.
 #[test]
