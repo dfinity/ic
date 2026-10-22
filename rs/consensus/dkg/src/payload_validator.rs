@@ -572,11 +572,7 @@ mod tests {
             let mut parent = Block::from(pool.make_next_block());
             parent.payload = Payload::new(
                 ic_types::crypto::crypto_hash,
-                BlockPayload::Data(DataPayload {
-                    batch: BatchPayload::default(),
-                    dkg: DkgDataPayload::new(Height::from(0), vec![], vec![]),
-                    idkg: idkg::Payload::default(),
-                }),
+                BlockPayload::Data(DataPayload::new_empty(Height::from(0))),
             );
 
             let context = ValidationContext {
