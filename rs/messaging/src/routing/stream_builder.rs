@@ -665,7 +665,7 @@ impl StreamBuilderImpl {
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
                             if is_loopback_stream && let RequestOrResponse::Request(req) = &msg {
-                                local_connections.push((req.receiver, req.sender));
+                                local_connections.push((req.sender, req.receiver));
                             }
                             dst_stream_entry.or_default().push(msg.into());
                         }
@@ -714,17 +714,17 @@ impl StreamBuilderImpl {
         }
         drop(output_iter);
 
-        // Record a connection metrics entry on the receiver of every subnet-local
+        // Record a connection metrics entry on the sender of every subnet-local
         // request, for identifying tightly coupled canisters (e.g. when splitting
         // the subnet).
         let batch_time = state.metadata.batch_time;
-        for (receiver, sender) in local_connections {
-            if let Some(canister) = state.canister_state_make_mut(&receiver) {
+        for (sender, receiver) in local_connections {
+            if let Some(canister) = state.canister_state_make_mut(&sender) {
                 canister
                     .system_state
                     .canister_metrics_mut()
                     .connection_metrics_mut()
-                    .increment(sender, batch_time);
+                    .increment(receiver, batch_time);
             }
         }
 

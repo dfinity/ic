@@ -103,8 +103,8 @@ fn write_connection_metrics_file(
         .map_err(|err| format!("Failed to write header: {err}"))?;
 
     // Write rows.
-    for (receiver_canister_id, canister_state) in replicated_state.canister_states().all_iter() {
-        for (sender_canister_id, metrics) in canister_state
+    for (sender_canister_id, canister_state) in replicated_state.canister_states().all_iter() {
+        for (receiver_canister_id, metrics) in canister_state
             .system_state
             .canister_metrics()
             .connection_metrics()

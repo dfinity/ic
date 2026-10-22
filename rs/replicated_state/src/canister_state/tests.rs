@@ -1867,42 +1867,42 @@ fn lru_connection_metrics_evicts_entries_in_correct_order() {
         count,
     };
     // Least recently accessed: evicted first
-    let oldest_sender = canister_test_id(56);
+    let oldest_receiver = canister_test_id(56);
     // Accessed recently with fewer messages: evicted second
-    let light_sender_id = canister_test_id(99);
+    let light_receiver_id = canister_test_id(99);
     // Accessed recently with more messages: the one with the lower ID is evicted.
-    let heavy_sender_low_id = canister_test_id(10);
-    let heavy_sender_high_id = canister_test_id(102);
+    let heavy_receiver_low_id = canister_test_id(10);
+    let heavy_receiver_high_id = canister_test_id(102);
 
-    let mut metrics_per_sender = BTreeMap::from([
-        (oldest_sender, connection_metrics(0, 1_000)),
-        (light_sender_id, connection_metrics(1, 1)),
-        (heavy_sender_low_id, connection_metrics(1, 2)),
-        (heavy_sender_high_id, connection_metrics(1, 2)),
+    let mut metrics_per_receiver = BTreeMap::from([
+        (oldest_receiver, connection_metrics(0, 1_000)),
+        (light_receiver_id, connection_metrics(1, 1)),
+        (heavy_receiver_low_id, connection_metrics(1, 2)),
+        (heavy_receiver_high_id, connection_metrics(1, 2)),
     ]);
     // Most recently accessed entries, filling the map up to three entries over capacity.
-    for i in metrics_per_sender.len()..(MAX_CONNECTION_METRICS_ENTRIES + 3) {
-        metrics_per_sender.insert(canister_test_id(1000 + i as u64), connection_metrics(2, 1));
+    for i in metrics_per_receiver.len()..(MAX_CONNECTION_METRICS_ENTRIES + 3) {
+        metrics_per_receiver.insert(canister_test_id(1000 + i as u64), connection_metrics(2, 1));
     }
 
     // Entries are evicted by access timestamp, then count, then canister ID.
-    let mut expected = metrics_per_sender.clone();
-    expected.remove(&oldest_sender);
-    expected.remove(&light_sender_id);
-    expected.remove(&heavy_sender_low_id);
+    let mut expected = metrics_per_receiver.clone();
+    expected.remove(&oldest_receiver);
+    expected.remove(&light_receiver_id);
+    expected.remove(&heavy_receiver_low_id);
     assert_eq!(expected.len(), MAX_CONNECTION_METRICS_ENTRIES);
 
     // Recording the messages one by one: entries are evicted as soon as the map overflows.
     let mut from_increments = LruConnectionMetrics::default();
-    for (sender, metrics) in &metrics_per_sender {
+    for (receiver, metrics) in &metrics_per_receiver {
         for _ in 0..metrics.count {
-            from_increments.increment(*sender, metrics.last_access_timestamp);
+            from_increments.increment(*receiver, metrics.last_access_timestamp);
         }
     }
     assert_eq!(from_increments.get(), &expected);
 
     // Loading all the same entries at once, e.g. from a checkpoint.
-    let from_new = LruConnectionMetrics::new(metrics_per_sender);
+    let from_new = LruConnectionMetrics::new(metrics_per_receiver);
     assert_eq!(from_new.get(), &expected);
 
     assert_eq!(from_new, from_increments);

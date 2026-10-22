@@ -201,7 +201,7 @@ enum ConsumingCycles {
     Refund,
 }
 
-/// Maximum number of per-sender entries kept in a canister's `LruConnectionMetrics`.
+/// Maximum number of per-receiver entries kept in a canister's `LruConnectionMetrics`.
 pub(crate) const MAX_CONNECTION_METRICS_ENTRIES: usize = 100;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -210,35 +210,37 @@ pub struct ConnectionMetrics {
     pub count: u64,
 }
 
-/// Keeps track of the number of requests received from each canister, and the last time a request
-/// was received from that canister.
+/// Keeps track of the number of requests sent to each canister, and the last time a request
+/// was sent to that canister.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct LruConnectionMetrics {
-    metrics_per_sender: BTreeMap<CanisterId, ConnectionMetrics>,
+    metrics_per_receiver: BTreeMap<CanisterId, ConnectionMetrics>,
 }
 
 impl LruConnectionMetrics {
     /// Creates the metrics from the given map, evicting entries if it holds more than
     /// `MAX_CONNECTION_METRICS_ENTRIES` of them.
-    pub fn new(metrics_per_sender: BTreeMap<CanisterId, ConnectionMetrics>) -> Self {
-        let mut lru = Self { metrics_per_sender };
+    pub fn new(metrics_per_receiver: BTreeMap<CanisterId, ConnectionMetrics>) -> Self {
+        let mut lru = Self {
+            metrics_per_receiver,
+        };
         lru.evict();
         lru
     }
 
     pub fn get(&self) -> &BTreeMap<CanisterId, ConnectionMetrics> {
-        &self.metrics_per_sender
+        &self.metrics_per_receiver
     }
 
-    /// Increments the message count for `sender` and updates its last access timestamp.
-    pub fn increment(&mut self, sender: CanisterId, access_timestamp: Time) {
-        let metrics_entry =
-            self.metrics_per_sender
-                .entry(sender)
-                .or_insert_with(|| ConnectionMetrics {
-                    last_access_timestamp: access_timestamp,
-                    count: 0,
-                });
+    /// Increments the message count for `receiver` and updates its last access timestamp.
+    pub fn increment(&mut self, receiver: CanisterId, access_timestamp: Time) {
+        let metrics_entry = self
+            .metrics_per_receiver
+            .entry(receiver)
+            .or_insert_with(|| ConnectionMetrics {
+                last_access_timestamp: access_timestamp,
+                count: 0,
+            });
         metrics_entry.last_access_timestamp = access_timestamp;
         metrics_entry.count += 1;
 
@@ -248,18 +250,18 @@ impl LruConnectionMetrics {
     /// Evicts entries until at most `MAX_CONNECTION_METRICS_ENTRIES` remain by:
     /// 1. `last_access_timestamp`: least recently accessed entries are evicted first.
     /// 2. `count`: among equally old entries, the one with the fewest messages is evicted first.
-    /// 3. sender: deterministic final tie-breaker.
+    /// 3. receiver: deterministic final tie-breaker.
     fn evict(&mut self) {
-        while self.metrics_per_sender.len() > MAX_CONNECTION_METRICS_ENTRIES
-            && let Some(sender) = self
-                .metrics_per_sender
+        while self.metrics_per_receiver.len() > MAX_CONNECTION_METRICS_ENTRIES
+            && let Some(receiver) = self
+                .metrics_per_receiver
                 .iter()
-                .min_by_key(|(sender, metrics)| {
-                    (metrics.last_access_timestamp, metrics.count, **sender)
+                .min_by_key(|(receiver, metrics)| {
+                    (metrics.last_access_timestamp, metrics.count, **receiver)
                 })
-                .map(|(sender, _)| *sender)
+                .map(|(receiver, _)| *receiver)
         {
-            self.metrics_per_sender.remove(&sender);
+            self.metrics_per_receiver.remove(&receiver);
         }
     }
 }

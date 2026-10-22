@@ -324,17 +324,17 @@ fn build_streams_local_canisters() {
         // messages, but also the destination canisters of all messages.
         let mut expected_state = consume_output_queues(&provided_state);
 
-        // Every request routed into the loopback stream is recorded in the receiving
+        // Every request routed into the loopback stream is recorded in the sending
         // canister's connection metrics.
         let batch_time = expected_state.time();
         for msg in &msgs {
             expected_state
-                .canister_state_make_mut(&msg.receiver)
+                .canister_state_make_mut(&msg.sender)
                 .unwrap()
                 .system_state
                 .canister_metrics_mut()
                 .connection_metrics_mut()
-                .increment(msg.sender, batch_time);
+                .increment(msg.receiver, batch_time);
         }
 
         // Establish the expected ReplicatedState that holds the expected_stream_state
@@ -2257,7 +2257,7 @@ fn build_streams_with_oversized_payloads() {
             .unwrap();
         push_input(local_canister, remote_request_reject.into());
 
-        // Expecting the loopback-routed local request to be recorded in the receiving
+        // Expecting the loopback-routed local request to be recorded in the sending
         // canister's connection metrics.
         let local_canister_id = local_canister.canister_id();
         local_canister
