@@ -17,15 +17,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
-# The build-and-push job lives in container-publish.yml and pushes with the
-# machine-account token of the publish-container-images environment. The
-# ghcr.io/dfinity/ic-build and ic-dev packages must grant this repository's
-# GITHUB_TOKEN read access only, so that no pull_request run can push to them
-# whatever permissions its copy of a workflow asks for; ghcr-push-canary.yml
-# checks that daily.
+# This workflow runs from the pull request's own copy of the file and holds no
+# secret. When it completes, container-publish.yml, which always runs as
+# master's copy, builds and pushes the images if the recipe hash differs from
+# ci/container/TAG and commits TAG and the digest pins to the branch.
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   build-image-prep:
@@ -52,171 +49,6 @@ jobs:
           else
             echo "build_image=true" >> "$GITHUB_OUTPUT"
             echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
+            echo "The Container Publish workflow will build and push the images with tag $image_tag and commit TAG and the digests to this branch."
           fi
 
-  ic-build-image:
-    name: Build Container Image
-    needs: [build-image-prep]
-    # The build-and-push job comes from master's container-publish.yml, never
-    # from this run's own copy of the workflows, so a pull request cannot change
-    # the steps that hold the registry token; it only supplies the commit to
-    # build. That job runs in the publish-container-images environment: one of
-    # its required reviewers releases the token per run after reviewing the PR's
-    # ci/container/ changes and this `uses:` line.
-    #
-    # Fork PRs are skipped so that no approval can hand them the token, and so
-    # is the dfinity/ic-private mirror, where this workflow is active too.
-    if: |
-      needs.build-image-prep.outputs.build_image == 'true' &&
-      github.repository == 'dfinity/ic' &&
-      (github.event_name != 'pull_request' ||
-       github.event.pull_request.head.repo.full_name == github.repository)
-    uses: dfinity/ic/.github/workflows/container-publish.yml@master
-    secrets: inherit
-
-  rbe-worker-image:
-    name: Create Remote Build Execution Worker Image @ Namespace
-    runs-on: namespace-profile-default;permissions.additional_grant=baseimage:*:*
-    permissions: {}
-    needs: [build-image-prep, ic-build-image]
-    if: |
-      needs.build-image-prep.outputs.build_image == 'true' &&
-      github.repository == 'dfinity/ic' &&
-      (github.event_name != 'pull_request' ||
-       github.event.pull_request.head.repo.full_name == github.repository)
-    timeout-minutes: 30
-    outputs:
-      worker-image: ${{ steps.worker.outputs.worker-image }}
-    steps:
-      - name: Mirror ic-build to nscr.io and optimize it for Remote Build Execution @ Namespace
-        id: worker
-        shell: bash
-        run: |
-          set -xeuo pipefail
-          nsc docker login
-          ic_build_repo="ghcr.io/dfinity/ic-build"
-          src="${ic_build_repo}@${{ needs.ic-build-image.outputs.ic-build-imagedigest }}"
-          upload_log="$(mktemp)"
-          nsc base-image upload "$src" "ic-build:${{ needs.ic-build-image.outputs.image_tag }}" 2>&1 | tee "$upload_log"
-          worker_digest="$(grep -i 'Uploaded base image' "$upload_log" | grep -oE 'sha256:[0-9a-f]{64}' | tail -n1 || true)"
-          : "${worker_digest:?could not parse pushed image digest from nsc base-image upload output}"
-          worker_image="${NSC_CONTAINER_REGISTRY}/ic-build@${worker_digest}"
-          echo "Resolved worker image: $worker_image"
-          nsc base-image optimize --image_ref "$worker_image"
-          echo "worker-image=$worker_image" >> "$GITHUB_OUTPUT"
-
-  update-image-references:
-    name: Update Image References in Repo
-    runs-on: ubuntu-latest
-    needs: [build-image-prep, ic-build-image, rbe-worker-image]
-    if: ${{ needs.build-image-prep.outputs.build_image == 'true' }}
-    steps:
-      - name: Create GitHub App Token
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
-        id: app-token
-        with:
-          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
-          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
-
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ github.head_ref }}
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: Update Image References
-        shell: bash
-        run: |
-          # Update container image references
-          set -xeuo pipefail
-
-          IMAGE_PREFIX="ghcr.io/dfinity/"
-          IC_BUILD_DIGEST='${{ needs.ic-build-image.outputs.ic-build-imagedigest }}'
-          IC_DEV_DIGEST='${{ needs.ic-build-image.outputs.ic-dev-imagedigest }}'
-          for digest in "$IC_BUILD_DIGEST" "$IC_DEV_DIGEST"; do
-            if ! [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]; then
-              echo "::error::malformed image digest '$digest'"
-              exit 1
-            fi
-          done
-          IMG_NAME_IC_BUILD="${IMAGE_PREFIX}ic-build@${IC_BUILD_DIGEST}"
-          IMG_NAME_IC_DEV="${IMAGE_PREFIX}ic-dev@${IC_DEV_DIGEST}"
-
-          echo '${{ needs.ic-build-image.outputs.image_tag }}' > ci/container/TAG
-          echo "$IC_BUILD_DIGEST" > ci/container/ic-build.digest
-          echo "$IC_DEV_DIGEST" > ci/container/ic-dev.digest
-          # Re-point every reference to either image, by tag or by digest, under
-          # .devcontainer/ and .github/: the scope ci/container/check-image-pins.sh
-          # verifies below, with its pattern. grep -r only lists regular files (sed -i
-          # fails on directories like actions/bazel/bin) and fails the step if there
-          # are none.
-          repoint() { # <image> <new reference>
-            local re="ghcr\.io/dfinity/${1}(:|@)[A-Za-z0-9:._-]+"
-            grep -rlZE -- "$re" .devcontainer .github | xargs -0 -r sed -i -E "s#${re}#${2}#g" --
-          }
-          repoint ic-build "$IMG_NAME_IC_BUILD"
-          repoint ic-dev "$IMG_NAME_IC_DEV"
-          pushd .github
-          # The RBE worker image is also referenced outside workflows/, by
-          # actions/bazel-namespace/rbe.bazelrc, so rewrite it in every file under .github that
-          # references it (the pattern is anchored on the digest). grep -r only lists regular files
-          # (sed -i fails on directories like actions/bazel/bin) and fails the step if there are none.
-          WORKER_IMAGE='${{ needs.rbe-worker-image.outputs.worker-image }}'
-          worker_image_re='nscr\.io/[^"/]+/ic-build@sha256:[0-9a-f]{64}'
-          grep -rlZE -- "$worker_image_re" . | xargs -0 -r sed -i -E "s|${worker_image_re}|${WORKER_IMAGE}|g" --
-          popd
-
-          # Fail before committing if any reference escaped the rewrites above.
-          ./ci/container/check-image-pins.sh
-
-          git config --global user.name "IDX GitHub Automation"
-          git config --global user.email "<>"
-          git add .
-          git commit \
-            -m 'Updating container images to tag: ${{ needs.ic-build-image.outputs.image_tag }}' \
-            -m 'ic-build: ${{ needs.ic-build-image.outputs.ic-build-imagedigest }}' \
-            -m 'ic-dev:   ${{ needs.ic-build-image.outputs.ic-dev-imagedigest }}'
-          git push
-
-      - name: Add PR Comment
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        if: ${{ github.event_name == 'pull_request' }}
-        with:
-          script: |
-            // Hidden marker used to find this workflow's comment on subsequent runs
-            const marker = '<!-- container-autobuild-image-tag -->';
-            let message = marker + '\n'
-            message += 'Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
-            message += 'New container images with tag: `${{ needs.ic-build-image.outputs.image_tag }}`\n'
-            message += 'ic-build: `${{ needs.ic-build-image.outputs.ic-build-imagedigest }}`\n'
-            message += 'ic-dev: `${{ needs.ic-build-image.outputs.ic-dev-imagedigest }}`\n'
-
-            // Find existing comment from this workflow
-            const comments = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number
-            });
-
-            const botComment = comments.data.find(comment =>
-              comment.user.type === 'Bot' &&
-              comment.body.includes(marker)
-            );
-
-            if (botComment) {
-              // Update existing comment
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: message
-              });
-            } else {
-              // Create new comment
-              await github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: message
-              });
-            }

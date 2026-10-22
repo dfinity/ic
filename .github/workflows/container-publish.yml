@@ -1,40 +1,82 @@
-# Builds the ic-build and ic-dev images from the calling run's commit and pushes
-# them to ghcr.io/dfinity. container-autobuild.yml calls it as
-# `uses: dfinity/ic/.github/workflows/container-publish.yml@master`, so the
-# steps that hold the registry token always come from master, whatever the
-# calling pull request changes in its own copy of the workflows; the PR only
-# supplies the commit whose ci/container/ is built. Nothing from that checkout
-# is executed on the runner that holds the token: the recipe hash is computed
-# inline below and the Dockerfile's instructions run inside BuildKit.
+# Builds and publishes the ic-build and ic-dev images for a run of
+# "Container IC Build Image" (container-autobuild.yml), mirrors ic-build to the
+# Namespace registry for RBE, and commits TAG, the digest pins and the worker
+# image reference to that run's branch.
 #
-# The push uses the GHCR_PUSH_TOKEN secret and GHCR_PUSH_USERNAME variable of
-# the publish-container-images environment, which must have required reviewers,
-# "prevent self-review", administrators not allowed to bypass its rules, and no
-# deployment branch rule (see "Image publishing" in ci/container/README.md).
-# The ghcr.io/dfinity/ic-build and ic-dev packages must grant this repository's
-# GITHUB_TOKEN read access only; ghcr-push-canary.yml checks that daily.
+# As a workflow_run workflow it always executes this file from master, on
+# master's ref, whatever the triggering pull request changes in its own copy of
+# the workflows. The publish-container-images environment, which holds the
+# machine-account token (secret GHCR_PUSH_TOKEN, variable GHCR_PUSH_USERNAME),
+# restricts deployments to master, so no pull_request run can obtain it.
+# Nothing from the triggering commit's checkout is executed here: the recipe
+# hash is computed inline, the Dockerfile's instructions run inside BuildKit,
+# and the commit step only edits files. The recipe tag is the hash of
+# Dockerfile, init.sh and files/*, which is everything the Dockerfile takes
+# from the checkout, so a tag only ever names an image built from a recipe that
+# hashes to it. The ghcr.io/dfinity/ic-build and ic-dev packages must grant
+# this repository's GITHUB_TOKEN read access only; ghcr-push-canary.yml checks
+# that daily.
 name: Container Publish
 
 on:
-  workflow_call:
-    outputs:
-      image_tag:
-        description: The tag the images were pushed under (ci/container/get-image-tag.sh)
-        value: ${{ jobs.build.outputs.image_tag }}
-      ic-build-imagedigest:
-        value: ${{ jobs.build.outputs.ic-build-imagedigest }}
-      ic-dev-imagedigest:
-        value: ${{ jobs.build.outputs.ic-dev-imagedigest }}
+  workflow_run:
+    workflows:
+      - Container IC Build Image
+    types:
+      - completed
 
-permissions:
-  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+permissions: {}
 
 jobs:
+  prep:
+    name: Compare the recipe hash with TAG
+    runs-on: ubuntu-latest
+    # Same-repository runs only: a fork cannot receive the bot commit, and the
+    # dfinity/ic-private mirror does not publish.
+    if: |
+      github.repository == 'dfinity/ic' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    permissions:
+      contents: read
+    outputs:
+      build_image: ${{ steps.decide.outputs.build_image }}
+      image_tag: ${{ steps.decide.outputs.image_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Compare the recipe hash with TAG
+        id: decide
+        # The rule of ci/container/get-image-tag.sh, inline rather than by running
+        # the script from the triggering commit. The two must agree: change the
+        # rule here, on master, before changing the script.
+        run: |
+          set -euo pipefail
+          image_tag="$(sha256sum ci/container/Dockerfile ci/container/init.sh ci/container/files/* | sha256sum | cut -d' ' -f1)"
+          if [ "$image_tag" = "$(<ci/container/TAG)" ]; then
+            echo "ci/container/TAG already names the recipe hash $image_tag; nothing to build."
+            echo "build_image=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_image=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build Container Image ${{ matrix.image }}
     runs-on: ubuntu-latest
+    needs: [prep]
+    if: needs.prep.outputs.build_image == 'true'
     timeout-minutes: 60
     environment: publish-container-images
+    permissions:
+      contents: read
     strategy:
       matrix:
         include:
@@ -43,21 +85,13 @@ jobs:
           - image: ic-dev
             target: dev
     outputs:
-      image_tag: ${{ steps.tag.outputs.image_tag }}
       ic-build-imagedigest: ${{ steps.set-output-imagedigest.outputs.ic-build-imagedigest }}
       ic-dev-imagedigest: ${{ steps.set-output-imagedigest.outputs.ic-dev-imagedigest }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Compute image tag
-        id: tag
-        # The rule of ci/container/get-image-tag.sh, inline rather than by running
-        # the script from the pull request's checkout on this runner. The two must
-        # agree: change the rule here, on master, before changing the script.
-        run: |
-          image_tag="$(sha256sum ci/container/Dockerfile ci/container/init.sh ci/container/files/* | sha256sum | cut -d' ' -f1)"
-          echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3
@@ -82,8 +116,8 @@ jobs:
           # tagged package version when <tag> is pushed again (a cleanup of
           # untagged versions would otherwise remove it).
           tags: |
-            ghcr.io/dfinity/${{ matrix.image }}:${{ steps.tag.outputs.image_tag }}
-            ghcr.io/dfinity/${{ matrix.image }}:${{ steps.tag.outputs.image_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+            ghcr.io/dfinity/${{ matrix.image }}:${{ needs.prep.outputs.image_tag }}
+            ghcr.io/dfinity/${{ matrix.image }}:${{ needs.prep.outputs.image_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
           target: ${{ matrix.target }}
 
       - name: Set output image digest
@@ -97,3 +131,148 @@ jobs:
             echo "Unknown image: ${{ matrix.image }}"
             exit 1
           fi
+
+  rbe-worker-image:
+    name: Create Remote Build Execution Worker Image @ Namespace
+    runs-on: namespace-profile-default;permissions.additional_grant=baseimage:*:*
+    permissions: {}
+    needs: [prep, build]
+    if: needs.prep.outputs.build_image == 'true'
+    timeout-minutes: 30
+    outputs:
+      worker-image: ${{ steps.worker.outputs.worker-image }}
+    steps:
+      - name: Mirror ic-build to nscr.io and optimize it for Remote Build Execution @ Namespace
+        id: worker
+        shell: bash
+        run: |
+          set -xeuo pipefail
+          nsc docker login
+          ic_build_repo="ghcr.io/dfinity/ic-build"
+          src="${ic_build_repo}@${{ needs.build.outputs.ic-build-imagedigest }}"
+          upload_log="$(mktemp)"
+          nsc base-image upload "$src" "ic-build:${{ needs.prep.outputs.image_tag }}" 2>&1 | tee "$upload_log"
+          worker_digest="$(grep -i 'Uploaded base image' "$upload_log" | grep -oE 'sha256:[0-9a-f]{64}' | tail -n1 || true)"
+          : "${worker_digest:?could not parse pushed image digest from nsc base-image upload output}"
+          worker_image="${NSC_CONTAINER_REGISTRY}/ic-build@${worker_digest}"
+          echo "Resolved worker image: $worker_image"
+          nsc base-image optimize --image_ref "$worker_image"
+          echo "worker-image=$worker_image" >> "$GITHUB_OUTPUT"
+
+  update-image-references:
+    name: Update Image References in Repo
+    runs-on: ubuntu-latest
+    needs: [prep, build, rbe-worker-image]
+    if: needs.prep.outputs.build_image == 'true'
+    permissions:
+      pull-requests: write # the comment; the commit is pushed with the app token
+    steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Update Image References
+        shell: bash
+        # Edits files only; nothing from the checkout is executed. ci-main's
+        # test-container-run job runs ci/container/check-image-pins.sh on the
+        # resulting commit.
+        run: |
+          set -xeuo pipefail
+
+          IMAGE_PREFIX="ghcr.io/dfinity/"
+          IC_BUILD_DIGEST='${{ needs.build.outputs.ic-build-imagedigest }}'
+          IC_DEV_DIGEST='${{ needs.build.outputs.ic-dev-imagedigest }}'
+          for digest in "$IC_BUILD_DIGEST" "$IC_DEV_DIGEST"; do
+            if ! [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::malformed image digest '$digest'"
+              exit 1
+            fi
+          done
+          IMG_NAME_IC_BUILD="${IMAGE_PREFIX}ic-build@${IC_BUILD_DIGEST}"
+          IMG_NAME_IC_DEV="${IMAGE_PREFIX}ic-dev@${IC_DEV_DIGEST}"
+
+          echo '${{ needs.prep.outputs.image_tag }}' > ci/container/TAG
+          echo "$IC_BUILD_DIGEST" > ci/container/ic-build.digest
+          echo "$IC_DEV_DIGEST" > ci/container/ic-dev.digest
+          # Re-point every reference to either image, by tag or by digest, under
+          # .devcontainer/ and .github/: the scope ci/container/check-image-pins.sh
+          # verifies, with its pattern. grep -r only lists regular files (sed -i
+          # fails on directories like actions/bazel/bin) and fails the step if there
+          # are none.
+          repoint() { # <image> <new reference>
+            local re="ghcr\.io/dfinity/${1}(:|@)[A-Za-z0-9:._-]+"
+            grep -rlZE -- "$re" .devcontainer .github | xargs -0 -r sed -i -E "s#${re}#${2}#g" --
+          }
+          repoint ic-build "$IMG_NAME_IC_BUILD"
+          repoint ic-dev "$IMG_NAME_IC_DEV"
+          pushd .github
+          # The RBE worker image is also referenced outside workflows/, by
+          # actions/bazel-namespace/rbe.bazelrc, so rewrite it in every file under .github that
+          # references it (the pattern is anchored on the digest). grep -r only lists regular files
+          # (sed -i fails on directories like actions/bazel/bin) and fails the step if there are none.
+          WORKER_IMAGE='${{ needs.rbe-worker-image.outputs.worker-image }}'
+          worker_image_re='nscr\.io/[^"/]+/ic-build@sha256:[0-9a-f]{64}'
+          grep -rlZE -- "$worker_image_re" . | xargs -0 -r sed -i -E "s|${worker_image_re}|${WORKER_IMAGE}|g" --
+          popd
+
+          git config --global user.name "IDX GitHub Automation"
+          git config --global user.email "<>"
+          git add .
+          git commit \
+            -m 'Updating container images to tag: ${{ needs.prep.outputs.image_tag }}' \
+            -m 'ic-build: ${{ needs.build.outputs.ic-build-imagedigest }}' \
+            -m 'ic-dev:   ${{ needs.build.outputs.ic-dev-imagedigest }}'
+          git push
+
+      - name: Add PR Comment
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        if: github.event.workflow_run.pull_requests[0] != null
+        with:
+          script: |
+            const prNumber = ${{ github.event.workflow_run.pull_requests[0].number }};
+            // Hidden marker used to find this workflow's comment on subsequent runs
+            const marker = '<!-- container-autobuild-image-tag -->';
+            let message = marker + '\n'
+            message += 'Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
+            message += 'New container images with tag: `${{ needs.prep.outputs.image_tag }}`\n'
+            message += 'ic-build: `${{ needs.build.outputs.ic-build-imagedigest }}`\n'
+            message += 'ic-dev: `${{ needs.build.outputs.ic-dev-imagedigest }}`\n'
+
+            // Find existing comment from this workflow
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber
+            });
+
+            const botComment = comments.data.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes(marker)
+            );
+
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: message
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                issue_number: prNumber,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: message
+              });
+            }
