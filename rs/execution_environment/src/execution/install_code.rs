@@ -768,9 +768,7 @@ impl InstallCodeHelper {
             }
         }
 
-        // Apply the remaining system state changes, but check the Wasm execution
-        // result first so that a Wasm failure takes precedence over a failure to
-        // apply these changes.
+        // Apply the remaining system state changes.
         let result_of_applying_system_state_modifications = system_state_modifications
             .apply_changes(
                 original.time,
@@ -781,6 +779,8 @@ impl InstallCodeHelper {
                 round.log,
             );
 
+        // Check the Wasm execution result before the result of applying the
+        // system state changes so that a Wasm failure takes precedence.
         match output.wasm_result {
             Ok(None) => {}
             Ok(Some(_response)) => {

@@ -2,7 +2,9 @@
 use crate::validation::{ValidationError, ValidationResult};
 use ic_types::{
     CryptoHashOfPartialState, Height, RegistryVersion, SubnetId,
-    consensus::certification::{Certification, CertificationMessage, CertificationShare},
+    consensus::certification::{
+        Certification, CertificationMessage, CertificationShare, SignedCertificationContent,
+    },
     crypto::CryptoError,
 };
 use std::collections::HashSet;
@@ -115,7 +117,7 @@ pub trait Verifier: Send + Sync {
     fn validate(
         &self,
         subnet_id: SubnetId,
-        certification: &Certification,
+        certification: &SignedCertificationContent,
         registry_version: RegistryVersion,
     ) -> ValidationResult<VerifierError>;
 }

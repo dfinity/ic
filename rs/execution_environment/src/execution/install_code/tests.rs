@@ -966,6 +966,34 @@ fn install_code_with_start_with_success() {
     assert!(check_ingress_status(test.ingress_status(&message_id)).is_ok());
 }
 
+/// `install_code` prepays the full instruction limit and refunds the unused
+/// part. Both are scaled by the subnet size with truncation, so there can be
+/// rounding errors.
+#[test]
+fn install_code_consumed_cycles_match_on_any_subnet_size() {
+    let wat = r#"
+        (module
+            (func $start (drop (memory.grow (i32.const 1))))
+            (start $start)
+            (func (export "canister_update test"))
+            (memory 0 2)
+        )"#;
+    for subnet_size in [4, 7, 13, 34, 40] {
+        let mut test = ExecutionTestBuilder::new()
+            .with_subnet_size(subnet_size)
+            .build();
+        // Larger subnets charge proportionally more, so provide ample cycles.
+        let canister_id = test
+            .canister_from_cycles_and_wat(Cycles::new(1_000_000_000_000_000), wat)
+            .unwrap();
+        assert_gt!(
+            consumed_cycles_for_instructions(&test, canister_id),
+            NominalCycles::zero(),
+            "subnet size {subnet_size}"
+        );
+    }
+}
+
 fn start_install_code_dts(
     test: &mut ExecutionTest,
     canister_id: CanisterId,
