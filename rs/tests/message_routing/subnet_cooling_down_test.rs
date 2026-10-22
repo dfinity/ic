@@ -64,7 +64,7 @@ end::catalog[] */
 use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_registry_subnet_type::SubnetType;
-use ic_subnet_merging::metrics_helper::{fetch_metrics, min_across_replicas};
+use ic_subnet_merging::metrics_helper::{Labels, MetricsByReplica, fetch_metrics, replica_values};
 use ic_subnet_merging::readiness::{
     Condition, METRIC_SUBNET_CALL_CONTEXTS, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, SubnetNodeIps,
     Term, evaluate_merge_readiness,
@@ -87,7 +87,7 @@ use ic_universal_canister::{
     CallInterface, call_args, get_universal_canister_wasm, management, wasm,
 };
 use slog::{Logger, info};
-use std::time::Duration;
+use std::{net::IpAddr, time::Duration};
 
 /// The value of the `type` label selecting the `install_code` call contexts of
 /// `METRIC_SUBNET_CALL_CONTEXTS`.
@@ -650,6 +650,28 @@ async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &
     )
     .await
     .unwrap_or_else(|e| panic!("U1's `install_code` requests were not inducted: {e}"));
+}
+
+/// The smallest value any of the given replicas reports for any series of
+/// `metric` whose labels match `labels_match`. A replica that reports no such
+/// series, or whose metrics are not in `metrics`, reads as zero, and so does
+/// an empty `replicas`.
+fn min_across_replicas(
+    metrics: &MetricsByReplica,
+    metric: &str,
+    labels_match: impl Fn(&Labels) -> bool,
+    replicas: &[IpAddr],
+) -> f64 {
+    replicas
+        .iter()
+        .map(|ip| {
+            metrics
+                .get(ip)
+                .and_then(|metrics| replica_values(metrics, metric, &labels_match).reduce(f64::min))
+                .unwrap_or(0.0)
+        })
+        .reduce(f64::min)
+        .unwrap_or(0.0)
 }
 
 /// Waits until `canister`'s global counter is non-zero, i.e. until the payload

@@ -20,11 +20,8 @@ const METRICS_PORT: u16 = 9090;
 /// The labels of a series, by label name.
 pub type Labels = BTreeMap<String, String>;
 
-/// The metrics of a set of nodes, keyed by series (i.e. metric name plus
-/// labels), with values keyed by the IP of each node reporting the series.
-pub type Metrics = BTreeMap<(String, Labels), BTreeMap<IpAddr, f64>>;
-
-/// The metrics of a single node, keyed by series.
+/// The metrics of a single node, keyed by series (i.e. metric name plus
+/// labels).
 pub type ReplicaMetrics = BTreeMap<(String, Labels), f64>;
 
 /// The metrics of a set of nodes, keyed by the IP of each node.
@@ -60,17 +57,12 @@ impl std::error::Error for ScrapeError {}
 /// Fails if any node cannot be scraped: a condition evaluated across the nodes
 /// could otherwise hold on partial data. A series that no node reports is
 /// absent though, as a node that responds simply does not export that series.
-pub async fn fetch_metrics(node_ips: &[IpAddr], metrics: &[&str]) -> Result<Metrics, ScrapeError> {
+pub async fn fetch_metrics(
+    node_ips: &[IpAddr],
+    metrics: &[&str],
+) -> Result<MetricsByReplica, ScrapeError> {
     match fetch_available_metrics(node_ips, metrics).await {
-        (by_replica, None) => {
-            let mut result = Metrics::new();
-            for (ip, replica_metrics) in by_replica {
-                for (series, value) in replica_metrics {
-                    result.entry(series).or_default().insert(ip, value);
-                }
-            }
-            Ok(result)
-        }
+        (metrics, None) => Ok(metrics),
         (_, Some(err)) => Err(err),
     }
 }
@@ -139,20 +131,6 @@ fn parse_metrics(body: &str, metrics: &[&str]) -> Vec<((String, Labels), f64)> {
         .collect()
 }
 
-/// The per-node values of every series of `metric` whose labels match
-/// `labels_match`.
-pub fn matching_series<'a>(
-    metrics: &'a Metrics,
-    metric: &str,
-    labels_match: impl Fn(&Labels) -> bool,
-) -> Vec<&'a BTreeMap<IpAddr, f64>> {
-    metrics
-        .iter()
-        .filter(|((name, labels), _)| name == metric && labels_match(labels))
-        .map(|(_, values)| values)
-        .collect()
-}
-
 /// The values a node reports for the series of `metric` whose labels match
 /// `labels_match`, given the metrics of that node.
 pub fn replica_values(
@@ -166,58 +144,9 @@ pub fn replica_values(
         .map(|(_, value)| *value)
 }
 
-/// The smallest value any of the given replicas reports for any series of
-/// `metric` whose labels match `labels_match`. A replica that reports no such
-/// series reads as zero, and so does an empty `replicas`.
-pub fn min_across_replicas(
-    metrics: &Metrics,
-    metric: &str,
-    labels_match: impl Fn(&Labels) -> bool,
-    replicas: &[IpAddr],
-) -> f64 {
-    let series = matching_series(metrics, metric, labels_match);
-    replicas
-        .iter()
-        .map(|ip| {
-            series
-                .iter()
-                .filter_map(|values| values.get(ip))
-                .copied()
-                .reduce(f64::min)
-                .unwrap_or(0.0)
-        })
-        .reduce(f64::min)
-        .unwrap_or(0.0)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn ip(node: u8) -> IpAddr {
-        IpAddr::from([127, 0, 0, node])
-    }
-
-    fn values(entries: &[(u8, f64)]) -> BTreeMap<IpAddr, f64> {
-        entries
-            .iter()
-            .map(|&(node, value)| (ip(node), value))
-            .collect()
-    }
-
-    #[test]
-    fn minimum_requires_each_replica_to_report() {
-        let metrics = Metrics::from([
-            (series("m", &[("kind", "a")]), values(&[(1, 5.0)])),
-            (series("m", &[("kind", "b")]), values(&[(1, 6.0)])),
-        ]);
-        assert_eq!(
-            min_across_replicas(&metrics, "m", |_| true, &[ip(1), ip(2)]),
-            0.0
-        );
-        assert_eq!(min_across_replicas(&metrics, "m", |_| true, &[ip(1)]), 5.0);
-        assert_eq!(min_across_replicas(&metrics, "m", |_| true, &[]), 0.0);
-    }
 
     fn series(metric: &str, labels: &[(&str, &str)]) -> (String, Labels) {
         let labels = labels

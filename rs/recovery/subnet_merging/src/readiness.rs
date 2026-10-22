@@ -24,10 +24,13 @@
 //! 8. `RefundPool`: a replica of `S` satisfies it iff it reports no
 //!    `replicated_state_pending_refunds > 0`.
 //! 9. `CommonQuorum`: a replica of any subnet satisfies it iff it satisfies
-//!    all of the above terms that apply to its subnet.
+//!    all of the above terms that apply to its subnet. Hence, it holds iff on
+//!    every subnet a single quorum of the replicas satisfies all of these terms
+//!    at once, as opposed to each term holding on a possibly different quorum.
 
 use crate::metrics_helper::{self, Labels, MetricsByReplica, ReplicaMetrics, ScrapeError};
 
+use futures::future::join_all;
 use ic_base_types::SubnetId;
 use ic_types::consensus::get_faults_tolerated;
 use strum_macros::EnumIter;
@@ -138,7 +141,7 @@ type FetchedMetrics = (
 /// Fetches the metrics the terms are evaluated on: all of them from the subnet
 /// that is cooling down, and those of terms 1 and 2 from every other subnet.
 /// Fails if `subnets` does not list the cooling down subnet, or lists no node
-/// for a subnet.
+/// for a subnet, before scraping any node.
 async fn fetch_readiness_metrics(
     subnets: &SubnetNodeIps,
     source_subnet_id: SubnetId,
@@ -146,12 +149,11 @@ async fn fetch_readiness_metrics(
     if !subnets.contains_key(&source_subnet_id) {
         return Err(ReadinessError::UnknownSubnet(source_subnet_id));
     }
-    if let Some((&subnet_id, _)) = subnets.iter().find(|(_, node_ips)| node_ips.is_empty()) {
-        return Err(ReadinessError::NoNodes(subnet_id));
-    }
-    let mut result = BTreeMap::new();
-    let mut scrape_failures = Vec::new();
+    let mut requests = Vec::new();
     for (&subnet_id, node_ips) in subnets {
+        if node_ips.is_empty() {
+            return Err(ReadinessError::NoNodes(subnet_id));
+        }
         let metrics: &[&str] = if subnet_id == source_subnet_id {
             &[
                 METRIC_REGISTRY_VERSION,
@@ -165,7 +167,16 @@ async fn fetch_readiness_metrics(
         } else {
             &[METRIC_REGISTRY_VERSION, METRIC_STREAM_MESSAGES]
         };
-        let (metrics, failures) = metrics_helper::fetch_available_metrics(node_ips, metrics).await;
+        requests.push(async move {
+            (
+                subnet_id,
+                metrics_helper::fetch_available_metrics(node_ips, metrics).await,
+            )
+        });
+    }
+    let mut result = BTreeMap::new();
+    let mut scrape_failures = Vec::new();
+    for (subnet_id, (metrics, failures)) in join_all(requests).await {
         result.insert(subnet_id, metrics);
         scrape_failures.extend(failures.map(|err| (subnet_id, err)));
     }
