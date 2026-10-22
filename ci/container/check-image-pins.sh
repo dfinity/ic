@@ -14,6 +14,11 @@ cd "$(git rev-parse --show-toplevel)"
 status=0
 for image in ic-dev ic-build; do
     digest_file="ci/container/$image.digest"
+    if [ ! -f "$digest_file" ]; then
+        echo "::error file=$digest_file::$digest_file is missing"
+        status=1
+        continue
+    fi
     digest="$(<"$digest_file")"
     if ! [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]; then
         echo "::error file=$digest_file::$digest_file is malformed: '$digest'"
