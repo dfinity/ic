@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "f8c116ef7dba3121cef5cc09a85ae1ca0769a8354e96ab77373cb469e5bbd007",
+  "checksum": "374fde82fa49c6ea72b1ca50c11912ab15b775ccd21772b6954b221f06307f57",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -706,7 +706,7 @@
             "target": "futures_util"
           },
           {
-            "id": "mio 0.8.10",
+            "id": "mio 0.8.11",
             "target": "mio"
           },
           {
@@ -35354,7 +35354,7 @@
       ],
       "version": "0.8.9"
     },
-    "mio 0.8.10": {
+    "mio 0.8.11": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -35406,8 +35406,8 @@
       "package_url": "https://github.com/tokio-rs/mio",
       "repository": {
         "Http": {
-          "sha256": "8f3d0b296e374a4e6f3c7b0a1f5a51d748a0d34c85e7dc48fc3fa9a87657fe09",
-          "url": "https://static.crates.io/crates/mio/0.8.10/download"
+          "sha256": "a4a650543ca06a924e8b371db273b2756685faae30f8487da1b56505a8f78b0c",
+          "url": "https://static.crates.io/crates/mio/0.8.11/download"
         }
       },
       "targets": [
@@ -35418,7 +35418,7 @@
           }
         }
       ],
-      "version": "0.8.10"
+      "version": "0.8.11"
     },
     "mio 1.2.4": {
       "common_attrs": {
