@@ -585,24 +585,10 @@ pub struct HttpEndpointHandles {
     pub query_execution: QueryExecutionHandle,
     pub terminal_state_ingress_messages: Sender<(MessageId, Height)>,
     pub certified_height_watcher: watch::Sender<Height>,
-    /// Sender feeding the NNS delegation the endpoint serves. Sending a new
-    /// value swaps the delegation the running endpoint uses, which lets tests
-    /// simulate the NNS delegation changing at runtime (see [`set_delegation_from_nns`]).
     pub nns_delegation_watcher: watch::Sender<Option<NNSDelegationBuilder>>,
 }
 
-/// Makes the running endpoint serve `delegation` from now on, as when its NNS delegation manager
-/// fetches a new delegation from the NNS.
-pub fn set_delegation_from_nns(
-    nns_delegation_watcher: &watch::Sender<Option<NNSDelegationBuilder>>,
-    delegation: CertificateDelegation,
-) {
-    nns_delegation_watcher
-        .send(Some(nns_delegation_builder(delegation)))
-        .expect("The NNS delegation receiver should be alive.");
-}
-
-fn nns_delegation_builder(delegation: CertificateDelegation) -> NNSDelegationBuilder {
+pub fn nns_delegation_builder(delegation: CertificateDelegation) -> NNSDelegationBuilder {
     NNSDelegationBuilder::try_new(delegation.certificate, subnet_test_id(1), &no_op_logger())
         .expect("The NNS delegation should be well-formed.")
 }

@@ -148,13 +148,13 @@ pub(crate) fn new_router(
     version: Version,
 ) -> Router {
     let call_service = SynchronousCallHandlerState {
+        ingress_watcher_handle,
         verified_delegation_source: VerifiedDelegationSource::new(
             nns_delegation_reader,
             call_handler.log.clone(),
             metrics.clone(),
             "call",
         ),
-        ingress_watcher_handle,
         metrics,
         ingress_message_certificate_timeout_seconds,
         call_handler,

@@ -3,11 +3,12 @@
 // https://github.com/rust-lang/rust/issues/46379
 pub mod common;
 
+use crate::common::nns_delegation_builder;
 use crate::common::{
     DelegatedSubnet, HttpEndpointBuilder, UpdateEndpoint, basic_state_manager_mock,
     complete_message_in_latest_state, create_conn_and_send_request, default_get_latest_state,
     default_read_certified_state, get_free_localhost_socket_addr, modify_latest_state,
-    query_endpoint, set_delegation_from_nns,
+    query_endpoint,
 };
 use axum::body::Body;
 use bytes::Bytes;
@@ -795,7 +796,6 @@ fn can_retrieve_subnet_metrics(
             ]),
         ]),
     ));
-    // The key signing the certificate, which the NNS delegation certifies as the subnet's key.
     let subnet_public_key = subnet_certificate_builder.get_root_public_key();
     let (certificate, root_pk, _cbor) = subnet_certificate_builder
         .with_delegation(delegation_from_nns)
@@ -804,8 +804,6 @@ fn can_retrieve_subnet_metrics(
     let mock_certified_state = move |certificate: TestCertificate| {
         let hash_tree = certificate.clone().tree();
 
-        // The certified state must record the subnet public key which the NNS delegation
-        // certifies, otherwise the endpoint does not serve the delegation.
         let mut state = (**default_get_latest_state().get_ref()).clone();
         DelegatedSubnet::default()
             .with_public_key(subnet_public_key)
@@ -2001,7 +1999,11 @@ fn drift_delegation_from_certified_state(
 
     match side {
         DriftingSide::NnsDelegation => {
-            set_delegation_from_nns(nns_delegation_watcher, drifted_subnet.nns_delegation())
+            nns_delegation_watcher
+                .send(Some(nns_delegation_builder(
+                    drifted_subnet.nns_delegation(),
+                )))
+                .expect("The NNS delegation receiver should be alive.");
         }
         DriftingSide::CertifiedState => {
             modify_latest_state(latest_state, |state| drifted_subnet.record_in(state))

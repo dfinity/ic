@@ -170,17 +170,17 @@ impl ReadStateServiceBuilder {
         let version = self.version;
         let target = self.target;
         let state = ReadStateService {
-            verified_delegation_source: VerifiedDelegationSource::new(
-                self.nns_delegation_reader,
-                self.log.clone(),
-                self.metrics.clone(),
-                "read_state",
-            ),
-            log: self.log,
+            log: self.log.clone(),
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
-            metrics: self.metrics,
+            metrics: self.metrics.clone(),
+            verified_delegation_source: VerifiedDelegationSource::new(
+                self.nns_delegation_reader,
+                self.log,
+                self.metrics,
+                "read_state",
+            ),
             state_reader: self.state_reader,
             time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
