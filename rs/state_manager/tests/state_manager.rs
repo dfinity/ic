@@ -426,7 +426,10 @@ fn lazy_pagemaps() {
 
     env.execute_ingress(canister_id, "write_heap_64k", vec![])
         .unwrap();
-    assert_eq!(page_maps_by_status("loaded", &env), 2);
+    // With debug assertions, the canister log page map is loaded, too, because
+    // a debug assertion compares canister logs when applying them after execution.
+    let expected_loaded = if cfg!(debug_assertions) { 3 } else { 2 };
+    assert_eq!(page_maps_by_status("loaded", &env), expected_loaded);
 }
 
 #[test]

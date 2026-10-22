@@ -505,14 +505,24 @@ impl CallOrTaskHelper {
     fn finish(
         mut self,
         mut output: WasmExecutionOutput,
-        clean_canister: CanisterState,
-        canister_state_changes: CanisterStateChanges,
+        mut clean_canister: CanisterState,
+        mut canister_state_changes: CanisterStateChanges,
         original: OriginalContext,
         round: RoundContext,
         round_limits: &mut RoundLimits,
         subnet_memory_saturation: &ResourceSaturation,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
+        // Canister logs are persisted even if the other changes are not.
+        // Both states need the log because either may be returned below.
+        canister_state_changes
+            .system_state_modifications
+            .apply_canister_log_to_both(
+                &mut clean_canister.system_state,
+                &mut self.canister.system_state,
+                round.hypervisor.metrics(),
+            );
+
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -619,7 +629,6 @@ impl CallOrTaskHelper {
                         // non-replicated mode: a composite query called in the
                         // replicated mode is rejected before its execution.
                         false,
-                        round.hypervisor.metrics(),
                         round.log,
                     )
                 {
