@@ -525,11 +525,11 @@ impl CallOrTaskHelper {
         // Both states need the log because either may be returned below.
         canister_state_changes
             .system_state_modifications
-            .apply_canister_log(&mut clean_canister.system_state, round.hypervisor.metrics());
-        // apply_canister_log() drains the delta, so calling it again would not
-        // append the records to the helper canister. Copy the updated log instead.
-        self.canister
-            .set_log(clean_canister.system_state.log_memory_store.clone());
+            .apply_canister_log_to_both(
+                &mut clean_canister.system_state,
+                &mut self.canister.system_state,
+                round.hypervisor.metrics(),
+            );
 
         self.canister
             .system_state

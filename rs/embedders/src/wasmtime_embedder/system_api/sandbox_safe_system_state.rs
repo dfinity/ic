@@ -399,6 +399,26 @@ impl SystemStateModifications {
             .append_delta_log(&mut self.canister_log);
     }
 
+    /// Like `apply_canister_log()`, but appends the canister log records to
+    /// the canister logs of two system states, e.g., if it is not known yet
+    /// which of them is persisted eventually. Both canister logs must be equal
+    /// before the records are appended.
+    pub fn apply_canister_log_to_both<Metrics: CanisterLogMetrics>(
+        &mut self,
+        system_state: &mut SystemState,
+        other_system_state: &mut SystemState,
+        metrics: &Metrics,
+    ) {
+        debug_assert!(
+            system_state.log_memory_store == other_system_state.log_memory_store,
+            "Both system states must have the same canister log before applying the delta log"
+        );
+        self.apply_canister_log(system_state, metrics);
+        // `apply_canister_log()` drains the delta log, so calling it again would
+        // not append the records. Copy the updated canister log instead.
+        other_system_state.log_memory_store = system_state.log_memory_store.clone();
+    }
+
     /// Verify that the changes to the system state are sound and apply them to
     /// the system state if they are.
     pub fn apply_changes(
