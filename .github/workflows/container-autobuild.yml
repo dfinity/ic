@@ -186,6 +186,9 @@ jobs:
           grep -rlZE -- "$worker_image_re" . | xargs -0 -r sed -i -E "s|${worker_image_re}|${WORKER_IMAGE}|g" --
           popd
 
+          # Fail before committing if any reference escaped the rewrites above.
+          ./ci/container/check-image-pins.sh
+
           git config --global user.name "IDX GitHub Automation"
           git config --global user.email "<>"
           git add .

@@ -840,6 +840,11 @@ jobs:
           if command -v podman &>/dev/null && [ -x /usr/local/bin/crun ]; then
             echo 'PODMAN_RUN_USR_ARGS=(--runtime /usr/local/bin/crun)' >>~/.container-run.conf
           fi
+      - name: Check image pins
+        # Not behind the path filter: the pins are rewritten together by
+        # container-autobuild.yml, and a hand edit or a merge that keeps an
+        # older pin makes container-run.sh and CI run different images.
+        run: ./ci/container/check-image-pins.sh
       - name: Filter Relevant Files
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
