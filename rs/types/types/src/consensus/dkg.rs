@@ -673,28 +673,19 @@ impl TryFrom<pb::DkgDataPayload> for DkgDataPayload {
 impl DkgDataPayload {
     /// Return an empty [`DkgDataPayload`] using the given start_height.
     pub fn new_empty(start_height: Height) -> Self {
-        Self::new(start_height, vec![])
+        Self::new(start_height, vec![], vec![])
     }
 
     /// Return a new [`DkgDataPayload`].
-    pub fn new(start_height: Height, messages: DealingMessages) -> Self {
-        Self {
-            start_height,
-            messages,
-            transcripts_for_remote_subnets: vec![],
-        }
-    }
-
-    /// Return a new [`DkgDataPayload`] with the given remote DKG transcripts.
-    pub fn new_with_remote_dkg_transcripts(
+    pub fn new(
         start_height: Height,
         messages: DealingMessages,
-        remote_dkg_transcripts: Vec<RemoteTranscriptResult>,
+        transcripts_for_remote_subnets: Vec<RemoteTranscriptResult>,
     ) -> Self {
         Self {
             start_height,
             messages,
-            transcripts_for_remote_subnets: remote_dkg_transcripts,
+            transcripts_for_remote_subnets,
         }
     }
 
