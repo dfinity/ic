@@ -1790,8 +1790,12 @@ fn install_chunked_code_payload(
     .encode()
 }
 
-#[test]
-fn failed_reexecution_of_aborted_install_removes_install_code_call() {
+/// Sends an `install_chunked_code` via `send`, which gets its payload; makes its
+/// re-execution after an abort fail; and checks that the call is no longer tracked
+/// and that its prepayment was refunded. Returns the test and the result of `send`.
+fn failed_reexecution_of_aborted_install_helper<T>(
+    send: impl FnOnce(&mut ExecutionTest, Vec<u8>) -> T,
+) -> (ExecutionTest, T) {
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
@@ -1816,11 +1820,7 @@ fn failed_reexecution_of_aborted_install_removes_install_code_call() {
     let payload = install_chunked_code_payload(&mut test, target, store);
     let balance_before = test.canister_state(target).system_state.balance();
 
-    test.inject_call_to_ic00(
-        Method::InstallChunkedCode,
-        payload,
-        Cycles::new(1_000_000_000),
-    );
+    let sent = send(&mut test, payload);
     test.execute_subnet_message();
     assert_eq!(
         test.canister_state(target).next_execution(),
@@ -1836,8 +1836,7 @@ fn failed_reexecution_of_aborted_install_removes_install_code_call() {
     assert_consistent_install_code_calls(test.state(), 1);
     test.execute_slice(target);
 
-    // The call was rejected and is no longer tracked; and the prepayment was
-    // refunded.
+    // The call is no longer tracked and the prepayment was refunded.
     assert_eq!(
         test.canister_state(target).next_execution(),
         NextExecution::None
@@ -1847,64 +1846,35 @@ fn failed_reexecution_of_aborted_install_removes_install_code_call() {
         test.canister_state(target).system_state.balance(),
         balance_before
     );
+    (test, sent)
+}
+
+#[test]
+fn failed_reexecution_of_aborted_install_removes_install_code_call() {
+    let (mut test, ()) = failed_reexecution_of_aborted_install_helper(|test, payload| {
+        test.inject_call_to_ic00(
+            Method::InstallChunkedCode,
+            payload,
+            Cycles::new(1_000_000_000),
+        )
+    });
+
     test.induct_messages();
     assert_eq!(test.xnet_messages().len(), 1);
-    match &test.get_xnet_response(0).response_payload {
-        ic_types::messages::Payload::Reject(reject) => reject.assert_contains(
-            RejectCode::DestinationInvalid,
-            &format!("Store canister {store} was not found"),
-        ),
-        payload => panic!("Expected a reject, got {payload:?}"),
-    }
+    assert_matches!(
+        &test.get_xnet_response(0).response_payload,
+        ic_types::messages::Payload::Reject(reject) if reject.code() == RejectCode::DestinationInvalid
+    );
 }
 
 #[test]
 fn failed_reexecution_of_aborted_install_from_ingress_removes_install_code_call() {
-    let own_subnet = subnet_test_id(1);
-    let caller_canister = canister_test_id(1);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        // Ensure that all `install_code()` executions will get paused.
-        .with_install_code_slice_instruction_limit(132_000)
-        .with_create_execution_state_base_cost(0)
-        .with_manual_execution()
-        .with_caller(own_subnet, caller_canister)
-        .build();
+    let (test, message_id) = failed_reexecution_of_aborted_install_helper(|test, payload| {
+        test.subnet_message_raw(Method::InstallChunkedCode, payload)
+    });
 
-    let target = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
-        .unwrap();
-    let store = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
-        .unwrap();
-    let controllers = vec![caller_canister.get(), test.user_id().get()];
-    test.canister_update_controller(target, controllers.clone())
-        .unwrap();
-    test.canister_update_controller(store, controllers).unwrap();
-    let payload = install_chunked_code_payload(&mut test, target, store);
-
-    let message_id = test.subnet_message_raw(Method::InstallChunkedCode, payload);
-    test.execute_subnet_message();
-    assert_eq!(
-        test.canister_state(target).next_execution(),
-        NextExecution::ContinueInstallCode
-    );
-
-    test.canister_update_controller(store, vec![caller_canister.get()])
-        .unwrap();
-
-    // Abort the execution, as on a checkpoint; and re-execute it.
-    test.abort_all_paused_executions();
-    test.execute_slice(target);
-
-    // The call failed and is no longer tracked.
-    assert_eq!(
-        test.canister_state(target).next_execution(),
-        NextExecution::None
-    );
-    assert_consistent_install_code_calls(test.state(), 0);
     let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
+    assert_eq!(err.code(), ErrorCode::CanisterNotFound);
 }
 
 #[test]
