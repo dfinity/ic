@@ -24,6 +24,8 @@ on:
       - Kickoff
       - Bazel Dependency Submission
       - Advance Claude Security RC
+      - GHCR Push Canary
+      - Container Publish
 
 jobs:
   slack-workflow-run:
