@@ -87,12 +87,9 @@ use ic_protobuf::{
         routing_table::v1::{
             CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
         },
-        subnet::v1::CatchUpPackageContents,
+        subnet::v1::{CatchUpPackageContents, GenesisArgs, catch_up_package_contents::CupType},
     },
-    types::{
-        v1 as pb,
-        v1::{PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
-    },
+    types::v1::{self as pb, PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
 };
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -159,7 +156,7 @@ use ic_types::{
     },
     consensus::{
         block_maker::SubnetRecords,
-        certification::{Certification, CertificationContent},
+        certification::{Certification, CertificationContent, SignedCertificationContent},
     },
     crypto::{
         AlgorithmId, CombinedThresholdSig, CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
@@ -236,7 +233,7 @@ impl Verifier for FakeVerifier {
     fn validate(
         &self,
         _: SubnetId,
-        _: &Certification,
+        _: &SignedCertificationContent,
         _: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
         Ok(())
@@ -355,16 +352,15 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
         .unwrap();
 
     // replica version record
-    let replica_version = test_replica_version();
     let replica_version_record = ReplicaVersionRecord {
-        replica_version_id: Some(replica_version.to_string()),
+        replica_version_id: test_replica_version().to_string(),
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
         guest_launch_measurements: None,
     };
     registry_data_provider
         .add(
-            &make_replica_version_key(replica_version),
+            &make_replica_version_key(&replica_version_record.replica_version_id),
             registry_version,
             Some(replica_version_record),
         )
@@ -592,6 +588,7 @@ fn add_cup_contents_and_key_record(
     let cup_contents = CatchUpPackageContents {
         initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript.into()),
         initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript.into()),
+        cup_type: Some(CupType::Genesis(GenesisArgs {})),
         ..Default::default()
     };
     registry_data_provider
@@ -842,7 +839,7 @@ impl PocketXNetImpl {
 
     fn refill(&self, registry_version: RegistryVersion, log: ReplicaLogger) {
         let refill_stream_slice_indices =
-            refill_stream_slice_indices(self.pool.clone(), self.own_subnet_id);
+            refill_stream_slice_indices(&self.pool.lock().unwrap(), self.own_subnet_id);
 
         for (subnet_id, indices) in refill_stream_slice_indices {
             // When restoring a PocketIC instance from its state,
@@ -1033,6 +1030,7 @@ impl StateMachineNode {
 #[allow(clippy::large_enum_variant)]
 enum SignatureSecretKey {
     EcdsaSecp256k1(ic_secp256k1::PrivateKey),
+    EcdsaSecp256r1(ic_secp256r1::PrivateKey),
     SchnorrBip340(ic_secp256k1::PrivateKey),
     Ed25519(ic_ed25519::DerivedPrivateKey),
     VetKD(ic_crypto_test_utils_vetkd::PrivateKey),
@@ -1838,7 +1836,10 @@ impl StateMachineBuilder {
             bitcoin_clients.doge_testnet_client,
             sm.subnet_id,
             sm.registry_client.clone(),
-            BitcoinPayloadBuilderConfig::default(),
+            // Tolerate slow responses from the adapters on loaded test machines.
+            BitcoinPayloadBuilderConfig {
+                adapter_timeout: Duration::from_secs(1),
+            },
             sm.replica_logger.clone(),
         ));
 
@@ -2309,26 +2310,48 @@ impl StateMachine {
 
                     (public_key, private_key)
                 }
-                MasterPublicKeyId::Ecdsa(id) => {
-                    use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
+                MasterPublicKeyId::Ecdsa(id) => match id.curve {
+                    EcdsaCurve::Secp256k1 => {
+                        use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
 
-                    let path =
-                        DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
+                        let path =
+                            DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
 
-                    // We use a fixed seed here so that all subnets in PocketIC share the same keys.
-                    let private_key = PrivateKey::generate_from_seed(&[42; 32])
-                        .derive_subkey(&path)
-                        .0;
+                        // We use a fixed seed here so that all subnets in PocketIC share the same keys.
+                        let private_key = PrivateKey::generate_from_seed(&[42; 32])
+                            .derive_subkey(&path)
+                            .0;
 
-                    let public_key = MasterPublicKey {
-                        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                        public_key: private_key.public_key().serialize_sec1(true),
-                    };
+                        let public_key = MasterPublicKey {
+                            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                            public_key: private_key.public_key().serialize_sec1(true),
+                        };
 
-                    let private_key = SignatureSecretKey::EcdsaSecp256k1(private_key);
+                        let private_key = SignatureSecretKey::EcdsaSecp256k1(private_key);
 
-                    (public_key, private_key)
-                }
+                        (public_key, private_key)
+                    }
+                    EcdsaCurve::Secp256r1 => {
+                        use ic_secp256r1::{DerivationIndex, DerivationPath, PrivateKey};
+
+                        let path =
+                            DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
+
+                        // We use a fixed seed here so that all subnets in PocketIC share the same keys.
+                        let private_key = PrivateKey::generate_insecure_key_for_testing(42)
+                            .derive_subkey(&path)
+                            .0;
+
+                        let public_key = MasterPublicKey {
+                            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256r1,
+                            public_key: private_key.public_key().serialize_sec1(true),
+                        };
+
+                        let private_key = SignatureSecretKey::EcdsaSecp256r1(private_key);
+
+                        (public_key, private_key)
+                    }
+                },
                 MasterPublicKeyId::Schnorr(id) => match id.algorithm {
                     SchnorrAlgorithm::Bip340Secp256k1 => {
                         use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
@@ -2903,28 +2926,47 @@ impl StateMachine {
     ) -> Result<SignWithECDSAReply, UserError> {
         assert!(context.is_ecdsa());
 
-        if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
-            self.chain_key_subnet_secret_keys.get(&context.key_id())
-        {
-            let path = ic_secp256k1::DerivationPath::from_canister_id_and_path(
-                context.request.sender.get().as_slice(),
-                &context.derivation_path,
-            );
-            let dk = k.derive_subkey(&path).0;
-            let signature = dk
-                .sign_digest_with_ecdsa(&context.ecdsa_args().message_hash)
-                .to_vec();
-            Ok(SignWithECDSAReply { signature })
-        } else {
-            Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "Subnet {} does not hold threshold key {}.",
-                    self.subnet_id,
-                    context.key_id()
-                ),
-            ))
-        }
+        let message_hash = &context.ecdsa_args().message_hash;
+        let signature = match self.chain_key_subnet_secret_keys.get(&context.key_id()) {
+            Some(SignatureSecretKey::EcdsaSecp256k1(k)) => {
+                let path = ic_secp256k1::DerivationPath::from_canister_id_and_path(
+                    context.request.sender.get().as_slice(),
+                    &context.derivation_path,
+                );
+                let dk = k.derive_subkey(&path).0;
+                dk.sign_digest_with_ecdsa(message_hash).to_vec()
+            }
+            Some(SignatureSecretKey::EcdsaSecp256r1(k)) => {
+                let path = ic_secp256r1::DerivationPath::from_canister_id_and_path(
+                    context.request.sender.get().as_slice(),
+                    &context.derivation_path,
+                );
+                let dk = k.derive_subkey(&path).0;
+                let signature = dk
+                    .sign_digest(message_hash)
+                    .expect("a 32-byte message hash is long enough to be signed");
+                // Unlike `ic_secp256r1`, the IC normalizes `s` for all curves.
+                let signature = p256::ecdsa::Signature::from_slice(&signature)
+                    .expect("a freshly produced signature is well-formed");
+                signature
+                    .normalize_s()
+                    .unwrap_or(signature)
+                    .to_bytes()
+                    .to_vec()
+            }
+            _ => {
+                return Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "Subnet {} does not hold threshold key {}.",
+                        self.subnet_id,
+                        context.key_id()
+                    ),
+                ));
+            }
+        };
+
+        Ok(SignWithECDSAReply { signature })
     }
 
     fn build_sign_with_schnorr_reply(
@@ -5500,7 +5542,7 @@ fn certify_hash(
         CombinedThresholdSigOf::from(CombinedThresholdSig(signature.as_ref().to_vec()));
     Certification {
         height: *height,
-        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: Signed {
             content: CertificationContent { hash: hash.clone() },
             signature: ThresholdSignature {
@@ -5509,7 +5551,7 @@ fn certify_hash(
                     dealer_subnet: subnet_id,
                     target_subnet: NiDkgTargetSubnet::Local,
                     start_block_height: *height,
-                    dkg_tag: NiDkgTag::LowThreshold,
+                    dkg_tag: NiDkgTag::HighThreshold,
                 },
             },
         },

@@ -402,6 +402,14 @@ pub fn execute_bash_command(sess: &Session, command: String) -> Result<String, S
     channel
         .read_to_string(&mut out)
         .map_err(|e| format!("Failed to read from the channel: {e}"))?;
+    // The server may send the exit status after its EOF but always before closing the channel.
+    // Wait for the close, as otherwise exit_status() may return its default of 0.
+    // Unread stderr stays buffered, so the error branches below can still read it.
+    channel.wait_close().map_err(|e| {
+        format!(
+            "Error in: {command}\nFailed to wait for the channel to close: {e}\nstdout: \n{out}"
+        )
+    })?;
     let mut err_str = String::new();
     match channel.exit_status() {
         Ok(status) => match status {

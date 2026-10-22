@@ -493,9 +493,10 @@ impl ReplicatedState {
         // just loaded. A running replica gets the same value from
         // `Self::refresh_consumed_cycles`, so the canonical state tree at
         // `/subnet/<subnet_id>/metrics` hashes identically across a restart.
-        metadata
-            .subnet_metrics
-            .refresh_consumed_cycles(canister_states.total_consumed_cycles());
+        metadata.subnet_metrics.refresh_consumed_cycles(
+            canister_states.total_consumed_cycles(),
+            canister_states.total_consumed_cycles_monotonic(),
+        );
 
         Self {
             canister_states,
@@ -696,15 +697,19 @@ impl ReplicatedState {
 
     /// Refreshes
     /// [`crate::metadata_state::SubnetMetrics::consumed_cycles_total_including_canisters`]
-    /// from the current canister states. The total is derived, not persisted;
-    /// [`Self::new_from_checkpoint`] derives it the same way.
+    /// and
+    /// [`crate::metadata_state::SubnetMetrics::consumed_cycles_total_including_canisters_monotonic`]
+    /// from the current canister states. The totals are derived, not persisted;
+    /// [`Self::new_from_checkpoint`] derives them the same way.
     ///
     /// `O(|hot canisters|)`.
     pub fn refresh_consumed_cycles(&mut self) {
         let consumed_by_canisters = self.canister_states.total_consumed_cycles();
+        let consumed_by_canisters_monotonic =
+            self.canister_states.total_consumed_cycles_monotonic();
         self.metadata
             .subnet_metrics
-            .refresh_consumed_cycles(consumed_by_canisters);
+            .refresh_consumed_cycles(consumed_by_canisters, consumed_by_canisters_monotonic);
     }
 
     /// Re-establishes strict hot / cold partitioning of canister states (see

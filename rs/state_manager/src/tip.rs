@@ -1788,15 +1788,20 @@ fn publish_bundled_manifest(
     height: Height,
     bundled_manifest: crate::BundledManifest,
 ) {
-    if !matches!(
-        state_layout.checkpoint_status(height),
-        Ok(CheckpointStatus::Verified),
-    ) {
-        fatal!(
+    match state_layout.checkpoint_status(height) {
+        Ok(CheckpointStatus::Verified) => {}
+        Err(LayoutError::NotFound(_)) => {
+            warn!(
+                log,
+                "Not publishing manifest for already removed checkpoint @{}", height
+            );
+            return;
+        }
+        _ => fatal!(
             log,
             "Trying to publish manifest for unverified checkpoint @{}",
             height
-        );
+        ),
     }
 
     let mut states = states.write();
@@ -1831,6 +1836,45 @@ mod test {
                 metrics,
                 MaliciousFlags::default(),
             );
+        });
+    }
+
+    #[test]
+    fn publish_bundled_manifest_for_removed_checkpoint_is_noop() {
+        with_test_replica_logger(|log| {
+            let tmp = tmpdir("checkpoint");
+            let root = tmp.path().to_path_buf();
+            let metrics_registry = MetricsRegistry::new();
+            let layout = StateLayout::try_new(log.clone(), root, &metrics_registry).unwrap();
+            let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
+            let states = parking_lot::RwLock::new(SharedState {
+                certifications_metadata: Default::default(),
+                certifications: Default::default(),
+                states_metadata: Default::default(),
+                snapshots: Default::default(),
+                last_advertised: Height::new(0),
+                fetch_state: None,
+                tip_height: Height::new(0),
+                tip: None,
+            });
+            let bundled_manifest =
+                compute_bundled_manifest(crate::state_sync::types::Manifest::new(
+                    ic_types::state_sync::CURRENT_STATE_SYNC_VERSION,
+                    vec![],
+                    vec![],
+                ));
+
+            publish_bundled_manifest(
+                &log,
+                &metrics,
+                &layout,
+                &states,
+                &Arc::new(Mutex::new(())),
+                Height::new(1),
+                bundled_manifest,
+            );
+
+            assert!(states.read().states_metadata.is_empty());
         });
     }
 }

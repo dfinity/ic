@@ -23,6 +23,7 @@ on:
       - Update mainnet canister versions file
       - Kickoff
       - Bazel Dependency Submission
+      - Advance Claude Security RC
 
 jobs:
   slack-workflow-run:

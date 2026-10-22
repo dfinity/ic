@@ -1197,10 +1197,11 @@ mod tests {
     }
 
     #[test]
-    fn test_traverse_subnet_metrics_includes_canister_consumed_cycles_at_v29() {
+    fn test_traverse_subnet_metrics_includes_canister_consumed_cycles() {
         use crate::encoding::encode_subnet_metrics;
         use ic_types_cycles::{
-            CompoundCycles, CyclesUseCase, Instructions, NominalCycles, NominalCyclesTesting,
+            CompoundCycles, CyclesUseCase, Instructions, Memory, NominalCycles,
+            NominalCyclesTesting,
         };
 
         let own_subnet_id = subnet_test_id(1);
@@ -1236,13 +1237,22 @@ mod tests {
         subnet_metrics
             .observe_consumed_cycles_with_use_case(CyclesUseCase::VetKd, NominalCycles::new(4));
 
-        // Add a non-deleted canister that has consumed some cycles.
+        // Add a non-deleted canister that has consumed some cycles: a direct charge
+        // (for memory), which raises both the gauge and the monotonic amount, and a
+        // prepayment (for instructions) whose refund is still outstanding, which
+        // raises only the gauge.
         let mut canister_state = new_canister_state(
             canister_test_id(2),
             user_test_id(24).get(),
             INITIAL_CYCLES,
             NumSeconds::from(100_000),
         );
+        canister_state
+            .system_state
+            .consume_cycles(CompoundCycles::<Memory>::new(
+                Cycles::new(7_890),
+                CanisterCyclesCostSchedule::Normal,
+            ));
         canister_state
             .system_state
             .consume_cycles(CompoundCycles::<Instructions>::new(
@@ -1253,7 +1263,12 @@ mod tests {
             .system_state
             .canister_metrics()
             .consumed_cycles();
-        assert!(consumed_by_canisters > NominalCycles::zero());
+        let consumed_by_canisters_monotonic = canister_state
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_monotonic();
+        assert!(consumed_by_canisters_monotonic > NominalCycles::zero());
+        assert!(consumed_by_canisters > consumed_by_canisters_monotonic);
         state.put_canister_state(canister_state);
 
         // The tree reads the stored aggregate, which is zero until refreshed.
@@ -1275,6 +1290,23 @@ mod tests {
                 .consumed_cycles_total_including_canisters(),
             subnet_level + consumed_by_canisters
         );
+        assert_eq!(
+            state
+                .metadata
+                .subnet_metrics
+                .consumed_cycles_total_including_canisters_monotonic(),
+            subnet_level + consumed_by_canisters_monotonic
+        );
+
+        let encode_with_canisters_part =
+            |consumed_by_canisters, consumed_by_canisters_monotonic, certification_version| {
+                let mut metrics = state.metadata.subnet_metrics.clone();
+                metrics.refresh_consumed_cycles(
+                    consumed_by_canisters,
+                    consumed_by_canisters_monotonic,
+                );
+                encode_subnet_metrics(&metrics, certification_version)
+            };
 
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
@@ -1299,15 +1331,35 @@ mod tests {
                 "unexpected metrics leaf for certification_version: {certification_version:?}"
             );
 
-            // The canister's consumed cycles are included only starting with V29.
-            let mut metrics_without_canisters = state.metadata.subnet_metrics.clone();
-            metrics_without_canisters.refresh_consumed_cycles(NominalCycles::zero());
-            let without_canisters =
-                encode_subnet_metrics(&metrics_without_canisters, certification_version);
-            if certification_version >= CertificationVersion::V29 {
+            // The canister's consumed cycles are included only starting with V29:
+            // in V29 as the gauge, starting with V30 as the monotonic amount.
+            let without_canisters = encode_with_canisters_part(
+                NominalCycles::zero(),
+                NominalCycles::zero(),
+                certification_version,
+            );
+            let gauge_only = encode_with_canisters_part(
+                consumed_by_canisters,
+                NominalCycles::zero(),
+                certification_version,
+            );
+            let monotonic_only = encode_with_canisters_part(
+                NominalCycles::zero(),
+                consumed_by_canisters_monotonic,
+                certification_version,
+            );
+            if certification_version >= CertificationVersion::V30 {
+                assert_eq!(metrics_blob, monotonic_only);
+                assert_ne!(metrics_blob, gauge_only);
+                assert_ne!(metrics_blob, without_canisters);
+            } else if certification_version >= CertificationVersion::V29 {
+                assert_eq!(metrics_blob, gauge_only);
+                assert_ne!(metrics_blob, monotonic_only);
                 assert_ne!(metrics_blob, without_canisters);
             } else {
                 assert_eq!(metrics_blob, without_canisters);
+                assert_eq!(metrics_blob, gauge_only);
+                assert_eq!(metrics_blob, monotonic_only);
             }
         }
     }

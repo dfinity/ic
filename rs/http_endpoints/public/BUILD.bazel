@@ -220,6 +220,7 @@ rust_test_suite_with_extra_srcs(
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/test_utilities/consensus",
+        "//rs/test_utilities/metrics",
         "//rs/test_utilities/state",
         "//rs/test_utilities/types",
         "//rs/types/types",

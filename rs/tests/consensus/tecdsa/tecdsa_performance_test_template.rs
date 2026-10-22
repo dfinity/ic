@@ -163,7 +163,9 @@ fn make_key_ids() -> Vec<MasterPublicKeyId> {
                 result.push(ic_consensus_threshold_sig_system_test_utils::make_eddsa_key_id());
             }
             "ecdsa_secp256k1" => {
-                result.push(ic_consensus_threshold_sig_system_test_utils::make_ecdsa_key_id());
+                result.push(
+                    ic_consensus_threshold_sig_system_test_utils::make_ecdsa_secp256k1_key_id(),
+                );
             }
             "vetkd_bls12_381_g2" => {
                 result.push(ic_consensus_threshold_sig_system_test_utils::make_vetkd_key_id());

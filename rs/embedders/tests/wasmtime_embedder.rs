@@ -9,7 +9,7 @@ use ic_embedders::{
     wasmtime_embedder::{CanisterMemoryType, system_api::ApiType, system_api_complexity},
 };
 use ic_interfaces::execution_environment::{
-    CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
+    CanisterBacktrace, Heap, HypervisorError, SystemApi, TrapCode,
 };
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
@@ -1234,6 +1234,52 @@ fn stable64_read_out_of_bounds() {
         .build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
     let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {err}");
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
+}
+
+/// A `stable64_read`/`stable64_write` with a `size` argument so large that
+/// `size + overhead` would overflow an `i64` must trap.
+#[test]
+fn stable64_read_write_huge_size_traps_on_bounds() {
+    fn func_ref(name: &str) -> FuncRef {
+        FuncRef::Method(WasmMethod::Update(name.to_string()))
+    }
+
+    // 2^63: `size + overhead` wraps to a negative i64, which previously forced
+    // the instruction counter to a hugely negative value before any bounds
+    // check ran.
+    let wat = r#"
+        (module
+            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+            (import "ic0" "stable64_read"
+                (func $stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+            (import "ic0" "stable64_write"
+                (func $stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+            (func (export "canister_update test_read")
+                (drop (call $stable_grow (i32.const 1)))
+                (call $stable64_read (i64.const 0) (i64.const 0) (i64.const 0x8000000000000000))
+            )
+            (func (export "canister_update test_write")
+                (drop (call $stable_grow (i32.const 1)))
+                (call $stable64_write (i64.const 0) (i64.const 0) (i64.const 0x8000000000000000))
+            )
+            (memory 1 1)
+        )"#;
+
+    use TrapCode::*;
+
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+    let err = instance.run(func_ref("test_read")).unwrap_err();
+    let HypervisorError::Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {err}");
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
+
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+    let err = instance.run(func_ref("test_write")).unwrap_err();
+    let HypervisorError::Trapped { trap_code, .. } = err else {
         panic!("Expected Trapped, but got {err}");
     };
     assert_eq!(trap_code, StableMemoryOutOfBounds);
@@ -2602,7 +2648,12 @@ fn wasm64_root_key() {
         .store_data_mut()
         .system_api_mut()
         .unwrap()
-        .ic0_root_key_copy(0, 0, expected_size, &mut expected_heap)
+        .ic0_root_key_copy(
+            0,
+            0,
+            expected_size,
+            &mut Heap::unchecked(&mut expected_heap),
+        )
         .unwrap();
     assert_eq!(wasm_heap, expected_heap);
 }
@@ -2852,7 +2903,12 @@ fn wasm64_subnet_self_copy() {
         .store_data()
         .system_api()
         .unwrap()
-        .ic0_subnet_self_copy(0, 0, subnet_id_size, &mut expected_heap)
+        .ic0_subnet_self_copy(
+            0,
+            0,
+            subnet_id_size,
+            &mut Heap::unchecked(&mut expected_heap),
+        )
         .unwrap();
 
     assert_eq!(wasm_heap, expected_heap);
@@ -3025,7 +3081,7 @@ fn wasm64_canister_liquid_cycle_balance128() {
         .store_data_mut()
         .system_api_mut()
         .unwrap()
-        .ic0_canister_liquid_cycle_balance128(0, &mut expected_heap)
+        .ic0_canister_liquid_cycle_balance128(0, &mut Heap::unchecked(&mut expected_heap))
         .unwrap();
     assert_eq!(wasm_heap, expected_heap);
 

@@ -9,7 +9,7 @@ rust_library(
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
-    version = "16.0.0",
+    version = "16.1.0",
     deps = [
         # Keep sorted.
         "@crate_index//:backon",
@@ -97,6 +97,7 @@ rust_test(
         "@crate_index//:ic-utils",
         "@crate_index//:ic-vetkeys",
         "@crate_index//:k256",
+        "@crate_index//:p256",
         "@crate_index//:reqwest",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",

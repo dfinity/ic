@@ -3197,9 +3197,10 @@ fn certified_subnet_metrics(env: &StateMachine) -> (MixedHashTree, CryptoHashOfP
 /// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters`
 /// is not persisted: `ReplicatedState::new_from_checkpoint` re-derives it from the
 /// canisters it loads, exactly as the refresh on every committed state does. From
-/// certification version `V29` on, that aggregate is what
-/// `/subnet/<subnet_id>/metrics` certifies, so a replica restarting from a
-/// checkpoint has to certify byte-for-byte the same leaf as one that kept running.
+/// certification version `V29` on, that aggregate (or, from `V30` on, its
+/// monotonic counterpart) is what `/subnet/<subnet_id>/metrics` certifies, so a
+/// replica restarting from a checkpoint has to certify byte-for-byte the same leaf
+/// as one that kept running.
 #[test]
 fn subnet_metrics_are_unchanged_across_a_restart() {
     let env = StateMachineBuilder::new()
@@ -3298,7 +3299,8 @@ fn assert_consumed_cycles_are_refreshed(env: &StateMachine) -> NominalCycles {
 /// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters`
 /// is refreshed on every committed state, not only on the rounds that happen to
 /// touch the subnet-level fields. From certification version `V29` on the aggregate
-/// is certified at `/subnet/<subnet_id>/metrics`, so a stale one would be served to
+/// (or, from `V30` on, its monotonic counterpart) is certified at
+/// `/subnet/<subnet_id>/metrics`, so a stale one would be served to
 /// users as the current consumption of the subnet.
 ///
 /// A heartbeat that burns a fixed amount of cycles makes every single round consume
@@ -3689,6 +3691,54 @@ fn canister_metrics_via_query_call_by_controller_succeeds() {
 
     assert!(result.is_ok());
     assert_eq!(canister_metrics_count(&env), 1);
+}
+
+// A subnet admin who is not a controller of a canister can install code on it
+// on a cloud engine, but not on a rented subnet (both on the free cost
+// schedule).
+#[test]
+fn install_code_by_subnet_admin_succeeds_only_on_cloud_engine() {
+    let subnet_admin = user_test_id(100).get();
+    for subnet_type in [SubnetType::CloudEngine, SubnetType::Application] {
+        let env = StateMachineBuilder::new()
+            .with_config(Some(StateMachineConfig::new(
+                SubnetConfig::new(subnet_type),
+                HypervisorConfig::default(),
+            )))
+            .with_subnet_type(subnet_type)
+            .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+            .with_subnet_admins(vec![subnet_admin])
+            .build();
+        let canister_id = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+        assert!(
+            !env.get_controllers(canister_id)
+                .unwrap()
+                .contains(&subnet_admin)
+        );
+
+        let install_code_args = InstallCodeArgsV2 {
+            mode: CanisterInstallModeV2::Install,
+            canister_id: canister_id.get(),
+            wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
+            arg: vec![],
+            sender_canister_version: None,
+        };
+        let result = env.execute_ingress_as(
+            subnet_admin,
+            IC_00,
+            Method::InstallCode,
+            install_code_args.encode(),
+        );
+        match subnet_type {
+            SubnetType::CloudEngine => {
+                result.unwrap();
+            }
+            _ => assert_eq!(
+                result.unwrap_err().code(),
+                ErrorCode::CanisterInvalidController
+            ),
+        }
+    }
 }
 
 #[test]

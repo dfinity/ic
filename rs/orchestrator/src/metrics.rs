@@ -18,9 +18,12 @@ pub(crate) struct OrchestratorMetrics {
     pub(crate) critical_error_cup_deserialization_failed: IntCounter,
     pub(crate) critical_error_state_removal_failed: IntCounter,
     pub(crate) fstrim_duration: IntGauge,
+    pub(crate) fstrim_total: IntCounter,
     pub(crate) critical_error_task_failed: IntCounterVec,
     pub(crate) processes_start_attempts: IntCounterVec,
     pub(crate) processes_stop_attempts: IntCounterVec,
+    pub(crate) cloud_engine_config_fetches: IntCounterVec,
+    pub(crate) cloud_engine_config_last_success: IntGauge,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, AsRefStr)]
@@ -102,6 +105,10 @@ impl OrchestratorMetrics {
                 "orchestrator_fstrim_duration_milliseconds",
                 "The duration of the last fstrim call, in milliseconds",
             ),
+            fstrim_total: metrics_registry.int_counter(
+                "orchestrator_fstrim_total",
+                "Number of times the data partition was synced and trimmed",
+            ),
             critical_error_task_failed: metrics_registry.int_counter_vec(
                 "orchestrator_tasks_failed_total",
                 "Number of times a task failed, \
@@ -117,6 +124,16 @@ impl OrchestratorMetrics {
                 "orchestrator_processes_stop_attempts_total",
                 "Number of times a process was attempted to be stopped",
                 &["process_name"],
+            ),
+            cloud_engine_config_fetches: metrics_registry.int_counter_vec(
+                "orchestrator_cloud_engine_config_fetches_total",
+                "Number of attempts to fetch the ic-gateway configuration from \
+                the engine operator canister, grouped by outcome",
+                &["outcome"],
+            ),
+            cloud_engine_config_last_success: metrics_registry.int_gauge(
+                "orchestrator_cloud_engine_config_last_success_seconds",
+                "Unix timestamp of the last successfully fetched ic-gateway configuration",
             ),
         }
     }

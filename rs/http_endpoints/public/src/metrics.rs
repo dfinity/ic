@@ -3,6 +3,7 @@ use ic_metrics::{
     buckets::{add_bucket, decimal_buckets, linear_buckets},
 };
 use ic_nns_delegation_manager::DelegationVerificationError;
+use ic_types::messages::SignedSenderInfo;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 
 pub const LABEL_DETAIL: &str = "detail";
@@ -78,6 +79,9 @@ pub struct HttpHandlerMetrics {
 
     // read_state metrics
     pub read_state_path_type_total: IntCounterVec,
+
+    // sender_info metrics
+    pub validated_sender_info_size_bytes: HistogramVec,
 
     // NNS delegation verification metrics
     pub delegation_verification_failures_total: IntCounterVec,
@@ -224,6 +228,13 @@ impl HttpHandlerMetrics {
                 "Count of read_state paths requested, by endpoint type and path type.",
                 &["endpoint", "path_type"],
             ),
+            validated_sender_info_size_bytes: metrics_registry.histogram_vec(
+                "replica_http_validated_sender_info_size_bytes",
+                "Sizes in bytes of the `info` blob of the `sender_info` field in requests that passed validation, by request type.",
+                // 1 B - 5 MB
+                decimal_buckets(0, 6),
+                &[LABEL_REQUEST_TYPE],
+            ),
             delegation_verification_failures_total: metrics_registry.int_counter_vec(
                 "replica_http_delegation_verification_failures_total",
                 "Count of NNS delegation verifications against the certified state which \
@@ -237,6 +248,20 @@ impl HttpHandlerMetrics {
         self.read_state_path_type_total
             .with_label_values(&[endpoint_type, path_type])
             .inc()
+    }
+
+    /// Observes the size of the `info` blob of the `sender_info` field, if any,
+    /// of a request that passed validation.
+    pub fn observe_validated_sender_info(
+        &self,
+        request_type: &str,
+        sender_info: Option<&SignedSenderInfo>,
+    ) {
+        if let Some(sender_info) = sender_info {
+            self.validated_sender_info_size_bytes
+                .with_label_values(&[request_type])
+                .observe(sender_info.info.len() as f64);
+        }
     }
 
     pub fn observe_delegation_verification_failure(

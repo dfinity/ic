@@ -3,8 +3,8 @@
 
 use crate::execution::common::{
     action_to_response, apply_canister_state_changes, finish_call_with_error,
-    ingress_status_with_processing_state, log_dirty_pages, update_round_limits, validate_message,
-    wasm_result_to_query_response,
+    ingress_status_with_processing_state, log_dirty_pages, update_round_limits,
+    validate_replicated_call, wasm_result_to_query_response,
 };
 use crate::execution_environment::{
     ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
@@ -12,7 +12,7 @@ use crate::execution_environment::{
 use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
 use ic_config::flag_status::FlagStatus;
-use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
+use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
     wasmtime_embedder::system_api::{ApiType, ExecutionParameters},
@@ -239,6 +239,12 @@ pub fn execute_call_or_task(
         }
         WasmExecutionResult::Finished(slice, output, state_changes) => {
             update_round_limits(round_limits, &slice);
+            // The execution finished in its first slice, so the subnet memory
+            // saturation from the original context is still current.
+            let subnet_memory_saturation = original
+                .execution_parameters
+                .subnet_memory_saturation
+                .clone();
             helper.finish(
                 output,
                 clean_canister,
@@ -246,6 +252,7 @@ pub fn execute_call_or_task(
                 original,
                 round,
                 round_limits,
+                &subnet_memory_saturation,
                 call_tree_metrics,
             )
         }
@@ -350,13 +357,11 @@ impl CallOrTaskHelper {
         original: &OriginalContext,
         deallocation_sender: &DeallocationSender,
     ) -> Result<Self, UserError> {
-        let mut canister = clean_canister.clone();
-
-        validate_message(&canister, &original.method)?;
+        validate_replicated_call(clean_canister, &original.method)?;
 
         match original.call_or_task {
             CanisterCallOrTask::Update(_) => {
-                let wasm_memory_usage = canister
+                let wasm_memory_usage = clean_canister
                     .execution_state
                     .as_ref()
                     .map_or(NumBytes::new(0), |es| {
@@ -370,23 +375,17 @@ impl CallOrTaskHelper {
                             bytes: wasm_memory_usage,
                             limit: wasm_memory_limit,
                         };
-                        return Err(err.into_user_error(&canister.canister_id()));
+                        return Err(err.into_user_error(&clean_canister.canister_id()));
                     }
                 }
             }
             // TODO(RUN-957): Enforce the `wasm_memory_limit` in heartbeat and timer after
             // canister logging ships.
             CanisterCallOrTask::Task(_) => (),
-            CanisterCallOrTask::Query(_) => {
-                if let WasmMethod::CompositeQuery(_) = &original.method {
-                    let user_error = UserError::new(
-                        ErrorCode::CompositeQueryCalledInReplicatedMode,
-                        "Composite query cannot be called in replicated mode",
-                    );
-                    return Err(user_error);
-                }
-            }
+            CanisterCallOrTask::Query(_) => (),
         }
+
+        let mut canister = clean_canister.clone();
 
         let sender_info = match &original.call_or_task {
             CanisterCallOrTask::Update(msg) | CanisterCallOrTask::Query(msg) => {
@@ -496,16 +495,34 @@ impl CallOrTaskHelper {
 
     /// Finishes an update call execution that could have run multiple rounds
     /// due to deterministic time slicing.
+    ///
+    /// The storage reservation for the memory allocated by the execution uses
+    /// the given subnet memory saturation at the start of the current slice.
+    /// It is passed separately (rather than read from the original context)
+    /// because a resumed execution must use the subnet memory saturation at
+    /// the start of its last slice instead.
+    #[allow(clippy::too_many_arguments)]
     fn finish(
         mut self,
         mut output: WasmExecutionOutput,
-        clean_canister: CanisterState,
-        canister_state_changes: CanisterStateChanges,
+        mut clean_canister: CanisterState,
+        mut canister_state_changes: CanisterStateChanges,
         original: OriginalContext,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: &ResourceSaturation,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
+        // Canister logs are persisted even if the other changes are not.
+        // Both states need the log because either may be returned below.
+        canister_state_changes
+            .system_state_modifications
+            .apply_canister_log_to_both(
+                &mut clean_canister.system_state,
+                &mut self.canister.system_state,
+                round.hypervisor.metrics(),
+            );
+
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -575,6 +592,10 @@ impl CallOrTaskHelper {
                     &mut self.canister.system_state,
                     &mut output,
                     round_limits,
+                    round.cycles_account_manager,
+                    original.subnet_cycles_config,
+                    subnet_memory_saturation,
+                    original.call_origin.get_principal(),
                     round.time,
                     &round.network_topology,
                     round.hypervisor.subnet_id(),
@@ -608,7 +629,6 @@ impl CallOrTaskHelper {
                         // non-replicated mode: a composite query called in the
                         // replicated mode is rejected before its execution.
                         false,
-                        round.hypervisor.metrics(),
                         round.log,
                     )
                 {
@@ -736,6 +756,7 @@ impl PausedExecution for PausedCallOrTaskExecution {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
         _subnet_size: usize,
         call_tree_metrics: &dyn CallTreeMetrics,
         deallocation_sender: &DeallocationSender,
@@ -821,6 +842,9 @@ impl PausedExecution for PausedCallOrTaskExecution {
                     instructions_consumed.display(),
                 );
                 update_round_limits(round_limits, &slice);
+                // The subnet memory usage might have changed while the execution
+                // was paused. Use the current subnet memory saturation for storage
+                // reservation when finishing the execution.
                 helper.finish(
                     output,
                     clean_canister,
@@ -828,6 +852,7 @@ impl PausedExecution for PausedCallOrTaskExecution {
                     self.original,
                     round,
                     round_limits,
+                    &subnet_memory_saturation,
                     call_tree_metrics,
                 )
             }

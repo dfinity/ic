@@ -525,17 +525,17 @@ fn test_network_status(args_with_caller in valid_transactions_strategy(
         );
 
         assert_eq!(
-            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash().clone()),
+            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash()),
             rosetta_response.genesis_block_identifier.hash,
             "Genesis block hashes do not match"
         );
         assert_eq!(
-            hex::encode(rosetta_blocks.last().unwrap().clone().get_block_hash().clone()),
+            hex::encode(rosetta_blocks.last().unwrap().clone().get_block_hash()),
             rosetta_response.current_block_identifier.hash,
             "Current block hashes do not match"
         );
         assert_eq!(
-            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash().clone()),
+            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash()),
             rosetta_response.oldest_block_identifier.unwrap().hash,
             "Genesis block hashes do not match"
         );
@@ -589,10 +589,10 @@ proptest! {
                 })
             }));
 
-        assert_eq!(hex::encode(block.clone().get_block_hash().clone()),expected_block_response.clone().block.unwrap().block_identifier.hash);
+        assert_eq!(hex::encode(block.clone().get_block_hash()),expected_block_response.clone().block.unwrap().block_identifier.hash);
                 // Rosetta should be able to handle blockidentifieres with both the hash and the block index set
         let actual_block_response = env.rosetta_client.block(env.network_identifier.clone(), PartialBlockIdentifier{
-            hash:Some(hex::encode(block.clone().get_block_hash().clone())),
+            hash:Some(hex::encode(block.clone().get_block_hash())),
             index:Some(block.index)
         })
         .await
@@ -665,15 +665,15 @@ proptest! {
                     op.status = Some(STATUS_COMPLETED.to_string());
                 });
 
-        assert_eq!(hex::encode(block.clone().get_transaction_hash().clone()),expected_block_transaction_response.clone().transaction.transaction_identifier.hash);
+        assert_eq!(hex::encode(block.clone().get_transaction_hash()),expected_block_transaction_response.clone().transaction.transaction_identifier.hash);
 
                 // Rosetta should be able to handle blockidentifieres with both the hash and the block index set
         let actual_block_transaction_response = env.rosetta_client.block_transaction(env.network_identifier.clone(),
             BlockIdentifier {
                             index: block.index,
-                            hash: hex::encode(block.clone().get_block_hash().clone()),
+                            hash: hex::encode(block.clone().get_block_hash()),
 
-        }, TransactionIdentifier{ hash: hex::encode(block.clone().get_transaction_hash().clone()) })
+        }, TransactionIdentifier{ hash: hex::encode(block.clone().get_transaction_hash()) })
         .await
         .expect("Failed to find block in Rosetta");
         assert_eq!(expected_block_transaction_response,actual_block_transaction_response);
@@ -681,9 +681,9 @@ proptest! {
         assert!(env.rosetta_client.block_transaction(env.network_identifier.clone(),
         BlockIdentifier {
                         index: u64::MAX,
-                        hash: hex::encode(block.clone().get_block_hash().clone()),
+                        hash: hex::encode(block.clone().get_block_hash()),
 
-    }, TransactionIdentifier{ hash: hex::encode(block.clone().get_transaction_hash().clone()) })
+    }, TransactionIdentifier{ hash: hex::encode(block.clone().get_transaction_hash()) })
     .await.is_err());
 
     assert!(env.rosetta_client.block_transaction(env.network_identifier.clone(),

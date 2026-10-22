@@ -9,9 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-- Expose each neuron's exact voting reward shares for its latest participating reward event through
-  `get_neuron` and `list_neurons`.
-
 ## Changed
 
 ## Deprecated
@@ -19,5 +16,10 @@ on the process that this file is part of, see
 ## Removed
 
 ## Fixed
+
+* Proposals that execute a generic (non-native) nervous system function now
+  store the raw reply bytes from the target canister in the proposal itself
+  (`ProposalData.execution_reply`). Previously, the reply was just discarded.
+  To avoid using too much space, only the first 5 KB of the reply is stored.
 
 ## Security

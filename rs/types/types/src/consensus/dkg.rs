@@ -458,12 +458,6 @@ impl From<&DkgSummary> for pb::Summary {
             interval_length: summary.interval_length.get(),
             next_interval_length: summary.next_interval_length.get(),
             height: summary.height.get(),
-            // The marker must keep being set even though this replica version no longer reads it:
-            // replica versions that still carry the field derive it from this marker, and would
-            // otherwise decode the empty repeated field above into `Some(vec![])` and hash its
-            // length prefix, where this version hashes nothing. It may only stop being set once no
-            // replica version that reads it is deployed any more.
-            transcripts_for_remote_subnets_removed: true,
             remote_dkg_attempts: build_remote_dkg_attempts_vec(&summary.remote_dkg_attempts),
             subnet_splitting_status: Some(pb::summary::SubnetSplittingStatus::from(
                 summary.subnet_splitting_status,
@@ -702,16 +696,6 @@ impl DkgDataPayload {
             messages,
             transcripts_for_remote_subnets: remote_dkg_transcripts,
         }
-    }
-
-    /// Returns true if the payload is empty
-    pub fn is_empty(&self) -> bool {
-        let DkgDataPayload {
-            start_height: _,
-            messages,
-            transcripts_for_remote_subnets,
-        } = self;
-        messages.is_empty() && transcripts_for_remote_subnets.is_empty()
     }
 }
 

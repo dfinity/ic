@@ -159,6 +159,12 @@ lazy_static! {
 /// this limit, the payload will not be returned in the reply.
 pub const EXECUTE_NERVOUS_SYSTEM_FUNCTION_PAYLOAD_LISTING_BYTES_MAX: usize = 1000; // 1 KB
 
+/// When a generic nervous system function is successfully executed, the reply
+/// from the target canister is stored in the proposal (in the execution_reply
+/// field), but only up to this many bytes; the rest is discarded. This is
+/// enough to fully hold the large majority of replies.
+pub const MAX_EXECUTION_REPLY_LEN_BYTES: usize = 5_000;
+
 const MAX_HEAP_SIZE_IN_KIB: usize = 4 * 1024 * 1024;
 const WASM32_PAGE_SIZE_IN_KIB: usize = 64;
 pub const MATURITY_DISBURSEMENT_DELAY_SECONDS: u64 = 7 * 24 * 3600;
@@ -1765,6 +1771,24 @@ impl Governance {
         }
     }
 
+    /// Saves a generic function call's reply on its proposal, keeping at most
+    /// `MAX_EXECUTION_REPLY_LEN_BYTES` bytes.
+    fn set_proposal_execution_reply(&mut self, proposal_id: u64, mut execution_reply: Vec<u8>) {
+        let Some(proposal) = self.proto.proposals.get_mut(&proposal_id) else {
+            log!(
+                ERROR,
+                "Tried to record reply after executing proposal {}, but unable to find the proposal.",
+                proposal_id,
+            );
+            return;
+        };
+
+        execution_reply.truncate(MAX_EXECUTION_REPLY_LEN_BYTES);
+        // Because truncate (previous line) does not actually free the extra space.
+        execution_reply.shrink_to_fit();
+        proposal.execution_reply = Some(execution_reply);
+    }
+
     /// Returns the latest reward event.
     pub fn latest_reward_event(&self) -> RewardEvent {
         self.proto
@@ -2174,7 +2198,7 @@ impl Governance {
                 }
             }
             Action::ExecuteGenericNervousSystemFunction(call) => {
-                self.perform_execute_generic_nervous_system_function(call)
+                self.perform_execute_generic_nervous_system_function(proposal_id, call)
                     .await
             }
             Action::ExecuteExtensionOperation(execute_extension_operation) => {
@@ -2531,32 +2555,37 @@ impl Governance {
         Ok(())
     }
 
-    /// Executes a (non-native) nervous system function as a result of an adopted proposal.
+    /// Executes a (non-native) nervous system function for an adopted proposal.
+    /// On success, saves the target canister's reply on the proposal.
     async fn perform_execute_generic_nervous_system_function(
-        &self,
+        &mut self,
+        proposal_id: u64,
         call: ExecuteGenericNervousSystemFunction,
     ) -> Result<(), GovernanceError> {
-        match self
+        let function = match self
             .proto
             .id_to_nervous_system_functions
             .get(&call.function_id)
         {
-            None => Err(GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                format!(
-                    "There is no generic NervousSystemFunction with id: {}",
-                    call.function_id
-                ),
-            )),
-            Some(function) => {
-                perform_execute_generic_nervous_system_function_call(
-                    &*self.env,
-                    function.clone(),
-                    call,
-                )
-                .await
+            None => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::NotFound,
+                    format!(
+                        "There is no generic NervousSystemFunction with id: {}",
+                        call.function_id
+                    ),
+                ));
             }
-        }
+            Some(function) => function.clone(),
+        };
+
+        let execution_reply =
+            perform_execute_generic_nervous_system_function_call(&*self.env, function, call)
+                .await?;
+
+        self.set_proposal_execution_reply(proposal_id, execution_reply);
+
+        Ok(())
     }
 
     async fn perform_execute_extension_operation(
@@ -3657,6 +3686,9 @@ impl Governance {
             is_eligible_for_rewards: true,
             action_auxiliary,
             topic: Some(i32::from(proposal_topic)),
+
+            // A new proposal has not been executed yet, so there is no reply.
+            execution_reply: None,
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -6756,6 +6788,9 @@ mod test_helpers;
 
 #[cfg(test)]
 mod get_metrics;
+
+#[cfg(test)]
+mod execute_generic_nervous_system_function_tests;
 
 #[cfg(feature = "canbench-rs")]
 mod benches;
