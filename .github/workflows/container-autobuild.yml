@@ -172,11 +172,18 @@ jobs:
           echo '${{ needs.build-image-prep.outputs.image_tag }}' > ci/container/TAG
           echo "$IC_BUILD_DIGEST" > ci/container/ic-build.digest
           echo "$IC_DEV_DIGEST" > ci/container/ic-dev.digest
-          pushd .devcontainer
-          sed -i -E "s|${IMAGE_PREFIX}ic-dev(:\|@)[^\"]{5,}|$IMG_NAME_IC_DEV|g" -- *
-          popd
+          # Re-point every reference to either image, by tag or by digest, under
+          # .devcontainer/ and .github/: the scope ci/container/check-image-pins.sh
+          # verifies below, with its pattern. grep -r only lists regular files (sed -i
+          # fails on directories like actions/bazel/bin) and fails the step if there
+          # are none.
+          repoint() { # <image> <new reference>
+            local re="ghcr\.io/dfinity/${1}(:|@)[A-Za-z0-9:._-]+"
+            grep -rlZE -- "$re" .devcontainer .github | xargs -0 -r sed -i -E "s#${re}#${2}#g" --
+          }
+          repoint ic-build "$IMG_NAME_IC_BUILD"
+          repoint ic-dev "$IMG_NAME_IC_DEV"
           pushd .github
-          sed -i -E "s|${IMAGE_PREFIX}ic-build(:\|@)[^\"]{5,}|$IMG_NAME_IC_BUILD|g" -- workflow*/*
           # The RBE worker image is also referenced outside workflows/, by
           # actions/bazel-namespace/rbe.bazelrc, so rewrite it in every file under .github that
           # references it (the pattern is anchored on the digest). grep -r only lists regular files
