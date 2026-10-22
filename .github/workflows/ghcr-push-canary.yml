@@ -1,0 +1,61 @@
+# Checks daily that this repository's GITHUB_TOKEN cannot push to the
+# ghcr.io/dfinity/ic-build and ic-dev packages, i.e. that their "Manage Actions
+# access" still grants dfinity/ic read access only. That setting is what stops a
+# pull_request run, which executes the PR's own copy of a workflow with whatever
+# permissions it asks for, from re-pointing the <image>:<TAG> tags that commits
+# before digest pinning pull. It lives outside the repository and has no API,
+# so a re-grant would otherwise go unnoticed. Failures are posted to Slack by
+# slack-workflow-run.yml.
+name: GHCR Push Canary
+
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/ghcr-push-canary.yml'
+
+permissions: {}
+
+jobs:
+  canary:
+    name: GITHUB_TOKEN cannot push to ghcr.io/dfinity/ic-build and ic-dev
+    if: github.repository == 'dfinity/ic'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Granted on purpose: the check is that the registry refuses it regardless.
+    permissions:
+      packages: write
+    steps:
+      - name: Request push access with GITHUB_TOKEN
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          status=0
+          for image in ic-build ic-dev; do
+            # Pull access must work, so that a registry or token problem is not
+            # mistaken for the denial checked below.
+            token="$(curl -fsS -u "$GITHUB_ACTOR:$GITHUB_TOKEN" "https://ghcr.io/token?service=ghcr.io&scope=repository:dfinity/$image:pull" | jq -r .token)"
+            curl -fsS -o /dev/null -H "Authorization: Bearer $token" "https://ghcr.io/v2/dfinity/$image/tags/list?n=1"
+            # ghcr.io refuses the token exchange itself (403) when push is not granted.
+            # If it does hand out a token, starting a blob upload must be refused; a
+            # refused or abandoned upload session creates nothing.
+            resp="$(curl -sS -w '\n%{http_code}' -u "$GITHUB_ACTOR:$GITHUB_TOKEN" "https://ghcr.io/token?service=ghcr.io&scope=repository:dfinity/$image:pull,push")"
+            code="${resp##*$'\n'}"
+            if [ "$code" = 200 ]; then
+              token="$(printf '%s' "${resp%$'\n'*}" | jq -r .token)"
+              code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $token" "https://ghcr.io/v2/dfinity/$image/blobs/uploads/")"
+            fi
+            case "$code" in
+              401 | 403) echo "ghcr.io/dfinity/$image: push with GITHUB_TOKEN refused (HTTP $code)" ;;
+              *)
+                echo "::error::GITHUB_TOKEN can push to ghcr.io/dfinity/$image (HTTP $code): set the dfinity/ic role under the package's \"Manage Actions access\" back to Read"
+                status=1
+                ;;
+            esac
+          done
+          exit "$status"
