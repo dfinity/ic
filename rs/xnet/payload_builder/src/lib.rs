@@ -12,7 +12,7 @@ use crate::certified_slice_pool::{
     CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes,
 };
 use crate::exchange::{
-    AdvertTask, ProximityMap, PullTask, RefillTaskHandle, XNetAdvertHandlerImpl, XNetClient,
+    AdvertTask, ProximityMap, PullTask, PullTaskHandle, XNetAdvertHandlerImpl, XNetClient,
     XNetClientImpl, XNetEndpointResolver,
 };
 use ic_config::message_routing::MAX_STREAM_MESSAGES;
@@ -210,8 +210,9 @@ pub struct XNetPayloadBuilderImpl {
     /// Advert handling logic, shared by `XNetEndpoint` and `AdvertTask`.
     advert_handler: Arc<XNetAdvertHandlerImpl>,
 
-    /// Handle to the pool refill task, used to asynchronously trigger refill.
-    refill_task_handle: RefillTaskHandle,
+    /// Handle to the pull task, used to trigger a refill after every garbage
+    /// collection.
+    pull_task_handle: PullTaskHandle,
 
     /// Function to be used for calculating deterministic `CertifiedStreamSlice`
     /// byte sizes. Always
@@ -280,11 +281,12 @@ impl XNetPayloadBuilderImpl {
             proximity_map,
             log.clone(),
         ));
-        let refill_task_handle = PullTask::start(
+        let pull_task_handle = PullTask::start(
             Arc::clone(&slice_pool),
             Arc::clone(&endpoint_resolver),
             Arc::clone(&xnet_client),
             Arc::clone(&certified_stream_store),
+            Arc::clone(&state_manager),
             runtime_handle.clone(),
             metrics_registry,
             log.clone(),
@@ -294,7 +296,7 @@ impl XNetPayloadBuilderImpl {
             certified_stream_store,
             registry,
             slice_pool,
-            refill_task_handle,
+            pull_task_handle,
             Arc::new(XNetPayloadBuilderMetrics::new(metrics_registry)),
             log.clone(),
         );
@@ -317,7 +319,7 @@ impl XNetPayloadBuilderImpl {
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
         registry: Arc<dyn RegistryClient>,
         slice_pool: Arc<Mutex<CertifiedSlicePool>>,
-        refill_task_handle: RefillTaskHandle,
+        pull_task_handle: PullTaskHandle,
         metrics: Arc<XNetPayloadBuilderMetrics>,
         log: ReplicaLogger,
     ) -> XNetPayloadBuilderImpl {
@@ -326,6 +328,7 @@ impl XNetPayloadBuilderImpl {
             Arc::clone(&certified_stream_store),
             Arc::clone(&registry),
             Arc::clone(&slice_pool),
+            pull_task_handle.clone(),
             log.clone(),
         ));
         Self {
@@ -334,7 +337,7 @@ impl XNetPayloadBuilderImpl {
             registry,
             slice_pool,
             advert_handler,
-            refill_task_handle,
+            pull_task_handle,
             count_bytes_fn: certified_slice_count_bytes,
             slice_byte_size_min: SLICE_BYTE_SIZE_MIN,
             deterministic_rng_for_testing: None,
@@ -819,7 +822,6 @@ impl XNetPayloadBuilderImpl {
 
             // Trim off messages in the state or past payloads.
             slice_pool.garbage_collect(stream_positions);
-            slice_pool.schedule_pending_pulls(state.streams());
         }
 
         {
@@ -981,7 +983,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
 
         // We don't care if the send succeeded or not. If it didn't, the refill task is
         // just behind.
-        self.refill_task_handle
+        self.pull_task_handle
             .trigger_refill(validation_context.registry_version);
 
         payload
@@ -1080,10 +1082,9 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                     },
                 );
             }
-            slice_pool.schedule_pending_pulls(state.streams());
         }
         // And trigger a pool refill.
-        self.refill_task_handle
+        self.pull_task_handle
             .trigger_refill(validation_context.registry_version);
 
         self.metrics
@@ -1213,7 +1214,7 @@ impl Error {
 /// Internal functionality, exposed for use by integration tests.
 pub mod testing {
     pub use super::exchange::{
-        EndpointLocator, GenRangeFn, ProximityMap, PullTask, RefillTaskHandle, XNetClient,
+        EndpointLocator, GenRangeFn, ProximityMap, PullTask, PullTaskHandle, XNetClient,
         XNetClientError, XNetEndpointResolver,
     };
     pub use super::{
