@@ -1792,10 +1792,11 @@ fn install_chunked_code_payload(
 
 /// Sends an `install_chunked_code` via `send`, which gets its payload; makes its
 /// re-execution after an abort fail; and checks that the call is no longer tracked
-/// and that its prepayment was refunded. Returns the test and the result of `send`.
+/// and that its prepayment was refunded. Returns the test, the store canister and
+/// the result of `send`.
 fn failed_reexecution_of_aborted_install_helper<T>(
     send: impl FnOnce(&mut ExecutionTest, Vec<u8>) -> T,
-) -> (ExecutionTest, T) {
+) -> (ExecutionTest, CanisterId, T) {
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
@@ -1846,12 +1847,12 @@ fn failed_reexecution_of_aborted_install_helper<T>(
         test.canister_state(target).system_state.balance(),
         balance_before
     );
-    (test, sent)
+    (test, store, sent)
 }
 
 #[test]
 fn failed_reexecution_of_aborted_install_removes_install_code_call() {
-    let (mut test, ()) = failed_reexecution_of_aborted_install_helper(|test, payload| {
+    let (mut test, store, ()) = failed_reexecution_of_aborted_install_helper(|test, payload| {
         test.inject_call_to_ic00(
             Method::InstallChunkedCode,
             payload,
@@ -1861,15 +1862,18 @@ fn failed_reexecution_of_aborted_install_removes_install_code_call() {
 
     test.induct_messages();
     assert_eq!(test.xnet_messages().len(), 1);
-    assert_matches!(
-        &test.get_xnet_response(0).response_payload,
-        ic_types::messages::Payload::Reject(reject) if reject.code() == RejectCode::DestinationInvalid
-    );
+    match &test.get_xnet_response(0).response_payload {
+        ic_types::messages::Payload::Reject(reject) => reject.assert_contains(
+            RejectCode::DestinationInvalid,
+            &format!("Store canister {store} was not found"),
+        ),
+        payload => panic!("Expected a reject, got {payload:?}"),
+    }
 }
 
 #[test]
 fn failed_reexecution_of_aborted_install_from_ingress_removes_install_code_call() {
-    let (test, message_id) = failed_reexecution_of_aborted_install_helper(|test, payload| {
+    let (test, _, message_id) = failed_reexecution_of_aborted_install_helper(|test, payload| {
         test.subnet_message_raw(Method::InstallChunkedCode, payload)
     });
 
