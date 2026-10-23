@@ -4257,6 +4257,23 @@ impl ExecutionEnvironment {
             match Self::decode_input_and_take_canister(&msg, &mut state, &self.config) {
                 Ok(result) => result,
                 Err(err) => {
+                    // If we already have a call ID, then we are re-executing an aborted
+                    // install that now failed: drop its call and refund its prepayment.
+                    if let Some(call_id) = call_id {
+                        let call = state
+                            .metadata
+                            .subnet_call_context_manager
+                            .remove_install_code_call(call_id);
+                        if let Some(call) = call
+                            && let Some(prepaid_execution_cycles) = prepaid_execution_cycles
+                            && let Some(canister) =
+                                state.canister_state_make_mut(&call.effective_canister_id)
+                        {
+                            canister
+                                .system_state
+                                .refund_cycles(prepaid_execution_cycles, prepaid_execution_cycles);
+                        }
+                    }
                     let refund = msg.take_cycles();
                     return self.finish_subnet_message_execution(
                         state,
