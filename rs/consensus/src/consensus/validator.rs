@@ -1491,7 +1491,7 @@ impl Validator {
             pool_reader,
             self.state_manager.as_ref(),
             &proposal.context,
-            &parent,
+            parent,
             &last_summary_block,
             proposal.payload.as_ref(),
             self.metrics.idkg_validation_duration.clone(),
