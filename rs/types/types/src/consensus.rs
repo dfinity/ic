@@ -108,6 +108,12 @@ impl<T: HasVersion, S> HasVersion for Signed<T, S> {
     }
 }
 
+impl<T> HasHash for Hashed<CryptoHashOf<T>, T> {
+    fn hash(&self) -> &CryptoHash {
+        self.hash.get_ref()
+    }
+}
+
 impl HasVersion for Block {
     fn version(&self) -> &ReplicaVersion {
         &self.version
@@ -329,12 +335,6 @@ impl HashedBlock {
             time: Some(block.context.time.as_nanos_since_unix_epoch()),
             version: Some(block.version().to_string()),
         }
-    }
-}
-
-impl HasHash for HashedBlock {
-    fn hash(&self) -> &CryptoHash {
-        self.hash.get_ref()
     }
 }
 
