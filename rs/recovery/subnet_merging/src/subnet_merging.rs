@@ -203,20 +203,26 @@ impl SubnetMerging {
         Ok(subnet_record)
     }
 
+    /// The URL of the dashboard evaluating the merge readiness condition, for
+    /// the registry version `V` recorded by `CheckRegistryForCoolingDownFlag`.
     fn dashboard_url(&self) -> String {
-        match self.recovery.registry_helper.latest_registry_version() {
+        let source_subnet_id = self.params.source_subnet_id;
+        match self
+            .layout
+            .read_cooling_down_registry_version(source_subnet_id)
+        {
             Ok(registry_version) => format!(
-                "https://grafana.mainnet.dfinity.network/d/subnet-merging?var-ic=mercury&var-ic_subnet={}&var-registry_version={}",
-                self.params.source_subnet_id, registry_version,
+                "https://grafana.mainnet.dfinity.network/d/subnet-merging?var-ic=mercury&var-ic_subnet={source_subnet_id}&var-registry_version={registry_version}",
             ),
             Err(err) => {
                 warn!(
                     self.logger,
-                    "Failed to get the latest registry version: {}", err
+                    "Failed to read the registry version the subnet is labeled \"cooling down\" \
+                     at: {}",
+                    err
                 );
                 format!(
-                    "https://grafana.mainnet.dfinity.network/d/subnet-merging?var-ic=mercury&var-ic_subnet={}",
-                    self.params.source_subnet_id,
+                    "https://grafana.mainnet.dfinity.network/d/subnet-merging?var-ic=mercury&var-ic_subnet={source_subnet_id}",
                 )
             }
         }
