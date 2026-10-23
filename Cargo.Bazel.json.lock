@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "d4e719583881cf898774f83b5661851ff3da30493e262b0832a817b5022e50da",
+  "checksum": "3484295e891fa6ca4f70bac6f36766ca90b9547bc8736cabdd61ec14797f1296",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -150,6 +150,12 @@
       "x86_64-apple-darwin",
       "x86_64-unknown-linux-gnu"
     ],
+    "cfg(any(unix, target_os = \"hermit\", target_os = \"wasi\"))": [
+      "aarch64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu"
+    ],
     "cfg(any(unix, target_os = \"redox\"))": [
       "aarch64-apple-darwin",
       "aarch64-unknown-linux-gnu",
@@ -269,7 +275,6 @@
       "x86_64-unknown-linux-gnu"
     ],
     "cfg(windows)": [],
-    "cfg(windows_raw_dylib)": [],
     "i686-pc-windows-gnu": [],
     "i686-pc-windows-gnullvm": [],
     "i686-pc-windows-msvc": [],
@@ -299,15 +304,15 @@
             "target": "bitflags"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "futures-sink 0.3.31",
+            "id": "futures-sink 0.3.33",
             "target": "futures_sink"
           },
           {
@@ -319,11 +324,11 @@
             "target": "pin_project_lite"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
-            "id": "tokio-util 0.7.17",
+            "id": "tokio-util 0.7.20",
             "target": "tokio_util"
           },
           {
@@ -399,7 +404,7 @@
             "target": "brotli"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -423,7 +428,7 @@
             "target": "foldhash"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
@@ -479,11 +484,11 @@
             "target": "smallvec"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
-            "id": "tokio-util 0.7.17",
+            "id": "tokio-util 0.7.20",
             "target": "tokio_util"
           },
           {
@@ -491,7 +496,7 @@
             "target": "tracing"
           },
           {
-            "id": "zstd 0.13.2",
+            "id": "zstd 0.13.3",
             "target": "zstd"
           }
         ],
@@ -633,11 +638,11 @@
         ],
         "deps": [
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           }
         ],
@@ -693,11 +698,11 @@
             "target": "actix_utils"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -713,7 +718,7 @@
             "target": "socket2"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -752,7 +757,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
@@ -879,7 +884,7 @@
             "target": "ahash"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -895,11 +900,11 @@
             "target": "encoding_rs"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -955,7 +960,7 @@
             "target": "smallvec"
           },
           {
-            "id": "socket2 0.5.9",
+            "id": "socket2 0.5.10",
             "target": "socket2"
           },
           {
@@ -1066,7 +1071,7 @@
             "target": "actix_web"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
@@ -1655,7 +1660,7 @@
             "target": "axum"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -1663,7 +1668,7 @@
             "target": "cfg_if"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -2422,7 +2427,7 @@
             "target": "alloy_rlp"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -2514,7 +2519,7 @@
             "target": "arrayvec"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           }
         ],
@@ -5469,7 +5474,7 @@
             "target": "event_listener"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           }
         ],
@@ -5516,7 +5521,7 @@
             "target": "event_listener_strategy"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
@@ -5573,7 +5578,7 @@
             "target": "flate2"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
@@ -5585,7 +5590,7 @@
             "target": "pin_project_lite"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -5633,11 +5638,11 @@
             "target": "anyhow"
           },
           {
-            "id": "futures 0.3.31",
+            "id": "futures 0.3.33",
             "target": "futures"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -5691,7 +5696,7 @@
               "target": "concurrent_queue"
             },
             {
-              "id": "futures-io 0.3.31",
+              "id": "futures-io 0.3.33",
               "target": "futures_io"
             },
             {
@@ -5711,7 +5716,7 @@
               "target": "rustix"
             },
             {
-              "id": "slab 0.4.8",
+              "id": "slab 0.4.12",
               "target": "slab"
             },
             {
@@ -5853,7 +5858,7 @@
             "target": "thiserror"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           }
         ],
@@ -5888,7 +5893,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
@@ -6097,7 +6102,7 @@
             "target": "async_net"
           },
           {
-            "id": "futures 0.3.31",
+            "id": "futures 0.3.33",
             "target": "futures"
           },
           {
@@ -6105,7 +6110,7 @@
             "target": "futures_rustls"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -6430,7 +6435,7 @@
             "target": "base64"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -6438,11 +6443,11 @@
             "target": "form_urlencoded"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -6450,7 +6455,7 @@
             "target": "http_body"
           },
           {
-            "id": "http-body-util 0.1.3",
+            "id": "http-body-util 0.1.5",
             "target": "http_body_util"
           },
           {
@@ -6510,7 +6515,7 @@
             "target": "sync_wrapper"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -6518,7 +6523,7 @@
             "target": "tokio_tungstenite"
           },
           {
-            "id": "tower 0.5.2",
+            "id": "tower 0.5.3",
             "target": "tower"
           },
           {
@@ -6573,15 +6578,15 @@
         ],
         "deps": [
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -6589,7 +6594,7 @@
             "target": "http_body"
           },
           {
-            "id": "http-body-util 0.1.3",
+            "id": "http-body-util 0.1.5",
             "target": "http_body_util"
           },
           {
@@ -6661,15 +6666,15 @@
             "target": "axum_core"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -6677,7 +6682,7 @@
             "target": "headers"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -6685,7 +6690,7 @@
             "target": "http_body"
           },
           {
-            "id": "http-body-util 0.1.3",
+            "id": "http-body-util 0.1.5",
             "target": "http_body_util"
           },
           {
@@ -6804,7 +6809,7 @@
             "target": "pin_project_lite"
           },
           {
-            "id": "tower 0.5.2",
+            "id": "tower 0.5.3",
             "target": "tower"
           }
         ],
@@ -6850,7 +6855,7 @@
             "target": "arc_swap"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -6858,7 +6863,7 @@
             "target": "fs_err"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -6878,7 +6883,7 @@
             "target": "pin_project_lite"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -6890,7 +6895,7 @@
             "target": "rustls_pki_types"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -8791,7 +8796,7 @@
             "target": "async_task"
           },
           {
-            "id": "futures-io 0.3.31",
+            "id": "futures-io 0.3.33",
             "target": "futures_io"
           },
           {
@@ -9378,7 +9383,7 @@
             "target": "z85"
           },
           {
-            "id": "zstd 0.13.2",
+            "id": "zstd 0.13.3",
             "target": "zstd"
           }
         ],
@@ -9508,7 +9513,7 @@
             "target": "z85"
           },
           {
-            "id": "zstd 0.13.2",
+            "id": "zstd 0.13.3",
             "target": "zstd"
           }
         ],
@@ -9718,7 +9723,7 @@
       ],
       "version": "1.5.0"
     },
-    "bytes 1.11.1": {
+    "bytes 1.12.1": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -9743,8 +9748,8 @@
       "package_url": "https://github.com/tokio-rs/bytes",
       "repository": {
         "Http": {
-          "sha256": "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33",
-          "url": "https://static.crates.io/crates/bytes/1.11.1/download"
+          "sha256": "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04",
+          "url": "https://static.crates.io/crates/bytes/1.12.1/download"
         }
       },
       "targets": [
@@ -9755,7 +9760,7 @@
           }
         }
       ],
-      "version": "1.11.1"
+      "version": "1.12.1"
     },
     "bytesize 1.3.0": {
       "common_attrs": {
@@ -9792,7 +9797,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           }
         ],
@@ -13962,7 +13967,7 @@
             "target": "criterion_plot"
           },
           {
-            "id": "futures 0.3.31",
+            "id": "futures 0.3.33",
             "target": "futures"
           },
           {
@@ -14010,7 +14015,7 @@
             "target": "tinytemplate"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -14306,7 +14311,7 @@
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "mio 1.0.2",
+                "id": "mio 1.2.4",
                 "target": "mio"
               },
               {
@@ -14320,7 +14325,7 @@
             ],
             "aarch64-unknown-linux-gnu": [
               {
-                "id": "mio 1.0.2",
+                "id": "mio 1.2.4",
                 "target": "mio"
               },
               {
@@ -14340,7 +14345,7 @@
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "mio 1.0.2",
+                "id": "mio 1.2.4",
                 "target": "mio"
               },
               {
@@ -14354,7 +14359,7 @@
             ],
             "x86_64-unknown-linux-gnu": [
               {
-                "id": "mio 1.0.2",
+                "id": "mio 1.2.4",
                 "target": "mio"
               },
               {
@@ -15676,7 +15681,7 @@
             "target": "dbus"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -16692,7 +16697,7 @@
             "target": "shell_words"
           },
           {
-            "id": "tempfile 3.23.0",
+            "id": "tempfile 3.27.0",
             "target": "tempfile"
           },
           {
@@ -17079,7 +17084,7 @@
             "target": "byteorder"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -17248,11 +17253,11 @@
             "target": "fs_extra"
           },
           {
-            "id": "futures 0.3.31",
+            "id": "futures 0.3.33",
             "target": "futures"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -17296,7 +17301,7 @@
             "target": "hpke"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -17304,7 +17309,7 @@
             "target": "http_body"
           },
           {
-            "id": "http-body-util 0.1.3",
+            "id": "http-body-util 0.1.5",
             "target": "http_body_util"
           },
           {
@@ -17400,7 +17405,7 @@
             "target": "ic_identity_hsm"
           },
           {
-            "id": "ic-management-canister-types 0.8.0",
+            "id": "ic-management-canister-types 0.11.0",
             "target": "ic_management_canister_types"
           },
           {
@@ -17744,11 +17749,11 @@
             "target": "quickcheck"
           },
           {
-            "id": "quinn 0.11.11",
+            "id": "quinn 0.11.12",
             "target": "quinn"
           },
           {
-            "id": "quinn-udp 0.5.5",
+            "id": "quinn-udp 0.5.16",
             "target": "quinn_udp"
           },
           {
@@ -17790,7 +17795,7 @@
             "target": "rayon"
           },
           {
-            "id": "rcgen 0.13.1",
+            "id": "rcgen 0.13.2",
             "target": "rcgen"
           },
           {
@@ -17862,7 +17867,7 @@
             "target": "rustc_hash"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -17994,7 +17999,7 @@
             "target": "slotmap"
           },
           {
-            "id": "socket2 0.5.9",
+            "id": "socket2 0.5.10",
             "target": "socket2"
           },
           {
@@ -18050,7 +18055,7 @@
             "target": "tarpc"
           },
           {
-            "id": "tempfile 3.23.0",
+            "id": "tempfile 3.27.0",
             "target": "tempfile"
           },
           {
@@ -18078,7 +18083,7 @@
             "target": "time"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -18086,7 +18091,7 @@
             "target": "tokio_io_timeout"
           },
           {
-            "id": "tokio-metrics 0.4.0",
+            "id": "tokio-metrics 0.4.9",
             "target": "tokio_metrics"
           },
           {
@@ -18114,7 +18119,7 @@
             "target": "tokio_tungstenite"
           },
           {
-            "id": "tokio-util 0.7.17",
+            "id": "tokio-util 0.7.20",
             "target": "tokio_util"
           },
           {
@@ -18138,7 +18143,7 @@
             "target": "tonic_prost_build"
           },
           {
-            "id": "tower 0.5.2",
+            "id": "tower 0.5.3",
             "target": "tower"
           },
           {
@@ -18194,7 +18199,7 @@
             "target": "tui_textarea"
           },
           {
-            "id": "turmoil 0.6.4",
+            "id": "turmoil 0.6.6",
             "target": "turmoil"
           },
           {
@@ -18274,7 +18279,7 @@
             "target": "zeroize"
           },
           {
-            "id": "zstd 0.13.2",
+            "id": "zstd 0.13.3",
             "target": "zstd"
           }
         ],
@@ -18476,7 +18481,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.61.2",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ]
@@ -20624,7 +20629,7 @@
             "target": "arrayvec"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           }
         ],
@@ -20668,7 +20673,7 @@
             "target": "arrayvec"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           }
         ],
@@ -21587,7 +21592,7 @@
         ],
         "deps": [
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           }
         ],
@@ -21722,7 +21727,7 @@
       ],
       "version": "0.1.5"
     },
-    "futures 0.3.31": {
+    "futures 0.3.33": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -21734,31 +21739,31 @@
         ],
         "deps": [
           {
-            "id": "futures-channel 0.3.31",
+            "id": "futures-channel 0.3.33",
             "target": "futures_channel"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "futures-executor 0.3.31",
+            "id": "futures-executor 0.3.33",
             "target": "futures_executor"
           },
           {
-            "id": "futures-io 0.3.31",
+            "id": "futures-io 0.3.33",
             "target": "futures_io"
           },
           {
-            "id": "futures-sink 0.3.31",
+            "id": "futures-sink 0.3.33",
             "target": "futures_sink"
           },
           {
-            "id": "futures-task 0.3.31",
+            "id": "futures-task 0.3.33",
             "target": "futures_task"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           }
         ],
@@ -21775,8 +21780,8 @@
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "sha256": "65bc07b1a8bc7c85c5f2e110c476c7389b4554ba72af57d8445ea63a576b0876",
-          "url": "https://static.crates.io/crates/futures/0.3.31/download"
+          "sha256": "a88cf1f829d945f548cf8fec32c61b1f202b6d93b45848602fc02af4b12ad218",
+          "url": "https://static.crates.io/crates/futures/0.3.33/download"
         }
       },
       "targets": [
@@ -21787,9 +21792,9 @@
           }
         }
       ],
-      "version": "0.3.31"
+      "version": "0.3.33"
     },
-    "futures-channel 0.3.31": {
+    "futures-channel 0.3.33": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -21800,11 +21805,11 @@
         ],
         "deps": [
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "futures-sink 0.3.31",
+            "id": "futures-sink 0.3.33",
             "target": "futures_sink"
           }
         ],
@@ -21821,8 +21826,8 @@
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "sha256": "2dff15bf788c671c1934e366d07e30c1814a8ef514e1af724a602e8a2fbe1b10",
-          "url": "https://static.crates.io/crates/futures-channel/0.3.31/download"
+          "sha256": "262590f4fe6afeb0bc83be1daa64e52657fe185690a958af7f3ad0e92085c5ae",
+          "url": "https://static.crates.io/crates/futures-channel/0.3.33/download"
         }
       },
       "targets": [
@@ -21833,9 +21838,9 @@
           }
         }
       ],
-      "version": "0.3.31"
+      "version": "0.3.33"
     },
-    "futures-core 0.3.31": {
+    "futures-core 0.3.33": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -21855,8 +21860,8 @@
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "sha256": "05f29059c0c2090612e8d742178b0580d2dc940c837851ad723096f87af6663e",
-          "url": "https://static.crates.io/crates/futures-core/0.3.31/download"
+          "sha256": "2cd50c473c80f6d7c3670a752354b8e569b1a7cbfdc0419ec88e5edad85e0dc7",
+          "url": "https://static.crates.io/crates/futures-core/0.3.33/download"
         }
       },
       "targets": [
@@ -21867,9 +21872,9 @@
           }
         }
       ],
-      "version": "0.3.31"
+      "version": "0.3.33"
     },
-    "futures-executor 0.3.31": {
+    "futures-executor 0.3.33": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -21877,15 +21882,15 @@
         ],
         "deps": [
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "futures-task 0.3.31",
+            "id": "futures-task 0.3.33",
             "target": "futures_task"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           }
         ],
@@ -21902,8 +21907,8 @@
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "sha256": "1e28d1d997f585e54aebc3f97d39e72338912123a67330d723fdbb564d646c9f",
-          "url": "https://static.crates.io/crates/futures-executor/0.3.31/download"
+          "sha256": "6754879cc9f2c66f88c6e5c35344bb0bdb0708b0352b1201815667c7eabc7458",
+          "url": "https://static.crates.io/crates/futures-executor/0.3.33/download"
         }
       },
       "targets": [
@@ -21914,9 +21919,9 @@
           }
         }
       ],
-      "version": "0.3.31"
+      "version": "0.3.33"
     },
-    "futures-io 0.3.31": {
+    "futures-io 0.3.33": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -21935,8 +21940,8 @@
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "sha256": "9e5c1b78ca4aae1ac06c48a526a655760685149f0d465d21f37abfe57ce075c6",
-          "url": "https://static.crates.io/crates/futures-io/0.3.31/download"
+          "sha256": "4577ecaa3c4f96589d473f679a71b596316f6641bc350038b962a5daf0085d7a",
+          "url": "https://static.crates.io/crates/futures-io/0.3.33/download"
         }
       },
       "targets": [
@@ -21947,7 +21952,7 @@
           }
         }
       ],
-      "version": "0.3.31"
+      "version": "0.3.33"
     },
     "futures-lite 2.0.0": {
       "common_attrs": {
@@ -21968,11 +21973,11 @@
             "target": "fastrand"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "futures-io 0.3.31",
+            "id": "futures-io 0.3.33",
             "target": "futures_io"
           },
           {
@@ -22019,7 +22024,7 @@
       ],
       "version": "2.0.0"
     },
-    "futures-macro 0.3.31": {
+    "futures-macro 0.3.33": {
       "common_attrs": {
         "deps": [
           {
@@ -22048,8 +22053,8 @@
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "sha256": "162ee34ebcb7c64a8abebc059ce0fee27c2262618d7b60ed8faf72fef13c3650",
-          "url": "https://static.crates.io/crates/futures-macro/0.3.31/download"
+          "sha256": "2d6d3cde68c518367be28956066ddfef33813991b77a55005a69dae04bf3b10b",
+          "url": "https://static.crates.io/crates/futures-macro/0.3.33/download"
         }
       },
       "targets": [
@@ -22060,7 +22065,7 @@
           }
         }
       ],
-      "version": "0.3.31"
+      "version": "0.3.33"
     },
     "futures-rustls 0.26.0": {
       "common_attrs": {
@@ -22070,11 +22075,11 @@
         ],
         "deps": [
           {
-            "id": "futures-io 0.3.31",
+            "id": "futures-io 0.3.33",
             "target": "futures_io"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -22110,7 +22115,7 @@
       ],
       "version": "0.26.0"
     },
-    "futures-sink 0.3.31": {
+    "futures-sink 0.3.33": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -22130,8 +22135,8 @@
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "sha256": "e575fab7d1e0dcb8d0c7bcf9a63ee213816ab51902e6d244a95819acacf1d4f7",
-          "url": "https://static.crates.io/crates/futures-sink/0.3.31/download"
+          "sha256": "e34418ac499d6305c2fb5ad0ed2f6ac998c5f8ca209b4510f7f94242c647e307",
+          "url": "https://static.crates.io/crates/futures-sink/0.3.33/download"
         }
       },
       "targets": [
@@ -22142,9 +22147,9 @@
           }
         }
       ],
-      "version": "0.3.31"
+      "version": "0.3.33"
     },
-    "futures-task 0.3.31": {
+    "futures-task 0.3.33": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -22163,8 +22168,8 @@
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "sha256": "f90f7dce0722e95104fcb095585910c0977252f286e354b5e3bd38902cd99988",
-          "url": "https://static.crates.io/crates/futures-task/0.3.31/download"
+          "sha256": "b231ed28831efb4a61a08580c4bc233ec56bc009f4cd8f52da2c3cb97df0c109",
+          "url": "https://static.crates.io/crates/futures-task/0.3.33/download"
         }
       },
       "targets": [
@@ -22175,7 +22180,7 @@
           }
         }
       ],
-      "version": "0.3.31"
+      "version": "0.3.33"
     },
     "futures-timer 3.0.3": {
       "common_attrs": {
@@ -22206,7 +22211,7 @@
       ],
       "version": "3.0.3"
     },
-    "futures-util 0.3.31": {
+    "futures-util 0.3.33": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -22226,23 +22231,23 @@
         ],
         "deps": [
           {
-            "id": "futures-channel 0.3.31",
+            "id": "futures-channel 0.3.33",
             "target": "futures_channel"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "futures-io 0.3.31",
+            "id": "futures-io 0.3.33",
             "target": "futures_io"
           },
           {
-            "id": "futures-sink 0.3.31",
+            "id": "futures-sink 0.3.33",
             "target": "futures_sink"
           },
           {
-            "id": "futures-task 0.3.31",
+            "id": "futures-task 0.3.33",
             "target": "futures_task"
           },
           {
@@ -22254,18 +22259,14 @@
             "target": "pin_project_lite"
           },
           {
-            "id": "pin-utils 0.1.0",
-            "target": "pin_utils"
-          },
-          {
-            "id": "slab 0.4.8",
+            "id": "slab 0.4.12",
             "target": "slab"
           }
         ],
         "edition": "2018",
         "proc_macro_deps": [
           {
-            "id": "futures-macro 0.3.31",
+            "id": "futures-macro 0.3.33",
             "target": "futures_macro"
           }
         ]
@@ -22281,8 +22282,8 @@
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "sha256": "9fa08315bb612088cc391249efdc3bc77536f16c91f6cf495e6fbe85b20a4a81",
-          "url": "https://static.crates.io/crates/futures-util/0.3.31/download"
+          "sha256": "a77a90a256fce34da66415271e30f94ee91c57b04b8a2c042d9cf3220179deaa",
+          "url": "https://static.crates.io/crates/futures-util/0.3.33/download"
         }
       },
       "targets": [
@@ -22293,7 +22294,7 @@
           }
         }
       ],
-      "version": "0.3.31"
+      "version": "0.3.33"
     },
     "fxhash 0.2.1": {
       "common_attrs": {
@@ -22943,7 +22944,7 @@
             "target": "dashmap"
           },
           {
-            "id": "futures-sink 0.3.31",
+            "id": "futures-sink 0.3.33",
             "target": "futures_sink"
           },
           {
@@ -22951,7 +22952,7 @@
             "target": "futures_timer"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -23117,7 +23118,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -23125,15 +23126,15 @@
             "target": "fnv"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "futures-sink 0.3.31",
+            "id": "futures-sink 0.3.33",
             "target": "futures_sink"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -23145,15 +23146,15 @@
             "target": "indexmap"
           },
           {
-            "id": "slab 0.4.8",
+            "id": "slab 0.4.12",
             "target": "slab"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
-            "id": "tokio-util 0.7.17",
+            "id": "tokio-util 0.7.20",
             "target": "tokio_util"
           },
           {
@@ -23187,14 +23188,18 @@
       ],
       "version": "0.3.27"
     },
-    "h2 0.4.4": {
+    "h2 0.4.20": {
       "common_attrs": {
         "crate_features": [
           "stream"
         ],
         "deps": [
           {
-            "id": "bytes 1.11.1",
+            "id": "atomic-waker 1.1.2",
+            "target": "atomic_waker"
+          },
+          {
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -23202,19 +23207,15 @@
             "target": "fnv"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "futures-sink 0.3.31",
+            "id": "futures-sink 0.3.33",
             "target": "futures_sink"
           },
           {
-            "id": "futures-util 0.3.31",
-            "target": "futures_util"
-          },
-          {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -23222,15 +23223,15 @@
             "target": "indexmap"
           },
           {
-            "id": "slab 0.4.8",
+            "id": "slab 0.4.12",
             "target": "slab"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
-            "id": "tokio-util 0.7.17",
+            "id": "tokio-util 0.7.20",
             "target": "tokio_util"
           },
           {
@@ -23250,8 +23251,8 @@
       "package_url": "https://github.com/hyperium/h2",
       "repository": {
         "Http": {
-          "sha256": "816ec7294445779408f36fe57bc5b7fc1cf59664059096c65f905c1c61f58069",
-          "url": "https://static.crates.io/crates/h2/0.4.4/download"
+          "sha256": "7d29020232d6aa3fb1daca64c1127cf662cf97f254ae16c18c05b8ab635fc118",
+          "url": "https://static.crates.io/crates/h2/0.4.20/download"
         }
       },
       "targets": [
@@ -23262,7 +23263,7 @@
           }
         }
       ],
-      "version": "0.4.4"
+      "version": "0.4.20"
     },
     "half 1.8.2": {
       "common_attrs": {
@@ -23720,7 +23721,7 @@
             "target": "base64"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -23728,7 +23729,7 @@
             "target": "headers_core"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -23774,7 +23775,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           }
         ],
@@ -24120,7 +24121,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.11.1",
+              "id": "bytes 1.12.1",
               "target": "bytes"
             },
             {
@@ -24132,19 +24133,19 @@
               "target": "data_encoding"
             },
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.33",
               "target": "futures_channel"
             },
             {
-              "id": "futures-io 0.3.31",
+              "id": "futures-io 0.3.33",
               "target": "futures_io"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.33",
               "target": "futures_util"
             },
             {
-              "id": "h2 0.4.4",
+              "id": "h2 0.4.20",
               "target": "h2"
             },
             {
@@ -24152,7 +24153,7 @@
               "target": "hickory_proto"
             },
             {
-              "id": "http 1.3.1",
+              "id": "http 1.5.0",
               "target": "http"
             },
             {
@@ -24176,7 +24177,7 @@
               "target": "rand"
             },
             {
-              "id": "rustls 0.23.45",
+              "id": "rustls 0.23.46",
               "target": "rustls"
             },
             {
@@ -24196,7 +24197,7 @@
               "target": "tinyvec"
             },
             {
-              "id": "tokio 1.50.0",
+              "id": "tokio 1.54.0",
               "target": "tokio"
             },
             {
@@ -24383,7 +24384,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.33",
               "target": "futures_util"
             },
             {
@@ -24419,7 +24420,7 @@
               "target": "resolv_conf"
             },
             {
-              "id": "rustls 0.23.45",
+              "id": "rustls 0.23.46",
               "target": "rustls"
             },
             {
@@ -24431,7 +24432,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.50.0",
+              "id": "tokio 1.54.0",
               "target": "tokio"
             },
             {
@@ -24787,7 +24788,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -24826,7 +24827,7 @@
       ],
       "version": "0.2.12"
     },
-    "http 1.3.1": {
+    "http 1.5.0": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -24834,19 +24835,15 @@
         ],
         "deps": [
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
-          },
-          {
-            "id": "fnv 1.0.7",
-            "target": "fnv"
           },
           {
             "id": "itoa 1.0.17",
             "target": "itoa"
           }
         ],
-        "edition": "2018"
+        "edition": "2021"
       },
       "library_target_name": "http",
       "license": "MIT OR Apache-2.0",
@@ -24859,8 +24856,8 @@
       "package_url": "https://github.com/hyperium/http",
       "repository": {
         "Http": {
-          "sha256": "f4a85d31aea989eead29a3aaf9e1115a180df8282431156e533de47660892565",
-          "url": "https://static.crates.io/crates/http/1.3.1/download"
+          "sha256": "918d3568bebf352712bc2ef3d46a8bcf1a75b373be6539de198e9105cbbf9ce0",
+          "url": "https://static.crates.io/crates/http/1.5.0/download"
         }
       },
       "targets": [
@@ -24871,17 +24868,17 @@
           }
         }
       ],
-      "version": "1.3.1"
+      "version": "1.5.0"
     },
     "http-body 1.0.1": {
       "common_attrs": {
         "deps": [
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           }
         ],
@@ -24911,22 +24908,22 @@
       ],
       "version": "1.0.1"
     },
-    "http-body-util 0.1.3": {
+    "http-body-util 0.1.5": {
       "common_attrs": {
         "crate_features": [
           "default"
         ],
         "deps": [
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -24950,8 +24947,8 @@
       "package_url": "https://github.com/hyperium/http-body",
       "repository": {
         "Http": {
-          "sha256": "b021d93e26becf5dc7e1b75b1bed1fd93124b374ceb73f43d4d4eafec896a64a",
-          "url": "https://static.crates.io/crates/http-body-util/0.1.3/download"
+          "sha256": "23169fe34a5fbcdd3f3862e78fb9b6fccd5f02a6dc6f732547005d45631ce71c",
+          "url": "https://static.crates.io/crates/http-body-util/0.1.5/download"
         }
       },
       "targets": [
@@ -24962,7 +24959,7 @@
           }
         }
       ],
-      "version": "0.1.3"
+      "version": "0.1.5"
     },
     "httparse 1.10.1": {
       "build_script_attrs": {},
@@ -25116,23 +25113,23 @@
             "target": "atomic_waker"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
-            "id": "futures-channel 0.3.31",
+            "id": "futures-channel 0.3.33",
             "target": "futures_channel"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "h2 0.4.4",
+            "id": "h2 0.4.20",
             "target": "h2"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -25164,7 +25161,7 @@
             "target": "smallvec"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -25214,7 +25211,7 @@
         ],
         "deps": [
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -25230,7 +25227,7 @@
             "target": "log"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -25247,7 +25244,7 @@
             "target": "rustls_platform_verifier"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -25299,7 +25296,7 @@
             "target": "async_socks5"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -25315,7 +25312,7 @@
             "target": "thiserror"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -25366,7 +25363,7 @@
             "target": "pin_project_lite"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -25427,19 +25424,19 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.11.1",
+              "id": "bytes 1.12.1",
               "target": "bytes"
             },
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.33",
               "target": "futures_channel"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.33",
               "target": "futures_util"
             },
             {
-              "id": "http 1.3.1",
+              "id": "http 1.5.0",
               "target": "http"
             },
             {
@@ -25467,11 +25464,11 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "socket2 0.6.1",
+              "id": "socket2 0.5.10",
               "target": "socket2"
             },
             {
-              "id": "tokio 1.50.0",
+              "id": "tokio 1.54.0",
               "target": "tokio"
             },
             {
@@ -25670,7 +25667,7 @@
               "target": "backon"
             },
             {
-              "id": "bytes 1.11.1",
+              "id": "bytes 1.12.1",
               "target": "bytes"
             },
             {
@@ -25694,7 +25691,7 @@
               "target": "elliptic_curve"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.33",
               "target": "futures_util"
             },
             {
@@ -25702,7 +25699,7 @@
               "target": "hex"
             },
             {
-              "id": "http 1.3.1",
+              "id": "http 1.5.0",
               "target": "http"
             },
             {
@@ -25710,7 +25707,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.3",
+              "id": "http-body-util 0.1.5",
               "target": "http_body_util"
             },
             {
@@ -25809,7 +25806,7 @@
           "selects": {
             "cfg(not(target_family = \"wasm\"))": [
               {
-                "id": "tokio 1.50.0",
+                "id": "tokio 1.54.0",
                 "target": "tokio"
               }
             ],
@@ -25904,7 +25901,7 @@
             "target": "base64"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -25932,11 +25929,11 @@
             "target": "fqdn"
           },
           {
-            "id": "futures 0.3.31",
+            "id": "futures 0.3.33",
             "target": "futures"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -25956,7 +25953,7 @@
             "target": "hickory_resolver"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -25964,7 +25961,7 @@
             "target": "http_body"
           },
           {
-            "id": "http-body-util 0.1.3",
+            "id": "http-body-util 0.1.5",
             "target": "http_body_util"
           },
           {
@@ -26060,7 +26057,7 @@
             "target": "reqwest"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -26108,7 +26105,7 @@
             "target": "show_option"
           },
           {
-            "id": "socket2 0.6.1",
+            "id": "socket2 0.6.5",
             "target": "socket2"
           },
           {
@@ -26124,7 +26121,7 @@
             "target": "tar"
           },
           {
-            "id": "tempfile 3.23.0",
+            "id": "tempfile 3.27.0",
             "target": "tempfile"
           },
           {
@@ -26132,7 +26129,7 @@
             "target": "thiserror"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -26144,11 +26141,11 @@
             "target": "tokio_rustls"
           },
           {
-            "id": "tokio-util 0.7.17",
+            "id": "tokio-util 0.7.20",
             "target": "tokio_util"
           },
           {
-            "id": "tower 0.5.2",
+            "id": "tower 0.5.3",
             "target": "tower"
           },
           {
@@ -26192,7 +26189,7 @@
             "target": "zeroize"
           },
           {
-            "id": "zstd 0.13.2",
+            "id": "zstd 0.13.3",
             "target": "zstd"
           }
         ],
@@ -27229,7 +27226,7 @@
             "target": "axum_extra"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -27249,7 +27246,7 @@
             "target": "fqdn"
           },
           {
-            "id": "futures 0.3.31",
+            "id": "futures 0.3.33",
             "target": "futures"
           },
           {
@@ -27257,7 +27254,7 @@
             "target": "hostname"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -27265,7 +27262,7 @@
             "target": "http_body"
           },
           {
-            "id": "http-body-util 0.1.3",
+            "id": "http-body-util 0.1.5",
             "target": "http_body_util"
           },
           {
@@ -27317,7 +27314,7 @@
             "target": "reqwest"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -27357,15 +27354,15 @@
             "target": "time"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
-            "id": "tokio-util 0.7.17",
+            "id": "tokio-util 0.7.20",
             "target": "tokio_util"
           },
           {
-            "id": "tower 0.5.2",
+            "id": "tower 0.5.3",
             "target": "tower"
           },
           {
@@ -27452,7 +27449,7 @@
             "target": "candid"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -27510,7 +27507,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -27518,11 +27515,11 @@
             "target": "candid"
           },
           {
-            "id": "futures 0.3.31",
+            "id": "futures 0.3.33",
             "target": "futures"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -27530,7 +27527,7 @@
             "target": "http_body"
           },
           {
-            "id": "http-body-util 0.1.3",
+            "id": "http-body-util 0.1.5",
             "target": "http_body_util"
           },
           {
@@ -27634,6 +27631,47 @@
         }
       ],
       "version": "0.49.1"
+    },
+    "ic-management-canister-types 0.11.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "candid 0.10.37",
+            "target": "candid"
+          },
+          {
+            "id": "serde 1.0.228",
+            "target": "serde"
+          },
+          {
+            "id": "serde_bytes 0.11.15",
+            "target": "serde_bytes"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "ic_management_canister_types",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "name": "ic-management-canister-types",
+      "package_url": "https://github.com/dfinity/ic",
+      "repository": {
+        "Http": {
+          "sha256": "b3e3162bdfbdbc6ca3b4bfa8145f9ba19cddaf3eb8d1af8dc7be6a39557b76c2",
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.11.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_management_canister_types",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.11.0"
     },
     "ic-management-canister-types 0.5.0": {
       "common_attrs": {
@@ -27845,7 +27883,7 @@
             "target": "hex"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -28194,7 +28232,7 @@
             "target": "candid"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -28349,7 +28387,7 @@
             "target": "candid"
           },
           {
-            "id": "futures 0.3.31",
+            "id": "futures 0.3.33",
             "target": "futures"
           },
           {
@@ -28817,7 +28855,7 @@
             "target": "candid"
           },
           {
-            "id": "futures 0.3.31",
+            "id": "futures 0.3.33",
             "target": "futures"
           },
           {
@@ -29703,23 +29741,9 @@
         ]
       },
       "common_attrs": {
-        "crate_features": {
-          "common": [],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "std"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "std"
-            ],
-            "x86_64-apple-darwin": [
-              "std"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "std"
-            ]
-          }
-        },
+        "crate_features": [
+          "std"
+        ],
         "deps": [
           {
             "id": "hashbrown 0.12.3",
@@ -30010,7 +30034,7 @@
             "target": "bitflags"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -30022,7 +30046,7 @@
             "target": "libc"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           }
         ],
@@ -30289,11 +30313,11 @@
             "target": "base64"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -30301,7 +30325,7 @@
             "target": "http_body"
           },
           {
-            "id": "http-body-util 0.1.3",
+            "id": "http-body-util 0.1.5",
             "target": "http_body_util"
           },
           {
@@ -30325,7 +30349,7 @@
             "target": "rcgen"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -30345,7 +30369,7 @@
             "target": "thiserror"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           }
         ],
@@ -30454,7 +30478,7 @@
           "selects": {
             "cfg(windows)": [
               {
-                "id": "socket2 0.5.9",
+                "id": "socket2 0.5.10",
                 "target": "socket2"
               },
               {
@@ -31296,7 +31320,7 @@
             "target": "cfg_if"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -33558,7 +33582,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -33722,15 +33746,15 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "futures-sink 0.3.31",
+            "id": "futures-sink 0.3.33",
             "target": "futures_sink"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -35437,7 +35461,7 @@
       ],
       "version": "0.8.10"
     },
-    "mio 1.0.2": {
+    "mio 1.2.4": {
       "common_attrs": {
         "crate_features": {
           "common": [
@@ -35479,32 +35503,21 @@
                 "target": "log"
               }
             ],
-            "cfg(target_os = \"hermit\")": [
-              {
-                "alias": "libc",
-                "id": "hermit-abi 0.3.9",
-                "target": "hermit_abi"
-              }
-            ],
-            "cfg(target_os = \"wasi\")": [
+            "cfg(any(unix, target_os = \"hermit\", target_os = \"wasi\"))": [
               {
                 "id": "libc 0.2.186",
                 "target": "libc"
-              },
+              }
+            ],
+            "cfg(target_os = \"wasi\")": [
               {
                 "id": "wasi 0.11.0+wasi-snapshot-preview1",
                 "target": "wasi"
               }
             ],
-            "cfg(unix)": [
-              {
-                "id": "libc 0.2.186",
-                "target": "libc"
-              }
-            ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.52.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ],
@@ -35534,8 +35547,8 @@
       "package_url": "https://github.com/tokio-rs/mio",
       "repository": {
         "Http": {
-          "sha256": "80e04d1dcff3aae0704555fe5fee3bcfaf3d1fdf8a7e521d5b9d2b42acb52cec",
-          "url": "https://static.crates.io/crates/mio/1.0.2/download"
+          "sha256": "1788edb87fdc09c7e26304471e2f5be8cdefb1b6930d6e3985fc02ff53bf86ee",
+          "url": "https://static.crates.io/crates/mio/1.2.4/download"
         }
       },
       "targets": [
@@ -35546,7 +35559,7 @@
           }
         }
       ],
-      "version": "1.0.2"
+      "version": "1.2.4"
     },
     "mockall 0.15.0": {
       "build_script_attrs": {},
@@ -35680,15 +35693,15 @@
             "target": "assert_json_diff"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -35696,7 +35709,7 @@
             "target": "http_body"
           },
           {
-            "id": "http-body-util 0.1.3",
+            "id": "http-body-util 0.1.5",
             "target": "http_body_util"
           },
           {
@@ -35732,7 +35745,7 @@
             "target": "similar"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           }
         ],
@@ -35795,7 +35808,7 @@
             "target": "event_listener"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -38124,11 +38137,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.33",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.31",
+              "id": "futures-sink 0.3.33",
               "target": "futures_sink"
             },
             {
@@ -38191,7 +38204,7 @@
         ],
         "deps": [
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -38215,7 +38228,7 @@
             "target": "thiserror"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -38409,15 +38422,15 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.33",
               "target": "futures_channel"
             },
             {
-              "id": "futures-executor 0.3.31",
+              "id": "futures-executor 0.3.33",
               "target": "futures_executor"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.33",
               "target": "futures_util"
             },
             {
@@ -40343,7 +40356,7 @@
             "target": "fastrand"
           },
           {
-            "id": "futures-io 0.3.31",
+            "id": "futures-io 0.3.33",
             "target": "futures_io"
           }
         ],
@@ -41077,7 +41090,7 @@
             "target": "symbolic_demangle"
           },
           {
-            "id": "tempfile 3.23.0",
+            "id": "tempfile 3.27.0",
             "target": "tempfile"
           },
           {
@@ -42236,7 +42249,7 @@
             "target": "rusty_fork"
           },
           {
-            "id": "tempfile 3.23.0",
+            "id": "tempfile 3.27.0",
             "target": "tempfile"
           },
           {
@@ -42323,7 +42336,7 @@
         ],
         "deps": [
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           }
         ],
@@ -42416,7 +42429,7 @@
             "target": "syn"
           },
           {
-            "id": "tempfile 3.23.0",
+            "id": "tempfile 3.27.0",
             "target": "tempfile"
           }
         ],
@@ -43179,7 +43192,7 @@
       ],
       "version": "1.0.3"
     },
-    "quinn 0.11.11": {
+    "quinn 0.11.12": {
       "build_script_attrs": {
         "deps": [
           {
@@ -43198,7 +43211,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.11.1",
+              "id": "bytes 1.12.1",
               "target": "bytes"
             },
             {
@@ -43207,12 +43220,12 @@
             },
             {
               "alias": "proto",
-              "id": "quinn-proto 0.11.15",
+              "id": "quinn-proto 0.11.19",
               "target": "quinn_proto"
             },
             {
               "alias": "udp",
-              "id": "quinn-udp 0.5.5",
+              "id": "quinn-udp 0.5.16",
               "target": "quinn_udp"
             },
             {
@@ -43220,7 +43233,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.45",
+              "id": "rustls 0.23.46",
               "target": "rustls"
             },
             {
@@ -43228,7 +43241,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.50.0",
+              "id": "tokio 1.54.0",
               "target": "tokio"
             },
             {
@@ -43245,7 +43258,7 @@
             ],
             "cfg(not(all(target_family = \"wasm\", target_os = \"unknown\")))": [
               {
-                "id": "socket2 0.6.1",
+                "id": "socket2 0.5.10",
                 "target": "socket2"
               }
             ]
@@ -43267,8 +43280,8 @@
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
         "Http": {
-          "sha256": "0c1a41e437b6bbd489372cd4971de128e85c855f56c57f283d20ff016cf7c0a8",
-          "url": "https://static.crates.io/crates/quinn/0.11.11/download"
+          "sha256": "4051e23e9185c255a7e33ef59cdbca87a22d359052eecd22fc6b901fb37d9d11",
+          "url": "https://static.crates.io/crates/quinn/0.11.12/download"
         }
       },
       "targets": [
@@ -43285,9 +43298,9 @@
           }
         }
       ],
-      "version": "0.11.11"
+      "version": "0.11.12"
     },
-    "quinn-proto 0.11.15": {
+    "quinn-proto 0.11.19": {
       "common_attrs": {
         "crate_features": [
           "aws-lc-rs",
@@ -43301,7 +43314,7 @@
               "target": "aws_lc_rs"
             },
             {
-              "id": "bytes 1.11.1",
+              "id": "bytes 1.12.1",
               "target": "bytes"
             },
             {
@@ -43309,19 +43322,23 @@
               "target": "lru_slab"
             },
             {
-              "id": "rand 0.9.4",
+              "id": "rand 0.10.1",
               "target": "rand"
+            },
+            {
+              "id": "rand_pcg 0.10.2",
+              "target": "rand_pcg"
             },
             {
               "id": "rustc-hash 2.1.1",
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.45",
+              "id": "rustls 0.23.46",
               "target": "rustls"
             },
             {
-              "id": "slab 0.4.8",
+              "id": "slab 0.4.12",
               "target": "slab"
             },
             {
@@ -43340,7 +43357,7 @@
           "selects": {
             "cfg(all(target_family = \"wasm\", target_os = \"unknown\"))": [
               {
-                "id": "getrandom 0.3.4",
+                "id": "getrandom 0.4.2",
                 "target": "getrandom"
               },
               {
@@ -43371,8 +43388,8 @@
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
         "Http": {
-          "sha256": "4fcb935c5bec503c2f0e306bdd3e58bb9029dcb14fa8d9ac76e3a5256ac0763e",
-          "url": "https://static.crates.io/crates/quinn-proto/0.11.15/download"
+          "sha256": "0e750cca55fe4f0439a15d0bb529da9651e79993e8e72c61a899a36d462befbe",
+          "url": "https://static.crates.io/crates/quinn-proto/0.11.19/download"
         }
       },
       "targets": [
@@ -43383,9 +43400,17 @@
           }
         }
       ],
-      "version": "0.11.15"
+      "version": "0.11.19"
     },
-    "quinn-udp 0.5.5": {
+    "quinn-udp 0.5.16": {
+      "build_script_attrs": {
+        "deps": [
+          {
+            "id": "cfg_aliases 0.2.1",
+            "target": "cfg_aliases"
+          }
+        ]
+      },
       "common_attrs": {
         "crate_features": [
           "default",
@@ -43399,28 +43424,33 @@
               "target": "libc"
             },
             {
-              "id": "socket2 0.5.9",
-              "target": "socket2"
-            },
-            {
               "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
           "selects": {
+            "cfg(not(all(target_family = \"wasm\", target_os = \"unknown\")))": [
+              {
+                "id": "socket2 0.5.10",
+                "target": "socket2"
+              }
+            ],
             "cfg(windows)": [
               {
                 "id": "once_cell 1.21.3",
                 "target": "once_cell"
               },
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ]
           }
         },
-        "edition": "2021"
+        "edition": "2021",
+        "extra_deps": [
+          ":build_script_build"
+        ]
       },
       "library_target_name": "quinn_udp",
       "license": "MIT OR Apache-2.0",
@@ -43433,8 +43463,8 @@
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
         "Http": {
-          "sha256": "4fe68c2e9e1a1234e218683dbdf9f9dfcb094113c5ac2b938dfcb9bab4c4140b",
-          "url": "https://static.crates.io/crates/quinn-udp/0.5.5/download"
+          "sha256": "af66907df18639dcf4db56ca65490cabc4b27a97dbadd96f2926cca73298f016",
+          "url": "https://static.crates.io/crates/quinn-udp/0.5.16/download"
         }
       },
       "targets": [
@@ -43443,9 +43473,15 @@
             "crate_name": "quinn_udp",
             "crate_root": "src/lib.rs"
           }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
         }
       ],
-      "version": "0.5.5"
+      "version": "0.5.16"
     },
     "quote 1.0.47": {
       "build_script_attrs": {},
@@ -44005,6 +44041,41 @@
       ],
       "version": "0.4.3"
     },
+    "rand_pcg 0.10.2": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "rand_core 0.10.1",
+            "target": "rand_core"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "rand_pcg",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "rand_pcg",
+      "package_url": "https://github.com/rust-random/rngs",
+      "repository": {
+        "Http": {
+          "sha256": "caa0f4137e1c0a72f4c651489402276c8e8e1cf081f3b0ba156d2cbeef09e86a",
+          "url": "https://static.crates.io/crates/rand_pcg/0.10.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rand_pcg",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.10.2"
+    },
     "rand_xorshift 0.3.0": {
       "common_attrs": {
         "deps": [
@@ -44360,7 +44431,7 @@
       ],
       "version": "1.12.1"
     },
-    "rcgen 0.13.1": {
+    "rcgen 0.13.2": {
       "common_attrs": {
         "crate_features": [
           "aws_lc_rs",
@@ -44419,8 +44490,8 @@
       "package_url": "https://github.com/rustls/rcgen",
       "repository": {
         "Http": {
-          "sha256": "54077e1872c46788540de1ea3d7f4ccb1983d12f9aa909b234468676c1a36779",
-          "url": "https://static.crates.io/crates/rcgen/0.13.1/download"
+          "sha256": "75e669e5202259b5314d1ea5397316ad400819437857b90861765f24c4cf80a2",
+          "url": "https://static.crates.io/crates/rcgen/0.13.2/download"
         }
       },
       "targets": [
@@ -44431,7 +44502,7 @@
           }
         }
       ],
-      "version": "0.13.1"
+      "version": "0.13.2"
     },
     "rcgen 0.14.5": {
       "common_attrs": {
@@ -45316,19 +45387,19 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.11.1",
+              "id": "bytes 1.12.1",
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.33",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.33",
               "target": "futures_util"
             },
             {
-              "id": "http 1.3.1",
+              "id": "http 1.5.0",
               "target": "http"
             },
             {
@@ -45359,11 +45430,11 @@
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.33",
                 "target": "futures_channel"
               },
               {
-                "id": "h2 0.4.4",
+                "id": "h2 0.4.20",
                 "target": "h2"
               },
               {
@@ -45379,7 +45450,7 @@
                 "target": "once_cell"
               },
               {
-                "id": "rustls 0.23.45",
+                "id": "rustls 0.23.46",
                 "target": "rustls"
               },
               {
@@ -45395,17 +45466,17 @@
                 "target": "tokio_rustls"
               },
               {
-                "id": "tokio-util 0.7.17",
+                "id": "tokio-util 0.7.20",
                 "target": "tokio_util"
               }
             ],
             "aarch64-unknown-linux-gnu": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.33",
                 "target": "futures_channel"
               },
               {
-                "id": "h2 0.4.4",
+                "id": "h2 0.4.20",
                 "target": "h2"
               },
               {
@@ -45421,7 +45492,7 @@
                 "target": "once_cell"
               },
               {
-                "id": "rustls 0.23.45",
+                "id": "rustls 0.23.46",
                 "target": "rustls"
               },
               {
@@ -45437,7 +45508,7 @@
                 "target": "tokio_rustls"
               },
               {
-                "id": "tokio-util 0.7.17",
+                "id": "tokio-util 0.7.20",
                 "target": "tokio_util"
               }
             ],
@@ -45465,7 +45536,7 @@
                 "target": "http_body"
               },
               {
-                "id": "http-body-util 0.1.3",
+                "id": "http-body-util 0.1.5",
                 "target": "http_body_util"
               },
               {
@@ -45489,11 +45560,11 @@
                 "target": "pin_project_lite"
               },
               {
-                "id": "tokio 1.50.0",
+                "id": "tokio 1.54.0",
                 "target": "tokio"
               },
               {
-                "id": "tower 0.5.2",
+                "id": "tower 0.5.3",
                 "target": "tower"
               },
               {
@@ -45513,11 +45584,11 @@
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.33",
                 "target": "futures_channel"
               },
               {
-                "id": "h2 0.4.4",
+                "id": "h2 0.4.20",
                 "target": "h2"
               },
               {
@@ -45533,7 +45604,7 @@
                 "target": "once_cell"
               },
               {
-                "id": "rustls 0.23.45",
+                "id": "rustls 0.23.46",
                 "target": "rustls"
               },
               {
@@ -45549,17 +45620,17 @@
                 "target": "tokio_rustls"
               },
               {
-                "id": "tokio-util 0.7.17",
+                "id": "tokio-util 0.7.20",
                 "target": "tokio_util"
               }
             ],
             "x86_64-unknown-linux-gnu": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.33",
                 "target": "futures_channel"
               },
               {
-                "id": "h2 0.4.4",
+                "id": "h2 0.4.20",
                 "target": "h2"
               },
               {
@@ -45575,7 +45646,7 @@
                 "target": "once_cell"
               },
               {
-                "id": "rustls 0.23.45",
+                "id": "rustls 0.23.46",
                 "target": "rustls"
               },
               {
@@ -45591,7 +45662,7 @@
                 "target": "tokio_rustls"
               },
               {
-                "id": "tokio-util 0.7.17",
+                "id": "tokio-util 0.7.20",
                 "target": "tokio_util"
               }
             ]
@@ -45703,7 +45774,7 @@
             "target": "regex"
           },
           {
-            "id": "tempfile 3.23.0",
+            "id": "tempfile 3.27.0",
             "target": "tempfile"
           },
           {
@@ -45991,7 +46062,7 @@
         ],
         "deps": [
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -46198,7 +46269,7 @@
         ],
         "deps": [
           {
-            "id": "futures 0.3.31",
+            "id": "futures 0.3.33",
             "target": "futures"
           },
           {
@@ -47064,7 +47135,7 @@
                 "target": "errno"
               },
               {
-                "id": "windows-sys 0.61.2",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ],
@@ -47117,7 +47188,7 @@
       ],
       "version": "1.1.4"
     },
-    "rustls 0.23.45": {
+    "rustls 0.23.46": {
       "build_script_attrs": {
         "link_deps": [
           {
@@ -47163,7 +47234,7 @@
             "target": "rustls_pki_types"
           },
           {
-            "id": "rustls-webpki 0.103.15",
+            "id": "rustls-webpki 0.103.16",
             "target": "webpki"
           },
           {
@@ -47192,8 +47263,8 @@
       "package_url": "https://github.com/rustls/rustls",
       "repository": {
         "Http": {
-          "sha256": "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634",
-          "url": "https://static.crates.io/crates/rustls/0.23.45/download"
+          "sha256": "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf",
+          "url": "https://static.crates.io/crates/rustls/0.23.46/download"
         }
       },
       "targets": [
@@ -47210,7 +47281,7 @@
           }
         }
       ],
-      "version": "0.23.45"
+      "version": "0.23.46"
     },
     "rustls-acme 0.15.4": {
       "common_attrs": {
@@ -47245,7 +47316,7 @@
             "target": "chrono"
           },
           {
-            "id": "futures 0.3.31",
+            "id": "futures 0.3.33",
             "target": "futures"
           },
           {
@@ -47253,7 +47324,7 @@
             "target": "futures_rustls"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -47265,7 +47336,7 @@
             "target": "pem"
           },
           {
-            "id": "rcgen 0.13.1",
+            "id": "rcgen 0.13.2",
             "target": "rcgen"
           },
           {
@@ -47493,7 +47564,7 @@
               "target": "log"
             },
             {
-              "id": "rustls 0.23.45",
+              "id": "rustls 0.23.46",
               "target": "rustls"
             }
           ],
@@ -47504,7 +47575,7 @@
                 "target": "rustls_native_certs"
               },
               {
-                "id": "rustls-webpki 0.103.15",
+                "id": "rustls-webpki 0.103.16",
                 "target": "webpki"
               }
             ],
@@ -47528,7 +47599,7 @@
             ],
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "rustls-webpki 0.103.15",
+                "id": "rustls-webpki 0.103.16",
                 "target": "webpki"
               },
               {
@@ -47550,13 +47621,13 @@
                 "target": "rustls_platform_verifier_android"
               },
               {
-                "id": "rustls-webpki 0.103.15",
+                "id": "rustls-webpki 0.103.16",
                 "target": "webpki"
               }
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.61.2",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ]
@@ -47598,7 +47669,7 @@
               "target": "log"
             },
             {
-              "id": "rustls 0.23.45",
+              "id": "rustls 0.23.46",
               "target": "rustls"
             }
           ],
@@ -47609,7 +47680,7 @@
                 "target": "rustls_native_certs"
               },
               {
-                "id": "rustls-webpki 0.103.15",
+                "id": "rustls-webpki 0.103.16",
                 "target": "webpki"
               }
             ],
@@ -47633,7 +47704,7 @@
             ],
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "rustls-webpki 0.103.15",
+                "id": "rustls-webpki 0.103.16",
                 "target": "webpki"
               },
               {
@@ -47655,13 +47726,13 @@
                 "target": "rustls_platform_verifier_android"
               },
               {
-                "id": "rustls-webpki 0.103.15",
+                "id": "rustls-webpki 0.103.16",
                 "target": "webpki"
               }
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.61.2",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ]
@@ -47722,7 +47793,7 @@
       ],
       "version": "0.1.1"
     },
-    "rustls-webpki 0.103.15": {
+    "rustls-webpki 0.103.16": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -47756,8 +47827,8 @@
       "package_url": "https://github.com/rustls/webpki",
       "repository": {
         "Http": {
-          "sha256": "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2",
-          "url": "https://static.crates.io/crates/rustls-webpki/0.103.15/download"
+          "sha256": "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281",
+          "url": "https://static.crates.io/crates/rustls-webpki/0.103.16/download"
         }
       },
       "targets": [
@@ -47768,7 +47839,7 @@
           }
         }
       ],
-      "version": "0.103.15"
+      "version": "0.103.16"
     },
     "rustversion 1.0.14": {
       "build_script_attrs": {},
@@ -47826,7 +47897,7 @@
             "target": "quick_error"
           },
           {
-            "id": "tempfile 3.23.0",
+            "id": "tempfile 3.27.0",
             "target": "tempfile"
           },
           {
@@ -50845,7 +50916,7 @@
           },
           {
             "alias": "mio_1_0",
-            "id": "mio 1.0.2",
+            "id": "mio 1.2.4",
             "target": "mio"
           },
           {
@@ -51234,24 +51305,13 @@
       ],
       "version": "0.3.11"
     },
-    "slab 0.4.8": {
-      "build_script_attrs": {
-        "deps": [
-          {
-            "id": "autocfg 1.5.0",
-            "target": "autocfg"
-          }
-        ]
-      },
+    "slab 0.4.12": {
       "common_attrs": {
         "crate_features": [
           "default",
           "std"
         ],
-        "edition": "2018",
-        "extra_deps": [
-          ":build_script_build"
-        ]
+        "edition": "2018"
       },
       "library_target_name": "slab",
       "license": "MIT",
@@ -51263,8 +51323,8 @@
       "package_url": "https://github.com/tokio-rs/slab",
       "repository": {
         "Http": {
-          "sha256": "6528351c9bc8ab22353f9d776db39a20288e8d6c37ef8cfe3317cf875eecfc2d",
-          "url": "https://static.crates.io/crates/slab/0.4.8/download"
+          "sha256": "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5",
+          "url": "https://static.crates.io/crates/slab/0.4.12/download"
         }
       },
       "targets": [
@@ -51273,15 +51333,9 @@
             "crate_name": "slab",
             "crate_root": "src/lib.rs"
           }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
         }
       ],
-      "version": "0.4.8"
+      "version": "0.4.12"
     },
     "slog 2.7.0": {
       "build_script_attrs": {},
@@ -51935,7 +51989,7 @@
       ],
       "version": "0.4.9"
     },
-    "socket2 0.5.9": {
+    "socket2 0.5.10": {
       "common_attrs": {
         "crate_features": [
           "all"
@@ -51970,8 +52024,8 @@
       "package_url": "https://github.com/rust-lang/socket2",
       "repository": {
         "Http": {
-          "sha256": "4f5fd57c80058a56cf5c777ab8a126398ece8e442983605d280a44ce79d0edef",
-          "url": "https://static.crates.io/crates/socket2/0.5.9/download"
+          "sha256": "e22376abed350d73dd1cd119b57ffccad95b4e585a7cda43e286245ce23c0678",
+          "url": "https://static.crates.io/crates/socket2/0.5.10/download"
         }
       },
       "targets": [
@@ -51982,9 +52036,9 @@
           }
         }
       ],
-      "version": "0.5.9"
+      "version": "0.5.10"
     },
-    "socket2 0.6.1": {
+    "socket2 0.6.5": {
       "common_attrs": {
         "crate_features": [
           "all"
@@ -51992,7 +52046,7 @@
         "deps": {
           "common": [],
           "selects": {
-            "cfg(unix)": [
+            "cfg(any(unix, target_os = \"wasi\"))": [
               {
                 "id": "libc 0.2.186",
                 "target": "libc"
@@ -52000,7 +52054,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.60.2",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ]
@@ -52019,8 +52073,8 @@
       "package_url": "https://github.com/rust-lang/socket2",
       "repository": {
         "Http": {
-          "sha256": "17129e116933cf371d018bb80ae557e889637989d8638274fb25622827b03881",
-          "url": "https://static.crates.io/crates/socket2/0.6.1/download"
+          "sha256": "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4",
+          "url": "https://static.crates.io/crates/socket2/0.6.5/download"
         }
       },
       "targets": [
@@ -52031,7 +52085,7 @@
           }
         }
       ],
-      "version": "0.6.1"
+      "version": "0.6.5"
     },
     "socks5-impl 0.6.1": {
       "common_attrs": {
@@ -52048,7 +52102,7 @@
             "target": "byteorder"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -52060,7 +52114,7 @@
             "target": "thiserror"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           }
         ],
@@ -52409,7 +52463,7 @@
             "target": "cfg_if"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
@@ -53003,7 +53057,7 @@
             "target": "rand"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           }
         ],
@@ -53387,7 +53441,7 @@
         ],
         "deps": [
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           }
         ],
@@ -54057,7 +54111,7 @@
             "target": "fnv"
           },
           {
-            "id": "futures 0.3.31",
+            "id": "futures 0.3.33",
             "target": "futures"
           },
           {
@@ -54089,7 +54143,7 @@
             "target": "thiserror"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -54097,7 +54151,7 @@
             "target": "tokio_serde"
           },
           {
-            "id": "tokio-util 0.7.17",
+            "id": "tokio-util 0.7.20",
             "target": "tokio_util"
           },
           {
@@ -54192,7 +54246,7 @@
       ],
       "version": "0.14.1"
     },
-    "tempfile 3.23.0": {
+    "tempfile 3.27.0": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -54212,13 +54266,13 @@
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "getrandom 0.3.4",
+                "id": "getrandom 0.4.2",
                 "target": "getrandom"
               }
             ],
             "aarch64-unknown-linux-gnu": [
               {
-                "id": "getrandom 0.3.4",
+                "id": "getrandom 0.4.2",
                 "target": "getrandom"
               }
             ],
@@ -54230,19 +54284,19 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.61.2",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "getrandom 0.3.4",
+                "id": "getrandom 0.4.2",
                 "target": "getrandom"
               }
             ],
             "x86_64-unknown-linux-gnu": [
               {
-                "id": "getrandom 0.3.4",
+                "id": "getrandom 0.4.2",
                 "target": "getrandom"
               }
             ]
@@ -54261,8 +54315,8 @@
       "package_url": "https://github.com/Stebalien/tempfile",
       "repository": {
         "Http": {
-          "sha256": "2d31c77bdf42a745371d260a26ca7163f1e0924b64afa0b688e61b5a9fa02f16",
-          "url": "https://static.crates.io/crates/tempfile/3.23.0/download"
+          "sha256": "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd",
+          "url": "https://static.crates.io/crates/tempfile/3.27.0/download"
         }
       },
       "targets": [
@@ -54273,7 +54327,7 @@
           }
         }
       ],
-      "version": "3.23.0"
+      "version": "3.27.0"
     },
     "tendril 0.4.3": {
       "common_attrs": {
@@ -55542,7 +55596,7 @@
       ],
       "version": "0.4.1"
     },
-    "tokio 1.50.0": {
+    "tokio 1.54.0": {
       "common_attrs": {
         "crate_features": [
           "bytes",
@@ -55571,11 +55625,11 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.11.1",
+              "id": "bytes 1.12.1",
               "target": "bytes"
             },
             {
-              "id": "mio 1.0.2",
+              "id": "mio 1.2.4",
               "target": "mio"
             },
             {
@@ -55598,7 +55652,7 @@
                 "target": "signal_hook_registry"
               },
               {
-                "id": "socket2 0.6.1",
+                "id": "socket2 0.6.5",
                 "target": "socket2"
               }
             ],
@@ -55612,7 +55666,7 @@
                 "target": "signal_hook_registry"
               },
               {
-                "id": "socket2 0.6.1",
+                "id": "socket2 0.6.5",
                 "target": "socket2"
               }
             ],
@@ -55626,7 +55680,7 @@
                 "target": "signal_hook_registry"
               },
               {
-                "id": "socket2 0.6.1",
+                "id": "socket2 0.6.5",
                 "target": "socket2"
               }
             ],
@@ -55640,7 +55694,7 @@
                 "target": "signal_hook_registry"
               },
               {
-                "id": "socket2 0.6.1",
+                "id": "socket2 0.6.5",
                 "target": "socket2"
               }
             ]
@@ -55649,7 +55703,7 @@
         "edition": "2021",
         "proc_macro_deps": [
           {
-            "id": "tokio-macros 2.6.0",
+            "id": "tokio-macros 2.7.1",
             "target": "tokio_macros"
           }
         ]
@@ -55664,8 +55718,8 @@
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "sha256": "27ad5e34374e03cfffefc301becb44e9dc3c17584f414349ebe29ed26661822d",
-          "url": "https://static.crates.io/crates/tokio/1.50.0/download"
+          "sha256": "a0c168a474b95bfecfe908a65d4bdffc523144b649a74c09c286afb35d53e0bc",
+          "url": "https://static.crates.io/crates/tokio/1.54.0/download"
         }
       },
       "targets": [
@@ -55676,7 +55730,7 @@
           }
         }
       ],
-      "version": "1.50.0"
+      "version": "1.54.0"
     },
     "tokio-io-timeout 1.2.0": {
       "common_attrs": {
@@ -55686,7 +55740,7 @@
             "target": "pin_project_lite"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           }
         ],
@@ -55717,7 +55771,7 @@
       ],
       "version": "1.2.0"
     },
-    "tokio-macros 2.6.0": {
+    "tokio-macros 2.7.1": {
       "common_attrs": {
         "deps": [
           {
@@ -55745,8 +55799,8 @@
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "sha256": "af407857209536a95c8e56f8231ef2c2e2aff839b22e07a1ffcbc617e9db9fa5",
-          "url": "https://static.crates.io/crates/tokio-macros/2.6.0/download"
+          "sha256": "6328af13490e73a9b4694030fafd93f8c8c6a9dede33e821c3fc63eddf8042ba",
+          "url": "https://static.crates.io/crates/tokio-macros/2.7.1/download"
         }
       },
       "targets": [
@@ -55757,9 +55811,9 @@
           }
         }
       ],
-      "version": "2.6.0"
+      "version": "2.7.1"
     },
-    "tokio-metrics 0.4.0": {
+    "tokio-metrics 0.4.9": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -55768,7 +55822,7 @@
         ],
         "deps": [
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -55776,7 +55830,7 @@
             "target": "pin_project_lite"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -55796,8 +55850,8 @@
       "package_url": "https://github.com/tokio-rs/tokio-metrics",
       "repository": {
         "Http": {
-          "sha256": "cb2bb07a8451c4c6fa8b3497ad198510d8b8dffa5df5cfb97a64102a58b113c8",
-          "url": "https://static.crates.io/crates/tokio-metrics/0.4.0/download"
+          "sha256": "0e0410015c6db7b67b9c9ab2a3af4d74a942d637ff248d0d055073750deac6f9",
+          "url": "https://static.crates.io/crates/tokio-metrics/0.4.9/download"
         }
       },
       "targets": [
@@ -55808,7 +55862,7 @@
           }
         }
       ],
-      "version": "0.4.0"
+      "version": "0.4.9"
     },
     "tokio-rusqlite 0.7.0": {
       "common_attrs": {
@@ -55825,7 +55879,7 @@
             "target": "rusqlite"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           }
         ],
@@ -55866,7 +55920,7 @@
         ],
         "deps": [
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -55875,7 +55929,7 @@
             "target": "rustls_pki_types"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           }
         ],
@@ -55923,15 +55977,15 @@
             "target": "bincode"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "futures-sink 0.3.31",
+            "id": "futures-sink 0.3.33",
             "target": "futures_sink"
           },
           {
@@ -55992,7 +56046,7 @@
             "target": "either"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -56000,7 +56054,7 @@
             "target": "thiserror"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           }
         ],
@@ -56039,7 +56093,7 @@
         ],
         "deps": [
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
@@ -56047,7 +56101,7 @@
             "target": "pin_project_lite"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           }
         ],
@@ -56085,15 +56139,15 @@
             "target": "async_stream"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -56137,7 +56191,7 @@
         ],
         "deps": [
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -56145,7 +56199,7 @@
             "target": "log"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -56179,7 +56233,7 @@
       ],
       "version": "0.29.0"
     },
-    "tokio-util 0.7.17": {
+    "tokio-util 0.7.20": {
       "common_attrs": {
         "crate_features": [
           "codec",
@@ -56192,49 +56246,78 @@
           "io",
           "io-util",
           "join-map",
+          "libc",
           "net",
           "rt",
           "slab",
           "time"
         ],
-        "deps": [
-          {
-            "id": "bytes 1.11.1",
-            "target": "bytes"
-          },
-          {
-            "id": "futures-core 0.3.31",
-            "target": "futures_core"
-          },
-          {
-            "id": "futures-io 0.3.31",
-            "target": "futures_io"
-          },
-          {
-            "id": "futures-sink 0.3.31",
-            "target": "futures_sink"
-          },
-          {
-            "id": "futures-util 0.3.31",
-            "target": "futures_util"
-          },
-          {
-            "id": "hashbrown 0.15.2",
-            "target": "hashbrown"
-          },
-          {
-            "id": "pin-project-lite 0.2.17",
-            "target": "pin_project_lite"
-          },
-          {
-            "id": "slab 0.4.8",
-            "target": "slab"
-          },
-          {
-            "id": "tokio 1.50.0",
-            "target": "tokio"
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.12.1",
+              "target": "bytes"
+            },
+            {
+              "id": "futures-core 0.3.33",
+              "target": "futures_core"
+            },
+            {
+              "id": "futures-io 0.3.33",
+              "target": "futures_io"
+            },
+            {
+              "id": "futures-sink 0.3.33",
+              "target": "futures_sink"
+            },
+            {
+              "id": "futures-util 0.3.33",
+              "target": "futures_util"
+            },
+            {
+              "id": "hashbrown 0.15.2",
+              "target": "hashbrown"
+            },
+            {
+              "id": "pin-project-lite 0.2.17",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "slab 0.4.12",
+              "target": "slab"
+            },
+            {
+              "id": "tokio 1.54.0",
+              "target": "tokio"
+            }
+          ],
+          "selects": {
+            "aarch64-apple-darwin": [
+              {
+                "id": "libc 0.2.186",
+                "target": "libc"
+              }
+            ],
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "libc 0.2.186",
+                "target": "libc"
+              }
+            ],
+            "x86_64-apple-darwin": [
+              {
+                "id": "libc 0.2.186",
+                "target": "libc"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "libc 0.2.186",
+                "target": "libc"
+              }
+            ]
           }
-        ],
+        },
         "edition": "2021"
       },
       "library_target_name": "tokio_util",
@@ -56247,8 +56330,8 @@
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "sha256": "2efa149fe76073d6e8fd97ef4f4eca7b67f599660115591483572e406e165594",
-          "url": "https://static.crates.io/crates/tokio-util/0.7.17/download"
+          "sha256": "e464cf451ba96ebfc6f9b6542f17ee8b8956e33f1e40d9690624e59d7a7f8a4b",
+          "url": "https://static.crates.io/crates/tokio-util/0.7.20/download"
         }
       },
       "targets": [
@@ -56259,17 +56342,17 @@
           }
         }
       ],
-      "version": "0.7.17"
+      "version": "0.7.20"
     },
     "tokio-vsock 0.7.2": {
       "common_attrs": {
         "deps": [
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
-            "id": "futures 0.3.31",
+            "id": "futures 0.3.33",
             "target": "futures"
           },
           {
@@ -56277,7 +56360,7 @@
             "target": "libc"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -56682,15 +56765,15 @@
             "target": "base64"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
-            "id": "h2 0.4.4",
+            "id": "h2 0.4.20",
             "target": "h2"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -56698,7 +56781,7 @@
             "target": "http_body"
           },
           {
-            "id": "http-body-util 0.1.3",
+            "id": "http-body-util 0.1.5",
             "target": "http_body_util"
           },
           {
@@ -56722,7 +56805,7 @@
             "target": "pin_project"
           },
           {
-            "id": "socket2 0.6.1",
+            "id": "socket2 0.6.5",
             "target": "socket2"
           },
           {
@@ -56730,7 +56813,7 @@
             "target": "sync_wrapper"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -56738,7 +56821,7 @@
             "target": "tokio_stream"
           },
           {
-            "id": "tower 0.5.2",
+            "id": "tower 0.5.3",
             "target": "tower"
           },
           {
@@ -56839,7 +56922,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -56909,7 +56992,7 @@
             "target": "syn"
           },
           {
-            "id": "tempfile 3.23.0",
+            "id": "tempfile 3.27.0",
             "target": "tempfile"
           },
           {
@@ -56999,11 +57082,11 @@
         ],
         "deps": [
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -57053,10 +57136,9 @@
       ],
       "version": "0.4.13"
     },
-    "tower 0.5.2": {
+    "tower 0.5.3": {
       "common_attrs": {
         "crate_features": [
-          "__common",
           "balance",
           "buffer",
           "discover",
@@ -57088,11 +57170,11 @@
         ],
         "deps": [
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -57108,7 +57190,7 @@
             "target": "pin_project_lite"
           },
           {
-            "id": "slab 0.4.8",
+            "id": "slab 0.4.12",
             "target": "slab"
           },
           {
@@ -57116,11 +57198,11 @@
             "target": "sync_wrapper"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
-            "id": "tokio-util 0.7.17",
+            "id": "tokio-util 0.7.20",
             "target": "tokio_util"
           },
           {
@@ -57148,8 +57230,8 @@
       "package_url": "https://github.com/tower-rs/tower",
       "repository": {
         "Http": {
-          "sha256": "d039ad9159c98b70ecfd540b2573b97f7f52c3e8d9f8ad57a24b916a536975f9",
-          "url": "https://static.crates.io/crates/tower/0.5.2/download"
+          "sha256": "ebe5ef63511595f1344e2d5cfa636d973292adc0eec1f0ad45fae9f0851ab1d4",
+          "url": "https://static.crates.io/crates/tower/0.5.3/download"
         }
       },
       "targets": [
@@ -57160,7 +57242,7 @@
           }
         }
       ],
-      "version": "0.5.2"
+      "version": "0.5.3"
     },
     "tower-http 0.6.11": {
       "common_attrs": {
@@ -57219,15 +57301,15 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.11.1",
+              "id": "bytes 1.12.1",
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.33",
               "target": "futures_core"
             },
             {
-              "id": "http 1.3.1",
+              "id": "http 1.5.0",
               "target": "http"
             },
             {
@@ -57235,7 +57317,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.3",
+              "id": "http-body-util 0.1.5",
               "target": "http_body_util"
             },
             {
@@ -57243,15 +57325,15 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.50.0",
+              "id": "tokio 1.54.0",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.17",
+              "id": "tokio-util 0.7.20",
               "target": "tokio_util"
             },
             {
-              "id": "tower 0.5.2",
+              "id": "tower 0.5.3",
               "target": "tower"
             },
             {
@@ -57274,7 +57356,7 @@
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "futures-util 0.3.31",
+                "id": "futures-util 0.3.33",
                 "target": "futures_util"
               },
               {
@@ -57284,7 +57366,7 @@
             ],
             "aarch64-unknown-linux-gnu": [
               {
-                "id": "futures-util 0.3.31",
+                "id": "futures-util 0.3.33",
                 "target": "futures_util"
               },
               {
@@ -57294,7 +57376,7 @@
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "futures-util 0.3.31",
+                "id": "futures-util 0.3.33",
                 "target": "futures_util"
               },
               {
@@ -57304,7 +57386,7 @@
             ],
             "x86_64-unknown-linux-gnu": [
               {
-                "id": "futures-util 0.3.31",
+                "id": "futures-util 0.3.33",
                 "target": "futures_util"
               },
               {
@@ -57365,15 +57447,15 @@
             "target": "bitflags"
           },
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
-            "id": "futures-core 0.3.31",
+            "id": "futures-core 0.3.33",
             "target": "futures_core"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -57389,11 +57471,11 @@
             "target": "pin_project_lite"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
-            "id": "tokio-util 0.7.17",
+            "id": "tokio-util 0.7.20",
             "target": "tokio_util"
           },
           {
@@ -57495,7 +57577,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -57503,7 +57585,7 @@
             "target": "pin_project"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -57566,7 +57648,7 @@
             "target": "governor"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -57582,7 +57664,7 @@
             "target": "tonic"
           },
           {
-            "id": "tower 0.5.2",
+            "id": "tower 0.5.3",
             "target": "tower"
           },
           {
@@ -58215,15 +58297,15 @@
             "target": "data_encoding"
           },
           {
-            "id": "futures-channel 0.3.31",
+            "id": "futures-channel 0.3.33",
             "target": "futures_channel"
           },
           {
-            "id": "futures-io 0.3.31",
+            "id": "futures-io 0.3.33",
             "target": "futures_io"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -58255,7 +58337,7 @@
             "target": "tinyvec"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -58320,7 +58402,7 @@
             "target": "cfg_if"
           },
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -58348,7 +58430,7 @@
             "target": "thiserror"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
           },
           {
@@ -58473,7 +58555,7 @@
         ],
         "deps": [
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
@@ -58481,7 +58563,7 @@
             "target": "data_encoding"
           },
           {
-            "id": "http 1.3.1",
+            "id": "http 1.5.0",
             "target": "http"
           },
           {
@@ -58532,22 +58614,18 @@
       ],
       "version": "0.29.0"
     },
-    "turmoil 0.6.4": {
+    "turmoil 0.6.6": {
       "common_attrs": {
         "crate_features": [
           "default"
         ],
         "deps": [
           {
-            "id": "bytes 1.11.1",
+            "id": "bytes 1.12.1",
             "target": "bytes"
           },
           {
-            "id": "futures 0.3.31",
-            "target": "futures"
-          },
-          {
-            "id": "indexmap 1.9.3",
+            "id": "indexmap 2.14.0",
             "target": "indexmap"
           },
           {
@@ -58563,28 +58641,12 @@
             "target": "scoped_tls"
           },
           {
-            "id": "tokio 1.50.0",
+            "id": "tokio 1.54.0",
             "target": "tokio"
-          },
-          {
-            "id": "tokio-stream 0.1.17",
-            "target": "tokio_stream"
-          },
-          {
-            "id": "tokio-test 0.4.4",
-            "target": "tokio_test"
-          },
-          {
-            "id": "tokio-util 0.7.17",
-            "target": "tokio_util"
           },
           {
             "id": "tracing 0.1.44",
             "target": "tracing"
-          },
-          {
-            "id": "tracing-subscriber 0.3.23",
-            "target": "tracing_subscriber"
           }
         ],
         "edition": "2021"
@@ -58599,8 +58661,8 @@
       "package_url": "https://github.com/tokio-rs/turmoil",
       "repository": {
         "Http": {
-          "sha256": "9b20f35a8264406dd5afac69a541665e860e52fec3dcec4091a0e2a3ce7f2b75",
-          "url": "https://static.crates.io/crates/turmoil/0.6.4/download"
+          "sha256": "1f0d6c134ef37268c94d50fb74252af1c34c5c88389e2c1af85654da944ceb52",
+          "url": "https://static.crates.io/crates/turmoil/0.6.6/download"
         }
       },
       "targets": [
@@ -58611,7 +58673,7 @@
           }
         }
       ],
-      "version": "0.6.4"
+      "version": "0.6.6"
     },
     "twox-hash 2.1.1": {
       "common_attrs": {
@@ -59854,7 +59916,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.11.1",
+              "id": "bytes 1.12.1",
               "target": "bytes"
             },
             {
@@ -60931,7 +60993,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "futures-util 0.3.31",
+            "id": "futures-util 0.3.33",
             "target": "futures_util"
           },
           {
@@ -63125,41 +63187,6 @@
       ],
       "version": "0.59.0"
     },
-    "windows-sys 0.60.2": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "windows-targets 0.53.5",
-            "target": "windows_targets"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "windows_sys",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "license-apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "windows-sys",
-      "package_url": "https://github.com/microsoft/windows-rs",
-      "repository": {
-        "Http": {
-          "sha256": "f2f500e4d28234f72040990ec9d39e3a6b950f9f22d3dba18416c35882612bcb",
-          "url": "https://static.crates.io/crates/windows-sys/0.60.2/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "windows_sys",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.60.2"
-    },
     "windows-sys 0.61.2": {
       "common_attrs": {
         "deps": [
@@ -63459,94 +63486,6 @@
       ],
       "version": "0.52.6"
     },
-    "windows-targets 0.53.5": {
-      "common_attrs": {
-        "deps": {
-          "common": [],
-          "selects": {
-            "aarch64-pc-windows-gnullvm": [
-              {
-                "id": "windows_aarch64_gnullvm 0.53.0",
-                "target": "windows_aarch64_gnullvm"
-              }
-            ],
-            "cfg(all(any(target_arch = \"x86_64\", target_arch = \"arm64ec\"), target_env = \"msvc\", not(windows_raw_dylib)))": [
-              {
-                "id": "windows_x86_64_msvc 0.53.0",
-                "target": "windows_x86_64_msvc"
-              }
-            ],
-            "cfg(all(target_arch = \"aarch64\", target_env = \"msvc\", not(windows_raw_dylib)))": [
-              {
-                "id": "windows_aarch64_msvc 0.53.0",
-                "target": "windows_aarch64_msvc"
-              }
-            ],
-            "cfg(all(target_arch = \"x86\", target_env = \"gnu\", not(target_abi = \"llvm\"), not(windows_raw_dylib)))": [
-              {
-                "id": "windows_i686_gnu 0.53.0",
-                "target": "windows_i686_gnu"
-              }
-            ],
-            "cfg(all(target_arch = \"x86\", target_env = \"msvc\", not(windows_raw_dylib)))": [
-              {
-                "id": "windows_i686_msvc 0.53.0",
-                "target": "windows_i686_msvc"
-              }
-            ],
-            "cfg(all(target_arch = \"x86_64\", target_env = \"gnu\", not(target_abi = \"llvm\"), not(windows_raw_dylib)))": [
-              {
-                "id": "windows_x86_64_gnu 0.53.0",
-                "target": "windows_x86_64_gnu"
-              }
-            ],
-            "cfg(windows_raw_dylib)": [
-              {
-                "id": "windows-link 0.2.1",
-                "target": "windows_link"
-              }
-            ],
-            "i686-pc-windows-gnullvm": [
-              {
-                "id": "windows_i686_gnullvm 0.53.0",
-                "target": "windows_i686_gnullvm"
-              }
-            ],
-            "x86_64-pc-windows-gnullvm": [
-              {
-                "id": "windows_x86_64_gnullvm 0.53.0",
-                "target": "windows_x86_64_gnullvm"
-              }
-            ]
-          }
-        },
-        "edition": "2021"
-      },
-      "library_target_name": "windows_targets",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "license-apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "windows-targets",
-      "package_url": "https://github.com/microsoft/windows-rs",
-      "repository": {
-        "Http": {
-          "sha256": "4945f9f551b88e0d65f3db0bc25c33b8acea4d9e41163edf90dcd0b19f9069f3",
-          "url": "https://static.crates.io/crates/windows-targets/0.53.5/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "windows_targets",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.53.5"
-    },
     "windows_aarch64_gnullvm 0.42.2": {
       "build_script_attrs": {},
       "common_attrs": {
@@ -63663,45 +63602,6 @@
         }
       ],
       "version": "0.52.6"
-    },
-    "windows_aarch64_gnullvm 0.53.0": {
-      "build_script_attrs": {},
-      "common_attrs": {
-        "edition": "2021",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "windows_aarch64_gnullvm",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "license-apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "windows_aarch64_gnullvm",
-      "package_url": "https://github.com/microsoft/windows-rs",
-      "repository": {
-        "Http": {
-          "sha256": "86b8d5f90ddd19cb4a147a5fa63ca848db3df085e25fee3cc10b39b6eebae764",
-          "url": "https://static.crates.io/crates/windows_aarch64_gnullvm/0.53.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "windows_aarch64_gnullvm",
-            "crate_root": "src/lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "0.53.0"
     },
     "windows_aarch64_msvc 0.42.2": {
       "build_script_attrs": {},
@@ -63820,45 +63720,6 @@
       ],
       "version": "0.52.6"
     },
-    "windows_aarch64_msvc 0.53.0": {
-      "build_script_attrs": {},
-      "common_attrs": {
-        "edition": "2021",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "windows_aarch64_msvc",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "license-apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "windows_aarch64_msvc",
-      "package_url": "https://github.com/microsoft/windows-rs",
-      "repository": {
-        "Http": {
-          "sha256": "c7651a1f62a11b8cbd5e0d42526e55f2c99886c77e007179efff86c2b137e66c",
-          "url": "https://static.crates.io/crates/windows_aarch64_msvc/0.53.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "windows_aarch64_msvc",
-            "crate_root": "src/lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "0.53.0"
-    },
     "windows_i686_gnu 0.42.2": {
       "build_script_attrs": {},
       "common_attrs": {
@@ -63976,45 +63837,6 @@
       ],
       "version": "0.52.6"
     },
-    "windows_i686_gnu 0.53.0": {
-      "build_script_attrs": {},
-      "common_attrs": {
-        "edition": "2021",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "windows_i686_gnu",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "license-apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "windows_i686_gnu",
-      "package_url": "https://github.com/microsoft/windows-rs",
-      "repository": {
-        "Http": {
-          "sha256": "c1dc67659d35f387f5f6c479dc4e28f1d4bb90ddd1a5d3da2e5d97b42d6272c3",
-          "url": "https://static.crates.io/crates/windows_i686_gnu/0.53.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "windows_i686_gnu",
-            "crate_root": "src/lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "0.53.0"
-    },
     "windows_i686_gnullvm 0.52.6": {
       "build_script_attrs": {},
       "common_attrs": {
@@ -64053,45 +63875,6 @@
         }
       ],
       "version": "0.52.6"
-    },
-    "windows_i686_gnullvm 0.53.0": {
-      "build_script_attrs": {},
-      "common_attrs": {
-        "edition": "2021",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "windows_i686_gnullvm",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "license-apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "windows_i686_gnullvm",
-      "package_url": "https://github.com/microsoft/windows-rs",
-      "repository": {
-        "Http": {
-          "sha256": "9ce6ccbdedbf6d6354471319e781c0dfef054c81fbc7cf83f338a4296c0cae11",
-          "url": "https://static.crates.io/crates/windows_i686_gnullvm/0.53.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "windows_i686_gnullvm",
-            "crate_root": "src/lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "0.53.0"
     },
     "windows_i686_msvc 0.42.2": {
       "build_script_attrs": {},
@@ -64210,45 +63993,6 @@
       ],
       "version": "0.52.6"
     },
-    "windows_i686_msvc 0.53.0": {
-      "build_script_attrs": {},
-      "common_attrs": {
-        "edition": "2021",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "windows_i686_msvc",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "license-apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "windows_i686_msvc",
-      "package_url": "https://github.com/microsoft/windows-rs",
-      "repository": {
-        "Http": {
-          "sha256": "581fee95406bb13382d2f65cd4a908ca7b1e4c2f1917f143ba16efe98a589b5d",
-          "url": "https://static.crates.io/crates/windows_i686_msvc/0.53.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "windows_i686_msvc",
-            "crate_root": "src/lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "0.53.0"
-    },
     "windows_x86_64_gnu 0.42.2": {
       "build_script_attrs": {},
       "common_attrs": {
@@ -64365,45 +64109,6 @@
         }
       ],
       "version": "0.52.6"
-    },
-    "windows_x86_64_gnu 0.53.0": {
-      "build_script_attrs": {},
-      "common_attrs": {
-        "edition": "2021",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "windows_x86_64_gnu",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "license-apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "windows_x86_64_gnu",
-      "package_url": "https://github.com/microsoft/windows-rs",
-      "repository": {
-        "Http": {
-          "sha256": "2e55b5ac9ea33f2fc1716d1742db15574fd6fc8dadc51caab1c16a3d3b4190ba",
-          "url": "https://static.crates.io/crates/windows_x86_64_gnu/0.53.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "windows_x86_64_gnu",
-            "crate_root": "src/lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "0.53.0"
     },
     "windows_x86_64_gnullvm 0.42.2": {
       "build_script_attrs": {},
@@ -64522,45 +64227,6 @@
       ],
       "version": "0.52.6"
     },
-    "windows_x86_64_gnullvm 0.53.0": {
-      "build_script_attrs": {},
-      "common_attrs": {
-        "edition": "2021",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "windows_x86_64_gnullvm",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "license-apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "windows_x86_64_gnullvm",
-      "package_url": "https://github.com/microsoft/windows-rs",
-      "repository": {
-        "Http": {
-          "sha256": "0a6e035dd0599267ce1ee132e51c27dd29437f63325753051e71dd9e42406c57",
-          "url": "https://static.crates.io/crates/windows_x86_64_gnullvm/0.53.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "windows_x86_64_gnullvm",
-            "crate_root": "src/lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "0.53.0"
-    },
     "windows_x86_64_msvc 0.42.2": {
       "build_script_attrs": {},
       "common_attrs": {
@@ -64677,45 +64343,6 @@
         }
       ],
       "version": "0.52.6"
-    },
-    "windows_x86_64_msvc 0.53.0": {
-      "build_script_attrs": {},
-      "common_attrs": {
-        "edition": "2021",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "windows_x86_64_msvc",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "license-apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "windows_x86_64_msvc",
-      "package_url": "https://github.com/microsoft/windows-rs",
-      "repository": {
-        "Http": {
-          "sha256": "271414315aff87387382ec3d271b52d7ae78726f5d44ac98b4f4030c91880486",
-          "url": "https://static.crates.io/crates/windows_x86_64_msvc/0.53.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "windows_x86_64_msvc",
-            "crate_root": "src/lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "0.53.0"
     },
     "winnow 0.5.0": {
       "common_attrs": {
@@ -66537,7 +66164,7 @@
       ],
       "version": "0.12.4"
     },
-    "zstd 0.13.2": {
+    "zstd 0.13.3": {
       "common_attrs": {
         "crate_features": [
           "arrays",
@@ -66563,8 +66190,8 @@
       "package_url": "https://github.com/gyscos/zstd-rs",
       "repository": {
         "Http": {
-          "sha256": "fcf2b778a664581e31e389454a7072dab1647606d44f7feea22cd5abb9c9f3f9",
-          "url": "https://static.crates.io/crates/zstd/0.13.2/download"
+          "sha256": "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a",
+          "url": "https://static.crates.io/crates/zstd/0.13.3/download"
         }
       },
       "targets": [
@@ -66575,7 +66202,7 @@
           }
         }
       ],
-      "version": "0.13.2"
+      "version": "0.13.3"
     },
     "zstd-safe 6.0.5+zstd.1.5.4": {
       "build_script_attrs": {
@@ -66789,7 +66416,7 @@
     "build-info 0.0.45",
     "build-info-build 0.0.45",
     "byteorder 1.5.0",
-    "bytes 1.11.1",
+    "bytes 1.12.1",
     "canbench-rs 0.7.0",
     "candid 0.10.37",
     "candid_parser 0.1.4",
@@ -66834,8 +66461,8 @@
     "form_urlencoded 1.2.1",
     "fqdn 0.5.2",
     "fs_extra 1.3.0",
-    "futures 0.3.31",
-    "futures-util 0.3.31",
+    "futures 0.3.33",
+    "futures-util 0.3.33",
     "getrandom 0.2.10",
     "gpt 4.1.0",
     "group 0.13.0",
@@ -66846,9 +66473,9 @@
     "hkdf 0.12.4",
     "hmac 0.12.1",
     "hpke 0.13.0",
-    "http 1.3.1",
+    "http 1.5.0",
     "http-body 1.0.1",
-    "http-body-util 0.1.3",
+    "http-body-util 0.1.5",
     "humantime 2.4.0",
     "hyper 1.8.1",
     "hyper-rustls 0.27.7",
@@ -66872,7 +66499,7 @@
     "ic-doge-interface 0.3.0",
     "ic-gateway 0.0.0-git",
     "ic-identity-hsm 0.49.1",
-    "ic-management-canister-types 0.8.0",
+    "ic-management-canister-types 0.11.0",
     "ic-metrics-encoder 1.1.1",
     "ic-sha3 1.0.0",
     "ic-stable-structures 0.6.8",
@@ -66960,8 +66587,8 @@
     "publicsuffix 2.2.3",
     "qrcode 0.14.1",
     "quickcheck 1.0.3",
-    "quinn 0.11.11",
-    "quinn-udp 0.5.5",
+    "quinn 0.11.12",
+    "quinn-udp 0.5.16",
     "quote 1.0.47",
     "rand 0.8.6",
     "rand 0.9.4",
@@ -66971,7 +66598,7 @@
     "ratatui 0.29.0",
     "ratelimit 0.9.1",
     "rayon 1.10.0",
-    "rcgen 0.13.1",
+    "rcgen 0.13.2",
     "regex 1.13.1",
     "regex-lite 0.1.8",
     "reqwest 0.13.4",
@@ -66990,7 +66617,7 @@
     "rust_decimal_macros 1.40.0",
     "rustc-demangle 0.1.26",
     "rustc-hash 1.1.0",
-    "rustls 0.23.45",
+    "rustls 0.23.46",
     "rustls-pemfile 2.2.0",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",
@@ -67024,7 +66651,7 @@
     "slog-scope 4.4.0",
     "slog-term 2.9.1",
     "slotmap 1.0.7",
-    "socket2 0.5.9",
+    "socket2 0.5.10",
     "socks5-impl 0.6.1",
     "ssh2 0.9.4",
     "static_assertions 1.1.0",
@@ -67039,7 +66666,7 @@
     "tar 0.4.46",
     "target-lexicon 0.13.5",
     "tarpc 0.37.0",
-    "tempfile 3.23.0",
+    "tempfile 3.27.0",
     "test-strategy 0.4.5",
     "textplots 0.8.4",
     "thiserror 2.0.18",
@@ -67047,22 +66674,22 @@
     "tikv-jemalloc-ctl 0.7.0",
     "tikv-jemallocator 0.7.0",
     "time 0.3.47",
-    "tokio 1.50.0",
+    "tokio 1.54.0",
     "tokio-io-timeout 1.2.0",
-    "tokio-metrics 0.4.0",
+    "tokio-metrics 0.4.9",
     "tokio-rusqlite 0.7.0",
     "tokio-rustls 0.26.0",
     "tokio-serde 0.9.0",
     "tokio-socks 0.5.2",
     "tokio-test 0.4.4",
     "tokio-tungstenite 0.29.0",
-    "tokio-util 0.7.17",
+    "tokio-util 0.7.20",
     "tokio-vsock 0.7.2",
     "toml 0.5.11",
     "tonic 0.14.6",
     "tonic-prost 0.14.5",
     "tonic-prost-build 0.14.6",
-    "tower 0.5.2",
+    "tower 0.5.3",
     "tower-http 0.6.11",
     "tower-test 0.4.0",
     "tower_governor 0.8.0",
@@ -67076,7 +66703,7 @@
     "tracing-subscriber 0.3.23",
     "trust-dns-resolver 0.22.0",
     "tui-textarea 0.7.0",
-    "turmoil 0.6.4",
+    "turmoil 0.6.6",
     "url 2.5.4",
     "uuid 1.12.1",
     "virt 0.4.2",
@@ -67096,7 +66723,7 @@
     "x509-cert 0.2.5",
     "x509-parser 0.18.1",
     "zeroize 1.8.1",
-    "zstd 0.13.2"
+    "zstd 0.13.3"
   ],
   "direct_dev_deps": [],
   "workspace_members": {

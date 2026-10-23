@@ -688,8 +688,12 @@ impl InstallCodeHelper {
 
         let CanisterStateChanges {
             execution_state_changes,
-            system_state_modifications,
+            mut system_state_modifications,
         } = canister_state_changes;
+
+        // Canister logs are persisted even if the other changes are not.
+        system_state_modifications
+            .apply_canister_log(&mut self.canister.system_state, round.hypervisor.metrics());
 
         // Charge the ingress induction debit before applying the state changes of
         // the Wasm execution below: the latter may burn cycles via
@@ -764,9 +768,7 @@ impl InstallCodeHelper {
             }
         }
 
-        // Apply system state changes always.
-        // The result will be checked later after we've checked the wasm execution result so that we
-        // don't miss logging in case there was an error from Wasm execution.
+        // Apply the remaining system state changes.
         let result_of_applying_system_state_modifications = system_state_modifications
             .apply_changes(
                 original.time,
@@ -774,10 +776,11 @@ impl InstallCodeHelper {
                 &round.network_topology,
                 round.hypervisor.subnet_id(),
                 false, // Install cannot happen in composite_query.
-                round.hypervisor.metrics(),
                 round.log,
             );
 
+        // Check the Wasm execution result before the result of applying the
+        // system state changes so that a Wasm failure takes precedence.
         match output.wasm_result {
             Ok(None) => {}
             Ok(Some(_response)) => {

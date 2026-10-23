@@ -524,7 +524,7 @@ mod crypto_hash_stability {
         let content = CertificationContent::new(state_hash);
         let data = Certification {
             height: Height::from(42),
-            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 content,
                 signature: ThresholdSignature {
@@ -536,7 +536,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "9fb205560b04ba770f600ebd986b6f398666c726e01168416b1bdc002dc6e494",
+            "102f527663a1ff91768134dcd391c8fe39423f6c3d3d0b172e07187919704b3f",
             "Hash of Certification changed"
         );
     }
@@ -714,7 +714,7 @@ mod crypto_hash_stability {
         let content = CertificationContent::new(state_hash);
         let cert = Certification {
             height: Height::from(42),
-            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 content,
                 signature: ThresholdSignature {
@@ -727,7 +727,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "af481a7d7ec38af0ed137ce9d12ee787823a9a9707a6c218053d556d864caea4",
+            "fce9b924904bcb7e4ce7df579e959188bc885aab660d2af849b800c0591c18ed",
             "Hash of CertificationMessage changed"
         );
     }

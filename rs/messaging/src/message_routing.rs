@@ -114,7 +114,6 @@ const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
 const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
 const BLOCKS_NOT_PROPOSED_BY_BLOCKMAKER_TOTAL: &str = "mr_blocks_not_proposed_by_blockmaker_total";
 const METRIC_NEXT_CHECKPOINT_HEIGHT: &str = "mr_next_checkpoint_height";
-const METRIC_REMOTE_CERTIFIED_HEIGHTS: &str = "mr_remote_certified_heights";
 
 const METRIC_SUBNET_INFO: &str = "mr_subnet_info";
 const METRIC_SUBNET_SIZE: &str = "mr_subnet_size";
@@ -305,8 +304,6 @@ pub(crate) struct MessageRoutingMetrics {
     pub(crate) induct_batch_latency: Histogram,
     /// Batch processing durations.
     process_batch_duration: Histogram,
-    /// Most recently seen certified height, per remote subnet
-    pub(crate) remote_certified_heights: IntGaugeVec,
     /// Batch processing phase durations, by phase.
     process_batch_phase_duration: HistogramVec,
     /// Number of timed out messages.
@@ -418,11 +415,6 @@ impl MessageRoutingMetrics {
                 // 1ms - 50s
                 decimal_buckets(-3, 1),
                 &["phase"],
-            ),
-            remote_certified_heights: metrics_registry.int_gauge_vec(
-                METRIC_REMOTE_CERTIFIED_HEIGHTS,
-                "Most recently observed remote subnet certified heights.",
-                &[LABEL_REMOTE],
             ),
             timed_out_messages_total: metrics_registry.int_counter_vec(
                 METRIC_TIMED_OUT_MESSAGES_TOTAL,
@@ -713,7 +705,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             vsr,
             stream_handler,
             certified_stream_store,
-            metrics.clone(),
             log.clone(),
         ));
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(

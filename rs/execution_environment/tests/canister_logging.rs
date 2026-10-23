@@ -2642,11 +2642,16 @@ fn test_canister_log_with_zero_log_memory_limit() {
 
     // Produce a second log with no ring buffer. persistent_next_idx advances
     // to next_idx == 2.
+    const METRIC: &str = "canister_log_delta_memory_usage_bytes";
+    let before = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
     let _ = env.execute_ingress(
         canister_id,
         "update",
         wasm().debug_print(b"log").reply().build(),
     );
+    let after = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+    // The delta must be consumed and observed only once, even without a ring buffer.
+    assert_eq!(after.count, before.count + 1);
 
     // lms.next_idx() must be 2 before and after a checkpoint/reload cycle.
     let check_next_idx = |env: &StateMachine| {

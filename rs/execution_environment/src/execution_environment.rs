@@ -7,7 +7,8 @@ use crate::canister_manager::types::{
 use crate::canister_settings::CanisterSettings;
 use crate::execution::call_or_task::execute_call_or_task;
 use crate::execution::common::{
-    CanisterAccess, canister_info, list_canisters, validate_sender_on_subnet,
+    CanisterAccess, canister_info, finish_call_with_error, list_canisters,
+    validate_replicated_call, validate_sender_on_subnet,
 };
 use crate::execution::inspect_message;
 use crate::execution::response::execute_response;
@@ -2560,6 +2561,24 @@ impl ExecutionEnvironment {
             }
         };
 
+        // Fail early, without charging any execution cycles, if the call is
+        // invalid (canister not running, non-existent or composite query method).
+        // Invalid resumed aborted executions (`prepaid_execution_cycles` is
+        // `Some`) will be handled by the regular execution path.
+        if prepaid_execution_cycles.is_none()
+            && let Err(user_error) = validate_replicated_call(&canister, &method)
+        {
+            return finish_call_with_error(
+                user_error,
+                canister,
+                CanisterCallOrTask::Update(req),
+                NumInstructions::from(0),
+                time,
+                self.own_subnet_type,
+                &self.log,
+            );
+        }
+
         match &method {
             WasmMethod::Query(_) | WasmMethod::CompositeQuery(_) => {
                 let instruction_limits = InstructionLimits::new(
@@ -4238,6 +4257,23 @@ impl ExecutionEnvironment {
             match Self::decode_input_and_take_canister(&msg, &mut state, &self.config) {
                 Ok(result) => result,
                 Err(err) => {
+                    // If we already have a call ID, then we are re-executing an aborted
+                    // install that now failed: drop its call and refund its prepayment.
+                    if let Some(call_id) = call_id {
+                        let call = state
+                            .metadata
+                            .subnet_call_context_manager
+                            .remove_install_code_call(call_id);
+                        if let Some(call) = call
+                            && let Some(prepaid_execution_cycles) = prepaid_execution_cycles
+                            && let Some(canister) =
+                                state.canister_state_make_mut(&call.effective_canister_id)
+                        {
+                            canister
+                                .system_state
+                                .refund_cycles(prepaid_execution_cycles, prepaid_execution_cycles);
+                        }
+                    }
                     let refund = msg.take_cycles();
                     return self.finish_subnet_message_execution(
                         state,

@@ -64,7 +64,9 @@ end::catalog[] */
 use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_registry_subnet_type::SubnetType;
-use ic_subnet_merging::metrics_helper::{fetch_metrics, min_across_replicas};
+use ic_subnet_merging::metrics_helper::{
+    Labels, MetricsByReplica, ScrapeError, fetch_available_metrics, replica_values,
+};
 use ic_subnet_merging::readiness::{
     Condition, METRIC_SUBNET_CALL_CONTEXTS, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, SubnetNodeIps,
     Term, evaluate_merge_readiness,
@@ -87,7 +89,7 @@ use ic_universal_canister::{
     CallInterface, call_args, get_universal_canister_wasm, management, wasm,
 };
 use slog::{Logger, info};
-use std::time::Duration;
+use std::{net::IpAddr, time::Duration};
 
 /// The value of the `type` label selecting the `install_code` call contexts of
 /// `METRIC_SUBNET_CALL_CONTEXTS`.
@@ -121,9 +123,9 @@ const INIT_INSTRUCTIONS: u64 = 295 * B;
 /// `U7`. The test never sets it, so those loops never end.
 const LOOP_BREAK_TRIGGER: &[u8] = b"break";
 
-/// The number of nodes of every subnet. More than one so that the minima and
-/// maxima the merge readiness condition is made of range over more than one
-/// replica.
+/// The number of nodes of every subnet. More than one so that the terms of the
+/// merge readiness condition, which must hold together on the same quorum of
+/// the replicas of a subnet, range over more than one replica.
 const SUBNET_SIZE: usize = 4;
 
 /// The DKG interval length of the Application subnets, i.e. one less than the
@@ -152,8 +154,9 @@ const INDUCTION_BACKOFF: Duration = Duration::from_secs(1);
 const PER_TEST_TIMEOUT: Duration = Duration::from_secs(900);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(1500);
 
-/// The conditions this scenario violates, i.e. the ones step 7 checks. The
-/// three that are missing are expected to hold:
+/// The conditions this scenario violates, i.e. the ones step 7 checks. This
+/// includes `CommonQuorum`, since the replicas do not satisfy the individual
+/// conditions together. The three that are missing are expected to hold:
 ///
 /// * `RegistryVersion`, because this test creates no registry version: it
 ///   evaluates the condition at the version of its own topology snapshot, which
@@ -170,12 +173,13 @@ const OVERALL_TIMEOUT: Duration = Duration::from_secs(1500);
 ///   refund, and the pool only holds on to refunds whose destination subnet
 ///   is cooling down while this one is not, or whose stream is full (which
 ///   would require a more complex test setup).
-const VIOLATED_CONDITIONS: [Condition; 5] = [
+const VIOLATED_CONDITIONS: [Condition; 6] = [
     Condition::IncomingStreams,
     Condition::OutgoingStreams,
     Condition::IngressHistory,
     Condition::SubnetInputQueues,
     Condition::SubnetCallContexts,
+    Condition::CommonQuorum,
 ];
 
 fn main() -> Result<()> {
@@ -385,7 +389,8 @@ async fn run(env: TestEnv) {
 /// The terms are evaluated by `ic_subnet_merging::readiness`, i.e. by the same
 /// code a subnet merging tool evaluates them with. Every term is evaluated
 /// repeatedly until all of `VIOLATED_CONDITIONS` are violated at the same
-/// evaluation.
+/// evaluation with every replica successfully scraped, so missing data cannot
+/// stand in for the violations this scenario is meant to exercise.
 async fn check_conditions_violated(
     topology: &TopologySnapshot,
     m_subnet: &SubnetSnapshot,
@@ -412,8 +417,20 @@ async fn check_conditions_violated(
         CONDITIONS_TIMEOUT,
         CONDITIONS_BACKOFF,
         || async {
-            let terms =
+            let readiness =
                 evaluate_merge_readiness(&subnets, m_subnet.subnet_id, registry_version).await?;
+            if !readiness.scrape_failures.is_empty() {
+                bail!(
+                    "cannot check readiness violations with incomplete metrics: {}",
+                    readiness
+                        .scrape_failures
+                        .iter()
+                        .map(|(subnet_id, err)| format!("subnet {subnet_id}: {err}"))
+                        .collect::<Vec<_>>()
+                        .join("; "),
+                );
+            }
+            let terms = readiness.terms;
             let satisfied: Vec<&str> = VIOLATED_CONDITIONS
                 .iter()
                 .map(|condition| term(&terms, *condition))
@@ -635,6 +652,43 @@ async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &
     )
     .await
     .unwrap_or_else(|e| panic!("U1's `install_code` requests were not inducted: {e}"));
+}
+
+/// Fetches all series of the given metrics from the given nodes.
+///
+/// Fails if any node cannot be scraped: a condition evaluated across the nodes
+/// could otherwise hold on partial data. A series that no node reports is
+/// absent though, as a node that responds simply does not export that series.
+async fn fetch_metrics(
+    node_ips: &[IpAddr],
+    metrics: &[&str],
+) -> Result<MetricsByReplica, ScrapeError> {
+    match fetch_available_metrics(node_ips, metrics).await {
+        (metrics, None) => Ok(metrics),
+        (_, Some(err)) => Err(err),
+    }
+}
+
+/// The smallest value any of the given replicas reports for any series of
+/// `metric` whose labels match `labels_match`. A replica that reports no such
+/// series, or whose metrics are not in `metrics`, reads as zero, and so does
+/// an empty `replicas`.
+fn min_across_replicas(
+    metrics: &MetricsByReplica,
+    metric: &str,
+    labels_match: impl Fn(&Labels) -> bool,
+    replicas: &[IpAddr],
+) -> f64 {
+    replicas
+        .iter()
+        .map(|ip| {
+            metrics
+                .get(ip)
+                .and_then(|metrics| replica_values(metrics, metric, &labels_match).reduce(f64::min))
+                .unwrap_or(0.0)
+        })
+        .reduce(f64::min)
+        .unwrap_or(0.0)
 }
 
 /// Waits until `canister`'s global counter is non-zero, i.e. until the payload
