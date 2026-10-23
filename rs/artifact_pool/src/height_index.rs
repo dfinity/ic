@@ -36,12 +36,15 @@ impl<T: Eq + Clone> HeightIndex<T> {
         false
     }
 
-    pub fn remove_all(&mut self, height: Height) -> Vec<T> {
-        self.buckets.remove(&height).unwrap_or_default()
+    pub fn remove_all(&mut self, height: Height) -> impl Iterator<Item = T> {
+        self.buckets.remove(&height).into_iter().flatten()
     }
 
-    pub fn remove_all_below(&mut self, height: Height) {
-        self.buckets = self.buckets.split_off(&height);
+    pub fn remove_all_below(&mut self, height: Height) -> impl Iterator<Item = T> {
+        let above_height = self.buckets.split_off(&height);
+        let below_height = std::mem::replace(&mut self.buckets, above_height);
+
+        below_height.into_values().flatten()
     }
 
     /// Removes `value` from `height`. Returns `true` if `value` was removed,
@@ -81,11 +84,11 @@ impl<T: Eq + Clone> HeightIndex<T> {
     }
 
     /// Returns all heights of the index, in sorted order.
-    pub fn heights(&self) -> Box<dyn Iterator<Item = &Height> + '_> {
-        Box::new(self.buckets.keys())
+    pub fn heights(&self) -> Box<dyn Iterator<Item = Height> + '_> {
+        Box::new(self.buckets.keys().copied())
     }
 
-    pub fn range<R>(&self, range: R) -> std::collections::btree_map::Range<'_, Height, Vec<T>>
+    pub fn range<R>(&self, range: R) -> impl Iterator<Item = (&Height, &Vec<T>)>
     where
         R: std::ops::RangeBounds<Height>,
     {
@@ -315,13 +318,9 @@ impl<T: Eq + Ord + Clone> HeightIndexedInstants<T> {
     }
 
     pub fn clear(&mut self, h: Height) {
-        let range = self.index.range(Height::new(0)..h);
-        for (_, bucket) in range {
-            for hash in bucket {
-                self.instants.remove(hash);
-            }
+        for hash in self.index.remove_all_below(h) {
+            self.instants.remove(&hash);
         }
-        self.index.remove_all_below(h);
     }
 }
 
@@ -356,7 +355,7 @@ mod tests {
 
         assert_eq!(
             vec![fifteen, sixty_six, one_hundred],
-            index.heights().cloned().collect::<Vec<_>>()
+            index.heights().collect::<Vec<_>>()
         );
 
         let expected_values = vec![&12, &13, &17, &44];

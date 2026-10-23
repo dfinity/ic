@@ -150,14 +150,10 @@ where
     }
 
     fn height_range(&self) -> Option<HeightRange> {
-        let heights = CryptoHashOf::<T>::select_index(&self.indexes)
-            .heights()
-            .cloned()
-            .collect::<Vec<_>>();
-        match (heights.first(), heights.last()) {
-            (Some(min), Some(max)) => Some(HeightRange::new(*min, *max)),
-            _ => None,
-        }
+        let mut heights = CryptoHashOf::<T>::select_index(&self.indexes).heights();
+        let min = heights.next()?;
+        let max = heights.last().unwrap_or(min);
+        Some(HeightRange::new(min, max))
     }
 
     fn max_height(&self) -> Option<Height> {

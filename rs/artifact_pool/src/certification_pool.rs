@@ -14,7 +14,7 @@ use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_types::NodeId;
 use ic_types::consensus::IsShare;
-use ic_types::crypto::crypto_hash;
+use ic_types::crypto::{CryptoHashOf, crypto_hash};
 use ic_types::{
     Height,
     artifact::CertificationMessageId,
@@ -105,8 +105,8 @@ impl PoolMetrics {
 pub struct CertificationPoolImpl {
     node_id: NodeId,
 
-    unvalidated_share_index: HeightIndex<CertificationMessageHash>,
-    unvalidated_cert_index: HeightIndex<CertificationMessageHash>,
+    unvalidated_share_index: HeightIndex<CryptoHashOf<CertificationShare>>,
+    unvalidated_cert_index: HeightIndex<CryptoHashOf<Certification>>,
     unvalidated: BTreeMap<CertificationMessageHash, CertificationMessage>,
 
     pub validated: Box<dyn MutablePoolSection + Send + Sync>,
@@ -190,37 +190,34 @@ impl CertificationPoolImpl {
 
     /// Removes all unvalidated artifacts below the given height
     fn remove_all_unvalidated_below(&mut self, height: Height) {
-        // remove from unvalidated pool
-        let range = (
-            std::ops::Bound::Included(Height::from(0)),
-            std::ops::Bound::Excluded(height),
-        );
-        self.unvalidated_share_index
-            .range(range)
-            .chain(self.unvalidated_cert_index.range(range))
-            .for_each(|(_, ids)| {
-                for id in ids {
-                    self.unvalidated.remove(id);
-                }
-            });
-
         // purge indices
-        self.unvalidated_share_index.remove_all_below(height);
-        self.unvalidated_cert_index.remove_all_below(height);
+        let shares = self
+            .unvalidated_share_index
+            .remove_all_below(height)
+            .map(CertificationMessageHash::CertificationShare);
+        let certs = self
+            .unvalidated_cert_index
+            .remove_all_below(height)
+            .map(CertificationMessageHash::Certification);
+
+        // remove from unvalidated pool
+        for id in shares.chain(certs) {
+            self.unvalidated.remove(&id);
+        }
     }
 
     fn update_metrics(&self) {
         // Unvalidated section
         if let (Some(min_cert), Some(max_cert)) = (
-            self.unvalidated_cert_index.range(..).next().map(|x| *x.0),
-            self.unvalidated_cert_index.range(..).last().map(|x| *x.0),
+            self.unvalidated_cert_index.heights().next(),
+            self.unvalidated_cert_index.heights().last(),
         ) {
             self.unvalidated_pool_metrics
                 .set_certification_range(HeightRange::new(min_cert, max_cert));
         }
         if let (Some(min_share), Some(max_share)) = (
-            self.unvalidated_share_index.range(..).next().map(|x| *x.0),
-            self.unvalidated_share_index.range(..).last().map(|x| *x.0),
+            self.unvalidated_share_index.heights().next(),
+            self.unvalidated_share_index.heights().last(),
         ) {
             self.unvalidated_pool_metrics
                 .set_certification_share_range(HeightRange::new(min_share, max_share));
@@ -257,28 +254,28 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
     type Mutations = Mutations;
 
     fn insert(&mut self, msg: UnvalidatedArtifact<CertificationMessage>) {
-        let hash = CertificationMessageHash::from(&msg.message);
+        let msg_hash = CertificationMessageHash::from(&msg.message);
 
-        if match hash {
-            CertificationMessageHash::Certification(_) => self
+        if match &msg_hash {
+            CertificationMessageHash::Certification(cert_hash) => self
                 .unvalidated_cert_index
-                .insert(msg.message.height(), &hash),
-            CertificationMessageHash::CertificationShare(_) => self
+                .insert(msg.message.height(), cert_hash),
+            CertificationMessageHash::CertificationShare(share_hash) => self
                 .unvalidated_share_index
-                .insert(msg.message.height(), &hash),
+                .insert(msg.message.height(), share_hash),
         } {
-            self.unvalidated.insert(hash, msg.message);
+            self.unvalidated.insert(msg_hash, msg.message);
         }
     }
 
     fn remove(&mut self, id: &CertificationMessageId) {
-        if match id.hash {
-            CertificationMessageHash::Certification(_) => self
+        if match &id.hash {
+            CertificationMessageHash::Certification(cert_hash) => self
                 .unvalidated_cert_index
-                .retain(id.height, |c| c != &id.hash),
-            CertificationMessageHash::CertificationShare(_) => self
+                .retain(id.height, |c| c != cert_hash),
+            CertificationMessageHash::CertificationShare(share_hash) => self
                 .unvalidated_share_index
-                .retain(id.height, |c| c != &id.hash),
+                .retain(id.height, |c| c != share_hash),
         } {
             self.unvalidated.remove(&id.hash);
         }
@@ -391,7 +388,7 @@ impl CertificationPool for CertificationPoolImpl {
         Box::new(self.unvalidated_share_index.lookup(height).map(|id| {
             let CertificationMessage::CertificationShare(share) = self
                 .unvalidated
-                .get(id)
+                .get(&CertificationMessageHash::CertificationShare(id.clone()))
                 .expect("value must exist if hash exists")
             else {
                 panic!("hash is share, but value is not");
@@ -407,7 +404,7 @@ impl CertificationPool for CertificationPoolImpl {
         Box::new(self.unvalidated_cert_index.lookup(height).map(|id| {
             let CertificationMessage::Certification(cert) = self
                 .unvalidated
-                .get(id)
+                .get(&CertificationMessageHash::Certification(id.clone()))
                 .expect("value must exist if hash exists")
             else {
                 panic!("hash is certification, but value is not");
@@ -420,8 +417,7 @@ impl CertificationPool for CertificationPoolImpl {
         let mut heights: Vec<Height> = self
             .unvalidated_share_index
             .heights()
-            .cloned()
-            .chain(self.unvalidated_cert_index.heights().cloned())
+            .chain(self.unvalidated_cert_index.heights())
             .chain(self.validated_shares().map(|share| share.height))
             .chain(
                 self.validated_certifications()
