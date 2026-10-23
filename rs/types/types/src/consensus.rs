@@ -332,6 +332,12 @@ impl HashedBlock {
     }
 }
 
+impl HasHash for HashedBlock {
+    fn hash(&self) -> &CryptoHash {
+        self.hash.get_ref()
+    }
+}
+
 fn block_hash_to_string(hash: &CryptoHashOf<Block>) -> String {
     hex::encode(&hash.get_ref().0)
 }

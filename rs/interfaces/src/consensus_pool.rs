@@ -281,9 +281,9 @@ pub trait ConsensusPool {
     /// Return the block chain between the given start/end, ends inclusive.
     fn build_block_chain(&self, start_height: Height, end: Block) -> Arc<dyn ConsensusBlockChain>;
 
-    /// Return the first instant at which a block with the given hash was inserted
-    /// into the validated pool. Returns None if no timestamp was found.
-    fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant>;
+    /// Return the first instant at which the given block was inserted into
+    /// the validated pool. Returns None if no timestamp was found.
+    fn block_instant(&self, block: &HashedBlock) -> Option<Instant>;
 
     /// Return the first instant at which a consensus message with the given id
     /// arrived in the unvalidated pool. Returns None if no timestamp was found

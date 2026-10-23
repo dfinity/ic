@@ -162,10 +162,10 @@ impl<'a> PoolReader<'a> {
         })
     }
 
-    /// Return the the first instant at which a block with the given hash was inserted
-    /// into the consensus pool. Returns None if no timestamp was found.
-    pub fn get_block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
-        self.pool.block_instant(hash)
+    /// Return the the first instant at which the given block was inserted into
+    /// the consensus pool. Returns None if no timestamp was found.
+    pub fn get_block_instant(&self, block: &HashedBlock) -> Option<Instant> {
+        self.pool.block_instant(block)
     }
 
     /// Return the finalized block of a given height which is either the genesis
