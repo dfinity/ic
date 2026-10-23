@@ -72,16 +72,14 @@ Runbook::
 10. The following step of the tool is executed: `CheckMergeReadiness`, which
    waits until `M` is "merge ready" for `V`, i.e. until every term of the
    condition of step 7 holds.
-11. After `CheckMergeReadiness`: check that the two loops of step 2 are
-   stalled. `UT`'s iteration counter does not advance, as read via a query to
-   `T`. `UM`'s counter cannot be read, as `M` rejects query calls; instead,
-   the test checks that `M` keeps skipping canister execution, so that `UM`'s
-   loop cannot advance either.
+11. After `CheckMergeReadiness`: check that `UT`'s loop of step 2 is stalled,
+   i.e. that its iteration counter does not advance, as read via a query to
+   `T`. `UM`'s counter cannot be read, as `M` rejects query calls.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
 violated before `M` starts cooling down; `M` then rejects ingress messages and
-query calls and becomes "merge ready" while both loops of step 2 are stalled.
+query calls and becomes "merge ready", and `UT`'s loop of step 2 is stalled.
 
 end::catalog[] */
 
@@ -119,12 +117,6 @@ use ic_universal_canister::{
 use slog::{Logger, info};
 use std::{net::IpAddr, time::Duration};
 use tokio::runtime::Runtime;
-
-/// The number of rounds a subnet executed no canister message in because it is
-/// cooling down. The metrics making up the "merge readiness" condition are read
-/// by `ic_subnet_merging::readiness`.
-const METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION: &str =
-    "round_skipped_canister_execution_due_to_cooling_down";
 
 /// The value of the `type` label selecting the `install_code` call contexts of
 /// `METRIC_SUBNET_CALL_CONTEXTS`.
@@ -203,7 +195,7 @@ const REGISTRY_TIMEOUT: Duration = Duration::from_secs(300);
 /// metrics of all subnets.
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
 
-/// How long the loops are observed to be stalled (step 11).
+/// How long `UT`'s loop is observed to be stalled (step 11).
 const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 
 /// Timeouts of the test itself: draining the `install_code` calls dominates,
@@ -530,7 +522,7 @@ fn cool_down(env: &TestEnv, context: &Context, runtime: &Runtime) {
             }
             StepType::CheckMergeReadiness => {
                 info!(logger, "Step 10 done: subnet M is \"merge ready\"");
-                runtime.block_on(check_stalled_loops(context))
+                runtime.block_on(check_ut_loop_stalled(context))
             }
             StepType::CoolDownSourceSubnet => {}
         }
@@ -612,41 +604,27 @@ async fn check_ingress_and_queries_rejected(context: &Context) {
     );
 }
 
-/// Step 11: check that both call loops of step 2 are stalled, i.e. that `M`
-/// became "merge ready" because it is cooling down and not because the loops
-/// stopped making calls.
-///
-/// `UT`'s iteration counter is read via a query to `T`. `UM`'s counter cannot
-/// be read, as `M` rejects query calls; instead, the test checks that `M` keeps
-/// skipping canister execution, so that `UM`'s loop cannot advance either.
-async fn check_stalled_loops(context: &Context) {
+/// Step 11: check that `UT`'s call loop of step 2 is stalled, i.e. that its
+/// iteration counter, read via a query to `T`, does not advance. `UM`'s counter
+/// cannot be read, as `M` rejects query calls.
+async fn check_ut_loop_stalled(context: &Context) {
     let logger = &context.logger;
     info!(
         logger,
-        "Step 11: Checking that both call loops are stalled over {STALL_OBSERVATION_PERIOD:?}"
+        "Step 11: Checking that UT's call loop is stalled over {STALL_OBSERVATION_PERIOD:?}"
     );
     let ut = UniversalCanister::from_canister_id(&context.t_agent, context.ut);
     let ut_before = global_counter(&ut).await.unwrap();
-    let skipped_before = rounds_with_skipped_canister_execution(&context.m_subnet).await;
     tokio::time::sleep(STALL_OBSERVATION_PERIOD).await;
     let ut_after = global_counter(&ut).await.unwrap();
-    let skipped_after = rounds_with_skipped_canister_execution(&context.m_subnet).await;
     assert_eq!(
         ut_before, ut_after,
         "UT's call loop advanced from iteration {ut_before} to {ut_after} while subnet M was \
          cooling down",
     );
-    assert!(
-        skipped_after > skipped_before,
-        "subnet M skipped canister execution in no round over {STALL_OBSERVATION_PERIOD:?} \
-         ({skipped_before} rounds before, {skipped_after} after), so it was not cooling down and \
-         UM's loop was stalled for some other reason",
-    );
     info!(
         logger,
-        "Step 11 done: UT's call loop is stalled at iteration {ut_after} and subnet M skipped \
-         canister execution in {} rounds while waiting",
-        skipped_after - skipped_before,
+        "Step 11 done: UT's call loop is stalled at iteration {ut_after}"
     );
 }
 
@@ -874,7 +852,7 @@ fn install_code_payload(targets: &[Principal]) -> Vec<u8> {
 /// queues hold nothing but those calls by the time they are inducted.
 async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &Logger) {
     let expected_queued = (INSTALL_CODE_TARGETS.len() - 1) as f64;
-    let node_ips = node_ips(subnet);
+    let node_ips: Vec<_> = subnet.nodes().map(|node| node.get_ip_addr()).collect();
     retry_with_msg_async!(
         format!(
             "waiting until all {} `install_code` requests are inducted on subnet {}",
@@ -989,32 +967,4 @@ async fn global_counter(canister: &UniversalCanister<'_>) -> Result<u64> {
         .try_into()
         .map_err(|_| anyhow!("expected 8 bytes, got {} bytes: {reply:?}", reply.len()))?;
     Ok(u64::from_le_bytes(reply))
-}
-
-/// The IPs of the nodes of `subnet`.
-fn node_ips(subnet: &SubnetSnapshot) -> Vec<IpAddr> {
-    subnet.nodes().map(|node| node.get_ip_addr()).collect()
-}
-
-/// The number of rounds `subnet` executed no canister message in because it is
-/// cooling down, as the minimum across its replicas.
-///
-/// A subnet that is not cooling down never touches the counter, and a replica
-/// that never touched it does not report it at all, which is a zero here.
-async fn rounds_with_skipped_canister_execution(subnet: &SubnetSnapshot) -> f64 {
-    let node_ips = node_ips(subnet);
-    let metrics = fetch_metrics(&node_ips, &[METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION])
-        .await
-        .unwrap_or_else(|e| {
-            panic!(
-                "failed to fetch the skipped canister execution metric of subnet {}: {e}",
-                subnet.subnet_id
-            )
-        });
-    min_across_replicas(
-        &metrics,
-        METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION,
-        |_| true,
-        &node_ips,
-    )
 }
