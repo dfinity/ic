@@ -278,10 +278,11 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    // The merging tool runs on this thread, which is deliberately not inside
-    // this runtime: every registry read and every metrics scrape of the tool
-    // blocks on a runtime of its own, which a thread that is driving one cannot
-    // do.
+    // The merging tool is synchronous, but internally creates a tokio runtime
+    // and blocks on it (`ic_recovery::util::block_on`) for every registry read
+    // and metrics scrape. Tokio panics if this happens inside another runtime,
+    // so the tool must run on this thread outside of any runtime; only the
+    // asynchronous parts of the test itself are run with `runtime.block_on`.
     let runtime = Runtime::new().expect("failed to create a tokio runtime");
 
     let context = runtime.block_on(prepare(&env));
