@@ -17,7 +17,7 @@ const FEE: u64 = 10_000;
 fn bench_endpoints() -> BenchResult {
     // Create the ledger canister
     let minter = Account {
-        owner: Principal::from_slice(&[1u8; 1]),
+        owner: Principal::from_slice(&[1_u8; 1]),
         subaccount: None,
     };
     let args = LedgerCanisterInitPayload::builder()
@@ -29,12 +29,12 @@ fn bench_endpoints() -> BenchResult {
 
     // Transfer funds from the minter to a regular account
     let acc = Account {
-        owner: Principal::from_slice(&[2u8; 1]),
+        owner: Principal::from_slice(&[2_u8; 1]),
         subaccount: None,
     };
     let _ = icrc1_send_not_async(
         None,
-        Nat::from(1_000_000_000u64),
+        Nat::from(1_000_000_000_u64),
         None,
         minter,
         acc,
@@ -54,7 +54,7 @@ fn bench_endpoints() -> BenchResult {
                     subaccount: None,
                 };
                 let result = icrc1_send_not_async(
-                    Some([20u8; 32].to_vec().into()),
+                    Some([20_u8; 32].to_vec().into()),
                     Nat::from(3 * FEE),
                     Some(Nat::from(FEE)),
                     acc,
@@ -105,8 +105,8 @@ fn bench_endpoints() -> BenchResult {
                     subaccount: None,
                 };
                 let result = icrc1_send_not_async(
-                    Some([20u8; 32].to_vec().into()),
-                    Nat::from(1u64),
+                    Some([20_u8; 32].to_vec().into()),
+                    Nat::from(1_u64),
                     Some(Nat::from(FEE)),
                     from,
                     receiver,

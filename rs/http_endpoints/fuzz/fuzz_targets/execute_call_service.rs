@@ -8,12 +8,13 @@ use ic_agent::{Agent, agent::UpdateBuilder, export::Principal, identity::Anonymo
 use ic_config::http_handler::Config;
 use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_error_types::{ErrorCode, UserError};
-use ic_http_endpoints_public::{IngressValidatorBuilder, call_async};
+use ic_http_endpoints_public::{IngressValidatorBuilder, call_async, metrics::HttpHandlerMetrics};
 use ic_interfaces::execution_environment::{IngressFilterInput, IngressFilterResponse};
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
 use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::replica_logger::no_op_logger;
+use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::PrincipalId;
 use ic_validator_http_request_arbitrary::AnonymousContent;
@@ -32,7 +33,7 @@ use tower::{
 };
 use tower_test::mock::Handle;
 
-#[path = "../../public/tests/common/mod.rs"]
+#[path = "../fuzz_test_common.rs"]
 pub mod common;
 use common::{basic_registry_client, get_free_localhost_socket_addr, setup_ingress_filter_mock};
 
@@ -193,6 +194,7 @@ fn new_call_service(
     let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(1)));
     let call_handler = IngressValidatorBuilder::builder(
         log.clone(),
+        HttpHandlerMetrics::new(&MetricsRegistry::default()),
         node_test_id(1),
         subnet_test_id(1),
         Arc::clone(&mock_registry_client),

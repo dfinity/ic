@@ -10,11 +10,11 @@ use tempfile::tempdir;
 fn compare_f64() {
     assert!(f64_approx_eq(f64::NAN, f64::NAN));
     assert!(f64_approx_eq(f64::INFINITY, f64::INFINITY));
-    assert!(f64_approx_eq(f64::INFINITY + 1f64, f64::INFINITY));
+    assert!(f64_approx_eq(f64::INFINITY + 1_f64, f64::INFINITY));
     assert!(f64_approx_eq(f64::NEG_INFINITY, f64::NEG_INFINITY));
-    assert!(f64_approx_eq(f64::NEG_INFINITY + 1f64, f64::NEG_INFINITY));
-    assert!(f64_approx_eq(1f64, 1f64));
-    assert!(f64_approx_eq(f64::NAN + 1f64, f64::NAN));
+    assert!(f64_approx_eq(f64::NEG_INFINITY + 1_f64, f64::NEG_INFINITY));
+    assert!(f64_approx_eq(1_f64, 1_f64));
+    assert!(f64_approx_eq(f64::NAN + 1_f64, f64::NAN));
 }
 
 #[test]
@@ -190,7 +190,7 @@ fn update_metrics() {
 
 // Simple local "update" for the test reference
 fn update_metrics_locally(metrics: &mut FsTrimMetrics, success: bool, duration: Duration) {
-    metrics.total_runs += 1f64;
+    metrics.total_runs += 1_f64;
     metrics.last_run_success = success;
     metrics.last_duration_milliseconds = duration.as_millis() as f64;
 }
@@ -238,9 +238,9 @@ fn update_metrics_with_nan_values() {
 }
 
 fn verify_invariants(i: f64, existing_metrics: &FsTrimMetrics) {
-    assert_eq!(i + 1f64, existing_metrics.total_runs);
+    assert_eq!(i + 1_f64, existing_metrics.total_runs);
     assert!(existing_metrics.last_duration_milliseconds.is_finite());
-    assert!(existing_metrics.last_duration_milliseconds >= 0f64);
+    assert!(existing_metrics.last_duration_milliseconds >= 0_f64);
 }
 
 #[test]

@@ -1,7 +1,7 @@
-use ic_system_test_driver::driver::test_env_api::{IcNodeContainer, SubnetSnapshot, secs};
 use ic_system_test_driver::{
     driver::test_env_api::{
-        HasPublicApiUrl, IcNodeSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF, SshSession,
+        HasPublicApiUrl, IcNodeContainer, IcNodeSnapshot, ORCHESTRATOR_METRICS_PORT,
+        READY_WAIT_TIMEOUT, REPLICA_METRICS_PORT, RETRY_BACKOFF, SshSession, SubnetSnapshot, secs,
     },
     util::{MetricsFetcher, block_on},
 };
@@ -16,7 +16,15 @@ use std::time::Duration;
 use crate::ssh_access::execute_bash_command;
 
 pub fn await_node_certified_height(node: &IcNodeSnapshot, target_height: Height, log: Logger) {
-    ic_system_test_driver::retry_with_msg!(
+    block_on(await_node_certified_height_async(node, target_height, &log))
+}
+
+pub async fn await_node_certified_height_async(
+    node: &IcNodeSnapshot,
+    target_height: Height,
+    log: &Logger,
+) {
+    ic_system_test_driver::retry_with_msg_async!(
         format!(
             "check if node {} is at height {}",
             node.node_id, target_height
@@ -24,8 +32,9 @@ pub fn await_node_certified_height(node: &IcNodeSnapshot, target_height: Height,
         log,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
-        || {
-            node.status()
+        || async {
+            node.status_async()
+                .await
                 .and_then(|response| match response.certified_height {
                     Some(height) if height > target_height => Ok(()),
                     Some(height) => bail!(
@@ -37,23 +46,29 @@ pub fn await_node_certified_height(node: &IcNodeSnapshot, target_height: Height,
                 })
         }
     )
+    .await
     .expect("The node did not reach the specified height in time")
 }
 
 pub fn get_node_certified_height(node: &IcNodeSnapshot, log: Logger) -> Height {
-    ic_system_test_driver::retry_with_msg!(
+    block_on(get_node_certified_height_async(node, &log))
+}
+
+pub async fn get_node_certified_height_async(node: &IcNodeSnapshot, log: &Logger) -> Height {
+    ic_system_test_driver::retry_with_msg_async!(
         format!("get certified height of node {}", node.node_id),
         log,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
-        || {
-            node.status().and_then(|response| {
+        || async {
+            node.status_async().await.and_then(|response| {
                 response
                     .certified_height
                     .ok_or_else(|| anyhow!("Certified height not available"))
             })
         }
     )
+    .await
     .expect("Should be able to retrieve the certified height")
 }
 
@@ -105,16 +120,27 @@ pub fn assert_node_is_assigned_with_ssh_session(
     .expect("Failed to detect that node has a state and local CUP.");
 }
 
-/// Assert that the given node has deleted its state within the next 5 minutes.
-pub fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
-    assert_node_is_unassigned_with_ssh_session(node, None, logger)
+/// Assert that the node deletes its state and local CUP within 5 minutes, then trims within 2 more.
+///
+/// `expected_fstrim_count` is how often this node has been unassigned over the test so far; the
+/// orchestrator trims exactly once per unassignment.
+pub fn assert_node_is_unassigned(
+    node: &IcNodeSnapshot,
+    expected_fstrim_count: u64,
+    logger: &Logger,
+) {
+    assert_node_is_unassigned_with_ssh_session(node, None, expected_fstrim_count, logger)
 }
 
-/// Assert that the given node has deleted its state within the next 5 minutes.
+/// Assert that the node deletes its state and local CUP within 5 minutes, then trims within 2 more.
 /// Reuses the provided SSH session if given, otherwise creates a new one.
+///
+/// `expected_fstrim_count` is how often this node has been unassigned over the test so far; the
+/// orchestrator trims exactly once per unassignment.
 pub fn assert_node_is_unassigned_with_ssh_session(
     node: &IcNodeSnapshot,
     existing_session: Option<&Session>,
+    expected_fstrim_count: u64,
     logger: &Logger,
 ) {
     info!(
@@ -152,12 +178,10 @@ pub fn assert_node_is_unassigned_with_ssh_session(
     )
     .expect("Failed to detect that node has deleted its state and local CUP.");
 
-    let state_removal_failed = "orchestrator_state_removal_failed_total".to_string();
-    let fs_trim_duration = "orchestrator_fstrim_duration_milliseconds".to_string();
     let fetcher = MetricsFetcher::new_with_port(
         std::iter::once(node.clone()),
-        vec![state_removal_failed.clone(), fs_trim_duration.clone()],
-        9091,
+        vec![STATE_REMOVAL_FAILED.to_string(), FSTRIM_TOTAL.to_string()],
+        ORCHESTRATOR_METRICS_PORT,
     );
 
     ic_system_test_driver::retry_with_msg!(
@@ -167,25 +191,48 @@ pub fn assert_node_is_unassigned_with_ssh_session(
         secs(10),
         || match block_on(fetcher.fetch::<u64>()) {
             Ok(metrics) => {
-                assert_eq!(metrics[&state_removal_failed][0], 0);
-                assert!(metrics[&fs_trim_duration][0] > 0);
+                // This counter never goes back to zero, so retrying wouldn't help.
+                assert_eq!(
+                    metrics[STATE_REMOVAL_FAILED][0],
+                    0,
+                    "Node {} failed to remove its state",
+                    node.get_ip_addr()
+                );
+                // Bumped only after the removal and the trim, so the check above can pass first.
+                ensure!(
+                    metrics[FSTRIM_TOTAL][0] == expected_fstrim_count,
+                    "Node {} has trimmed its filesystem {} times, expected {}.",
+                    node.get_ip_addr(),
+                    metrics[FSTRIM_TOTAL][0],
+                    expected_fstrim_count
+                );
                 Ok(())
             }
             Err(e) => bail!("Failed to fetch metrics: {}", e),
         }
     )
-    .expect("Failed to detect that node has deleted its state.");
+    .expect("Failed to detect that node has deleted its state and trimmed its filesystem.");
 }
 
-fn fetch_metric_from_nodes<T>(nodes: Vec<IcNodeSnapshot>, metric_name: &str) -> Result<Vec<T>>
+async fn fetch_metric_from_nodes<T>(
+    nodes: Vec<IcNodeSnapshot>,
+    (metric_name, metric_port): (&str, u16),
+) -> Result<Vec<T>>
 where
     T: Copy + Debug + std::str::FromStr,
 {
-    let metrics_fetcher = MetricsFetcher::new(nodes.iter().cloned(), vec![metric_name.to_string()]);
-    let metrics = block_on(metrics_fetcher.fetch::<T>())
+    let metrics_fetcher = MetricsFetcher::new_with_port(
+        nodes.iter().cloned(),
+        vec![metric_name.to_string()],
+        metric_port,
+    );
+    let metrics = metrics_fetcher
+        .fetch::<T>()
+        .await
         .map_err(|err| anyhow!("Could not connect to metrics yet {:?}", err))?;
 
-    let vals = metrics[metric_name].clone();
+    // Empty if no node exports it yet, so the check below reports it instead of panicking.
+    let vals = metrics.get(metric_name).cloned().unwrap_or_default();
     if vals.len() != nodes.len() {
         bail!(
             "Metrics not available for all nodes yet. {} metrics, {} nodes",
@@ -197,11 +244,58 @@ where
     Ok(vals)
 }
 
-const EARLIEST_TOPOLOGY_VERSION: &str = "peer_manager_topology_earliest_registry_version";
+async fn await_metric_registry_version(
+    (metric_name, metric_port): (&str, u16),
+    log_text: &str,
+    nodes: Vec<IcNodeSnapshot>,
+    target_version: RegistryVersion,
+    logger: &Logger,
+    retry_timeout: Duration,
+    retry_backoff: Duration,
+) {
+    info!(logger, "{}", log_text);
+    ic_system_test_driver::retry_with_msg_async!(
+        log_text,
+        logger,
+        retry_timeout,
+        retry_backoff,
+        || async {
+            fetch_metric_from_nodes::<u64>(nodes.clone(), (metric_name, metric_port))
+                .await
+                .and_then(|registry_versions| {
+                    let min_registry_version = registry_versions.iter().min().unwrap();
+                    assert!(
+                        *min_registry_version <= target_version.get(),
+                        "Target version already surpassed"
+                    );
+                    ensure!(
+                        *min_registry_version == target_version.get(),
+                        "Target registry version not yet reached, current: {:?}, target: {}",
+                        registry_versions,
+                        target_version
+                    );
+                    Ok(())
+                })
+        }
+    )
+    .await
+    .expect("The nodes did not reach the specified registry version in time")
+}
+
+const STATE_REMOVAL_FAILED: &str = "orchestrator_state_removal_failed_total";
+const FSTRIM_TOTAL: &str = "orchestrator_fstrim_total";
+
+const EARLIEST_TOPOLOGY_VERSION: (&str, u16) = (
+    "peer_manager_topology_earliest_registry_version",
+    REPLICA_METRICS_PORT,
+);
 
 pub fn get_node_earliest_topology_version(node: &IcNodeSnapshot) -> Result<RegistryVersion> {
-    fetch_metric_from_nodes::<u64>(vec![node.clone()], EARLIEST_TOPOLOGY_VERSION)
-        .map(|versions| RegistryVersion::from(versions[0]))
+    block_on(fetch_metric_from_nodes::<u64>(
+        vec![node.clone()],
+        EARLIEST_TOPOLOGY_VERSION,
+    ))
+    .map(|versions| RegistryVersion::from(versions[0]))
 }
 
 pub fn await_subnet_earliest_topology_version(
@@ -209,50 +303,58 @@ pub fn await_subnet_earliest_topology_version(
     target_version: RegistryVersion,
     logger: &Logger,
 ) {
-    await_subnet_earliest_topology_version_with_retries(
+    block_on(await_subnet_earliest_topology_version_with_retries_async(
         subnet,
         target_version,
         logger,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
-    )
+    ))
 }
 
-pub fn await_subnet_earliest_topology_version_with_retries(
+pub async fn await_subnet_earliest_topology_version_with_retries_async(
     subnet: &SubnetSnapshot,
     target_version: RegistryVersion,
     logger: &Logger,
     retry_timeout: Duration,
     retry_backoff: Duration,
 ) {
-    info!(
-        logger,
-        "Waiting until earliest topology version {} on subnet {}", target_version, subnet.subnet_id,
-    );
-    ic_system_test_driver::retry_with_msg!(
-        format!(
+    await_metric_registry_version(
+        EARLIEST_TOPOLOGY_VERSION,
+        &format!(
             "Waiting until earliest topology version {} on subnet {}",
             target_version, subnet.subnet_id,
         ),
-        logger.clone(),
+        subnet.nodes().collect(),
+        target_version,
+        logger,
         retry_timeout,
         retry_backoff,
-        || fetch_metric_from_nodes::<u64>(subnet.nodes().collect(), EARLIEST_TOPOLOGY_VERSION)
-            .and_then(|earliest_registry_versions| {
-                let min_earliest_registry_version =
-                    earliest_registry_versions.iter().min().unwrap();
-                assert!(
-                    *min_earliest_registry_version <= target_version.get(),
-                    "Target version already surpassed"
-                );
-                ensure!(
-                    *min_earliest_registry_version == target_version.get(),
-                    "Target registry version not yet reached, current: {:?}, target: {}",
-                    earliest_registry_versions,
-                    target_version
-                );
-                Ok(())
-            })
     )
-    .expect("The subnet did not reach the specified registry version in time")
+    .await
+}
+
+const FIREWALL_REGISTRY_VERSION: (&str, u16) =
+    ("firewall_registry_version", ORCHESTRATOR_METRICS_PORT);
+
+pub async fn await_subnet_firewall_registry_version_with_retries_async(
+    subnet: &SubnetSnapshot,
+    target_version: RegistryVersion,
+    logger: &Logger,
+    retry_timeout: Duration,
+    retry_backoff: Duration,
+) {
+    await_metric_registry_version(
+        FIREWALL_REGISTRY_VERSION,
+        &format!(
+            "Waiting until firewall registry version {} on subnet {}",
+            target_version, subnet.subnet_id,
+        ),
+        subnet.nodes().collect(),
+        target_version,
+        logger,
+        retry_timeout,
+        retry_backoff,
+    )
+    .await
 }

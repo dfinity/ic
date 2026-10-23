@@ -3,6 +3,7 @@ use ic_nns_governance_api::Vote;
 use super::{NeuronStore, NeuronStoreError};
 
 use crate::{
+    is_mission_70_voting_rewards_enabled,
     neuron::Neuron,
     pb::v1::{Ballot, NeuronIdToVotingPowerMap, VotingPowerEconomics, VotingPowerTotal},
     storage::neurons::NeuronSections,
@@ -131,9 +132,14 @@ impl NeuronStore {
         let mut total_deciding_voting_power: u128 = 0;
         let mut total_potential_voting_power: u128 = 0;
 
+        let default_min_dissolve_delay = if is_mission_70_voting_rewards_enabled() {
+            VotingPowerEconomics::MISSION_70_DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
+        } else {
+            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
+        };
         let min_dissolve_delay_seconds = voting_power_economics
             .neuron_minimum_dissolve_delay_to_vote_seconds
-            .unwrap_or(VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS);
+            .unwrap_or(default_min_dissolve_delay);
 
         let mut process_neuron = |neuron: &Neuron| {
             if neuron.is_inactive(now_seconds)
@@ -142,14 +148,15 @@ impl NeuronStore {
                 return;
             }
 
-            let voting_power = neuron.deciding_voting_power(voting_power_economics, now_seconds);
+            let (potential_voting_power, deciding_voting_power) =
+                neuron.potential_and_deciding_voting_power(voting_power_economics, now_seconds);
             // We don't handle overflow here, as in `get_voting_power_as_u64` below,
             // the input arguments bigger than u64::MAX will result in an error.
             total_deciding_voting_power =
-                total_deciding_voting_power.saturating_add(voting_power as u128);
-            total_potential_voting_power = total_potential_voting_power
-                .saturating_add(neuron.potential_voting_power(now_seconds) as u128);
-            voting_power_map.insert(neuron.id().id, voting_power);
+                total_deciding_voting_power.saturating_add(deciding_voting_power as u128);
+            total_potential_voting_power =
+                total_potential_voting_power.saturating_add(potential_voting_power as u128);
+            voting_power_map.insert(neuron.id().id, deciding_voting_power);
         };
 
         // Active neurons iterator already makes distinctions between stable and heap neurons.

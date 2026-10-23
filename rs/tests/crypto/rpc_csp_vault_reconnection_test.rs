@@ -128,7 +128,7 @@ impl SystemdCli<'_> {
     fn state(&self) -> String {
         let cmd = format!(
             "systemctl show --property ActiveState --value {}",
-            &self.service
+            self.service
         );
         self.log_ssh_command(&cmd);
         self.node
@@ -142,7 +142,7 @@ impl SystemdCli<'_> {
         info!(self.logger, "Killing {}", self.service);
         let cmd = format!(
             "sudo kill -9 $(systemctl show --property MainPID --value {})",
-            &self.service
+            self.service
         );
         self.log_ssh_command(&cmd);
         self.node.block_on_bash_script(&cmd).expect("run command");
@@ -150,7 +150,7 @@ impl SystemdCli<'_> {
 
     fn stop(&self) {
         info!(self.logger, "Stopping {}", self.service);
-        let cmd = format!("sudo systemctl stop {}", &self.service);
+        let cmd = format!("sudo systemctl stop {}", self.service);
         self.log_ssh_command(&cmd);
         self.node.block_on_bash_script(&cmd).expect("run command");
     }

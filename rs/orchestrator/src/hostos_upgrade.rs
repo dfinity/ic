@@ -2,7 +2,7 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     registry_helper::RegistryHelper,
 };
-use backoff::{ExponentialBackoff, backoff::Backoff};
+use backon::{BackoffBuilder, ExponentialBuilder};
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
 use ic_sys::utility_command::UtilityCommand;
@@ -40,22 +40,24 @@ impl HostosUpgrader {
     pub async fn upgrade_loop(
         &mut self,
         cancellation_token: CancellationToken,
-        mut backoff: ExponentialBackoff,
+        backoff_builder: ExponentialBuilder,
+        max_interval: Duration,
         liveness_timeout: Duration,
     ) {
+        let mut backoff = backoff_builder.build();
         loop {
             match tokio::time::timeout(liveness_timeout, self.check_for_upgrade()).await {
-                Ok(Ok(())) => backoff.reset(),
+                Ok(Ok(())) => backoff = backoff_builder.build(),
                 e => warn!(&self.logger, "Check for HostOS upgrade failed: {:?}", e),
             }
 
-            // NOTE: We currently do not and should not set `max_elapsed_time`,
-            // so that we never run out of backoffs. If `max_elapsed_time` _is_
-            // ever set, repeat the `max_interval` instead. This is technically
-            // not the same behavior as if `max_elapsed_time` was unset, because
-            // we will not be including jitter, but it should be close enough,
-            // and safe.
-            let safe_backoff = backoff.next_backoff().unwrap_or(backoff.max_interval);
+            // NOTE: We currently do not and should not set a total delay on
+            // `backoff_builder`, so that we never run out of backoffs. If a
+            // total delay _is_ ever set, repeat `max_interval` instead. This
+            // is technically not the same behavior as if no total delay was
+            // set, because we will not be including jitter, but it should be
+            // close enough, and safe.
+            let safe_backoff = backoff.next().unwrap_or(max_interval);
             tokio::select! {
                 _ = tokio::time::sleep(safe_backoff) => {}
                 _ = cancellation_token.cancelled() => break

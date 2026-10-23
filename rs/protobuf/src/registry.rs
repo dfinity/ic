@@ -10,5 +10,6 @@ pub mod node_rewards;
 pub mod provisional_whitelist;
 pub mod replica_version;
 pub mod routing_table;
+pub mod standard_engine_replica_version;
 pub mod subnet;
 pub mod unassigned_nodes_config;

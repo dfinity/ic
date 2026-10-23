@@ -9,7 +9,6 @@ use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_management_canister_types_private::{CanisterIdRecord, Method};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::LongExecutionMode;
 use ic_types::methods::SystemMethod;
 use ic_types_test_utils::ids::canister_test_id;
 use more_asserts::assert_le;
@@ -40,8 +39,7 @@ fn dts_long_execution_completes() {
         ErrorCode::CanisterDidNotReply,
     );
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_paused_execution()
             .get_sample_sum(),
         9.0
@@ -125,8 +123,7 @@ fn cannot_execute_management_message_for_targeted_long_execution_canister() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_paused_execution()
             .get_sample_sum(),
         4.0
@@ -144,8 +141,7 @@ fn cannot_execute_management_message_for_targeted_long_execution_canister() {
         ErrorCode::CanisterDidNotReply,
     );
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_paused_execution()
             .get_sample_sum(),
         9.0
@@ -177,12 +173,58 @@ fn dts_long_execution_runs_out_of_instructions() {
         ErrorCode::CanisterInstructionLimitExceeded,
     );
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_paused_execution()
             .get_sample_sum(),
         9.0
     );
+}
+
+#[test]
+fn dts_long_execution_aborted_after_checkpoint() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(100),
+            max_instructions_per_message: NumInstructions::from(1000),
+            max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
+            ..zero_instruction_overhead_config()
+        })
+        .build();
+
+    let canister = test.create_canister();
+    let message_id = test.send_ingress(canister, ingress(300));
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Canister has a paused execution and non-zero executed rounds.
+    assert!(test.canister_state(canister).has_paused_execution());
+    assert_ne!(test.state().canister_priority(&canister).executed_rounds, 0);
+
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+
+    // After a checkpoint round, the canister has an aborted execution and zero
+    // executed rounds.
+    assert!(test.canister_state(canister).has_aborted_execution());
+    assert_eq!(test.state().canister_priority(&canister).executed_rounds, 0);
+
+    // Complete the long execution.
+    for _ in 0..3 {
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
+    assert_eq!(
+        test.ingress_error(&message_id).code(),
+        ErrorCode::CanisterDidNotReply,
+    );
+
+    // After completion, there is no paused or aborted execution. And executed
+    // rounds is again zero.
+    assert!(!test.canister_state(canister).has_long_execution());
+    assert_eq!(test.state().canister_priority(&canister).executed_rounds, 0);
+
+    // 2 + 3 slices were executed.
+    assert_eq!(test.scheduler().metrics.round.slices.get_sample_sum(), 5.0);
 }
 
 #[test_strategy::proptest]
@@ -252,10 +294,21 @@ fn respect_max_paused_executions(
     }
 
     test.execute_all_with(|test| {
-        let paused_executions = test
-            .state()
-            .canisters_iter()
-            .filter(|canister| canister.has_paused_execution())
+        let (canister_states, subnet_schedule) = test.state_mut().canisters_and_schedule_mut();
+        let paused_executions = canister_states
+            .hot_values()
+            .filter(|canister| {
+                let priority = subnet_schedule.get(&canister.canister_id());
+                if canister.has_paused_execution() {
+                    // All paused executions have non-zero executed rounds.
+                    assert_ne!(priority.executed_rounds, 0);
+                    true
+                } else {
+                    // All aborted (or not started) executions have zero executed rounds.
+                    assert_eq!(priority.executed_rounds, 0);
+                    false
+                }
+            })
             .count();
         // Make sure the `max_paused_executions` is respected after each round
         assert_le!(paused_executions, max_paused_executions);
@@ -298,11 +351,8 @@ fn break_after_long_executions(#[strategy(2..10_usize)] scheduler_cores: usize) 
 
     // Create one canister with many long messages
     let long_canister_id = test.create_canister();
-    let mut long_message_ids = vec![];
     for _ in 0..num_long_messages {
-        let long_message_id =
-            test.send_ingress(long_canister_id, ingress(max_instructions_per_slice + 1));
-        long_message_ids.push(long_message_id);
+        test.send_ingress(long_canister_id, ingress(max_instructions_per_slice + 1));
     }
 
     // Create many canisters with 4 short messages each
@@ -381,7 +431,7 @@ fn filter_after_long_executions() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     for canister in test.state().canisters_iter() {
         assert_eq!(canister.system_state.canister_metrics().executed(), 2);
-        assert!(!canister.has_paused_execution());
+        assert!(!canister.has_long_execution());
     }
 }
 
@@ -455,7 +505,7 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
         0.0
     );
 
-    let state_metrics = &test.scheduler().state_metrics;
+    let state_metrics = test.state_metrics();
     // 2 rounds because the first canister was paused twice.
     assert_eq!(
         state_metrics
@@ -495,7 +545,7 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     );
     // 3 slices for the first canister, 1 slice for the second.
     assert_eq!(metrics.round.slices.get_sample_sum(), 4.0);
-    let state_metrics = &test.scheduler().state_metrics;
+    let state_metrics = test.state_metrics();
     // Same 2 rounds of paused install code as above.
     assert_eq!(
         state_metrics
@@ -535,21 +585,18 @@ fn dts_resume_install_code_after_abort() {
     }
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    assert!(!test.canister_state(canister).has_paused_install_code());
-    assert!(!test.canister_state(canister).has_aborted_install_code());
+    assert!(!test.canister_state(canister).has_long_install_code());
 
     // After 1 + 9 rounds we had a paused install code.
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_paused_install_code()
             .get_sample_sum(),
         10.0
     );
     // After the checkpoint round we had an aborted install code.
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_aborted_install_code()
             .get_sample_sum(),
         1.0
@@ -593,7 +640,6 @@ fn dts_resume_long_execution_after_abort() {
     assert_eq!(execution_stats(&test, canister), (1, true));
 
     test.execute_round(ExecutionRoundType::CheckpointRound);
-    assert!(!test.canister_state(canister).has_paused_execution());
     assert!(test.canister_state(canister).has_aborted_execution());
     assert_eq!(execution_stats(&test, canister), (2, true));
 
@@ -607,15 +653,13 @@ fn dts_resume_long_execution_after_abort() {
         ErrorCode::CanisterDidNotReply,
     );
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_paused_execution()
             .get_sample_sum(),
         10.0
     );
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_aborted_execution()
             .get_sample_sum(),
         1.0
@@ -707,28 +751,31 @@ fn abort_paused_executions_keeps_highest_priority() {
     test.send_ingress(mid, ingress(100));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // The low compute allocation canister is classified as `Prioritized`, as it has
-    // executed a second slice.
+    // The low compute allocation canister started execution a round earlier.
     assert_eq!(
-        test.state().canister_priority(&low).long_execution_mode,
-        LongExecutionMode::Prioritized
+        test.state()
+            .canister_priority(&low)
+            .long_execution_start_round,
+        Some(ExecutionRound::new(0))
     );
-    // The high and mid compute allocation canisters are only `Opportunistic`.
+    // The high and mid compute allocation canisters started a round later.
     assert_eq!(
-        test.state().canister_priority(&high).long_execution_mode,
-        LongExecutionMode::Opportunistic
+        test.state()
+            .canister_priority(&high)
+            .long_execution_start_round,
+        Some(ExecutionRound::new(1))
     );
     assert_eq!(
-        test.state().canister_priority(&mid).long_execution_mode,
-        LongExecutionMode::Opportunistic
+        test.state()
+            .canister_priority(&mid)
+            .long_execution_start_round,
+        Some(ExecutionRound::new(1))
     );
 
-    // The low compute allocation canister keeps its paused execution (its
-    // `Prioritized` mode actually gives it the highest priority).
-    assert!(test.canister_state(low).has_paused_execution());
-    // The high compute allocation canister comes in second, so it's still paused.
-    assert!(test.canister_state(high).has_paused_execution());
-    // The medium compute allocation canister had the lowest priority, so it was
+    // `low` has the most executed rounds (highest priority among long
+    // executions), `high` has the highest CA (second priority). `mid` is
     // aborted.
+    assert!(test.canister_state(low).has_paused_execution());
+    assert!(test.canister_state(high).has_paused_execution());
     assert!(test.canister_state(mid).has_aborted_execution());
 }

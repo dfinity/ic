@@ -1,5 +1,5 @@
 use crate::{
-    governance::MAX_DISSOLVE_DELAY_SECONDS, neuron::StoredDissolveStateAndAge, pb::v1::NeuronState,
+    governance::max_dissolve_delay_seconds, neuron::StoredDissolveStateAndAge, pb::v1::NeuronState,
 };
 
 use ic_nns_governance_api::neuron::DissolveState as ApiDissolveState;
@@ -154,7 +154,7 @@ impl DissolveStateAndAge {
     /// already dissolved, it transitions to a non-dissolving state with the new dissolve delay. If
     /// the neuron is dissolving, the dissolve timestamp is increased by the given number of
     /// seconds. If the neuron is not dissolving, the dissolve delay is increased by the given
-    /// number of seconds. The new dissolve delay is capped at MAX_DISSOLVE_DELAY_SECONDS.
+    /// number of seconds. The new dissolve delay is capped at max_dissolve_delay_seconds().
     pub fn increase_dissolve_delay(
         self,
         now_seconds: u64,
@@ -174,7 +174,7 @@ impl DissolveStateAndAge {
             } => {
                 let new_delay_dissolve_delay_seconds = std::cmp::min(
                     dissolve_delay_seconds.saturating_add(additional_dissolve_delay_seconds),
-                    MAX_DISSOLVE_DELAY_SECONDS,
+                    max_dissolve_delay_seconds(),
                 );
                 Self::NotDissolving {
                     dissolve_delay_seconds: new_delay_dissolve_delay_seconds,
@@ -190,7 +190,7 @@ impl DissolveStateAndAge {
                         when_dissolved_timestamp_seconds.saturating_sub(now_seconds);
                     let new_delay_seconds = std::cmp::min(
                         dissolve_delay_seconds.saturating_add(additional_dissolve_delay_seconds),
-                        MAX_DISSOLVE_DELAY_SECONDS,
+                        max_dissolve_delay_seconds(),
                     );
                     let new_when_dissolved_timestamp_seconds =
                         now_seconds.saturating_add(new_delay_seconds);
@@ -201,7 +201,7 @@ impl DissolveStateAndAge {
                     // This neuron is dissolved. Set it to non-dissolving.
                     let new_delay_seconds = std::cmp::min(
                         additional_dissolve_delay_seconds,
-                        MAX_DISSOLVE_DELAY_SECONDS,
+                        max_dissolve_delay_seconds(),
                     );
                     Self::NotDissolving {
                         dissolve_delay_seconds: new_delay_seconds,
@@ -264,6 +264,29 @@ impl DissolveStateAndAge {
             },
             // This is a no-op.
             Self::DissolvingOrDissolved { .. } => self,
+        }
+    }
+
+    pub fn clamp_dissolve_delay(self, max_dissolve_delay_seconds: u64, now_seconds: u64) -> Self {
+        match self {
+            Self::NotDissolving {
+                dissolve_delay_seconds,
+                aging_since_timestamp_seconds,
+            } => Self::NotDissolving {
+                dissolve_delay_seconds: std::cmp::min(
+                    dissolve_delay_seconds,
+                    max_dissolve_delay_seconds,
+                ),
+                aging_since_timestamp_seconds,
+            },
+            Self::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds,
+            } => Self::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: std::cmp::min(
+                    when_dissolved_timestamp_seconds,
+                    now_seconds.saturating_add(max_dissolve_delay_seconds),
+                ),
+            },
         }
     }
 }
@@ -364,7 +387,7 @@ mod tests {
         for (aging_since_timestamp_seconds, expected_age_seconds) in
             [(0, NOW), (NOW - 1, 1), (NOW, 0), (NOW + 1, 0)]
         {
-            for dissolve_delay_seconds in [0, 1, 100, MAX_DISSOLVE_DELAY_SECONDS] {
+            for dissolve_delay_seconds in [0, 1, 100, max_dissolve_delay_seconds()] {
                 assert_age_seconds(
                     DissolveStateAndAge::NotDissolving {
                         dissolve_delay_seconds,
@@ -424,12 +447,12 @@ mod tests {
                 },
             );
 
-            // Test that the dissolve delay is capped at MAX_DISSOLVE_DELAY_SECONDS.
+            // Test that the dissolve delay is capped at max_dissolve_delay_seconds().
             assert_increase_dissolve_delay(
                 dissolve_state_and_age,
-                MAX_DISSOLVE_DELAY_SECONDS as u32 + 1000,
+                max_dissolve_delay_seconds() as u32 + 1000,
                 DissolveStateAndAge::NotDissolving {
-                    dissolve_delay_seconds: MAX_DISSOLVE_DELAY_SECONDS,
+                    dissolve_delay_seconds: max_dissolve_delay_seconds(),
                     aging_since_timestamp_seconds: NOW,
                 },
             );
@@ -440,7 +463,7 @@ mod tests {
     fn test_increase_dissolve_delay_for_not_dissolving_neurons() {
         for current_aging_since_timestamp_seconds in [0, NOW - 1, NOW, NOW + 1, NOW + 2000] {
             for current_dissolve_delay_seconds in
-                [1, 10, 100, NOW, NOW + 1000, MAX_DISSOLVE_DELAY_SECONDS - 1]
+                [1, 10, 100, 1000, max_dissolve_delay_seconds() - 1]
             {
                 assert_increase_dissolve_delay(
                     DissolveStateAndAge::NotDissolving {
@@ -456,15 +479,15 @@ mod tests {
             }
         }
 
-        // Test that the dissolve delay is capped at MAX_DISSOLVE_DELAY_SECONDS.
+        // Test that the dissolve delay is capped at max_dissolve_delay_seconds().
         assert_increase_dissolve_delay(
             DissolveStateAndAge::NotDissolving {
                 dissolve_delay_seconds: 1000,
                 aging_since_timestamp_seconds: NOW,
             },
-            MAX_DISSOLVE_DELAY_SECONDS as u32,
+            max_dissolve_delay_seconds() as u32,
             DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds: MAX_DISSOLVE_DELAY_SECONDS,
+                dissolve_delay_seconds: max_dissolve_delay_seconds(),
                 aging_since_timestamp_seconds: NOW,
             },
         );
@@ -473,7 +496,7 @@ mod tests {
     #[test]
     fn test_increase_dissolve_delay_for_dissolving_neurons() {
         for when_dissolved_timestamp_seconds in
-            [NOW + 1, NOW + 1000, NOW + MAX_DISSOLVE_DELAY_SECONDS - 1]
+            [NOW + 1, NOW + 1000, NOW + max_dissolve_delay_seconds() - 1]
         {
             assert_increase_dissolve_delay(
                 DissolveStateAndAge::DissolvingOrDissolved {
@@ -486,14 +509,14 @@ mod tests {
             );
         }
 
-        // Test that the dissolve delay is capped at MAX_DISSOLVE_DELAY_SECONDS.
+        // Test that the dissolve delay is capped at max_dissolve_delay_seconds().
         assert_increase_dissolve_delay(
             DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: NOW + 1000,
             },
-            MAX_DISSOLVE_DELAY_SECONDS as u32,
+            max_dissolve_delay_seconds() as u32,
             DissolveStateAndAge::DissolvingOrDissolved {
-                when_dissolved_timestamp_seconds: NOW + MAX_DISSOLVE_DELAY_SECONDS,
+                when_dissolved_timestamp_seconds: NOW + max_dissolve_delay_seconds(),
             },
         );
     }

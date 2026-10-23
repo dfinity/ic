@@ -6,7 +6,7 @@ use std::{
     pin::Pin,
     sync::{Arc, RwLock},
     task::{Context, Poll},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -200,15 +200,89 @@ impl AsyncUdpSocket for CustomUdp {
         false
     }
 }
+/// Advances the simulation by one tick, pacing it against the real clock.
+///
+/// `Sim::step` advances the *simulated* clock by `tick_duration` as fast as the
+/// CPU can step it, so a bare `while !f() { sim.step()?; }` loop runs simulated
+/// time orders of magnitude faster than real time -- measured at ~11000x for
+/// the 100 ms tick in `consensus_manager`'s tests, and higher still for the
+/// 1 ms default tick.
+///
+/// That matters because not everything under test runs on the simulated clock.
+/// The artifact processor (`ic_artifact_manager`'s `process_messages`) runs on
+/// its own OS thread with its own `enable_time()` runtime, and polls for work on
+/// *real* time every `ARTIFACT_MANAGER_TIMER_DURATION_MSEC` (200 ms). A
+/// free-running simulation exhausts its entire `simulation_duration` before that
+/// thread has managed even one poll, so any condition that depends on an
+/// artifact being processed can never become true and the test fails with
+/// turmoil's "Ran for duration: ... without completing". The faster and less
+/// contended the machine, the more reliably this happens -- it was deterministic
+/// on Namespace RBE workers while only flaking at ~0.2% on GitHub runners, and
+/// CPU oversubscription hides it entirely by slowing the simulation down.
+///
+/// Sleeping away the difference keeps simulated and real time advancing at
+/// roughly the same rate, so the real-time components make progress at the rate
+/// the simulated ones expect. The tick duration is measured from the simulation
+/// itself rather than passed in, so this adapts to whatever the caller
+/// configured on the `Builder`.
+///
+/// The pacing only ever slows the simulation down: real time can run ahead of
+/// simulated time, but simulated time can no longer run ahead of real time.
+/// One consequence is that the `simulation_duration` configured on the
+/// `Builder`, which bounds the *simulated* clock, is now also a lower bound on
+/// the *real* time a simulation runs for before turmoil gives up on it. A
+/// budget that used to be "as good as infinite" because it was burnt through in
+/// a fraction of a second now has to be sized to the test's Bazel timeout; see
+/// `SIMULATION_DURATION` in `consensus_manager`'s tests.
+fn step_paced(sim: &mut Sim) -> turmoil::Result<bool> {
+    let simulated_before = sim.elapsed();
+    let real_before = Instant::now();
+
+    let all_clients_finished = sim.step()?;
+
+    let simulated = sim.elapsed().saturating_sub(simulated_before);
+    // `None` means real time is already ahead of simulated time: the step took
+    // longer than the tick it advanced. That happens on a contended machine,
+    // and structurally in `consensus_manager`'s `test_large_msgs`, whose 1 ms
+    // default tick is shorter than delivering its 50 MB messages takes. There
+    // is nothing to sleep off then, and no attempt is made to catch up later
+    // by skipping sleeps: the simulation simply runs slower than real time for
+    // a while, which is the direction that was always safe.
+    if let Some(ahead_of_real_time) = simulated.checked_sub(real_before.elapsed()) {
+        std::thread::sleep(ahead_of_real_time);
+    }
+
+    Ok(all_clients_finished)
+}
+
 /// Runs the tokio simulation until provided closure evaluates to true.
 /// If Ok(true) is returned all clients have completed.
+///
+/// Gives up when the simulation exhausts the `simulation_duration` configured
+/// on its `Builder`. Since the simulation is paced against real time, that
+/// takes at least that long in real time too (see `step_paced`), so the budget
+/// needs to be reachable inside the test's Bazel timeout for the failure to be
+/// reported as this error rather than as a bare timeout.
 pub fn wait_for<F>(sim: &mut Sim, mut f: F) -> turmoil::Result
 where
     F: FnMut() -> bool,
 {
+    let simulated_start = sim.elapsed();
     while !f() {
-        if sim.step()? {
-            panic!("Simulation finished while checking condition");
+        match step_paced(sim) {
+            Ok(false) => {}
+            Ok(true) => panic!("Simulation finished while checking condition"),
+            Err(e) => {
+                // Turmoil reports the whole budget. Say how much of it went on
+                // this particular condition, since a test typically waits on
+                // several in sequence.
+                let spent_here = sim.elapsed().saturating_sub(simulated_start);
+                return Err(format!(
+                    "{e}; {spent_here:?} of that simulated time was spent waiting \
+                     for this condition"
+                )
+                .into());
+            }
         }
     }
     Ok(())
@@ -222,7 +296,7 @@ pub fn run_simulation_for(sim: &mut Sim, timeout: Duration) -> turmoil::Result {
         if sim.elapsed() > timeout + now {
             break;
         }
-        if sim.step()? {
+        if step_paced(sim)? {
             panic!("Simulation finished while checking condition");
         }
     }
@@ -244,7 +318,7 @@ where
         if sim.elapsed() > timeout + now {
             break;
         }
-        if sim.step()? {
+        if step_paced(sim)? {
             panic!("Simulation finished while checking condition");
         }
     }

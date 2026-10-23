@@ -372,12 +372,13 @@ fn icrc3_get_blocks(reqs: Vec<GetBlocksRequest>) -> GetBlocksResult {
         }
         let length = length.min(max_length);
         let decoded_block_range = decode_block_range(start, length, decode_icrc1_block);
+        #[allow(clippy::explicit_counter_loop)]
         for block in decoded_block_range {
             blocks.push(BlockWithId {
                 id: id.clone(),
                 block: ICRC3Value::from(block),
             });
-            id += 1u64;
+            id += 1_u64;
         }
     }
     GetBlocksResult {
@@ -402,7 +403,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        ic_cdk::stable::stable_size() as f64 * 65536f64,
+        ic_cdk::stable::stable_size() as f64 * 65536_f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(

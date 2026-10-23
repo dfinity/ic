@@ -5,7 +5,14 @@
 /// This type is used in the registry Candid API, and adding or removing
 /// non-optional fields causes Candid client/server compatibility issues.
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct SevAttestationPackage {
     /// Opaque bytes containing the SEV attestation report. Can be parsed using
@@ -26,7 +33,14 @@ pub struct SevAttestationPackage {
 /// Certificate chain for SEV attestation verification.
 /// NOTE: All fields must remain optional (see SevAttestationPackage comment).
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct SevCertificateChain {
     /// AMD Root Key (ARK) certificate in PEM encoding
@@ -41,7 +55,14 @@ pub struct SevCertificateChain {
 }
 /// / Verification error when verifying an attestation package
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct VerificationError {
     /// Message describing the error
@@ -57,7 +78,7 @@ pub struct VerificationError {
     /// be added (i.e. the new message type fields should be a superset of the
     /// fields of VerificationErrorDescription) and then the type can be replaced
     /// with the new message type in the detail variant.
-    #[prost(oneof = "verification_error::Detail", tags = "2, 3, 4, 5, 6, 7, 8")]
+    #[prost(oneof = "verification_error::Detail", tags = "2, 3, 4, 5, 6, 7, 8, 9")]
     pub detail: ::core::option::Option<verification_error::Detail>,
 }
 /// Nested message and enum types in `VerificationError`.
@@ -70,7 +91,14 @@ pub mod verification_error {
     /// fields of VerificationErrorDescription) and then the type can be replaced
     /// with the new message type in the detail variant.
     #[derive(
-        candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Oneof,
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        Clone,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Oneof,
     )]
     pub enum Detail {
         /// Generic internal error
@@ -94,10 +122,20 @@ pub mod verification_error {
         /// The signature in the attestation report is not by the VCEK
         #[prost(message, tag = "8")]
         InvalidSignature(super::VerificationErrorDescription),
+        /// The policy is invalid
+        #[prost(message, tag = "9")]
+        InvalidPolicy(super::VerificationErrorDescription),
     }
 }
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct VerificationErrorDescription {
     #[prost(string, tag = "1")]

@@ -32,10 +32,6 @@ pub(crate) fn update_signature_request_contexts(
     metrics: &SchedulerMetrics,
     logger: &ReplicaLogger,
 ) {
-    let _timer = metrics
-        .round_update_signature_request_contexts_duration
-        .start_timer();
-
     // Assign a random nonce to the context in the round immediately subsequent to its successful
     // match with a pre-signature.
     for context in &mut contexts {
@@ -270,9 +266,8 @@ mod tests {
             MasterPublicKeyId::VetKd(_) => panic!("vetKD does not have pre-signatures"),
         };
         let context = SignWithThresholdContext {
-            request: RequestBuilder::new().build(),
+            request: RequestBuilder::new().build_arc(),
             args,
-            pseudo_random_id: [id as u8; 32],
             derivation_path: Arc::new(vec![]),
             batch_time: UNIX_EPOCH,
             nonce: None,

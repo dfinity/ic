@@ -23,6 +23,7 @@ type ValidationError = variant {
   MigrationsDisabled : reserved;
   MigratedCanisterNotReady : reserved;
   MigratedCanisterInsufficientCycles : reserved;
+  CloudEngineSubnet : record { subnet : principal };
   SameSubnet : reserved;
   ReplacedCanisterNotStopped : reserved;
 };

@@ -160,7 +160,7 @@ fn scrypt_vs_double_sha256<M: Measurement>(
 ) {
     group.bench_function("scrypt", |bench| {
         bench.iter(|| {
-            let mut hash = [0u8; 32];
+            let mut hash = [0_u8; 32];
             scrypt::scrypt(header, header, scrypt_params, &mut hash).unwrap();
         })
     });
@@ -173,7 +173,7 @@ fn scrypt_vs_double_sha256<M: Measurement>(
 }
 
 fn random_header<const N: usize, R: Rng + CryptoRng>(rng: &mut R) -> [u8; N] {
-    let mut header = [0u8; N];
+    let mut header = [0_u8; N];
     rng.fill_bytes(&mut header);
     header
 }

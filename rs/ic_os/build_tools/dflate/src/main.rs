@@ -27,7 +27,7 @@ fn main() -> Result<()> {
         let mut source = File::open(&file)?;
         let file_name = file
             .file_name()
-            .ok_or(anyhow!("Invalid path: '{}'", &file.display()))?
+            .ok_or(anyhow!("Invalid path: '{}'", file.display()))?
             .to_string_lossy()
             .into_owned();
 

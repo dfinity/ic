@@ -9,8 +9,8 @@ fn round_trip(testname: &str, folder: &str) {
     );
     let buff = wat::parse_file(filename).expect("couldn't convert the input wat to Wasm");
 
-    let mut module = Module::parse(&buff, false).unwrap();
-    let result = module.encode();
+    let module = Module::parse(&buff, false, false).unwrap();
+    let result = module.encode().expect("couldn't encode Wasm");
     let out = wasmprinter::print_bytes(result).expect("couldn't translated Wasm to wat");
     let original = wasmprinter::print_bytes(buff).expect("couldn't convert original Wasm to wat");
     assert_eq!(out, original);

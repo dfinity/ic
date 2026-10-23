@@ -2,7 +2,11 @@
 Hold manifest common to all GuestOS variants.
 """
 
-load("//ic-os/components:guestos.bzl", "component_files")
+load(
+    "//ic-os/components:guestos.bzl",
+    "component_files",
+    "upgrade_overlay_component_files",
+)
 
 # Declare the dependencies that we will have for the built filesystem images.
 # This needs to be done separately from the build rules because we want to
@@ -26,7 +30,7 @@ def image_deps(mode, malicious = False):
 
         # Extra files to be added to rootfs and bootfs
         "bootfs": {
-            "//ic-os/components/ovmf:ovmf_sev": "/OVMF_SEV.fd:0644",
+            "//:ovmfsev_code": "/OVMF_SEV.fd:0644",
         },
         "rootfs": {
             # additional files to install
@@ -40,6 +44,7 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",  # Replica process manager, required by the IC protocol (upgrades, node addition, etc).
             ("//publish/malicious:replica" if malicious else "//publish/binaries:replica"): "/opt/ic/bin/replica:0755",  # Main protocol binary, required by the IC protocol. Installs the malicious replica iff set only in test builds.
             "//publish/binaries:ic-boundary": "/opt/ic/bin/ic-boundary:0755",  # API boundary node binary, required by the IC protocol. The same GuestOS is used both for the replica and API boundary nodes.
+            "//rs/ic_os/release:ic-gateway": "/opt/ic/bin/ic-gateway:0755",  # IC-gateway binary, required by cloud engine nodes, who run it as a sidecar to the replica.
             "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",  # May be used during recoveries to export/import consensus pool artifacts.
             "//publish/binaries:ic-recovery": "/opt/ic/bin/ic-recovery:0755",  # Required for performing subnet recoveries on the node directly.
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",  # May be used during recoveries for calculating the state hash and inspecting the state more generally.
@@ -64,6 +69,8 @@ def image_deps(mode, malicious = False):
         # Set various configuration values
         "container_context_files": Label("//ic-os/guestos/context:context-files"),
         "component_files": component_files(mode),
+        "upgrade_overlay_binaries": UPGRADE_OVERLAY_BINARIES,
+        "upgrade_overlay_files": upgrade_overlay_component_files,
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
         "rootfs_size": "3G",
@@ -125,3 +132,16 @@ def image_deps(mode, malicious = False):
         })
 
     return deps
+
+# Binaries hot-swapped by the fast-upgrade overlay. Each must also be present
+# in the rootfs install list below; the overlay reuses its install path.
+UPGRADE_OVERLAY_BINARIES = [
+    "//publish/binaries:replica",
+    "//publish/binaries:orchestrator",
+    "//publish/binaries:ic-crypto-csp",
+    "//publish/binaries:ic-btc-adapter",
+    "//publish/binaries:ic-https-outcalls-adapter-https-only",
+    "//publish/binaries:canister_sandbox",
+    "//publish/binaries:compiler_sandbox",
+    "//publish/binaries:sandbox_launcher",
+]

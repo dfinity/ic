@@ -10,15 +10,15 @@
 ///
 /// State (lifecycle) diagram for the swap canister's state.
 ///
-/// ```text
-///                                                                      sufficient_participation
-///                                                                      && (swap_due || icp_target_reached)
+/// ```text,text
+///                                                                     sufficient_participation
+///                                                                     && (swap_due || icp_target_reached)
 /// PENDING -------------------> ADOPTED ---------------------> OPEN -----------------------------------------> COMMITTED
-///          Swap receives a request        The opening delay      |                                                |
-///          from NNS governance to         has elapsed            | not sufficient_participation                   |
-///          schedule opening                                      | && (swap_due || icp_target_reached)            |
-///                                                                v                                                v
-///                                                             ABORTED ---------------------------------------> <DELETED>
+///         Swap receives a request        The opening delay      |                                                |
+///         from NNS governance to         has elapsed            | not sufficient_participation                   |
+///         schedule opening                                      | && (swap_due || icp_target_reached)            |
+///                                                               v                                                v
+///                                                            ABORTED ---------------------------------------> <DELETED>
 /// ```
 ///
 /// Here `sufficient_participation` means that the minimum number of
@@ -31,24 +31,23 @@
 /// equal to `max_icp_e8s`. (The total amount of ICP contributed should
 /// never be greater than `max_icp_e8s`.)
 ///
-///
 /// The dramatis personae of the `swap` canister are as follows:
 ///
-/// - The swap canister itself.
+/// * The swap canister itself.
 ///
-/// - The NNS governance canister - which is the only principal that can open
-///    the swap.
+/// * The NNS governance canister - which is the only principal that can open
+///   the swap.
 ///
-/// - The governance canister of the SNS to be decentralized.
+/// * The governance canister of the SNS to be decentralized.
 ///
-/// - The ledger canister of the SNS, i.e., the ledger of the token type
-///    being sold.
+/// * The ledger canister of the SNS, i.e., the ledger of the token type
+///   being sold.
 ///
-/// - The ICP ledger canister, or more generally of the base currency of
-///    the auction.
+/// * The ICP ledger canister, or more generally of the base currency of
+///   the auction.
 ///
-/// - The root canister of the SNS to control aspects of the SNS not
-///    controlled by the SNS governance canister.
+/// * The root canister of the SNS to control aspects of the SNS not
+///   controlled by the SNS governance canister.
 ///
 /// When the swap canister is initialized, it must be configured with
 /// the canister IDs of the other participant canisters.
@@ -110,39 +109,39 @@
 /// * Message fields are never removed.
 ///
 /// * Integer and enum fields can only have their values increase (with
-/// one exception, viz., the timestamp field for the start of a
-/// transfer is reset if the transfer fails).
+///   one exception, viz., the timestamp field for the start of a
+///   transfer is reset if the transfer fails).
 ///
 /// Data flow for the Neurons' Fund.
 ///
-/// - A SNS is created.
-/// - Proposal to open a decentralization swap for the SNS is submitted to
-///    the NNS.
-///    - ProposalToOpenDecentralizationSale
-///      - The Neurons' Fund investment amount
-///      - The parameters of the decentralization swap (`Params`).
-///    - Call to open swap:
-///      - Parameters
-///      - Neurons' Fund investments
-///      - NNS Proposal ID of the NNS proposal to open the swap.
-/// - On accept of proposal to open decentralization swap:
-///    - Compute the maturity contribution of each Neurons' Fund neuron and deduct
-///      this amount from the Neurons' Fund neuron.
-///    - The swap is informed about the corresponding amount of ICP
-///      (`CfParticipant`) in the call to open.
-///    - Call back to NNS governance after the swap is committed or aborted:
-///      - On committed swap:
-///        - Ask the NNS to mint the right amount of ICP for the SNS corresponding
-///          to the Neurons' Fund investment (the NNS governance canister keeps
-///          track of the total).
-///      - On aborted swap:
-///        - Send the information about Neurons' Fund participants
-///          (`CfParticipant`) back to NNS governance which will return it to
-///          the corresponding neurons. Assign the control of the dapp (now under
-///          the SNS control) back to the specified principals.
-/// - On reject of proposal to open decentralization swap:
-///    - Assign the control of the dapp (now under the SNS control) back to the
-///      specified principals.
+/// * A SNS is created.
+/// * Proposal to open a decentralization swap for the SNS is submitted to
+///   the NNS.
+///   * ProposalToOpenDecentralizationSale
+///     * The Neurons' Fund investment amount
+///     * The parameters of the decentralization swap (`Params`).
+///   * Call to open swap:
+///     * Parameters
+///     * Neurons' Fund investments
+///     * NNS Proposal ID of the NNS proposal to open the swap.
+/// * On accept of proposal to open decentralization swap:
+///   * Compute the maturity contribution of each Neurons' Fund neuron and deduct
+///     this amount from the Neurons' Fund neuron.
+///   * The swap is informed about the corresponding amount of ICP
+///     (`CfParticipant`) in the call to open.
+///   * Call back to NNS governance after the swap is committed or aborted:
+///     * On committed swap:
+///       * Ask the NNS to mint the right amount of ICP for the SNS corresponding
+///         to the Neurons' Fund investment (the NNS governance canister keeps
+///         track of the total).
+///     * On aborted swap:
+///       * Send the information about Neurons' Fund participants
+///         (`CfParticipant`) back to NNS governance which will return it to
+///         the corresponding neurons. Assign the control of the dapp (now under
+///         the SNS control) back to the specified principals.
+/// * On reject of proposal to open decentralization swap:
+///   * Assign the control of the dapp (now under the SNS control) back to the
+///     specified principals.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -360,7 +359,8 @@ pub struct Init {
     /// governance canister.
     ///
     /// Invariant for the OPEN state:
-    /// ```text
+    ///
+    /// ```text,text
     /// state.sns_token_e8s <= token_ledger.balance_of(<swap-canister>)
     /// ```
     #[prost(uint64, optional, tag = "24")]
@@ -401,7 +401,6 @@ pub struct Init {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
-    Eq,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -440,9 +439,10 @@ pub struct NeuronsFundParticipationConstraints {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
-    Eq,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct IdealMatchedParticipationFunction {
@@ -455,12 +455,13 @@ pub struct IdealMatchedParticipationFunction {
 /// Some Neurons' Fund neurons might be too small, and some might be too large to participate in a
 /// given SNS swap. This causes the need to adjust Neurons' Fund participation from an "ideal" amount
 /// to an "effective" amount.
+///
 /// * The ideal-participation of the Neurons' Fund refers to the value dictated by some curve that
-///    specifies how direct contributions should be matched with Neurons' Fund maturity.
+///   specifies how direct contributions should be matched with Neurons' Fund maturity.
 /// * The effective-participation of the Neurons' Fund refers to the value that the NNS Governance
-///    can actually allocate, given (1) the configuration of the Neurons' Fund at the time of
-///    execution of the corresponding CreateServiceNervousSystem proposal and (2) the amount of direct
-///    participation.
+///   can actually allocate, given (1) the configuration of the Neurons' Fund at the time of
+///   execution of the corresponding CreateServiceNervousSystem proposal and (2) the amount of direct
+///   participation.
 ///
 /// This structure represents the coefficients of a linear transformation used for
 /// mapping the Neurons' Fund ideal-participation to effective-participation on a given
@@ -468,9 +469,11 @@ pub struct IdealMatchedParticipationFunction {
 /// participants' contributions: `f: ICP e8s -> ICP e8s`; then the *ideal* Neuron's Fund
 /// participation amount corresponding to the direct participation of `x` ICP e8s is
 /// `f(x)`, while the Neuron's Fund *effective* participation amount is:
-/// ```
+///
+/// ```text,
 /// g(x) = (c.slope_numerator / c.slope_denominator) * f(x) + c.intercept
 /// ```
+///
 /// where `c: LinearScalingCoefficient` with
 /// `c.from_direct_participation_icp_e8s <= x < c.to_direct_participation_icp_e8s`.
 /// Note that we represent the slope as a rational number (as opposed to floating point),
@@ -480,10 +483,11 @@ pub struct IdealMatchedParticipationFunction {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
-    Eq,
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct LinearScalingCoefficient {
@@ -511,7 +515,6 @@ pub struct LinearScalingCoefficient {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
-    Eq,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -540,7 +543,6 @@ pub struct CfNeuron {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
-    Eq,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -566,10 +568,11 @@ pub struct CfParticipant {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
-    Eq,
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NeuronBasketConstructionParameters {
@@ -592,6 +595,8 @@ pub struct NeuronBasketConstructionParameters {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct Params {
@@ -657,7 +662,8 @@ pub struct Params {
     /// governance canister.
     ///
     /// Invariant for the OPEN state:
-    /// ```text
+    ///
+    /// ```text,text
     /// state.sns_token_e8s <= token_ledger.balance_of(<swap-canister>)
     /// ```
     #[prost(uint64, tag = "7")]
@@ -687,6 +693,8 @@ pub struct Params {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct TransferableAmount {
@@ -716,6 +724,8 @@ pub struct TransferableAmount {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct BuyerState {
@@ -730,13 +740,14 @@ pub struct BuyerState {
     ///
     /// Invariant between canisters in the OPEN state:
     ///
-    ///   ```text
-    ///   icp.amount_e8 <= icp_ledger.balance_of(subaccount(swap_canister, P)),
-    ///   ```
+    /// ```text,text
+    /// icp.amount_e8 <= icp_ledger.balance_of(subaccount(swap_canister, P)),
+    /// ```
     ///
     /// where `P` is the principal ID associated with this buyer's state.
     ///
     /// ownership
+    ///
     /// * PENDING - a `BuyerState` cannot exist
     /// * OPEN - owned by the buyer, cannot be transferred out
     /// * COMMITTED - owned by the SNS governance canister, can be transferred out
@@ -758,6 +769,8 @@ pub struct BuyerState {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct DirectInvestment {
@@ -801,6 +814,8 @@ pub struct CfInvestment {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct TimeWindow {
@@ -949,6 +964,8 @@ pub mod sns_neuron_recipe {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetCanisterStatusRequest {}
@@ -961,6 +978,8 @@ pub struct GetCanisterStatusRequest {}
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetStateRequest {}
@@ -986,6 +1005,8 @@ pub struct GetStateResponse {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetBuyerStateRequest {
@@ -1001,6 +1022,8 @@ pub struct GetBuyerStateRequest {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetBuyerStateResponse {
@@ -1015,6 +1038,8 @@ pub struct GetBuyerStateResponse {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetBuyersTotalRequest {}
@@ -1026,6 +1051,8 @@ pub struct GetBuyersTotalRequest {}
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetBuyersTotalResponse {
@@ -1080,6 +1107,8 @@ pub struct DerivedState {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SetOpenTimeWindowRequest {
@@ -1098,6 +1127,8 @@ pub struct SetOpenTimeWindowRequest {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SetOpenTimeWindowResponse {}
@@ -1112,6 +1143,8 @@ pub struct SetOpenTimeWindowResponse {}
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct RefreshBuyerTokensRequest {
@@ -1132,6 +1165,8 @@ pub struct RefreshBuyerTokensRequest {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct RefreshBuyerTokensResponse {
@@ -1150,6 +1185,8 @@ pub struct RefreshBuyerTokensResponse {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct FinalizeSwapRequest {}
@@ -1194,6 +1231,8 @@ pub struct FinalizeSwapResponse {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SweepResult {
@@ -1219,7 +1258,7 @@ pub struct SweepResult {
     #[prost(uint32, tag = "5")]
     pub global_failures: u32,
 }
-/// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
+/// Analogous to Rust type Result\<SetModeResponse, CanisterCallError>.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -1227,6 +1266,8 @@ pub struct SweepResult {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SetModeCallResult {
@@ -1243,6 +1284,8 @@ pub mod set_mode_call_result {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct SetModeResult {}
@@ -1253,6 +1296,8 @@ pub mod set_mode_call_result {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Possibility {
@@ -1262,7 +1307,7 @@ pub mod set_mode_call_result {
         Err(super::CanisterCallError),
     }
 }
-/// Analogous to Rust type Result<SetDappControllersResponse, CanisterCallError>.
+/// Analogous to Rust type Result\<SetDappControllersResponse, CanisterCallError>.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -1303,6 +1348,8 @@ pub mod set_dapp_controllers_call_result {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SettleCommunityFundParticipationResult {
@@ -1322,6 +1369,8 @@ pub mod settle_community_fund_participation_result {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Response {
@@ -1336,6 +1385,8 @@ pub mod settle_community_fund_participation_result {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Possibility {
@@ -1353,6 +1404,8 @@ pub mod settle_community_fund_participation_result {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SettleNeuronsFundParticipationResult {
@@ -1376,6 +1429,8 @@ pub mod settle_neurons_fund_participation_result {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Ok {
@@ -1386,9 +1441,9 @@ pub mod settle_neurons_fund_participation_result {
     }
     /// The failure branch of the result. This message can be set for a
     /// number of reasons not limited to
-    ///     - invalid state
-    ///     - replica errors
-    ///     - canister errors
+    /// - invalid state
+    /// - replica errors
+    /// - canister errors
     ///
     /// While some of these errors are transient and can immediately retried,
     /// others require manual intervention. The error messages and logs of the
@@ -1400,6 +1455,8 @@ pub mod settle_neurons_fund_participation_result {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Error {
@@ -1413,6 +1470,8 @@ pub mod settle_neurons_fund_participation_result {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Possibility {
@@ -1477,6 +1536,8 @@ pub mod set_dapp_controllers_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct FailedUpdate {
@@ -1494,6 +1555,8 @@ pub mod set_dapp_controllers_response {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GovernanceError {
@@ -1644,6 +1707,8 @@ pub mod governance_error {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SettleCommunityFundParticipation {
@@ -1670,6 +1735,8 @@ pub mod settle_community_fund_participation {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Committed {
@@ -1696,6 +1763,8 @@ pub mod settle_community_fund_participation {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Aborted {}
@@ -1708,6 +1777,8 @@ pub mod settle_community_fund_participation {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Result {
@@ -1722,18 +1793,19 @@ pub mod settle_community_fund_participation {
 /// When a swap ends, the Swap canister notifies the Neurons' Fund of the swap's ultimate result,
 /// which can be either `Committed` or `Aborted`. Note that currently, the Neurons' Fund is managed
 /// by the NNS Governance canister.
+///
 /// * If the result is `Committed`:
-///    - Neurons' Fund computes the "effective" participation amount for each of its neurons (as per
-///      the Matched Funding rules). This computation is based on the total direct participation
-///      amount, which is thus a field of `Committed`.
-///    - Neurons' Fund converts the "effective" amount of maturity into ICP by:
-///      - Requesting the ICP Ledger to mint an appropriate amount of ICP tokens and sending them
-///        to the SNS treasury.
-///      - Refunding whatever maturity is left over (the maximum possible maturity is reserved by
-///        the Neurons' Fund before the swap begins).
-///    - Neurons' Fund returns the Neurons' Fund participants back to the Swap canister
-///      (see SettleNeuronsFundParticipationResponse).
-///    - The Swap canister then creates SNS neurons for the Neurons' Fund participants.
+///   * Neurons' Fund computes the "effective" participation amount for each of its neurons (as per
+///     the Matched Funding rules). This computation is based on the total direct participation
+///     amount, which is thus a field of `Committed`.
+///   * Neurons' Fund converts the "effective" amount of maturity into ICP by:
+///     * Requesting the ICP Ledger to mint an appropriate amount of ICP tokens and sending them
+///       to the SNS treasury.
+///     * Refunding whatever maturity is left over (the maximum possible maturity is reserved by
+///       the Neurons' Fund before the swap begins).
+///   * Neurons' Fund returns the Neurons' Fund participants back to the Swap canister
+///     (see SettleNeuronsFundParticipationResponse).
+///   * The Swap canister then creates SNS neurons for the Neurons' Fund participants.
 /// * If the result is Aborted, the Neurons' Fund is refunded for all maturity reserved for this SNS.
 ///
 /// This design assumes trust between the Neurons' Fund and the SNS Swap canisters. In the one hand,
@@ -1758,6 +1830,8 @@ pub mod settle_community_fund_participation {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SettleNeuronsFundParticipationRequest {
@@ -1776,23 +1850,24 @@ pub struct SettleNeuronsFundParticipationRequest {
 pub mod settle_neurons_fund_participation_request {
     /// When this happens, the NNS Governance needs to do several things:
     /// (1) Compute the effective amount of ICP per neuron of the Neurons' Fund as a function of
-    ///      `total_direct_participation_icp_e8s`. The overall Neurons' Fund participation should
-    ///      equal `total_neurons_fund_contribution_icp_e8s`.
+    /// `total_direct_participation_icp_e8s`. The overall Neurons' Fund participation should
+    /// equal `total_neurons_fund_contribution_icp_e8s`.
     /// (2) Mint (via the ICP Ledger) and sent to the SNS governance the amount of
-    ///      `total_neurons_fund_contribution_icp_e8s`.
+    /// `total_neurons_fund_contribution_icp_e8s`.
     /// (3) Respond to this request with `SettleNeuronsFundParticipationResponse`, providing
-    ///      the set of `NeuronsFundParticipant`s with the effective amount of ICP per neuron,
-    ///      as computed in step (1).
+    /// the set of `NeuronsFundParticipant`s with the effective amount of ICP per neuron,
+    /// as computed in step (1).
     /// (4) Refund each neuron of the Neurons' Fund with (reserved - effective) amount of ICP.
     /// Effective amounts depend on `total_direct_participation_icp_e8s` and the participation limits
     /// of a particular SNS instance, namely, each participation must be between
     /// `min_participant_icp_e8s` and `max_participant_icp_e8s`.
-    /// - If a neuron of the Neurons' Fund has less than `min_participant_icp_e8s` worth of maturity,
-    ///    then it is ineligible to participate.
-    /// - If a neuron of the Neurons' Fund has more than `max_participant_icp_e8s` worth of maturity,
-    ///    then its participation amount is limited to `max_participant_icp_e8s`.
-    /// Reserved amounts are computed as the minimal upper bound on the effective amounts, i.e., when
-    /// the value `total_direct_participation_icp_e8s` reaches its theoretical maximum.
+    ///
+    /// * If a neuron of the Neurons' Fund has less than `min_participant_icp_e8s` worth of maturity,
+    ///   then it is ineligible to participate.
+    /// * If a neuron of the Neurons' Fund has more than `max_participant_icp_e8s` worth of maturity,
+    ///   then its participation amount is limited to `max_participant_icp_e8s`.
+    ///   Reserved amounts are computed as the minimal upper bound on the effective amounts, i.e., when
+    ///   the value `total_direct_participation_icp_e8s` reaches its theoretical maximum.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -1800,6 +1875,8 @@ pub mod settle_neurons_fund_participation_request {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Committed {
@@ -1824,6 +1901,8 @@ pub mod settle_neurons_fund_participation_request {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Aborted {}
@@ -1836,6 +1915,8 @@ pub mod settle_neurons_fund_participation_request {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Result {
@@ -1942,6 +2023,8 @@ pub mod settle_neurons_fund_participation_response {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NeuronId {
@@ -1956,6 +2039,8 @@ pub struct NeuronId {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct CanisterCallError {
@@ -1974,6 +2059,8 @@ pub struct CanisterCallError {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ErrorRefundIcpRequest {
@@ -1989,6 +2076,8 @@ pub struct ErrorRefundIcpRequest {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ErrorRefundIcpResponse {
@@ -2006,6 +2095,8 @@ pub mod error_refund_icp_response {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Ok {
@@ -2021,6 +2112,8 @@ pub mod error_refund_icp_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Err {
@@ -2095,6 +2188,8 @@ pub mod error_refund_icp_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Result {
@@ -2113,6 +2208,8 @@ pub mod error_refund_icp_response {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetLifecycleRequest {}
@@ -2125,6 +2222,8 @@ pub struct GetLifecycleRequest {}
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetLifecycleResponse {
@@ -2143,6 +2242,8 @@ pub struct GetLifecycleResponse {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetAutoFinalizationStatusRequest {}
@@ -2177,6 +2278,8 @@ pub struct GetAutoFinalizationStatusResponse {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetInitRequest {}
@@ -2203,6 +2306,8 @@ pub struct GetInitResponse {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetDerivedStateRequest {}
@@ -2250,6 +2355,8 @@ pub struct GetDerivedStateResponse {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct Icrc1Account {
@@ -2279,6 +2386,8 @@ pub struct Icrc1Account {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct Ticket {
@@ -2306,6 +2415,8 @@ pub struct Ticket {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetOpenTicketRequest {}
@@ -2317,6 +2428,8 @@ pub struct GetOpenTicketRequest {}
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetOpenTicketResponse {
@@ -2333,6 +2446,8 @@ pub mod get_open_ticket_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Ok {
@@ -2350,6 +2465,8 @@ pub mod get_open_ticket_response {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Err {
@@ -2409,6 +2526,8 @@ pub mod get_open_ticket_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Result {
@@ -2426,6 +2545,8 @@ pub mod get_open_ticket_response {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NewSaleTicketRequest {
@@ -2445,6 +2566,8 @@ pub struct NewSaleTicketRequest {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NewSaleTicketResponse {
@@ -2461,6 +2584,8 @@ pub mod new_sale_ticket_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Ok {
@@ -2476,6 +2601,8 @@ pub mod new_sale_ticket_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Err {
@@ -2500,6 +2627,8 @@ pub mod new_sale_ticket_response {
             Clone,
             Copy,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Message,
         )]
         pub struct InvalidUserAmount {
@@ -2582,6 +2711,8 @@ pub mod new_sale_ticket_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Result {
@@ -2603,6 +2734,8 @@ pub mod new_sale_ticket_response {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ListDirectParticipantsRequest {
@@ -2631,13 +2764,14 @@ pub struct ListDirectParticipantsResponse {
     /// `list_direct_participants`.
     /// The list is a page of all the buyers in the Swap canister at the time of
     /// the method call. The size of the page is equal to either:
-    /// - the max page size (30,000),
-    /// - the corresponding `ListDirectParticipantsRequest.limit`,
-    /// - the remaining Participants, if there are fewer than `limit` participants
-    ///    left.
+    ///
+    /// * the max page size (30,000),
+    /// * the corresponding `ListDirectParticipantsRequest.limit`,
+    /// * the remaining Participants, if there are fewer than `limit` participants
+    ///   left.
     ///
     /// Pagination through the entire list of participants is complete if
-    /// len(participants) < `ListDirectParticipantsRequest.limit`.
+    /// len(participants) \< `ListDirectParticipantsRequest.limit`.
     #[prost(message, repeated, tag = "1")]
     pub participants: ::prost::alloc::vec::Vec<Participant>,
 }
@@ -2649,6 +2783,8 @@ pub struct ListDirectParticipantsResponse {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct Participant {
@@ -2670,6 +2806,8 @@ pub struct Participant {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetSaleParametersRequest {}
@@ -2682,6 +2820,8 @@ pub struct GetSaleParametersRequest {}
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetSaleParametersResponse {
@@ -2697,6 +2837,8 @@ pub struct GetSaleParametersResponse {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ListCommunityFundParticipantsRequest {
@@ -2731,6 +2873,8 @@ pub struct ListCommunityFundParticipantsResponse {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ListSnsNeuronRecipesRequest {
@@ -2765,6 +2909,8 @@ pub struct ListSnsNeuronRecipesResponse {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NotifyPaymentFailureRequest {}
@@ -2778,6 +2924,8 @@ pub struct NotifyPaymentFailureRequest {}
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NotifyPaymentFailureResponse {
@@ -2822,7 +2970,7 @@ pub enum Lifecycle {
     /// happens first.
     Open = 2,
     /// In COMMITTED state the token price has been determined; on a call to
-    /// finalize`, buyers receive their SNS neurons and the SNS governance canister
+    /// finalize\`, buyers receive their SNS neurons and the SNS governance canister
     /// receives the ICP.
     Committed = 3,
     /// In ABORTED state the token swap has been aborted, e.g., because the due

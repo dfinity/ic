@@ -73,6 +73,10 @@ pub enum ValidationError {
     ReplacedCanisterNotStopped(Reserved),
     ReplacedCanisterHasSnapshots(Reserved),
     MigratedCanisterInsufficientCycles(Reserved),
+    #[strum(to_string = "ValidationError::CloudEngineSubnet {{ subnet: {subnet} }}")]
+    CloudEngineSubnet {
+        subnet: Principal,
+    },
     #[strum(to_string = "ValidationError::CallFailed {{ reason: {reason} }}")]
     CallFailed {
         reason: String,

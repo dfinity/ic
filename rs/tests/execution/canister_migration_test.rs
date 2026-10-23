@@ -68,7 +68,7 @@ struct MigrateCanisterArgs {
     pub replaced_canister_id: Principal,
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum ValidationError {
     MigrationsDisabled(Reserved),
     RateLimited(Reserved),
@@ -86,7 +86,7 @@ pub enum ValidationError {
     CallFailed { reason: String },
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 enum MigrationStatus {
     InProgress { status: String },
     Failed { reason: String, time: u64 },
@@ -125,7 +125,8 @@ async fn add_controller(
 ) {
     let (status_result,) = management_canister
         .canister_status(&canister.canister_id())
-        .call_and_wait()
+        .as_update()
+        .call()
         .await
         .expect("Failed to query canister controllers.");
 

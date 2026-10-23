@@ -8,7 +8,8 @@ use ic_base_types::{NodeId, PrincipalId};
 use ic_certified_map::{AsHashTree, HashTree};
 use ic_nervous_system_string::clamp_debug_len;
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID, ROOT_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
+    ENGINE_CONTROLLER_CANISTER_ID, GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID, ROOT_CANISTER_ID,
+    SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
@@ -36,6 +37,7 @@ use prost::Message;
 use registry_canister::{
     certification::{current_version_tree, hash_tree_to_proto},
     common::LOG_PREFIX,
+    get_subnet::{GetSubnetRequest, SubnetRecord},
     init::RegistryCanisterInitPayload,
     mutations::{
         complete_canister_migration::CompleteCanisterMigrationPayload,
@@ -44,13 +46,16 @@ use registry_canister::{
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
         do_change_subnet_membership::ChangeSubnetMembershipPayload,
         do_create_subnet::{CreateSubnetPayload, NewSubnet},
+        do_delete_subnet::DeleteSubnetPayload,
         do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
         do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
+        do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
         do_recover_subnet::RecoverSubnetPayload,
         do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
         do_remove_node_operators::RemoveNodeOperatorsPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
+        do_set_default_initial_dkg_subnet::SetDefaultInitialDkgSubnetPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
         do_set_subnet_operational_level::SetSubnetOperationalLevelPayload,
         do_split_subnet::SplitSubnetPayload,
@@ -67,12 +72,14 @@ use registry_canister::{
             DeployHostosToSomeNodes, UpdateNodesHostosVersionPayload,
         },
         do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
+        do_update_standard_engine_replica_version::UpdateStandardEngineReplicaVersionPayload,
         do_update_subnet::UpdateSubnetPayload,
         do_update_subnet_admins::UpdateSubnetAdminsPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
         firewall::{
             AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
         },
+        merge_subnets::MergeSubnetsPayload,
         node_management::{
             do_remove_node_directly::RemoveNodeDirectlyPayload,
             do_remove_nodes::RemoveNodesPayload,
@@ -125,6 +132,15 @@ fn check_caller_is_governance_and_log(method_name: &str) {
     assert_eq!(
         caller,
         GOVERNANCE_CANISTER_ID.into(),
+        "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
+    );
+}
+
+fn check_caller_is_governance_or_engine_controller_and_log(method_name: &str) {
+    let caller = dfn_core::api::caller();
+    println!("{LOG_PREFIX}call: {method_name} from: {caller}");
+    assert!(
+        caller == GOVERNANCE_CANISTER_ID.into() || caller == ENGINE_CONTROLLER_CANISTER_ID.into(),
         "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
     );
 }
@@ -194,8 +210,8 @@ fn canister_init() {
     #[cfg(feature = "test")]
     {
         use registry_canister::flags::temporary_overrides::{
-            test_set_swapping_enabled_subnets, test_set_swapping_status,
-            test_set_swapping_whitelisted_callers,
+            test_set_subnet_splitting_enabled, test_set_swapping_enabled_subnets,
+            test_set_swapping_status, test_set_swapping_whitelisted_callers,
         };
 
         println!("{LOG_PREFIX}canister_init: Overriding swapping flags");
@@ -219,6 +235,13 @@ fn canister_init() {
         );
         test_set_swapping_enabled_subnets(
             init_payload.swapping_enabled_subnets.unwrap_or_default(),
+        );
+        println!(
+            "{LOG_PREFIX}canister_init: Subnet Splitting enabled: {:?}",
+            init_payload.is_subnet_splitting_enabled
+        );
+        test_set_subnet_splitting_enabled(
+            init_payload.is_subnet_splitting_enabled.unwrap_or_default(),
         );
     }
 }
@@ -539,13 +562,14 @@ fn revise_elected_replica_versions_(payload: ReviseElectedGuestosVersionsPayload
 
 #[unsafe(export_name = "canister_update deploy_guestos_to_all_subnet_nodes")]
 fn deploy_guestos_to_all_subnet_nodes() {
-    check_caller_is_governance_and_log("deploy_guestos_to_all_subnet_nodes");
+    check_caller_is_governance_or_engine_controller_and_log("deploy_guestos_to_all_subnet_nodes");
     over(candid_one, deploy_guestos_to_all_subnet_nodes_);
 }
 
 #[candid_method(update, rename = "deploy_guestos_to_all_subnet_nodes")]
 fn deploy_guestos_to_all_subnet_nodes_(payload: DeployGuestosToAllSubnetNodesPayload) {
-    registry_mut().do_deploy_guestos_to_all_subnet_nodes(payload);
+    let caller = dfn_core::api::caller();
+    registry_mut().do_deploy_guestos_to_all_subnet_nodes(caller, payload);
     recertify_registry();
 }
 
@@ -621,7 +645,7 @@ fn add_node_operator_(payload: AddNodeOperatorPayload) {
 
 #[unsafe(export_name = "canister_update create_subnet")]
 fn create_subnet() {
-    check_caller_is_governance_and_log("create_subnet");
+    check_caller_is_governance_or_engine_controller_and_log("create_subnet");
     over_async(candid_one, |payload: CreateSubnetPayload| async move {
         create_subnet_(payload).await
     });
@@ -636,6 +660,22 @@ async fn create_subnet_(payload: CreateSubnetPayload) -> Result<NewSubnet, Strin
     let new_subnet = registry_mut().do_create_subnet(payload).await;
     recertify_registry();
     Ok(new_subnet)
+}
+
+#[unsafe(export_name = "canister_update delete_subnet")]
+fn delete_subnet() {
+    check_caller_is_governance_or_engine_controller_and_log("delete_subnet");
+    over(candid_one, |payload: DeleteSubnetPayload| {
+        delete_subnet_(payload)
+    });
+}
+
+#[candid_method(update, rename = "delete_subnet")]
+fn delete_subnet_(payload: DeleteSubnetPayload) -> Result<(), String> {
+    let caller = dfn_core::api::caller();
+    registry_mut().do_delete_subnet(caller, payload)?;
+    recertify_registry();
+    Ok(())
 }
 
 #[unsafe(export_name = "canister_update add_nodes_to_subnet")]
@@ -682,7 +722,7 @@ fn remove_nodes_from_subnet_(payload: RemoveNodesFromSubnetPayload) {
 
 #[unsafe(export_name = "canister_update change_subnet_membership")]
 fn change_subnet_membership() {
-    check_caller_is_governance_and_log("change_subnet_membership");
+    check_caller_is_governance_or_engine_controller_and_log("change_subnet_membership");
     over(candid_one, |payload: ChangeSubnetMembershipPayload| {
         change_subnet_membership_(payload)
     });
@@ -811,6 +851,19 @@ fn swap_node_in_subnet_directly_(payload: SwapNodeInSubnetDirectlyPayload) {
     recertify_registry();
 }
 
+#[unsafe(export_name = "canister_update migrate_node_operator_directly")]
+fn migrate_node_operator_directly() {
+    over(candid_one, |payload: MigrateNodeOperatorPayload| {
+        migrate_node_operator_directly_(payload)
+    });
+}
+
+#[candid_method(update, rename = "migrate_node_operator_directly")]
+fn migrate_node_operator_directly_(payload: MigrateNodeOperatorPayload) {
+    registry_mut().do_migrate_node_operator_directly(payload);
+    recertify_registry();
+}
+
 #[unsafe(export_name = "canister_update remove_node_operators")]
 fn remove_node_operators() {
     check_caller_is_governance_and_log("remove_node_operators");
@@ -827,7 +880,7 @@ fn remove_node_operators_(payload: RemoveNodeOperatorsPayload) {
 
 #[unsafe(export_name = "canister_update update_subnet")]
 fn update_subnet() {
-    check_caller_is_governance_and_log("update_subnet");
+    check_caller_is_governance_or_engine_controller_and_log("update_subnet");
     over(candid_one, |payload: UpdateSubnetPayload| {
         update_subnet_(payload)
     });
@@ -835,7 +888,8 @@ fn update_subnet() {
 
 #[candid_method(update, rename = "update_subnet")]
 fn update_subnet_(payload: UpdateSubnetPayload) {
-    registry_mut().do_update_subnet(payload);
+    let caller = dfn_core::api::caller();
+    registry_mut().do_update_subnet(caller, payload);
     recertify_registry();
 }
 
@@ -945,6 +999,18 @@ fn update_unassigned_nodes_config_(payload: UpdateUnassignedNodesConfigPayload) 
     recertify_registry();
 }
 
+#[unsafe(export_name = "canister_update update_standard_engine_replica_version")]
+fn update_standard_engine_replica_version() {
+    check_caller_is_governance_and_log("update_standard_engine_replica_version");
+    over(candid_one, update_standard_engine_replica_version_);
+}
+
+#[candid_method(update, rename = "update_standard_engine_replica_version")]
+fn update_standard_engine_replica_version_(payload: UpdateStandardEngineReplicaVersionPayload) {
+    registry_mut().do_update_standard_engine_replica_version(payload);
+    recertify_registry();
+}
+
 #[unsafe(export_name = "canister_update deploy_guestos_to_all_unassigned_nodes")]
 fn deploy_guestos_to_all_unassigned_nodes() {
     check_caller_is_governance_and_log("deploy_guestos_to_all_unassigned_nodes");
@@ -1012,6 +1078,24 @@ fn reroute_canister_ranges_(payload: RerouteCanisterRangesPayload) {
         .unwrap_or_else(|error_message| {
             trap_with(&format!(
                 "{LOG_PREFIX} Reroute canister ranges failed: {error_message}"
+            ))
+        });
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update merge_subnets")]
+fn merge_subnets() {
+    check_caller_is_governance_and_log("merge_subnets");
+    over(candid_one, merge_subnets_);
+}
+
+#[candid_method(update, rename = "merge_subnets")]
+fn merge_subnets_(payload: MergeSubnetsPayload) {
+    registry_mut()
+        .merge_subnets(payload)
+        .unwrap_or_else(|error_message| {
+            trap_with(&format!(
+                "{LOG_PREFIX} Merge subnets failed: {error_message}"
             ))
         });
     recertify_registry();
@@ -1141,6 +1225,16 @@ fn get_subnet_for_canister_(arg: GetSubnetForCanisterRequest) -> Result<SubnetFo
         .map_err(|e| e.to_string())
 }
 
+#[unsafe(export_name = "canister_query get_subnet")]
+fn get_subnet() {
+    over(candid_one, get_subnet_)
+}
+
+#[candid_method(query, rename = "get_subnet")]
+fn get_subnet_(arg: GetSubnetRequest) -> Result<SubnetRecord, String> {
+    registry().get_subnet_record(arg)
+}
+
 #[unsafe(export_name = "canister_update add_node")]
 fn add_node() {
     // This method can be called by anyone
@@ -1261,6 +1355,18 @@ fn set_subnet_operational_level() {
 #[candid_method(update, rename = "set_subnet_operational_level")]
 fn set_subnet_operational_level_(payload: SetSubnetOperationalLevelPayload) {
     registry_mut().do_set_subnet_operational_level(payload);
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update set_default_initial_dkg_subnet")]
+fn set_default_initial_dkg_subnet() {
+    check_caller_is_governance_and_log("set_default_initial_dkg_subnet");
+    over(candid_one, set_default_initial_dkg_subnet_);
+}
+
+#[candid_method(update, rename = "set_default_initial_dkg_subnet")]
+fn set_default_initial_dkg_subnet_(payload: SetDefaultInitialDkgSubnetPayload) {
+    registry_mut().do_set_default_initial_dkg_subnet(payload);
     recertify_registry();
 }
 

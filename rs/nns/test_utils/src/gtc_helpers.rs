@@ -139,7 +139,7 @@ impl GenesisTokenCanisterInitPayloadBuilder {
 
             println!(
                 "Seed used in generating GTC release schedule is: {:?}",
-                &seed
+                seed
             );
 
             let rng = StdRng::from_seed(seed);

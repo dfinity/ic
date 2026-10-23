@@ -3,6 +3,7 @@ mod tests;
 
 pub mod get_btc_address;
 pub mod get_withdrawal_account;
+pub mod icrc21;
 pub mod retrieve_btc;
 pub mod update_balance;
 

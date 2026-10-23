@@ -43,6 +43,11 @@ pub struct NnsInitPayloads {
     // Option<${CANISTER}InitPayload>. When an optional canister is enabled,
     // these fields contain Some (otherwise, they contain None).
     pub subnet_rental: Option<()>,
+
+    /// Optional init args for the engine controller canister. `None` means
+    /// "install with candid `null`", which falls back to the canister's
+    /// hard-coded defaults.
+    pub engine_controller: Option<crate::itest_helpers::EngineControllerInitArgs>,
 }
 
 /// Builder to help create the initial payloads for the NNS canisters.
@@ -57,6 +62,7 @@ pub struct NnsInitPayloadsBuilder {
     pub sns_wasms: SnsWasmCanisterInitPayloadBuilder,
     pub index: ic_icp_index::InitArg,
     pub subnet_rental: SubnetRentalCanisterInitPayloadBuilder,
+    pub engine_controller: Option<crate::itest_helpers::EngineControllerInitArgs>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -86,7 +92,16 @@ impl NnsInitPayloadsBuilder {
                 retrieve_blocks_from_ledger_interval_seconds: None,
             },
             subnet_rental: SubnetRentalCanisterInitPayloadBuilder::new(),
+            engine_controller: None,
         }
+    }
+
+    pub fn with_engine_controller_init_args(
+        &mut self,
+        args: crate::itest_helpers::EngineControllerInitArgs,
+    ) -> &mut Self {
+        self.engine_controller = Some(args);
+        self
     }
 
     pub fn with_ledger_init_state(&mut self, state: LedgerCanisterInitPayload) -> &mut Self {
@@ -276,6 +291,7 @@ impl NnsInitPayloadsBuilder {
             sns_wasms: self.sns_wasms.build(),
             index: self.index.clone(),
             subnet_rental: self.subnet_rental.build(),
+            engine_controller: self.engine_controller.clone(),
         }
     }
 }

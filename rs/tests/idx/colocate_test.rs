@@ -6,7 +6,7 @@ use ic_system_test_driver::driver::driver_setup::{
 };
 use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::group::{CliArguments, SystemTestGroup};
-use ic_system_test_driver::driver::ic::VmResources;
+use ic_system_test_driver::driver::ic::VmResourceOverrides;
 use ic_system_test_driver::driver::test_env::RequiredHostFeaturesFromCmdLine;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::{
@@ -32,6 +32,12 @@ pub const RUNTIME_DEPS_TAR_ZST: &str = "runtime_deps.tar.zst";
 pub const ENV_TAR_ZST: &str = "env.tar.zst";
 const DASHBOARDS_TAR_ZST: &str = "dashboards.tar.zst";
 
+/// Where the runtime-dep tarball is unpacked inside the UVM container: the host
+/// dir /home/admin/test is bind-mounted at /home/root/test (see the `docker run`
+/// below), and the deps land under runtime_deps/ there. Mirrors the colocated
+/// `runtime_dep_base` in run_systest.sh.
+const CONTAINER_RUNTIME_DEPS_DIR: &str = "/home/root/test/runtime_deps";
+
 pub const TEST_STATUS_CHECK_RETRY: Duration = Duration::from_secs(5);
 type ExitCode = i32;
 
@@ -40,7 +46,6 @@ fn main() -> Result<()> {
         .with_overall_timeout(Duration::from_secs(3 * 60 * 60))
         .with_timeout_per_test(Duration::from_secs(3 * 60 * 60))
         .with_setup(setup)
-        .without_assert_no_replica_restarts()
         .remove_all_metrics_to_check()
         .execute_from_args()?;
     Ok(())
@@ -63,14 +68,14 @@ fn setup(env: TestEnv) {
             .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
             .unwrap_or_default();
 
-    let vm_resources: VmResources = env::var("COLOCATED_TEST_DRIVER_VM_RESOURCES")
+    let vm_resource_overrides: VmResourceOverrides = env::var("COLOCATED_TEST_DRIVER_VM_RESOURCES")
         .map_err(|e| e.to_string())
         .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
         .unwrap_or_default();
 
     let uvm = UniversalVm::new(UVM_NAME.to_string())
         .with_required_host_features(host_features)
-        .with_vm_resources(vm_resources)
+        .with_resource_overrides(vm_resource_overrides)
         .with_config_img(
             Path::new(&env::var("COLOCATED_UVM_CONFIG_IMAGE_PATH").unwrap()).to_path_buf(),
         );
@@ -167,7 +172,13 @@ fn setup(env: TestEnv) {
             .output()
             .unwrap_or_else(|e| panic!("Failed to list env: {e}"));
 
-        file.write_all(&output.stdout).expect("Could not write env");
+        // run_systest.sh leaves MKFS_FAT/MCOPY pointing at their host location
+        // (the colocated wrapper dereferences them locally, see UniversalVm::start).
+        // Inside the UVM container the runtime deps live under
+        // CONTAINER_RUNTIME_DEPS_DIR, so rewrite just those two variables for the
+        // env we forward to the container's (inner) test driver.
+        let env_file = rewrite_fat_tool_paths_for_container(&output.stdout);
+        file.write_all(&env_file).expect("Could not write env");
 
         scp_send_to(
             log.clone(),
@@ -326,6 +337,37 @@ chmod +x /home/admin/run
     std::thread::sleep(EXTRA_TIME_LOG_COLLECTION);
     assert_eq!(0, test_exit_code, "test finished with failure");
     info!(log, "test execution has finished successfully");
+}
+
+/// Rewrites the `MKFS_FAT`/`MCOPY` variables in a `KEY=VALUE`-per-line env dump so they point at
+/// the runtime-deps location inside the UVM container instead of their host path. `run_systest.sh`
+/// intentionally leaves them host-pathed because the colocate wrapper dereferences them locally
+/// (building the driver VM's config image); the inner test driver, running in the container, needs
+/// the in-container path. Only the directory changes (the symlink basename is identical on both
+/// sides). Operates on raw bytes so a non-UTF-8 entry elsewhere in the dump is preserved verbatim
+/// rather than corrupted.
+fn rewrite_fat_tool_paths_for_container(env_dump: &[u8]) -> Vec<u8> {
+    const PREFIXES: [&[u8]; 2] = [b"MKFS_FAT=", b"MCOPY="];
+    let mut out = Vec::with_capacity(env_dump.len());
+    for (i, line) in env_dump.split(|&b| b == b'\n').enumerate() {
+        if i > 0 {
+            out.push(b'\n');
+        }
+        match PREFIXES
+            .iter()
+            .find_map(|prefix| line.strip_prefix(*prefix).map(|value| (*prefix, value)))
+        {
+            Some((prefix, value)) => {
+                let name = value.rsplit(|&b| b == b'/').next().unwrap_or(value);
+                out.extend_from_slice(prefix);
+                out.extend_from_slice(CONTAINER_RUNTIME_DEPS_DIR.as_bytes());
+                out.push(b'/');
+                out.extend_from_slice(name);
+            }
+            None => out.extend_from_slice(line),
+        }
+    }
+    out
 }
 
 fn start_test(env: TestEnv, uvm: &DeployedUniversalVm) {

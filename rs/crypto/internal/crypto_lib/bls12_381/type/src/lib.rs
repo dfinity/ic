@@ -2073,7 +2073,7 @@ macro_rules! declare_pippengers_for {
                 for s in scalars {
                     let sb = s.serialize();
 
-                    let mut window = [0u8; Window::WINDOWS];
+                    let mut window = [0_u8; Window::WINDOWS];
                     for i in 0..Window::WINDOWS {
                         window[i] = Window::extract(&sb, i);
                     }

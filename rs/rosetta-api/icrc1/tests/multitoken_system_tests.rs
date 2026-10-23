@@ -835,7 +835,7 @@ fn test_blocks() {
                             });
 
                             assert_eq!(
-                                hex::encode(block.clone().get_block_hash().clone()),
+                                hex::encode(block.clone().get_block_hash()),
                                 expected_block_response
                                     .clone()
                                     .block
@@ -848,9 +848,7 @@ fn test_blocks() {
                                 .block(
                                     icrc1_ledgers[0].network_identifier().clone(),
                                     PartialBlockIdentifier {
-                                        hash: Some(hex::encode(
-                                            block.clone().get_block_hash().clone(),
-                                        )),
+                                        hash: Some(hex::encode(block.clone().get_block_hash())),
                                         index: Some(block.index),
                                     },
                                 )
@@ -999,7 +997,7 @@ fn test_block_transaction() {
                                 });
 
                             assert_eq!(
-                                hex::encode(block.clone().get_transaction_hash().clone()),
+                                hex::encode(block.clone().get_transaction_hash()),
                                 expected_block_transaction_response
                                     .clone()
                                     .transaction
@@ -1020,12 +1018,10 @@ fn test_block_transaction() {
                                     icrc1_ledgers[0].network_identifier(),
                                     BlockIdentifier {
                                         index: block.index,
-                                        hash: hex::encode(block.clone().get_block_hash().clone()),
+                                        hash: hex::encode(block.clone().get_block_hash()),
                                     },
                                     TransactionIdentifier {
-                                        hash: hex::encode(
-                                            block.clone().get_transaction_hash().clone(),
-                                        ),
+                                        hash: hex::encode(block.clone().get_transaction_hash()),
                                     },
                                 )
                                 .await
@@ -1041,14 +1037,10 @@ fn test_block_transaction() {
                                         icrc1_ledgers[0].network_identifier(),
                                         BlockIdentifier {
                                             index: u64::MAX,
-                                            hash: hex::encode(
-                                                block.clone().get_block_hash().clone()
-                                            ),
+                                            hash: hex::encode(block.clone().get_block_hash()),
                                         },
                                         TransactionIdentifier {
-                                            hash: hex::encode(
-                                                block.clone().get_transaction_hash().clone()
-                                            )
+                                            hash: hex::encode(block.clone().get_transaction_hash())
                                         }
                                     )
                                     .await
@@ -1262,38 +1254,17 @@ fn test_network_status() {
                         );
 
                         assert_eq!(
-                            hex::encode(
-                                rosetta_blocks
-                                    .first()
-                                    .unwrap()
-                                    .clone()
-                                    .get_block_hash()
-                                    .clone()
-                            ),
+                            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash()),
                             rosetta_response.genesis_block_identifier.hash,
                             "Genesis block hashes do not match"
                         );
                         assert_eq!(
-                            hex::encode(
-                                rosetta_blocks
-                                    .last()
-                                    .unwrap()
-                                    .clone()
-                                    .get_block_hash()
-                                    .clone()
-                            ),
+                            hex::encode(rosetta_blocks.last().unwrap().clone().get_block_hash()),
                             rosetta_response.current_block_identifier.hash,
                             "Current block hashes do not match"
                         );
                         assert_eq!(
-                            hex::encode(
-                                rosetta_blocks
-                                    .first()
-                                    .unwrap()
-                                    .clone()
-                                    .get_block_hash()
-                                    .clone()
-                            ),
+                            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash()),
                             rosetta_response.oldest_block_identifier.unwrap().hash,
                             "Genesis block hashes do not match"
                         );
@@ -1367,7 +1338,7 @@ fn test_metrics() {
         // so that the index of the latest block is non-zero.
         .with_initial_balance(
             sender_keypair.generate_principal_id().unwrap().0,
-            1_000_000_000_000u64,
+            1_000_000_000_000_u64,
         );
     let setup = Setup::builder()
         .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
@@ -1581,6 +1552,7 @@ fn test_account_balance() {
 
                     let mut all_involved_accounts = HashSet::new();
 
+                    #[allow(clippy::explicit_counter_loop)]
                     for ArgWithCaller {
                         caller,
                         arg,
@@ -1747,7 +1719,7 @@ fn test_continuous_block_sync() {
             from_subaccount: None,
             to: *TEST_ACCOUNT,
             fee: Some(DEFAULT_TRANSFER_FEE.into()),
-            amount: 1u64.into(),
+            amount: 1_u64.into(),
             memo: None,
             created_at_time: None,
         };
@@ -1842,11 +1814,16 @@ fn test_construction_submit() {
                             ic_icrc1::Operation::Mint { .. } => None,
                             ic_icrc1::Operation::Burn { .. } => None,
                             ic_icrc1::Operation::FeeCollector { .. } => None,
+                            ic_icrc1::Operation::AuthorizedMint { .. }
+                            | ic_icrc1::Operation::AuthorizedBurn { .. } => None,
                         };
 
                         if matches!(
                             icrc1_transaction.operation,
-                            ic_icrc1::Operation::Mint { .. } | ic_icrc1::Operation::Burn { .. }
+                            ic_icrc1::Operation::Mint { .. }
+                                | ic_icrc1::Operation::Burn { .. }
+                                | ic_icrc1::Operation::AuthorizedMint { .. }
+                                | ic_icrc1::Operation::AuthorizedBurn { .. }
                         ) {
                             let caller_agent = Icrc1Agent {
                                 agent: get_custom_agent(arg_with_caller.caller.clone(), setup.port)
@@ -1974,7 +1951,7 @@ fn test_rosetta_client_construction_api_flow() {
         .with_decimals(6)
         .with_initial_balance(
             sender_keypair.generate_principal_id().unwrap().0,
-            1_000_000_000_000u64,
+            1_000_000_000_000_u64,
         );
     let setup = Setup::builder()
         .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
@@ -1998,7 +1975,7 @@ fn test_rosetta_client_construction_api_flow() {
         )
         .await;
 
-        let transfer_amount: Nat = 1_000_000_000u64.into();
+        let transfer_amount: Nat = 1_000_000_000_u64.into();
         let operations = env
             .rosetta_client
             .build_transfer_operations(
@@ -2047,7 +2024,7 @@ fn test_rosetta_client_construction_api_flow() {
             balance_before_transfer - Nat::from(DEFAULT_TRANSFER_FEE) - transfer_amount
         );
 
-        let approve_amount: Nat = 1_000_000_000u64.into();
+        let approve_amount: Nat = 1_000_000_000_u64.into();
         let operations = env
             .rosetta_client
             .build_approve_operations(
@@ -2112,7 +2089,7 @@ fn test_rosetta_client_binary() {
     let rt = Runtime::new().unwrap();
     let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
         .with_symbol("SYM1")
-        .with_initial_balance(sender_account, 1_000_000_000_000u64);
+        .with_initial_balance(sender_account, 1_000_000_000_000_u64);
     let setup = Setup::builder()
         .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
         .build(&rt);
@@ -2134,7 +2111,7 @@ fn test_rosetta_client_binary() {
             0,
         )
         .await;
-        let transfer_amount: Nat = 1_000_000_000u64.into();
+        let transfer_amount: Nat = 1_000_000_000_u64.into();
         let balance_before_transfer = env.rosetta_ledger_testing_envs[0]
             .icrc1_ledger
             .agent
@@ -2165,7 +2142,7 @@ fn test_rosetta_client_binary() {
             balance_before_transfer - Nat::from(DEFAULT_TRANSFER_FEE) - transfer_amount
         );
 
-        let approve_amount: Nat = 1_000_000_000u64.into();
+        let approve_amount: Nat = 1_000_000_000_u64.into();
         let balance_before_approve = env.rosetta_ledger_testing_envs[0]
             .icrc1_ledger
             .agent
@@ -2220,7 +2197,7 @@ fn test_rosetta_transfer_from() {
     let rt = Runtime::new().unwrap();
     let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
         .with_symbol("SYM1")
-        .with_initial_balance(from_account, 1_000_000_000_000u64);
+        .with_initial_balance(from_account, 1_000_000_000_000_u64);
     let setup = Setup::builder()
         .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
         .build(&rt);
@@ -2240,7 +2217,7 @@ fn test_rosetta_transfer_from() {
             0,
         )
         .await;
-        let approve_amount: Nat = 1_000_000_000u64.into();
+        let approve_amount: Nat = 1_000_000_000_u64.into();
         let rosetta_client_args =
             RosettaClientArgsBuilder::new(env.rosetta_client.url.clone().to_string(), "approve")
                 .with_spender_account(spender_account)
@@ -2254,7 +2231,7 @@ fn test_rosetta_transfer_from() {
         )
         .await
         .unwrap();
-        let transfer_amount: Nat = 1_000u64.into();
+        let transfer_amount: Nat = 1_000_u64.into();
         let balance_before_transfer = env.rosetta_ledger_testing_envs[0]
             .icrc1_ledger
             .agent

@@ -2,6 +2,7 @@ use ic_metrics::{
     MetricsRegistry,
     buckets::{add_bucket, decimal_buckets, linear_buckets},
 };
+use ic_types::messages::SignedSenderInfo;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 
 pub const LABEL_DETAIL: &str = "detail";
@@ -27,9 +28,14 @@ pub const SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE: &str =
     "message_already_in_certified_state";
 pub const SYNC_CALL_STATUS_IS_NOT_LEAF: &str = "not_leaf";
 pub const SYNC_CALL_STATUS_IS_INVALID_UTF8: &str = "is_invalid_utf8";
+pub const CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS: &str =
+    "http_handler_sync_call_unknown_certificate_status";
 
 /// Placeholder used when we can't determine the appropriate prometheus label.
 pub const LABEL_UNKNOWN: &str = "unknown";
+
+/// Label value used for requests whose path did not match any registered route.
+pub const LABEL_UNMATCHED_PATH: &str = "unmatched_path";
 
 pub const STATUS_SUCCESS: &str = "success";
 pub const STATUS_ERROR: &str = "error";
@@ -71,9 +77,13 @@ pub struct HttpHandlerMetrics {
     // sync call handler metrics
     pub sync_call_early_response_trigger_total: IntCounterVec,
     pub sync_call_certificate_status_total: IntCounterVec,
+    pub critical_error_sync_call_unknown_certificate_status: IntCounter,
 
     // read_state metrics
     pub read_state_path_type_total: IntCounterVec,
+
+    // sender_info metrics
+    pub validated_sender_info_size_bytes: HistogramVec,
 }
 
 // There is a mismatch between the labels and the public spec.
@@ -210,10 +220,19 @@ impl HttpHandlerMetrics {
                 "The count of early response triggers for the /{v3,v4}/.../call endpoint.",
                 &[LABEL_SYNC_CALL_EARLY_RESPONSE_TRIGGER],
             ),
+            critical_error_sync_call_unknown_certificate_status: metrics_registry
+                .error_counter(CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS),
             read_state_path_type_total: metrics_registry.int_counter_vec(
                 "replica_http_read_state_path_type_total",
                 "Count of read_state paths requested, by endpoint type and path type.",
                 &["endpoint", "path_type"],
+            ),
+            validated_sender_info_size_bytes: metrics_registry.histogram_vec(
+                "replica_http_validated_sender_info_size_bytes",
+                "Sizes in bytes of the `info` blob of the `sender_info` field in requests that passed validation, by request type.",
+                // 1 B - 5 MB
+                decimal_buckets(0, 6),
+                &[LABEL_REQUEST_TYPE],
             ),
         }
     }
@@ -222,5 +241,19 @@ impl HttpHandlerMetrics {
         self.read_state_path_type_total
             .with_label_values(&[endpoint_type, path_type])
             .inc()
+    }
+
+    /// Observes the size of the `info` blob of the `sender_info` field, if any,
+    /// of a request that passed validation.
+    pub fn observe_validated_sender_info(
+        &self,
+        request_type: &str,
+        sender_info: Option<&SignedSenderInfo>,
+    ) {
+        if let Some(sender_info) = sender_info {
+            self.validated_sender_info_size_bytes
+                .with_label_values(&[request_type])
+                .observe(sender_info.info.len() as f64);
+        }
     }
 }

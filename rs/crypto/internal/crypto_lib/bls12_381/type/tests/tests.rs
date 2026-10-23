@@ -1730,7 +1730,7 @@ test_point_operation!(is_torsion_free, [g1, g2], {
     let rng = &mut reproducible_rng();
 
     for _ in 0..30 {
-        let mut buf = [0u8; Affine::BYTES];
+        let mut buf = [0_u8; Affine::BYTES];
         rng.fill_bytes(&mut buf);
 
         let pt_c = Affine::deserialize(&buf);
@@ -1956,7 +1956,7 @@ test_point_operation!(muln_sparse, [g1, g2], {
 
         const SCALAR_FLOORED_BIT_LENGTH: usize = 254;
 
-        let mut scalar = [0u8; Scalar::BYTES];
+        let mut scalar = [0_u8; Scalar::BYTES];
         for i in gen_rand_subset(k, SCALAR_FLOORED_BIT_LENGTH, rng) {
             set_bit(&mut scalar, i);
         }

@@ -24,7 +24,7 @@ fn large_u128_amount() -> impl Strategy<Value = U256> {
 }
 
 fn large_u256_amount() -> impl Strategy<Value = U256> {
-    (1u128..).prop_map(|lo| U256::from_words(u128::MAX, lo))
+    (1_u128..).prop_map(|lo| U256::from_words(u128::MAX, lo))
 }
 
 fn check_block_conversion<T: TokensType>(block: Block<T>) -> Result<(), TestCaseError> {
@@ -212,15 +212,15 @@ mod block_encoding_stability {
 
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(5).0,
-            subaccount: Some([0x17u8; 32]),
+            subaccount: Some([0x17_u8; 32]),
         };
         let account2 = Account {
             owner: PrincipalId::new_user_test_id(6).0,
-            subaccount: Some([0x71u8; 32]),
+            subaccount: Some([0x71_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(2, 0x68686767)
-            .with_parent_hash(vec![0x22u8; 32])
-            .approve(account1, account2, Tokens::from_e8s(0x991199119911u64));
+            .with_parent_hash(vec![0x22_u8; 32])
+            .approve(account1, account2, Tokens::from_e8s(0x991199119911_u64));
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }
 
@@ -230,11 +230,11 @@ mod block_encoding_stability {
 
         let account = Account {
             owner: PrincipalId::new_user_test_id(13).0,
-            subaccount: Some([0x51u8; 32]),
+            subaccount: Some([0x51_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(3, 0x58585757)
-            .with_parent_hash(vec![27u8; 32])
-            .burn(account, Tokens::from_e8s(0x441144114411u64));
+            .with_parent_hash(vec![27_u8; 32])
+            .burn(account, Tokens::from_e8s(0x441144114411_u64));
 
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }
@@ -245,15 +245,15 @@ mod block_encoding_stability {
 
         let account = Account {
             owner: PrincipalId::new_user_test_id(1).0,
-            subaccount: Some([37u8; 32]),
+            subaccount: Some([37_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(1, 12345678)
             .with_btype(BTYPE_107.to_string())
-            .with_parent_hash(vec![67u8; 32])
+            .with_parent_hash(vec![67_u8; 32])
             .fee_collector(
                 Some(account),
                 Some(PrincipalId::new_user_test_id(2).0),
-                Some(22334455u64),
+                Some(22334455_u64),
                 Some(SET_FEE_COL_107.to_string()),
             );
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
@@ -265,11 +265,11 @@ mod block_encoding_stability {
 
         let account = Account {
             owner: PrincipalId::new_user_test_id(1).0,
-            subaccount: Some([37u8; 32]),
+            subaccount: Some([37_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(2, 68686767)
-            .with_parent_hash(vec![43u8; 32])
-            .mint(account, Tokens::from_e8s(998899889988u64));
+            .with_parent_hash(vec![43_u8; 32])
+            .mint(account, Tokens::from_e8s(998899889988_u64));
 
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }
@@ -280,15 +280,15 @@ mod block_encoding_stability {
 
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(7).0,
-            subaccount: Some([0x26u8; 32]),
+            subaccount: Some([0x26_u8; 32]),
         };
         let account2 = Account {
             owner: PrincipalId::new_user_test_id(8).0,
-            subaccount: Some([0x38u8; 32]),
+            subaccount: Some([0x38_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(7, 0x10102020)
-            .with_parent_hash(vec![0xb8u8; 32])
-            .transfer(account1, account2, Tokens::from_e8s(0x55215521u64));
+            .with_parent_hash(vec![0xb8_u8; 32])
+            .transfer(account1, account2, Tokens::from_e8s(0x55215521_u64));
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }
 
@@ -298,19 +298,19 @@ mod block_encoding_stability {
 
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(7).0,
-            subaccount: Some([0x26u8; 32]),
+            subaccount: Some([0x26_u8; 32]),
         };
         let account2 = Account {
             owner: PrincipalId::new_user_test_id(8).0,
-            subaccount: Some([0x38u8; 32]),
+            subaccount: Some([0x38_u8; 32]),
         };
         let account3 = Account {
             owner: PrincipalId::new_user_test_id(9).0,
-            subaccount: Some([0x47u8; 32]),
+            subaccount: Some([0x47_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(7, 0x31313131)
-            .with_parent_hash(vec![0xa6u8; 32])
-            .transfer(account1, account2, Tokens::from_e8s(0x73377337u64))
+            .with_parent_hash(vec![0xa6_u8; 32])
+            .transfer(account1, account2, Tokens::from_e8s(0x73377337_u64))
             .with_spender(account3);
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }
@@ -326,5 +326,248 @@ mod block_encoding_stability {
             "mismatch for expected block encoding:\n  {}\nvs actual block encoding:\n  {}\nfor block:\n{}",
             expected, block_hex_bytes, block
         );
+    }
+}
+
+mod authorized_mint_burn_tests {
+    use super::*;
+    use candid::Principal;
+    use ic_icrc1::Operation;
+    use ic_ledger_core::block::BlockType;
+    use icrc_ledger_types::icrc1::account::Account;
+    use icrc_ledger_types::icrc3::transactions::{
+        TRANSACTION_AUTHORIZED_BURN, TRANSACTION_AUTHORIZED_MINT,
+    };
+    use icrc_ledger_types::icrc122::schema::{
+        BTYPE_122_BURN, BTYPE_122_MINT, validate_152_burn, validate_152_mint, validate_burn,
+        validate_mint,
+    };
+
+    fn test_account(n: u64) -> Account {
+        Account {
+            owner: Principal::from_slice(&n.to_be_bytes()),
+            subaccount: None,
+        }
+    }
+
+    fn make_authorized_mint_block(
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+        created_at_time: Option<u64>,
+    ) -> Block<U64> {
+        let transaction = Transaction {
+            operation: Operation::AuthorizedMint {
+                to: test_account(1),
+                amount: U64::from(1_000_000_u64),
+                caller,
+                mthd,
+                reason,
+            },
+            created_at_time,
+            memo: None,
+        };
+        Block::from_transaction(
+            None,
+            transaction,
+            ic_ledger_core::timestamp::TimeStamp::from_nanos_since_unix_epoch(1_000_000_000),
+            U64::from(0_u64),
+            None,
+        )
+    }
+
+    fn make_authorized_burn_block(
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+        created_at_time: Option<u64>,
+    ) -> Block<U64> {
+        let transaction = Transaction {
+            operation: Operation::AuthorizedBurn {
+                from: test_account(1),
+                amount: U64::from(500_000_u64),
+                caller,
+                mthd,
+                reason,
+            },
+            created_at_time,
+            memo: None,
+        };
+        Block::from_transaction(
+            None,
+            transaction,
+            ic_ledger_core::timestamp::TimeStamp::from_nanos_since_unix_epoch(1_000_000_000),
+            U64::from(0_u64),
+            None,
+        )
+    }
+
+    // --- CBOR round-trip tests ---
+
+    #[test]
+    fn test_authorized_mint_cbor_round_trip() {
+        let block = make_authorized_mint_block(
+            Some(Principal::anonymous()),
+            Some("152mint".to_string()),
+            Some("test reason".to_string()),
+            Some(1_000_000_000),
+        );
+        let encoded = block.clone().encode();
+        let decoded = Block::<U64>::decode(encoded).unwrap();
+        assert_eq!(block, decoded);
+    }
+
+    #[test]
+    fn test_authorized_burn_cbor_round_trip() {
+        let block = make_authorized_burn_block(
+            Some(Principal::anonymous()),
+            Some("152burn".to_string()),
+            None,
+            Some(1_000_000_000),
+        );
+        let encoded = block.clone().encode();
+        let decoded = Block::<U64>::decode(encoded).unwrap();
+        assert_eq!(block, decoded);
+    }
+
+    #[test]
+    fn test_authorized_mint_btype_set_correctly() {
+        let block = make_authorized_mint_block(None, None, None, None);
+        assert_eq!(block.btype.as_deref(), Some(BTYPE_122_MINT));
+    }
+
+    #[test]
+    fn test_authorized_burn_btype_set_correctly() {
+        let block = make_authorized_burn_block(None, None, None, None);
+        assert_eq!(block.btype.as_deref(), Some(BTYPE_122_BURN));
+    }
+
+    #[test]
+    fn test_authorized_mint_generic_block_round_trip() {
+        let block = make_authorized_mint_block(
+            Some(Principal::anonymous()),
+            Some("152mint".to_string()),
+            None,
+            Some(1_000_000_000),
+        );
+        let generic_block = encoded_block_to_generic_block(&block.clone().encode());
+        let encoded_block = generic_block_to_encoded_block(generic_block.clone()).unwrap();
+        let round_tripped = Block::<U64>::decode(encoded_block).unwrap();
+        assert_eq!(block, round_tripped);
+    }
+
+    #[test]
+    fn test_authorized_mint_hash_stability() {
+        let block = make_authorized_mint_block(
+            Some(Principal::anonymous()),
+            Some("152mint".to_string()),
+            None,
+            Some(1_000_000_000),
+        );
+        let generic_block = encoded_block_to_generic_block(&block.clone().encode());
+        assert_eq!(
+            generic_block.hash().to_vec(),
+            Block::<U64>::block_hash(&block.encode())
+                .as_slice()
+                .to_vec()
+        );
+    }
+
+    // --- Candid conversion tests ---
+
+    #[test]
+    fn test_authorized_mint_candid_conversion() {
+        let block = make_authorized_mint_block(
+            Some(Principal::anonymous()),
+            Some("152mint".to_string()),
+            Some("reason".to_string()),
+            Some(1_000_000_000),
+        );
+        let tx: icrc_ledger_types::icrc3::transactions::Transaction = block.into();
+
+        assert_eq!(tx.kind, TRANSACTION_AUTHORIZED_MINT);
+        assert!(tx.authorized_mint.is_some());
+        assert!(tx.authorized_burn.is_none());
+        assert!(tx.mint.is_none());
+        assert!(tx.burn.is_none());
+        assert!(tx.transfer.is_none());
+        assert!(tx.approve.is_none());
+        assert!(tx.fee_collector.is_none());
+
+        let am = tx.authorized_mint.unwrap();
+        assert_eq!(am.to, test_account(1));
+        assert_eq!(am.amount, candid::Nat::from(1_000_000_u64));
+        assert_eq!(am.created_at_time, Some(1_000_000_000));
+        assert_eq!(am.caller, Some(Principal::anonymous()));
+        assert_eq!(am.mthd, Some("152mint".to_string()));
+        assert_eq!(am.reason, Some("reason".to_string()));
+    }
+
+    #[test]
+    fn test_authorized_burn_candid_conversion() {
+        let block = make_authorized_burn_block(
+            Some(Principal::anonymous()),
+            Some("152burn".to_string()),
+            None,
+            Some(1_000_000_000),
+        );
+        let tx: icrc_ledger_types::icrc3::transactions::Transaction = block.into();
+
+        assert_eq!(tx.kind, TRANSACTION_AUTHORIZED_BURN);
+        assert!(tx.authorized_burn.is_some());
+        assert!(tx.authorized_mint.is_none());
+        assert!(tx.mint.is_none());
+
+        let ab = tx.authorized_burn.unwrap();
+        assert_eq!(ab.from, test_account(1));
+        assert_eq!(ab.amount, candid::Nat::from(500_000_u64));
+        assert_eq!(ab.created_at_time, Some(1_000_000_000));
+        assert_eq!(ab.caller, Some(Principal::anonymous()));
+        assert_eq!(ab.mthd, Some("152burn".to_string()));
+        assert_eq!(ab.reason, None);
+    }
+
+    // --- Schema validation tests ---
+
+    #[test]
+    fn test_authorized_mint_block_passes_icrc152_validation() {
+        let block = make_authorized_mint_block(
+            Some(Principal::anonymous()),
+            Some("152mint".to_string()),
+            None,
+            Some(1_000_000_000),
+        );
+        let generic_block = encoded_block_to_generic_block(&block.encode());
+        assert!(validate_152_mint(&generic_block).is_ok());
+        assert!(validate_mint(&generic_block).is_ok());
+    }
+
+    #[test]
+    fn test_authorized_burn_block_passes_icrc152_validation() {
+        let block = make_authorized_burn_block(
+            Some(Principal::anonymous()),
+            Some("152burn".to_string()),
+            None,
+            Some(1_000_000_000),
+        );
+        let generic_block = encoded_block_to_generic_block(&block.encode());
+        assert!(validate_152_burn(&generic_block).is_ok());
+        assert!(validate_burn(&generic_block).is_ok());
+    }
+
+    #[test]
+    fn test_authorized_mint_without_caller_passes_icrc122_but_fails_icrc152() {
+        let block = make_authorized_mint_block(None, None, None, None);
+        let generic_block = encoded_block_to_generic_block(&block.encode());
+        assert!(validate_mint(&generic_block).is_ok());
+        assert!(validate_152_mint(&generic_block).is_err());
+    }
+
+    #[test]
+    fn test_authorized_burn_without_caller_passes_icrc122_but_fails_icrc152() {
+        let block = make_authorized_burn_block(None, None, None, None);
+        let generic_block = encoded_block_to_generic_block(&block.encode());
+        assert!(validate_burn(&generic_block).is_ok());
+        assert!(validate_152_burn(&generic_block).is_err());
     }
 }

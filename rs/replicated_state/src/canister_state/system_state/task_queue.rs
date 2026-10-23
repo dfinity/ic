@@ -1,10 +1,10 @@
 pub mod proto;
 
 use crate::ExecutionTask;
-use ic_interfaces::execution_environment::ExecutionRoundType;
 use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
 use ic_types::CanisterId;
 use ic_types::NumBytes;
+use ic_types_cycles::{CompoundCycles, Instructions};
 use std::collections::VecDeque;
 
 /// `TaskQueue` represents the implementation of queue structure for canister tasks satisfying the following conditions:
@@ -45,6 +45,10 @@ impl TaskQueue {
                 self.queue.pop_front()
             }
         })
+    }
+
+    pub fn paused_or_aborted_task(&self) -> &Option<ExecutionTask> {
+        &self.paused_or_aborted_task
     }
 
     pub fn has_paused_or_aborted_task(&self) -> bool {
@@ -121,14 +125,13 @@ impl TaskQueue {
     /// 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
     /// 3. If deterministic time slicing is disabled, then there are no paused tasks.
     ///    Aborted tasks may still exist if DTS was disabled in recent checkpoints.
-    pub fn check_dts_invariants(&self, current_round_type: ExecutionRoundType, id: &CanisterId) {
+    pub fn check_dts_invariants(&self, is_checkpoint_round: bool, id: &CanisterId) {
         if let Some(paused_or_aborted_task) = &self.paused_or_aborted_task {
             match paused_or_aborted_task {
                 ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
-                    assert_eq!(
-                        current_round_type,
-                        ExecutionRoundType::OrdinaryRound,
-                        "Unexpected paused execution {paused_or_aborted_task:?} after a checkpoint round in canister {id:?}"
+                    assert!(
+                        !is_checkpoint_round,
+                        "Unexpected paused execution {paused_or_aborted_task:?} in canister {id:?} after a checkpoint round"
                     );
                 }
                 ExecutionTask::AbortedExecution { .. }
@@ -166,10 +169,20 @@ impl TaskQueue {
         }
     }
 
-    /// Removes aborted install code task.
-    pub fn remove_aborted_install_code_task(&mut self) {
-        if let Some(ExecutionTask::AbortedInstallCode { .. }) = &self.paused_or_aborted_task {
-            self.paused_or_aborted_task = None;
+    /// Removes the aborted install code task, if any, returning the execution cycles
+    /// that were prepaid for it. The caller is responsible for settling them, as the
+    /// execution they paid for will not happen.
+    pub fn remove_aborted_install_code_task(&mut self) -> Option<CompoundCycles<Instructions>> {
+        match &self.paused_or_aborted_task {
+            Some(ExecutionTask::AbortedInstallCode {
+                prepaid_execution_cycles,
+                ..
+            }) => {
+                let prepaid_execution_cycles = *prepaid_execution_cycles;
+                self.paused_or_aborted_task = None;
+                Some(prepaid_execution_cycles)
+            }
+            _ => None,
         }
     }
 
@@ -289,7 +302,7 @@ mod tests {
     use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
     use ic_test_utilities_types::messages::IngressBuilder;
     use ic_types::messages::{CanisterCall, CanisterMessageOrTask, CanisterTask};
-    use ic_types_cycles::Cycles;
+    use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
 
     #[test]
     fn test_on_low_wasm_memory_hook_start_status_condition_not_satisfied() {
@@ -372,7 +385,10 @@ mod tests {
 
         task_queue.replace_paused_with_aborted_task(ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
-            prepaid_execution_cycles: Cycles::zero(),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::zero(),
+                CanisterCyclesCostSchedule::Normal,
+            ),
         });
     }
 
@@ -389,7 +405,10 @@ mod tests {
 
         let aborted_install_code = ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Ingress(Arc::clone(&ingress)),
-            prepaid_execution_cycles: Cycles::new(1),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::new(1),
+                CanisterCyclesCostSchedule::Normal,
+            ),
             call_id: InstallCodeCallId::new(0),
         };
 
@@ -433,7 +452,10 @@ mod tests {
 
         task_queue.remove(ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Ingress(Arc::clone(&ingress)),
-            prepaid_execution_cycles: Cycles::new(1),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::new(1),
+                CanisterCyclesCostSchedule::Normal,
+            ),
             call_id: InstallCodeCallId::new(0),
         });
     }
@@ -444,7 +466,10 @@ mod tests {
         let mut task_queue = TaskQueue::default();
         task_queue.remove(ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
-            prepaid_execution_cycles: Cycles::zero(),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::zero(),
+                CanisterCyclesCostSchedule::Normal,
+            ),
         });
     }
 

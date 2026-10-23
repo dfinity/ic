@@ -134,7 +134,7 @@ fn should_accept_ecdsa_signatures_that_we_generate() {
     let pk = sk.public_key();
 
     for m in 0..100 {
-        let mut msg = vec![0u8; m];
+        let mut msg = vec![0_u8; m];
         rng.fill_bytes(&mut msg);
         let sig = sk.sign_message_with_ecdsa(&msg);
 
@@ -151,12 +151,10 @@ fn should_accept_ecdsa_signatures_that_we_generate() {
 
 #[test]
 fn bitcoin_library_accepts_our_bip341_signatures() {
-    use bitcoin::{
-        hashes::hex::FromHex,
-        schnorr::TapTweak,
-        secp256k1::{Message, Secp256k1, XOnlyPublicKey, schnorr::Signature},
-        util::taproot::TapBranchHash,
-    };
+    use bitcoin::hashes::Hash;
+    use bitcoin::key::TapTweak;
+    use bitcoin::secp256k1::{Message, Secp256k1, XOnlyPublicKey, schnorr::Signature};
+    use bitcoin::taproot::TapNodeHash;
 
     let secp256k1 = Secp256k1::new();
 
@@ -172,13 +170,13 @@ fn bitcoin_library_accepts_our_bip341_signatures() {
 
         let pk = XOnlyPublicKey::from_slice(&sk.public_key().serialize_sec1(true)[1..]).unwrap();
 
-        let tbh = TapBranchHash::from_hex(&hex::encode(ttr)).unwrap();
+        let tbh = TapNodeHash::from_slice(&ttr).unwrap();
 
-        let tweaked_key = pk.tap_tweak(&secp256k1, Some(tbh)).0.to_inner();
+        let tweaked_key = pk.tap_tweak(&secp256k1, Some(tbh)).0.to_x_only_public_key();
 
-        let msg = Message::from_slice(&msg).unwrap();
+        let msg = Message::from_digest_slice(&msg).unwrap();
         let sig = Signature::from_slice(&sig).unwrap();
-        assert!(sig.verify(&msg, &tweaked_key).is_ok());
+        assert!(secp256k1.verify_schnorr(&sig, &msg, &tweaked_key).is_ok());
     }
 }
 
@@ -193,7 +191,7 @@ fn should_accept_bip340_signatures_that_we_generate() {
 
         let pk = sk.public_key();
 
-        let mut msg = vec![0u8; len];
+        let mut msg = vec![0_u8; len];
         rng.fill_bytes(&mut msg);
 
         let sig = sk.sign_message_with_bip340(&msg, &mut rng);
@@ -212,11 +210,11 @@ fn should_accept_bip341_signatures_that_we_generate() {
 
         let pk = sk.public_key();
 
-        let mut msg = vec![0u8; len];
+        let mut msg = vec![0_u8; len];
         rng.fill_bytes(&mut msg);
 
         for ttr_len in [0, 32] {
-            let mut ttr = vec![0u8; ttr_len];
+            let mut ttr = vec![0_u8; ttr_len];
             rng.fill_bytes(&mut ttr);
             let sig = sk.sign_message_with_bip341(&msg, &mut rng, &ttr).unwrap();
             assert!(pk.verify_bip341_signature(&msg, &sig, &ttr));
@@ -587,7 +585,7 @@ fn key_derivation_matches_bip32() {
         .collect::<Vec<u32>>();
 
     let master_key = PrivateKey::generate_using_rng(rng).public_key();
-    let root_chain_code = [0u8; 32];
+    let root_chain_code = [0_u8; 32];
 
     let mut derived_keys = Vec::with_capacity(path.len());
     for i in 1..=path.len() {
@@ -600,7 +598,7 @@ fn key_derivation_matches_bip32() {
 
     let attrs = bip32::ExtendedKeyAttrs {
         depth: 0,
-        parent_fingerprint: [0u8; 4],
+        parent_fingerprint: [0_u8; 4],
         child_number: bip32::ChildNumber(0),
         chain_code: root_chain_code,
     };

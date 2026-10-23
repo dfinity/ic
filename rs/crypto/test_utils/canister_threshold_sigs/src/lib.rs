@@ -313,7 +313,7 @@ pub mod node {
         ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
     };
     use ic_types::crypto::{BasicSigOf, CryptoResult, CurrentNodePublicKeys, Signable};
-    use ic_types::signature::BasicSignatureBatch;
+    use ic_types::signature::{BasicSigBatchEntry, BasicSignatureBatch};
     use ic_types::{NodeId, RegistryVersion};
     use rand::seq::IteratorRandom;
     use rand::{CryptoRng, Rng, RngCore, SeedableRng};
@@ -411,7 +411,7 @@ pub mod node {
         pub fn create_transcript_or_panic(
             &self,
             params: &IDkgTranscriptParams,
-            dealings: &BatchSignedIDkgDealings,
+            dealings: BatchSignedIDkgDealings,
         ) -> IDkgTranscript {
             self.create_transcript(params, dealings)
                 .unwrap_or_else(|error| {
@@ -474,7 +474,7 @@ pub mod node {
         fn create_transcript(
             &self,
             params: &IDkgTranscriptParams,
-            dealings: &BatchSignedIDkgDealings,
+            dealings: BatchSignedIDkgDealings,
         ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
             self.crypto_component.create_transcript(params, dealings)
         }
@@ -672,6 +672,14 @@ pub mod node {
             self.crypto_component
                 .verify_basic_sig_batch(signature_batch, message, registry_version)
         }
+
+        fn verify_basic_sig_batch_multi_msg(
+            &self,
+            inputs: &[BasicSigBatchEntry<'_, T>],
+        ) -> CryptoResult<()> {
+            self.crypto_component
+                .verify_basic_sig_batch_multi_msg(inputs)
+        }
     }
 
     fn create_crypto_component_with_sign_mega_and_multisign_keys_in_registry<R: Rng + CryptoRng>(
@@ -791,36 +799,36 @@ pub mod node {
             (nodes_true, nodes_false)
         }
 
-        pub fn into_filtered_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
+        pub fn into_filtered_by_receivers<T: AsRef<IDkgReceivers>>(
             self,
             idkg_receivers: T,
-        ) -> impl Iterator<Item = Node> + 'a {
+        ) -> impl Iterator<Item = Node> {
             self.nodes
                 .into_iter()
                 .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
 
-        pub fn filter_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
-            &'a self,
+        pub fn filter_by_receivers<T: AsRef<IDkgReceivers>>(
+            &self,
             idkg_receivers: T,
-        ) -> impl Iterator<Item = &'a Node> + 'a {
+        ) -> impl Iterator<Item = &Node> {
             self.iter()
                 .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
 
-        pub fn filter_by_dealers<'a, T: AsRef<IDkgDealers> + 'a>(
-            &'a self,
+        pub fn filter_by_dealers<T: AsRef<IDkgDealers>>(
+            &self,
             idkg_dealers: T,
-        ) -> impl Iterator<Item = &'a Node> + 'a {
+        ) -> impl Iterator<Item = &Node> {
             self.iter()
                 .filter(move |node| idkg_dealers.as_ref().contains(node.id))
         }
 
-        pub fn random_subset_with_min_size<'a, R: RngCore + CryptoRng>(
-            &'a self,
+        pub fn random_subset_with_min_size<R: RngCore + CryptoRng>(
+            &self,
             minimum_size: usize,
-            rng: &'a mut R,
-        ) -> impl Iterator<Item = &'a Node> + 'a {
+            rng: &mut R,
+        ) -> impl Iterator<Item = &Node> {
             assert!(
                 minimum_size <= self.len(),
                 "Requested a random subset with at least {} elements but there are only {} elements",
@@ -831,11 +839,11 @@ pub mod node {
             self.iter().choose_multiple(rng, subset_size).into_iter()
         }
 
-        pub fn random_subset<'a, R: RngCore + CryptoRng>(
-            &'a self,
+        pub fn random_subset<R: RngCore + CryptoRng>(
+            &self,
             size: usize,
-            rng: &'a mut R,
-        ) -> impl Iterator<Item = &'a Node> + 'a {
+            rng: &mut R,
+        ) -> impl Iterator<Item = &Node> {
             assert!(
                 size <= self.len(),
                 "Requested a random subset with {} elements but there are only {} elements",
@@ -845,33 +853,29 @@ pub mod node {
             self.iter().choose_multiple(rng, size).into_iter()
         }
 
-        pub fn random_filtered_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
-            &'a self,
+        pub fn random_filtered_by_receivers<T: AsRef<IDkgReceivers>, R: Rng>(
+            &self,
             idkg_receivers: T,
             rng: &mut R,
-        ) -> &'a Node {
+        ) -> &Node {
             self.filter_by_receivers(idkg_receivers)
                 .choose(rng)
                 .expect("empty receivers")
         }
 
-        pub fn random_filtered_by_receivers_excluding<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
-            &'a self,
+        pub fn random_filtered_by_receivers_excluding<T: AsRef<IDkgReceivers>, R: Rng>(
+            &self,
             exclusion: &Node,
             idkg_receivers: T,
             rng: &mut R,
-        ) -> &'a Node {
+        ) -> &Node {
             self.filter_by_receivers(idkg_receivers)
                 .filter(|node| *node != exclusion)
                 .choose(rng)
                 .expect("empty receivers")
         }
 
-        pub fn random_dealer<'a, R: Rng>(
-            &'a self,
-            params: &'a IDkgTranscriptParams,
-            rng: &mut R,
-        ) -> &'a Node {
+        pub fn random_dealer<R: Rng>(&self, params: &IDkgTranscriptParams, rng: &mut R) -> &Node {
             self.filter_by_dealers(params)
                 .choose(rng)
                 .expect("empty dealers")
@@ -1013,7 +1017,7 @@ pub mod node {
             let multisigned_dealings = self.support_dealings_from_all_receivers(dealings, params);
             let transcript_creator = self.filter_by_receivers(params).next().unwrap();
             let transcript =
-                transcript_creator.create_transcript_or_panic(params, &multisigned_dealings);
+                transcript_creator.create_transcript_or_panic(params, multisigned_dealings);
             assert!(
                 self.random_filtered_by_receivers(params.receivers(), rng)
                     .verify_transcript(params, &transcript)
@@ -1815,7 +1819,7 @@ pub fn load_previous_transcripts_for_all_dealers(params: &IDkgTranscriptParams, 
 pub fn create_transcript_or_panic(
     receiver: &Node,
     params: &IDkgTranscriptParams,
-    dealings: &BatchSignedIDkgDealings,
+    dealings: BatchSignedIDkgDealings,
 ) -> IDkgTranscript {
     receiver
         .create_transcript(params, dealings)
@@ -1854,7 +1858,7 @@ pub fn run_idkg_without_complaint<R: RngCore + CryptoRng>(
     let dealings = nodes.create_dealings(params);
     let dealings_with_receivers_support =
         nodes.support_dealings_from_all_receivers(dealings, params);
-    create_transcript_or_panic(receiver, params, &dealings_with_receivers_support)
+    create_transcript_or_panic(receiver, params, dealings_with_receivers_support)
 }
 
 /// Corrupts the dealing for a single randomly picked receiver.

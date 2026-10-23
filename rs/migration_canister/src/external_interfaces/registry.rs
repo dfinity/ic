@@ -8,6 +8,18 @@ use crate::{ValidationError, processing::ProcessingResult};
 
 const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 
+#[derive(Clone, Debug, CandidType, Deserialize, PartialEq)]
+pub enum SubnetType {
+    #[serde(rename = "application")]
+    Application,
+    #[serde(rename = "system")]
+    System,
+    #[serde(rename = "verified_application")]
+    VerifiedApplication,
+    #[serde(rename = "cloud_engine")]
+    CloudEngine,
+}
+
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct GetSubnetForCanisterArgs {
     principal: Option<Principal>,
@@ -45,19 +57,60 @@ pub async fn get_subnet_for_canister(canister_id: Principal) -> Result<Principal
                 }),
                 Some(subnet_id) => Ok(subnet_id),
             },
-            Ok(Err(e)) => {
-                let msg = format!(
-                    "Call `GetSubnetForCanisterResponse` for {} failed: {}",
-                    canister_id, e
-                );
-                println!("{}", msg);
-                Err(ValidationError::CallFailed { reason: msg })
-            }
+            Ok(Err(_)) => Err(ValidationError::CanisterNotFound {
+                canister: canister_id,
+            }),
             Err(e) => {
                 let msg = format!(
                     "Decoding `get_subnet_for_canister` for {} failed: {:?}",
                     canister_id, e
                 );
+                println!("{}", msg);
+                Err(ValidationError::CallFailed { reason: msg })
+            }
+        },
+    }
+}
+
+// ========================================================================= //
+// `get_subnet`
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+struct GetSubnetArgs {
+    subnet_id: Option<Principal>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+struct SubnetRecord {
+    subnet_type: SubnetType,
+}
+
+pub async fn get_subnet(subnet_id: Principal) -> Result<SubnetType, ValidationError> {
+    let args = GetSubnetArgs {
+        subnet_id: Some(subnet_id),
+    };
+
+    match Call::bounded_wait(
+        Principal::from_text(REGISTRY_CANISTER_ID).unwrap(),
+        "get_subnet",
+    )
+    .with_arg(args)
+    .await
+    {
+        Err(e) => {
+            let msg = format!("Call `get_subnet` for {} failed: {:?}", subnet_id, e);
+            println!("{}", msg);
+            Err(ValidationError::CallFailed { reason: msg })
+        }
+        Ok(response) => match response.candid::<Result<SubnetRecord, String>>() {
+            Ok(Ok(SubnetRecord { subnet_type })) => Ok(subnet_type),
+            Ok(Err(e)) => {
+                let msg = format!("Call `get_subnet` for {} failed: {}", subnet_id, e);
+                println!("{}", msg);
+                Err(ValidationError::CallFailed { reason: msg })
+            }
+            Err(e) => {
+                let msg = format!("Decoding `get_subnet` for {} failed: {:?}", subnet_id, e);
                 println!("{}", msg);
                 Err(ValidationError::CallFailed { reason: msg })
             }

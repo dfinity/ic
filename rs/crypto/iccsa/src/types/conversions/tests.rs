@@ -27,7 +27,7 @@ fn should_convert_zero_length_pubkey() {
         public_key.signing_canister_id(),
         CanisterId::try_from(vec![]).unwrap()
     );
-    assert_eq!(public_key.seed(), &[0u8; 0][..]);
+    assert_eq!(public_key.seed(), &[0_u8; 0][..]);
 }
 
 #[test]

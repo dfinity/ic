@@ -5,33 +5,21 @@
 //
 // You can setup this testnet by executing the following commands:
 //
-//   $ ./ci/tools/docker-run
-//   $ ict testnet create small_high_perf --output-dir=./small_high_perf -- --test_tmpdir=./small_high_perf
+//   $ ./ci/tools/container-run.sh
+//   $ bazel run //rs/tests/testnets:small_high_perf_farm --test_tmpdir=./small_high_perf -- --keepalive
 //
-// The --output-dir=./small_high_perf will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./small_high_perf will store the remaining test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
 //
-//   $ ssh -i small_high_perf/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@
+//   $ ssh -i small_high_perf/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@$ipv6
 //
-// Note that you can get the address of the IC node from the ict console output:
+// Note that you can get the $ipv6 address of the IC node from the farm_vm_created_events in the output.
 //
-//   {
-//     nodes: [
-//       {
-//         id: y4g5e-dpl4n-swwhv-la7ec-32ngk-w7f3f-pr5bt-kqw67-2lmfy-agipc-zae,
-//         ipv6: 2a0b:21c0:4003:2:5034:46ff:fe3c:e76f
-//       }
-//     ],
-//     subnet_id: 5hv4k-srndq-xgw53-r6ldt-wtv4x-6xvbj-6lvpf-sbu5n-sqied-63bgv-eqe,
-//     subnet_type: application
-//   },
+// To get access to P8s and Grafana look for the following lines in the output:
 //
-// To get access to P8s and Grafana look for the following lines in the ict console output:
-//
-//     prometheus: Prometheus Web UI at http://prometheus.small_high_perf--1692597750709.testnet.farm.dfinity.systems,
-//     grafana: Grafana at http://grafana.small_high_perf--1692597750709.testnet.farm.dfinity.systems,
-//     progress_clock: IC Progress Clock at http://grafana.small_high_perf--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
+//     prometheus: Prometheus Web UI at http://prometheus.small_high_perf_farm--1692597750709.testnet.farm.dfinity.systems,
+//     grafana: Grafana at http://grafana.small_high_perf_farm--1692597750709.testnet.farm.dfinity.systems,
+//     progress_clock: IC Progress Clock at http://grafana.small_high_perf_farm--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
 //
 // Happy testing!
 
@@ -41,7 +29,9 @@ use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+    ic::{
+        AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
+    },
     ic_gateway_vm::{IC_GATEWAY_VM_NAME, IcGatewayVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations},
@@ -59,7 +49,7 @@ pub fn setup(env: TestEnv) {
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
+                .with_resource_overrides(VmResourceOverrides {
                     vcpus: Some(NrOfVCPUs::new(64)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),

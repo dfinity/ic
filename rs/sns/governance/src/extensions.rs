@@ -46,16 +46,11 @@ use std::{
 };
 
 thread_local! {
-    static ALLOWED_EXTENSIONS: RefCell<BTreeMap<[u8; 32], ExtensionSpec>> = RefCell::new(btreemap! {
-    hex::decode("1c07ceba560e7bcffa43d1b5ae97db81151854f068b707c1728e213948212a6c")
-    .unwrap()
-    .try_into()
-    .unwrap() => ExtensionSpec {
-            name: "sns-kongswap-adaptor".to_string(),
-            version: ExtensionVersion(1),
-            topic: Topic::TreasuryAssetManagement,
-            extension_type: ExtensionType::TreasuryManager,
-    }});
+    static ALLOWED_EXTENSIONS: RefCell<BTreeMap<[u8; 32], ExtensionSpec>> = const { RefCell::new(btreemap! {
+        // This collection is intentionally left empty. The Kong Swap extension used to be here,
+        // but they ceased operations on April 6, 2026. Consequently, that was removed
+        // from this list.
+    }) };
 }
 
 #[cfg(any(test, feature = "test"))]
@@ -229,7 +224,7 @@ pub struct ExtensionOperationSpec {
 
 impl ExtensionOperationSpec {
     pub fn name(&self) -> String {
-        format!("{}", &self.operation_type)
+        format!("{}", self.operation_type)
     }
 
     pub fn description(&self) -> &str {
@@ -565,6 +560,9 @@ impl ValidatedRegisterExtension {
                     wasm,
                     init_blob,
                     CanisterInstallMode::Install,
+                    // Upgrade options. Since we are using install mode here, we
+                    // are supposed to not pass Some, only None.
+                    None,
                 )
                 .await?;
 
@@ -1235,6 +1233,7 @@ impl ValidatedUpgradeExtension {
                 wasm,
                 arg_bytes,
                 CanisterInstallMode::Upgrade,
+                None, // upgrade options
             )
             .await?;
 

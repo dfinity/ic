@@ -1,6 +1,6 @@
 //! Module that deals with requests to /api/v2/canister/.../call
 
-use super::{IngressError, IngressValidator, IngressWatcherHandle};
+use super::{EffectiveDestination, IngressError, IngressValidator, IngressWatcherHandle};
 use crate::{
     HttpError,
     common::{Cbor, CborUserError, WithTimeout},
@@ -112,7 +112,10 @@ async fn handler(
     let logger = ingress_validator.log.clone();
 
     let ingress_submitter = ingress_validator
-        .validate_ingress_message(request, effective_canister_id)
+        .validate_ingress_message(
+            request,
+            EffectiveDestination::Canister(effective_canister_id),
+        )
         .await?;
 
     let message_id = ingress_submitter.message_id();

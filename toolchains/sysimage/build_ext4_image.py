@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from itertools import batched
 
 
 def limit_file_contexts(file_contexts, base_path):
@@ -95,13 +96,10 @@ def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
         else:
             flattened_paths.append(target_path)
 
-    # TODO: replace this with itertools.batched when we have Python 3.12
     BATCH_SIZE = 100
-    for batch_start in range(0, len(flattened_paths), BATCH_SIZE):
-        batch_end = min(batch_start + BATCH_SIZE, len(flattened_paths))
+    for batch in batched(flattened_paths, BATCH_SIZE):
         subprocess.run(
-            ["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf"]
-            + flattened_paths[batch_start:batch_end],
+            ["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf"] + list(batch),
             check=True,
         )
 
@@ -113,15 +111,18 @@ def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extrac
     if in_file:
         # Untar files to the base dir.
         commands += f"""tar xf {in_file} --numeric-owner -C "{fs_basedir}" "{dir_to_extract}";\n"""
-
-        # Copy extra files to the base dir and set permissions.
-        for path_target in extra_files or []:
-            (path, target, mod) = path_target.split(":")
-            target_in_basedir = os.path.join(fs_basedir, dir_to_extract, target.lstrip("/"))
-            commands += f"""cp "{path}" "{target_in_basedir}";\n"""
-            commands += f"""chmod "{mod}" "{target_in_basedir}";\n"""
     else:
         commands += f"""chown root:root "{fs_basedir}";\n"""
+
+    # Copy extra files to the base dir and set permissions.
+    for path_target in extra_files or []:
+        (path, target, mod) = path_target.split(":")
+        target_in_basedir = os.path.join(fs_basedir, dir_to_extract, target.lstrip("/"))
+        commands += f"""mkdir -p $(dirname "{target_in_basedir}");\n"""
+        commands += f"""cp "{path}" "{target_in_basedir}";\n"""
+        # Force a chown to be picked up by fakeroot
+        commands += f"""chown --reference="{target_in_basedir}" "{target_in_basedir}";\n"""
+        commands += f"""chmod "{mod}" "{target_in_basedir}";\n"""
 
     subprocess.run(["fakeroot", "-s", fakeroot_statefile, "bash"], input=commands.encode(), check=True)
 
@@ -164,6 +165,9 @@ def make_argparser():
     )
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str, required=True)
     parser.add_argument("--diroid", help="Path to our diroid tool", type=str, required=True)
+    parser.add_argument("--zstd", help="Path to the zstd tool", type=str, required=True)
+    parser.add_argument("--mkfs-ext4", help="Path to the mkfs.ext4 (mke2fs) tool", type=str, required=True)
+    parser.add_argument("--e2fsdroid", help="Path to the e2fsdroid tool", type=str, required=True)
     return parser
 
 
@@ -209,7 +213,9 @@ def main():
         "faketime",
         "-f",
         "1970-1-1 0:0:0",
-        "/usr/sbin/mkfs.ext4",
+        # Absolute path so faketime (which execs it) resolves it as a path
+        # rather than searching PATH.
+        os.path.abspath(args.mkfs_ext4),
         "-E",
         "hash_seed=c61251eb-100b-48fe-b089-57dea7368612",
         "-U",
@@ -220,7 +226,7 @@ def main():
         image_file,
         str(image_size),
     ]
-    subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
+    subprocess.run(mke2fs_args, check=True, env={"SOURCE_DATE_EPOCH": "0"})
 
     # Use our tool, diroid, to create an fs_config file to be used by e2fsdroid.
     # This file is a simple list of files with their desired uid, gid, and mode.
@@ -243,7 +249,9 @@ def main():
         "fakeroot",
         "-i",
         fakeroot_statefile,
-        "e2fsdroid",
+        # Absolute path so fakeroot (which execs it) resolves it as a path rather
+        # than searching PATH.
+        os.path.abspath(args.e2fsdroid),
         "-e",
         "-a",
         "/",
@@ -254,7 +262,7 @@ def main():
     if file_contexts_file:
         e2fsdroid_args += ["-S", file_contexts_file]
     e2fsdroid_args += [image_file]
-    subprocess.run(e2fsdroid_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
+    subprocess.run(e2fsdroid_args, check=True, env={"SOURCE_DATE_EPOCH": "0"})
 
     # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:
@@ -273,7 +281,7 @@ def main():
 
     subprocess.run(
         [
-            "zstd",
+            args.zstd,
             "-q",
             "--threads=0",
             temp_tar,

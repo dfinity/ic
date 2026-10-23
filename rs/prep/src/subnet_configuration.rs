@@ -19,9 +19,11 @@ use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{
         CanisterCyclesCostSchedule, CatchUpPackageContents, ChainKeyConfig, GenesisArgs,
-        InitialNiDkgTranscriptRecord, SubnetRecord, catch_up_package_contents::CupType,
+        InitialNiDkgTranscriptRecord, RecoveryArgs, ResourceLimits as ResourceLimitsPb,
+        SubnetRecord, catch_up_package_contents::CupType,
     },
 };
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::crypto::threshold_sig::ni_dkg::ThresholdSigPublicKeyError;
@@ -49,7 +51,7 @@ pub enum SubnetRunningState {
 
 /// This represents the initial configuration of an NNS subnetwork of an IC
 /// instance.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct SubnetConfig {
     /// The subnet id of this subnetwork.
     pub subnet_index: SubnetIndex,
@@ -94,6 +96,10 @@ pub struct SubnetConfig {
     /// The type of the subnet
     pub subnet_type: SubnetType,
 
+    /// Whether this subnet uses Cycles. Not applicable to system subnets,
+    /// which don't use Cycles via a different mechanism.
+    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
+
     /// The maximum number of instructions a message can execute.
     /// See the comments in `subnet_config.rs` for more details.
     pub max_instructions_per_message: u64,
@@ -108,6 +114,9 @@ pub struct SubnetConfig {
 
     /// Flags to mark which features are enabled for this subnet.
     pub features: SubnetFeatures,
+
+    /// Limits on resource consumption (e.g., memory usage) of the subnet.
+    pub resource_limits: Option<ResourceLimits>,
 
     /// Optional chain key configuration for this subnet.
     pub chain_key_config: Option<ChainKeyConfig>,
@@ -190,8 +199,10 @@ pub fn duration_to_millis(unit_delay: Duration) -> u64 {
 /// 13 nodes. App subnets with more than 13 nodes will be deployed with the NNS
 /// subnet configs.
 pub fn get_default_config_params(subnet_type: SubnetType, nodes_num: usize) -> SubnetConfigParams {
-    let use_app_config =
-        subnet_type == SubnetType::Application && nodes_num <= ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
+    let use_app_config = matches!(
+        subnet_type,
+        SubnetType::Application | SubnetType::CloudEngine
+    ) && nodes_num <= ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 
     struct DynamicConfig {
         pub unit_delay: Duration,
@@ -243,10 +254,12 @@ impl SubnetConfig {
         dkg_interval_length: Option<Height>,
         dkg_dealings_per_block: Option<usize>,
         subnet_type: SubnetType,
+        canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
         max_instructions_per_message: Option<u64>,
         max_instructions_per_round: Option<u64>,
         max_instructions_per_install_code: Option<u64>,
         features: Option<SubnetFeatures>,
+        resource_limits: Option<ResourceLimits>,
         chain_key_config: Option<ChainKeyConfig>,
         max_number_of_canisters: Option<u64>,
         ssh_readonly_access: Vec<String>,
@@ -275,6 +288,7 @@ impl SubnetConfig {
             dkg_interval_length: dkg_interval_length.unwrap_or(config.dkg_interval_length),
             dkg_dealings_per_block: dkg_dealings_per_block.unwrap_or(config.dkg_dealings_per_block),
             subnet_type,
+            canister_cycles_cost_schedule,
             max_instructions_per_message: max_instructions_per_message
                 .unwrap_or_else(|| scheduler_config.max_instructions_per_message.get()),
             max_instructions_per_round: max_instructions_per_round
@@ -282,6 +296,7 @@ impl SubnetConfig {
             max_instructions_per_install_code: max_instructions_per_install_code
                 .unwrap_or_else(|| scheduler_config.max_instructions_per_install_code.get()),
             features: features.unwrap_or_default(),
+            resource_limits,
             chain_key_config,
             max_number_of_canisters: max_number_of_canisters.unwrap_or(0),
             ssh_readonly_access,
@@ -335,13 +350,15 @@ impl SubnetConfig {
             subnet_type: self.subnet_type.into(),
             is_halted: self.running_state == SubnetRunningState::Halted,
             halt_at_cup_height: false,
+            cooling_down: false,
             features: Some(self.features.into()),
             max_number_of_canisters: self.max_number_of_canisters,
             ssh_readonly_access: self.ssh_readonly_access,
             ssh_backup_access: self.ssh_backup_access,
             chain_key_config: self.chain_key_config,
-            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+            canister_cycles_cost_schedule: i32::from(self.canister_cycles_cost_schedule),
             subnet_admins: vec![],
+            resource_limits: self.resource_limits.map(ResourceLimitsPb::from),
             recalled_replica_version_ids: vec![],
         };
 
@@ -385,23 +402,32 @@ impl SubnetConfig {
         let der_pk = threshold_sig_public_key_to_der(pk)?;
         let subnet_id = SubnetId::from(PrincipalId::new_self_authenticating(&der_pk[..]));
 
-        let state_hash = if self.initial_height != 0 {
-            let state_hashes: Vec<_> = initialized_nodes
-                .values()
-                .map(|initialized_node| {
-                    initialized_node.generate_initial_state(subnet_id, self.subnet_type)
-                })
-                .collect();
+        let (cup_type, state_hash) = match self.initial_height {
+            0 => (CupType::Genesis(GenesisArgs {}), vec![]),
+            height => {
+                let state_hashes: Vec<_> = initialized_nodes
+                    .values()
+                    .map(|initialized_node| {
+                        initialized_node.generate_initial_state(subnet_id, self.subnet_type)
+                    })
+                    .collect();
 
-            // Make sure that all states have the same state shash
-            assert_eq!(
-                state_hashes,
-                vec![state_hashes[0].clone(); state_hashes.len()],
-                "Generated initial states do not have the same state hash"
-            );
-            state_hashes[0].clone()
-        } else {
-            vec![]
+                // Make sure that all states have the same state shash
+                assert_eq!(
+                    state_hashes,
+                    vec![state_hashes[0].clone(); state_hashes.len()],
+                    "Generated initial states do not have the same state hash"
+                );
+
+                (
+                    CupType::Recovery(RecoveryArgs {
+                        height,
+                        time: 0,
+                        state_hash: state_hashes[0].clone(),
+                    }),
+                    state_hashes[0].clone(),
+                )
+            }
         };
 
         let subnet_dkg = CatchUpPackageContents {
@@ -417,9 +443,7 @@ impl SubnetConfig {
             registry_store_uri: None,
             ecdsa_initializations: vec![],
             chain_key_initializations: vec![],
-            cup_type: Some(CupType::Genesis(GenesisArgs {
-                height: self.initial_height,
-            })),
+            cup_type: Some(cup_type),
         };
 
         Ok(InitializedSubnet {

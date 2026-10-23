@@ -1,7 +1,7 @@
 //! The crypto public interface.
 mod keygen;
 
-use ic_types::canister_http::CanisterHttpResponseMetadata;
+use ic_types::canister_http::CanisterHttpResponseReceipt;
 pub use keygen::*;
 
 mod errors;
@@ -26,7 +26,7 @@ pub use vetkd::*;
 use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_types::consensus::{
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent, UpgradePermitRequest,
     certification::CertificationContent,
     dkg as consensus_dkg,
     idkg::{IDkgComplaintContent, IDkgOpeningContent},
@@ -79,9 +79,12 @@ pub trait Crypto:
     + ThresholdSchnorrSigner
     + ThresholdSchnorrSigVerifier
     + VetKdProtocol
+    // UpgradePermitRequest
+    + BasicSigner<UpgradePermitRequest>
+    + BasicSigVerifier<UpgradePermitRequest>
     // CanisterHttpResponse
-    + BasicSigner<CanisterHttpResponseMetadata>
-    + BasicSigVerifier<CanisterHttpResponseMetadata>
+    + BasicSigner<CanisterHttpResponseReceipt>
+    + BasicSigVerifier<CanisterHttpResponseReceipt>
     // Signed Queries
     + BasicSigner<QueryResponseHash>
     // RequestId/WebAuthn
@@ -141,8 +144,8 @@ impl<T> Crypto for T where
         + BasicSigVerifier<IDkgComplaintContent>
         + BasicSigner<IDkgOpeningContent>
         + BasicSigVerifier<IDkgOpeningContent>
-        + BasicSigner<CanisterHttpResponseMetadata>
-        + BasicSigVerifier<CanisterHttpResponseMetadata>
+        + BasicSigner<CanisterHttpResponseReceipt>
+        + BasicSigVerifier<CanisterHttpResponseReceipt>
         + BasicSigner<QueryResponseHash>
         + IDkgProtocol
         + ThresholdEcdsaSigner
@@ -150,6 +153,8 @@ impl<T> Crypto for T where
         + ThresholdSchnorrSigner
         + ThresholdSchnorrSigVerifier
         + VetKdProtocol
+        + BasicSigner<UpgradePermitRequest>
+        + BasicSigVerifier<UpgradePermitRequest>
         + BasicSigVerifierByPublicKey<MessageId>
         + BasicSigVerifierByPublicKey<WebAuthnEnvelope>
         + ThresholdSigner<CatchUpContent>

@@ -12,7 +12,7 @@ path = "src/lib.rs"
 
 [dependencies]
 candid = { workspace = true }
-comparable = { version = "0.5", features = ["derive"] }
+comparable = { workspace = true, features = ["derive"] }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }

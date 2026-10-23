@@ -602,13 +602,6 @@ impl BackupArtifact {
     /// Each artifact will be stored separately used the following path:
     ///
     /// <subnet_id>/<replica_version>/<(height / N) * N>/height/<artifact_specific_name>.bin
-    ///
-    /// Note that the artifact specific name must contain all parameters to be
-    /// differentiated not only across other artifacts of the same replica, but also
-    /// across artifacts from all replicas. E.g., since we use multi-signatures for
-    /// notarizations and finalizations, these artifacts can be created in different
-    /// ways on different replicas, so we need to put their hashes into the artifact
-    /// name.
     pub fn file_location(&self, path: &Path) -> (PathBuf, String) {
         // Create a subdirectory for the height
         let (height, file_name) = match self {
@@ -632,7 +625,7 @@ impl BackupArtifact {
 mod tests {
     use super::*;
     use ic_test_utilities_consensus::fake::*;
-    use ic_test_utilities_types::ids::node_test_id;
+    use ic_test_utilities_types::ids::{node_test_id, test_replica_version};
     use ic_types::{
         RegistryVersion,
         batch::*,
@@ -643,7 +636,10 @@ mod tests {
 
     #[test]
     fn test_random_tape_conversion() {
-        let artifact = RandomTape::fake(RandomTapeContent::new(Height::from(22)));
+        let artifact = RandomTape::fake(RandomTapeContent::new(
+            Height::from(22),
+            test_replica_version(),
+        ));
         let mut buf = Vec::new();
         pb::RandomTape::from(artifact.clone())
             .encode(&mut buf)
@@ -659,6 +655,7 @@ mod tests {
         let artifact = Finalization::fake(FinalizationContent::new(
             Height::from(22),
             CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+            test_replica_version(),
         ));
         let mut buf = Vec::new();
         pb::Finalization::from(artifact.clone())
@@ -675,6 +672,7 @@ mod tests {
         let artifact = Notarization::fake(NotarizationContent::new(
             Height::from(22),
             CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+            test_replica_version(),
         ));
         let mut buf = Vec::new();
         pb::Notarization::from(artifact.clone())
@@ -702,6 +700,7 @@ mod tests {
                     certified_height: Height::from(42),
                     time: UNIX_EPOCH,
                 },
+                test_replica_version(),
             ),
             node_test_id(333),
         );

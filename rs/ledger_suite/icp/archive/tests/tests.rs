@@ -30,9 +30,9 @@ impl Setup {
             .create_canister_with_id(None, None, Principal::from(canister_id))
             .expect("should create canister successfully");
         assert_eq!(created_canister_id, Principal::from(canister_id));
-        let node_block_height_offset = 0u64;
+        let node_block_height_offset = 0_u64;
         let node_max_memory_size_bytes = archive_memory_size;
-        let max_transactions_per_response = 10u64;
+        let max_transactions_per_response = 10_u64;
         pocket_ic.install_canister(
             Principal::from(canister_id),
             archive_wasm.clone(),
@@ -111,7 +111,7 @@ fn valid_encoded_block() -> EncodedBlock {
                 to: AccountIdentifier::new(PrincipalId::new_user_test_id(1), None),
                 amount: Tokens::from_e8s(100),
             },
-            memo: Memo(45u64),
+            memo: Memo(45_u64),
             created_at_time: None,
             icrc1_memo: None,
         },
@@ -122,14 +122,14 @@ fn valid_encoded_block() -> EncodedBlock {
 
 #[test]
 fn should_return_initial_remaining_capacity_correctly() {
-    let archive_memory_size = valid_encoded_block().size_bytes() as u64 + 1u64;
+    let archive_memory_size = valid_encoded_block().size_bytes() as u64 + 1_u64;
     let setup = Setup::new(archive_memory_size);
     setup.assert_remaining_capacity(archive_memory_size);
 }
 
 #[test]
 fn should_append_block() {
-    let archive_memory_size = valid_encoded_block().size_bytes() as u64 + 1u64;
+    let archive_memory_size = valid_encoded_block().size_bytes() as u64 + 1_u64;
     let setup = Setup::new(archive_memory_size);
     let encoded_block = valid_encoded_block();
     assert!(encoded_block.size_bytes() < archive_memory_size as usize);
@@ -138,7 +138,7 @@ fn should_append_block() {
 
 #[test]
 fn should_return_remaining_capacity_correctly_after_appending_block() {
-    let archive_memory_size = valid_encoded_block().size_bytes() as u64 + 1u64;
+    let archive_memory_size = valid_encoded_block().size_bytes() as u64 + 1_u64;
     let setup = Setup::new(archive_memory_size);
     let encoded_block = valid_encoded_block();
     let encoded_block_size = encoded_block.size_bytes() as u64;
@@ -149,7 +149,7 @@ fn should_return_remaining_capacity_correctly_after_appending_block() {
 #[test]
 #[should_panic(expected = "No space left")]
 fn should_fail_to_append_block_when_insufficient_capacity() {
-    let archive_memory_size = valid_encoded_block().size_bytes() as u64 - 1u64;
+    let archive_memory_size = valid_encoded_block().size_bytes() as u64 - 1_u64;
     let setup = Setup::new(archive_memory_size);
     let encoded_block = valid_encoded_block();
     let encoded_block_size = encoded_block.size_bytes();

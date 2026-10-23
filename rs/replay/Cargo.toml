@@ -41,6 +41,7 @@ ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-replicated-state = { path = "../replicated_state" }
@@ -62,6 +63,7 @@ tower = { workspace = true }
 
 [dev-dependencies]
 async-trait = { workspace = true }
+ic-consensus-mocks = { path = "../consensus/mocks" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-nervous-system-agent = { path = "../nervous_system/agent" }

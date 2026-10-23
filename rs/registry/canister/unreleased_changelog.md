@@ -9,11 +9,20 @@ on the process that this file is part of, see
 
 ## Added
 
-* Rate limit the number of subnet admin updates that can happen for a subnet.
+* Enforce that every `hostos_version_id` matches its `HostosVersionRecord`'s registry key.
 
 ## Changed
 
-* During node registration, IDKG keys now must be generated and provided by the replica. Previously these keys were optional.
+* The engine controller canister may now set the state limits in `UpdateSubnet`'s `resource_limits`
+  (`maximum_state_size`, `maximum_state_delta`) on CloudEngine subnets. A limit it leaves unset keeps
+  its current value instead of being reset, and the query limits remain governance-only.
+
+* `UpdateSubnet` can now enable SEV on an existing subnet, not only at subnet creation. Disabling SEV
+  is still rejected, and enabling it only succeeds if the subnet's nodes all have a chip ID and its
+  GuestOS version has launch measurements, as the SEV invariants demand.
+* `replica_version_id` on `ReplicaVersionRecord` is no longer optional in code.
+  Setting this field has been mandatory for some time, and any previous records
+  with unset values have been backfilled.
 
 ## Deprecated
 

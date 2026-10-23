@@ -415,13 +415,13 @@ fn test_is_principal() {
 
     for len in 0..Principal::MAX_LENGTH_IN_BYTES + 1 {
         assert_eq!(
-            is_principal()(Cow::Owned(Value::blob(vec![0u8; len]))),
+            is_principal()(Cow::Owned(Value::blob(vec![0_u8; len]))),
             Ok(())
         );
     }
     assert_matches!(
         is_principal()(Cow::Owned(Value::blob(vec![
-            0u8;
+            0_u8;
             Principal::MAX_LENGTH_IN_BYTES
                 + 1
         ]))),
@@ -449,12 +449,12 @@ fn test_is_subaccount() {
     for len in 31..34 {
         if len == 32 {
             assert_eq!(
-                is_subaccount()(Cow::Owned(Value::blob(vec![0u8; len]))),
+                is_subaccount()(Cow::Owned(Value::blob(vec![0_u8; len]))),
                 Ok(())
             );
         } else {
             assert_matches!(
-                is_subaccount()(Cow::Owned(Value::blob(vec![0u8; len]))),
+                is_subaccount()(Cow::Owned(Value::blob(vec![0_u8; len]))),
                 Err(_)
             );
         }
@@ -494,8 +494,8 @@ fn test_is_account() {
         ]))),
         Err(_)
     );
-    let principal = Value::blob([1u8; 20]);
-    let subaccount = Value::blob([1u8; 32]);
+    let principal = Value::blob([1_u8; 20]);
+    let subaccount = Value::blob([1_u8; 32]);
     // wrong order
     assert_matches!(
         is_account()(Cow::Owned(Value::Array(vec![

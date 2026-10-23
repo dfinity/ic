@@ -770,7 +770,7 @@ pub fn canister_cycle_balance() -> u64 {
 /// Returns the amount of cycles in the canister's account.
 pub fn canister_cycle_balance128() -> Vec<u8> {
     let size = 16;
-    let mut buf = vec![0u8; size];
+    let mut buf = vec![0_u8; size];
     unsafe { ic0::canister_cycle_balance128(buf.as_mut_ptr() as i32) }
     buf
 }
@@ -784,7 +784,7 @@ pub fn msg_cycles_available() -> u64 {
 /// Returns the cycles available in this current message.
 pub fn msg_cycles_available128() -> u128 {
     let size = 16;
-    let mut buf = vec![0u8; size];
+    let mut buf = vec![0_u8; size];
     unsafe { ic0::msg_cycles_available128(buf.as_mut_ptr() as i32) }
     u128::from_le_bytes(buf.try_into().unwrap())
 }
@@ -798,7 +798,7 @@ pub fn msg_cycles_refunded() -> u64 {
 /// Returns the amount of cycles refunded with a response.
 pub fn msg_cycles_refunded128() -> u128 {
     let size = 16;
-    let mut buf = vec![0u8; size];
+    let mut buf = vec![0_u8; size];
     unsafe { ic0::msg_cycles_refunded128(buf.as_mut_ptr() as i32) }
     u128::from_le_bytes(buf.try_into().unwrap())
 }
@@ -812,7 +812,7 @@ pub fn msg_cycles_accept(amount: u64) -> u64 {
 /// Indicates that `amount` of cycles should be accepted in the current message.
 pub fn msg_cycles_accept128(amount_high: u64, amount_low: u64) -> u128 {
     let size = 16;
-    let mut buf = vec![0u8; size];
+    let mut buf = vec![0_u8; size];
     unsafe {
         ic0::msg_cycles_accept128(
             amount_high as i64,
@@ -842,9 +842,9 @@ pub fn data_certificate() -> Option<Vec<u8>> {
     }
 
     let n = unsafe { ic0::data_certificate_size() };
-    let mut buf = vec![0u8; n as usize];
+    let mut buf = vec![0_u8; n as usize];
     unsafe {
-        ic0::data_certificate_copy(buf.as_mut_ptr() as u32, 0u32, n);
+        ic0::data_certificate_copy(buf.as_mut_ptr() as u32, 0_u32, n);
     }
     Some(buf)
 }

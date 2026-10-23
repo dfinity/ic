@@ -22,9 +22,9 @@ use ic_interfaces::{
 use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
-use ic_types::NodeId;
 use ic_types::crypto::CryptoHashOf;
 use ic_types::{Height, SubnetId, Time, artifact::ConsensusMessageId, consensus::*};
+use ic_types::{NodeId, ReplicaVersion};
 use prometheus::{Histogram, IntCounter, IntGauge, histogram_opts, labels, opts};
 use std::time::Instant;
 use std::{marker::PhantomData, sync::Arc, time::Duration};
@@ -419,6 +419,7 @@ impl ConsensusPoolImpl {
     pub fn new(
         node_id: NodeId,
         subnet_id: SubnetId,
+        replica_version: &ReplicaVersion,
         cup_proto: pb::CatchUpPackage,
         config: ArtifactPoolConfig,
         registry: ic_metrics::MetricsRegistry,
@@ -443,7 +444,7 @@ impl ConsensusPoolImpl {
                 config
                     .spool_path
                     .join(subnet_id.to_string())
-                    .join(ic_types::ReplicaVersion::default().to_string()),
+                    .join(replica_version.to_string()),
                 Duration::from_secs(config.retention_time_secs),
                 Duration::from_secs(config.purging_interval_secs),
                 registry,
@@ -842,9 +843,11 @@ fn is_latency_sensitive(msg: &ConsensusMessage) -> bool {
     }
 }
 
+/// The interface the P2P layer uses to read from the validated pool.
+/// Returned block proposals are guaranteed to be fully loaded.
 impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
     fn get(&self, id: &ConsensusMessageId) -> Option<ConsensusMessage> {
-        self.validated.get(id)
+        self.validated.get(id).inspect(ConsensusMessage::load)
     }
 
     fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
@@ -959,6 +962,10 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
                     min: max_catch_up_height,
                     max: max_catch_up_height,
                 })
+                // Do not broadcast unsigned (i.e. genesis or recovery) CUPs: peers would consider
+                // them invalid, as they have no signature. Instead, each peer obtains such a CUP
+                // from its own orchestrator, which creates it from the registry.
+                .filter(|x| x.is_signed())
                 .map(|x| x.into_message())
                 .chain(
                     self.validated
@@ -1035,7 +1042,8 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
                         })
                         .map(|x| x.into_message()),
                 )
-                .chain(random_tape_iterator),
+                .chain(random_tape_iterator)
+                .inspect(ConsensusMessage::load),
         )
     }
 }
@@ -1056,13 +1064,15 @@ mod tests {
     use ic_test_utilities_consensus::{fake::*, make_genesis};
     use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
     use ic_test_utilities_time::FastForwardTimeSource;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::{
-        RegistryVersion, ReplicaVersion,
+        RegistryVersion,
         artifact::IdentifiableArtifact,
         batch::ValidationContext,
         consensus::{BlockProposal, RandomBeacon, dkg::DkgSummary},
-        crypto::{CryptoHash, CryptoHashOf, crypto_hash},
+        crypto::{
+            CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, crypto_hash,
+        },
         time::UNIX_EPOCH,
     };
     use prost::Message;
@@ -1080,6 +1090,7 @@ mod tests {
         ConsensusPoolImpl::new(
             node_id,
             subnet_id,
+            &test_replica_version(),
             catch_up_package.into(),
             config,
             registry,
@@ -1102,6 +1113,7 @@ mod tests {
                 certified_height: Height::from(42),
                 time: UNIX_EPOCH,
             },
+            test_replica_version(),
         )
     }
 
@@ -1123,6 +1135,7 @@ mod tests {
             let mut random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(0),
                 CryptoHashOf::from(CryptoHash(Vec::new())),
+                test_replica_version(),
             ));
             let msg_0 = random_beacon.clone().into_message();
             let msg_id_0 = random_beacon.get_id();
@@ -1182,18 +1195,21 @@ mod tests {
             let random_beacon_1 = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(1),
                 CryptoHashOf::from(CryptoHash(Vec::new())),
+                test_replica_version(),
             ))
             .into_message();
 
             let random_beacon_2 = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(2),
                 CryptoHashOf::from(CryptoHash(Vec::new())),
+                test_replica_version(),
             ))
             .into_message();
 
             let random_beacon_3 = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(3),
                 CryptoHashOf::from(CryptoHash(Vec::new())),
+                test_replica_version(),
             ))
             .into_message();
 
@@ -1264,6 +1280,7 @@ mod tests {
             let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(1),
                 CryptoHashOf::from(CryptoHash(Vec::new())),
+                test_replica_version(),
             ));
 
             let random_beacon_share_1 =
@@ -1336,6 +1353,7 @@ mod tests {
             let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(1),
                 CryptoHashOf::from(CryptoHash(Vec::new())),
+                test_replica_version(),
             ));
             let id = random_beacon.get_id();
 
@@ -1348,6 +1366,55 @@ mod tests {
 
             pool.remove(&id);
             assert!(!pool.unvalidated.contains(&id));
+        });
+    }
+
+    /// p2p hands out the block proposals it gets from the pool after letting go of the
+    /// lock on it, by which time the block, payload included, may have been purged. So
+    /// it has to get them with their payload already loaded.
+    #[test]
+    fn test_block_proposals_for_peers_come_with_their_payload() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let mut pool = new_from_cup_without_bytes(
+                node_test_id(0),
+                subnet_test_id(0),
+                make_genesis(DkgSummary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+                time_source.clone(),
+            );
+            let block_proposal =
+                BlockProposal::fake(fake_block(Height::from(1), Rank(0)), node_test_id(0));
+            let message = block_proposal.clone().into_message();
+            let id = message.get_id();
+            pool.apply(vec![ChangeAction::AddToValidated(
+                ValidatedConsensusArtifact {
+                    msg: message.clone(),
+                    timestamp: time_source.get_relative_time(),
+                },
+            )]);
+
+            let served = ValidatedPoolReader::get(&pool, &id).expect("The proposal is in the pool");
+            let broadcast: Vec<_> = pool
+                .get_all_for_initial_broadcast()
+                .filter(|message| message.get_id() == id)
+                .collect();
+            assert_eq!(broadcast.len(), 1);
+
+            pool.apply(vec![ChangeAction::RemoveFromValidated(message)]);
+            assert!(ValidatedPoolReader::get(&pool, &id).is_none());
+
+            for message in std::iter::once(served).chain(broadcast) {
+                let ConsensusMessage::BlockProposal(proposal) = message else {
+                    panic!("Expected a block proposal, got {message:?}");
+                };
+                assert_eq!(
+                    proposal.as_ref().payload.as_ref(),
+                    block_proposal.as_ref().payload.as_ref()
+                );
+            }
         });
     }
 
@@ -1376,7 +1443,7 @@ mod tests {
 
             let fake_finalization = |height: Height| {
                 Finalization::fake(FinalizationContent {
-                    version: ReplicaVersion::default(),
+                    version: test_replica_version(),
                     height,
                     block: crypto_hash(&fake_block(height, Rank(0))),
                 })
@@ -1389,7 +1456,7 @@ mod tests {
 
             let fake_notarization = |height: Height| {
                 Notarization::fake(NotarizationContent {
-                    version: ReplicaVersion::default(),
+                    version: test_replica_version(),
                     height,
                     block: crypto_hash(&fake_block(height, Rank(0))),
                 })
@@ -1402,7 +1469,7 @@ mod tests {
 
             let fake_beacon = |height: Height| {
                 RandomBeacon::fake(RandomBeaconContent {
-                    version: ReplicaVersion::default(),
+                    version: test_replica_version(),
                     height,
                     parent: CryptoHashOf::from(CryptoHash(vec![])),
                 })
@@ -1419,7 +1486,7 @@ mod tests {
 
             let fake_tape = |height: Height| {
                 RandomTape::fake(RandomTapeContent {
-                    version: ReplicaVersion::default(),
+                    version: test_replica_version(),
                     height,
                 })
                 .into_message()
@@ -1452,25 +1519,25 @@ mod tests {
                     ]);
                 }
             }
-            messages.push(
-                CatchUpPackage::fake(CatchUpContent::new(
-                    HashedBlock::new(
-                        crypto_hash,
-                        fake_block(Height::from(height_offset), Rank(0)),
-                    ),
-                    HashedRandomBeacon::new(
-                        crypto_hash,
-                        RandomBeacon::fake(RandomBeaconContent {
-                            version: ReplicaVersion::default(),
-                            height: Height::from(height_offset),
-                            parent: CryptoHashOf::from(CryptoHash(vec![])),
-                        }),
-                    ),
-                    CryptoHashOf::from(CryptoHash(vec![])),
-                    None,
-                ))
-                .into_message(),
-            );
+            let mut cup = CatchUpPackage::fake(CatchUpContent::new(
+                HashedBlock::new(
+                    crypto_hash,
+                    fake_block(Height::from(height_offset), Rank(0)),
+                ),
+                HashedRandomBeacon::new(
+                    crypto_hash,
+                    RandomBeacon::fake(RandomBeaconContent {
+                        version: test_replica_version(),
+                        height: Height::from(height_offset),
+                        parent: CryptoHashOf::from(CryptoHash(vec![])),
+                    }),
+                ),
+                CryptoHashOf::from(CryptoHash(vec![])),
+                None,
+            ));
+            // Sign the CUP, as unsigned CUPs are not broadcast
+            cup.signature.signature = CombinedThresholdSigOf::new(CombinedThresholdSig(vec![1]));
+            messages.push(cup.into_message());
 
             pool.apply(
                 messages
@@ -1510,6 +1577,43 @@ mod tests {
         });
     }
 
+    /// The CUP that the pool is initialized with is broadcast on startup only if it is signed, as
+    /// peers would consider unsigned (i.e. genesis or recovery) CUPs invalid.
+    #[test]
+    fn test_initial_broadcast_includes_cup_only_if_signed() {
+        for is_signed in [false, true] {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                let mut cup = make_genesis(DkgSummary::fake());
+                if is_signed {
+                    cup.signature.signature =
+                        CombinedThresholdSigOf::new(CombinedThresholdSig(vec![1]));
+                }
+                assert_eq!(cup.is_signed(), is_signed);
+                let pool = new_from_cup_without_bytes(
+                    node_test_id(0),
+                    subnet_test_id(0),
+                    cup.clone(),
+                    pool_config,
+                    MetricsRegistry::new(),
+                    no_op_logger(),
+                    FastForwardTimeSource::new(),
+                );
+
+                let broadcast_cups: Vec<_> = pool
+                    .get_all_for_initial_broadcast()
+                    .filter(|m| matches!(m, ConsensusMessage::CatchUpPackage(_)))
+                    .collect();
+
+                let expected_cups = if is_signed {
+                    vec![cup.into_message()]
+                } else {
+                    vec![]
+                };
+                assert_eq!(broadcast_cups, expected_cups, "is_signed: {is_signed}");
+            });
+        }
+    }
+
     #[test]
     fn test_metrics() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -1538,6 +1642,7 @@ mod tests {
                     msg: Notarization::fake(NotarizationContent::new(
                         block.height(),
                         ic_types::crypto::crypto_hash(block),
+                        test_replica_version(),
                     ))
                     .into_message(),
                     timestamp: time_source.get_relative_time(),
@@ -1550,6 +1655,7 @@ mod tests {
                     msg: Finalization::fake(FinalizationContent::new(
                         block.height(),
                         ic_types::crypto::crypto_hash(block),
+                        test_replica_version(),
                     ))
                     .into_message(),
                     timestamp: time_source.get_relative_time(),
@@ -1640,7 +1746,7 @@ mod tests {
             let root_path = backup_dir
                 .path()
                 .join(subnet_id.to_string())
-                .join(ic_types::ReplicaVersion::default().to_string());
+                .join(test_replica_version().to_string());
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_id,
@@ -1672,15 +1778,21 @@ mod tests {
             let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(1),
                 CryptoHashOf::from(CryptoHash(Vec::new())),
+                test_replica_version(),
             ));
-            let random_tape = RandomTape::fake(RandomTapeContent::new(Height::from(2)));
+            let random_tape = RandomTape::fake(RandomTapeContent::new(
+                Height::from(2),
+                test_replica_version(),
+            ));
             let notarization = Notarization::fake(NotarizationContent::new(
                 Height::from(2),
                 CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+                test_replica_version(),
             ));
             let finalization = Finalization::fake(FinalizationContent::new(
                 Height::from(3),
                 CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+                test_replica_version(),
             ));
 
             // height 3, non-final
@@ -1697,6 +1809,7 @@ mod tests {
                     certified_height: Height::from(41),
                     time: UNIX_EPOCH,
                 },
+                test_replica_version(),
             );
             let proposal3 = BlockProposal::fake(block, node_test_id(333));
 
@@ -1714,11 +1827,13 @@ mod tests {
                     certified_height: Height::from(42),
                     time: UNIX_EPOCH,
                 },
+                test_replica_version(),
             );
             let proposal3_final = BlockProposal::fake(block.clone(), node_test_id(333));
             let notarization3 = Notarization::fake(NotarizationContent::new(
                 Height::from(3),
                 ic_types::crypto::crypto_hash(&block),
+                test_replica_version(),
             ));
 
             let block = Block::new(
@@ -1734,10 +1849,12 @@ mod tests {
                     certified_height: Height::from(42),
                     time: UNIX_EPOCH,
                 },
+                test_replica_version(),
             );
             let finalization_at_4 = Finalization::fake(FinalizationContent::new(
                 Height::from(4),
                 ic_types::crypto::crypto_hash(&block),
+                test_replica_version(),
             ));
             let proposal = BlockProposal::fake(block, node_test_id(333));
 
@@ -1755,6 +1872,7 @@ mod tests {
                     certified_height: Height::from(41),
                     time: UNIX_EPOCH,
                 },
+                test_replica_version(),
             );
             let proposal_non_final = BlockProposal::fake(block, node_test_id(333));
 
@@ -1765,6 +1883,7 @@ mod tests {
                 RandomBeacon::fake(RandomBeaconContent::new(
                     Height::from(4),
                     CryptoHashOf::from(CryptoHash(Vec::new())),
+                    test_replica_version(),
                 )),
             );
 
@@ -2042,12 +2161,20 @@ mod tests {
             let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(1),
                 CryptoHashOf::from(CryptoHash(Vec::new())),
+                test_replica_version(),
             ));
-            let random_tape = RandomTape::fake(RandomTapeContent::new(Height::from(2)));
-            let random_tape3 = RandomTape::fake(RandomTapeContent::new(Height::from(3)));
+            let random_tape = RandomTape::fake(RandomTapeContent::new(
+                Height::from(2),
+                test_replica_version(),
+            ));
+            let random_tape3 = RandomTape::fake(RandomTapeContent::new(
+                Height::from(3),
+                test_replica_version(),
+            ));
             let notarization = Notarization::fake(NotarizationContent::new(
                 Height::from(3),
                 CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+                test_replica_version(),
             ));
             let block = Block::new(
                 CryptoHashOf::from(CryptoHash(Vec::new())),
@@ -2062,10 +2189,12 @@ mod tests {
                     certified_height: Height::from(42),
                     time: UNIX_EPOCH,
                 },
+                test_replica_version(),
             );
             let finalization = Finalization::fake(FinalizationContent::new(
                 Height::from(4),
                 ic_types::crypto::crypto_hash(&block),
+                test_replica_version(),
             ));
             let proposal = BlockProposal::fake(block, node_test_id(333));
 
@@ -2208,6 +2337,7 @@ mod tests {
             let mut pool = TestConsensusPool::new(
                 node_test_id(0),
                 subnet_id,
+                test_replica_version(),
                 pool_config,
                 time_source,
                 registry,
@@ -2277,7 +2407,7 @@ mod tests {
                 HashedRandomBeacon::new(
                     crypto_hash,
                     RandomBeacon::fake(RandomBeaconContent {
-                        version: ReplicaVersion::default(),
+                        version: test_replica_version(),
                         height,
                         parent: CryptoHashOf::from(CryptoHash(vec![])),
                     }),
@@ -2286,13 +2416,14 @@ mod tests {
                 None,
             ));
             let notarization = Notarization::fake(NotarizationContent {
-                version: ReplicaVersion::default(),
+                version: test_replica_version(),
                 height,
                 block: crypto_hash(&fake_block(height, Rank(0))),
             });
             let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
                 height,
                 CryptoHashOf::from(CryptoHash(Vec::new())),
+                test_replica_version(),
             ));
             let cup_id = cup.get_id();
             let notarization_id = notarization.get_id();

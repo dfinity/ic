@@ -8,7 +8,8 @@
 //! 2. We add a test that uses:
 //!
 //!    a. the binary from the commit that matches the latest mainnet versions, as
-//!    defined in mainnet-icos-revisions.json, (the binary is downloaded from S3)
+//!    defined in mainnet-icos-revisions.json (the binary is a bazel dependency,
+//!    see MAINNET_QUEUES_COMPATIBILITY_RUNTIME_DEPS in rs/tests/common.bzl)
 //!
 //!    b. the binary from the current commit
 //!
@@ -25,22 +26,15 @@
 //! a bit hacky, but gets around the annoying Rust test code visibility limitations,
 //! allowing the test serializers/deserializers to use unit test code from
 //! replicated_state.
-//!
-//! Implemented as a system test since binary downloads from the CDN don't
-//! work from plain Rust tests for some reason, and debugging/fixing this seems
-//! neither fun nor profitable.
 
 use anyhow::Result;
 use slog::{Logger, info};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
-use std::time::Duration;
 
-use ic_recovery::file_sync_helper::download_binary;
 use ic_system_test_driver::driver::{group::SystemTestGroup, test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::block_on;
 use ic_types::ReplicaVersion;
 
 fn run_unit_test(
@@ -82,26 +76,6 @@ fn run_unit_test(
     output
 }
 
-fn download_mainnet_binary(
-    binary_name: &str,
-    version: &ReplicaVersion,
-    target_dir: &Path,
-    log: &Logger,
-) -> PathBuf {
-    block_on(ic_system_test_driver::retry_with_msg_async!(
-        "download mainnet binary",
-        log,
-        Duration::from_secs(30),
-        RETRY_BACKOFF,
-        || async {
-            download_binary(log, version, binary_name.into(), target_dir)
-                .await
-                .map_err(|e| e.into())
-        }
-    ))
-    .expect("Failed to Download")
-}
-
 /// Check that the artifacts produced by the `test_module` of `from_binary` can be ingested by
 /// the `test_module` of the `to_binary`
 ///
@@ -137,7 +111,12 @@ enum TestType {
     #[allow(dead_code)]
     SelfTestOnly,
     Bidirectional {
-        published_binary: String,
+        /// Env var holding the published ("mainnet") test binary, which is a bazel
+        /// runtime dependency built at `mainnet_version` (see
+        /// MAINNET_QUEUES_COMPATIBILITY_RUNTIME_DEPS in rs/tests/common.bzl).
+        published_binary_env_var: String,
+        /// Only used for logging: which binary we get is determined by the bazel
+        /// dependency, not resolved from the version at runtime.
         mainnet_version: ReplicaVersion,
     },
 }
@@ -160,11 +139,11 @@ impl TestCase {
     pub fn run(&self, logger: &Logger) {
         match &self.test_type {
             TestType::Bidirectional {
-                published_binary,
+                published_binary_env_var,
                 mainnet_version,
             } => {
                 self.self_test(logger);
-                self.bidirectional_test(mainnet_version, published_binary, logger)
+                self.bidirectional_test(mainnet_version, published_binary_env_var, logger)
             }
             TestType::SelfTestOnly => {
                 self.self_test(logger);
@@ -192,24 +171,17 @@ impl TestCase {
     fn bidirectional_test(
         &self,
         mainnet_version: &ReplicaVersion,
-        published_binary_name: &str,
+        published_binary_env_var: &str,
         logger: &Logger,
     ) {
-        let download_dir = tempfile::tempdir().unwrap();
-        let download_dir_path = download_dir.path();
-        let published_binary = download_mainnet_binary(
-            published_binary_name,
-            mainnet_version,
-            download_dir_path,
-            logger,
-        );
+        let published_binary = get_dependency_path_from_env(published_binary_env_var);
         let test_binary = get_dependency_path_from_env(&self.test_binary_env_var);
         info!(
             logger,
-            "Testing module {} with the mainnet commit {} and published binary {}",
+            "Testing module {} with the mainnet commit {} and published binary {:?}",
             self.test_module,
             mainnet_version,
-            published_binary_name,
+            published_binary,
         );
         for (direction, from, to) in [
             ("upgrade", &published_binary, &test_binary),
@@ -236,51 +208,53 @@ fn test(env: TestEnv) {
         mainnet_application_subnet_version
     );
 
-    let mainnet_versions = [mainnet_nns_version, mainnet_application_subnet_version];
+    // The published binaries of both mainnet versions are bazel runtime
+    // dependencies, named `<prefix>_<binary>` where `<prefix>` identifies the
+    // mainnet version. See MAINNET_QUEUES_COMPATIBILITY_RUNTIME_DEPS in
+    // rs/tests/common.bzl.
+    let mainnet_versions = [
+        ("MAINNET_NNS", mainnet_nns_version),
+        ("MAINNET_APP", mainnet_application_subnet_version),
+    ];
 
-    let tests = mainnet_versions.iter().flat_map(|v| {
+    let tests = mainnet_versions.iter().flat_map(|(prefix, version)| {
         [
-            TestCase::new(
-                TestType::Bidirectional {
-                    published_binary: "replicated-state-test".to_string(),
-                    mainnet_version: v.clone(),
-                },
+            (
+                "REPLICATED_STATE_TEST_PATH",
                 "REPLICATED_STATE_TEST_BINARY_PATH",
                 "canister_state::queues::tests::mainnet_compatibility_tests::basic_test",
             ),
-            TestCase::new(
-                TestType::Bidirectional {
-                    published_binary: "replicated-state-test".to_string(),
-                    mainnet_version: v.clone(),
-                },
+            (
+                "REPLICATED_STATE_TEST_PATH",
                 "REPLICATED_STATE_TEST_BINARY_PATH",
                 "canister_state::queues::tests::mainnet_compatibility_tests::best_effort_test",
             ),
-            TestCase::new(
-                TestType::Bidirectional {
-                    published_binary: "replicated-state-test".to_string(),
-                    mainnet_version: v.clone(),
-                },
+            (
+                "REPLICATED_STATE_TEST_PATH",
                 "REPLICATED_STATE_TEST_BINARY_PATH",
                 "canister_state::queues::tests::mainnet_compatibility_tests::input_order_test",
             ),
-            TestCase::new(
-                TestType::Bidirectional {
-                    published_binary: "replicated-state-test".to_string(),
-                    mainnet_version: v.clone(),
-                },
+            (
+                "REPLICATED_STATE_TEST_PATH",
                 "REPLICATED_STATE_TEST_BINARY_PATH",
                 "canister_state::queues::tests::mainnet_compatibility_tests::refunds_test",
             ),
-            TestCase::new(
-                TestType::Bidirectional {
-                    published_binary: "state-layout-test".to_string(),
-                    mainnet_version: v.clone(),
-                },
+            (
+                "STATE_LAYOUT_TEST_PATH",
                 "STATE_LAYOUT_TEST_BINARY_PATH",
                 "state_layout::tests::mainnet_compatibility_tests::task_queue_compatibility_test",
             ),
         ]
+        .map(|(published_binary, test_binary_env_var, test_module)| {
+            TestCase::new(
+                TestType::Bidirectional {
+                    published_binary_env_var: format!("{prefix}_{published_binary}"),
+                    mainnet_version: version.clone(),
+                },
+                test_binary_env_var,
+                test_module,
+            )
+        })
     });
 
     for t in tests {

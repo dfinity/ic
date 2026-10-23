@@ -115,7 +115,7 @@ async fn test_create_neuron_with_defaults() {
 #[tokio::test]
 async fn test_create_neuron_with_custom_values() {
     let amount_e8s = 10 * E8;
-    let source_subaccount = Some(vec![1u8; 32]);
+    let source_subaccount = Some(vec![1_u8; 32]);
     let controller = PrincipalId::new_user_test_id(42);
     let dissolve_delay_seconds = ONE_YEAR_SECONDS * 2;
 
@@ -295,7 +295,7 @@ async fn test_create_neuron_invalid_source_subaccount() {
     let neuron_count_before = neuron_count();
 
     let request = CreateNeuronRequest {
-        source_subaccount: Some(vec![1u8; 31]), // Invalid length (not 32 bytes)
+        source_subaccount: Some(vec![1_u8; 31]), // Invalid length (not 32 bytes)
         amount_e8s: Some(10 * E8),
         controller: None,
         followees: None,

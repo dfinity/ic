@@ -97,6 +97,15 @@ pub enum PrivateKeyFormat {
     Pkcs8v2WithRingBug,
 }
 
+fn hash_seed(seed: &[u8]) -> [u8; 32] {
+    let mut sha2 = Sha512::new();
+    sha2.update(seed);
+    let digest: [u8; 64] = sha2.finalize().into();
+    let mut truncated = [0_u8; 32];
+    truncated.copy_from_slice(&digest[..32]);
+    truncated
+}
+
 impl PrivateKey {
     /// The length in bytes of the raw private key
     pub const BYTES: usize = 32;
@@ -122,18 +131,8 @@ impl PrivateKey {
     /// For security the seed should be at least 256 bits and
     /// randomly generated
     pub fn generate_from_seed(seed: &[u8]) -> Self {
-        let digest: [u8; 32] = {
-            let mut sha2 = Sha512::new();
-            sha2.update(seed);
-            let digest: [u8; 64] = sha2.finalize().into();
-            let mut truncated = [0u8; 32];
-            truncated.copy_from_slice(&digest[..32]);
-            truncated
-        };
-
-        Self {
-            sk: SigningKey::from_bytes(&digest),
-        }
+        let sk = SigningKey::from_bytes(&hash_seed(seed));
+        Self { sk }
     }
 
     /// Sign a message and return a signature
@@ -291,7 +290,7 @@ impl PrivateKey {
     /// incompatible with additive derivation.
     ///
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (DerivedPrivateKey, [u8; 32]) {
-        let chain_code = [0u8; 32];
+        let chain_code = [0_u8; 32];
         self.derive_subkey_with_chain_code(derivation_path, &chain_code)
     }
 
@@ -325,7 +324,7 @@ impl PrivateKey {
             sha2.update(derived_scalar.to_bytes());
             sha2.update(chain_code);
             let hash: [u8; 64] = sha2.finalize().into();
-            let mut truncated = [0u8; 32];
+            let mut truncated = [0_u8; 32];
             truncated.copy_from_slice(&hash[..32]);
             truncated
         };
@@ -381,7 +380,7 @@ impl DerivedPrivateKey {
     /// incompatible with additive derivation.
     ///
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (DerivedPrivateKey, [u8; 32]) {
-        let chain_code = [0u8; 32];
+        let chain_code = [0_u8; 32];
         self.derive_subkey_with_chain_code(derivation_path, &chain_code)
     }
 
@@ -415,7 +414,7 @@ impl DerivedPrivateKey {
             sha2.update(derived_scalar.to_bytes());
             sha2.update(chain_code);
             let hash: [u8; 64] = sha2.finalize().into();
-            let mut truncated = [0u8; 32];
+            let mut truncated = [0_u8; 32];
             truncated.copy_from_slice(&hash[..32]);
             truncated
         };
@@ -453,7 +452,7 @@ impl Signature {
         }
 
         let (r, r_bytes) = {
-            let mut r_bytes = [0u8; 32];
+            let mut r_bytes = [0_u8; 32];
             r_bytes.copy_from_slice(&signature[..32]);
             let r = CompressedEdwardsY(r_bytes)
                 .decompress()
@@ -463,7 +462,7 @@ impl Signature {
         };
 
         let s = {
-            let mut s_bytes = [0u8; 32];
+            let mut s_bytes = [0_u8; 32];
             s_bytes.copy_from_slice(&signature[32..]);
             Option::<Scalar>::from(Scalar::from_canonical_bytes(s_bytes))
                 .ok_or(SignatureError::InvalidSignature)?
@@ -736,6 +735,32 @@ impl PublicKey {
     /// valid signatures (if any).
     ///
     /// This verification follows ZIP215 validation rules
+    ///
+    /// # Warning
+    ///
+    /// The seed should be randomly chosen - if an attacker can predict it
+    /// then it's possible to introduce a forgery into the batch
+    #[cfg(feature = "rand")]
+    pub fn batch_verify_with_seed(
+        messages: &[&[u8]],
+        signatures: &[&[u8]],
+        keys: &[Self],
+        seed: &[u8],
+    ) -> Result<(), SignatureError> {
+        use rand::SeedableRng;
+        let mut rng = rand_chacha::ChaCha20Rng::from_seed(hash_seed(seed));
+        Self::batch_verify(messages, signatures, keys, &mut rng)
+    }
+
+    /// Verify a batch of signatures
+    ///
+    /// Returns Ok if the signatures are all valid, or Err otherwise
+    ///
+    /// Note that this does not indicate which of the signature(s) are invalid;
+    /// if batch verification fails you must then test serially to find the
+    /// valid signatures (if any).
+    ///
+    /// This verification follows ZIP215 validation rules
     #[cfg(feature = "rand")]
     pub fn batch_verify<R: rand::CryptoRng + rand::Rng>(
         messages: &[&[u8]],
@@ -861,7 +886,7 @@ impl PublicKey {
     /// This is the same derivation system used by the Internet Computer when
     /// deriving subkeys for Ed25519
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (Self, [u8; 32]) {
-        let chain_code = [0u8; 32];
+        let chain_code = [0_u8; 32];
         self.derive_subkey_with_chain_code(derivation_path, &chain_code)
     }
 
@@ -953,11 +978,11 @@ impl DerivationPath {
 
             let hkdf = hkdf::Hkdf::<Sha512>::new(Some(&chain_code), &ikm);
 
-            let mut okm = [0u8; 96];
+            let mut okm = [0_u8; 96];
             hkdf.expand(b"Ed25519", &mut okm)
                 .expect("96 is a valid length for HKDF-SHA-512");
 
-            let mut offset = [0u8; 64];
+            let mut offset = [0_u8; 64];
             offset.copy_from_slice(&okm[0..64]);
             offset.reverse(); // dalek uses little endian
             let offset = Scalar::from_bytes_mod_order_wide(&offset);

@@ -595,11 +595,16 @@ pub struct Ledger {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct FeatureFlags {
     pub icrc2: bool,
+    #[serde(default)]
+    pub icrc152: bool,
 }
 
 impl FeatureFlags {
     const fn const_default() -> Self {
-        Self { icrc2: true }
+        Self {
+            icrc2: true,
+            icrc152: false,
+        }
     }
 }
 
@@ -1181,7 +1186,7 @@ pub fn get_allowances(
         None => AccountSpender {
             account: from,
             spender: Account {
-                owner: Principal::from_slice(&[0u8; 0]),
+                owner: Principal::from_slice(&[0_u8; 0]),
                 subaccount: None,
             },
         },

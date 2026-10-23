@@ -3,18 +3,6 @@ load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:prost",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/registry/proto/generator:lib",
-    "//rs/test_utilities/compare_dirs",
-    "@crate_index//:tempfile",
-]
-
 rust_library(
     name = "proto",
     srcs = glob([
@@ -22,7 +10,10 @@ rust_library(
     ]),
     crate_name = "ic_registry_common_proto",
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:prost",
+    ],
 )
 
 filegroup(
@@ -39,11 +30,21 @@ generated_files_check(
         "src/gen/**",
     ]),
     manifest_dir = "rs/registry/proto",
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/proto/generator:lib",
+        "//rs/test_utilities/compare_dirs",
+        "@crate_index//:tempfile",
+    ],
 )
 
 rust_test(
     name = "proto_test",
     crate = ":proto",
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/proto/generator:lib",
+        "//rs/test_utilities/compare_dirs",
+        "@crate_index//:tempfile",
+    ],
 )

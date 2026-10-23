@@ -25,7 +25,7 @@ fn encode(t: &PbTree) -> Vec<u8> {
 fn decode_bad_digest_fails() {
     match PbTree::proxy_decode(
         encode(&PbTree {
-            tree_enum: Some(TreeEnum::PrunedDigest(vec![0u8; 10])),
+            tree_enum: Some(TreeEnum::PrunedDigest(vec![0_u8; 10])),
         })
         .as_ref(),
     ) as Result<T, _>

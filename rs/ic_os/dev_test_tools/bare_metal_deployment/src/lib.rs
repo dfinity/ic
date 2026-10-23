@@ -1,14 +1,22 @@
+//! Fast HostOS/GuestOS deployment to bare metal nodes, bypassing full SetupOS
+//! redeployment. SSHes into the target, copies images, and triggers an
+//! upgrade via the `reload_icos` script. Falls back to IPMI Serial-over-LAN
+//! for SSH key injection when SSH authentication fails.
+
 pub mod deploy;
 
 pub use deploy::SshAuthMethod;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
+use config_types::VmSlot;
+use configparser::ini::{Ini, IniDefault};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{DeploymentEnvironment, MacAddr6Ext};
 use macaddr::MacAddr6;
 use rexpect::session::PtySession;
 use rexpect::{ReadUntil, spawn};
 use std::net::Ipv6Addr;
+use std::process::Command;
 use std::time::Duration;
 
 /// A wrapper around a command line session for managing a baremetal host via IPMI Serial Over LAN
@@ -18,60 +26,60 @@ pub struct BareMetalIpmiSession {
     /// IPv6 address of the HostOS
     host_address: Ipv6Addr,
     mgmt_mac: MacAddr6,
-    keep_alive_after_drop: bool,
 }
 
 impl BareMetalIpmiSession {
     /// Attempts to start a SOL session, retrying if it fails.
     /// The session is closed when the struct is dropped.
-    /// As long as the impitool process is running, the SOL session is active and no other sessions
-    /// can be started on the same host.
     pub fn start(login_info: &LoginInfo) -> Result<Self> {
+        let _ = Command::new("ipmitool")
+            .args([
+                "-I",
+                "lanplus",
+                "-H",
+                &login_info.host,
+                "-U",
+                &login_info.username,
+                "-P",
+                &login_info.password,
+                "sol",
+                "deactivate",
+            ])
+            .status();
         let cmd = format!(
             "ipmitool -I lanplus -H {} -U {} -P {} sol activate",
             login_info.host, login_info.username, login_info.password
         );
 
         // Single expect timeout for all exp_* operations in this session
-        let expect_timeout_ms = 5_000;
+        const EXPECT_TIMEOUT_MS: u64 = 5_000;
 
-        for _ in 0..30 {
-            let mut session = spawn(&cmd, Some(expect_timeout_ms))
-                .with_context(|| format!("Failed to start ipmitool with command: {}", cmd))?;
+        let mut session = spawn(&cmd, Some(EXPECT_TIMEOUT_MS))
+            .with_context(|| format!("Failed to start ipmitool with command: {}", cmd))?;
 
-            let (_, matched) = session
-                .exp_any(vec![
-                    ReadUntil::String("SOL payload already active on another session".to_string()),
-                    ReadUntil::String("SOL Session operational".to_string()),
-                ])
-                .context("Timed out waiting for SOL session to become operational")?;
+        session
+            .exp_any(vec![ReadUntil::String(
+                "SOL Session operational".to_string(),
+            )])
+            .context("Timed out waiting for SOL session to become operational")?;
 
-            if !matched.contains("SOL Session operational") {
-                eprintln!("SOL payload already active on another session; retrying...");
-                std::thread::sleep(Duration::from_secs(30));
-                continue;
-            }
+        Self::init_session(&mut session)?;
+        // Wait a moment to get a prompt
+        std::thread::sleep(Duration::from_millis(500));
 
-            Self::init_session(&mut session)?;
-            // Wait a moment to get a prompt
-            std::thread::sleep(Duration::from_millis(500));
+        // Get the global IPv6 address of the HostOS
+        session.send_line(
+            "ip -6 addr show br6 scope global | awk '/inet6 / {print $2}' | cut -d/ -f1",
+        )?;
+        let (_, host_ip) = session.exp_regex(r"(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}")?;
 
-            // Get the global IPv6 address of the HostOS
-            session.send_line(
-                "ip -6 addr show br6 scope global | awk '/inet6 / {print $2}' | cut -d/ -f1",
-            )?;
-            let (_, host_ip) = session.exp_regex(r"(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}")?;
-            return Ok(BareMetalIpmiSession {
-                session,
-                host_address: host_ip
-                    .parse()
-                    .with_context(|| format!("Failed to parse Host IPv6 address {host_ip}"))?,
-                mgmt_mac: login_info.mgmt_mac,
-                keep_alive_after_drop: false,
-            });
-        }
-
-        bail!("Could not start SOL session after multiple attempts");
+        Ok(BareMetalIpmiSession {
+            session,
+            host_address: host_ip
+                .parse()
+                .with_context(|| format!("Failed to parse Host IPv6 address {host_ip}"))?,
+            mgmt_mac: login_info.mgmt_mac,
+        })
     }
 
     fn init_session(session: &mut PtySession) -> Result<()> {
@@ -153,18 +161,10 @@ impl BareMetalIpmiSession {
 
         Ok(())
     }
-
-    /// Keep the SOL session alive after dropping the BareMetalIpmiSession
-    pub fn keep_alive_after_drop(&mut self) {
-        self.keep_alive_after_drop = true;
-    }
 }
 
 impl Drop for BareMetalIpmiSession {
     fn drop(&mut self) {
-        if self.keep_alive_after_drop {
-            return;
-        }
         // Attempt to cleanly terminate the SOL session
         let _ = self.session.send("\n~.").inspect_err(|err| {
             eprintln!("Failed to send '~.' to terminate SOL session: {err}");
@@ -180,11 +180,12 @@ impl Drop for BareMetalIpmiSession {
 
 /// Login info for a baremetal host
 pub struct LoginInfo {
-    host: String,
-    username: String,
-    password: String,
-    mgmt_mac: MacAddr6,
-    addr_prefix: String,
+    pub host: String,
+    pub username: String,
+    pub password: String,
+    pub mgmt_mac: MacAddr6,
+    pub addr_prefix: String,
+    pub chip_id_hex: String,
 }
 
 impl LoginInfo {
@@ -193,6 +194,7 @@ impl LoginInfo {
             &self.mgmt_mac,
             DeploymentEnvironment::Testnet,
             NodeType::HostOS,
+            VmSlot::Plain,
         )
         .calculate_slaac(&self.addr_prefix)
         .unwrap()
@@ -200,33 +202,83 @@ impl LoginInfo {
 }
 
 pub fn parse_login_info_from_ini(data: &str) -> Result<LoginInfo> {
-    let ini = ini::Ini::load_from_str(data)?;
-    let host_section = ini
-        .section(Some("host"))
-        .context("No [host] section in INI")?;
-    let host = host_section
-        .get("ipmi_addr")
-        .context("No ipmi_addr in [host] section")?;
-    let username = host_section
-        .get("username")
-        .context("No username in [host] section")?;
-    let password = host_section
-        .get("password")
-        .context("No password in [host] section")?;
-    let mgmt_mac = host_section
-        .get("mgmt_mac")
-        .context("No mgmt_mac in [host] section")?
-        .parse::<MacAddr6>()
-        .context("Failed to parse mgmt_mac")?;
-    let addr_prefix = host_section
-        .get("addr_prefix")
-        .context("No addr_prefix in [host] section")?;
+    let mut defaults = IniDefault::default();
+    defaults.case_sensitive = true;
+    // Only `=` separates keys from values (the default also accepts `:`, which appears in the
+    // MAC address and IPv6 prefix values).
+    defaults.delimiters = vec!['='];
+    let mut ini = Ini::new_from_defaults(defaults);
+    ini.read(data.to_string())
+        .map_err(|err| anyhow!("Failed to parse INI: {err}"))?;
+    if !ini.sections().iter().any(|section| section == "host") {
+        bail!("No [host] section in INI");
+    }
+    let get = |key: &str| {
+        ini.get("host", key)
+            .with_context(|| format!("No {key} in [host] section"))
+    };
 
     Ok(LoginInfo {
-        host: host.to_string(),
-        username: username.to_string(),
-        password: password.to_string(),
-        mgmt_mac,
-        addr_prefix: addr_prefix.to_string(),
+        host: get("ipmi_addr")?,
+        username: get("username")?,
+        password: get("password")?,
+        mgmt_mac: get("mgmt_mac")?
+            .parse::<MacAddr6>()
+            .context("Failed to parse mgmt_mac")?,
+        addr_prefix: get("addr_prefix")?,
+        chip_id_hex: get("chip_id_hex")?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const LOGIN_INI: &str = "\
+# IPMI login information.
+[host]
+ipmi_addr = 10.0.0.1
+username = admin
+; passwords may contain '=' and ':'
+password = s3cr=t:pw
+mgmt_mac = 00:11:22:33:44:55
+addr_prefix = 2a00:fb01:400:44
+chip_id_hex = deadbeef
+";
+
+    #[test]
+    fn parse_login_info_from_ini_reads_the_host_section() {
+        let info = parse_login_info_from_ini(LOGIN_INI).unwrap();
+        assert_eq!(info.host, "10.0.0.1");
+        assert_eq!(info.username, "admin");
+        assert_eq!(info.password, "s3cr=t:pw");
+        assert_eq!(
+            info.mgmt_mac,
+            "00:11:22:33:44:55".parse::<MacAddr6>().unwrap()
+        );
+        assert_eq!(info.addr_prefix, "2a00:fb01:400:44");
+        assert_eq!(info.chip_id_hex, "deadbeef");
+    }
+
+    #[test]
+    fn parse_login_info_from_ini_accepts_crlf() {
+        let info = parse_login_info_from_ini(&LOGIN_INI.replace('\n', "\r\n")).unwrap();
+        assert_eq!(info.host, "10.0.0.1");
+    }
+
+    #[test]
+    fn parse_login_info_from_ini_reports_missing_section_and_keys() {
+        let Err(err) = parse_login_info_from_ini("ipmi_addr = 10.0.0.1\n") else {
+            panic!("expected an error for a missing [host] section");
+        };
+        assert!(err.to_string().contains("No [host] section"), "{err}");
+
+        let Err(err) = parse_login_info_from_ini("[host]\nipmi_addr = 10.0.0.1\n") else {
+            panic!("expected an error for a missing key");
+        };
+        assert!(
+            err.to_string().contains("No username in [host] section"),
+            "{err}"
+        );
+    }
 }

@@ -31,4 +31,4 @@ time = { workspace = true }
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
-scraper = "0.17.1"
+scraper = { workspace = true }

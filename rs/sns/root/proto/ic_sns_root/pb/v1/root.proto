@@ -9,7 +9,7 @@ import "ic_nervous_system/pb/v1/nervous_system.proto";
 //
 // When canister_init is called in the SNS root canister, it is expected that a
 // serialized version of this was passed via ic_management_canister_types_private::InstallCodeArgs::args,
-// which can be retrieved by the canister via ic_cdk::api::call::arg_data().
+// which can be retrieved by the canister via ic_cdk::api::msg_arg_data().
 message SnsRootCanister {
   // Required.
   //
@@ -154,6 +154,16 @@ enum LogVisibility {
   LOG_VISIBILITY_PUBLIC = 2;
 }
 
+enum SnapshotVisibility {
+  SNAPSHOT_VISIBILITY_UNSPECIFIED = 0;
+
+  // Snapshots are visible to the controllers of the dapp canister.
+  SNAPSHOT_VISIBILITY_CONTROLLERS = 1;
+
+  // Snapshots are visible to the public.
+  SNAPSHOT_VISIBILITY_PUBLIC = 2;
+}
+
 message ManageDappCanisterSettingsRequest {
   repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
   optional uint64 compute_allocation = 2;
@@ -163,6 +173,7 @@ message ManageDappCanisterSettingsRequest {
   optional LogVisibility log_visibility = 6;
   optional uint64 wasm_memory_limit = 7;
   optional uint64 wasm_memory_threshold = 8;
+  optional SnapshotVisibility snapshot_visibility = 9;
 }
 
 message ManageDappCanisterSettingsResponse {

@@ -61,7 +61,7 @@ fn test_instrument_module_rename_memory_table() {
     .unwrap()
     .1;
 
-    let module = Module::parse(output.binary.as_slice(), false).unwrap();
+    let module = Module::parse(output.binary.as_slice(), false, false).unwrap();
     assert_memory_and_table_exports(&module);
     // check that instrumented module instantiates correctly
     wasmtime_simple::wasmtime_instantiate_and_call_run(&output.binary);
@@ -93,7 +93,7 @@ fn test_instrument_module_export_memory_table() {
     .unwrap()
     .1;
 
-    let module = Module::parse(output.binary.as_slice(), false).unwrap();
+    let module = Module::parse(output.binary.as_slice(), false, false).unwrap();
     assert_memory_and_table_exports(&module);
     // check that instrumented module instantiates correctly
     wasmtime_simple::wasmtime_instantiate_and_call_run(&output.binary);
@@ -180,6 +180,7 @@ fn run_go_export(wat: &str) -> Result<(), HypervisorError> {
             Cycles::from(0_u128),
             PrincipalId::new_user_test_id(0),
             0.into(),
+            None,
         ))
         .with_num_instructions(LARGE_INSTRUCTION_LIMIT.into())
         .try_build()

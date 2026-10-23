@@ -1,5 +1,6 @@
 use crate::{
-    common::LOG_PREFIX, mutations::node_management::common::get_key_family_iter, registry::Registry,
+    common::{LOG_PREFIX, key_family::get_key_family_iter},
+    registry::Registry,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -60,7 +61,7 @@ impl Registry {
 
         // This implementation is inefficient, because it does a full scan of all nodes.
         for (_key, node_record) in get_key_family_iter::<NodeRecord>(self, NODE_RECORD_KEY_PREFIX) {
-            // Throw out node operators that operate the node (that this this loop is currently considering).
+            // Throw out node operators that operate the node (that this loop is currently considering).
             node_operators
                 .retain(|node_operator| node_operator.to_vec() != node_record.node_operator_id);
         }

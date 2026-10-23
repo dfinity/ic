@@ -15,6 +15,7 @@ impl Default for PayloadBuilder {
                 canister_http: vec![],
                 query_stats: vec![],
                 chain_key: vec![],
+                upgrade: vec![],
             },
         }
     }
@@ -76,11 +77,7 @@ mod tests {
         // Test default empty payload
         let payload_0 = Payload::new(
             ic_types::crypto::crypto_hash,
-            BlockPayload::Data(DataPayload {
-                batch: BatchPayload::default(),
-                dkg: DkgDataPayload::new_empty(Height::from(0)),
-                idkg: None,
-            }),
+            BlockPayload::Data(DataPayload::new_empty(Height::from(0))),
         );
         let vec = serde_cbor::ser::to_vec(&payload_0).unwrap();
         let payload_1: Payload = serde_cbor::de::from_slice(&vec).unwrap();

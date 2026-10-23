@@ -60,7 +60,7 @@ mod tls_public_key_cert {
 
     #[test]
     fn should_return_error_if_der_malformed() {
-        let malformed_der = vec![42u8; 5];
+        let malformed_der = vec![42_u8; 5];
 
         let error = TlsPublicKeyCert::new_from_der(malformed_der).unwrap_err();
 

@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use crate::{
     clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
     environment::CanisterEnvironment,
@@ -29,13 +28,14 @@ use crate::{
 };
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
-use ic_cdk::api::call::RejectionCode;
+use ic_cdk::call::Error as IcCdkCallError;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_common::{
     MAX_NEURONS_FOR_DIRECT_PARTICIPANTS, i2d, ledger::compute_neuron_staking_subaccount_bytes,
 };
 use ic_nervous_system_proto::pb::v1::Principals;
+use ic_nervous_system_runtime::into_reject_code_and_message;
 use ic_neurons_fund::{MatchedParticipationFunction, PolynomialNeuronsFundParticipation};
 use ic_sns_governance::pb::v1::{
     ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId, NeuronIds,
@@ -108,11 +108,13 @@ impl From<(Option<i32>, String)> for CanisterCallError {
     }
 }
 
-impl From<(RejectionCode, String)> for CanisterCallError {
-    fn from(value: (RejectionCode, String)) -> Self {
+impl From<IcCdkCallError> for CanisterCallError {
+    fn from(err: IcCdkCallError) -> Self {
+        let (code, description) = into_reject_code_and_message(err);
+
         Self {
-            code: Some(value.0 as i32),
-            description: value.1,
+            code: Some(code),
+            description,
         }
     }
 }
@@ -3924,7 +3926,7 @@ mod tests {
     fn test_derived_state_to_get_derived_state_response() {
         let derived_state = DerivedState {
             buyer_total_icp_e8s: 400_000_000,
-            sns_tokens_per_icp: 2.5f32,
+            sns_tokens_per_icp: 2.5_f32,
             direct_participant_count: Some(1000),
             cf_participant_count: Some(100),
             cf_neuron_count: Some(200),
@@ -3933,7 +3935,7 @@ mod tests {
         };
 
         let response: GetDerivedStateResponse = derived_state.into();
-        assert_eq!(response.sns_tokens_per_icp, Some(2.5f64));
+        assert_eq!(response.sns_tokens_per_icp, Some(2.5_f64));
         assert_eq!(response.buyer_total_icp_e8s, Some(400_000_000));
         assert_eq!(response.direct_participant_count, Some(1000));
         assert_eq!(response.cf_participant_count, Some(100));

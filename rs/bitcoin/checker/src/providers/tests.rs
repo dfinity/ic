@@ -14,7 +14,7 @@ fn test_parse_authorization_header_from_url() {
     assert_eq!(url.to_string(), "http://localhost:3030/");
     assert_eq!(
         header.value,
-        format!("Basic {}", base64::encode("guest:pass"))
+        format!("Basic {}", BASE64_STANDARD.encode("guest:pass"))
     );
 
     // The following would have failed if there was no url_decode
@@ -24,6 +24,6 @@ fn test_parse_authorization_header_from_url() {
     assert_eq!(url.to_string(), "http://localhost:3030/");
     assert_eq!(
         header.value,
-        format!("Basic {}", base64::encode("guest:pa=ss"))
+        format!("Basic {}", BASE64_STANDARD.encode("guest:pa=ss"))
     );
 }

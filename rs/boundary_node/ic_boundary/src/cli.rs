@@ -1,13 +1,14 @@
 use candid::Principal;
 use clap::{ArgGroup, Args, Parser};
 use humantime::parse_duration;
-use ic_bn_lib_common::{
-    parse_size, parse_size_usize,
-    types::{
-        acme::AcmeUrl,
-        http::{HttpClientCli, HttpServerCli},
+use ic_bn_lib::{
+    http::{
+        client::cli::HttpClientCli,
+        server::cli::HttpServerCli,
         shed::{ShedShardedCli, ShedSystemCli},
     },
+    parse_size, parse_size_usize,
+    tls::acme::AcmeUrl,
 };
 use ic_config::crypto::CryptoConfig;
 use ic_types::CanisterId;
@@ -52,6 +53,9 @@ pub struct Cli {
 
     #[command(flatten, next_help_heading = "Caching")]
     pub cache: Cache,
+
+    #[command(flatten, next_help_heading = "Subnet Read State Caching")]
+    pub subnet_read_state_cache: SubnetReadStateCache,
 
     #[command(flatten, next_help_heading = "Retries")]
     pub retry: Retry,
@@ -277,7 +281,7 @@ pub struct RateLimiting {
     /// File is re-read periodically (see below) and new rules are applied if the changes are detected.
     ///
     /// Expecting YAML list with objects that have at least one of
-    /// (canister_id, subnet_id, methods_regex, request_types, limit) fields.
+    /// (canister_id, subnet_id, sender_id, methods_regex, request_types, limit) fields.
     ///
     /// Example:
     /// - canister_id: aaaaa-aa
@@ -288,6 +292,9 @@ pub struct RateLimiting {
     /// - subnet_id: aaaaaa-aa
     ///   canister_id: aaaaa-aa
     ///   methods_regex: ^baz$
+    ///   limit: block
+    ///
+    /// - sender_id: 2vxsx-fae
     ///   limit: block
     #[clap(env, long)]
     pub rate_limit_generic_file: Option<PathBuf>,
@@ -333,10 +340,30 @@ pub struct Cache {
     /// Time-to-live for cache entries
     #[clap(env, long, default_value = "1s", value_parser = parse_duration)]
     pub cache_ttl: Duration,
+}
 
-    /// Whether to cache non-anonymous requests
+#[derive(Args)]
+pub struct SubnetReadStateCache {
+    /// Disable subnet read_state caching
     #[clap(env, long)]
-    pub cache_non_anonymous: bool,
+    pub subnet_read_state_cache_disable: bool,
+
+    /// TTL for cached subnet read_state responses
+    #[clap(env, long, default_value = "30s", value_parser = parse_duration)]
+    pub subnet_read_state_cache_ttl: Duration,
+
+    /// Maximum size of the subnet read_state cache in bytes
+    #[clap(env, long, default_value = "10MB", value_parser = parse_size)]
+    pub subnet_read_state_cache_size: u64,
+
+    /// Maximum size of a single cached response body in bytes.
+    /// Responses larger than this will not be cached.
+    #[clap(env, long, default_value = "1MB", value_parser = parse_size_usize)]
+    pub subnet_read_state_cache_max_item_size: usize,
+
+    /// Timeout for buffering the response body before caching
+    #[clap(env, long, default_value = "10s", value_parser = parse_duration)]
+    pub subnet_read_state_cache_body_timeout: Duration,
 }
 
 #[derive(Args)]

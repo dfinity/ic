@@ -34,59 +34,84 @@ pub(crate) enum CallOrQuery {
     Query,
 }
 
+pub(crate) struct RawSignedSenderInfoSlices<'a> {
+    pub info: &'a [u8],
+    pub signer: &'a [u8],
+    pub sig: &'a [u8],
+}
+
 pub(crate) fn representation_independent_hash_call_or_query(
     request_type: CallOrQuery,
-    canister_id: Vec<u8>,
+    canister_id: &[u8],
     method_name: &str,
-    arg: Vec<u8>,
+    arg: &[u8],
     ingress_expiry: u64,
-    sender: Vec<u8>,
+    sender: &[u8],
     nonce: Option<&[u8]>,
+    sender_info: Option<RawSignedSenderInfoSlices<'_>>,
 ) -> [u8; 32] {
     use RawHttpRequestVal::*;
     let mut map = btreemap! {
-        "request_type".to_string() => match request_type {
-            CallOrQuery::Call => String("call".to_string()),
-            CallOrQuery::Query => String("query".to_string()),
+        "request_type" => match request_type {
+            CallOrQuery::Call => String("call"),
+            CallOrQuery::Query => String("query"),
         },
-        "canister_id".to_string() => Bytes(canister_id),
-        "method_name".to_string() => String(method_name.to_string()),
-        "arg".to_string() => Bytes(arg),
-        "ingress_expiry".to_string() => U64(ingress_expiry),
-        "sender".to_string() => Bytes(sender),
+        "canister_id" => Bytes(canister_id),
+        "method_name" => String(method_name),
+        "arg" => Bytes(arg),
+        "ingress_expiry" => U64(ingress_expiry),
+        "sender" => Bytes(sender),
     };
     if let Some(some_nonce) = nonce {
-        map.insert("nonce".to_string(), Bytes(some_nonce.to_vec()));
+        map.insert("nonce", Bytes(some_nonce));
     }
-    hash_of_map(&map, |key, value| hash_key_val(key.as_str(), value))
+    if let Some(RawSignedSenderInfoSlices { info, signer, sig }) = sender_info {
+        map.insert(
+            "sender_info",
+            Map(btreemap! {
+                "info" => Bytes(info),
+                "signer" => Bytes(signer),
+                "sig" => Bytes(sig),
+            }),
+        );
+    }
+    hash_of_map(&map, |key, value| hash_key_val(key, value))
 }
 
 pub(crate) fn representation_independent_hash_read_state(
     ingress_expiry: u64,
     paths: &[Path],
-    sender: Vec<u8>,
+    sender: &[u8],
     nonce: Option<&[u8]>,
 ) -> [u8; 32] {
     use RawHttpRequestVal::*;
     let mut map = btreemap! {
-        "request_type".to_string() => String("read_state".to_string()),
-        "ingress_expiry".to_string() => U64(ingress_expiry),
-        "paths".to_string() => Array(paths
+        "request_type" => String("read_state"),
+        "ingress_expiry" => U64(ingress_expiry),
+        "paths" => Array(paths
                 .iter()
                 .map(|p| {
-                    RawHttpRequestVal::Array(
+                    Array(
                         p.iter()
-                            .map(|b| RawHttpRequestVal::Bytes(b.clone().into_vec()))
+                            .map(|b| Bytes(b.as_bytes()))
                             .collect(),
                     )
                 })
                 .collect()),
-        "sender".to_string() => Bytes(sender),
+        "sender" => Bytes(sender),
     };
     if let Some(some_nonce) = nonce {
-        map.insert("nonce".to_string(), Bytes(some_nonce.to_vec()));
+        map.insert("nonce", Bytes(some_nonce));
     }
-    hash_of_map(&map, |key, value| hash_key_val(key.as_str(), value))
+    hash_of_map(&map, |key, value| hash_key_val(key, value))
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(Arbitrary))]
+pub struct RawSignedSenderInfo {
+    pub info: Blob,
+    pub signer: Blob,
+    pub sig: Blob,
 }
 
 /// Describes the fields of a canister update call as defined in
@@ -104,6 +129,8 @@ pub struct HttpCanisterUpdate {
     // Do not include omitted fields in MessageId calculation
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nonce: Option<Blob>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_info: Option<RawSignedSenderInfo>,
 }
 
 impl HttpCanisterUpdate {
@@ -111,12 +138,19 @@ impl HttpCanisterUpdate {
     pub fn representation_independent_hash(&self) -> [u8; 32] {
         representation_independent_hash_call_or_query(
             CallOrQuery::Call,
-            self.canister_id.0.clone(),
+            &self.canister_id.0,
             &self.method_name,
-            self.arg.0.clone(),
+            &self.arg.0,
             self.ingress_expiry,
-            self.sender.0.clone(),
+            &self.sender.0,
             self.nonce.as_ref().map(|x| x.0.as_slice()),
+            self.sender_info
+                .as_ref()
+                .map(|sender_info| RawSignedSenderInfoSlices {
+                    info: &sender_info.info.0,
+                    signer: &sender_info.signer.0,
+                    sig: &sender_info.sig.0,
+                }),
         )
     }
 
@@ -165,6 +199,8 @@ pub struct HttpUserQuery {
     // Do not include omitted fields in MessageId calculation
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nonce: Option<Blob>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_info: Option<RawSignedSenderInfo>,
 }
 
 /// Describes the contents of a /api/v2/canister/_/query request.
@@ -229,12 +265,19 @@ impl HttpUserQuery {
     pub fn representation_independent_hash(&self) -> [u8; 32] {
         representation_independent_hash_call_or_query(
             CallOrQuery::Query,
-            self.canister_id.0.clone(),
+            &self.canister_id.0,
             &self.method_name,
-            self.arg.0.clone(),
+            &self.arg.0,
             self.ingress_expiry,
-            self.sender.0.clone(),
-            self.nonce.as_ref().map(|x| x.0.as_slice()),
+            &self.sender.0,
+            self.nonce.as_ref().map(|x| x.0.as_ref()),
+            self.sender_info
+                .as_ref()
+                .map(|sender_info| RawSignedSenderInfoSlices {
+                    info: &sender_info.info.0,
+                    signer: &sender_info.signer.0,
+                    sig: &sender_info.sig.0,
+                }),
         )
     }
 }
@@ -244,9 +287,9 @@ impl HttpReadState {
     pub fn representation_independent_hash(&self) -> [u8; 32] {
         representation_independent_hash_read_state(
             self.ingress_expiry,
-            self.paths.as_slice(),
-            self.sender.0.clone(),
-            self.nonce.as_ref().map(|x| x.0.as_slice()),
+            &self.paths,
+            &self.sender.0,
+            self.nonce.as_ref().map(|x| x.0.as_ref()),
         )
     }
 }
@@ -282,6 +325,28 @@ pub enum Authentication {
     Anonymous,
 }
 
+/// Signed sender info after decoding.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+pub struct SignedSenderInfo {
+    pub info: Vec<u8>,
+    pub signer: CanisterId,
+    pub sig: Vec<u8>,
+}
+
+/// The content bytes of a sender_info field, used as the signable message
+/// for canister signature verification of sender info.
+///
+/// The signing canister (e.g. Internet Identity) signs the `info` blob
+/// using a canister signature with the domain separator `"ic-sender-info"`.
+#[derive(Clone, Debug)]
+pub struct SenderInfoContent<'a>(pub &'a [u8]);
+
+impl crate::crypto::SignedBytesWithoutDomainSeparator for SenderInfoContent<'_> {
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(self.0);
+    }
+}
+
 /// Common attributes that all HTTP request contents should have.
 pub trait HttpRequestContent {
     fn id(&self) -> MessageId;
@@ -291,6 +356,8 @@ pub trait HttpRequestContent {
     fn ingress_expiry(&self) -> u64;
 
     fn nonce(&self) -> Option<Vec<u8>>;
+
+    fn sender_info(&self) -> Option<&SignedSenderInfo>;
 }
 
 /// A trait implemented by HTTP requests that contain a `canister_id`.
@@ -313,6 +380,10 @@ impl<C: HttpRequestContent> HttpRequest<C> {
 
     pub fn nonce(&self) -> Option<Vec<u8>> {
         self.content.nonce()
+    }
+
+    pub fn sender_info(&self) -> Option<&SignedSenderInfo> {
+        self.content.sender_info()
     }
 }
 
@@ -352,6 +423,13 @@ impl HttpRequestContent for Query {
             QuerySource::System => None,
         }
     }
+
+    fn sender_info(&self) -> Option<&SignedSenderInfo> {
+        match &self.source {
+            QuerySource::User { sender_info, .. } => sender_info.as_ref(),
+            QuerySource::System => None,
+        }
+    }
 }
 
 impl HttpRequestContent for ReadState {
@@ -369,6 +447,10 @@ impl HttpRequestContent for ReadState {
 
     fn nonce(&self) -> Option<Vec<u8>> {
         self.nonce.clone()
+    }
+
+    fn sender_info(&self) -> Option<&SignedSenderInfo> {
+        None
     }
 }
 
@@ -454,6 +536,34 @@ impl From<CanisterIdError> for HttpRequestError {
     }
 }
 
+/// The kinds of calls a delegation permits, as defined in
+/// `<https://docs.internetcomputer.org/references/ic-interface-spec/https-interface/#authentication>`.
+/// An absent field on the [`Delegation`] is unrestricted, equivalent to
+/// [`DelegationPermissions::All`].
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(Arbitrary))]
+pub enum DelegationPermissions {
+    /// The sender may only perform query calls and `read_state` requests;
+    /// requests to `/call` endpoints are rejected.
+    #[serde(rename = "queries")]
+    Queries,
+    /// The sender may perform all kinds of calls (queries, replicated
+    /// queries, and updates). Same as omitting the field.
+    #[serde(rename = "all")]
+    All,
+}
+
+impl DelegationPermissions {
+    /// The textual value as it appears on the wire and in the
+    /// representation-independent hash.
+    fn as_str(&self) -> &'static str {
+        match self {
+            DelegationPermissions::Queries => "queries",
+            DelegationPermissions::All => "all",
+        }
+    }
+}
+
 /// Describes a delegation map as defined in
 /// `<https://internetcomputer.org/docs/current/references/ic-interface-spec#certification-delegation>`.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -462,6 +572,7 @@ pub struct Delegation {
     pubkey: Blob,
     expiration: Time,
     targets: Option<Vec<Blob>>,
+    permissions: Option<DelegationPermissions>,
 }
 
 impl Delegation {
@@ -470,15 +581,20 @@ impl Delegation {
             pubkey: Blob(pubkey),
             expiration,
             targets: None,
+            permissions: None,
         }
     }
 
-    pub fn new_with_targets(pubkey: Vec<u8>, expiration: Time, targets: Vec<CanisterId>) -> Self {
-        Self {
-            pubkey: Blob(pubkey),
-            expiration,
-            targets: Some(targets.iter().map(|c| Blob(c.get().to_vec())).collect()),
-        }
+    /// Restricts the delegation to the given canister targets.
+    pub fn with_targets(mut self, targets: Vec<CanisterId>) -> Self {
+        self.targets = Some(targets.iter().map(|c| Blob(c.get().to_vec())).collect());
+        self
+    }
+
+    /// Restricts the kinds of calls the delegation permits.
+    pub fn with_permissions(mut self, permissions: DelegationPermissions) -> Self {
+        self.permissions = Some(permissions);
+        self
     }
 
     pub fn pubkey(&self) -> &Vec<u8> {
@@ -508,24 +624,33 @@ impl Delegation {
     pub fn number_of_targets(&self) -> Option<usize> {
         self.targets.as_ref().map(Vec::len)
     }
+
+    /// The kinds of calls the delegation permits, if restricted.
+    /// `None` means the delegation is unrestricted.
+    pub fn permissions(&self) -> Option<DelegationPermissions> {
+        self.permissions
+    }
 }
 
 impl SignedBytesWithoutDomainSeparator for Delegation {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
         use RawHttpRequestVal::*;
 
         let mut map = btreemap! {
-            "pubkey" => Bytes(self.pubkey.0.clone()),
+            "pubkey" => Bytes(self.pubkey.0.as_slice()),
             "expiration" => U64(self.expiration.as_nanos_since_unix_epoch()),
         };
         if let Some(targets) = &self.targets {
             map.insert(
                 "targets",
-                Array(targets.iter().map(|t| Bytes(t.0.clone())).collect()),
+                Array(targets.iter().map(|t| Bytes(t.0.as_slice())).collect()),
             );
         }
+        if let Some(permissions) = self.permissions {
+            map.insert("permissions", String(permissions.as_str()));
+        }
 
-        hash_of_map(&map, |key, value| hash_key_val(key, value)).to_vec()
+        bytes.extend_from_slice(&hash_of_map(&map, |key, value| hash_key_val(key, value)));
     }
 }
 
@@ -560,13 +685,13 @@ impl SignedDelegation {
 }
 
 /// The different types of values supported in `RawHttpRequest`.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
-pub enum RawHttpRequestVal {
-    Bytes(#[serde(with = "serde_bytes")] Vec<u8>),
-    String(String),
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub enum RawHttpRequestVal<'a> {
+    Bytes(&'a [u8]),
+    String(&'a str),
     U64(u64),
-    Array(Vec<RawHttpRequestVal>),
-    Map(BTreeMap<String, RawHttpRequestVal>),
+    Array(Vec<RawHttpRequestVal<'a>>),
+    Map(BTreeMap<&'a str, RawHttpRequestVal<'a>>),
 }
 
 /// The reply to an update call.
@@ -600,18 +725,18 @@ impl QueryResponseHash {
     /// Creates a [`QueryResponseHash`] from a given query response, request and timestamp.
     pub fn new(response: &HttpQueryResponse, request: &Query, timestamp: Time) -> Self {
         use RawHttpRequestVal::*;
-
+        let request_id = request.id();
         let self_map_representation = match response {
             HttpQueryResponse::Replied { reply } => {
                 let map_of_reply = btreemap! {
-                    "arg".to_string() => RawHttpRequestVal::Bytes(reply.arg.0.clone()),
+                    "arg" => RawHttpRequestVal::Bytes(reply.arg.0.as_slice()),
                 };
 
                 btreemap! {
-                    "request_id".to_string() => Bytes(request.id().as_bytes().to_vec()),
-                    "status".to_string() => String("replied".to_string()),
-                    "timestamp".to_string() => U64(timestamp.as_nanos_since_unix_epoch()),
-                    "reply".to_string() => Map(map_of_reply)
+                    "request_id" => Bytes(request_id.as_bytes()),
+                    "status" => String("replied"),
+                    "timestamp" => U64(timestamp.as_nanos_since_unix_epoch()),
+                    "reply" => Map(map_of_reply)
                 }
             }
             HttpQueryResponse::Rejected {
@@ -620,19 +745,19 @@ impl QueryResponseHash {
                 reject_message,
             } => {
                 btreemap! {
-                    "request_id".to_string() => Bytes(request.id().as_bytes().to_vec()),
-                    "status".to_string() => String("rejected".to_string()),
-                    "timestamp".to_string() => U64(timestamp.as_nanos_since_unix_epoch()),
-                    "reject_code".to_string() => U64(*reject_code),
-                    "reject_message".to_string() => String(reject_message.to_string()),
-                    "error_code".to_string() => String(error_code.to_string()),
+                    "request_id" => Bytes(request_id.as_bytes()),
+                    "status" => String("rejected"),
+                    "timestamp" => U64(timestamp.as_nanos_since_unix_epoch()),
+                    "reject_code" => U64(*reject_code),
+                    "reject_message" => String(reject_message.as_str()),
+                    "error_code" => String(error_code.as_str()),
 
                 }
             }
         };
 
         let hash = hash_of_map(&self_map_representation, |key, value| {
-            hash_key_val(key.as_str(), value)
+            hash_key_val(key, value)
         });
 
         Self(hash)
@@ -644,8 +769,8 @@ impl QueryResponseHash {
 }
 
 impl SignedBytesWithoutDomainSeparator for QueryResponseHash {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        self.0.to_vec()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.0);
     }
 }
 
@@ -778,6 +903,11 @@ pub struct HttpStatusResponse {
     pub root_key: Option<Blob>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub impl_version: Option<String>,
+    /// The GuestOS version the node booted from (from version.txt). Distinct
+    /// from `impl_version` (the replica binary version) when a fast-upgrade
+    /// overlay is active.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guestos_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replica_health_status: Option<ReplicaHealthStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]

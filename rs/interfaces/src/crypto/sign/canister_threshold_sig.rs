@@ -301,7 +301,7 @@ pub trait IDkgProtocol {
     fn create_transcript(
         &self,
         params: &IDkgTranscriptParams,
-        dealings: &BatchSignedIDkgDealings,
+        dealings: BatchSignedIDkgDealings,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError>;
 
     /// Verify the multisignature on each dealing in the transcript.

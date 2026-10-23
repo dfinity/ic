@@ -212,7 +212,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
             .expect("Error while calling retrieve_btc");
         assert_eq!(
             Err(RetrieveBtcError::InsufficientFunds {
-                balance: 7_000_000u64
+                balance: 7_000_000_u64
             }),
             retrieve_result
         );

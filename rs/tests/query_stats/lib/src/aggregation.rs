@@ -26,7 +26,7 @@ use ic_system_test_driver::{
     },
     util::{UniversalCanister, block_on},
 };
-use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
+use ic_utils::interfaces::ManagementCanister;
 use slog::info;
 use std::{ops::Range, time::Duration};
 
@@ -101,22 +101,23 @@ fn query_stats_fault_tolerance(
 
         let query_stats = ManagementCanister::create(agents.first().unwrap())
             .canister_status(&uc_id)
-            .call_and_wait()
+            .as_update()
+            .call()
             .await
             .unwrap()
             .0
             .query_stats;
 
         if expect_success {
-            assert_eq!(query_stats.num_calls_total, 4u64);
-            assert_ne!(query_stats.num_instructions_total, 0u64);
-            assert_ne!(query_stats.request_payload_bytes_total, 0u64);
-            assert_eq!(query_stats.response_payload_bytes_total, 16u64);
+            assert_eq!(query_stats.num_calls_total, 4_u64);
+            assert_ne!(query_stats.num_instructions_total, 0_u64);
+            assert_ne!(query_stats.request_payload_bytes_total, 0_u64);
+            assert_eq!(query_stats.response_payload_bytes_total, 16_u64);
         } else {
-            assert_eq!(query_stats.num_calls_total, 0u64);
-            assert_eq!(query_stats.num_instructions_total, 0u64);
-            assert_eq!(query_stats.request_payload_bytes_total, 0u64);
-            assert_eq!(query_stats.response_payload_bytes_total, 0u64);
+            assert_eq!(query_stats.num_calls_total, 0_u64);
+            assert_eq!(query_stats.num_instructions_total, 0_u64);
+            assert_eq!(query_stats.request_payload_bytes_total, 0_u64);
+            assert_eq!(query_stats.response_payload_bytes_total, 0_u64);
         }
     })
 }

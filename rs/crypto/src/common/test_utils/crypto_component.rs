@@ -1,4 +1,4 @@
-use crate::CryptoComponentImpl;
+use crate::{CryptoComponentImpl, CryptoComponentRng};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
@@ -9,10 +9,11 @@ use std::sync::Arc;
 
 const NODE_ID: u64 = 42;
 
-pub fn crypto_component_with_csp(
+pub fn crypto_component_with_csp<R: CryptoComponentRng>(
     csp: MockAllCryptoServiceProvider,
     registry_client: Arc<dyn RegistryClient>,
-) -> CryptoComponentImpl<MockAllCryptoServiceProvider> {
+    rng: R,
+) -> CryptoComponentImpl<MockAllCryptoServiceProvider, R> {
     CryptoComponentImpl::new_for_test(
         csp,
         Arc::new(MockLocalCspVault::new()),
@@ -21,14 +22,16 @@ pub fn crypto_component_with_csp(
         node_test_id(NODE_ID),
         Arc::new(CryptoMetrics::none()),
         None,
+        rng,
     )
 }
 
-pub fn crypto_component_with_csp_and_vault(
+pub fn crypto_component_with_csp_and_vault<R: CryptoComponentRng>(
     csp: MockAllCryptoServiceProvider,
     vault: MockLocalCspVault,
     registry_client: Arc<dyn RegistryClient>,
-) -> CryptoComponentImpl<MockAllCryptoServiceProvider> {
+    rng: R,
+) -> CryptoComponentImpl<MockAllCryptoServiceProvider, R> {
     CryptoComponentImpl::new_for_test(
         csp,
         Arc::new(vault),
@@ -37,5 +40,6 @@ pub fn crypto_component_with_csp_and_vault(
         node_test_id(NODE_ID),
         Arc::new(CryptoMetrics::none()),
         None,
+        rng,
     )
 }

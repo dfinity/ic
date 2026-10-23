@@ -7,11 +7,11 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-backoff = { workspace = true }
+backon = { workspace = true }
 candid = { workspace = true }
-cargo_metadata = "0.14.2"
+cargo_metadata = { workspace = true }
 dfn_candid = { path = "../dfn_candid" }
-escargot = "0.5.2"
+escargot = { workspace = true }
 ic-canister-client = { path = "../../canister_client" }
 ic-config = { path = "../../config" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }

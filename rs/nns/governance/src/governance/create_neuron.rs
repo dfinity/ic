@@ -1,6 +1,6 @@
 use crate::{
     governance::{
-        Governance, INITIAL_NEURON_DISSOLVE_DELAY, LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS,
+        Governance, INITIAL_NEURON_DISSOLVE_DELAY, LOG_PREFIX, max_dissolve_delay_seconds,
     },
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
@@ -14,7 +14,6 @@ use ic_cdk::println;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::{CreateNeuronRequest, CreatedNeuron};
 use ic_types::PrincipalId;
-use icp_ledger::Subaccount;
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 use std::{cell::RefCell, thread::LocalKey};
 
@@ -73,12 +72,13 @@ impl Governance {
                 ),
             ));
         }
-        if dissolve_delay_seconds > MAX_DISSOLVE_DELAY_SECONDS {
+        if dissolve_delay_seconds > max_dissolve_delay_seconds() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 format!(
                     "Dissolve delay {dissolve_delay_seconds} is greater than the maximum \
-            dissolve delay {MAX_DISSOLVE_DELAY_SECONDS}"
+            dissolve delay {}",
+                    max_dissolve_delay_seconds()
                 ),
             ));
         }
@@ -95,28 +95,9 @@ impl Governance {
                     NEURON_RATE_LIMITER_KEY.to_string(),
                     1,
                 )?;
-                let neuron_subaccount =
-                    governance.randomness.random_byte_array().map_err(|_| {
-                        GovernanceError::new_with_message(
-                            ErrorType::Unavailable,
-                            "Failed to generate neuron subaccount",
-                        )
-                    })?;
-                let neuron_subaccount = Subaccount(neuron_subaccount);
-                if governance
+                let neuron_subaccount = governance
                     .neuron_store
-                    .has_neuron_with_subaccount(neuron_subaccount)
-                {
-                    println!(
-                        "{LOG_PREFIX}Warning: An improbable event has occurred: a neuron \
-                    subaccount was generated randomly but there is already a neuron with the same \
-                    subaccount."
-                    );
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::Unavailable,
-                        "There is already a neuron with the same subaccount.",
-                    ));
-                }
+                    .new_neuron_subaccount(&mut *governance.randomness)?;
                 let neuron_id = governance
                     .neuron_store
                     .new_neuron_id(&mut *governance.randomness)?;

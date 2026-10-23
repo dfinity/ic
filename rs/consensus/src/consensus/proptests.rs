@@ -1,6 +1,5 @@
 use crate::consensus::payload_builder::test::make_test_payload_impl;
-use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
-use ic_crypto_tree_hash::{Digest, Witness};
+use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
 use ic_interfaces::{batch_payload::ProposalContext, consensus::PayloadBuilder};
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
@@ -14,10 +13,8 @@ use ic_types::{
     CryptoHashOfPartialState, Height, RegistryVersion, SubnetId,
     batch::{BatchPayload, ValidationContext},
     consensus::{
-        BlockPayload, DataPayload, Payload,
-        block_maker::SubnetRecords,
-        certification::{Certification, CertificationContent},
-        dkg::DkgDataPayload,
+        BlockPayload, DataPayload, Payload, block_maker::SubnetRecords,
+        certification::CertificationContent, dkg::DkgDataPayload,
     },
     crypto::{CryptoHash, Signed},
     messages::SignedIngress,
@@ -41,11 +38,12 @@ fn proptest_payload_size_validation() {
             .with_max_ingress_bytes_per_message(MAX_BLOCK_SIZE as u64)
             .build();
 
-        let Dependencies { registry, .. } = dependencies_with_subnet_params(
+        let Dependencies { registry, .. } = DependenciesBuilder::single_subnet(
             pool_config,
             subnet_test_id(0),
             vec![(1, subnet_record.clone())],
-        );
+        )
+        .build();
 
         proptest!(
             ProptestConfig {
@@ -54,7 +52,7 @@ fn proptest_payload_size_validation() {
                 ..ProptestConfig::default()
             },
             |(
-                height in 0..10u64,
+                height in 0..10_u64,
                 ingress in prop_ingress_vec(MAX_MESSAGES, MAX_SIZE),
                 xnet in prop_xnet_slice(MAX_MESSAGES, MAX_SIZE),
             )| {
@@ -136,15 +134,9 @@ fn make_xnet_slice(size: usize) -> CertifiedStreamSlice {
     CertifiedStreamSlice {
         payload: vec![0; size],
         merkle_proof: vec![],
-        certification: Certification {
-            height: Height::from(0),
-            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
-            signed: Signed {
-                signature: ThresholdSignature::fake(),
-                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                    vec![],
-                ))),
-            },
+        certification: Signed {
+            signature: ThresholdSignature::fake(),
+            content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
         },
     }
 }
@@ -172,11 +164,12 @@ fn regression1() {
             .with_max_ingress_bytes_per_message(MAX_BLOCK_SIZE as u64)
             .build();
 
-        let Dependencies { registry, .. } = dependencies_with_subnet_params(
+        let Dependencies { registry, .. } = DependenciesBuilder::single_subnet(
             pool_config,
             subnet_test_id(0),
             vec![(1, subnet_record.clone())],
-        );
+        )
+        .build();
         let ingress = vec![make_ingress(965988), make_ingress(1019914)];
         let mut xnet = BTreeMap::new();
         xnet.insert(subnet_test_id(0), make_xnet_slice(1389926));

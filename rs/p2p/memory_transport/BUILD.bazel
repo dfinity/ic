@@ -4,30 +4,23 @@ package(default_visibility = [
     "//rs/p2p:__subpackages__",
 ])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/p2p/quic_transport",
-    "//rs/types/types",
-    "@crate_index//:axum",
-    "@crate_index//:bytes",
-    "@crate_index//:tokio",
-    "@crate_index//:tower",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-]
-
-ALIASES = {}
-
 rust_library(
     name = "memory_transport",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "ic_memory_transport",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/p2p/quic_transport",
+        "//rs/types/types",
+        "@crate_index//:axum",
+        "@crate_index//:bytes",
+        "@crate_index//:tokio",
+        "@crate_index//:tower",
+    ],
 )

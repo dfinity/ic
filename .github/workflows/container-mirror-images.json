@@ -1,10 +1,10 @@
 {
   "images": [
     {
-      "note": "ubuntu:noble-20250910",
+      "note": "ubuntu:resolute-20260413",
       "image": "library/ubuntu",
       "repo": "docker.io",
-      "sha256": "985be7c735afdf6f18aaa122c23f87d989c30bba4e9aa24c8278912aac339a8d"
+      "sha256": "5e275723f82c67e387ba9e3c24baa0abdcb268917f276a0561c97bef9450d0b4"
     },
     {
       "image": "ryantk/minica",
@@ -28,8 +28,8 @@
     },
     {
       "image": "letsencrypt/pebble",
-      "repo": "docker.io",
-      "sha256": "fc5a537bf8fbc7cc63aa24ec3142283aa9b6ba54529f86eb8ff31fbde7c5b258"
+      "repo": "ghcr.io",
+      "sha256": "68cf1ec8a8db96f64244d5f559c448bc8e54f2934e0dd53a414eabffda7a6f22"
     },
     {
       "image": "library/python",

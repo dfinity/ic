@@ -131,6 +131,8 @@ fn test_list_node_provider_rewards() {
         NodeRewardType::Type1,
     );
 
+    advance_to_next_noon(&state_machine);
+
     // Set the conversion rate
     let current_timestamp_seconds = state_machine.get_time().as_secs_since_unix_epoch();
     let payload = UpdateIcpXdrConversionRatePayload {
@@ -579,11 +581,13 @@ fn test_automated_node_provider_remuneration() {
         .or_default()
         .extend(np_3_nodes);
 
+    advance_to_next_noon(&state_machine);
+
     // All success failure rate is 0
     let node_metrics_daily: Vec<NodeMetricsDailyRaw> = nodes
         .clone()
-        .into_iter()
-        .flat_map(|(_, node_ids)| {
+        .into_values()
+        .flat_map(|node_ids| {
             node_ids.into_iter().map(|node_id| NodeMetricsDailyRaw {
                 node_id,
                 num_blocks_failed: 0,
@@ -837,8 +841,8 @@ fn test_automated_node_provider_remuneration() {
     // All success failure rate is 0
     let node_metrics_daily: Vec<NodeMetricsDailyRaw> = nodes
         .clone()
-        .into_iter()
-        .flat_map(|(_, node_ids)| {
+        .into_values()
+        .flat_map(|node_ids| {
             node_ids.into_iter().map(|node_id| NodeMetricsDailyRaw {
                 node_id,
                 num_blocks_failed: 0,
@@ -953,8 +957,8 @@ fn test_automated_node_provider_remuneration() {
     // All success failure rate is 0
     let node_metrics_daily: Vec<NodeMetricsDailyRaw> = nodes
         .clone()
-        .into_iter()
-        .flat_map(|(_, node_ids)| {
+        .into_values()
+        .flat_map(|node_ids| {
             node_ids.into_iter().map(|node_id| NodeMetricsDailyRaw {
                 node_id,
                 num_blocks_failed: 0,
@@ -1102,6 +1106,17 @@ fn add_node(
         )
         .map(|result| Decode!(&result.bytes(), NodeId).unwrap())
         .unwrap()
+}
+
+/// Advance the state machine time to noon UTC of the next day.
+/// This avoids date-boundary flakiness: `wait_for_rewards_minting` advances
+/// time by up to 500 seconds, which can push governance's `end_date` past a
+/// date boundary when the time-of-day happens to be close to midnight.
+const NOON_OFFSET_SECONDS: u64 = ONE_DAY_SECONDS / 2;
+fn advance_to_next_noon(state_machine: &StateMachine) {
+    let secs = state_machine.get_time().as_secs_since_unix_epoch();
+    let next_noon = (secs / ONE_DAY_SECONDS + 1) * ONE_DAY_SECONDS + NOON_OFFSET_SECONDS;
+    state_machine.set_time(SystemTime::UNIX_EPOCH + Duration::from_secs(next_noon));
 }
 
 // Helper function to wait until Node Rewards Canister has synced metrics for yesterday

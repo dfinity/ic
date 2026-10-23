@@ -79,6 +79,8 @@ impl StopOrStartCanister {
 }
 
 impl CallCanister for StopOrStartCanister {
+    type Reply = ();
+
     fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
         Ok((ROOT_CANISTER_ID, "stop_or_start_nns_canister"))
     }

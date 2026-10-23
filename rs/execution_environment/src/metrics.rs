@@ -172,6 +172,7 @@ impl CallTreeMetrics for CallTreeMetricsImpl {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct QueryHandlerMetrics {
     pub query: ScopedMetrics,
     pub query_initial_call: ScopedMetrics,
@@ -186,6 +187,8 @@ pub(crate) struct QueryHandlerMetrics {
     pub transient_errors: IntCounter,
     /// Duration of a subnet query message execution, in seconds, similar to `execution_subnet_message_duration_seconds`.
     pub subnet_query_messages: HistogramVec,
+    /// Response size in bytes of a successful subnet query message execution.
+    pub subnet_query_message_response_bytes: HistogramVec,
 }
 
 impl QueryHandlerMetrics {
@@ -288,14 +291,23 @@ impl QueryHandlerMetrics {
                 decimal_buckets(-3, 2),
                 &["method_name", "status"],
             ),
+            subnet_query_message_response_bytes: metrics_registry.histogram_vec(
+                "execution_subnet_query_message_response_bytes",
+                "Response size in bytes of a successful subnet query message execution.",
+                decimal_buckets_with_zero(0, 7),
+                &["method_name"],
+            ),
         }
     }
 
-    pub fn observe_subnet_query_message<T>(
+    /// Observes the execution of a management canister query method served
+    /// in the non-replicated mode. The result is either the encoded reply
+    /// or the error the execution failed with.
+    pub fn observe_subnet_query_message(
         &self,
         query_method: QueryMethod,
         duration: f64,
-        result: &Result<T, UserError>,
+        result: &Result<Vec<u8>, UserError>,
     ) {
         let method_name_label = &format!("query_ic00_{query_method}");
         let status_label = match result {
@@ -306,6 +318,12 @@ impl QueryHandlerMetrics {
         self.subnet_query_messages
             .with_label_values(&[method_name_label.as_str(), status_label])
             .observe(duration);
+
+        if let Ok(bytes) = result {
+            self.subnet_query_message_response_bytes
+                .with_label_values(&[method_name_label.as_str()])
+                .observe(bytes.len() as f64);
+        }
     }
 }
 
@@ -318,7 +336,7 @@ impl QueryHandlerMetrics {
 /// - the number of messages executed in the phase.
 ///
 /// Use `MeasurementScope` instead of observing the metrics manually.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct ScopedMetrics {
     pub duration: Histogram,
     pub instructions: Histogram,
@@ -404,6 +422,11 @@ impl<'a> MeasurementScope<'a> {
     /// Returns the number of messages associated with this measurement scope.
     pub fn messages(&self) -> NumMessages {
         self.core.borrow().messages
+    }
+
+    /// Returns the number of instructions associated with this measurement scope.
+    pub fn instructions(&self) -> NumInstructions {
+        self.core.borrow().instructions
     }
 }
 

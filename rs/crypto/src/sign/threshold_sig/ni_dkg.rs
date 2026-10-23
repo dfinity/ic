@@ -22,7 +22,7 @@ mod utils;
 #[cfg(test)]
 mod test_utils;
 
-impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> NiDkgAlgorithm for CryptoComponentImpl<C, R> {
     fn create_dealing(&self, config: &NiDkgConfig) -> Result<NiDkgDealing, DkgCreateDealingError> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
@@ -101,7 +101,7 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentImpl<C> {
     fn create_transcript(
         &self,
         config: &NiDkgConfig,
-        verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+        verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;

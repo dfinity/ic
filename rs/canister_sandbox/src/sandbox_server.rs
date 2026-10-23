@@ -126,8 +126,10 @@ mod tests {
     };
     use ic_base_types::{NumSeconds, PrincipalId};
     use ic_config::embedders::Config as EmbeddersConfig;
-    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
-    use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+    use ic_config::subnet_config::{CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE};
+    use ic_cycles_account_manager::{
+        CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
+    };
     use ic_embedders::{
         SerializedModuleBytes, WasmtimeEmbedder, wasm_utils,
         wasmtime_embedder::system_api::{
@@ -147,13 +149,12 @@ mod tests {
     use ic_types::{
         CanisterTimer, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation,
         NumBytes, NumInstructions,
-        batch::CanisterCyclesCostSchedule,
         ingress::WasmResult,
         messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
         time::Time,
     };
-    use ic_types_cycles::Cycles;
+    use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
     use ic_wasm_types::BinaryEncodedWasm;
     use mockall::*;
     use std::sync::{Arc, Condvar, Mutex};
@@ -210,14 +211,15 @@ mod tests {
                 subnet_test_id(0),
                 CyclesAccountManagerConfig::application_subnet(),
             ),
-            Some(0),
             0,
             BTreeMap::new(),
             0,
             ic00_aliases,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            CanisterCyclesCostSchedule::Normal,
-            SchedulerConfig::application_subnet().dirty_page_overhead,
+            CyclesAccountManagerSubnetConfig::new(
+                SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
+                DEFAULT_REFERENCE_SUBNET_SIZE,
+            ),
             CanisterTimer::Inactive,
             0,
             BTreeSet::from([controller]),
@@ -226,7 +228,7 @@ mod tests {
             0,
             DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
             IS_WASM64_EXECUTION,
-            NetworkTopology::default(),
+            std::sync::Arc::new(NetworkTopology::default()),
         )
     }
 
@@ -239,7 +241,10 @@ mod tests {
         let mut fds: Vec<&mut std::os::unix::io::RawFd> = vec![];
         memory.enumerate_fds(&mut fds);
         for fd in fds.into_iter() {
-            *fd = nix::unistd::dup(*fd).unwrap();
+            use std::os::fd::{BorrowedFd, IntoRawFd};
+            // SAFETY: `*fd` is a valid file descriptor.
+            let borrowed = unsafe { BorrowedFd::borrow_raw(*fd) };
+            *fd = nix::unistd::dup(borrowed).unwrap().into_raw_fd();
         }
         memory
     }
@@ -257,6 +262,7 @@ mod tests {
             Cycles::zero(),
             PrincipalId::try_from([0].as_ref()).unwrap(),
             CallContextId::from(0),
+            None,
         );
         let caller = api_type.caller();
         let call_context_id = api_type.call_context_id();
@@ -289,6 +295,7 @@ mod tests {
             incoming_payload.to_vec(),
             PrincipalId::try_from([0].as_ref()).unwrap(),
             CallContextId::from(0),
+            None,
         );
         let caller = api_type.caller();
         let call_context_id = api_type.call_context_id();

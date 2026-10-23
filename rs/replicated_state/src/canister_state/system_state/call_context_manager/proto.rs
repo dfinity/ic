@@ -1,6 +1,7 @@
 use super::*;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
+use ic_protobuf::state::ingress::v1 as pb_ingress;
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::user_id_try_from_option;
 
@@ -14,6 +15,10 @@ impl From<&CallContext> for pb::CallContext {
             time_nanos: item.time.as_nanos_since_unix_epoch(),
             metadata: Some((&item.metadata).into()),
             instructions_executed: item.instructions_executed.get(),
+            sender_info: item
+                .sender_info
+                .as_deref()
+                .map(pb_ingress::SenderInfo::from),
         }
     }
 }
@@ -37,6 +42,12 @@ impl TryFrom<pb::CallContext> for CallContext {
                     Time::from_nanos_since_unix_epoch(0),
                 )),
             instructions_executed: value.instructions_executed.into(),
+            sender_info: value
+                .sender_info
+                .map(SenderInfo::try_from)
+                .transpose()
+                .map_err(|err| ProxyDecodeError::Other(format!("CallContext::sender_info: {err}")))?
+                .map(Arc::new),
         })
     }
 }

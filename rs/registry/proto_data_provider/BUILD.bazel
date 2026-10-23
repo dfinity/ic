@@ -2,39 +2,34 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/interfaces/registry",
-    "//rs/registry/proto",
-    "//rs/registry/transport",
-    "//rs/sys",
-    "//rs/types/types",
-    "@crate_index//:bytes",
-    "@crate_index//:thiserror",
-]
-
-MACRO_DEPENDENCIES = []
-
-DEV_DEPENDENCIES = []
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "proto_data_provider",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "ic_registry_proto_data_provider",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/interfaces/registry",
+        "//rs/registry/proto",
+        "//rs/registry/transport",
+        "//rs/sys",
+        "//rs/types/types",
+        "@crate_index//:bytes",
+        "@crate_index//:thiserror",
+    ],
 )
 
 rust_test(
     name = "proto_data_provider_test",
-    aliases = ALIASES,
     crate = ":proto_data_provider",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/interfaces/registry",
+        "//rs/registry/proto",
+        "//rs/registry/transport",
+        "//rs/sys",
+        "//rs/types/types",
+        "@crate_index//:bytes",
+        "@crate_index//:thiserror",
+    ],
 )

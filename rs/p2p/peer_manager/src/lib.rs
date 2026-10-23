@@ -135,11 +135,6 @@ impl PeerManager {
                         self.log,
                         "Got transport infos but it's empty. Registry version {version}"
                     );
-                    self.metrics
-                        .topology_watcher_errors
-                        .with_label_values(&["empty_list_of_node_records"])
-                        .inc();
-
                     Vec::new()
                 }
                 Err(err) => {
@@ -192,6 +187,13 @@ impl PeerManager {
                     }
                 }
             }
+        }
+
+        if subnet_nodes.is_empty() {
+            self.metrics
+                .topology_watcher_errors
+                .with_label_values(&["empty_subnet_nodes"])
+                .inc();
         }
 
         SubnetTopology::new(

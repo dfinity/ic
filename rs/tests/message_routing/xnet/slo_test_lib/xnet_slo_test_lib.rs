@@ -29,7 +29,7 @@ use dfn_candid::candid;
 use futures::future::join_all;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::farm::HostFeature;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet, VmResources};
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet, VmResourceOverrides};
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
@@ -69,7 +69,7 @@ pub struct Config {
     subnet_to_subnet_rate: usize,
     canisters_per_subnet: usize,
     canister_to_subnet_rate: usize,
-    vm_resources: Option<VmResources>,
+    vm_resource_overrides: VmResourceOverrides,
 }
 
 impl Config {
@@ -120,12 +120,12 @@ impl Config {
             subnet_to_subnet_rate,
             canisters_per_subnet,
             canister_to_subnet_rate,
-            vm_resources: None,
+            vm_resource_overrides: VmResourceOverrides::default(),
         }
     }
 
-    pub fn with_vm_resources(mut self, resources: VmResources) -> Self {
-        self.vm_resources = Some(resources);
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
         self
     }
 
@@ -133,6 +133,11 @@ impl Config {
         let mut config = self.clone();
         config.call_timeouts_seconds = timeouts_seconds.to_vec();
         config
+    }
+
+    pub fn with_send_rate_threshold(mut self, send_rate_threshold: f64) -> Self {
+        self.send_rate_threshold = send_rate_threshold;
+        self
     }
 
     pub fn with_payload_bytes(self, payload_size_bytes: u64) -> Self {
@@ -167,11 +172,9 @@ impl Config {
 
 // Generic setup
 fn setup(env: TestEnv, config: Config) {
-    let mut ic =
-        InternetComputer::new().with_required_host_features(vec![HostFeature::Performance]);
-    if let Some(resources) = config.vm_resources {
-        ic = ic.with_default_vm_resources(resources);
-    }
+    let ic = InternetComputer::new()
+        .with_required_host_features(vec![HostFeature::Performance])
+        .with_resource_overrides(config.vm_resource_overrides);
     (0..config.subnets)
         .fold(ic, |ic, _idx| {
             ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_per_subnet))
@@ -441,8 +444,11 @@ pub fn check_success(
             &actual,
         );
 
-        if responses_received != 0 {
-            let avg_latency_millis = m.latency_distribution.sum_millis() / responses_received;
+        if let Some(avg_latency_millis) = m
+            .latency_distribution
+            .sum_millis()
+            .checked_div(responses_received)
+        {
             expect(
                 avg_latency_millis <= config.targeted_latency_seconds as usize * 1000,
                 i,

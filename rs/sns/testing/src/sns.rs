@@ -512,6 +512,7 @@ pub async fn propose_sns_controlled_canister_upgrade<C: CallCanisters + Progress
                     canister_upgrade_arg: upgrade_arg,
                     mode: Some(CanisterInstallMode::Upgrade as i32),
                     chunked_canister_wasm: None,
+                    canister_upgrade_options: None,
                 },
             )),
         },

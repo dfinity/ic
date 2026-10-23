@@ -40,7 +40,7 @@ pub struct DashboardBlob {
 
 pub fn dashboard() -> DashboardTemplate {
     read_blob_store(|store| {
-        let mut total_size_bytes = 0u64;
+        let mut total_size_bytes = 0_u64;
         let blobs: Vec<DashboardBlob> = store
             .iter_metadata()
             .map(|(hash, metadata)| {

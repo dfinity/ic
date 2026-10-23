@@ -8,8 +8,7 @@ use crate::{
 };
 use candid::{CandidType, Encode, Principal};
 use canister_test::{
-    Canister, Project, Runtime, Wasm, local_test_with_config_e,
-    local_test_with_config_with_mutations_on_system_subnet,
+    Canister, Project, Runtime, Wasm, local_test_with_config_with_mutations_on_system_subnet,
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use dfn_candid::{CandidOne, candid_one};
@@ -60,6 +59,7 @@ pub struct NnsCanisters<'a> {
     pub nns_ui: Canister<'a>,
     pub sns_wasms: Canister<'a>,
     pub migration: Canister<'a>,
+    pub engine_controller: Canister<'a>,
 
     // Optional canisters.
     pub subnet_rental: Option<Canister<'a>>,
@@ -86,14 +86,6 @@ impl NnsCanisters<'_> {
         maybe_canisters.unwrap_or_else(|e| panic!("At least one canister creation failed: {e}"));
         eprintln!("NNS canisters created after {:.1} s", since_start_secs());
 
-        // TODO (after deploying SNS-WASMs to mainnet) update ALL_NNS_CANISTER_IDS to the resulting
-        // SNS-WASMs canister and delete following line. We avoid that so the canister ID is not added
-        // to a whitelist before it is deployed.  But we need one more canister for our tests.
-        runtime
-            .create_canister_max_cycles_with_retries()
-            .await
-            .expect("Failed creating last canister");
-
         // Create canisters.
 
         let mut registry = Canister::new(runtime, REGISTRY_CANISTER_ID);
@@ -108,6 +100,7 @@ impl NnsCanisters<'_> {
         let mut sns_wasms = Canister::new(runtime, SNS_WASM_CANISTER_ID);
         let mut subnet_rental = Canister::new(runtime, SUBNET_RENTAL_CANISTER_ID);
         let mut migration = Canister::new(runtime, MIGRATION_CANISTER_ID);
+        let mut engine_controller = Canister::new(runtime, ENGINE_CONTROLLER_CANISTER_ID);
 
         // Install code into canisters (pass init argument/payload).
         // Registry and Governance need to first or the process hangs,
@@ -132,6 +125,10 @@ impl NnsCanisters<'_> {
                 }
             },
             install_migration_canister(&mut migration),
+            install_engine_controller_canister(
+                &mut engine_controller,
+                init_payloads.engine_controller.clone(),
+            ),
         );
 
         eprintln!("NNS canisters installed after {:.1} s", since_start_secs());
@@ -154,6 +151,7 @@ impl NnsCanisters<'_> {
             sns_wasms.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             subnet_rental.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             migration.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            engine_controller.set_controller_with_retries(ROOT_CANISTER_ID.get()),
         )
         .unwrap();
 
@@ -173,6 +171,7 @@ impl NnsCanisters<'_> {
             sns_wasms,
             subnet_rental: init_payloads.subnet_rental.map(|()| subnet_rental),
             migration,
+            engine_controller,
         }
     }
 
@@ -232,6 +231,10 @@ impl NnsCanisters<'_> {
             .create_canister_at_id_max_cycles_with_retries(MIGRATION_CANISTER_ID.get())
             .await
             .unwrap();
+        let mut engine_controller = runtime
+            .create_canister_at_id_max_cycles_with_retries(ENGINE_CONTROLLER_CANISTER_ID.get())
+            .await
+            .unwrap();
 
         let mut subnet_rental = init_payloads.subnet_rental.as_ref().map(|_not_used| {
             block_on(async {
@@ -267,6 +270,10 @@ impl NnsCanisters<'_> {
                 }
             },
             install_migration_canister(&mut migration),
+            install_engine_controller_canister(
+                &mut engine_controller,
+                init_payloads.engine_controller.clone(),
+            ),
         );
 
         eprintln!("NNS canisters installed after {:.1} s", since_start_secs());
@@ -295,6 +302,7 @@ impl NnsCanisters<'_> {
                 }
             },
             migration.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            engine_controller.set_controller_with_retries(ROOT_CANISTER_ID.get()),
         )
         .unwrap();
 
@@ -313,6 +321,7 @@ impl NnsCanisters<'_> {
             sns_wasms,
             subnet_rental,
             migration,
+            engine_controller,
         }
     }
 
@@ -493,41 +502,19 @@ pub async fn install_rust_canister_from_path<P: AsRef<Path>>(
     .await
 }
 
-/// Runtime must be built from a node belonging to a subnet that can host
-/// EXCHANGE_RATE_CANISTER_ID.
-///
-/// Warning: This assumes that canisters with ID smaller than that of the
-/// Exchange Rate canister have all already been created.
+/// Runtime must be built from a node belonging to a subnet that hosts
+/// EXCHANGE_RATE_CANISTER_ID and supports creating canisters at specified IDs
+/// in the canister ID range containing it. In system tests, such a subnet can
+/// be obtained with `InternetComputer::use_specified_ids_allocation_range`.
 pub async fn create_and_install_mock_exchange_rate_canister(
     runtime: &'_ Runtime,
     price_of_icp_in_xdr_cents: u64,
 ) {
-    // Step 1: Create the canister.
-
-    // Create canisters in a loop until we hit EXCHANGE_RATE_CANISTER_ID. Yes,
-    // this is a hack. You might think that
-    // runtime.create_canister_with_specified_id(...) would get the desired
-    // effect (more straightforwardly), but trying to create an Exchange Rate
-    // canister that way results in
-    //
-    //     The `specified_id` uf6dk-hyaaa-aaaaq-qaaaq-cai is invalid because it belongs to the canister allocation ranges of the test environment.
-    //
-    // This is because of the way that the routing table is set up in system
-    // tests. If we wanted to get rid of this hack, we would have to change how
-    // the routing table is set up in system tests:
-    // https://github.com/dfinity/ic/pull/6053#discussion_r2329340517
-    //
-    // The "Warning" in the triple slash comments of this function is because of
-    // this hack.
-    let mut found = false;
-    for _ in 0..100 {
-        let canister = runtime.create_canister(Some(0)).await.unwrap();
-        if canister.canister_id() == EXCHANGE_RATE_CANISTER_ID {
-            found = true;
-            break;
-        }
-    }
-    assert!(found);
+    // Step 1: Create the canister at its usual (mainnet) canister ID.
+    runtime
+        .create_canister_at_id_max_cycles_with_retries(EXCHANGE_RATE_CANISTER_ID.get())
+        .await
+        .unwrap();
 
     // Step 2: Install code into the canister.
 
@@ -570,9 +557,13 @@ pub async fn create_and_install_mock_exchange_rate_canister(
 /// Warning: This assumes that canisters with ID smaller than that of the
 /// Subnet Rental canister have all already been created.
 pub async fn create_and_install_mock_subnet_rental_canister(runtime: &'_ Runtime) -> Canister<'_> {
-    // Create canisters in a loop until we hit SUBNET_RENTAL_CANISTER_ID.
-    // This is a hack similar to the one in `create_and_install_mock_exchange_rate_canister`.
-    // See the comment there for more details.
+    // Create canisters in a loop until we hit SUBNET_RENTAL_CANISTER_ID. Yes,
+    // this is a hack. You might think that
+    // runtime.create_canister_with_specified_id(...) would get the desired
+    // effect (more straightforwardly), but the Subnet Rental canister ID
+    // belongs to the canister allocation range of the (root) subnet in test
+    // environments, and creating a canister at a specified ID within a
+    // canister allocation range is not allowed.
     for _ in 0..100 {
         let mut canister = runtime.create_canister(Some(0)).await.unwrap();
         if canister.canister_id() == SUBNET_RENTAL_CANISTER_ID {
@@ -827,18 +818,43 @@ pub async fn set_up_migration_canister(runtime: &'_ Runtime) -> Canister<'_> {
     canister
 }
 
-/// Runs a local test on the nns subnetwork, so that the canister will be
-/// assigned the same ids as in prod.
-pub fn local_test_on_nns_subnet<Fut, Out, F>(run: F) -> Out
-where
-    Fut: Future<Output = Result<Out, String>>,
-    F: FnOnce(Runtime) -> Fut + 'static,
-{
-    let (config, _tmpdir) = Config::temp_config();
-    local_test_with_config_e(config, run)
+/// Engine controller canister init args.
+///
+/// Re-declared here because the canister crate is binary-only (no library
+/// surface to import from). The candid layout must match
+/// `rs/engine_controller/engine_controller.did` exactly.
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+pub struct EngineControllerInitArgs {
+    pub authorized_caller: Option<Principal>,
+    pub initial_dkg_subnet_id: Option<Principal>,
 }
 
-/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_nns_subnet
+/// Compiles the engine controller canister and installs it.
+///
+/// If `args` is `None`, the canister is installed with a candid-encoded
+/// `null` so that it falls back to its hard-coded defaults (authorized
+/// caller and initial DKG subnet id). Otherwise the supplied args are
+/// candid-encoded and used. An empty byte payload would trap because the
+/// candid init signature is `(opt EngineControllerInitArgs)`.
+pub async fn install_engine_controller_canister(
+    canister: &mut Canister<'_>,
+    args: Option<EngineControllerInitArgs>,
+) {
+    let init_args = Encode!(&args).unwrap();
+    install_rust_canister(canister, "engine-controller-canister", &[], Some(init_args)).await;
+}
+
+/// Creates and installs the engine controller canister.
+pub async fn set_up_engine_controller_canister(
+    runtime: &'_ Runtime,
+    args: Option<EngineControllerInitArgs>,
+) -> Canister<'_> {
+    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
+    install_engine_controller_canister(&mut canister, args).await;
+    canister
+}
+
+/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_nns_subnet_with_mutations
 pub fn state_machine_test_on_nns_subnet<Fut, Out, F>(run: F) -> Out
 where
     Fut: Future<Output = Result<Out, String>>,

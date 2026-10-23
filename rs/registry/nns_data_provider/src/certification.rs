@@ -45,6 +45,7 @@ pub enum CertificationError {
         delegation_subnet_id: SubnetId,
     },
     DechunkifyingFailed(ic_registry_transport::Error),
+    UntrustedDelegationSubnet(SubnetId),
 }
 
 #[derive(Deserialize)]
@@ -77,6 +78,7 @@ fn embed_certificate_error(err: CertificateValidationError) -> CertificationErro
             provided_subnet_id,
             delegation_subnet_id,
         },
+        Cve::UntrustedDelegationSubnet(subnet_id) => Ce::UntrustedDelegationSubnet(subnet_id),
     }
 }
 

@@ -4,7 +4,6 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "vetkd",
-    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_test_utils_vetkd",
     version = "0.1.0",

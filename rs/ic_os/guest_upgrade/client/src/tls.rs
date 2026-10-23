@@ -1,6 +1,6 @@
 use rustls::PeerIncompatible;
 use rustls::client::danger::{ServerCertVerified, ServerCertVerifier};
-use rustls::crypto::ring::default_provider;
+use rustls::crypto::aws_lc_rs::default_provider;
 use rustls::crypto::verify_tls13_signature;
 use rustls::pki_types::{CertificateDer, ServerName};
 use std::fmt::Debug;

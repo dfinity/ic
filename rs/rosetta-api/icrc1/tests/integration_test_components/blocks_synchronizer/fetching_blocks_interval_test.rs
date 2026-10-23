@@ -78,7 +78,7 @@ proptest! {
         let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().with_sns_subnet().build();
         let init_args = InitArgsBuilder::for_tests()
             .with_minting_account(*TEST_ACCOUNT)
-            .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000u64)
+            .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000_u64)
             .with_transfer_fee(DEFAULT_TRANSFER_FEE)
             .with_archive_options(ArchiveOptions {
                 trigger_threshold: 10_000,
@@ -111,7 +111,7 @@ proptest! {
             // Create the storage client where blocks will be stored
             let storage_client = Arc::new(StorageClient::new_in_memory().await.unwrap());
 
-            // Start the synching process
+            // Start the syncing process
             // Conduct a full sync from the tip of the blockchain to genesis block
             blocks_synchronizer::start_synching_blocks(agent.clone(), storage_client.clone(),2,Arc::new(AsyncMutex::new(vec![])), RecurrencyMode::OneShot, Box::new(|| {})).await.unwrap();
 
@@ -145,7 +145,7 @@ proptest! {
         let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().with_sns_subnet().build();
         let init_args = InitArgsBuilder::for_tests()
             .with_minting_account(*TEST_ACCOUNT)
-            .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000u64)
+            .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000_u64)
             .with_transfer_fee(DEFAULT_TRANSFER_FEE)
             .with_archive_options(ArchiveOptions {
                 // Create archive after every ten blocks
@@ -181,7 +181,7 @@ proptest! {
             // Create the storage client where blocks will be stored
             let storage_client = Arc::new(StorageClient::new_in_memory().await.unwrap());
 
-            // Start the synching process
+            // Start the syncing process
             // Conduct a full sync from the tip of the blockchain to genesis block
             // Fetched blocks from the ledger and the archive
             blocks_synchronizer::start_synching_blocks(agent.clone(), storage_client.clone(),10,Arc::new(AsyncMutex::new(vec![])), RecurrencyMode::OneShot, Box::new(|| {})).await.unwrap();
@@ -310,7 +310,7 @@ fn test_gaps_handling() {
                 owner: PrincipalId::new_user_test_id(i).0,
                 subaccount: None,
             },
-            1_000_000_000_000u64.into(),
+            1_000_000_000_000_u64.into(),
         ));
     }
     init_args.initial_balances = initial_balances;
@@ -330,7 +330,7 @@ fn test_gaps_handling() {
         // Create the storage client where blocks will be stored (using on-disk database)
         let storage_client = Arc::new(StorageClient::new_persistent(&db_path_clone).await.unwrap());
 
-        // Start the synching process
+        // Start the syncing process
         // Conduct a full sync from the tip of the blockchain to genesis block
         blocks_synchronizer::start_synching_blocks(
             agent.clone(),

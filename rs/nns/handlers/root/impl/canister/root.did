@@ -18,8 +18,18 @@ type CanisterIdRecord = record {
 
 type CanisterInstallMode = variant {
   reinstall;
-  upgrade;
+  upgrade : opt CanisterUpgradeOptions;
   install;
+};
+
+type CanisterUpgradeOptions = record {
+  skip_pre_upgrade : opt bool;
+  wasm_memory_persistence : opt WasmMemoryPersistence;
+};
+
+type WasmMemoryPersistence = variant {
+  keep;
+  replace;
 };
 
 type CanisterSettings = record {
@@ -27,6 +37,7 @@ type CanisterSettings = record {
   controllers : opt vec principal;
   reserved_cycles_limit : opt nat;
   log_visibility : opt LogVisibility;
+  snapshot_visibility : opt SnapshotVisibility;
   wasm_memory_limit : opt nat;
   memory_allocation : opt nat;
   compute_allocation : opt nat;
@@ -112,6 +123,11 @@ type LogVisibility = variant {
   public;
 };
 
+type SnapshotVisibility = variant {
+  controllers;
+  public;
+};
+
 type CanisterStatusLogVisibility = variant {
   controllers;
   public;
@@ -192,6 +208,27 @@ type LoadCanisterSnapshotError = record {
   description : text;
 };
 
+type CreateCanisterAndInstallCodeRequest = record {
+  host_subnet_id : principal;
+  canister_settings : opt CanisterSettings;
+  wasm_module : blob;
+  install_arg : blob;
+};
+
+type CreateCanisterAndInstallCodeResponse = variant {
+  Ok : CreateCanisterAndInstallCodeOk;
+  Err : CreateCanisterAndInstallCodeError;
+};
+
+type CreateCanisterAndInstallCodeOk = record {
+  canister_id : principal;
+};
+
+type CreateCanisterAndInstallCodeError = record {
+  code : opt int32;
+  description : text;
+};
+
 service : () -> {
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
   get_build_metadata : () -> (text) query;
@@ -207,6 +244,9 @@ service : () -> {
       UpdateCanisterSettingsResponse,
     );
   call_canister : (CallCanisterRequest) -> ();
+  create_canister_and_install_code : (CreateCanisterAndInstallCodeRequest) -> (
+      CreateCanisterAndInstallCodeResponse,
+    );
   take_canister_snapshot : (TakeCanisterSnapshotArgs) -> (
       TakeCanisterSnapshotResponse,
     );

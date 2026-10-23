@@ -858,3 +858,76 @@ mod metadata_validation_tests {
         }
     }
 }
+
+#[test]
+fn test_authorized_mint_credits_account() {
+    let now = ts(12345678);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
+
+    let to = test_account_id(1);
+    let caller = PrincipalId::new_user_test_id(99).0;
+
+    let tr = Transaction {
+        operation: Operation::AuthorizedMint {
+            to,
+            amount: tokens(50_000),
+            caller: Some(caller),
+            mthd: Some("152mint".to_string()),
+            reason: None,
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&to), tokens(50_000));
+}
+
+#[test]
+fn test_authorized_burn_debits_account() {
+    let now = ts(12345678);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
+
+    let from = test_account_id(1);
+    ctx.balances_mut().mint(&from, tokens(100_000)).unwrap();
+
+    let tr = Transaction {
+        operation: Operation::AuthorizedBurn {
+            from,
+            amount: tokens(30_000),
+            caller: Some(PrincipalId::new_user_test_id(99).0),
+            mthd: Some("152burn".to_string()),
+            reason: Some("compliance".to_string()),
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&from), tokens(70_000));
+}
+
+#[test]
+fn test_authorized_burn_insufficient_balance_fails() {
+    let now = ts(12345678);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
+
+    let from = test_account_id(1);
+    ctx.balances_mut().mint(&from, tokens(10_000)).unwrap();
+
+    let tr = Transaction {
+        operation: Operation::AuthorizedBurn {
+            from,
+            amount: tokens(50_000),
+            caller: Some(PrincipalId::new_user_test_id(99).0),
+            mthd: Some("152burn".to_string()),
+            reason: None,
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    assert!(tr.apply(&mut ctx, now, Tokens::ZERO).is_err());
+
+    // Balance unchanged
+    assert_eq!(ctx.balances().account_balance(&from), tokens(10_000));
+}

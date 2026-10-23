@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use axum::Router;
 use clap::Parser;
 use ic_base_types::NodeId;
+use ic_bn_lib::http::{client::Client as HttpClient, server::conn::ConnInfo};
 use ic_bn_lib::prometheus::Registry;
-use ic_bn_lib_common::{traits::http::Client as HttpClient, types::http::ConnInfo};
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
 use ic_crypto_tree_hash::Digest;
@@ -28,9 +28,9 @@ use ic_registry_keys::{
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable as RoutingTableIC};
 use ic_registry_subnet_type::SubnetType;
+use ic_test_utilities_types::ids::test_replica_version;
 use ic_types::{
-    CanisterId, RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey,
-    replica_version::ReplicaVersion, time::Time,
+    CanisterId, RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey, time::Time,
 };
 
 use crate::routes::ProxyRouter;
@@ -111,13 +111,14 @@ pub fn test_subnet_record() -> SubnetRecord {
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
         initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
-        replica_version_id: ReplicaVersion::default().into(),
+        replica_version_id: test_replica_version().to_string(),
         dkg_interval_length: 59,
         dkg_dealings_per_block: 1,
         start_as_nns: false,
         subnet_type: SubnetType::Application.into(),
         is_halted: false,
         halt_at_cup_height: false,
+        cooling_down: false,
         features: Some(Default::default()),
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],
@@ -125,6 +126,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         chain_key_config: None,
         canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
         subnet_admins: vec![],
+        resource_limits: None,
         recalled_replica_version_ids: vec![],
     }
 }
@@ -339,6 +341,7 @@ pub fn setup_test_router(
         &cli,
         &metrics_registry,
         enable_cache.then(|| Arc::new(CacheState::new(&cli.cache, &Registry::new()).unwrap())),
+        None,
         salt,
         proxy_router,
     );

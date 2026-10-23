@@ -1,3 +1,22 @@
+// Some Conventions
+// ================
+//
+// One of the patterns you might notice here is pairs of super similar types. In
+// fact, it might be hard to spot the difference(s)! One type will be named
+// something like Widget, while the other is named WidgetRequest. Depending on
+// where you come from, WidgetRequest is a misnomer, because it does not imply
+// that the Governance canister has a method named widget (whose argument is of
+// type WidgetRequest). Rather, what's really going on in such cases is this:
+// Widget is nested (deeply) within responses, while WidgetRequest is nested
+// (deeply) within requests. The reason for split is usually that WidgetRequest
+// contains some large blob, such as a wasm, while Widget only has the hash of
+// that blob. So yes, they are super similar to one another, but they are NOT
+// interchangeable!  In some cases, the large blob is buried deep within the
+// type), and so, it is not obvious why the pair of types exists. Nevertheless,
+// even in such cases, this request vs. response distinction is still
+// needed. This is, of course, pretty confusing and unfortunate; it came about
+// exactly as you would imagine: it growed organically. Sigh.
+
 #![allow(clippy::all)]
 use candid::{Int, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -103,6 +122,16 @@ pub struct NeuronInfo {
     pub deciding_voting_power: Option<u64>,
     /// See analogous field in Neuron.
     pub potential_voting_power: Option<u64>,
+
+    /// Base value (in e8s) used for the "8-year gang" dissolve delay bonus.
+    /// For neurons that had the maximum dissolve delay of 8 years before the
+    /// maximum dissolve delay was reduced, this is set to the total staked value
+    /// net of fees (including staked maturity) captured at the time of migration.
+    /// For all other neurons, this is 0.
+    pub eight_year_gang_bonus_base_e8s: Option<u64>,
+
+    /// See analogous field in Neuron.
+    pub staked_maturity_e8s_equivalent: Option<u64>,
 }
 
 impl NeuronInfo {
@@ -327,6 +356,13 @@ pub struct Neuron {
     ///
     /// Per NNS policy, this is opt. Nevertheless, it will never be null.
     pub potential_voting_power: Option<u64>,
+
+    /// Base value (in e8s) used for the "8-year gang" dissolve delay bonus.
+    /// For neurons that had the maximum dissolve delay of 8 years before the
+    /// maximum dissolve delay was reduced, this is set to the total staked value
+    /// net of fees (including staked maturity) captured at the time of migration.
+    /// For all other neurons, this is 0.
+    pub eight_year_gang_bonus_base_e8s: Option<u64>,
 
     /// The maturity disbursements in progress for this neuron.
     pub maturity_disbursements_in_progress: Option<Vec<MaturityDisbursement>>,
@@ -655,6 +691,10 @@ pub mod proposal {
         TakeCanisterSnapshot(super::TakeCanisterSnapshot),
         /// Load a canister snapshot.
         LoadCanisterSnapshot(super::LoadCanisterSnapshot),
+        /// Create a canister in a (possibly non-NNS) subnet and install code into it.
+        CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCode),
+        /// Change what replica version(s) are run by Cloud Engines.
+        UpdateStandardEngineReplicaVersion(super::UpdateStandardEngineReplicaVersion),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1415,6 +1455,8 @@ pub enum ProposalActionRequest {
     BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
     TakeCanisterSnapshot(TakeCanisterSnapshot),
     LoadCanisterSnapshot(LoadCanisterSnapshot),
+    CreateCanisterAndInstallCode(CreateCanisterAndInstallCodeRequest),
+    UpdateStandardEngineReplicaVersion(UpdateStandardEngineReplicaVersion),
 }
 
 #[derive(
@@ -1691,6 +1733,9 @@ pub struct ProposalData {
     pub total_potential_voting_power: ::core::option::Option<u64>,
     /// The topic of the proposal.
     pub topic: ::core::option::Option<i32>,
+    /// When an adopted proposal has been executed successfully, this may contain
+    /// a value produced by the execution. This is the dual of failure_reason.
+    pub success_value: Option<SuccessfulProposalExecutionValue>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(
@@ -2017,6 +2062,40 @@ pub struct ProposalInfo {
     pub deadline_timestamp_seconds: Option<u64>,
     pub derived_proposal_information: Option<DerivedProposalInformation>,
     pub total_potential_voting_power: ::core::option::Option<u64>,
+    /// When an adopted proposal has been executed successfully, this may contain
+    /// a value produced by the execution. This is the dual of failure_reason.
+    pub success_value: Option<SuccessfulProposalExecutionValue>,
+}
+
+/// A value produced by successfully executing a proposal.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub enum SuccessfulProposalExecutionValue {
+    CreateCanisterAndInstallCode(CreateCanisterAndInstallCodeOk),
+    TakeCanisterSnapshot(TakeCanisterSnapshotOk),
+}
+
+/// The result of a successful CreateCanisterAndInstallCode proposal execution.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub struct CreateCanisterAndInstallCodeOk {
+    pub canister_id: Option<PrincipalId>,
+}
+
+/// The result of a successful TakeCanisterSnapshot proposal execution.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub struct TakeCanisterSnapshotOk {
+    pub snapshot_id: Vec<u8>,
+}
+
+impl From<CreateCanisterAndInstallCodeOk> for SuccessfulProposalExecutionValue {
+    fn from(ok: CreateCanisterAndInstallCodeOk) -> Self {
+        Self::CreateCanisterAndInstallCode(ok)
+    }
+}
+
+impl From<TakeCanisterSnapshotOk> for SuccessfulProposalExecutionValue {
+    fn from(ok: TakeCanisterSnapshotOk) -> Self {
+        Self::TakeCanisterSnapshot(ok)
+    }
 }
 
 /// Network economics contains the parameters for several operations related
@@ -2500,9 +2579,36 @@ pub struct InstallCode {
 
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub arg_hash: Option<Vec<u8>>,
+
+    /// Options that only apply when install_mode is Upgrade.
+    pub canister_upgrade_options: Option<install_code::CanisterUpgradeOptions>,
 }
 /// Nested message and enum types in `InstallCode`.
 pub mod install_code {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        Clone,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        Default,
+    )]
+    pub struct CanisterUpgradeOptions {
+        /// Whether to skip the canister's pre_upgrade hook. This would generally be
+        /// used in emergencies. See the corresponding field in the Management
+        /// canister API.
+        pub skip_pre_upgrade: Option<bool>,
+        /// Whether to retain (keep) or drop (replace) the canister's Wasm main
+        /// memory across the upgrade. When the previous WASM had a custom
+        /// section named "icp:private enhanced-orthogonal-persistence", then
+        /// upgrading gets blocked if this is not set. The integer value
+        /// corresponds to `ic_protobuf::types::v1::WasmMemoryPersistence`.
+        pub wasm_memory_persistence: Option<i32>,
+    }
+
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -2553,11 +2659,16 @@ pub mod install_code {
 pub struct InstallCodeRequest {
     pub canister_id: ::core::option::Option<PrincipalId>,
     pub install_mode: ::core::option::Option<i32>,
+    // If we add support for chunked WASMs later, the WasmModule type should
+    // probably be used in place of this field in order to be consistent with
+    // CreateCanisterAndInstallCodeRequest.
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub wasm_module: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub arg: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     pub skip_stopping_before_installing: ::core::option::Option<bool>,
+    /// Options that only apply when install_mode is Upgrade.
+    pub canister_upgrade_options: ::core::option::Option<install_code::CanisterUpgradeOptions>,
 }
 
 #[derive(
@@ -2621,10 +2732,28 @@ pub struct UpdateCanisterSettings {
     /// The target canister ID to call update_settings on. Required.
     pub canister_id: Option<PrincipalId>,
     /// The settings to update. Required.
-    pub settings: Option<update_canister_settings::CanisterSettings>,
+    pub settings: Option<CanisterSettings>,
 }
-/// Nested message and enum types in `UpdateCanisterSettings`.
-pub mod update_canister_settings {
+
+/// The CanisterSettings struct as defined in the ic-interface-spec
+/// <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.>
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct CanisterSettings {
+    pub controllers: Option<canister_settings::Controllers>,
+    pub compute_allocation: Option<u64>,
+    pub memory_allocation: Option<u64>,
+    pub freezing_threshold: Option<u64>,
+    pub log_visibility: Option<i32>,
+    pub snapshot_visibility: Option<i32>,
+    pub wasm_memory_limit: Option<u64>,
+    pub wasm_memory_threshold: Option<u64>,
+    pub reserved_cycles_limit: Option<u64>,
+}
+
+/// Nested message and enum types in `CanisterSettings`.
+pub mod canister_settings {
     use super::*;
 
     /// The controllers of the canister. We use a message to wrap the repeated field because prost does
@@ -2636,20 +2765,7 @@ pub mod update_canister_settings {
         /// The controllers of the canister.
         pub controllers: Vec<PrincipalId>,
     }
-    /// The CanisterSettings struct as defined in the ic-interface-spec
-    /// <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.>
-    #[derive(
-        candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
-    )]
-    pub struct CanisterSettings {
-        pub controllers: Option<Controllers>,
-        pub compute_allocation: Option<u64>,
-        pub memory_allocation: Option<u64>,
-        pub freezing_threshold: Option<u64>,
-        pub log_visibility: Option<i32>,
-        pub wasm_memory_limit: Option<u64>,
-        pub wasm_memory_threshold: Option<u64>,
-    }
+
     /// Log visibility of a canister.
     #[derive(
         candid::CandidType,
@@ -2694,6 +2810,50 @@ pub mod update_canister_settings {
             }
         }
     }
+    /// Snapshot visibility of a canister.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+    )]
+    #[repr(i32)]
+    pub enum SnapshotVisibility {
+        Unspecified = 0,
+        /// Snapshots are visible to the controllers of the dapp canister.
+        Controllers = 1,
+        /// Snapshots are visible to the public.
+        Public = 2,
+    }
+    impl SnapshotVisibility {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                SnapshotVisibility::Unspecified => "SNAPSHOT_VISIBILITY_UNSPECIFIED",
+                SnapshotVisibility::Controllers => "SNAPSHOT_VISIBILITY_CONTROLLERS",
+                SnapshotVisibility::Public => "SNAPSHOT_VISIBILITY_PUBLIC",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> Option<Self> {
+            match value {
+                "SNAPSHOT_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
+                "SNAPSHOT_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
+                "SNAPSHOT_VISIBILITY_PUBLIC" => Some(Self::Public),
+                _ => None,
+            }
+        }
+    }
 }
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
@@ -2702,6 +2862,9 @@ pub struct FulfillSubnetRentalRequest {
     pub user: Option<PrincipalId>,
     pub node_ids: Option<Vec<PrincipalId>>,
     pub replica_version_id: Option<String>,
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    pub initial_dkg_subnet_id: Option<PrincipalId>,
 }
 
 #[derive(
@@ -2711,6 +2874,15 @@ pub struct BlessAlternativeGuestOsVersion {
     pub chip_ids: Option<Vec<Vec<u8>>>,
     pub rootfs_hash: Option<String>,
     pub base_guest_launch_measurements: Option<GuestLaunchMeasurements>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct UpdateStandardEngineReplicaVersion {
+    pub new_replica_version_id: Option<String>,
+    pub old_replica_version_id: Option<String>,
+    pub deployment_progress: Option<f64>,
 }
 
 /// See also the definition of GuestLaunchMeasurements (plural!) in
@@ -2739,6 +2911,7 @@ pub struct GuestLaunchMeasurement {
 )]
 pub struct GuestLaunchMeasurementMetadata {
     pub kernel_cmdline: Option<String>,
+    pub vcpu_type: Option<String>,
 }
 
 /// Loads a snapshot of the canister.
@@ -2751,6 +2924,48 @@ pub struct LoadCanisterSnapshot {
     /// The ID of the snapshot to load.
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub snapshot_id: Option<Vec<u8>>,
+}
+
+/// A WASM module. Currently only supports inlined WASMs.
+/// This type is only used in requests (proposal submission), not in responses.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub enum WasmModule {
+    Inlined(Vec<u8>),
+}
+
+/// Create a canister in a (possibly non-NNS) subnet and install code into it.
+/// This is the response type: only hashes are included, not the full WASM or install_arg.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct CreateCanisterAndInstallCode {
+    /// The subnet where the canister will be created.
+    pub host_subnet_id: Option<PrincipalId>,
+    /// Settings for the new canister.
+    pub canister_settings: Option<CanisterSettings>,
+    /// Derived from the WASM content in the proposal. Cached to speed up
+    /// responses by avoiding re-calculation.
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub wasm_module_hash: Option<Vec<u8>>,
+    /// Derived from the install_arg in the proposal. Cached to speed up
+    /// responses by avoiding re-calculation.
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub install_arg_hash: Option<Vec<u8>>,
+}
+
+/// Create a canister in a (possibly non-NNS) subnet and install code into it.
+/// This is the submission type: includes the full WASM and install_arg.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub struct CreateCanisterAndInstallCodeRequest {
+    /// The subnet where the canister will be created.
+    pub host_subnet_id: Option<PrincipalId>,
+    /// Settings for the new canister.
+    pub canister_settings: Option<CanisterSettings>,
+    /// The WASM module to install.
+    pub wasm_module: Option<WasmModule>,
+    /// The argument to pass to the canister's install handler.
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub install_arg: Option<Vec<u8>>,
 }
 
 /// This represents the whole NNS governance system. It contains all
@@ -3942,13 +4157,14 @@ pub enum NnsFunction {
     /// the Wasm module of the target canister, the proposal can also set the
     /// authorization information and the allocations.
     NnsCanisterUpgrade = 4,
-    /// A proposal to bless a new version to which the replicas can be
+    /// (obsolete) A proposal to bless a new version to which the replicas can be
     /// upgraded.
     /// The proposal registers a replica version (identified by the hash of the
     /// installation image) in the registry. Besides creating a record for that
     /// version, the proposal also appends that version to the list of "blessed
     /// versions" that can be installed on a subnet. By itself, this proposal
     /// does not effect any upgrade.
+    /// Superseded by ReviseElectedGuestosVersions.
     BlessReplicaVersion = 5,
     /// Update a subnet's recovery CUP (used to recover subnets that have stalled).
     /// Nodes that find a recovery CUP for their subnet will load that CUP from
@@ -4045,16 +4261,16 @@ pub enum NnsFunction {
     UpdateSnsWasmSnsSubnetIds = 34,
     /// Update the SNS-wasm canister's list of allowed principals. This list guards which principals can deploy an SNS.
     UpdateAllowedPrincipals = 35,
-    /// A proposal to retire previously elected and unused replica versions.
+    /// (obsolete) A proposal to retire previously elected and unused replica versions.
     /// The specified versions are removed from the registry and the "blessed versions" record.
     /// This ensures that the replica cannot upgrade to these versions anymore.
+    /// Superseded by ReviseElectedGuestosVersions.
     RetireReplicaVersion = 36,
     /// Insert custom upgrade path entries into SNS-W for all SNSes, or for an SNS specified by its governance canister ID.
     InsertSnsWasmUpgradePathEntries = 37,
     /// A proposal to change the set of elected GuestOS versions. The version to elect (identified by
-    /// the hash of the installation image) is added to the registry. Besides creating a record for
-    /// that version, the proposal also appends that version to the list of elected versions that can
-    /// be installed on nodes of a subnet. Only elected GuestOS versions can be deployed.
+    /// the commit hash of the installation image) is added to the registry. This version can then be
+    /// used to upgrade nodes.
     ReviseElectedGuestosVersions = 38,
     BitcoinSetConfig = 39,
     /// OBSOLETE: use NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS instead
@@ -4109,6 +4325,19 @@ pub enum NnsFunction {
     SetSubnetOperationalLevel = 55,
     /// The proposal requests to split a subnet.
     SplitSubnet = 56,
+    /// Delete a subnet. The subnet record, catch-up package, threshold signing key
+    /// and routing table entries are removed from the registry, the subnet is
+    /// removed from the subnet list, and the subnet's nodes become unassigned.
+    /// System subnets (e.g. the NNS or II subnet) cannot be deleted.
+    DeleteSubnet = 57,
+    /// Set or unset the default subnet to which `SetupInitialDKG` management
+    /// canister calls are routed when no subnet is specified explicitly. If unset,
+    /// `SetupInitialDKG` requests without an explicit subnet id are routed to the
+    /// calling subnet (NNS).
+    SetDefaultInitialDkgSubnet = 58,
+    /// Merge a subnet into another subnet: in the routing table, reassigns all
+    /// canister ranges hosted by the source subnet to the destination subnet.
+    MergeSubnets = 59,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4193,6 +4422,11 @@ impl NnsFunction {
             NnsFunction::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
             NnsFunction::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
             NnsFunction::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
+            NnsFunction::DeleteSubnet => "NNS_FUNCTION_DELETE_SUBNET",
+            NnsFunction::SetDefaultInitialDkgSubnet => {
+                "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET"
+            }
+            NnsFunction::MergeSubnets => "NNS_FUNCTION_MERGE_SUBNETS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4274,6 +4508,9 @@ impl NnsFunction {
             "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
             "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
+            "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
+            "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET" => Some(Self::SetDefaultInitialDkgSubnet),
+            "NNS_FUNCTION_MERGE_SUBNETS" => Some(Self::MergeSubnets),
             _ => None,
         }
     }
@@ -4562,3 +4799,23 @@ pub struct CreatedNeuron {
 }
 
 pub type CreateNeuronResponse = Result<CreatedNeuron, GovernanceError>;
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Default,
+)]
+pub struct MaturityModulation {
+    pub current_value_permyriad: Option<i32>,
+    pub updated_at_timestamp_seconds: Option<u64>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Default,
+)]
+pub struct GetMaturityModulationRequest {}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Default,
+)]
+pub struct GetMaturityModulationResponse {
+    pub maturity_modulation: Option<MaturityModulation>,
+}

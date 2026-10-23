@@ -730,9 +730,9 @@ impl Metrics {
                     // In the experiments, lower bound that has not been reached was 0.00001 and the upper bound was 0.2.
                     // Generate an exponential progression as `start * factor.pow(i)`, s.t. the biggest value is minimally
                     // larger than `threshold`.
-                    let start = 0.00001f64;
-                    let factor = 2.0f64;
-                    let threshold = 0.2f64;
+                    let start = 0.00001_f64;
+                    let factor = 2.0_f64;
+                    let threshold = 0.2_f64;
                     let count = 1 + (threshold / start).log(factor).ceil() as usize;
                     let buckets = ic_metrics::buckets::exponential_buckets(start, factor, count);
                     debug_assert_eq!(buckets[0], start);

@@ -11,7 +11,6 @@ anyhow = { workspace = true }
 assert_matches = { workspace = true }
 async-trait = { workspace = true }
 candid = { workspace = true }
-cddl = "0.9.4"
 futures = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
@@ -43,6 +42,7 @@ icrc1-test-suite = { git = "https://github.com/dfinity/ICRC-1", rev = "26a80d777
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 proptest = { workspace = true }
+serde = { workspace = true }
 serde_bytes = { workspace = true }
 
 [features]

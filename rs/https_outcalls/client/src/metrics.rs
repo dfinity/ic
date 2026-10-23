@@ -1,15 +1,21 @@
-use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
+use ic_metrics::{
+    MetricsRegistry,
+    buckets::{decimal_buckets, decimal_buckets_with_zero},
+};
 use prometheus::{Histogram, HistogramVec, IntCounterVec};
 
 // Constants for metric label names
 const LABEL_STATUS_CODE: &str = "status_code";
 const LABEL_HTTP_METHOD: &str = "http_method";
 const LABEL_STATUS: &str = "status";
+const LABEL_REPLICATION: &str = "replication";
 
 #[derive(Clone)]
 pub struct Metrics {
     /// Execution time of transform function.
     pub transform_execution_duration: Histogram,
+    /// Instructions executed by transform function.
+    pub transform_instructions: Histogram,
     /// Execution time of http request via adapter.
     pub http_request_duration: HistogramVec,
     /// Request results returned to consensus.
@@ -25,6 +31,12 @@ impl Metrics {
                 // 10ms, 20ms, 50ms, …, 1s, 2s, 5s
                 decimal_buckets(-2, 0),
             ),
+            transform_instructions: metrics_registry.histogram(
+                "canister_http_transform_instructions",
+                "Number of instructions executed by response transformation.",
+                // 0, 10K, 20K, 50K, …, 1B, 2B, 5B
+                decimal_buckets_with_zero(4, 9),
+            ),
             http_request_duration: metrics_registry.histogram_vec(
                 "canister_http_external_http_request_duration_seconds",
                 "Execution time of remote http call by adapter.",
@@ -35,7 +47,7 @@ impl Metrics {
             request_total: metrics_registry.int_counter_vec(
                 "canister_http_requests_total",
                 "Canister http request results returned to consensus.",
-                &[LABEL_STATUS, LABEL_HTTP_METHOD],
+                &[LABEL_STATUS, LABEL_HTTP_METHOD, LABEL_REPLICATION],
             ),
         }
     }

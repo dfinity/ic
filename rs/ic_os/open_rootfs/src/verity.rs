@@ -2,6 +2,7 @@ use anyhow::{Context, Result, ensure};
 use command_runner::CommandRunner;
 use std::path::Path;
 use std::process::Command;
+use tracing::info;
 
 const VERITY_HASH_OFFSET: u64 = 10603200512;
 
@@ -14,7 +15,7 @@ pub fn veritysetup(
 ) -> Result<()> {
     // Verify the device hash if asked to do so
     if verify {
-        eprintln!(
+        info!(
             "Running 'veritysetup verify' for device {:?} with hash {hash}",
             device
         );
@@ -36,7 +37,7 @@ pub fn veritysetup(
             "veritysetup verify failed: {verify_output:?}"
         );
     } else {
-        eprintln!("Skipping 'veritysetup verify'");
+        info!("Skipping 'veritysetup verify'");
     }
 
     let open_output = command_runner

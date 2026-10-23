@@ -97,7 +97,7 @@ impl<const NUM_BUCKETS: usize> Histogram<NUM_BUCKETS> {
 
     /// Returns an iterator over the histogram buckets as tuples containing the bucket upper bound
     /// (inclusive), and the count of observed values within the bucket.
-    pub fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = (f64, f64)> {
         self.bucket_upper_bounds
             .iter()
             .enumerate()
@@ -324,6 +324,12 @@ pub fn encode_metrics(
         "ckbtc_minter_outpoint_count",
         state::read_state(|s| s.outpoint_account.len()) as f64,
         "Total number of outputs the minter has to remember.",
+    )?;
+
+    metrics.encode_gauge(
+        "ckbtc_minter_duplicated_outpoint_count",
+        state::read_state(|s| s.duplicated_outpoints.len()) as f64,
+        "Total number of outpoints found to be duplicated during update_balance.",
     )?;
 
     metrics.encode_gauge(

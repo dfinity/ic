@@ -36,7 +36,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 fn dummy_utxo_from_value(v: u64) -> Utxo {
-    let mut bytes = [0u8; 32];
+    let mut bytes = [0_u8; 32];
     bytes[0..8].copy_from_slice(&v.to_be_bytes());
     Utxo {
         outpoint: OutPoint {
@@ -178,7 +178,7 @@ fn signed_tx_to_bitcoin_tx(tx: &tx::SignedTransaction) -> bitcoin::Transaction {
 
 #[test]
 fn greedy_smoke_test() {
-    let mut utxos: UtxoSet = (1..10u64).map(dummy_utxo_from_value).collect();
+    let mut utxos: UtxoSet = (1..10_u64).map(dummy_utxo_from_value).collect();
     assert_eq!(utxos.len(), 9_usize);
 
     let res = greedy(15, &mut utxos);
@@ -447,8 +447,8 @@ fn test_no_dust_in_change_output() {
 proptest! {
     #[test]
     fn greedy_solution_properties(
-        mut utxos in arbitrary::utxo_set(1u64..1_000_000_000, 1..10),
-        target in 1u64..1_000_000_000,
+        mut utxos in arbitrary::utxo_set(1_u64..1_000_000_000, 1..10),
+        target in 1_u64..1_000_000_000,
     ) {
         let total = utxos.iter().map(|u| u.value).sum::<u64>();
 
@@ -481,7 +481,7 @@ proptest! {
 
     #[test]
     fn greedy_does_not_modify_input_when_fails(
-        values in pvec(1u64..1_000_000_000, 1..10),
+        values in pvec(1_u64..1_000_000_000, 1..10),
     ) {
         let mut utxos: UtxoSet = values
             .into_iter()
@@ -499,7 +499,7 @@ proptest! {
 
     #[test]
     fn unsigned_tx_encoding_model(
-        inputs in pvec(arbitrary::unsigned_input(5_000u64..1_000_000_000), 1..20),
+        inputs in pvec(arbitrary::unsigned_input(5_000_u64..1_000_000_000), 1..20),
         outputs in pvec(arbitrary::tx_out(), 1..20),
         lock_time in any::<u32>(),
     ) {
@@ -520,7 +520,7 @@ proptest! {
     fn unsigned_tx_sighash_model(
         inputs_data in pvec(
             (
-                arbitrary::utxo(5_000u64..1_000_000_000),
+                arbitrary::utxo(5_000_u64..1_000_000_000),
                 any::<u32>(),
                 pvec(any::<u8>(), tx::PUBKEY_LEN)
             ),
@@ -585,10 +585,10 @@ proptest! {
 
     #[test]
     fn build_tx_splits_utxos(
-        mut utxos in arbitrary::utxo_set(5_000u64..1_000_000_000, 1..20),
+        mut utxos in arbitrary::utxo_set(5_000_u64..1_000_000_000, 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
-        fee_per_vbyte in arbitrary::fee_rate(1000..2000u64),
+        fee_per_vbyte in arbitrary::fee_rate(1000..2000_u64),
     ) {
         prop_assume!(dst_pkhash != main_pkhash);
 
@@ -628,11 +628,11 @@ proptest! {
 
     #[test]
     fn check_output_order(
-        mut utxos in arbitrary::utxo_set(1_000_000u64..1_000_000_000, 1..20),
+        mut utxos in arbitrary::utxo_set(1_000_000_u64..1_000_000_000, 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
-        target in 50000..100000u64,
-        fee_per_vbyte in arbitrary::fee_rate(1000..2000u64),
+        target in 50000..100000_u64,
+        fee_per_vbyte in arbitrary::fee_rate(1000..2000_u64),
     ) {
         prop_assume!(dst_pkhash != main_pkhash);
 
@@ -650,11 +650,11 @@ proptest! {
 
     #[test]
     fn build_tx_handles_change_from_inputs(
-        mut utxos in arbitrary::utxo_set(1_000_000u64..1_000_000_000, 1..20),
+        mut utxos in arbitrary::utxo_set(1_000_000_u64..1_000_000_000, 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
-        target in 50000..100000u64,
-        fee_per_vbyte in arbitrary::fee_rate(1000..2000u64),
+        target in 50000..100000_u64,
+        fee_per_vbyte in arbitrary::fee_rate(1000..2000_u64),
     ) {
         prop_assume!(dst_pkhash != main_pkhash);
 
@@ -701,10 +701,10 @@ proptest! {
 
     #[test]
     fn build_tx_does_not_modify_utxos_on_error(
-        mut utxos in arbitrary::utxo_set(5_000u64..1_000_000_000, 1..20),
+        mut utxos in arbitrary::utxo_set(5_000_u64..1_000_000_000, 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
-        fee_per_vbyte in arbitrary::fee_rate(1000..2000u64),
+        fee_per_vbyte in arbitrary::fee_rate(1000..2000_u64),
     ) {
         let utxos_copy = utxos.clone();
 
@@ -735,7 +735,7 @@ proptest! {
 
     #[test]
     fn add_utxos_maintains_invariants(
-        utxos_acc_idx in pvec((arbitrary::utxo(5_000u64..1_000_000_000), 0..5usize), 10..20),
+        utxos_acc_idx in pvec((arbitrary::utxo(5_000_u64..1_000_000_000), 0..5_usize), 10..20),
         accounts in pvec(arbitrary::account(), 5),
     ) {
         let mut state = CkBtcMinterState::from(InitArgs {
@@ -750,10 +750,10 @@ proptest! {
 
     #[test]
     fn batching_preserves_invariants(
-        utxos_acc_idx in pvec((arbitrary::utxo(5_000u64..1_000_000_000), 0..5usize), 10..20),
+        utxos_acc_idx in pvec((arbitrary::utxo(5_000_u64..1_000_000_000), 0..5_usize), 10..20),
         accounts in pvec(arbitrary::account(), 5),
-        requests in arbitrary::retrieve_btc_requests(5_000u64..1_000_000_000, 1..25),
-        limit in 1..25usize,
+        requests in arbitrary::retrieve_btc_requests(5_000_u64..1_000_000_000, 1..25),
+        limit in 1..25_usize,
     ) {
         let mut state = CkBtcMinterState::from(InitArgs {
             retrieve_btc_min_amount: 5000,
@@ -785,8 +785,8 @@ proptest! {
     #[test]
     fn tx_replacement_preserves_invariants(
         accounts in pvec(arbitrary::account(), 5),
-        utxos_acc_idx in pvec((arbitrary::utxo(5_000_000u64..1_000_000_000), 0..5usize), 10..=10),
-        requests in arbitrary::retrieve_btc_requests(5_000_000u64..10_000_000, 1..5),
+        utxos_acc_idx in pvec((arbitrary::utxo(5_000_000_u64..1_000_000_000), 0..5_usize), 10..=10),
+        requests in arbitrary::retrieve_btc_requests(5_000_000_u64..10_000_000, 1..5),
         main_pkhash in uniform20(any::<u8>()),
         resubmission_chain_length in 1..=5,
     ) {
@@ -932,7 +932,7 @@ proptest! {
     }
 
     #[test]
-    fn sec1_to_der_positive_parses(sig in pvec(1u8..0x0f, 64)) {
+    fn sec1_to_der_positive_parses(sig in pvec(1_u8..0x0f, 64)) {
         use simple_asn1::{from_der, ASN1Block::{Sequence, Integer}};
 
         let der = crate::signature::sec1_to_der(&sig);
@@ -975,7 +975,7 @@ proptest! {
     }
 
     #[test]
-    fn amount_distribute_props(amount in any::<u64>(), n in 1..20u64) {
+    fn amount_distribute_props(amount in any::<u64>(), n in 1..20_u64) {
         let shares = crate::distribute(amount, n);
 
         // Distribute respects the share number.
@@ -994,9 +994,9 @@ proptest! {
 
     #[test]
     fn test_fee_range(
-        mut utxos in arbitrary::utxo_set(5_000u64..1_000_000_000, 20..40),
+        mut utxos in arbitrary::utxo_set(5_000_u64..1_000_000_000, 20..40),
         amount in 0_u64..15_000, //can be covered by UTXOs
-        fee_per_vbyte in arbitrary::fee_rate(2000..10000u64),
+        fee_per_vbyte in arbitrary::fee_rate(2000..10000_u64),
     ) {
         const SMALLEST_TX_SIZE_VBYTES: u64 = 140; // one input, two outputs
         const MIN_MINTER_FEE: u64 = BitcoinFeeEstimator::MINTER_ADDRESS_P2WPKH_DUST_LIMIT;
@@ -1066,7 +1066,7 @@ fn can_form_a_batch_conditions() {
 #[test]
 fn test_build_account_to_utxos_table_pagination() {
     let mut state = CkBtcMinterState::from(InitArgs {
-        retrieve_btc_min_amount: 5_000u64,
+        retrieve_btc_min_amount: 5_000_u64,
         ..init_args()
     });
     let account1 = Account::from(
@@ -1208,7 +1208,7 @@ fn test_build_consolidation_transaction() {
     let fee_millisatoshi_per_vbyte = FeeRate::from_millis_per_byte(10);
 
     // Randomly generate a utxo set from proptest strategy
-    let strategy = arbitrary::utxo_set(1_000_000u64..1_000_000_000, 1000..2000);
+    let strategy = arbitrary::utxo_set(1_000_000_u64..1_000_000_000, 1000..2000);
     let mut runner = TestRunner::new(Config::default());
     let mut utxos: UtxoSet = strategy.new_tree(&mut runner).unwrap().current();
 
@@ -1239,8 +1239,8 @@ fn test_build_consolidation_transaction() {
 proptest! {
     #[test]
     fn test_cache_batch_inserts(
-        expiration in 1u64..10,
-        max_key in 1u64..20,
+        expiration in 1_u64..10,
+        max_key in 1_u64..20,
     ) {
         let mut cache = CacheWithExpiration::new(Duration::from_nanos(expiration));
         assert_eq!(cache.len(), 0);

@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package types.v1;
 
+import "google/protobuf/empty.proto";
 import "types/v1/types.proto";
 
 message DkgMessage {
@@ -28,18 +29,34 @@ message DkgDataPayload {
   repeated CallbackIdedNiDkgTranscript transcripts_for_remote_subnets = 3;
 }
 
+message SplittingArgs {
+  SubnetId destination_subnet_id = 1;
+  SubnetId source_subnet_id = 2;
+}
+
+message PostSplitArgs {
+  SubnetId new_subnet_id = 1;
+}
+
+// next id: 17
 message Summary {
-  reserved 5, 6, 8;
+  reserved 5, 6, 8, 10, 16;
   reserved "transcripts_for_new_subnets";
+  reserved "transcripts_for_remote_subnets";
+  reserved "transcripts_for_remote_subnets_removed";
   uint64 registry_version = 1;
   uint64 interval_length = 2;
   uint64 next_interval_length = 3;
   uint64 height = 4;
   repeated NiDkgConfig configs = 7;
-  repeated InitialDkgAttemptCount initial_dkg_attempts = 9;
-  repeated CallbackIdedNiDkgTranscript transcripts_for_remote_subnets = 10;
+  repeated RemoteDkgAttemptCount remote_dkg_attempts = 9;
   repeated NiDkgTranscript current_transcripts = 11;
   repeated NiDkgTranscript next_transcripts = 12;
+  oneof subnet_splitting_status {
+    google.protobuf.Empty not_scheduled = 13;
+    SplittingArgs scheduled = 14;
+    PostSplitArgs post_split = 15;
+  }
 }
 
 message CallbackIdedNiDkgTranscript {
@@ -76,7 +93,7 @@ message NiDkgConfig {
   NiDkgTranscript resharing_transcript = 8;
 }
 
-message InitialDkgAttemptCount {
+message RemoteDkgAttemptCount {
   bytes target_id = 1;
   uint32 attempt_no = 2;
 }

@@ -1,3 +1,4 @@
+use crate::governance::NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS;
 use crate::pb::v1::{
     NetworkEconomics, NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients,
     VotingPowerEconomics,
@@ -276,6 +277,11 @@ impl VotingPowerEconomics {
     /// for that proposal. Thus, such neurons cannot vote on the proposal.
     pub const DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
 
+    /// The default value for `neuron_minimum_dissolve_delay_to_vote_seconds` once the mission 70
+    /// voting rewards feature is enabled. Two weeks instead of six months.
+    pub const MISSION_70_DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 =
+        14 * ONE_DAY_SECONDS;
+
     /// A proposal to set `VotingPowerEconomics.min_dissolve_delay_seconds` must specify a value
     /// for this field that falls within this range. Changing the lower bound of this parameter
     /// requires manually checking how it might interact with other aspects of the NNS.
@@ -285,7 +291,7 @@ impl VotingPowerEconomics {
     /// which originate from the time when the minimum dissolve delay to vote was an internal NNS
     /// constant.
     pub const NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS_BOUNDS: RangeInclusive<u64> =
-        (3 * ONE_MONTH_SECONDS)..=(6 * ONE_MONTH_SECONDS);
+        (14 * ONE_DAY_SECONDS)..=(6 * ONE_MONTH_SECONDS);
 
     pub const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
 
@@ -369,9 +375,19 @@ impl VotingPowerEconomics {
                 .contains(&delay)
             {
                 let defect = format!(
-                    "neuron_minimum_dissolve_delay_to_vote_seconds ({:?}) must be between three \
-                     and six months.",
+                    "neuron_minimum_dissolve_delay_to_vote_seconds ({:?}) must be between two \
+                     weeks and six months.",
                     self.neuron_minimum_dissolve_delay_to_vote_seconds
+                );
+                defects.push(defect);
+            }
+
+            if delay > NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS {
+                let defect = format!(
+                    "neuron_minimum_dissolve_delay_to_vote_seconds ({:?}) must not exceed \
+                     the minimum dissolve delay required to submit proposals ({}).",
+                    self.neuron_minimum_dissolve_delay_to_vote_seconds,
+                    NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS,
                 );
                 defects.push(defect);
             }

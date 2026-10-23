@@ -72,7 +72,7 @@ pub fn encode_instruction_metrics<MyWrite: std::io::Write>(
             "candid_call_instructions",
             "How many instructions were directly consumed to service requests. \
              Useful numbers: \
-             https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits",
+             https://docs.internetcomputer.org/references/resource-limits",
         )?;
 
         for (metric_labels, histogram) in stats.borrow().iter() {

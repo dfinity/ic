@@ -152,7 +152,7 @@ pub async fn start_synching_blocks(
     recurrency_mode: RecurrencyMode,
     heartbeat: Box<dyn Fn() + Send + Sync>,
 ) -> anyhow::Result<()> {
-    let mut current_failure_streak = 0u32;
+    let mut current_failure_streak = 0_u32;
     let mut is_initial_sync = true;
     loop {
         // Don't start beating heart before initial sync is done,
@@ -206,7 +206,7 @@ pub async fn start_synching_blocks(
                     .await
                     .unwrap_or(None)
                     .map(|rosetta_block| rosetta_block.index)
-                    .unwrap_or(0u64);
+                    .unwrap_or(0_u64);
                 storage_client
                     .get_metrics()
                     .set_verified_height(highest_block_index);
@@ -724,7 +724,7 @@ pub mod blocks_verifier {
         Ok(())
     }
 
-    /// Checks whether the blocks in the blockchain are a continous subset of the requested indices
+    /// Checks whether the blocks in the blockchain are a continuous subset of the requested indices
     pub fn indices_are_valid(
         blockchain: &[RosettaBlock],
         requested_indices: RangeInclusive<u64>,
@@ -735,7 +735,7 @@ pub mod blocks_verifier {
 
         let mut current_index = *requested_indices.start();
         for block in blockchain {
-            // The fetched blockchain should be continous with respect to the requested indices.
+            // The fetched blockchain should be continuous with respect to the requested indices.
             if block.index != current_index {
                 return false;
             }

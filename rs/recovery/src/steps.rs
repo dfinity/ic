@@ -3,6 +3,7 @@ use crate::{
     IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, NEW_IC_STATE, OLD_IC_STATE,
     Recovery,
     admin_helper::IcAdmin,
+    cli::consent_given,
     command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::{clear_dir, create_dir, read_dir, rsync, rsync_includes},
@@ -10,7 +11,7 @@ use crate::{
     registry_helper::RegistryHelper,
     replay_helper,
     ssh_helper::SshHelper,
-    util::{SshUser, block_on, parse_hex_str},
+    util::{ExecutionMode, SshUser, block_on, parse_hex_str},
 };
 use core::convert::From;
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
@@ -19,7 +20,7 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::certification::CertificationPool;
 use ic_metrics::MetricsRegistry;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
-use ic_types::{Height, SubnetId, consensus::certification::CertificationMessage};
+use ic_types::{Height, ReplicaVersion, SubnetId, consensus::certification::CertificationMessage};
 use slog::{Logger, debug, info, warn};
 use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
 
@@ -61,7 +62,7 @@ impl Step for AdminStep {
     }
 }
 
-pub struct DownloadCertificationsStep {
+pub(crate) struct DownloadCertificationsStep {
     pub logger: Logger,
     pub subnet_id: SubnetId,
     pub registry_helper: RegistryHelper,
@@ -137,7 +138,7 @@ impl Step for DownloadCertificationsStep {
     }
 }
 
-pub struct MergeCertificationPoolsStep {
+pub(crate) struct MergeCertificationPoolsStep {
     pub logger: Logger,
     pub work_dir: PathBuf,
 }
@@ -274,6 +275,8 @@ impl Step for MergeCertificationPoolsStep {
     }
 }
 
+/// Downloads data (the state, the consensus pool, ...) of a node into a
+/// working directory.
 pub struct DownloadIcDataStep {
     pub logger: Logger,
     pub ssh_helper: SshHelper,
@@ -364,10 +367,11 @@ impl Step for DownloadIcDataStep {
     }
 }
 
-pub struct CopyLocalIcStateStep {
+pub(crate) struct CopyLocalIcStateStep {
     pub logger: Logger,
     pub working_dir: PathBuf,
     pub require_confirmation: bool,
+    pub data_includes: Vec<PathBuf>,
 }
 
 impl Step for CopyLocalIcStateStep {
@@ -384,8 +388,7 @@ impl Step for CopyLocalIcStateStep {
         let log = self.require_confirmation.then_some(&self.logger);
 
         // State
-        let includes = Recovery::get_ic_state_includes(None)?;
-        for include in includes.iter() {
+        for include in self.data_includes.iter() {
             let src = PathBuf::from(IC_DATA_PATH).join(include);
             let dst_parent = self
                 .working_dir
@@ -415,12 +418,21 @@ impl Step for CopyLocalIcStateStep {
     }
 }
 
+/// Renders the `--replica-version` argument of the `ic-replay` invocations that
+/// the steps below describe, empty unless a version was given on the command line.
+fn replica_version_arg(replica_version: &Option<ReplicaVersion>) -> String {
+    replica_version
+        .as_ref()
+        .map(|v| format!(" --replica-version {v}"))
+        .unwrap_or_default()
+}
+
 pub struct ReplaySubCmd {
     pub cmd: SubCommand,
     pub descr: String,
 }
 
-pub struct ReplayStep {
+pub(crate) struct ReplayStep {
     pub logger: Logger,
     pub subnet_id: SubnetId,
     pub work_dir: PathBuf,
@@ -430,19 +442,21 @@ pub struct ReplayStep {
     pub replay_until_height: Option<u64>,
     pub result: PathBuf,
     pub skip_prompts: bool,
+    pub replica_version: Option<ReplicaVersion>,
 }
 
 impl Step for ReplayStep {
     fn descr(&self) -> String {
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
         let mut base = format!(
-            "Delete old checkpoints found in {}, and execute:\nic-replay {} --subnet-id {:?}{}",
+            "Delete old checkpoints found in {}, and execute:\nic-replay {} --subnet-id {:?}{}{}",
             checkpoint_path.display(),
             self.config.display(),
             self.subnet_id,
             self.replay_until_height
                 .map(|h| format!(" --replay-until-height {h}"))
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            replica_version_arg(&self.replica_version)
         );
         if let Some(subcmd) = &self.subcmd {
             base.push_str(&subcmd.descr);
@@ -451,6 +465,43 @@ impl Step for ReplayStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
+        // Note that `IC_CONSENSUS_POOL_PATH` is merely the root that the consensus and
+        // the certification store share. `MergeCertificationPoolsStep` creates that root
+        // for the certification store alone, so its existence says nothing about whether
+        // a consensus pool was downloaded; the consensus store itself does.
+        let consensus_store_path = self
+            .work_dir
+            .join("data")
+            .join(IC_CONSENSUS_POOL_PATH)
+            .join("consensus");
+        // Without a consensus pool, `ic-replay` replays no blocks: it only executes the
+        // subcommand's extra batch, if any, on top of the latest local checkpoint. That
+        // is legitimate when no node could be reached over SSH to download the pool, and
+        // that we are confident there are no blocks to replay (maybe because we stalled
+        // at a CUP height for which we already have the manifest). Though it also looks
+        // exactly like a state download gone wrong, so warn about it and let the
+        // operator decide.
+        if !consensus_store_path.exists() {
+            warn!(
+                self.logger,
+                "No consensus pool found at {}: no blocks will be replayed and {}.",
+                consensus_store_path.display(),
+                match &self.subcmd {
+                    Some(_) =>
+                        "only the subcommand will be executed, \
+                        on top of the latest local checkpoint",
+                    None => "the state will be left unchanged",
+                }
+            );
+            if !self.skip_prompts
+                && !consent_given(&self.logger, "Continue without a consensus pool?")
+            {
+                return Err(RecoveryError::UnexpectedError(
+                    "Replay without a consensus pool was declined".to_string(),
+                ));
+            }
+        }
+
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
 
         let checkpoint_height = if checkpoint_path.exists() {
@@ -474,7 +525,9 @@ impl Step for ReplayStep {
             self.replay_until_height,
             self.result.clone(),
             self.skip_prompts,
-        ))?;
+            self.replica_version.clone(),
+        ))?
+        .state_params;
 
         let latest_height = state_params.height;
         let state_hash = state_params.hash;
@@ -497,12 +550,11 @@ impl Step for ReplayStep {
     }
 }
 
-pub struct ValidateReplayStep {
+pub(crate) struct ValidateReplayStep {
     pub logger: Logger,
     pub subnet_id: SubnetId,
     pub registry_helper: RegistryHelper,
     pub work_dir: PathBuf,
-    pub extra_batches: u64,
 }
 
 impl Step for ValidateReplayStep {
@@ -511,8 +563,12 @@ impl Step for ValidateReplayStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let latest_height =
-            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?.height;
+        // `ic-replay` reports how many batches it delivered on top of the replayed
+        // blocks, so that the comparison below is against the last replayed block.
+        let replay_output =
+            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?;
+        let latest_height = replay_output.state_params.height;
+        let extra_batches = replay_output.extra_batches;
 
         let heights = get_available_nodes_heights_from_metrics(
             &self.logger,
@@ -540,10 +596,10 @@ impl Step for ValidateReplayStep {
         );
         info!(self.logger, "Height after replay: {}", latest_height);
 
-        if self.extra_batches > 0 {
-            info!(self.logger, "Extra batches: {}", self.extra_batches);
+        if extra_batches > 0 {
+            info!(self.logger, "Extra batches: {}", extra_batches);
         }
-        if latest_height.get() - self.extra_batches < cert_height.get() {
+        if latest_height.get() - extra_batches < cert_height.get() {
             return Err(RecoveryError::invalid_output_error(
                 "Replay height smaller than certification height.",
             ));
@@ -599,6 +655,7 @@ impl Step for UploadStateAndRestartStep {
         if self.check_ic_replay_height {
             let replay_height =
                 replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?
+                    .state_params
                     .height;
 
             if parse_hex_str(max_checkpoint)? != replay_height.get() {
@@ -627,11 +684,10 @@ impl Step for UploadStateAndRestartStep {
             let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
             // path of latest checkpoint on upload node
             let copy_from = ic_checkpoints_path.join(
-                Recovery::get_maybe_latest_checkpoint_name_remotely(
-                    &ssh_helper,
-                    &ic_checkpoints_path,
-                )?
-                .unwrap_or_default(),
+                ExecutionMode::Remote(&ssh_helper)
+                    .get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
+                    .unwrap_or_default()
+                    .0,
             );
             // path and name of checkpoint after replay
             let copy_to = upload_dir.join(CHECKPOINTS).join(max_checkpoint);
@@ -713,7 +769,7 @@ impl Step for UploadStateAndRestartStep {
     }
 }
 
-pub struct WaitForCUPStep {
+pub(crate) struct WaitForCUPStep {
     pub logger: Logger,
     pub node_ip: IpAddr,
     pub work_dir: PathBuf,
@@ -729,7 +785,8 @@ impl Step for WaitForCUPStep {
 
     fn exec(&self) -> RecoveryResult<()> {
         let state_params =
-            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?;
+            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?
+                .state_params;
         let recovery_height = Recovery::get_recovery_height(state_params.height);
 
         Recovery::wait_for_recovery_cup(
@@ -741,7 +798,7 @@ impl Step for WaitForCUPStep {
     }
 }
 
-pub struct CleanupStep {
+pub(crate) struct CleanupStep {
     pub recovery_dir: PathBuf,
 }
 
@@ -755,7 +812,7 @@ impl Step for CleanupStep {
     }
 }
 
-pub struct StopReplicaStep {
+pub(crate) struct StopReplicaStep {
     pub logger: Logger,
     pub node_ip: IpAddr,
     pub require_confirmation: bool,
@@ -780,18 +837,20 @@ impl Step for StopReplicaStep {
     }
 }
 
-pub struct UpdateLocalStoreStep {
+pub(crate) struct UpdateLocalStoreStep {
     pub subnet_id: SubnetId,
     pub work_dir: PathBuf,
     pub skip_prompts: bool,
+    pub replica_version: Option<ReplicaVersion>,
 }
 
 impl Step for UpdateLocalStoreStep {
     fn descr(&self) -> String {
         format!(
-            "Update registry local store by executing:\nic-replay {:?} --subnet-id {:?} update-registry-local-store",
+            "Update registry local store by executing:\nic-replay {:?} --subnet-id {:?}{} update-registry-local-store",
             self.work_dir.join("ic.json5"),
-            self.subnet_id
+            self.subnet_id,
+            replica_version_arg(&self.replica_version)
         )
     }
 
@@ -805,12 +864,13 @@ impl Step for UpdateLocalStoreStep {
             None,
             self.work_dir.join("update_local_store.txt"),
             self.skip_prompts,
+            self.replica_version.clone(),
         ))?;
         Ok(())
     }
 }
 
-pub struct GetRecoveryCUPStep {
+pub(crate) struct GetRecoveryCUPStep {
     pub subnet_id: SubnetId,
     pub config: PathBuf,
     pub state_hash: String,
@@ -818,15 +878,17 @@ pub struct GetRecoveryCUPStep {
     pub result: PathBuf,
     pub work_dir: PathBuf,
     pub skip_prompts: bool,
+    pub replica_version: Option<ReplicaVersion>,
 }
 
 impl Step for GetRecoveryCUPStep {
     fn descr(&self) -> String {
         format!(
             "Set recovery CUP by executing:\n\
-            ic-replay {} --subnet-id {} get-recovery-cup {} {} cup.proto",
+            ic-replay {} --subnet-id {}{} get-recovery-cup {} {} cup.proto",
             self.config.display(),
             self.subnet_id,
+            replica_version_arg(&self.replica_version),
             self.state_hash,
             self.recovery_height
         )
@@ -846,12 +908,13 @@ impl Step for GetRecoveryCUPStep {
             None,
             self.result.clone(),
             self.skip_prompts,
+            self.replica_version.clone(),
         ))?;
         Ok(())
     }
 }
 
-pub struct CreateRegistryTarStep {
+pub(crate) struct CreateRegistryTarStep {
     pub logger: Logger,
     pub store_tar_cmd: Command,
 }
@@ -871,9 +934,8 @@ impl Step for CreateRegistryTarStep {
     }
 }
 
-pub struct UploadCUPAndTarStep {
+pub(crate) struct UploadCUPAndTarStep {
     pub logger: Logger,
-    pub registry_helper: RegistryHelper,
     pub node_ip: IpAddr,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
@@ -881,7 +943,7 @@ pub struct UploadCUPAndTarStep {
 }
 
 impl UploadCUPAndTarStep {
-    pub fn get_restart_commands(&self) -> String {
+    fn get_restart_commands(&self) -> String {
         format!(
             r#"
 cd {};
@@ -904,7 +966,7 @@ sudo systemctl status ic-replica;
         )
     }
 
-    pub fn get_upload_dir_name() -> PathBuf {
+    fn get_upload_dir_name() -> PathBuf {
         PathBuf::from("/tmp").join("subnet_recovery")
     }
 }
@@ -1042,7 +1104,7 @@ impl Step for CreateNNSRecoveryTarStep {
     }
 }
 
-pub struct DownloadRegistryStoreStep {
+pub(crate) struct DownloadRegistryStoreStep {
     pub logger: Logger,
     pub node_ip: IpAddr,
     pub original_nns_id: SubnetId,
@@ -1106,7 +1168,7 @@ impl Step for DownloadRegistryStoreStep {
     }
 }
 
-pub struct UploadAndHostTarStep {
+pub(crate) struct UploadAndHostTarStep {
     pub logger: Logger,
     pub aux_user: SshUser,
     pub aux_ip: IpAddr,
@@ -1116,7 +1178,7 @@ pub struct UploadAndHostTarStep {
 }
 
 impl UploadAndHostTarStep {
-    pub fn get_upload_dir_name() -> PathBuf {
+    fn get_upload_dir_name() -> PathBuf {
         PathBuf::from("/tmp").join("recovery_registry")
     }
 }
@@ -1142,7 +1204,6 @@ impl Step for UploadAndHostTarStep {
 
         let upload_dir = UploadAndHostTarStep::get_upload_dir_name();
 
-        ssh_helper.ssh("nix-env -i daemonize python3".to_string())?;
         ssh_helper.ssh(format!(
             "mkdir -p {upload_dir}",
             upload_dir = upload_dir.display()
@@ -1173,7 +1234,7 @@ mod tests {
     fn make_certification(height: u64, hash: Vec<u8>) -> CertificationMessage {
         CertificationMessage::Certification(Certification {
             height: Height::from(height),
-            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 content: CertificationContent::new(CryptoHash(hash).into()),
                 signature: ThresholdSignature::fake(),
@@ -1223,6 +1284,36 @@ mod tests {
         };
         assert!(
             matches!(step.exec(), Err(RecoveryError::UnexpectedError(e)) if e.starts_with("Did not find any certifications"))
+        );
+    }
+
+    /// `MergeCertificationPoolsStep` creates the root that the consensus and the
+    /// certification store share, without creating a consensus store. Whether a
+    /// consensus pool was downloaded is therefore decided by the consensus store
+    /// alone, both in `ReplayStep::exec()` and in `ic-replay`'s `Player::new()`;
+    /// testing the shared root instead would take these certifications for a pool.
+    #[test]
+    fn merged_certifications_do_not_create_a_consensus_store() {
+        let logger = crate::util::make_logger();
+        let (tmp, pool1, _pool2) = setup_merge_certs(&logger);
+        let work_dir = tmp.path().to_path_buf();
+        pool1.validated.insert(make_certification(1, vec![1, 2, 3]));
+
+        MergeCertificationPoolsStep {
+            logger: logger.clone(),
+            work_dir: work_dir.clone(),
+        }
+        .exec()
+        .expect("Failed to merge the certification pools");
+
+        let pool_root = work_dir.join("data").join(IC_CONSENSUS_POOL_PATH);
+        assert!(
+            pool_root.exists(),
+            "the merge step should have created the shared pool root"
+        );
+        assert!(
+            !pool_root.join("consensus").exists(),
+            "the merge step should not have created a consensus store"
         );
     }
 

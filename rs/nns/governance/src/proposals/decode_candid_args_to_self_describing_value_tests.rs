@@ -152,7 +152,7 @@ fn test_decode_candid_args_to_self_describing_value_vec() {
         }
     "#;
 
-    let arg = vec![Nat::from(1u64), Nat::from(2u64), Nat::from(3u64)];
+    let arg = vec![Nat::from(1_u64), Nat::from(2_u64), Nat::from(3_u64)];
     let encoded = Encode!(&arg).unwrap();
 
     assert_candid_converts_to(
@@ -217,7 +217,7 @@ fn test_decode_candid_args_to_self_describing_value_blob() {
         }
     "#;
 
-    let arg = vec![1u8, 2u8, 3u8, 4u8];
+    let arg = vec![1_u8, 2_u8, 3_u8, 4_u8];
     let encoded = Encode!(&arg).unwrap();
 
     // Both `vec nat8` and `blob` (an alias for `vec nat8`) should be converted to `Blob`.

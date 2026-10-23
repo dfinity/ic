@@ -38,7 +38,7 @@ const TEST_SUBNET_NODES: u16 = 34;
 // and checking the actual consumptions. It is both big enough to allow tests to
 // succeed, and small enough not to interfere with the expected cycle cost we
 // are testing for.
-const UNIVERSAL_CANISTER_CYCLE_MARGIN: u128 = 43_000_000;
+const UNIVERSAL_CANISTER_CYCLE_MARGIN: u128 = 46_000_000;
 
 struct Setup {
     // Owner of canisters created for the setup.

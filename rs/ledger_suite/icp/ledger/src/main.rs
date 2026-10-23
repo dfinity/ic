@@ -1,14 +1,13 @@
-#![allow(deprecated)]
 #[cfg(feature = "canbench-rs")]
 mod canbench;
 
 use candid::Decode;
-use candid::{Nat, Principal, candid_method};
+use candid::{Encode, Nat, Principal, candid_method};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
 use ic_cdk::api::{
-    call::{arg_data_raw, reply_raw},
-    caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
+    certified_data_set, data_certificate, debug_print as print, instruction_counter,
+    msg_arg_data as arg_data_raw, msg_caller as caller, msg_reply as reply_raw, time, trap,
 };
 use ic_cdk::futures::internals::{in_executor_context, in_query_executor_context};
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
@@ -157,14 +156,14 @@ fn init(
         }
     }
     #[cfg(not(feature = "canbench-rs"))]
-    set_certified_data(
-        &LEDGER
+    certified_data_set(
+        LEDGER
             .read()
             .unwrap()
             .blockchain
             .last_hash
             .map(|h| h.into_bytes())
-            .unwrap_or([0u8; 32]),
+            .unwrap_or([0_u8; 32]),
     );
 
     if let Some(archive_options) = archive_options {
@@ -254,7 +253,7 @@ async fn send(
         Err(PaymentError::TransferError(transfer_error)) => return Err(transfer_error),
         Err(PaymentError::Reject(msg)) => panic!("{}", msg),
     };
-    set_certified_data(&hash.into_bytes());
+    certified_data_set(hash.into_bytes());
 
     // Don't put anything that could ever trap after this call or people using this
     // endpoint. If something did panic the payment would appear to fail, but would
@@ -296,7 +295,7 @@ fn icrc1_send_not_async(
         .expect("Minting canister id not initialized");
     let now = TimeStamp::from_nanos_since_unix_epoch(time());
     let (operation, effective_fee) = if to == minting_acc {
-        if fee.is_some() && fee.as_ref() != Some(&Nat::from(0u64)) {
+        if fee.is_some() && fee.as_ref() != Some(&Nat::from(0_u64)) {
             return Err(CoreTransferError::BadFee {
                 expected_fee: Tokens::ZERO,
             });
@@ -324,7 +323,7 @@ fn icrc1_send_not_async(
         if spender_account.is_some() {
             trap("the minter account cannot delegate mints");
         }
-        if fee.is_some() && fee.as_ref() != Some(&Nat::from(0u64)) {
+        if fee.is_some() && fee.as_ref() != Some(&Nat::from(0_u64)) {
             return Err(CoreTransferError::BadFee {
                 expected_fee: Tokens::ZERO,
             });
@@ -363,7 +362,7 @@ fn icrc1_send_not_async(
         let (block_index, _hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)?;
 
         #[cfg(not(feature = "canbench-rs"))]
-        set_certified_data(&hash.into_bytes());
+        certified_data_set(hash.into_bytes());
 
         block_index
     };
@@ -466,12 +465,10 @@ fn icrc1_supported_standards() -> Vec<StandardRecord> {
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-2".to_string(),
         });
     }
-    standards.push(
-        StandardRecord {
-            name: "ICRC-21".to_string(),
-            url: "https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md".to_string(),
-        }
-    );
+    standards.push(StandardRecord {
+        name: "ICRC-21".to_string(),
+        url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-21/ICRC-21.md".to_string(),
+    });
     standards.push(StandardRecord {
         name: "ICRC-10".to_string(),
         url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-10/ICRC-10.md".to_string(),
@@ -635,9 +632,9 @@ const BUFFER_SIZE: usize = 8388608;
 fn post_upgrade(args: Option<LedgerCanisterPayload>) {
     let start = instruction_counter();
 
-    let mut magic_bytes_reader = ic_cdk::api::stable::StableReader::default();
+    let mut magic_bytes_reader = ic_cdk::stable::StableReader::default();
     const MAGIC_BYTES: &[u8; 3] = b"MGR";
-    let mut first_bytes = [0u8; 3];
+    let mut first_bytes = [0_u8; 3];
     let memory_manager_found = match magic_bytes_reader.read_exact(&mut first_bytes) {
         Ok(_) => first_bytes == *MAGIC_BYTES,
         Err(_) => false,
@@ -657,13 +654,13 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
             let ledger_state = ciborium::de::from_reader(&mut buffered_reader).expect(
                 "Failed to read the Ledger state from memory manager managed stable memory",
             );
-            let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+            let mut pre_upgrade_instructions_counter_bytes = [0_u8; 8];
             pre_upgrade_instructions_consumed =
                 match buffered_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
                     Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
                     Err(_) => {
                         // If upgrading from a version that didn't write the instructions counter to stable memory
-                        0u64
+                        0_u64
                     }
                 };
             ledger_state
@@ -693,12 +690,12 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
                 }
             }
         }
-        set_certified_data(
-            &ledger
+        certified_data_set(
+            ledger
                 .blockchain
                 .last_hash
                 .map(|h| h.into_bytes())
-                .unwrap_or([0u8; 32]),
+                .unwrap_or([0_u8; 32]),
         );
         PRE_UPGRADE_INSTRUCTIONS_CONSUMED
             .with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
@@ -1129,7 +1126,7 @@ fn get_nodes_() {
             .iter()
             .map(|archive| archive.canister_id)
             .collect::<Vec<CanisterId>>();
-        ic_cdk::api::call::reply((result,));
+        reply_raw(Encode!(&result).unwrap());
     })
 }
 
@@ -1149,12 +1146,12 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "ledger_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
+        (ic_cdk::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
@@ -1208,7 +1205,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "ledger_notify_method_calls",
-        0f64,
+        0_f64,
         "Total number of calls to the notify-method method.",
     )?;
     w.encode_counter(
@@ -1410,7 +1407,7 @@ fn icrc2_approve_not_async(
         let (block_index, _hash) = result;
 
         #[cfg(not(feature = "canbench-rs"))]
-        set_certified_data(&hash.into_bytes());
+        certified_data_set(hash.into_bytes());
 
         block_index
     };
@@ -1445,7 +1442,7 @@ async fn remove_approval(args: RemoveApprovalArgs) -> Result<Nat, ApproveError> 
             owner: Principal::anonymous(),
             subaccount: None,
         },
-        amount: Nat::from(0u64),
+        amount: Nat::from(0_u64),
         expected_allowance: None,
         expires_at: None,
         fee: args.fee,

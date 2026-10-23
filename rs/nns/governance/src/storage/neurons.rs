@@ -3,7 +3,7 @@ use crate::{
     neuron_store::NeuronStoreError,
     pb::v1::{
         AbridgedNeuron, BallotInfo, Followees, KnownNeuronData, MaturityDisbursement,
-        NeuronStakeTransfer, Topic,
+        NeuronDissolveStateSnapshot, NeuronStakeTransfer, Topic,
     },
     storage::validate_stable_btree_map,
 };
@@ -439,7 +439,7 @@ where
         self.main.len().min(usize::MAX as u64) as usize
     }
 
-    pub fn range_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
+    pub fn range_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron>
     where
         R: RangeBounds<NeuronId> + Clone,
     {
@@ -451,7 +451,7 @@ where
         &self,
         range: R,
         sections: NeuronSections,
-    ) -> impl Iterator<Item = Neuron> + '_
+    ) -> impl Iterator<Item = Neuron>
     where
         R: RangeBounds<NeuronId> + Clone,
     {
@@ -755,6 +755,26 @@ where
 
     pub fn is_known_neuron(&self, neuron_id: NeuronId) -> bool {
         self.known_neuron_data_map.contains_key(&neuron_id)
+    }
+
+    pub fn clamp_dissolve_delay_for_all_neurons_or_panic(
+        &mut self,
+        now_seconds: u64,
+    ) -> HashMap<u64, NeuronDissolveStateSnapshot> {
+        let neuron_ids = self.main.keys().collect::<Vec<NeuronId>>();
+        let mut pre_clamp_dissolve_states = HashMap::new();
+        for neuron_id in neuron_ids {
+            let mut snapshot = None;
+            self.with_main_part_mut(neuron_id, |abridged_neuron| {
+                snapshot = Some(abridged_neuron.clamp_dissolve_delay_or_panic(now_seconds));
+            })
+            .expect("Failed to clamp dissolve delay for neuron");
+            pre_clamp_dissolve_states.insert(
+                neuron_id.id,
+                snapshot.expect("snapshot must be set inside with_main_part_mut"),
+            );
+        }
+        pre_clamp_dissolve_states
     }
 }
 

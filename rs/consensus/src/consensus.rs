@@ -1,6 +1,7 @@
 //! This module encapsulates all components required for establishing of a
 //! distributed consensus.
 
+mod allowed_panics;
 pub mod batch_delivery;
 mod block_maker;
 pub mod bounds;
@@ -24,10 +25,11 @@ pub mod validator;
 mod proptests;
 
 use crate::consensus::{
-    block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker, finalizer::Finalizer,
-    metrics::ConsensusMetrics, notary::Notary, payload_builder::PayloadBuilderImpl,
-    priority::new_bouncer, purger::Purger, random_beacon_maker::RandomBeaconMaker,
-    random_tape_maker::RandomTapeMaker, share_aggregator::ShareAggregator, validator::Validator,
+    allowed_panics::panic_with_no_subnet_record, block_maker::BlockMaker,
+    catchup_package_maker::CatchUpPackageMaker, finalizer::Finalizer, metrics::ConsensusMetrics,
+    notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
+    random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
+    share_aggregator::ShareAggregator, validator::Validator,
 };
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
@@ -48,7 +50,7 @@ use ic_interfaces::{
     time_source::TimeSource,
 };
 use ic_interfaces_registry::{POLLING_PERIOD, RegistryClient};
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::{StateManager, StateReader};
 use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -56,9 +58,8 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Time, artifact::ConsensusMessageId, consensus::ConsensusMessageHashable,
     malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
-    replica_version::ReplicaVersion,
 };
-use rayon::{ThreadPool, ThreadPoolBuilder};
+use rayon::ThreadPool;
 use std::{
     cell::RefCell,
     collections::BTreeMap,
@@ -72,7 +73,7 @@ use strum_macros::AsRefStr;
 /// We will not notarize or validate artifacts with a height greater than the given
 /// value above the latest certification. During validation, the only exception to
 /// this are CUPs, which  have no upper bound on the height to be validated.
-pub(crate) const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
+pub const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
 
 /// In order to have a bound on the advertised consensus pool, we place a limit on
 /// the gap between notarized height and the height of the next pending CUP.
@@ -80,9 +81,6 @@ pub(crate) const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
 /// value above the latest CUP. During validation, the only exception to this are
 /// CUPs, which have no upper bound on the height to be validated.
 pub(crate) const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 130;
-
-/// The maximum number of threads used to create & validate block payloads in parallel.
-pub const MAX_CONSENSUS_THREADS: usize = 16;
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
@@ -96,33 +94,6 @@ enum ConsensusSubcomponent {
     Validator,
     Aggregator,
     Purger,
-}
-
-/// Describe expected version and artifact version when there is a mismatch.
-#[derive(Debug)]
-pub(crate) struct ReplicaVersionMismatch {}
-
-/// The function checks if the version of the given artifact matches the default
-/// protocol version and returns an error if it does not.
-pub(crate) fn check_protocol_version(
-    version: &ReplicaVersion,
-) -> Result<(), ReplicaVersionMismatch> {
-    let expected_version = ReplicaVersion::default();
-    if version != &expected_version {
-        Err(ReplicaVersionMismatch {})
-    } else {
-        Ok(())
-    }
-}
-
-/// Builds a rayon thread pool with the given number of threads.
-pub fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
-    Arc::new(
-        ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-            .expect("Failed to create thread pool"),
-    )
 }
 
 /// [ConsensusImpl] holds all consensus subcomponents, and implements the
@@ -140,7 +111,7 @@ pub struct ConsensusImpl {
     metrics: ConsensusMetrics,
     time_source: Arc<dyn TimeSource>,
     registry_client: Arc<dyn RegistryClient>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
     last_invoked: RefCell<BTreeMap<ConsensusSubcomponent, Time>>,
     schedule: RoundRobin,
@@ -165,6 +136,7 @@ impl ConsensusImpl {
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
         chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        upgrade_payload_builder: Arc<dyn BatchPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -195,6 +167,7 @@ impl ConsensusImpl {
             canister_http_payload_builder,
             query_stats_payload_builder,
             chain_key_payload_builder,
+            upgrade_payload_builder,
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -251,18 +224,18 @@ impl ConsensusImpl {
                 crypto.clone(),
                 state_manager.clone(),
                 message_routing.clone(),
+                registry_client.clone(),
                 logger.clone(),
             ),
             block_maker: BlockMaker::new(
                 Arc::clone(&time_source) as Arc<_>,
                 replica_config.clone(),
-                Arc::clone(&registry_client),
+                registry_client.clone(),
                 membership.clone(),
                 crypto.clone(),
                 payload_builder.clone(),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
-                thread_pool.clone(),
                 state_manager.clone(),
                 stable_registry_version_age,
                 metrics_registry.clone(),
@@ -271,7 +244,7 @@ impl ConsensusImpl {
             validator: Validator::new(
                 replica_config.clone(),
                 membership.clone(),
-                Arc::clone(&registry_client),
+                registry_client.clone(),
                 crypto.clone(),
                 payload_builder,
                 state_manager.clone(),
@@ -286,6 +259,8 @@ impl ConsensusImpl {
                 membership,
                 message_routing.clone(),
                 crypto.clone(),
+                registry_client.clone(),
+                replica_config.clone(),
                 logger.clone(),
             ),
             purger: Purger::new(
@@ -300,7 +275,7 @@ impl ConsensusImpl {
             log: logger,
             time_source,
             registry_client,
-            state_manager,
+            state_reader: state_manager,
             malicious_flags,
             replica_config,
             last_invoked: RefCell::new(last_invoked),
@@ -355,10 +330,7 @@ impl ConsensusImpl {
             .get_is_halted(self.replica_config.subnet_id, version)
         {
             Ok(None) => {
-                panic!(
-                    "No subnet record found for registry version={:?} and subnet_id={:?}",
-                    version, self.replica_config.subnet_id,
-                );
+                panic_with_no_subnet_record(version, self.replica_config.subnet_id);
             }
             Err(err) => {
                 error!(
@@ -450,7 +422,7 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
             "Consensus finalized height: {}, state available: {}, DKG key material available: {}",
             pool_reader.get_finalized_height(),
             pool_reader.get_finalized_tip().context.certified_height
-                <= self.state_manager.latest_certified_height(),
+                <= self.state_reader.latest_certified_height(),
             self.dkgs_available(&pool_reader)
         );
 
@@ -638,7 +610,8 @@ impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for Consensus
 mod tests {
     use super::*;
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
+    use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -653,20 +626,12 @@ mod tests {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::{CryptoHashOfState, Height, SubnetId, crypto::CryptoHash};
+    use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash};
     use std::sync::Arc;
 
     fn set_up_consensus_with_subnet_record(
         record: SubnetRecord,
         pool_config: ArtifactPoolConfig,
-    ) -> (ConsensusImpl, TestConsensusPool, Arc<FastForwardTimeSource>) {
-        set_up_consensus_with_subnet_record_and_subnet_id(record, pool_config, subnet_test_id(0))
-    }
-
-    fn set_up_consensus_with_subnet_record_and_subnet_id(
-        record: SubnetRecord,
-        pool_config: ArtifactPoolConfig,
-        subnet_id: SubnetId,
     ) -> (ConsensusImpl, TestConsensusPool, Arc<FastForwardTimeSource>) {
         let Dependencies {
             pool,
@@ -678,7 +643,8 @@ mod tests {
             dkg_pool,
             idkg_pool,
             ..
-        } = dependencies_with_subnet_params(pool_config, subnet_id, vec![(1, record)]);
+        } = DependenciesBuilder::single_subnet(pool_config, subnet_test_id(0), vec![(1, record)])
+            .build();
         state_manager
             .get_mut()
             .expect_latest_certified_height()
@@ -695,14 +661,15 @@ mod tests {
         let metrics_registry = MetricsRegistry::new();
 
         let consensus_impl = ConsensusImpl::new(
-            replica_config,
-            registry,
+            replica_config.clone(),
+            registry.clone(),
             pool.get_cache(),
             crypto.clone(),
             Arc::new(FakeIngressSelector::new()),
             Arc::new(FakeXNetPayloadBuilder::new()),
             Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
+            Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             dkg_pool,
@@ -712,6 +679,8 @@ mod tests {
                 crypto,
                 no_op_logger(),
                 &PoolReader::new(&pool),
+                registry,
+                replica_config,
             ))),
             Arc::new(FakeMessageRouting::new()),
             state_manager,

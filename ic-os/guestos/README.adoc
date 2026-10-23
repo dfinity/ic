@@ -39,7 +39,7 @@ link:docs/README.adoc#[docs/ subdirectory]
 == Performance Benchmarking
 
 Performance benchmarks are run in GuestOS, on hardware, every day during the nightly
-link:../../.github/workflows-source/schedule-daily.yml[`Bazel Test Bare Metal`] job.
+link:../../.github/workflows-source/schedule-daily-bare-metal.yml[`Bazel Test Bare Metal`] job.
 
 This job runs commands from link:../dev-tools/bare_metal_deployment/benchmark_runner.sh[`benchmark_runner.sh`],
 and expects that results are placed into the `results` folder on the node. All results are then

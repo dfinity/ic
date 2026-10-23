@@ -3178,7 +3178,7 @@ fn test_derived_state() {
     // Validate initial Swap configuration
     let mut expected = DerivedState {
         buyer_total_icp_e8s: 0,
-        sns_tokens_per_icp: 0f32,
+        sns_tokens_per_icp: 0_f32,
         direct_participant_count: Some(0),
         direct_participation_icp_e8s: Some(0),
         neurons_fund_participation_icp_e8s: Some(0),
@@ -3211,7 +3211,7 @@ fn test_derived_state() {
     swap.update_derived_fields();
     expected = DerivedState {
         buyer_total_icp_e8s: 25_000 * E8,
-        sns_tokens_per_icp: 4f32,
+        sns_tokens_per_icp: 4_f32,
         direct_participant_count: Some(1),
         direct_participation_icp_e8s: Some(25_000 * E8),
         ..expected
@@ -3237,7 +3237,7 @@ fn test_derived_state() {
         .unwrap();
     expected = DerivedState {
         buyer_total_icp_e8s: final_direct_participation_icp_e8s + final_nf_participation_icp_e8s,
-        sns_tokens_per_icp: 0.25f32,
+        sns_tokens_per_icp: 0.25_f32,
         direct_participant_count: Some(1),
         direct_participation_icp_e8s: Some(final_direct_participation_icp_e8s),
         neurons_fund_participation_icp_e8s: Some(final_nf_participation_icp_e8s),
@@ -5932,7 +5932,7 @@ fn test_get_state_bounds_data_sources() {
     // 1 CF participant and 1 direct participant at 1 E8 each
     assert_eq!(derived_state.buyer_total_icp_e8s, 2 * E8);
     // Exact exchange rate is not important to this test, just that it is set
-    assert!(derived_state.sns_tokens_per_icp >= 0.0f32);
+    assert!(derived_state.sns_tokens_per_icp >= 0.0_f32);
 
     let swap_state = get_state_response.swap.unwrap();
     // Assert that unbounded data sources are set to empty structs in the response

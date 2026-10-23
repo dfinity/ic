@@ -303,7 +303,7 @@ fn set_up_chain<R: Rng>(
         let previous_neuron_indices = (neuron_index - num_half_followees - 1)..neuron_index;
         let followee_neuron_ids = previous_neuron_indices
             .map(|index| neuron_ids[index as usize])
-            .chain(not_voting_neuron_ids.clone().into_iter())
+            .chain(not_voting_neuron_ids.clone())
             .collect::<Vec<_>>();
 
         let followees = hashmap! {topic.into() => Followees {followees: followee_neuron_ids}};
@@ -688,16 +688,17 @@ fn list_proposals_benchmark() -> BenchResult {
     let proposal_actions = vec![
         Action::ExecuteNnsFunction(ExecuteNnsFunction {
             nns_function: NnsFunction::HardResetNnsRootToVersion as i32,
-            payload: vec![0u8; 1 << 20], // 1 MiB
+            payload: vec![0_u8; 1 << 20], // 1 MiB
         }),
         Action::InstallCode(InstallCode {
             canister_id: Some(GOVERNANCE_CANISTER_ID.get()),
-            wasm_module: Some(vec![0u8; 1 << 20]), // 1 MiB
-            arg: Some(vec![0u8; 1 << 20]),         // 1 MiB
+            wasm_module: Some(vec![0_u8; 1 << 20]), // 1 MiB
+            arg: Some(vec![0_u8; 1 << 20]),         // 1 MiB
             install_mode: Some(CanisterInstallMode::Install as i32),
-            wasm_module_hash: Some(Sha256::hash(&vec![0u8; 1 << 20]).to_vec()),
-            arg_hash: Some(Sha256::hash(&vec![0u8; 1 << 20]).to_vec()),
+            wasm_module_hash: Some(Sha256::hash(&vec![0_u8; 1 << 20]).to_vec()),
+            arg_hash: Some(Sha256::hash(&vec![0_u8; 1 << 20]).to_vec()),
             skip_stopping_before_installing: None,
+            canister_upgrade_options: None,
         }),
         Action::CreateServiceNervousSystem(
             create_service_nervous_system_action_with_large_payload(),

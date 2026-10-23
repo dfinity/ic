@@ -1,6 +1,7 @@
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use strum_macros::EnumIter;
 
 /// Enumerates use cases of consumed cycles.
@@ -16,7 +17,6 @@ pub enum CyclesUseCase {
     ECDSAOutcalls = 8,
     HTTPOutcalls = 9,
     DeletedCanisters = 10,
-    NonConsumed = 11,
     BurnedCycles = 12,
     SchnorrOutcalls = 13,
     VetKd = 14,
@@ -38,7 +38,6 @@ impl CyclesUseCase {
             Self::ECDSAOutcalls => "ECDSAOutcalls",
             Self::HTTPOutcalls => "HTTPOutcalls",
             Self::DeletedCanisters => "DeletedCanisters",
-            Self::NonConsumed => "NonConsumed",
             Self::BurnedCycles => "BurnedCycles",
             Self::SchnorrOutcalls => "SchnorrOutcalls",
             Self::VetKd => "VetKd",
@@ -62,7 +61,6 @@ impl From<CyclesUseCase> for pb::CyclesUseCase {
             CyclesUseCase::ECDSAOutcalls => pb::CyclesUseCase::EcdsaOutcalls,
             CyclesUseCase::HTTPOutcalls => pb::CyclesUseCase::HttpOutcalls,
             CyclesUseCase::DeletedCanisters => pb::CyclesUseCase::DeletedCanisters,
-            CyclesUseCase::NonConsumed => pb::CyclesUseCase::NonConsumed,
             CyclesUseCase::BurnedCycles => pb::CyclesUseCase::BurnedCycles,
             CyclesUseCase::SchnorrOutcalls => pb::CyclesUseCase::SchnorrOutcalls,
             CyclesUseCase::VetKd => pb::CyclesUseCase::VetKd,
@@ -92,7 +90,6 @@ impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
             pb::CyclesUseCase::EcdsaOutcalls => Ok(Self::ECDSAOutcalls),
             pb::CyclesUseCase::HttpOutcalls => Ok(Self::HTTPOutcalls),
             pb::CyclesUseCase::DeletedCanisters => Ok(Self::DeletedCanisters),
-            pb::CyclesUseCase::NonConsumed => Ok(Self::NonConsumed),
             pb::CyclesUseCase::BurnedCycles => Ok(Self::BurnedCycles),
             pb::CyclesUseCase::SchnorrOutcalls => Ok(Self::SchnorrOutcalls),
             pb::CyclesUseCase::VetKd => Ok(Self::VetKd),
@@ -100,3 +97,183 @@ impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
         }
     }
 }
+
+/// The following trait helps bound what kind of types can be used as the
+/// first generic argument to `CompoundCycles` that represent the various
+/// use cases for cycles accounting.
+pub trait CyclesUseCaseKind: Copy + Clone + Debug {
+    fn cycles_use_case() -> CyclesUseCase;
+}
+
+/// Marker trait to identify which use cases of `CyclesUseCase` are refundable,
+/// i.e. the ones that are prepaid and expected to be refunded if not fully consumed.
+pub trait CyclesUseCaseRefundableKind: CyclesUseCaseKind {}
+
+/// Marker trait to identify which use cases of `CyclesUseCase` are non-refundable,
+/// i.e. the ones that are charged directly, without a prepayment that would later
+/// be refunded via a call to `SystemState::refund_cycles`.
+///
+/// Intended to be disjoint from `CyclesUseCaseRefundableKind`: each built-in use case
+/// in this crate implements exactly one of the two traits.
+pub trait CyclesUseCaseNonRefundableKind: CyclesUseCaseKind {}
+
+/*
+ * Empty structs are added for each use case to act like tags that can be used
+ * to allow the compiler to enforce type-safe operations on `CompoundCycles`
+ * but also make it more clear to the reader which use case is handled as it
+ * will be part of the type they see.
+*/
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct Memory;
+
+impl CyclesUseCaseKind for Memory {
+    fn cycles_use_case() -> CyclesUseCase {
+        CyclesUseCase::Memory
+    }
+}
+
+impl CyclesUseCaseNonRefundableKind for Memory {}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct ComputeAllocation;
+
+impl CyclesUseCaseKind for ComputeAllocation {
+    fn cycles_use_case() -> CyclesUseCase {
+        CyclesUseCase::ComputeAllocation
+    }
+}
+
+impl CyclesUseCaseNonRefundableKind for ComputeAllocation {}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct IngressInduction;
+
+impl CyclesUseCaseKind for IngressInduction {
+    fn cycles_use_case() -> CyclesUseCase {
+        CyclesUseCase::IngressInduction
+    }
+}
+
+impl CyclesUseCaseNonRefundableKind for IngressInduction {}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
+pub struct Instructions;
+
+impl CyclesUseCaseKind for Instructions {
+    fn cycles_use_case() -> CyclesUseCase {
+        CyclesUseCase::Instructions
+    }
+}
+
+impl CyclesUseCaseRefundableKind for Instructions {}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
+pub struct RequestAndResponseTransmission;
+
+impl CyclesUseCaseKind for RequestAndResponseTransmission {
+    fn cycles_use_case() -> CyclesUseCase {
+        CyclesUseCase::RequestAndResponseTransmission
+    }
+}
+
+impl CyclesUseCaseRefundableKind for RequestAndResponseTransmission {}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct Uninstall;
+
+impl CyclesUseCaseKind for Uninstall {
+    fn cycles_use_case() -> CyclesUseCase {
+        CyclesUseCase::Uninstall
+    }
+}
+
+impl CyclesUseCaseNonRefundableKind for Uninstall {}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct CanisterCreation;
+
+impl CyclesUseCaseKind for CanisterCreation {
+    fn cycles_use_case() -> CyclesUseCase {
+        CyclesUseCase::CanisterCreation
+    }
+}
+
+impl CyclesUseCaseNonRefundableKind for CanisterCreation {}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct ECDSAOutcalls;
+
+impl CyclesUseCaseKind for ECDSAOutcalls {
+    fn cycles_use_case() -> CyclesUseCase {
+        CyclesUseCase::ECDSAOutcalls
+    }
+}
+
+impl CyclesUseCaseNonRefundableKind for ECDSAOutcalls {}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct HTTPOutcalls;
+
+impl CyclesUseCaseKind for HTTPOutcalls {
+    fn cycles_use_case() -> CyclesUseCase {
+        CyclesUseCase::HTTPOutcalls
+    }
+}
+
+impl CyclesUseCaseNonRefundableKind for HTTPOutcalls {}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct DeletedCanisters;
+
+impl CyclesUseCaseKind for DeletedCanisters {
+    fn cycles_use_case() -> CyclesUseCase {
+        CyclesUseCase::DeletedCanisters
+    }
+}
+
+impl CyclesUseCaseNonRefundableKind for DeletedCanisters {}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct BurnedCycles;
+
+impl CyclesUseCaseKind for BurnedCycles {
+    fn cycles_use_case() -> CyclesUseCase {
+        CyclesUseCase::BurnedCycles
+    }
+}
+
+impl CyclesUseCaseNonRefundableKind for BurnedCycles {}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct SchnorrOutcalls;
+
+impl CyclesUseCaseKind for SchnorrOutcalls {
+    fn cycles_use_case() -> CyclesUseCase {
+        CyclesUseCase::SchnorrOutcalls
+    }
+}
+
+impl CyclesUseCaseNonRefundableKind for SchnorrOutcalls {}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct VetKd;
+
+impl CyclesUseCaseKind for VetKd {
+    fn cycles_use_case() -> CyclesUseCase {
+        CyclesUseCase::VetKd
+    }
+}
+
+impl CyclesUseCaseNonRefundableKind for VetKd {}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct DroppedMessages;
+
+impl CyclesUseCaseKind for DroppedMessages {
+    fn cycles_use_case() -> CyclesUseCase {
+        CyclesUseCase::DroppedMessages
+    }
+}
+
+impl CyclesUseCaseNonRefundableKind for DroppedMessages {}

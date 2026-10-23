@@ -1,10 +1,11 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "DEFAULT_VCPUS_PER_VM", "MIN_LOCAL_CPUS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "api_bn_integration_test",
+    cpus = MIN_LOCAL_CPUS + 7 * DEFAULT_VCPUS_PER_VM,  # 1 System + 1 App + 4 unassigned + 1 API BN node VMs, 6 vCPUs each.
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/integration_test_common",
@@ -20,10 +21,12 @@ system_test_nns(
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
+    backend = "farm",  # Too big for the "local" backend.
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 16,
     },
+    cpus = MIN_LOCAL_CPUS + 6 * 16,  # 1 System + 4 App + 1 API BN node VMs, 16 vCPUs each (IC-level override).
     enable_head_nns_variant = False,
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
@@ -31,6 +34,7 @@ system_test_nns(
         "colocate",
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
@@ -41,6 +45,7 @@ system_test_nns(
 
 system_test_nns(
     name = "salt_sharing_canister_test",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 1 System node VM + 1 API BN node VM, 6 vCPUs each.
     proc_macro_deps = [],
     runtime_deps = {
         "SALT_SHARING_CANISTER_WASM_PATH": "//rs/boundary_node/salt_sharing:salt_sharing_canister",
@@ -67,6 +72,7 @@ system_test_nns(
 
 system_test_nns(
     name = "rate_limit_canister_test",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 1 System node VM + 1 API BN node VM, 6 vCPUs each.
     proc_macro_deps = ["@crate_index//:async-trait"],
     tags = [
         "long_test",  # the P90 duration was over 5 minutes for the week starting on 2025-08-25.
@@ -102,15 +108,18 @@ system_test_nns(
 
 system_test_nns(
     name = "api_bn_performance_test",
+    backend = "farm",  # Too big for the "local" backend.
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM + 1 * 64 + 1 * DEFAULT_VCPUS_PER_VM,  # 1 System node VM (6) + 1 App node VM (64 vCPUs override) + 1 API BN node VM (6).
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
     tags = ["manual"],
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -129,12 +138,14 @@ system_test(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    cpus = MIN_LOCAL_CPUS,  # empty_setup deploys no VMs (test targets an existing mainnet boundary node).
     enable_metrics = True,
     env_inherit = ["BOUNDARY_NODE_IPV6"],
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -152,12 +163,14 @@ system_test(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    cpus = MIN_LOCAL_CPUS,  # empty_setup deploys no VMs (test targets an existing mainnet boundary node).
     enable_metrics = True,
     env_inherit = ["BOUNDARY_NODE_IPV6"],
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -169,6 +182,7 @@ system_test(
 
 system_test_nns(
     name = "api_bn_decentralization_test",
+    cpus = MIN_LOCAL_CPUS + 6 * DEFAULT_VCPUS_PER_VM,  # 1 System + 1 App + 4 unassigned node VMs, 6 vCPUs each.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],

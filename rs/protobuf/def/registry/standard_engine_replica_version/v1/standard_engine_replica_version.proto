@@ -1,0 +1,36 @@
+syntax = "proto3";
+package registry.standard_engine_replica_version.v1;
+
+// The default replica/guestos version that engines run, used when an engine's
+// own SubnetRecord.replica_version_id is blank (i.e. the engine has not opted
+// out of the standard upgrade train).
+message StandardEngineReplicaVersionRecord {
+  // In general, these are (hex encoded) git commit IDs from the dfinity/ic
+  // repo, identifying the source code from which Replica was built. (Also known
+  // as Guest OS versions.)
+  string new_replica_version_id = 1;
+  string old_replica_version_id = 2;
+
+  // The (approximate) fraction of engines that should be on
+  // new_replica_version_id (the rest should be on old_replica_version_id).
+  //
+  // Ranges from 0.0 to 1.0 (inclusive).
+  //
+  // Engines with "upgrade priority" <= this should take on
+  // new_replica_version_id. An engine's upgrade priority is a hash whose inputs
+  // include its own subnet_id, and new_replica_version_id. More precisely, an
+  // engine's priority is determined as follows:
+  //
+  // 1. Compute SHA-256 of the concatenation of
+  //    a. len("upgrade priority"): a single u8
+  //    b. "upgrade priority": ASCII encoded
+  //    c. new_replica_version_id: (not hex decoded)
+  //    d. the engine's subnet_id: text/display representation (not raw bytes)
+  //
+  // 2. Take the first 8 bytes of that hash, and interpret them as a
+  //    little-endian 64 bit unsigned integer.
+  //
+  // 3. Divide that u64 by 2^64 - 1. The result is the engine's upgrade
+  //    priority, a number in [0.0, 1.0].
+  double deployment_progress = 3;
+}

@@ -43,6 +43,7 @@ enum ErrorCode {
   ERROR_CODE_CERTIFIED_STATE_UNAVAILABLE = 208;
   ERROR_CODE_CANISTER_INSTALL_CODE_RATE_LIMITED = 209;
   ERROR_CODE_CANISTER_HEAP_DELTA_RATE_LIMITED = 210;
+  ERROR_CODE_SUBNET_COOLING_DOWN = 211;
   // 3xx -- `RejectCode::DestinationInvalid`
   ERROR_CODE_CANISTER_NOT_FOUND = 301;
   reserved 302, 303, 304;
@@ -97,6 +98,7 @@ enum ErrorCode {
   ERROR_CODE_CANISTER_WASM_MEMORY_LIMIT_EXCEEDED = 539;
   ERROR_CODE_RESERVED_CYCLES_LIMIT_IS_TOO_LOW = 540;
   ERROR_CODE_CANISTER_INVALID_CONTROLLER_OR_SUBNET_ADMIN = 541;
+  ERROR_CODE_CANISTER_STATUS_ACCESS_DENIED = 542;
   // 6xx -- `RejectCode::SysUnknown`
   ERROR_CODE_DEADLINE_EXPIRED = 601;
   ERROR_CODE_RESPONSE_DROPPED = 602;
@@ -147,6 +149,11 @@ message IngressHistoryState {
   uint64 next_terminal_time = 3;
 }
 
+message SenderInfo {
+  bytes info = 1;
+  types.v1.CanisterId signer = 2;
+}
+
 message Ingress {
   types.v1.UserId source = 1;
   types.v1.CanisterId receiver = 2;
@@ -157,4 +164,5 @@ message Ingress {
   // It may be present for a subnet message.
   // Represents the id of the canister that the message is targeting.
   types.v1.CanisterId effective_canister_id = 7;
+  SenderInfo sender_info = 8;
 }

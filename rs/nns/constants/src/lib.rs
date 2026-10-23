@@ -11,7 +11,7 @@ use maplit::btreemap;
 // NOTES (IMPORTANT!)
 // ~~~~~~~~~~~~~~~~~~
 // - This is dependent on the implementation of function
-//   `CanisterManager::generate_new_canister_id`.
+//   `CanisterManager::peek_new_canister_id`.
 // - Unless you only add at the end, be sure to double check with
 //   `rs/nns/canister_ids.json`. TODO: Write a test that enforces
 //   that this file matches the .json file
@@ -33,11 +33,13 @@ pub const ICP_LEDGER_ARCHIVE_2_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 14;
 pub const ICP_LEDGER_ARCHIVE_3_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 15;
 pub const NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 16;
 pub const MIGRATION_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 17;
+pub const ENGINE_CONTROLLER_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 18;
 
-// Canisters belonging to the II subnet, whose ID begins with zur34.
+// Canisters belonging to the II subnet, whose ID begins with uzr34.
 pub const EXCHANGE_RATE_CANISTER_INDEX: u64 = 0x_0210_0001;
 pub const CYCLES_LEDGER_CANISTER_INDEX: u64 = 0x_0210_0002;
 pub const CYCLES_LEDGER_INDEX_CANISTER_INDEX: u64 = 0x_0210_0003;
+pub const INTERNET_IDENTITY_FRONTEND_CANISTER_INDEX: u64 = 0x_0210_0006;
 
 // Canisters belonging to the Bitcoin subnet, whose ID begins with w4rem.
 pub const BITCOIN_TESTNET_CANISTER_INDEX: u64 = 0x_01A0_0001;
@@ -136,6 +138,9 @@ pub const NODE_REWARDS_CANISTER_ID: CanisterId =
 /// 17: sbzkb-zqaaa-aaaaa-aaaiq-cai
 pub const MIGRATION_CANISTER_ID: CanisterId =
     CanisterId::from_u64(MIGRATION_CANISTER_INDEX_IN_NNS_SUBNET);
+/// 18: si2b5-pyaaa-aaaaa-aaaja-cai
+pub const ENGINE_CONTROLLER_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(ENGINE_CONTROLLER_CANISTER_INDEX_IN_NNS_SUBNET);
 /// 0x_0210_0001 (34_603_009): uf6dk-hyaaa-aaaaq-qaaaq-cai
 pub const EXCHANGE_RATE_CANISTER_ID: CanisterId =
     CanisterId::from_u64(EXCHANGE_RATE_CANISTER_INDEX);
@@ -145,6 +150,9 @@ pub const CYCLES_LEDGER_CANISTER_ID: CanisterId =
 /// 0x_0210_0003 (34_603_011): ul4oc-4iaaa-aaaaq-qaabq-cai
 pub const CYCLES_LEDGER_INDEX_CANISTER_ID: CanisterId =
     CanisterId::from_u64(CYCLES_LEDGER_INDEX_CANISTER_INDEX);
+/// 0x_0210_0006 (34_603_014): uqzsh-gqaaa-aaaaq-qaada-cai
+pub const INTERNET_IDENTITY_FRONTEND_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(INTERNET_IDENTITY_FRONTEND_CANISTER_INDEX);
 
 /// 0x_01A0_0001 (27_262_977): g4xu7-jiaaa-aaaan-aaaaq-cai
 pub const BITCOIN_TESTNET_CANISTER_ID: CanisterId =
@@ -170,7 +178,7 @@ pub const SNS_AGGREGATOR_CANISTER_ID: CanisterId =
 ///
 /// As of May 2024, it looks like this is only used by (a whole bunch of) tests, mostly as the
 /// argument to send_whitelist.
-pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 18] = [
+pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 19] = [
     &REGISTRY_CANISTER_ID,
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
@@ -189,9 +197,10 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 18] = [
     &ICP_LEDGER_ARCHIVE_3_CANISTER_ID,
     &NODE_REWARDS_CANISTER_ID,
     &MIGRATION_CANISTER_ID,
+    &ENGINE_CONTROLLER_CANISTER_ID,
 ];
 
-pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 23] = [
+pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 24] = [
     &REGISTRY_CANISTER_ID,
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
@@ -215,6 +224,7 @@ pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 23] = [
     &DOGECOIN_CANISTER_ID,
     &BITCOIN_WATCHDOG_CANISTER_ID,
     &DOGECOIN_WATCHDOG_CANISTER_ID,
+    &ENGINE_CONTROLLER_CANISTER_ID,
 ];
 
 /// The current value is 4 GiB, s.t. the SNS governance canister never hits the soft memory limit.
@@ -267,13 +277,14 @@ pub fn canister_id_to_nns_canister_name(canister_id: CanisterId) -> String {
         ROOT_CANISTER_ID                 => "root",
         SNS_WASM_CANISTER_ID             => "sns-wasm",
         SUBNET_RENTAL_CANISTER_ID        => "subnet-rental",
-        MIGRATION_CANISTER_ID            => "migration"
+        MIGRATION_CANISTER_ID            => "migration",
+        ENGINE_CONTROLLER_CANISTER_ID    => "engine-controller"
     };
     debug_assert_eq!(
         id_to_name.len(),
-        // Because 0 through 14 accounts for the first 15 canister +
-        // 1 for exchange rate canister.
-        19,
+        // This must match the number of entries in the `id_to_name` map above;
+        // bump it whenever a canister is added or removed.
+        20,
         "{id_to_name:#?}"
     );
 

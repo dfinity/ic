@@ -786,7 +786,7 @@ impl RosettaClient {
             })?;
 
             let signed_bytes = signer_keypair.sign(&signable_bytes);
-            let hex_bytes = hex::encode(signed_bytes.clone());
+            let hex_bytes = hex::encode(&signed_bytes);
 
             let signature = Signature {
                 signing_payload: payload,
@@ -1552,6 +1552,7 @@ impl RosettaClient {
     }
 }
 
+#[derive(Clone)]
 pub struct RosettaTransferArgs {
     pub from_subaccount: Option<[u8; 32]>,
     pub to: Account,
@@ -1634,8 +1635,8 @@ impl RosettaTransferArgsBuilder {
 pub struct RosettaCreateNeuronArgs {
     // The index of the neuron relative to the signer_keypair
     // If set the user specifies which index the neuron should have
-    // This is especially usuful if the user wants to create multiple neurons on the same signer keypair
-    // If the user for example already has a neuron at index 0, they may want to specify the the new nueral should be at index 1
+    // This is especially useful if the user wants to create multiple neurons on the same signer keypair
+    // If the user for example already has a neuron at index 0, they may want to specify that the new neuron should be at index 1
     // The default value will be set to 0
     pub neuron_index: Option<u64>,
     // The amount the user wants to stake

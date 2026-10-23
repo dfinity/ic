@@ -13,6 +13,7 @@ sha2 = { workspace = true }
 
 attestation = { path = "../attestation" }
 config_types = { path = "../../config/types" }
+linux_kernel_command_line = { path = "../../linux_kernel_command_line" }
 sev_guest_firmware = { path = "firmware" }
 
 [dev-dependencies]

@@ -71,7 +71,7 @@ mod tests {
                 let mut ingress_pool =
                     IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
                 assert_eq!(ingress_pool.unvalidated().size(), 0);
-                for _ in 1..1024u64 {
+                for _ in 1..1024_u64 {
                     let ingress_msg = SignedIngressBuilder::new()
                         .sign_for_randomly_generated_sender()
                         .build();

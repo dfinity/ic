@@ -33,6 +33,7 @@ use num_traits::cast::ToPrimitive;
 use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use rosetta_core::identifiers::NetworkIdentifier;
+use rosetta_core::response_types::ConstructionSubmitResponse;
 use std::collections::HashMap;
 use tempfile::TempDir;
 
@@ -88,27 +89,43 @@ impl RosettaTestingEnvironment {
                     ledger_canister_id: LEDGER_CANISTER_ID.into(),
                 };
                 match arg_with_caller.arg {
-                    LedgerEndpointArg::ApproveArg(approve_arg) => caller_agent
+                    LedgerEndpointArg::ApproveArg(ref approve_arg) => caller_agent
                         .approve(approve_arg.clone())
                         .await
-                        .unwrap()
-                        .unwrap()
+                        .unwrap_or_else(|e| {
+                            panic!("approve agent call failed: {e:?}, arg: {approve_arg:?}")
+                        })
+                        .unwrap_or_else(|e| {
+                            panic!("approve rejected by ledger: {e:?}, arg: {approve_arg:?}")
+                        })
                         .0
                         .to_u64()
                         .unwrap(),
-                    LedgerEndpointArg::TransferArg(transfer_arg) => caller_agent
+                    LedgerEndpointArg::TransferArg(ref transfer_arg) => caller_agent
                         .transfer(transfer_arg.clone())
                         .await
-                        .unwrap()
-                        .unwrap()
+                        .unwrap_or_else(|e| {
+                            panic!("transfer agent call failed: {e:?}, arg: {transfer_arg:?}")
+                        })
+                        .unwrap_or_else(|e| {
+                            panic!("transfer rejected by ledger: {e:?}, arg: {transfer_arg:?}")
+                        })
                         .0
                         .to_u64()
                         .unwrap(),
-                    LedgerEndpointArg::TransferFromArg(transfer_from_arg) => caller_agent
+                    LedgerEndpointArg::TransferFromArg(ref transfer_from_arg) => caller_agent
                         .transfer_from(transfer_from_arg.clone())
                         .await
-                        .unwrap()
-                        .unwrap()
+                        .unwrap_or_else(|e| {
+                            panic!(
+                                "transfer_from agent call failed: {e:?}, arg: {transfer_from_arg:?}"
+                            )
+                        })
+                        .unwrap_or_else(|e| {
+                            panic!(
+                                "transfer_from rejected by ledger: {e:?}, arg: {transfer_from_arg:?}"
+                            )
+                        })
                         .0
                         .to_u64()
                         .unwrap(),
@@ -120,8 +137,9 @@ impl RosettaTestingEnvironment {
                 LedgerEndpointArg::TransferArg(transfer_args) => transfer_args,
                 _ => panic!("Expected TransferArg"),
             };
-            let mut args_builder =
-                RosettaTransferArgs::builder(transfer_args.to, transfer_args.amount);
+            let transfer_to = transfer_args.to;
+            let transfer_amount = transfer_args.amount.to_string();
+            let mut args_builder = RosettaTransferArgs::builder(transfer_to, transfer_args.amount);
             if let Some(from_subaccount) = transfer_args.from_subaccount {
                 args_builder = args_builder.with_from_subaccount(from_subaccount);
             }
@@ -132,14 +150,77 @@ impl RosettaTestingEnvironment {
                 args_builder = args_builder.with_created_at_time(created_at_time);
             }
 
-            self.rosetta_client
-                .transfer(
-                    args_builder.build(),
-                    self.network_identifier.clone(),
-                    &arg_with_caller.caller,
-                )
-                .await
-                .unwrap();
+            let rosetta_transfer_args = args_builder.build();
+
+            // The Rosetta server's internal wait_for_result can time out (20s),
+            // returning a 200 OK with FAILED status in the metadata. The transaction
+            // may or may not have been submitted to the ledger. We retry with the
+            // same args (same created_at_time + memo = same dedup key) so the
+            // ledger's dedup logic makes this safe: either the retry succeeds
+            // (original wasn't processed) or we get a duplicate error (original was
+            // processed, balance is correct).
+            const MAX_ROSETTA_TRANSFER_RETRIES: u32 = 1;
+            let mut last_response = None;
+            for attempt in 0..=MAX_ROSETTA_TRANSFER_RETRIES {
+                match self
+                    .rosetta_client
+                    .transfer(
+                        rosetta_transfer_args.clone(),
+                        self.network_identifier.clone(),
+                        &arg_with_caller.caller,
+                    )
+                    .await
+                {
+                    Ok(response) => {
+                        if !Self::response_has_failed_status(&response) {
+                            last_response = None;
+                            break;
+                        }
+                        eprintln!(
+                            "Rosetta transfer returned FAILED status (attempt {}): to={}, amount={}",
+                            attempt + 1,
+                            transfer_to,
+                            transfer_amount,
+                        );
+                        last_response = Some(Ok(response));
+                    }
+                    Err(e) => {
+                        let err_msg = format!("{e:?}");
+                        let is_duplicate =
+                            err_msg.contains("transaction is a duplicate of another transaction");
+                        if attempt > 0 && is_duplicate {
+                            // The ledger rejected the retry as a duplicate, which
+                            // means the original transaction was processed
+                            // successfully. The balance is correct.
+                            eprintln!(
+                                "Rosetta transfer retry confirmed duplicate \
+                                 (original succeeded): {err_msg}"
+                            );
+                            last_response = None;
+                            break;
+                        }
+                        eprintln!(
+                            "Rosetta transfer returned error (attempt {}): {err_msg}",
+                            attempt + 1,
+                        );
+                        last_response = Some(Err(e));
+                    }
+                }
+            }
+            if let Some(result) = last_response {
+                match result {
+                    Ok(_) => panic!(
+                        "Rosetta transfer failed after {} attempts with FAILED status: to={}, amount={}",
+                        MAX_ROSETTA_TRANSFER_RETRIES + 1,
+                        transfer_to,
+                        transfer_amount,
+                    ),
+                    Err(e) => panic!(
+                        "Rosetta transfer failed: {e:?}, to: {}, amount: {}",
+                        transfer_to, transfer_amount,
+                    ),
+                }
+            }
         }
     }
 
@@ -164,6 +245,24 @@ impl RosettaTestingEnvironment {
 
     pub async fn get_test_agent(&self) -> Agent {
         get_test_agent(self.pocket_ic.url().unwrap().port().unwrap()).await
+    }
+
+    /// Checks whether any operation in the submit response metadata has a FAILED status.
+    fn response_has_failed_status(response: &ConstructionSubmitResponse) -> bool {
+        let Some(metadata) = &response.metadata else {
+            return false;
+        };
+        let Some(operations) = metadata.get("operations") else {
+            return false;
+        };
+        let Some(operations) = operations.as_array() else {
+            return false;
+        };
+        operations.iter().any(|op| {
+            op.get("status")
+                .and_then(|s| s.as_str())
+                .is_some_and(|s| s == "FAILED")
+        })
     }
 }
 

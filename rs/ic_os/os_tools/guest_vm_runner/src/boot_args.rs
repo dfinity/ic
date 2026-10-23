@@ -1,26 +1,26 @@
 use anyhow::Result;
-use anyhow::bail;
 use regex::Regex;
 use std::path::Path;
 use std::sync::LazyLock;
 
-/// Extracts the value of `boot_args_var_name` from the given config file.
+/// Extracts the value of `boot_args_var_name` from the given config file or returns None if not
+/// found.
 ///
 /// Supported config format:
 /// VARIABLE1=value
 /// VARIABLE2="other value" # some comment
 /// VARIABLE3='third value'
 ///
-/// read_boot_args(config_path, "VARIABLE2") returns Ok("other value")
-pub fn read_boot_args(config: &Path, boot_args_var_name: &str) -> Result<String> {
+/// read_boot_args(config_path, "VARIABLE2") returns Ok(Some("other value"))
+pub fn read_boot_args(config: &Path, boot_args_var_name: &str) -> Result<Option<String>> {
     let config_contents = std::fs::read_to_string(config)?;
     for line in config_contents.lines().rev() {
         if let Some(result) = try_parse(line, boot_args_var_name) {
-            return Ok(result);
+            return Ok(Some(result));
         }
     }
 
-    bail!("Variable {boot_args_var_name} not found");
+    Ok(None)
 }
 
 fn try_parse(line: &str, boot_args_var_name: &str) -> Option<String> {
@@ -250,7 +250,7 @@ BOOT_ARGS="kernel params here"
         fs::write(temp_file.path(), content)?;
 
         let result = read_boot_args(temp_file.path(), "BOOT_ARGS")?;
-        assert_eq!(result, "kernel params here");
+        assert_eq!(result, Some("kernel params here".to_string()));
         Ok(())
     }
 
@@ -265,7 +265,7 @@ BOOT_ARGS=third_value
 
         // Should return the last match
         let result = read_boot_args(temp_file.path(), "BOOT_ARGS")?;
-        assert_eq!(result, "third_value");
+        assert_eq!(result, Some("third_value".to_string()));
         Ok(())
     }
 
@@ -278,13 +278,8 @@ DIFFERENT_VAR="some value"
 "#;
         fs::write(temp_file.path(), content)?;
 
-        let result = read_boot_args(temp_file.path(), "BOOT_ARGS");
-        assert!(
-            result
-                .expect_err("Missing var should be error")
-                .to_string()
-                .contains("Variable BOOT_ARGS not found")
-        );
+        let result = read_boot_args(temp_file.path(), "BOOT_ARGS")?;
+        assert_eq!(result, None);
         Ok(())
     }
 

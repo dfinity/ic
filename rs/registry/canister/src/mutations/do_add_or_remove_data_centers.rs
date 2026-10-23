@@ -13,10 +13,7 @@ impl Registry {
         &mut self,
         payload: AddOrRemoveDataCentersProposalPayload,
     ) {
-        println!(
-            "{}do_add_or_remove_data_centers: {:?}",
-            LOG_PREFIX, &payload
-        );
+        println!("{}do_add_or_remove_data_centers: {:?}", LOG_PREFIX, payload);
 
         let mut mutations = vec![];
 
@@ -40,7 +37,7 @@ impl Registry {
             if self.get(key.as_bytes(), latest_version).is_some() {
                 panic!(
                     "{}do_add_or_remove_data_centers: Cannot add DataCenterRecord with ID: '{}' already exists",
-                    LOG_PREFIX, &dc.id
+                    LOG_PREFIX, dc.id
                 );
             }
 
@@ -53,7 +50,7 @@ impl Registry {
                 Err(msg) => {
                     println!(
                         "{}do_add_or_remove_data_centers: invalid DataCenterRecord: {}, {:?}",
-                        LOG_PREFIX, msg, &dc
+                        LOG_PREFIX, msg, dc
                     );
                 }
             }

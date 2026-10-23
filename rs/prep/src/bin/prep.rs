@@ -12,6 +12,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
+use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
 use reqwest::blocking::ClientBuilder;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use url::Url;
@@ -27,14 +28,13 @@ use ic_types::{Height, PrincipalId, ReplicaVersion};
 
 /// the filename of the update disk image, as published on the cdn
 const UPD_IMG_FILENAME: &str = "update-img.tar.zst";
-/// in case the replica version id is specified on the command line, but not the
-/// release package url and hash, the following url-template will be used to
-/// fetch the sha256 of the corresponding image.
+/// in case the release package url and hash are not specified on the command
+/// line, the following url-template will be used to fetch the sha256 of the
+/// corresponding image.
 const UPD_IMG_DEFAULT_SHA256_URL: &str =
     "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/SHA256SUMS";
-/// in case the replica version id is specified on the command line, but not the
-/// release package url and hash, the following url-template will be used to
-/// specify the update image.
+/// in case the release package url and hash are not specified on the command
+/// line, the following url-template will be used to specify the update image.
 const UPD_IMG_DEFAULT_URL: &str = "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/update-img.tar.zst";
 const CDN_HTTP_ATTEMPTS: usize = 3;
 const RETRY_BACKOFF: Duration = Duration::from_secs(5);
@@ -48,14 +48,13 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(12);
 struct CliArgs {
     /// The version of the Replica being run
     #[clap(long)]
-    pub replica_version: Option<ReplicaVersion>,
+    pub replica_version: ReplicaVersion,
 
     /// The URL against which a HTTP GET request will return a release
     /// package that corresponds to this version.
     ///
-    /// If replica-version is specified and both release-package-download-url
-    /// and release-package-sha256-hex are unspecified, the
-    /// release-package-download-url will default to
+    /// If both release-package-download-url and release-package-sha256-hex are
+    /// unspecified, the release-package-download-url will default to
     /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/update-img.tar.zst
     #[clap(long)]
     pub release_package_download_url: Option<Url>,
@@ -64,9 +63,8 @@ struct CliArgs {
     /// 'release_package_url'. Must be present if release_package_url is
     /// present.
     ///
-    /// If replica-version is specified and both release-package-download-url
-    /// and release-package-sha256-hex are unspecified, the
-    /// release-package-download-url will downloaded from
+    /// If both release-package-download-url and release-package-sha256-hex are
+    /// unspecified, the release-package-download-url will downloaded from
     /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/SHA256SUMS
     #[clap(long)]
     pub release_package_sha256_hex: Option<String>,
@@ -143,7 +141,7 @@ struct CliArgs {
     pub max_block_payload_size: Option<u64>,
 
     /// if release-package-download-url is not specified and this option is
-    /// specified, the corresponding update image field in the blessed replica
+    /// specified, the corresponding update image field in the elected replica
     /// version record is left empty.
     #[clap(long)]
     pub allow_empty_update_image: bool,
@@ -168,19 +166,16 @@ fn main() -> Result<()> {
     let mut valid_args = CliArgs::parse().validate()?;
 
     // set replica update image if necessary
-    if let Some(ref replica_version_id) = valid_args.replica_version_id
-        && !valid_args.allow_empty_update_image
-        && valid_args.release_package_download_url.is_none()
-    {
+    if !valid_args.allow_empty_update_image && valid_args.release_package_download_url.is_none() {
         let url = Url::parse(
-            &UPD_IMG_DEFAULT_URL.replace("<REPLICA_VERSION>", replica_version_id.as_ref()),
+            &UPD_IMG_DEFAULT_URL.replace("<REPLICA_VERSION>", valid_args.replica_version.as_ref()),
         )?;
         valid_args.release_package_download_url = Some(url);
-        valid_args.release_package_sha256_hex =
-            Some(fetch_replica_version_sha256(replica_version_id.clone())?);
+        valid_args.release_package_sha256_hex = Some(fetch_replica_version_sha256(
+            valid_args.replica_version.clone(),
+        )?);
     }
 
-    let replica_version = valid_args.replica_version_id.unwrap_or_default();
     let root_subnet_idx = valid_args.nns_subnet_index.unwrap_or(0);
     let mut topology_config = TopologyConfig::default();
     for (i, (subnet_id, nodes)) in valid_args.subnets.iter().enumerate() {
@@ -193,7 +188,7 @@ fn main() -> Result<()> {
         let subnet_configuration = SubnetConfig::new(
             *subnet_id,
             nodes.to_owned(),
-            replica_version.clone(),
+            valid_args.replica_version.clone(),
             valid_args.max_ingress_bytes_per_message,
             /*max_ingress_bytes_per_block=*/ None,
             /*max_ingress_messages_per_block=*/ None,
@@ -203,10 +198,12 @@ fn main() -> Result<()> {
             valid_args.dkg_interval_length,
             /*dkg_dealings_per_block=*/ None,
             subnet_type,
+            CanisterCyclesCostSchedule::Normal,
             /*max_instructions_per_message=*/ None,
             /*max_instructions_per_round=*/ None,
             /*max_instructions_per_install_code=*/ None,
             /*features=*/ None,
+            /*resource_limits=*/ None,
             /*chain_key_config=*/ None,
             /*max_number_of_canisters=*/ None,
             valid_args.ssh_readonly_access.clone(),
@@ -222,7 +219,7 @@ fn main() -> Result<()> {
     let mut ic_config0 = IcConfig::new(
         valid_args.working_dir.as_path(),
         topology_config,
-        replica_version,
+        valid_args.replica_version,
         valid_args.generate_subnet_records,
         Some(root_subnet_idx),
         valid_args.release_package_download_url,
@@ -254,7 +251,7 @@ fn main() -> Result<()> {
 #[derive(Clone, Eq, PartialEq, Debug)]
 struct ValidatedArgs {
     pub working_dir: PathBuf,
-    pub replica_version_id: Option<ReplicaVersion>,
+    pub replica_version: ReplicaVersion,
     pub release_package_download_url: Option<Url>,
     pub release_package_sha256_hex: Option<String>,
     pub subnets: BTreeMap<SubnetIndex, BTreeMap<NodeIndex, NodeConfiguration>>,
@@ -382,7 +379,7 @@ impl CliArgs {
 
         Ok(ValidatedArgs {
             working_dir,
-            replica_version_id: self.replica_version,
+            replica_version: self.replica_version,
             release_package_download_url: self.release_package_download_url,
             release_package_sha256_hex: self.release_package_sha256_hex,
             subnets,

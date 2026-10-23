@@ -6,6 +6,7 @@ use ic_nervous_system_temporary::Temporary;
 use ic_types::{PrincipalId, SubnetId};
 
 thread_local! {
+    static IS_SUBNET_SPLITTING_ENABLED: Cell<bool> = const { Cell::new(false) };
     static IS_CHUNKIFYING_LARGE_VALUES_ENABLED: Cell<bool> = const { Cell::new(true) };
     static IS_NODE_SWAPPING_ENABLED: Cell<bool> = const { Cell::new(true) };
 
@@ -47,6 +48,20 @@ pub(crate) fn temporarily_enable_node_swapping() -> Temporary {
     Temporary::new(&IS_NODE_SWAPPING_ENABLED, true)
 }
 
+#[cfg(test)]
+pub(crate) fn temporarily_enable_subnet_splitting() -> Temporary {
+    Temporary::new(&IS_SUBNET_SPLITTING_ENABLED, true)
+}
+
+#[cfg(test)]
+pub(crate) fn temporarily_disable_subnet_splitting() -> Temporary {
+    Temporary::new(&IS_SUBNET_SPLITTING_ENABLED, false)
+}
+
+pub(crate) fn is_subnet_splitting_enabled() -> bool {
+    IS_SUBNET_SPLITTING_ENABLED.get()
+}
+
 #[cfg(any(test, feature = "test"))]
 pub mod temporary_overrides {
     use super::*;
@@ -63,6 +78,10 @@ pub mod temporary_overrides {
     pub fn test_set_swapping_enabled_subnets(override_subnets: Vec<SubnetId>) {
         let policy = AccessList::allow(override_subnets);
         NODE_SWAPPING_SUBNETS_POLICY.replace(policy);
+    }
+
+    pub fn test_set_subnet_splitting_enabled(override_value: bool) {
+        IS_SUBNET_SPLITTING_ENABLED.replace(override_value);
     }
 }
 

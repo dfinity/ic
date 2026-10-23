@@ -1,5 +1,6 @@
 mod execution_tests {
     use crate::CompilationCostHandling;
+    use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
     use ic_error_types::ErrorCode;
     use ic_replicated_state::{
         ExecutionState, ExportedFunctions, Memory,
@@ -7,11 +8,12 @@ mod execution_tests {
     };
     use ic_test_utilities_execution_environment::{ExecutionTestBuilder, wat_compilation_cost};
     use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_int_counter_vec};
-    use ic_types::{batch::CanisterCyclesCostSchedule, methods::WasmMethod};
+    use ic_types::methods::WasmMethod;
     use ic_types_cycles::Cycles;
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
-    use std::path::PathBuf;
+    use std::collections::BTreeSet;
+    use std::sync::Arc;
 
     const WAT_EMPTY: &str = "(module)";
     const WAT_WITH_GO: &str = r#"
@@ -249,25 +251,27 @@ mod execution_tests {
         let compilation_instructions = wat_compilation_cost(WAT_EMPTY);
         assert_eq!(
             test.canister_executed_instructions(canister_id1),
-            compilation_instructions
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + compilation_instructions
         );
         let reduced_compilation_instructions = CompilationCostHandling::CountReducedAmount
             .adjusted_compilation_cost(compilation_instructions);
         assert_eq!(
             test.canister_executed_instructions(canister_id2),
-            reduced_compilation_instructions,
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + reduced_compilation_instructions,
         );
 
         // Check that the canister has been charged cycles for the reduced compilation cost
         assert_eq!(
             test.canister_state(canister_id2).system_state.balance(),
             initial_balance
-                - test.cycles_account_manager().execution_cost(
-                    reduced_compilation_instructions,
-                    test.subnet_size(),
-                    CanisterCyclesCostSchedule::Normal,
-                    WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
-                )
+                - test
+                    .cycles_account_manager()
+                    .execution_cost(
+                        DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + reduced_compilation_instructions,
+                        test.get_own_subnet_cycles_config(),
+                        WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
+                    )
+                    .real()
         );
     }
 
@@ -280,7 +284,7 @@ mod execution_tests {
 
         // Install two canisters with the same wat.
         let canister_id1 = test.canister_from_wat(WAT_EMPTY).unwrap();
-        test.state_mut().metadata.expected_compiled_wasms.clear();
+        test.state_mut().metadata.expected_compiled_wasms = Arc::new(BTreeSet::new());
         let initial_balance = Cycles::new(1_000_000_000_000);
         let canister_id2 = test
             .canister_from_cycles_and_wat(initial_balance, WAT_EMPTY)
@@ -289,23 +293,25 @@ mod execution_tests {
         let compilation_instructions = wat_compilation_cost(WAT_EMPTY);
         assert_eq!(
             test.canister_executed_instructions(canister_id1),
-            compilation_instructions
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + compilation_instructions
         );
         assert_eq!(
             test.canister_executed_instructions(canister_id2),
-            compilation_instructions,
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + compilation_instructions,
         );
 
         // Check that the canister has been charged cycles for the full compilation cost
         assert_eq!(
             test.canister_state(canister_id2).system_state.balance(),
             initial_balance
-                - test.cycles_account_manager().execution_cost(
-                    compilation_instructions,
-                    test.subnet_size(),
-                    CanisterCyclesCostSchedule::Normal,
-                    WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
-                )
+                - test
+                    .cycles_account_manager()
+                    .execution_cost(
+                        DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + compilation_instructions,
+                        test.get_own_subnet_cycles_config(),
+                        WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
+                    )
+                    .real()
         );
     }
 
@@ -321,8 +327,8 @@ mod execution_tests {
         let canister_state = test.canister_state_mut(canister_id);
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
-            PathBuf::new(),
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
+            None,
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]
                     .into_iter()
@@ -375,8 +381,8 @@ mod execution_tests {
         let canister_state = test.canister_state_mut(canister_id1);
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
-            PathBuf::new(),
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
+            None,
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]
                     .into_iter()
@@ -391,8 +397,8 @@ mod execution_tests {
         let canister_state = test.canister_state_mut(canister_id2);
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
-            PathBuf::new(),
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
+            None,
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]
                     .into_iter()
@@ -442,8 +448,8 @@ mod execution_tests {
         let canister_state = test.canister_state_mut(canister_id1);
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
-            PathBuf::new(),
             WasmBinary::new(CanisterModule::new(b"\x00asm invalid wasm".to_vec())),
+            None,
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]
                     .into_iter()
@@ -499,9 +505,9 @@ mod execution_tests {
         let canister_state = test.canister_state_mut(canister_id1);
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
-            PathBuf::new(),
             // Without the '\x00asm' prefix, the check for wasm code length will fail.
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
+            None,
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]
                     .into_iter()
@@ -548,6 +554,7 @@ mod state_machine_tests {
     //! full scheduler so they exercise the actual checkpoint logic.
 
     use crate::CompilationCostHandling;
+    use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
     use ic_state_machine_tests::StateMachine;
     use ic_test_utilities_execution_environment::wat_compilation_cost;
 
@@ -570,19 +577,21 @@ mod state_machine_tests {
         let env = StateMachine::new();
 
         let expected_compilation_instructions = wat_compilation_cost(TEST_CANISTER);
+        let base_cost = DEFAULT_CREATE_EXECUTION_STATE_BASE_COST.get() as f64;
 
         // Installing first canister takes some instructions.
         let _canister_id1 = env.install_canister_wat(TEST_CANISTER, vec![], None);
         assert_eq!(
             env.subnet_message_instructions(),
-            expected_compilation_instructions.get() as f64,
+            base_cost + expected_compilation_instructions.get() as f64,
         );
 
         // Installing another canister with the same Wasm doesn't take instructions.
         let _canister_id2 = env.install_canister_wat(TEST_CANISTER, vec![], None);
         assert_eq!(
             env.subnet_message_instructions(),
-            expected_compilation_instructions.get() as f64
+            2.0 * base_cost
+                + expected_compilation_instructions.get() as f64
                 + CompilationCostHandling::CountReducedAmount
                     .adjusted_compilation_cost(expected_compilation_instructions)
                     .get() as f64
@@ -595,13 +604,14 @@ mod state_machine_tests {
         // Enabling checkpoints causes a checkpoint round on each installation.
         env.set_checkpoints_enabled(true);
 
+        let base_cost = DEFAULT_CREATE_EXECUTION_STATE_BASE_COST.get() as f64;
         let expected_compilation_instructions = wat_compilation_cost(TEST_CANISTER).get() as f64;
 
         // Installing first canister takes some instructions.
         let _canister_id1 = env.install_canister_wat(TEST_CANISTER, vec![], None);
         assert_eq!(
             env.subnet_message_instructions(),
-            expected_compilation_instructions,
+            base_cost + expected_compilation_instructions,
         );
 
         // Installing another canister with the same Wasm uses instructions because
@@ -609,7 +619,7 @@ mod state_machine_tests {
         let _canister_id2 = env.install_canister_wat(TEST_CANISTER, vec![], None);
         assert_eq!(
             env.subnet_message_instructions(),
-            2.0 * expected_compilation_instructions,
+            2.0 * (base_cost + expected_compilation_instructions),
         );
     }
 }

@@ -1,8 +1,12 @@
 use std::rc::Rc;
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
-use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
-use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_config::{
+    embedders::Config as EmbeddersConfig, subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE,
+};
+use ic_cycles_account_manager::{
+    CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
+};
 use ic_embedders::wasmtime_embedder::system_api::{
     ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits,
     SystemApiImpl, sandbox_safe_system_state::SandboxSafeSystemState,
@@ -10,6 +14,7 @@ use ic_embedders::wasmtime_embedder::system_api::{
 use ic_interfaces::execution_environment::{
     ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::CanisterIdRange;
@@ -25,12 +30,11 @@ use ic_test_utilities_types::ids::{
 };
 use ic_types::{
     ComputeAllocation, MemoryAllocation, NumInstructions, PrincipalId, Time,
-    batch::CanisterCyclesCostSchedule,
     messages::{CallContextId, CallbackId, NO_DEADLINE, RejectContext},
     methods::SystemMethod,
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use std::collections::BTreeMap;
 
 pub const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
@@ -94,6 +98,7 @@ impl ApiTypeBuilder {
             Cycles::zero(),
             user_test_id(1).get(),
             CallContextId::from(1),
+            None,
         )
     }
 
@@ -111,6 +116,7 @@ impl ApiTypeBuilder {
             vec![],
             user_test_id(1).get(),
             CallContextId::new(1),
+            None,
         )
     }
 
@@ -121,6 +127,7 @@ impl ApiTypeBuilder {
             subnet_test_id(1),
             vec![],
             Some(vec![1]),
+            None,
         )
     }
 
@@ -132,6 +139,7 @@ impl ApiTypeBuilder {
             vec![],
             Some(vec![1]),
             CallContextId::from(1),
+            None,
         )
     }
 
@@ -144,6 +152,7 @@ impl ApiTypeBuilder {
             CallContextId::new(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -156,6 +165,7 @@ impl ApiTypeBuilder {
             CallContextId::new(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -168,6 +178,7 @@ impl ApiTypeBuilder {
             call_context_test_id(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -180,6 +191,7 @@ impl ApiTypeBuilder {
             call_context_test_id(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -189,6 +201,7 @@ impl ApiTypeBuilder {
             "test".to_string(),
             vec![],
             UNIX_EPOCH,
+            None,
         )
     }
 
@@ -215,14 +228,17 @@ pub fn get_system_api(
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
+        std::sync::Arc::new(NetworkTopology::default()),
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
     );
     SystemApiImpl::new(
         api_type,
@@ -261,6 +277,7 @@ pub fn get_system_state() -> SystemState {
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     system_state

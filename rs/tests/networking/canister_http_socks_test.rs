@@ -1,28 +1,28 @@
 /* tag::catalog[]
-Title:: HTTP requests from canisters to remote IPv4 service through socks proxy on API boundary node.
+Title:: HTTP requests from canisters to a remote service through the socks proxy on an API boundary node.
 
-Goal:: Ensure that only system subnets with the feature enabled can access IPv4 endpoints.
+Goal:: Ensure that HTTP requests from canisters that cannot reach the remote service directly are
+routed through the correct API boundary node (system API BN for system subnet, application API BN
+for application and cloud engine subnets).
 
 Runbook::
-1. Instantiate an IC with one applications and one system subnet with the HTTP feature enabled.
+1. Instantiate an IC with one application, one cloud engine and one system subnet with the HTTP feature enabled.
 2. Install NNS canisters
-3. Install the proxy canister on both subnets.
-4. Make a http outcall request to the IPv4 interface of the http server from the system subnet.
-5. Make a http outcall request to the IPv4 interface of the http server from the application subnet.
+3. Install the proxy canister on all subnets.
+4. For each of those subnets: block the outcalls adapter's direct route to the http server, make an
+   outcall, and check the server saw the request coming from an API boundary node; then unblock the
+   direct route, make the same outcall, and check the server saw it coming from a subnet node.
 
 Success::
-1. Received http response with status 200 for system subnet.
-2. Received failed to connect error from application subnet.
+1. Received http response with status 200 that is routed through the correct API boundary node.
 
 end::catalog[] */
-#![allow(deprecated)]
 
 use anyhow::Result;
 use anyhow::bail;
 use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
-use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::HttpMethod;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -37,7 +37,7 @@ use ic_system_test_driver::driver::{
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
-use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
+use proxy_canister::{RejectionCode, RemoteHttpRequest, RemoteHttpResponse};
 use slog::Logger;
 use slog::info;
 use std::net::{IpAddr, SocketAddr};
@@ -48,6 +48,7 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .add_test(systest!(test_system_subnet))
         .add_test(systest!(test_application_subnet))
+        .add_test(systest!(test_cloud_engine))
         .execute_from_args()?;
 
     Ok(())
@@ -84,8 +85,16 @@ pub fn setup(env: TestEnv) {
                 })
                 .add_nodes(4),
         )
+        .add_subnet(
+            Subnet::new(SubnetType::CloudEngine)
+                .with_features(SubnetFeatures {
+                    http_requests: true,
+                    ..SubnetFeatures::default()
+                })
+                .add_nodes(4),
+        )
         // 2 api boundary nodes, one for system subnets, one for application subnets
-        .with_api_boundary_nodes(2)
+        .with_api_boundary_nodes_playnet(2)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
@@ -118,6 +127,18 @@ pub fn test_application_subnet(env: TestEnv) {
     setup_and_run_subnet_test(env, "application", subnet_nodes, api_bn_ips);
 }
 
+/// Tests that an outcall from the cloud engine is routed via an APPLICATION API BN.
+pub fn test_cloud_engine(env: TestEnv) {
+    let subnet_nodes: Vec<IcNodeSnapshot> = get_cloud_engine_node_snapshots(&env).collect();
+    let api_bn_ips: Vec<String> = env
+        .topology_snapshot()
+        .app_api_boundary_nodes()
+        .map(|bn| bn.get_ip_addr().to_string())
+        .collect();
+
+    setup_and_run_subnet_test(env, "cloud engine", subnet_nodes, api_bn_ips);
+}
+
 fn setup_and_run_subnet_test(
     env: TestEnv,
     subnet_type_str: &str,
@@ -129,8 +150,16 @@ fn setup_and_run_subnet_test(
 
     let webserver_ipv6 = get_universal_vm_address(&env).to_string();
 
-    // The dante server running on the API boundary node expects a domain name.
-    // Construct nip.io hostname for the IPv6 address.
+    // The outcall has to target a *host name*, not an address literal: the
+    // adapter's socks connector always encodes the SOCKS5 target as a domain
+    // name, and for an IPv6 URL that string keeps its brackets (`[fd00::1]`),
+    // which the dante server on the API boundary node cannot resolve.
+    //
+    // So name the webserver after its own address, the way the public `nip.io`
+    // wildcard service does: colons written as dashes. The webserver's
+    // certificate covers that name (see `start_httpbin_on_uvm`), and on the
+    // local backend the group's dnsmasq synthesises it (see
+    // `LocalBackend::start_dnsmasq`), so no external DNS is involved there.
     let nip_io_hostname = webserver_ipv6.replace(':', "-") + ".ipv6.nip.io";
     let webserver_url = format!("https://{}/ip", nip_io_hostname);
 
@@ -148,14 +177,19 @@ fn setup_and_run_subnet_test(
     let runtime = get_runtime_from_node(canister_node);
     let proxy_canister = create_proxy_canister(&env, &runtime, canister_node);
 
+    let api_bn_type = match subnet_type_str {
+        s @ "system" | s @ "application" => s,
+        "cloud engine" => "application",
+        _ => panic!("Unknown subnet type string"),
+    };
     info!(
         &logger,
-        "Expecting {} API BN IPs: {:?}", subnet_type_str, api_bn_ips
+        "Expecting {} API BN IPs: {:?}", api_bn_type, api_bn_ips
     );
     assert!(
         !api_bn_ips.is_empty(),
         "No {} API boundary nodes found!",
-        subnet_type_str
+        api_bn_type
     );
 
     run_http_outcall_test(

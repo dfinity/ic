@@ -105,7 +105,7 @@ impl ConsentMessage {
         token_symbol: &String,
     ) -> Result<(), Icrc21Error> {
         let amount = amount.ok_or(Icrc21Error::GenericError {
-            error_code: Nat::from(500u64),
+            error_code: Nat::from(500_u64),
             description: "Amount has to be specified.".to_owned(),
         })?;
         match self {
@@ -133,7 +133,7 @@ impl ConsentMessage {
         token_symbol: &String,
     ) -> Result<(), Icrc21Error> {
         let amount = amount.ok_or(Icrc21Error::GenericError {
-            error_code: Nat::from(500u64),
+            error_code: Nat::from(500_u64),
             description: "Amount has to be specified.".to_owned(),
         })?;
         match self {
@@ -178,7 +178,7 @@ impl ConsentMessage {
         token_symbol: &String,
     ) -> Result<(), Icrc21Error> {
         let amount = amount.ok_or(Icrc21Error::GenericError {
-            error_code: Nat::from(500u64),
+            error_code: Nat::from(500_u64),
             description: "Amount has to be specified.".to_owned(),
         })?;
         match self {
@@ -320,7 +320,7 @@ fn convert_tokens_to_string_representation(
     decimals: u8,
 ) -> Result<String, Icrc21Error> {
     let tokens = tokens.0.to_f64().ok_or(Icrc21Error::GenericError {
-        error_code: Nat::from(500u64),
+        error_code: Nat::from(500_u64),
         description: "Failed to convert tokens to u64".to_owned(),
     })?;
     Ok(format!("{}", tokens / 10_f64.pow(decimals)))
@@ -328,7 +328,7 @@ fn convert_tokens_to_string_representation(
 
 fn nat_to_u64(tokens: Nat) -> Result<u64, Icrc21Error> {
     tokens.0.to_u64().ok_or(Icrc21Error::GenericError {
-        error_code: Nat::from(500u64),
+        error_code: Nat::from(500_u64),
         description: "Failed to convert tokens to u64".to_owned(),
     })
 }

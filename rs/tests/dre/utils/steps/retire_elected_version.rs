@@ -28,20 +28,23 @@ impl Step for RetireElectedVersions {
         env: ic_system_test_driver::driver::test_env::TestEnv,
         rt: tokio::runtime::Handle,
     ) -> anyhow::Result<()> {
-        let elected_versions = env.topology_snapshot().elected_replica_versions()?;
         let replica_versions = env.topology_snapshot().replica_version_records()?;
 
         let mut versions_to_unelect = self
             .versions
             .iter()
-            .filter(|version| elected_versions.iter().any(|v| v == version.as_ref()))
+            .filter(|version| {
+                replica_versions
+                    .iter()
+                    .any(|v| v.replica_version_id == version.as_ref())
+            })
             .cloned()
             .collect_vec();
 
         if versions_to_unelect.is_empty() {
             info!(
                 env.logger(),
-                "Versions {} are not blessed",
+                "Versions {} are not elected",
                 self.versions.iter().join(", ")
             );
             return Ok(());
@@ -58,17 +61,15 @@ impl Step for RetireElectedVersions {
         versions_to_unelect.retain(|r| {
             let record = replica_versions
                 .iter()
-                .find_map(|(key, rec)| {
-                    if key == r.as_ref() {
-                        return Some(rec);
-                    }
-                    None
-                })
+                .find(|rec| rec.replica_version_id == r.as_ref())
                 .unwrap_or_else(|| {
                     panic!(
-                        "Blessed replica version with key {} not found in records: {}",
+                        "Elected replica version with key {} not found in records: {}",
                         r,
-                        replica_versions.iter().map(|(k, _)| k).join(", ")
+                        replica_versions
+                            .iter()
+                            .map(|v| &v.replica_version_id)
+                            .join(", ")
                     )
                 });
 

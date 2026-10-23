@@ -1,5 +1,5 @@
 load("@python_deps//:requirements.bzl", "requirement")
-load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 py_binary(
@@ -7,6 +7,8 @@ py_binary(
     srcs = ["query.py"],
     data = glob(["*.sql"]) + ["//.github:CODEOWNERS"],
     env = {"CODEOWNERS_PATH": "$(rootpath //.github:CODEOWNERS)"},
+    # So that query_test can `import query`: rules_python runs Python with PYTHONSAFEPATH=1.
+    imports = ["."],
     deps = [
         "@buildbuddy_proto//:buildbuddy_py_proto",
         requirement("pandas"),
@@ -17,6 +19,13 @@ py_binary(
         requirement("protobuf"),
         requirement("dacite"),
     ],
+)
+
+py_test(
+    name = "query_test",
+    size = "small",
+    srcs = ["query_test.py"],
+    deps = [":query"],
 )
 
 sh_test(

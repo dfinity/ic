@@ -4,7 +4,7 @@ This module defines utilities for building Rust canisters.
 
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//bazel/candid:defs.bzl", "did_git_test")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 def _wasm_rust_transition_impl(_settings, attr):
     return {
@@ -65,13 +65,12 @@ wasm_rust_binary_rule = rule(
     },
 )
 
-def rust_canister(name, service_file, visibility = ["//visibility:public"], testonly = False, opt = "3", did_check = True, **kwargs):
+def rust_canister(name, service_file, visibility = ["//visibility:public"], testonly = False, opt = "3", **kwargs):
     """Defines a Rust program that builds into a WebAssembly module.
 
     The following targets are generated:
         <name>.raw: the raw Wasm module as built by rustc
         <name>.wasm.gz: the Wasm module, shrunk, with metadata, gzipped.
-        <name>_did_git_test: a test that checks the backwards-compatibility of the did service file from HEAD with the same file from the merge-base of the PR.
 
     Args:
       name: the name of the target that produces a Wasm module.
@@ -79,7 +78,6 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
       visibility: visibility of the Wasm target
       opt: opt-level for the Wasm target
       testonly: testonly attribute for Wasm target
-      did_check: generate a did compatibility test (default: True)
       **kwargs: additional arguments to pass a rust_binary.
     """
 
@@ -89,6 +87,9 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
 
     # The option to keep the name section is only required for wasm finalization.
     keep_name_section = kwargs.pop("keep_name_section", False)
+
+    # Optional path to a hidden_endpoints.conf for `ic-wasm check-endpoints`.
+    hidden_endpoints = kwargs.pop("hidden_endpoints", None)
 
     # Sanity checking (no '.' in name)
     if name.count(".") > 0:
@@ -131,6 +132,15 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
         keep_name_section = keep_name_section,
     )
 
+    if hidden_endpoints != None:
+        _check_endpoints_test(
+            name = name + "_check_endpoints_test",
+            wasm = ":" + final_name,
+            hidden_endpoints = hidden_endpoints,
+            testonly = testonly,
+            visibility = visibility,
+        )
+
     native.alias(
         name = name,
         actual = final_name,
@@ -143,11 +153,6 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
         actual = service_file,
         visibility = visibility,
     )
-    if did_check:
-        did_git_test(
-            name = name + "_did_git_test",
-            did = service_file,
-        )
 
 def motoko_canister(name, entry, deps, **kwargs):
     """Defines a Motoko program that builds into a WebAssembly module.
@@ -212,4 +217,22 @@ def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly
             "{pigz} --processes 16 --no-name $@.ver --stdout > $@",
         ])
             .format(input_wasm = "$(location {})".format(src_wasm), ic_wasm = "$(location @crate_index//:ic-wasm__ic-wasm)", version_file = "$(location {})".format(version_file), pigz = "$(location @pigz)", keep_name_section = "--keep-name-section" if keep_name_section else ""),
+    )
+
+def _check_endpoints_test(name, wasm, hidden_endpoints, testonly, visibility):
+    sh_test(
+        name = name,
+        srcs = ["//bazel:check_endpoints_test.sh"],
+        data = [
+            wasm,
+            hidden_endpoints,
+            "@crate_index//:ic-wasm__ic-wasm",
+        ],
+        env = {
+            "IC_WASM": "$(location @crate_index//:ic-wasm__ic-wasm)",
+            "WASM": "$(location {})".format(wasm),
+            "HIDDEN": "$(location {})".format(hidden_endpoints),
+        },
+        testonly = testonly,
+        visibility = visibility,
     )

@@ -1,0 +1,5 @@
+canister_id,instructions_executed,ingress_messages_executed,remote_subnet_messages_executed,local_subnet_messages_executed,http_outcalls_executed,heartbeats_and_global_timers_executed
+rwlgt-iiaaa-aaaaa-aaaaa-cai,52931,1,0,0,0,7
+rrkah-fqaaa-aaaaa-aaaaq-cai,98880,1,0,1,1,0
+ryjl3-tyaaa-aaaaa-aaaba-cai,55152,2,1,1,0,51
+r7inp-6aaaa-aaaaa-aaabq-cai,98880,1,0,1,1,0

@@ -5,7 +5,7 @@ use ic_agent::AgentError;
 use ic_base_types::{CanisterId, NodeId, SubnetId};
 use ic_bls12_381::G1Affine;
 use ic_canister_client::Sender;
-use ic_cdk::management_canister::{
+use ic_cdk_management_canister::{
     SignWithEcdsaResult, SignWithSchnorrResult, VetKDDeriveKeyResult,
 };
 use ic_config::subnet_config::{ECDSA_SIGNATURE_FEE, SCHNORR_SIGNATURE_FEE, VETKD_FEE};
@@ -71,9 +71,18 @@ pub fn make_key(name: &str) -> EcdsaKeyId {
     }
 }
 
-pub fn make_ecdsa_key_id() -> MasterPublicKeyId {
+pub fn make_ecdsa_secp256k1_key_id() -> MasterPublicKeyId {
     MasterPublicKeyId::Ecdsa(EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
+        name: "some_ecdsa_key".to_string(),
+    })
+}
+
+/// Shares its name with the secp256k1 key, as keys of both curves would on
+/// mainnet, so that tests catch code telling ECDSA keys apart by name alone.
+pub fn make_ecdsa_secp256r1_key_id() -> MasterPublicKeyId {
+    MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256r1,
         name: "some_ecdsa_key".to_string(),
     })
 }
@@ -101,7 +110,8 @@ pub fn make_vetkd_key_id() -> MasterPublicKeyId {
 
 pub fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
     vec![
-        make_ecdsa_key_id(),
+        make_ecdsa_secp256k1_key_id(),
+        make_ecdsa_secp256r1_key_id(),
         make_bip340_key_id(),
         make_eddsa_key_id(),
         make_vetkd_key_id(),
@@ -110,7 +120,8 @@ pub fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
 
 pub fn make_key_ids_for_all_idkg_schemes() -> Vec<MasterPublicKeyId> {
     vec![
-        make_ecdsa_key_id(),
+        make_ecdsa_secp256k1_key_id(),
+        make_ecdsa_secp256r1_key_id(),
         make_bip340_key_id(),
         make_eddsa_key_id(),
     ]
@@ -215,13 +226,16 @@ pub fn empty_subnet_update() -> UpdateSubnetPayload {
         subnet_type: None,
         is_halted: None,
         halt_at_cup_height: None,
+        cooling_down: None,
         features: None,
+        resource_limits: None,
         chain_key_config: None,
         chain_key_signing_enable: None,
         chain_key_signing_disable: None,
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
+        subnet_admins: None,
         // Deprecated/unused values follow
         max_artifact_streams_per_peer: None,
         max_chunk_wait_ms: None,
@@ -253,7 +267,7 @@ pub fn run_chain_key_signature_test(
     existing_key: Vec<u8>,
 ) {
     info!(logger, "Run through Chain key signature test.");
-    let message_hash = vec![0xabu8; 32];
+    let message_hash = vec![0xab_u8; 32];
     block_on(async {
         let public_key = get_public_key_with_retries(key_id, canister, logger, 100)
             .await
@@ -299,7 +313,7 @@ pub async fn get_public_key_and_test_signature(
         scale_cycles(ECDSA_SIGNATURE_FEE)
     };
 
-    let message_hash = vec![0xabu8; 32];
+    let message_hash = vec![0xab_u8; 32];
 
     info!(logger, "Getting the public key for {}", key_id);
     let public_key = get_public_key_with_logger(key_id, message_canister, logger).await?;
@@ -405,9 +419,18 @@ pub async fn get_ecdsa_public_key_with_retries(
             }
         }
     };
-    let pk =
-        VerifyingKey::from_sec1_bytes(&public_key[..]).expect("Bytes are not a valid public key");
-    info!(logger, "ecdsa_public_key returns {:?}", pk);
+    match key_id.curve {
+        EcdsaCurve::Secp256k1 => {
+            let pk = VerifyingKey::from_sec1_bytes(&public_key[..])
+                .expect("Bytes are not a valid public key");
+            info!(logger, "ecdsa_public_key returns {:?}", pk);
+        }
+        EcdsaCurve::Secp256r1 => {
+            let pk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&public_key[..])
+                .expect("Bytes are not a valid public key");
+            info!(logger, "ecdsa_public_key returns {:?}", pk);
+        }
+    }
     Ok(public_key)
 }
 
@@ -991,6 +1014,7 @@ pub async fn add_chain_keys_with_timeout_and_rotation_period(
 ) {
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
+        subnet_admins: None,
         chain_key_config: Some(ChainKeyConfig {
             key_configs: key_ids
                 .into_iter()
@@ -1034,6 +1058,7 @@ pub async fn enable_chain_key_signing_with_timeout_and_rotation_period(
 
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
+        subnet_admins: None,
         chain_key_signing_enable: Some(key_ids),
         ..empty_subnet_update()
     };
@@ -1078,6 +1103,7 @@ pub async fn create_new_subnet_with_keys(
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
+        initial_dkg_subnet_id: None,
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
         max_ingress_bytes_per_block: Some(config.max_ingress_bytes_per_block),
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,
@@ -1099,6 +1125,7 @@ pub async fn create_new_subnet_with_keys(
         chain_key_config: Some(chain_key_config),
         canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
         subnet_admins: Some(vec![]),
+        resource_limits: Default::default(),
 
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
@@ -1120,47 +1147,64 @@ pub fn await_pre_signature_stash_size(
     key_ids: &[MasterPublicKeyId],
     log: &Logger,
 ) {
+    block_on(await_pre_signature_stash_size_async(
+        subnet,
+        expected_size,
+        key_ids,
+        log,
+    ));
+}
+
+pub async fn await_pre_signature_stash_size_async(
+    subnet: &SubnetSnapshot,
+    expected_size: usize,
+    key_ids: &[MasterPublicKeyId],
+    log: &Logger,
+) {
     let metric_vec = key_ids
         .iter()
         .map(|key_id| format!("execution_pre_signature_stash_size{{key_id=\"{key_id}\"}}"))
         .collect::<Vec<_>>();
     let metrics = MetricsFetcher::new(subnet.nodes(), metric_vec.clone());
-    ic_system_test_driver::retry_with_msg!(
+    ic_system_test_driver::retry_with_msg_async!(
         format!(
             "Waiting until pre-signature stashes for key_ids {key_ids:?} are of size {expected_size}",
         ),
-        log.clone(),
+        log,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
-        || match block_on(metrics.fetch::<usize>()) {
-            Ok(val) => {
-                for metric in &metric_vec {
-                    let Some(sizes) = val.get(metric) else {
-                        bail!("Metric {metric} not found in {val:?}");
-                    };
-                    if sizes.len() != subnet.nodes().count() {
-                        bail!(
-                            "Metric {metric} only reported by {} out of {} nodes",
-                            sizes.len(),
-                            subnet.nodes().count()
-                        );
-                    }
-                    for size in sizes {
-                        if *size != expected_size {
+        || async {
+            match metrics.fetch::<usize>().await {
+                Ok(val) => {
+                    for metric in &metric_vec {
+                        let Some(sizes) = val.get(metric) else {
+                            bail!("Metric {metric} not found in {val:?}");
+                        };
+                        if sizes.len() != subnet.nodes().count() {
                             bail!(
-                                "Pre-signature stash for key_id {} is of size {}, but expected {}",
-                                metric, size, expected_size
+                                "Metric {metric} only reported by {} out of {} nodes",
+                                sizes.len(),
+                                subnet.nodes().count()
                             );
                         }
+                        for size in sizes {
+                            if *size != expected_size {
+                                bail!(
+                                    "Pre-signature stash for key_id {} is of size {}, but expected {}",
+                                    metric, size, expected_size
+                                );
+                            }
+                        }
                     }
+                    Ok(())
                 }
-                Ok(())
-            }
-            Err(err) => {
-                bail!("Could not connect to metrics yet {:?}", err);
+                Err(err) => {
+                    bail!("Could not connect to metrics yet {:?}", err);
+                }
             }
         }
     )
+    .await
     .expect("The subnet did not reach the required pre-signature stash size in time");
 }
 
@@ -1175,6 +1219,7 @@ pub async fn set_pre_signature_stash_size(
 ) {
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
+        subnet_admins: None,
         chain_key_config: Some(ChainKeyConfig {
             key_configs: key_ids
                 .iter()
@@ -1222,9 +1267,16 @@ pub fn verify_ed25519_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
     vk.verify(msg, &signature).is_ok()
 }
 
-pub fn verify_ecdsa_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
+pub fn verify_ecdsa_secp256k1_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
     let pk = VerifyingKey::from_sec1_bytes(pk).expect("Bytes are not a valid public key");
     let signature = Signature::try_from(sig).expect("Bytes are not a valid signature");
+    pk.verify_prehash(msg, &signature).is_ok()
+}
+
+pub fn verify_ecdsa_secp256r1_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
+    let pk =
+        p256::ecdsa::VerifyingKey::from_sec1_bytes(pk).expect("Bytes are not a valid public key");
+    let signature = p256::ecdsa::Signature::try_from(sig).expect("Bytes are not a valid signature");
     pk.verify_prehash(msg, &signature).is_ok()
 }
 
@@ -1245,7 +1297,8 @@ pub fn verify_vetkey(public_key: &[u8], encrypted_key: &[u8], input: &[u8]) -> b
 pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: &[u8]) {
     let res = match key_id {
         MasterPublicKeyId::Ecdsa(key_id) => match key_id.curve {
-            EcdsaCurve::Secp256k1 => verify_ecdsa_signature(pk, sig, msg),
+            EcdsaCurve::Secp256k1 => verify_ecdsa_secp256k1_signature(pk, sig, msg),
+            EcdsaCurve::Secp256r1 => verify_ecdsa_secp256r1_signature(pk, sig, msg),
         },
         MasterPublicKeyId::Schnorr(key_id) => match key_id.algorithm {
             SchnorrAlgorithm::Bip340Secp256k1 => verify_bip340_signature(pk, sig, msg),
@@ -1265,40 +1318,44 @@ pub enum SignWithChainKeyReply {
     VetKd(VetKdDeriveKeyResult),
 }
 
-fn cast_ecdsa_key_id(key_id: EcdsaKeyId) -> ic_cdk::management_canister::EcdsaKeyId {
-    ic_cdk::management_canister::EcdsaKeyId {
+fn cast_ecdsa_key_id(key_id: EcdsaKeyId) -> ic_cdk_management_canister::EcdsaKeyId {
+    ic_cdk_management_canister::EcdsaKeyId {
         curve: match key_id.curve {
-            EcdsaCurve::Secp256k1 => ic_cdk::management_canister::EcdsaCurve::Secp256k1,
+            EcdsaCurve::Secp256k1 => ic_cdk_management_canister::EcdsaCurve::Secp256k1,
+            EcdsaCurve::Secp256r1 => unimplemented!(
+                "ic-cdk-management-canister re-exports a secp256k1-only EcdsaCurve; \
+                 needs ic-management-canister-types released and cdk-rs bumped"
+            ),
         },
         name: key_id.name,
     }
 }
 
-fn cast_schnorr_key_id(key_id: SchnorrKeyId) -> ic_cdk::management_canister::SchnorrKeyId {
-    ic_cdk::management_canister::SchnorrKeyId {
+fn cast_schnorr_key_id(key_id: SchnorrKeyId) -> ic_cdk_management_canister::SchnorrKeyId {
+    ic_cdk_management_canister::SchnorrKeyId {
         algorithm: match key_id.algorithm {
             SchnorrAlgorithm::Bip340Secp256k1 => {
-                ic_cdk::management_canister::SchnorrAlgorithm::Bip340secp256k1
+                ic_cdk_management_canister::SchnorrAlgorithm::Bip340secp256k1
             }
-            SchnorrAlgorithm::Ed25519 => ic_cdk::management_canister::SchnorrAlgorithm::Ed25519,
+            SchnorrAlgorithm::Ed25519 => ic_cdk_management_canister::SchnorrAlgorithm::Ed25519,
         },
         name: key_id.name,
     }
 }
 
-fn cast_vetkd_key_id(key_id: VetKdKeyId) -> ic_cdk::management_canister::VetKDKeyId {
-    ic_cdk::management_canister::VetKDKeyId {
+fn cast_vetkd_key_id(key_id: VetKdKeyId) -> ic_cdk_management_canister::VetKDKeyId {
+    ic_cdk_management_canister::VetKDKeyId {
         curve: match key_id.curve {
-            VetKdCurve::Bls12_381_G2 => ic_cdk::management_canister::VetKDCurve::Bls12_381_G2,
+            VetKdCurve::Bls12_381_G2 => ic_cdk_management_canister::VetKDCurve::Bls12_381_G2,
         },
         name: key_id.name,
     }
 }
 
-fn cast_schnorr_aux(aux: SignWithSchnorrAux) -> ic_cdk::management_canister::SchnorrAux {
+fn cast_schnorr_aux(aux: SignWithSchnorrAux) -> ic_cdk_management_canister::SchnorrAux {
     match aux {
         SignWithSchnorrAux::Bip341(aux) => {
-            ic_cdk::management_canister::SchnorrAux::Bip341(ic_cdk::management_canister::Bip341 {
+            ic_cdk_management_canister::SchnorrAux::Bip341(ic_cdk_management_canister::Bip341 {
                 merkle_root_hash: aux.merkle_root_hash.to_vec(),
             })
         }

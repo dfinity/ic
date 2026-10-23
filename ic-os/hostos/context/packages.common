@@ -5,7 +5,7 @@
 # image only.
 
 # Need kernel to boot anything
-linux-image-generic-hwe-24.04
+linux-image-generic-hwe-26.04
 initramfs-tools
 
 # Need systemd for boot process
@@ -36,8 +36,7 @@ lvm2
 netcat-openbsd
 nftables
 traceroute
-# NODE-1718: Parted has a conflict with the new libvirt, install it below
-# parted
+parted
 python-is-python3
 rsync
 sudo
@@ -60,32 +59,14 @@ checkpolicy
 dosfstools
 ethtool
 ipmitool
-lsof
+libvirt-daemon-system
+libvirt-dev
 locales
+lsof
 moreutils
 mtools
 nvme-cli
+ovmf
 pciutils
+qemu-system-x86
 strace
-
-# Install select components from future releases
-# Install >=2025 OVMF
-ovmf/plucky # Top level
-
-# NODE-1718: Parted has a conflict with the new libvirt, it should be installed above once
-# this is resolved
-parted/plucky
-
-# Install >=10.5.0 libvirt
-libvirt-daemon-system/plucky # Top level
-libvirt-dev/plucky # Top level
-libvirt-daemon-config-network/plucky # Dependency
-libvirt-daemon-config-nwfilter/plucky # Dependency
-libvirt-daemon-driver-network/plucky # Dependency
-libvirt-daemon-driver-nodedev/plucky # Dependency
-libvirt-daemon-driver-nwfilter/plucky # Dependency
-libvirt-daemon-driver-qemu/plucky # Dependency
-libvirt-daemon-driver-secret/plucky # Dependency
-libvirt-daemon-driver-storage/plucky # Dependency
-libvirt-daemon-log/plucky # Dependency
-libvirt-daemon/plucky # Dependency

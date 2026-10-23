@@ -27,8 +27,12 @@ pub struct DkgPoolImpl {
 const POOL_DKG: &str = "dkg";
 
 impl DkgPoolImpl {
-    /// Instantiates a new DKG pool from the time source.
-    pub fn new(metrics_registry: MetricsRegistry, log: ReplicaLogger) -> Self {
+    /// Instantiates a new DKG pool with the given start height.
+    pub fn new(
+        metrics_registry: MetricsRegistry,
+        log: ReplicaLogger,
+        current_start_height: Height,
+    ) -> Self {
         Self {
             invalidated_artifacts: metrics_registry.int_counter(
                 "dkg_invalidated_artifacts",
@@ -36,7 +40,7 @@ impl DkgPoolImpl {
             ),
             validated: PoolSection::new(metrics_registry.clone(), POOL_DKG, POOL_TYPE_VALIDATED),
             unvalidated: PoolSection::new(metrics_registry, POOL_DKG, POOL_TYPE_UNVALIDATED),
-            current_start_height: Height::from(1),
+            current_start_height,
             log,
         }
     }
@@ -54,27 +58,12 @@ impl DkgPoolImpl {
     /// purged
     fn purge(&mut self, height: Height) -> Vec<DkgMessageId> {
         self.current_start_height = height;
-        // TODO: use drain_filter once it's stable.
-        let unvalidated_keys: Vec<_> = self
-            .unvalidated
-            .keys()
-            .filter(|id| id.height < height)
-            .cloned()
-            .collect();
-        for id in unvalidated_keys {
-            self.unvalidated.remove(&id);
-        }
 
-        let validated_keys: Vec<_> = self
-            .validated
-            .keys()
-            .filter(|id| id.height < height)
-            .cloned()
-            .collect();
-        for hash in &validated_keys {
-            self.validated.remove(hash);
-        }
-        validated_keys
+        let _ = self
+            .unvalidated
+            .extract_keys_below(&DkgMessageId::smallest_at_height(height));
+        self.validated
+            .extract_keys_below(&DkgMessageId::smallest_at_height(height))
     }
 }
 
@@ -198,7 +187,7 @@ mod test {
     use ic_interfaces::dkg::DkgPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_consensus::fake::FakeSigner;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::{
         NodeId,
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -214,14 +203,14 @@ mod test {
             target_subnet: NiDkgTargetSubnet::Local,
         };
         dkg::Message {
-            content: dkg::DealingContent::new(dummy_dealing(0), dkg_id),
+            content: dkg::DealingContent::new(dummy_dealing(0), dkg_id, test_replica_version()),
             signature: BasicSignature::fake(node_id),
         }
     }
 
     #[test]
     fn test_dkg_pool_insert_and_remove() {
-        let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+        let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger(), Height::from(0));
         let message = make_message(Height::from(30), node_test_id(1));
         let id = DkgMessageId::from(&message);
 
@@ -243,7 +232,11 @@ mod test {
         // create 2 DKGs for the same subnet
         let current_dkg_id_start_height = Height::from(30);
         let last_dkg_id_start_height = Height::from(10);
-        let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+        let mut pool = DkgPoolImpl::new(
+            MetricsRegistry::new(),
+            no_op_logger(),
+            current_dkg_id_start_height,
+        );
         // add two validated messages, one for every DKG instance
         let result = pool.apply(
             [
@@ -310,7 +303,7 @@ mod test {
 
     #[test]
     fn test_dkg_pool_filter_by_age() {
-        let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+        let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger(), Height::from(0));
 
         // 200 sec old
         let msg = make_message(Height::from(1), node_test_id(1));

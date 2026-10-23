@@ -5,7 +5,7 @@ use crate::{
     pb::v1::{Ballot, NeuronIdToVotingPowerMap, VotingPowerTotal},
 };
 
-use ic_cdk::eprintln;
+use ic_cdk::{eprintln, println};
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_stable_structures::{
     DefaultMemoryImpl, StableBTreeMap, Storable, memory_manager::VirtualMemory, storable::Bound,
@@ -202,6 +202,14 @@ impl VotingPowerSnapshots {
             voting_power_map,
             totals_with_minimum_total_potential_voting_power,
         ));
+        println!(
+            "{}Voting power spike detected at timestamp {}, total potential voting power: {}, \
+            minimum total potential voting power: {}",
+            LOG_PREFIX,
+            timestamp_with_minimum_total_potential_voting_power,
+            total_potential_voting_power,
+            totals_with_minimum_total_potential_voting_power.total_potential_voting_power
+        );
         Some((
             timestamp_with_minimum_total_potential_voting_power,
             previous_voting_power_snapshot,
@@ -213,6 +221,13 @@ impl VotingPowerSnapshots {
         self.voting_power_totals
             .last_key_value()
             .map(|(timestamp, _)| timestamp)
+    }
+
+    /// Clears the voting power snapshots.
+    // TODO(NNS1-4323): Remove this method after Mission 70 is fully deployed.
+    pub(crate) fn clear(&mut self) {
+        self.neuron_id_to_voting_power_maps.clear_new();
+        self.voting_power_totals.clear_new();
     }
 }
 

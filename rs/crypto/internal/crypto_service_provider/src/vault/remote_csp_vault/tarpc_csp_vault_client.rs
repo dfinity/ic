@@ -53,7 +53,7 @@ use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant};
 use tarpc::serde_transport;
 use tracing::instrument;
 
@@ -235,8 +235,8 @@ impl RemoteCspVaultBuilder {
     }
 }
 
-fn deadline_from_now(timeout: Duration) -> SystemTime {
-    SystemTime::now() + timeout
+fn deadline_from_now(timeout: Duration) -> Instant {
+    Instant::now() + timeout
 }
 
 fn context_with_timeout(timeout: Duration) -> tarpc::context::Context {

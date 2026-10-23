@@ -168,8 +168,8 @@ fn should_adapt_timer_interval_to_ledger_activity() {
     //
     // We run enough rounds for the timer to stabilize and then collect
     // the wait time after each round to verify the oscillation.
-    let tx_interval_secs = 6u64;
-    let stabilization_rounds = 20u64;
+    let tx_interval_secs = 6_u64;
+    let stabilization_rounds = 20_u64;
     for _ in 0..stabilization_rounds {
         send_tx(&env, ledger_id, a1, a2);
         advance(&env, ONE_SECOND, tx_interval_secs);
@@ -178,7 +178,7 @@ fn should_adapt_timer_interval_to_ledger_activity() {
     // Collect the wait times over several more rounds to verify
     // the oscillation between 2 s and 4 s.
     let mut observed_wait_times = std::collections::BTreeSet::new();
-    let observation_rounds = 10u64;
+    let observation_rounds = 10_u64;
     for _ in 0..observation_rounds {
         send_tx(&env, ledger_id, a1, a2);
         // Advance one second at a time and sample after every tick so
@@ -266,8 +266,8 @@ fn should_maintain_legacy_behavior_with_min_interval_equal_to_max() {
         wait_time
     );
 
-    let tx_interval_secs = 6u64;
-    let stabilization_rounds = 20u64;
+    let tx_interval_secs = 6_u64;
+    let stabilization_rounds = 20_u64;
     for _ in 0..stabilization_rounds {
         send_tx(&env, ledger_id, a1, a2);
         advance(&env, ONE_SECOND, tx_interval_secs);

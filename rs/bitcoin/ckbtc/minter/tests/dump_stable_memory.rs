@@ -42,7 +42,6 @@ impl Setup {
         let ledger_id = env.create_canister();
         let minter_id = env.create_canister();
         let btc_checker_id = env.create_canister();
-        env.add_cycles(minter_id, 100_000_000_000_000);
 
         let init_args = Encode!(&MinterArg::Init(CkbtcMinterInitArgs {
             btc_network,

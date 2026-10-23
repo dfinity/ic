@@ -27,17 +27,16 @@ use ic_protobuf::registry::{
     dc::v1::DataCenterRecord,
     node::v1::{ConnectionEndpoint, NodeRecord},
     node_operator::v1::NodeOperatorRecord,
-    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+    replica_version::v1::ReplicaVersionRecord,
     routing_table::v1::RoutingTable as RoutingTablePB,
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig, InitialNiDkgTranscriptRecord, SubnetListRecord,
-        SubnetRecord,
+        CatchUpPackageContents, ChainKeyConfig, GenesisArgs, InitialNiDkgTranscriptRecord,
+        SubnetListRecord, SubnetRecord, catch_up_package_contents::CupType,
     },
 };
 use ic_registry_canister_api::{AddNodePayload, Chunk, GetChunkRequest};
 use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_canister_ranges_key,
-    make_catch_up_package_contents_key, make_crypto_node_key,
+    make_canister_ranges_key, make_catch_up_package_contents_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
     make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
@@ -53,8 +52,9 @@ use ic_registry_transport::{
     serialize_get_value_request,
 };
 use ic_test_utilities_types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::test_replica_version;
 use ic_types::{
-    NodeId, ReplicaVersion,
+    NodeId,
     crypto::{
         CurrentNodePublicKeys, KeyPurpose,
         threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript},
@@ -348,14 +348,11 @@ pub fn invariant_compliant_mutation_with_subnet_id(
     };
     const MOCK_HASH: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
     let release_package_url = "http://release_package.tar.zst".to_string();
-    let replica_version_id = ReplicaVersion::default().to_string();
     let replica_version = ReplicaVersionRecord {
+        replica_version_id: test_replica_version().to_string(),
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],
         guest_launch_measurements: None,
-    };
-    let blessed_replica_version = BlessedReplicaVersions {
-        blessed_version_ids: vec![replica_version_id.clone()],
     };
 
     let subnet_list = SubnetListRecord {
@@ -364,7 +361,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
     let system_subnet = SubnetRecord {
         membership: vec![node_id.get().to_vec()],
         subnet_type: i32::from(SubnetType::System),
-        replica_version_id: replica_version_id.clone(),
+        replica_version_id: replica_version.replica_version_id.clone(),
         unit_delay_millis: 600,
         chain_key_config,
         ..Default::default()
@@ -383,12 +380,8 @@ pub fn invariant_compliant_mutation_with_subnet_id(
             system_subnet.encode_to_vec(),
         ),
         insert(
-            make_replica_version_key(replica_version_id).as_bytes(),
+            make_replica_version_key(&replica_version.replica_version_id).as_bytes(),
             replica_version.encode_to_vec(),
-        ),
-        insert(
-            make_blessed_replica_versions_key().as_bytes(),
-            blessed_replica_version.encode_to_vec(),
         ),
         insert(
             ic_registry_keys::NODE_REWARDS_TABLE_KEY.as_bytes(),
@@ -415,7 +408,7 @@ pub fn new_node_keys_and_node_id() -> (ValidNodePublicKeys, NodeId) {
     let npks = generate_node_keys_once(&config, None).unwrap_or_else(|_| {
         panic!(
             "Generation of new node keys with CryptoConfig {:?} failed",
-            &config
+            config
         )
     });
     let node_id = npks.node_id();
@@ -580,6 +573,7 @@ fn dummy_cup_for_subnet(nodes: Vec<NodeId>) -> CatchUpPackageContents {
     CatchUpPackageContents {
         initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript_record),
         initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript_record),
+        cup_type: Some(CupType::Genesis(GenesisArgs {})),
         ..Default::default()
     }
 }
@@ -614,7 +608,6 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         add_node_mutations.append(&mut mutations);
     }
 
-    let replica_version_id = ReplicaVersion::default().to_string();
     const MOCK_HASH: &str = "abbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabba";
     let release_package_url = "http://release_package.tar.zst".to_string();
     let guest_launch_measurements = Some(GuestLaunchMeasurements {
@@ -622,16 +615,15 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
             measurement: vec![0x42; 48],
             metadata: Some(GuestLaunchMeasurementMetadata {
                 kernel_cmdline: Some("foo=bar".to_string()),
+                vcpu_type: None,
             }),
         }],
     });
     let replica_version = ReplicaVersionRecord {
+        replica_version_id: test_replica_version().to_string(),
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],
         guest_launch_measurements,
-    };
-    let blessed_replica_version = BlessedReplicaVersions {
-        blessed_version_ids: vec![replica_version_id.clone()],
     };
     let subnet_list = SubnetListRecord {
         subnets: vec![nns_subnet_id.get().to_vec()],
@@ -639,7 +631,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
     let system_subnet = SubnetRecord {
         membership: node_id.iter().map(|id| id.get().to_vec()).collect(),
         subnet_type: i32::from(SubnetType::System),
-        replica_version_id: replica_version_id.clone(),
+        replica_version_id: replica_version.replica_version_id.clone(),
         unit_delay_millis: 600,
         ..Default::default()
     };
@@ -666,12 +658,8 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
             RoutingTablePB::from(routing_table).encode_to_vec(),
         ),
         insert(
-            make_replica_version_key(replica_version_id).as_bytes(),
+            make_replica_version_key(&replica_version.replica_version_id).as_bytes(),
             replica_version.encode_to_vec(),
-        ),
-        insert(
-            make_blessed_replica_versions_key().as_bytes(),
-            blessed_replica_version.encode_to_vec(),
         ),
     ];
 
@@ -762,11 +750,9 @@ pub fn prepare_registry_with_two_node_sets(
         num_nodes_in_subnet2,
     );
 
-    let replica_version = ReplicaVersion::default();
-
     // Subnet record 1
     let subnet_record = SubnetRecord {
-        replica_version_id: replica_version.to_string(),
+        replica_version_id: test_replica_version().to_string(),
         membership: node_ids_and_dkg_keys_subnet_1
             .keys()
             .map(|id| id.get().into_vec())
@@ -796,7 +782,7 @@ pub fn prepare_registry_with_two_node_sets(
     if assign_nodes_to_subnet2 {
         // Subnet record 2
         let subnet2_record = SubnetRecord {
-            replica_version_id: replica_version.to_string(),
+            replica_version_id: test_replica_version().to_string(),
             membership: node_ids_and_dkg_keys_subnet_2
                 .keys()
                 .map(|id| id.get().into_vec())

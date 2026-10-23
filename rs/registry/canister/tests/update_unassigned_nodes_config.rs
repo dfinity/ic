@@ -10,7 +10,7 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
 use ic_registry_keys::make_unassigned_nodes_config_record_key;
-use ic_types::ReplicaVersion;
+use ic_test_utilities_types::ids::test_replica_version;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
@@ -31,7 +31,7 @@ fn test_the_anonymous_user_cannot_update_unassigned_nodes_config() {
 
         let payload = UpdateUnassignedNodesConfigPayload {
             ssh_readonly_access: Some(vec!["some_key".to_string()]),
-            replica_version: Some("some_unblessed_version".to_string()),
+            replica_version: Some("some_unelected_version".to_string()),
         };
 
         // The anonymous end-user tries to update the config, bypassing the proposals
@@ -77,7 +77,7 @@ fn test_updating_unassigned_nodes_config_does_not_break_invariants() {
 
         let mut payload = UpdateUnassignedNodesConfigPayload {
             ssh_readonly_access: None,
-            replica_version: Some("some_unblessed_version".to_string()),
+            replica_version: Some("some_unelected_version".to_string()),
         };
 
         assert!(
@@ -90,10 +90,10 @@ fn test_updating_unassigned_nodes_config_does_not_break_invariants() {
             .await
         );
 
-        // New payload with already-blessed version
+        // New payload with already-elected version
         payload = UpdateUnassignedNodesConfigPayload {
             ssh_readonly_access: None,
-            replica_version: Some(ReplicaVersion::default().into()),
+            replica_version: Some(test_replica_version().to_string()),
         };
 
         assert!(
@@ -114,7 +114,7 @@ fn test_updating_unassigned_nodes_config_does_not_break_invariants() {
             .await,
             UnassignedNodesConfigRecord {
                 ssh_readonly_access: vec![],
-                replica_version: ReplicaVersion::default().into(),
+                replica_version: test_replica_version().to_string(),
             }
         );
 

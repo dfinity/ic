@@ -56,8 +56,9 @@ mod tests {
     use crate::node::{NodeConfiguration, NodeIndex};
     use crate::subnet_configuration::{SubnetConfig, SubnetRunningState};
     use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
+    use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
     use ic_registry_subnet_type::SubnetType;
-    use ic_types::ReplicaVersion;
+    use ic_test_utilities_types::ids::test_replica_version;
     use std::collections::BTreeMap;
     use std::net::SocketAddr;
     use std::str::FromStr;
@@ -112,7 +113,7 @@ mod tests {
             SubnetConfig::new(
                 0,
                 subnet_nodes,
-                ReplicaVersion::default(),
+                test_replica_version(),
                 None,
                 /*max_ingress_bytes_per_block=*/ None,
                 None,
@@ -122,6 +123,8 @@ mod tests {
                 None,
                 None,
                 SubnetType::System,
+                CanisterCyclesCostSchedule::Normal,
+                None,
                 None,
                 None,
                 None,
@@ -138,7 +141,7 @@ mod tests {
         let ic_config = IcConfig::new(
             /* target_dir= */ tmp.path(),
             topology_config,
-            ReplicaVersion::default(),
+            test_replica_version(),
             /* generate_subnet_records= */ true, // see note above
             /* nns_subnet_index= */ Some(0),
             /* release_package_download_url= */ None,

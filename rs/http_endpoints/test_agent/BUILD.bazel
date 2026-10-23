@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = [
+    "//rs/http_endpoints/fuzz:__subpackages__",
     "//rs/http_endpoints/public:__subpackages__",
     "//rs/tests/networking:__subpackages__",
 ])
@@ -18,7 +19,6 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:reqwest",
         "@crate_index//:serde_cbor",
-        "@crate_index//:slog",
         "@crate_index//:tokio",
         "@crate_index//:url",
     ],

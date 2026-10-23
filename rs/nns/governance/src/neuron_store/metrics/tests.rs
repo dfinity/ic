@@ -1,6 +1,8 @@
 use super::*;
 use crate::{
-    neuron::{DissolveStateAndAge, NeuronBuilder},
+    governance::max_dissolve_delay_seconds,
+    is_mission_70_voting_rewards_enabled,
+    neuron::{DissolveStateAndAge, NeuronBuilder, dissolve_delay_bonus_multiplier},
     pb::v1::{KnownNeuronData, MaturityDisbursement, NeuronType},
 };
 use ic_base_types::PrincipalId;
@@ -9,6 +11,7 @@ use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
 use maplit::{btreemap, hashmap};
 use pretty_assertions::assert_eq;
+use rust_decimal::prelude::ToPrimitive;
 use std::{collections::BTreeMap, str::FromStr};
 
 #[test]
@@ -439,9 +442,8 @@ fn test_compute_neuron_metrics_non_self_authenticating() {
         NeuronId { id: 1 },
         Subaccount::try_from([1_u8; 32].as_ref()).unwrap(),
         controller_of_neuron_1,
-        // Total voting power bonus: 2x * 1.125x = 2.25x
         DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: 8 * ONE_YEAR_SECONDS, // 100% (equivlanetly, 2x) dissolve delay bonus
+            dissolve_delay_seconds: max_dissolve_delay_seconds(),
             aging_since_timestamp_seconds: now_seconds - 2 * ONE_YEAR_SECONDS, // 12.5% (equivalently 1.125x) age bonus
         },
         now_seconds,
@@ -473,7 +475,7 @@ fn test_compute_neuron_metrics_non_self_authenticating() {
         controller_of_neuron_3,
         // Total voting power bonus: 1.5x * 1.25x = 1.875x
         DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: 4 * ONE_YEAR_SECONDS, // 50% (equivalently, 1.5x) dissolve delay bonus
+            dissolve_delay_seconds: max_dissolve_delay_seconds() / 2, // 50% (equivalently, 1.5x) dissolve delay bonus
             aging_since_timestamp_seconds: now_seconds - 4 * ONE_YEAR_SECONDS, // 25% (equivalently 1.25x) age bonus
         },
         now_seconds,
@@ -500,7 +502,17 @@ fn test_compute_neuron_metrics_non_self_authenticating() {
 
     let voting_power_1 = neuron_1.potential_voting_power(now_seconds);
     let voting_power_3 = neuron_3.potential_voting_power(now_seconds);
-    assert_eq!(voting_power_1, (2.250 * (100.0 + 101.0)) as u64);
+    assert_eq!(
+        voting_power_1,
+        // TODO(NNS1-4323): Once Mission 70 is fully deployed, replace the big
+        // dissolve delay bonus expression with 3.0, the maximum dissolve delay
+        // bonus.
+        (dissolve_delay_bonus_multiplier(max_dissolve_delay_seconds())
+         .to_f64()
+         .unwrap()
+         * 1.125 // age bonus
+         * (100.0 + 101.0)) as u64,
+    );
     assert_eq!(
         voting_power_3,
         (1.875 * (300.0 + 303.0) * 1_000_000.0) as u64
@@ -523,6 +535,22 @@ fn test_compute_neuron_metrics_non_self_authenticating() {
     } = neuron_store.compute_neuron_metrics(E8, &VotingPowerEconomics::DEFAULT, now_seconds);
 
     // Step 3: Inspect results.
+    //
+    // bucket_for_half_max: neuron_3 has a dissolve delay equal to max_dissolve_delay_seconds() / 2
+    //   (mapped to bucket 8 when the max is long, 2 when the max is short).
+    let bucket_for_half_max = if is_mission_70_voting_rewards_enabled() {
+        2
+    } else {
+        8
+    };
+    // bucket_for_max: neuron_1 has a dissolve delay equal to max_dissolve_delay_seconds()
+    //   (mapped to bucket 16 when the max is long, 4 when the max is short).
+    let bucket_for_max = if is_mission_70_voting_rewards_enabled() {
+        4
+    } else {
+        16
+    };
+
     assert_eq!(
         non_self_authenticating_controller_neuron_subset_metrics,
         NeuronSubsetMetrics {
@@ -542,36 +570,36 @@ fn test_compute_neuron_metrics_non_self_authenticating() {
 
             // Analogous to the vanilla count field.
             count_buckets: hashmap! {
-                8  => 1, // 1 neuron with 4 year dissolve delay.
-                16 => 1, // 1 neuron with 8 year dissolve delay.
+                bucket_for_half_max => 1, // 1 neuron with max/2 dissolve delay.
+                bucket_for_max => 1,      // 1 neuron with max dissolve delay.
             },
 
             // ICP-like resources.
             staked_e8s_buckets: hashmap! {
-                8  => 300_000_000,
-                16 => 100,
+                bucket_for_half_max => 300_000_000,
+                bucket_for_max => 100,
             },
             staked_maturity_e8s_equivalent_buckets: hashmap! {
-                8  => 303_000_000,
-                16 => 101,
+                bucket_for_half_max => 303_000_000,
+                bucket_for_max => 101,
             },
             maturity_e8s_equivalent_buckets: hashmap! {
-                8  => 330_000_000,
-                16 => 110,
+                bucket_for_half_max => 330_000_000,
+                bucket_for_max => 110,
             },
 
             // Analogous to total_voting_power.
             voting_power_buckets: hashmap! {
-                8  => voting_power_3,
-                16 => voting_power_1,
+                bucket_for_half_max => voting_power_3,
+                bucket_for_max => voting_power_1,
             },
             deciding_voting_power_buckets: hashmap! {
-                8  => voting_power_3,
-                16 => voting_power_1,
+                bucket_for_half_max => voting_power_3,
+                bucket_for_max => voting_power_1,
             },
             potential_voting_power_buckets: hashmap! {
-                8  => voting_power_3,
-                16 => voting_power_1,
+                bucket_for_half_max => voting_power_3,
+                bucket_for_max => voting_power_1,
             },
         },
     );
@@ -598,7 +626,7 @@ fn test_compute_neuron_metrics_public_neurons() {
         PrincipalId::new_user_test_id(1),
         // Total voting power bonus: 2x * 1.125x = 2.25x
         DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: 8 * ONE_YEAR_SECONDS, // 100% (equivlanetly, 2x) dissolve delay bonus
+            dissolve_delay_seconds: max_dissolve_delay_seconds(),
             aging_since_timestamp_seconds: now_seconds - 2 * ONE_YEAR_SECONDS, // 12.5% (equivalently 1.125x) age bonus
         },
         now_seconds - 10 * ONE_YEAR_SECONDS,
@@ -633,7 +661,7 @@ fn test_compute_neuron_metrics_public_neurons() {
         PrincipalId::new_user_test_id(3),
         // Total voting power bonus: 1.5x * 1.25x = 1.875x
         DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: 4 * ONE_YEAR_SECONDS, // 50% (equivalently, 1.5x) dissolve delay bonus
+            dissolve_delay_seconds: max_dissolve_delay_seconds() / 2,
             aging_since_timestamp_seconds: now_seconds - 4 * ONE_YEAR_SECONDS, // 25% (equivalently 1.25x) age bonus
         },
         now_seconds - 10 * ONE_YEAR_SECONDS,
@@ -653,7 +681,17 @@ fn test_compute_neuron_metrics_public_neurons() {
 
     let voting_power_1 = neuron_1.potential_voting_power(now_seconds);
     let voting_power_3 = neuron_3.potential_voting_power(now_seconds);
-    assert_eq!(voting_power_1, (2.250 * (100.0 + 101.0)) as u64);
+    assert_eq!(
+        voting_power_1,
+        // TODO(NNS1-4323): Once Mission 70 is fully deployed, replace the big
+        // dissolve delay bonus expression with 3.0, the maximum dissolve delay
+        // bonus.
+        (dissolve_delay_bonus_multiplier(max_dissolve_delay_seconds())
+         .to_f64()
+         .unwrap()
+         * 1.125 // age bonus
+         * (100.0 + 101.0)) as u64,
+    );
     assert_eq!(
         voting_power_3,
         (1.875 * (300.0 + 303.0) * 1_000_000.0) as u64
@@ -681,6 +719,22 @@ fn test_compute_neuron_metrics_public_neurons() {
     } = neuron_store.compute_neuron_metrics(E8, &VotingPowerEconomics::DEFAULT, now_seconds);
 
     // Step 3: Inspect results.
+    //
+    // bucket_for_half_max: neuron_3 has a dissolve delay equal to max_dissolve_delay_seconds() / 2
+    //   (mapped to bucket 8 when the max is long, 2 when the max is short).
+    let bucket_for_half_max = if is_mission_70_voting_rewards_enabled() {
+        2
+    } else {
+        8
+    };
+    // bucket_for_max: neuron_1 has a dissolve delay equal to max_dissolve_delay_seconds()
+    //   (mapped to bucket 16 when the max is long, 4 when the max is short).
+    let bucket_for_max = if is_mission_70_voting_rewards_enabled() {
+        4
+    } else {
+        16
+    };
+
     assert_eq!(
         public_neuron_subset_metrics,
         NeuronSubsetMetrics {
@@ -700,36 +754,36 @@ fn test_compute_neuron_metrics_public_neurons() {
 
             // Analogous to the vanilla count field.
             count_buckets: hashmap! {
-                8  => 1, // 1 neuron with 4 year dissolve delay.
-                16 => 1, // 1 neuron with 8 year dissolve delay.
+                bucket_for_half_max => 1, // 1 neuron with max/2 dissolve delay.
+                bucket_for_max => 1,      // 1 neuron with max dissolve delay.
             },
 
             // ICP-like resources.
             staked_e8s_buckets: hashmap! {
-                8  => 300_000_000,
-                16 => 100,
+                bucket_for_half_max => 300_000_000,
+                bucket_for_max => 100,
             },
             staked_maturity_e8s_equivalent_buckets: hashmap! {
-                8  => 303_000_000,
-                16 => 101,
+                bucket_for_half_max => 303_000_000,
+                bucket_for_max => 101,
             },
             maturity_e8s_equivalent_buckets: hashmap! {
-                8  => 330_000_000,
-                16 => 110,
+                bucket_for_half_max => 330_000_000,
+                bucket_for_max => 110,
             },
 
             // Analogous to total_voting_power.
             voting_power_buckets: hashmap! {
-                8  => voting_power_3,
-                16 => voting_power_1,
+                bucket_for_half_max => voting_power_3,
+                bucket_for_max => voting_power_1,
             },
             deciding_voting_power_buckets: hashmap! {
-                8  => voting_power_3,
-                16 => voting_power_1,
+                bucket_for_half_max => voting_power_3,
+                bucket_for_max => voting_power_1,
             },
             potential_voting_power_buckets: hashmap! {
-                8  => voting_power_3,
-                16 => voting_power_1,
+                bucket_for_half_max => voting_power_3,
+                bucket_for_max => voting_power_1,
             },
         },
     );
@@ -753,12 +807,17 @@ fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
 
     // Step 1.1: Construct neurons (as described in the docstring).
 
-    // Total voting power bonus: 2x * 1.125x = 2.25x
     let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
-        dissolve_delay_seconds: 8 * ONE_YEAR_SECONDS, // 100% (equivlanetly, 2x) dissolve delay bonus
+        dissolve_delay_seconds: max_dissolve_delay_seconds(),
         aging_since_timestamp_seconds: now_seconds - 2 * ONE_YEAR_SECONDS, // 12.5% (equivalently 1.125x) age bonus
     };
-    let total_bonus_multiplier = 2.25;
+    // TODO(NNS1-4323): Once Mission 70 is fully deployed, replace the big
+    // dissolve delay bonus expression with 3.0, the maximum dissolve delay
+    // bonus.
+    let total_bonus_multiplier = dissolve_delay_bonus_multiplier(max_dissolve_delay_seconds())
+        .to_f64()
+        .unwrap()
+        * 1.125; // age bonus.
 
     let fresh_neuron = NeuronBuilder::new(
         NeuronId { id: 1 },
@@ -835,6 +894,16 @@ fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
     } = neuron_store.compute_neuron_metrics(E8, &VotingPowerEconomics::DEFAULT, now_seconds);
 
     // Step 3: Inspect results.
+    //
+    // All neurons are created with the maximum dissolve delay, and we bucket by
+    // that effective maximum:
+    // - Pre-mission-70: max dissolve delay is 8 years -> bucket 16
+    // - Post-mission-70: max dissolve delay is clamped to 2 years -> bucket 4
+    let bucket_for_max = if is_mission_70_voting_rewards_enabled() {
+        4
+    } else {
+        16
+    };
 
     assert_eq!(
         declining_voting_power_neuron_subset_metrics,
@@ -862,30 +931,30 @@ fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
 
             // Analogous to the vanilla count field.
             count_buckets: hashmap! {
-                16 => 1, // 1 neuron with 4 year dissolve delay.
+                bucket_for_max => 1, // 1 neuron with max dissolve delay.
             },
 
             // ICP-like resources.
             staked_e8s_buckets: hashmap! {
-                16 => 200_000,
+                bucket_for_max => 200_000,
             },
             staked_maturity_e8s_equivalent_buckets: hashmap! {
-                16 => 202_000,
+                bucket_for_max => 202_000,
             },
             maturity_e8s_equivalent_buckets: hashmap! {
-                16 => 220_000,
+                bucket_for_max => 220_000,
             },
 
             // Analogous to total_voting_power.
             voting_power_buckets: hashmap! {
-                16 => stale_potential_voting_power,
+                bucket_for_max => stale_potential_voting_power,
             },
             // Ditto earlier comments about "right" voting power.
             deciding_voting_power_buckets: hashmap! {
-                16 => stale_potential_voting_power / 2,
+                bucket_for_max => stale_potential_voting_power / 2,
             },
             potential_voting_power_buckets: hashmap! {
-                16 => stale_potential_voting_power,
+                bucket_for_max => stale_potential_voting_power,
             },
         },
     );
@@ -913,30 +982,30 @@ fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
 
             // Analogous to the vanilla count field.
             count_buckets: hashmap! {
-                16 => 1, // 1 neuron with 4 year dissolve delay.
+                bucket_for_max => 1, // 1 neuron with max dissolve delay.
             },
 
             // ICP-like resources.
             staked_e8s_buckets: hashmap! {
-                16 => 300_000_000,
+                bucket_for_max => 300_000_000,
             },
             staked_maturity_e8s_equivalent_buckets: hashmap! {
-                16 => 303_000_000,
+                bucket_for_max => 303_000_000,
             },
             maturity_e8s_equivalent_buckets: hashmap! {
-                16 => 330_000_000,
+                bucket_for_max => 330_000_000,
             },
 
             // Analogous to total_voting_power.
             voting_power_buckets: hashmap! {
-                16 => expired_potential_voting_power,
+                bucket_for_max => expired_potential_voting_power,
             },
             // Ditto earlier comment about "right" voting power.
             deciding_voting_power_buckets: hashmap! {
-                16 => 0,
+                bucket_for_max => 0,
             },
             potential_voting_power_buckets: hashmap! {
-                16 => expired_potential_voting_power,
+                bucket_for_max => expired_potential_voting_power,
             },
         },
     );

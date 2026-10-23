@@ -10,6 +10,7 @@ message Stats {
 message QueryStats {
   optional uint64 highest_aggregated_epoch = 1;
   repeated QueryStatsInner query_stats = 2;
+  repeated EmptyEpochEntry empty_epochs = 3;
 }
 
 message QueryStatsInner {
@@ -20,4 +21,9 @@ message QueryStatsInner {
   uint64 num_instructions = 4;
   uint64 ingress_payload_size = 5;
   uint64 egress_payload_size = 6;
+}
+
+message EmptyEpochEntry {
+  types.v1.NodeId proposer = 1;
+  uint64 epoch = 2;
 }

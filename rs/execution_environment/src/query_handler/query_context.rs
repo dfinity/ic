@@ -1,6 +1,7 @@
 use super::query_call_graph::evaluate_query_call_graph;
+use super::subnet_query::{execute_subnet_query, parse_query_method};
 use crate::{
-    NonReplicatedQueryKind, RoundInstructions,
+    CanisterManager, NonReplicatedQueryKind, RoundInstructions,
     execution::common::{self, validate_method},
     execution::nonreplicated_query::execute_non_replicated_query,
     execution_environment::{RoundLimits, as_round_instructions},
@@ -13,7 +14,9 @@ use crate::{
 };
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
-use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_cycles_account_manager::{
+    CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
+};
 use ic_embedders::wasmtime_embedder::system_api::{
     ApiType, ExecutionParameters, InstructionLimits,
 };
@@ -23,7 +26,6 @@ use ic_interfaces::execution_environment::{
     SystemApiCallCounters,
 };
 use ic_interfaces_state_manager::Labeled;
-use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{ReplicaLogger, error, info};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
@@ -32,16 +34,15 @@ use ic_replicated_state::{
 };
 use ic_types::{
     CanisterId, NumInstructions, NumMessages, NumSlices, Time,
-    batch::{CanisterCyclesCostSchedule, QueryStats},
+    batch::QueryStats,
     ingress::WasmResult,
     messages::{
         CallContextId, NO_DEADLINE, Payload, Query, QuerySource, RejectContext, Request,
-        RequestOrResponse, Response,
+        RequestOrResponse, Response, SenderInfo,
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
 };
 use ic_types_cycles::Cycles;
-use prometheus::IntCounter;
 use std::{
     collections::{BTreeMap, VecDeque},
     sync::{Arc, atomic::AtomicU64},
@@ -89,9 +90,10 @@ fn wasm_query_method(
 }
 
 /// Executes a single user query along with its outgoing query calls.
-pub(super) struct QueryContext<'a> {
-    log: &'a ReplicaLogger,
-    hypervisor: &'a Hypervisor,
+pub(super) struct QueryContext {
+    log: ReplicaLogger,
+    hypervisor: Arc<Hypervisor>,
+    canister_manager: Arc<CanisterManager>,
     own_subnet_type: SubnetType,
     // The state against which all queries in the context will be executed.
     state: Labeled<Arc<ReplicatedState>>,
@@ -108,8 +110,8 @@ pub(super) struct QueryContext<'a> {
     // Walltime at which the query has started to execute.
     query_context_time_start: Instant,
     query_context_time_limit: Duration,
-    query_critical_error: &'a IntCounter,
-    local_query_execution_stats: Option<&'a QueryStatsCollector>,
+    metrics: QueryHandlerMetrics,
+    local_query_execution_stats: Option<Arc<QueryStatsCollector>>,
     /// How many times each tracked System API call was invoked during the query execution.
     system_api_call_counters: SystemApiCallCounters,
     /// A map of canister IDs evaluated and executed at least once in this query context
@@ -117,17 +119,20 @@ pub(super) struct QueryContext<'a> {
     evaluated_canister_stats: BTreeMap<CanisterId, QueryStats>,
     /// The number of transient errors.
     transient_errors: usize,
+    /// The number of calls to the management canister in this query context.
+    ic00_calls: usize,
     cycles_account_manager: Arc<CyclesAccountManager>,
     /// An optional atomic to observe the number of instructions used in the query.
     /// This should only be populated for http outcalls transformations.
     instruction_observation: Option<Arc<AtomicU64>>,
 }
 
-impl<'a> QueryContext<'a> {
+impl QueryContext {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
-        log: &'a ReplicaLogger,
-        hypervisor: &'a Hypervisor,
+        log: ReplicaLogger,
+        hypervisor: Arc<Hypervisor>,
+        canister_manager: Arc<CanisterManager>,
         own_subnet_type: SubnetType,
         state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Option<Vec<u8>>,
@@ -142,12 +147,12 @@ impl<'a> QueryContext<'a> {
         instruction_overhead_per_query_call: NumInstructions,
         composite_queries: FlagStatus,
         canister_id: CanisterId,
-        query_critical_error: &'a IntCounter,
-        local_query_execution_stats: Option<&'a QueryStatsCollector>,
+        metrics: QueryHandlerMetrics,
+        local_query_execution_stats: Option<Arc<QueryStatsCollector>>,
         cycles_account_manager: Arc<CyclesAccountManager>,
         instruction_observation: Option<Arc<AtomicU64>>,
     ) -> Self {
-        let network_topology = Arc::new(state.get_ref().metadata.network_topology.clone());
+        let network_topology = Arc::clone(&state.get_ref().metadata.network_topology);
         let round_limits = RoundLimits {
             instructions: as_round_instructions(max_query_call_graph_instructions),
             subnet_available_memory,
@@ -159,6 +164,7 @@ impl<'a> QueryContext<'a> {
         Self {
             log,
             hypervisor,
+            canister_manager,
             own_subnet_type,
             state,
             network_topology,
@@ -174,13 +180,14 @@ impl<'a> QueryContext<'a> {
             composite_queries,
             query_context_time_start: Instant::now(),
             query_context_time_limit: max_query_call_walltime,
-            query_critical_error,
+            metrics,
             local_query_execution_stats,
             system_api_call_counters: SystemApiCallCounters::default(),
             // If the `context.run()` returns an error and hence the empty evaluated IDs set,
             // the original canister ID should always be tracked for changes.
             evaluated_canister_stats: BTreeMap::from([(canister_id, QueryStats::default())]),
             transient_errors: 0,
+            ic00_calls: 0,
             cycles_account_manager,
             instruction_observation,
         }
@@ -214,9 +221,11 @@ impl<'a> QueryContext<'a> {
         let query_kind = match &method {
             WasmMethod::Query(_) => NonReplicatedQueryKind::Pure {
                 caller: query.source(),
+                sender_info: query.sender_info(),
             },
             WasmMethod::CompositeQuery(_) => NonReplicatedQueryKind::Stateful {
                 call_origin: call_origin.clone(),
+                sender_info: query.sender_info(),
             },
             WasmMethod::Update(_) | WasmMethod::System(_) => {
                 unreachable!("Expected a Wasm query method");
@@ -319,7 +328,7 @@ impl<'a> QueryContext<'a> {
                     canister_id,
                     QUERY_HANDLER_CRITICAL_ERROR,
                 );
-                self.query_critical_error.inc();
+                self.metrics.query_critical_error.inc();
                 UserError::new(
                     ErrorCode::QueryCallGraphInternal,
                     "Composite query: canister does not have a call context manager",
@@ -346,7 +355,7 @@ impl<'a> QueryContext<'a> {
                                 canister_id,
                                 QUERY_HANDLER_CRITICAL_ERROR,
                             );
-                            self.query_critical_error.inc();
+                            self.metrics.query_critical_error.inc();
                             return Err(UserError::new(
                                 ErrorCode::QueryCallGraphInternal,
                                 "Composite query: canister does not have a call origin for callback",
@@ -394,11 +403,6 @@ impl<'a> QueryContext<'a> {
                 )),
             );
         }
-        let cost_schedule = self.get_cost_schedule();
-        let subnet_size = self
-            .network_topology
-            .get_subnet_size(&self.cycles_account_manager.get_subnet_id())
-            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
         if self
             .cycles_account_manager
             .can_withdraw_cycles_with_threshold(
@@ -407,8 +411,7 @@ impl<'a> QueryContext<'a> {
                 canister.memory_usage(),
                 canister.message_memory_usage(),
                 canister.system_state.reserved_balance(),
-                subnet_size,
-                self.get_cost_schedule(),
+                self.get_own_subnet_cycles_config(),
                 false,
             )
             .is_err()
@@ -432,6 +435,7 @@ impl<'a> QueryContext<'a> {
         let execution_parameters = self.execution_parameters(&canister, instruction_limits);
 
         let data_certificate = self.get_data_certificate(&canister.canister_id());
+        let own_subnet_cycles_config = self.get_own_subnet_cycles_config();
         let (mut canister, instructions_left, result, call_context_id, system_api_call_counters) =
             execute_non_replicated_query(
                 query_kind,
@@ -441,11 +445,11 @@ impl<'a> QueryContext<'a> {
                 data_certificate,
                 self.state.get_ref().time(),
                 execution_parameters,
-                &self.network_topology,
-                self.hypervisor,
+                self.network_topology.clone(),
+                &self.hypervisor,
                 &mut self.round_limits,
-                self.query_critical_error,
-                cost_schedule,
+                &self.metrics.query_critical_error,
+                own_subnet_cycles_config,
             );
         self.add_system_api_call_counters(system_api_call_counters);
         let instructions_executed = instruction_limit - instructions_left;
@@ -475,7 +479,7 @@ impl<'a> QueryContext<'a> {
             egress_payload_size: egress_payload_size as u64,
         };
         self.add_evaluated_canister_stats(canister.canister_id(), &stats);
-        if let Some(query_stats) = self.local_query_execution_stats {
+        if let Some(query_stats) = self.local_query_execution_stats.as_deref() {
             query_stats.set_epoch_from_height(self.state.height());
             query_stats.register_query_statistics(canister.canister_id(), &stats);
         }
@@ -585,13 +589,17 @@ impl<'a> QueryContext<'a> {
         let callback = common::unregister_callback(
             &mut canister,
             &response,
-            self.log,
-            self.query_critical_error,
+            &self.log,
+            &self.metrics.query_critical_error,
         )
         .ok_or_else(err)?;
-        let (call_context, call_context_id) =
-            common::get_call_context(&canister, &callback, self.log, self.query_critical_error)
-                .ok_or_else(err)?;
+        let (call_context, call_context_id) = common::get_call_context(
+            &canister,
+            &callback,
+            &self.log,
+            &self.metrics.query_critical_error,
+        )
+        .ok_or_else(err)?;
 
         let call_responded = call_context.has_responded();
         let call_origin = call_context.call_origin().clone();
@@ -635,6 +643,7 @@ impl<'a> QueryContext<'a> {
                 call_context_id,
                 call_responded,
                 call_context.instructions_executed(),
+                call_context.sender_info().cloned(),
             ),
             Payload::Reject(context) => ApiType::composite_reject_callback(
                 time,
@@ -644,11 +653,11 @@ impl<'a> QueryContext<'a> {
                 call_context_id,
                 call_responded,
                 call_context.instructions_executed(),
+                call_context.sender_info().cloned(),
             ),
         };
 
-        let cost_schedule = self.get_cost_schedule();
-
+        let own_subnet_cycles_config = self.get_own_subnet_cycles_config();
         let (output, output_execution_state, output_system_state) = self.hypervisor.execute(
             api_type,
             time,
@@ -658,12 +667,12 @@ impl<'a> QueryContext<'a> {
             execution_parameters.clone(),
             func_ref,
             canister.execution_state.take().unwrap(),
-            &self.network_topology,
+            self.network_topology.clone(),
             &mut self.round_limits,
-            self.query_critical_error,
+            &self.metrics.query_critical_error,
             &CallTreeMetricsNoOp,
             call_context.time(),
-            cost_schedule,
+            own_subnet_cycles_config,
         );
 
         self.add_system_api_call_counters(output.system_api_call_counters);
@@ -699,6 +708,7 @@ impl<'a> QueryContext<'a> {
                             canister_current_message_memory_usage,
                             execution_parameters,
                             call_context.instructions_executed(),
+                            call_context.sender_info().cloned(),
                         )
                     }
                 }
@@ -733,6 +743,7 @@ impl<'a> QueryContext<'a> {
         canister_current_message_memory_usage: MessageMemoryUsage,
         execution_parameters: ExecutionParameters,
         call_context_instructions_executed: NumInstructions,
+        sender_info: Option<SenderInfo>,
     ) -> (NumInstructions, Result<Option<WasmResult>, HypervisorError>) {
         let func_ref = match call_origin {
             CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
@@ -742,13 +753,14 @@ impl<'a> QueryContext<'a> {
                 FuncRef::QueryClosure(cleanup_closure)
             }
         };
-        let cost_schedule = self.get_cost_schedule();
+        let own_subnet_cycles_config = self.get_own_subnet_cycles_config();
         let (cleanup_output, output_execution_state, output_system_state) =
             self.hypervisor.execute(
                 ApiType::CompositeCleanup {
                     caller: call_origin.get_principal(),
                     time,
                     call_context_instructions_executed,
+                    sender_info,
                 },
                 time,
                 canister.system_state.clone(),
@@ -757,12 +769,12 @@ impl<'a> QueryContext<'a> {
                 execution_parameters,
                 func_ref,
                 canister.execution_state.take().unwrap(),
-                &self.network_topology,
+                self.network_topology.clone(),
                 &mut self.round_limits,
-                self.query_critical_error,
+                &self.metrics.query_critical_error,
                 &CallTreeMetricsNoOp,
                 time,
-                cost_schedule,
+                own_subnet_cycles_config,
             );
 
         self.add_system_api_call_counters(cleanup_output.system_api_call_counters);
@@ -813,6 +825,16 @@ impl<'a> QueryContext<'a> {
         };
 
         let canister_id = request.receiver;
+
+        // Requests to the management canister made by a composite query are not
+        // routed to a destination subnet, i.e. they reach the query handler with
+        // `IC_00` as the receiver. A request providing a subnet ID directly in the
+        // request is not treated as a management canister call: it is rejected
+        // below with `CanisterNotFound`, as no canister with that ID exists.
+        if canister_id == CanisterId::ic_00() {
+            return self.handle_ic00_request(&request, to_query_result);
+        }
+
         // Add the canister to the set of evaluated canisters early, i.e. before any errors.
         self.add_evaluated_canister_stats(canister_id, &QueryStats::default());
 
@@ -846,6 +868,8 @@ impl<'a> QueryContext<'a> {
             request.method_payload.as_slice(),
             NonReplicatedQueryKind::Stateful {
                 call_origin: call_origin.clone(),
+                // this is a nested composite query call => no sender info available
+                sender_info: None,
             },
             measurement_scope,
         );
@@ -886,6 +910,62 @@ impl<'a> QueryContext<'a> {
         }
     }
 
+    /// Executes a call to the management canister made by a composite query.
+    ///
+    /// The call is executed against the state of the own subnet, i.e. it can
+    /// only target canisters hosted by the own subnet. Calls to management
+    /// canister methods that cannot be executed in the non-replicated mode
+    /// are rejected.
+    fn handle_ic00_request(
+        &mut self,
+        request: &Request,
+        to_query_result: impl Fn(Payload) -> QueryResponse,
+    ) -> ExecutionResult {
+        // Results of query contexts calling the management canister are not cached.
+        self.ic00_calls += 1;
+
+        let reject = |err: UserError| {
+            ExecutionResult::Response(to_query_result(Payload::Reject(RejectContext::from(err))))
+        };
+
+        // Reject the calls to all the management canister methods that cannot be
+        // executed in non-replicated mode, as well as the calls to methods not
+        // exported by the management canister at all, with the same error as for
+        // such a query sent by an end user to the management canister.
+        let method = match parse_query_method(&request.method_name) {
+            Ok(method) => method,
+            Err(err) => return reject(err),
+        };
+
+        // Charge the base overhead of a query call. This happens after rejecting
+        // calls to methods that are not management canister query methods, in the
+        // same way as calls to non-existing methods of a canister are not charged.
+        self.round_limits.instructions -= self.instruction_overhead_per_query_call;
+
+        let since = Instant::now(); // Start logging execution time.
+        let (result, instructions) = match execute_subnet_query(
+            &self.canister_manager,
+            self.state.get_ref(),
+            request.sender.get(),
+            method,
+            &request.method_payload,
+        ) {
+            Ok((reply, instructions)) => (Ok(reply), instructions),
+            Err(err) => (Err(err), NumInstructions::new(0)),
+        };
+        self.metrics
+            .observe_subnet_query_message(method, since.elapsed().as_secs_f64(), &result);
+
+        // Account for the instructions consumed while producing the reply
+        // in the same way as for the instructions executed by a canister.
+        self.round_limits.instructions -= as_round_instructions(instructions);
+
+        match result {
+            Ok(reply) => ExecutionResult::Response(to_query_result(Payload::Data(reply))),
+            Err(err) => reject(err),
+        }
+    }
+
     /// Extracts the query result from the call context action.
     fn action_to_result(
         &self,
@@ -921,7 +1001,7 @@ impl<'a> QueryContext<'a> {
                     canister_id,
                     QUERY_HANDLER_CRITICAL_ERROR,
                 );
-                self.query_critical_error.inc();
+                self.metrics.query_critical_error.inc();
                 (
                     Some(Err(UserError::new(
                         ErrorCode::QueryCallGraphInternal,
@@ -940,7 +1020,7 @@ impl<'a> QueryContext<'a> {
                 refund,
                 QUERY_HANDLER_CRITICAL_ERROR
             );
-            self.query_critical_error.inc();
+            self.metrics.query_critical_error.inc();
         }
         result
     }
@@ -974,7 +1054,7 @@ impl<'a> QueryContext<'a> {
                     canister_id,
                     QUERY_HANDLER_CRITICAL_ERROR,
                 );
-                self.query_critical_error.inc();
+                self.metrics.query_critical_error.inc();
                 ExecutionResult::SystemError(UserError::new(
                     ErrorCode::QueryCallGraphInternal,
                     "Composite query: unexpected callback with an update origin",
@@ -1115,7 +1195,13 @@ impl<'a> QueryContext<'a> {
         self.transient_errors
     }
 
-    pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
-        self.state.get_ref().get_own_cost_schedule()
+    /// Returns the number of calls to the management canister
+    /// made in this query context.
+    pub fn ic00_calls(&self) -> usize {
+        self.ic00_calls
+    }
+
+    fn get_own_subnet_cycles_config(&self) -> CyclesAccountManagerSubnetConfig {
+        self.state.get_ref().get_own_subnet_cycles_config()
     }
 }

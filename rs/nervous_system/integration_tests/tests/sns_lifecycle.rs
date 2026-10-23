@@ -294,7 +294,7 @@ async fn test_sns_lifecycle(
             .await
             .unwrap();
 
-        stream::iter(nns_neuron_controller_principal_ids.into_iter())
+        stream::iter(nns_neuron_controller_principal_ids)
             .then(|controller_principal_id| {
                 let pocket_ic = &pocket_ic;
                 async move {
@@ -1589,8 +1589,7 @@ async fn test_sns_lifecycle(
                             permissions: &[sns_pb::NeuronPermission],
                         ) -> Vec<sns_pb::NeuronPermission> {
                             let mut permissions = permissions.to_vec();
-                            permissions
-                                .sort_by(|x, y| y.principal.unwrap().cmp(&x.principal.unwrap()));
+                            permissions.sort_by_key(|y| std::cmp::Reverse(y.principal.unwrap()));
                             permissions
                         }
                         let claimer_permissions = nervous_system_parameters

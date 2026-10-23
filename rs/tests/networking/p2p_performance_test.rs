@@ -6,8 +6,10 @@ use ic_system_test_driver::{
     driver::{
         farm::HostFeature,
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::HasPrometheus,
+        ic::{
+            AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet,
+            VmResourceOverrides,
+        },
         simulate_network::{ProductionSubnetTopology, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
@@ -31,7 +33,6 @@ const PAYLOAD_SIZE_BYTES: usize = 1024 * 1024;
 const WORKLOAD_RUNTIME: Duration = Duration::from_secs(30 * 60);
 const NNS_SUBNET_MAX_SIZE: usize = 1;
 const APP_SUBNET_MAX_SIZE: usize = 13;
-const DOWNLOAD_PROMETHEUS_DATA: bool = true;
 // Timeout parameters
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
@@ -46,9 +47,6 @@ const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // Thi
 
 const JAEGER_VM_NAME: &str = "jaeger-vm";
 
-// 5 minutes
-const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(60 * 60);
-
 pub fn setup(
     env: TestEnv,
     nodes_nns_subnet: usize,
@@ -62,7 +60,7 @@ pub fn setup(
 
     UniversalVm::new(JAEGER_VM_NAME.to_string())
         .with_required_host_features(vec![HostFeature::Performance])
-        .with_vm_resources(VmResources {
+        .with_resource_overrides(VmResourceOverrides {
             vcpus: Some(NrOfVCPUs::new(16)),
             memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
@@ -80,24 +78,16 @@ pub fn setup(
         "Jaeger frontend available at: http://[{}]:16686", jaeger_ipv6
     );
 
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(16)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
-        boot_image_minimal_size_gibibytes,
-    };
     InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
         .with_jaeger_addr(SocketAddr::new(IpAddr::V6(jaeger_ipv6), 4317))
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(vm_resources)
-                .add_nodes(nodes_nns_subnet),
-        )
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(vm_resources)
-                .add_nodes(nodes_app_subnet),
-        )
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(16)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
+            boot_image_minimal_size_gibibytes,
+        })
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(nodes_nns_subnet))
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(nodes_app_subnet))
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
     info!(logger, "Step 1: Installing NNS canisters ...");
@@ -133,13 +123,7 @@ pub fn setup(
 // Run a test with configurable number of update requests per second,
 // size of the payload, duration of the test. The requests are sent
 // to the replica.
-pub fn test(
-    env: TestEnv,
-    rps: usize,
-    payload_size_bytes: usize,
-    duration: Duration,
-    download_prometheus_data: bool,
-) {
+pub fn test(env: TestEnv, rps: usize, payload_size_bytes: usize, duration: Duration) {
     let log = env.logger();
     info!(
         &log,
@@ -242,17 +226,6 @@ pub fn test(
             load_metrics_app.failure_calls(),
         );
     }
-
-    // Download Prometheus data if required.
-    if download_prometheus_data {
-        info!(
-            &log,
-            "Waiting {:?} before download.", DOWNLOAD_PROMETHEUS_WAIT_TIME
-        );
-        std::thread::sleep(DOWNLOAD_PROMETHEUS_WAIT_TIME);
-        info!(&log, "Downloading p8s data");
-        env.download_prometheus_data_dir_if_exists();
-    }
 }
 
 fn create_agents_for_subnet(log: &Logger, subnet: &SubnetSnapshot) -> Vec<Agent> {
@@ -282,15 +255,7 @@ fn main() -> Result<()> {
             None,
         )
     };
-    let test = |env| {
-        test(
-            env,
-            RPS,
-            PAYLOAD_SIZE_BYTES,
-            WORKLOAD_RUNTIME,
-            DOWNLOAD_PROMETHEUS_DATA,
-        )
-    };
+    let test = |env| test(env, RPS, PAYLOAD_SIZE_BYTES, WORKLOAD_RUNTIME);
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))

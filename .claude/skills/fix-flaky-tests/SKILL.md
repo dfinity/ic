@@ -28,7 +28,7 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
 
     1. Run the following command to get the top 100 tests ordered descendingly by how much percent of their total runs they flaked in the last week, showing only tests which flaked 1% or more of their runs:
        ```
-       bazel run //ci/githubstats:query -- top 100 flaky% --ge 1 --week
+       bazel --quiet run //ci/githubstats:query -- top 100 flaky% --ge 1 --week
        ```
 
     2. Pick the `label` of the top most test which doesn't have an open PR or git commit in the last week mentioning its `<test_name>` which is the part of the `label` after the `:`.
@@ -50,15 +50,25 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
        even if it seems the commit is not about fixing flakiness.
        It's better to pick a test which has no other work being done on it to avoid conflicts.
 
-2. Get the last flaky runs of the test named `label` in the last week by running the following command, replacing `<label>` with the label of the test:
-   ```
-   bazel run //ci/githubstats:query -- last --flaky --week --download-ic-logs --download-console-logs <label>
-   ```
+2. Get the last flaky runs of the test named `label` in the last week by running one of the following commands, replacing `<label>` with the label of the test:
+
+   - For most system-tests, which run via Farm, also download their journald logs from ElasticSearch and their console logs from Farm:
+     ```
+     bazel --quiet run //ci/githubstats:query -- last --flaky --week --download-ic-logs --download-console-logs <label>
+     ```
+
+   - For `_local` system-tests, i.e. targets matching the regex `//rs/tests/.*_local$`, omit the `--download-ic-logs` and `--download-console-logs` options:
+     ```
+     bazel --quiet run //ci/githubstats:query -- last --flaky --week <label>
+     ```
+     These tests use the `Local` backend which doesn't run via Farm and doesn't upload its journald logs to ElasticSearch. Instead the journald and console logs are streamed to the test log itself (the `FAILED.log`/`PASSED.log` files), so there's nothing to download from ElasticSearch or Farm.
+     They only run on RBE @ Namespace, so their logs come from GitHub artifacts instead of BuildBuddy. GitHub deletes those after 14 days, and downloading them needs `gh` to be logged in (see the prerequisites).
+
    Note the command will print `Downloading logs to: <LOG_DIR>`.
 
    Read `<LOG_DIR>/README.md` to understand how the logs are organized.
 
-3. Analyze the source code of `label` and the logs in `<LOG_DIR>` to determine the root cause of the flakiness.
+3. Analyze the source code of `label` and the logs in `<LOG_DIR>` to determine the root causes of the flakiness.
 
    Ignore failures containing the error:
    ```
@@ -66,16 +76,22 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
    ```
    as those are due to infrastructure issues unrelated to the test code.
 
-4. Once you have determined the root cause,
-   fix the test taking `.claude/CLAUDE.md` into account.
+4. When asked to just figure out the root causes without fixing them,
+   document the root causes in a markdown file and finish without running the following steps.
 
-5. Verify the test still passes by running:
+5. Once the root causes have been determined, pick the most common or recent one
+   and fix the test by addressing that root cause taking `.claude/CLAUDE.md` into account.
+
+   Don't address multiple root causes in the same fix.
+   Prefer making separate PRs for each root cause to make it easier to review and revert if needed.
+
+6. Verify the test still passes by running:
    ```
    bazel test --test_output=errors --runs_per_test=3 --jobs=3 <label>
    ```
    This executes 3 runs of the test in parallel to increase the chances of reproducing the flakiness. If it fails, analyze the failure and fix it until it passes reliably.
 
-6. Make a draft Pull Request with the fix, following these steps:
+7. Make a draft Pull Request with the fix, following these steps:
 
    1. From the root of the repository, create a new git branch named `ai/deflake-<test_name>-<date>`,
       replacing `<test_name>` with the name of the test

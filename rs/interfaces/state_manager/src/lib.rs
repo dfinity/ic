@@ -282,6 +282,11 @@ pub trait StateManager: StateReader {
         batch_summary: Option<BatchSummary>,
     );
 
+    /// Returns the height of the latest [`StateManager::commit_and_certify`] call,
+    /// or of the latest state sync once the subsequent [`StateManager::take_tip`]
+    /// call has advanced the tip to the synced height.
+    fn tip_height(&self) -> Height;
+
     /// Returns the version of the state that can be modified in-place and the
     /// height of that state.
     ///

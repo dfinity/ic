@@ -13,8 +13,8 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hex-literal = "0.4"
-hmac = "0.12"
+hex-literal = { workspace = true }
+hmac = { workspace = true }
 ic_principal = { version = "0.1.1", default-features = false }
 k256 = { workspace = true }
 num-bigint = { workspace = true }
@@ -26,9 +26,9 @@ sha2 = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]
-bip32 = "0.5"
-bitcoin = { version = "0.28.2" }
+bip32 = { workspace = true }
+bitcoin = { workspace = true }
 hex = { workspace = true }
 ic_principal = { version = "0.1.1", default-features = false, features = ["convert"] }
-secp256k1 = { version = "0.22", features = ["global-context", "rand-std"] }
-wycheproof = { version = "0.6", default-features = false, features = ["ecdsa"] }
+secp256k1 = { workspace = true, features = ["global-context", "std", "rand"] }
+wycheproof = { workspace = true, features = ["ecdsa"] }

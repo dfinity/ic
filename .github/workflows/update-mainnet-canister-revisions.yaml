@@ -13,7 +13,6 @@ on:
     paths:
       - '.github/workflows/update-mainnet-canister-revisions.yaml'
 
-
 defaults:
   run:
     shell: bash
@@ -21,47 +20,57 @@ defaults:
 jobs:
   # IMPORTANT: See note at the top of this file.
   update-nervous-system-wasms:
+    # for dfinity/ic: run on all events except on PRs from forks;
+    # never run on other repos such as dfinity/ic-private
+    if: |
+      github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on:
       labels: dind-small
     environment: CREATE_PR
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:0a0cff0b12c7586c2f312c739176924edf0c9e71df92f382eba836913da9f1c6
+      image: ghcr.io/dfinity/ic-build@sha256:6184a4beddca0e898c9e2113b2dd78f0391caefef7c13090c56ae1ab7b1ec399
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info --mount type=tmpfs,target="/tmp/containers"
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Create GitHub App Token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         id: app-token
         with:
           app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
           private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Setup python3.12
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
       - name: Setup gh cli
         env:
-          GH_CLI_VERSION: 2.74.0
+          GH_CLI_VERSION: 2.98.0
+          # sha256 of gh_${GH_CLI_VERSION}_linux_amd64.tar.gz. When bumping the
+          # version, take the new value from that release's
+          # gh_${GH_CLI_VERSION}_checksums.txt asset.
+          GH_CLI_SHA256: 3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de
         run: |
+          set -eEuxo pipefail
+
           # Without --fail, 4xx and 5xx are considered "success", because UNIX.
           # If this keeps failing, consider applying other --retry-??? flags.
           curl \
-            --location https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/gh_${GH_CLI_VERSION}_linux_386.tar.gz \
+            --location https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/gh_${GH_CLI_VERSION}_linux_amd64.tar.gz \
             --output gh_cli.tar.gz \
             --fail \
             --retry 7
 
+          # Release assets are mutable under an existing tag, so the URL alone is
+          # not a trust anchor: verify against the checksum pinned above before
+          # unpacking or running anything.
+          echo "${GH_CLI_SHA256}  gh_cli.tar.gz" | sha256sum --check
+
           tar -xvf gh_cli.tar.gz
-          mv "gh_${GH_CLI_VERSION}_linux_386" gh_cli
+          mv "gh_${GH_CLI_VERSION}_linux_amd64" gh_cli
           chmod +x ./gh_cli/bin/gh
           sudo cp ./gh_cli/bin/gh /usr/local/bin/
           rm -rf gh_cli*
@@ -69,7 +78,7 @@ jobs:
       - name: Update mainnet canister versions file
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          DRY_RUN: ${{ github.event_name == 'pull_request' && '--dry-run' || '' }}
+          DRY_RUN: ${{ case(github.event_name == 'pull_request', '--dry-run', '') }}
         run: |
           set -eEuxo pipefail
 
@@ -79,7 +88,7 @@ jobs:
           retry \
             --times=10 \
             --delay=1,2,4,8,15,30,60,120,300,600 \
-            -- time python \
+            -- time python3 \
             ci/src/mainnet_revisions/mainnet_revisions.py \
             $DRY_RUN \
             canisters

@@ -6,10 +6,9 @@ use ic_interfaces::{
 };
 use ic_logger::{ReplicaLogger, error};
 use ic_protobuf::types::v1 as pb;
-use ic_types::{
-    NodeId, batch::slice_to_messages, consensus::idkg::VetKdKeyShare,
-    crypto::vetkd::VetKdEncryptedKeyShare, messages::CallbackId,
-};
+use ic_types::crypto::canister_threshold_sig::{ThresholdEcdsaSigShare, ThresholdSchnorrSigShare};
+use ic_types::crypto::vetkd::VetKdEncryptedKeyShare;
+use ic_types::{NodeId, batch::slice_to_messages, consensus::idkg::SigShare, messages::CallbackId};
 use std::collections::{BTreeMap, HashSet};
 
 pub(super) fn validation_failed_err(
@@ -34,16 +33,43 @@ pub(super) fn invalid_artifact(reason: InvalidChainKeyPayloadReason) -> PayloadV
     ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(reason))
 }
 
-pub(super) fn group_shares_by_callback_id<Shares: Iterator<Item = VetKdKeyShare>>(
-    shares: Shares,
-) -> BTreeMap<CallbackId, BTreeMap<NodeId, VetKdEncryptedKeyShare>> {
-    let mut map: BTreeMap<CallbackId, BTreeMap<NodeId, VetKdEncryptedKeyShare>> = BTreeMap::new();
-    for share in shares {
-        map.entry(share.request_id.callback_id)
-            .or_default()
-            .insert(share.signer_id, share.share);
+#[derive(Default)]
+pub(super) struct Shares {
+    pub(crate) vetkd_shares: BTreeMap<CallbackId, BTreeMap<NodeId, VetKdEncryptedKeyShare>>,
+    pub(crate) ecdsa_shares: BTreeMap<CallbackId, BTreeMap<NodeId, ThresholdEcdsaSigShare>>,
+    pub(crate) schnorr_shares: BTreeMap<CallbackId, BTreeMap<NodeId, ThresholdSchnorrSigShare>>,
+}
+
+pub(super) fn group_shares_by_callback_id<ShareIter: Iterator<Item = SigShare>>(
+    shares_iter: ShareIter,
+) -> Shares {
+    let mut grouped_shares = Shares::default();
+    for share in shares_iter {
+        match share {
+            SigShare::VetKd(share) => {
+                grouped_shares
+                    .vetkd_shares
+                    .entry(share.request_id.callback_id)
+                    .or_default()
+                    .insert(share.signer_id, share.share);
+            }
+            SigShare::Ecdsa(share) => {
+                grouped_shares
+                    .ecdsa_shares
+                    .entry(share.request_id.callback_id)
+                    .or_default()
+                    .insert(share.signer_id, share.share);
+            }
+            SigShare::Schnorr(share) => {
+                grouped_shares
+                    .schnorr_shares
+                    .entry(share.request_id.callback_id)
+                    .or_default()
+                    .insert(share.signer_id, share.share);
+            }
+        }
     }
-    map
+    grouped_shares
 }
 
 pub(super) fn parse_past_payload_ids(

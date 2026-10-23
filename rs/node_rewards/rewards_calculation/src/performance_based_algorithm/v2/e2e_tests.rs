@@ -405,8 +405,8 @@ fn test_v2_differs_from_v1() {
 // ------------------------------------------------------------------------------------------------
 
 /// **Scenario**: Type4 node in a region NOT present in the rewards table
-/// **Expected**: Falls back to default rewards (1 permyriad, coefficient 1.0)
-/// **Key Test**: Verifies that missing type4 entries in rewards table result in minimal rewards
+/// **Expected**: Falls back to 0 rewards (0 permyriad, coefficient 1.0)
+/// **Key Test**: Verifies that missing type4 entries in rewards table result in exactly 0 rewards
 #[test]
 fn test_type4_not_in_rewards_table() {
     let day = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
@@ -452,33 +452,28 @@ fn test_type4_not_in_rewards_table() {
         .find(|r| r.node_reward_type == NodeRewardType::Type4)
         .expect("Should have base rewards for type4");
 
-    // When type is not in rewards table, it defaults to 1 permyriad monthly
-    // Daily = 1 / 30.4375 (REWARDS_TABLE_DAYS) ≈ 0.0328...
-    assert_eq!(type4_base_rewards.monthly_xdr_permyriad, dec!(1));
+    // When type is not in rewards table, it defaults to 0 permyriad monthly
+    assert_eq!(type4_base_rewards.monthly_xdr_permyriad, dec!(0));
+    assert_eq!(type4_base_rewards.daily_xdr_permyriad, dec!(0));
 
     // Verify node rewards
     let node_rewards = &provider_result.daily_nodes_rewards[0];
     assert_eq!(node_rewards.node_id, test_node_id(1));
     assert_eq!(node_rewards.node_reward_type, NodeRewardType::Type4);
 
-    // Base rewards should be 1 / 30.4375 ≈ 0.0328...
-    assert_eq!(
-        node_rewards.base_rewards_xdr_permyriad,
-        dec!(0.0328542094455852156057494867)
-    );
+    // Base rewards should be exactly 0
+    assert_eq!(node_rewards.base_rewards_xdr_permyriad, dec!(0));
 
     // With good performance (relative FR = 0), performance_multiplier should be 1.0
     assert_eq!(node_rewards.performance_multiplier, dec!(1.0));
     assert_eq!(node_rewards.rewards_reduction, dec!(0.0));
 
-    // Adjusted rewards = base * performance_multiplier ≈ 0.0328...
-    assert_eq!(
-        node_rewards.adjusted_rewards_xdr_permyriad,
-        dec!(0.0328542094455852156057494867)
-    );
+    // Adjusted rewards = 0 * performance_multiplier = 0
+    assert_eq!(node_rewards.adjusted_rewards_xdr_permyriad, dec!(0));
 
-    // Total rewards should be essentially zero (truncated to 0)
+    // Total rewards should be exactly 0
     assert_eq!(provider_result.total_adjusted_rewards_xdr_permyriad, 0);
+    assert_eq!(provider_result.total_base_rewards_xdr_permyriad, 0);
 }
 
 /// **Scenario**: Type4 node in a region where type4 is explicitly set to 0 XDR

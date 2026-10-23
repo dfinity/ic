@@ -99,7 +99,7 @@ impl<const N: usize> FromStr for Hash<N> {
                 s.len()
             ));
         }
-        let mut bytes = [0u8; N];
+        let mut bytes = [0_u8; N];
         hex::decode_to_slice(s, &mut bytes).map_err(|e| format!("Invalid hex string: {e}"))?;
         Ok(Self(bytes))
     }
@@ -118,7 +118,7 @@ impl<const N: usize> Storable for Hash<N> {
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         assert_eq!(bytes.len(), N, "Hash representation is {N}-bytes long");
-        let mut be_bytes = [0u8; N];
+        let mut be_bytes = [0_u8; N];
         be_bytes.copy_from_slice(bytes.as_ref());
         Self(be_bytes)
     }
@@ -504,13 +504,13 @@ impl Storable for ConfigState {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-fn encode<S: ?Sized + serde::Serialize>(state: &S) -> Vec<u8> {
+pub(crate) fn encode<S: ?Sized + serde::Serialize>(state: &S) -> Vec<u8> {
     let mut buf = vec![];
     ciborium::ser::into_writer(state, &mut buf).expect("failed to encode state");
     buf
 }
 
-fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> T {
+pub(crate) fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> T {
     ciborium::de::from_reader(bytes)
         .unwrap_or_else(|e| panic!("failed to decode state bytes {}: {e}", hex::encode(bytes)))
 }
@@ -555,7 +555,7 @@ impl State {
             .flat_map(|(_, canisters)| canisters.principals_iter())
     }
 
-    pub fn all_managed_tokens_ids_iter(&self) -> impl Iterator<Item = TokenId> + '_ {
+    pub fn all_managed_tokens_ids_iter(&self) -> impl Iterator<Item = TokenId> {
         self.all_managed_canisters_iter().map(|(id, _)| id)
     }
 

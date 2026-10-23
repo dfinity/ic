@@ -6,7 +6,7 @@
 //! each concurrently call `stable_fill()` with `NUMBER_OF_BYTES_TO_WRITE` bytes.
 //!
 //! To run the benchmark, run the following command in the dev environment:
-//! ict test //rs/tests/execution:fill_execution_rounds_workload -k -- --test_tmpdir=test_tmpdir --test_timeout=60000
+//! bazel test //rs/tests/execution:fill_execution_rounds_workload_farm --test_arg=--keepalive --test_tmpdir=test_tmpdir --test_timeout=60000
 
 use anyhow::Result;
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -16,8 +16,10 @@ use ic_system_test_driver::{
     driver::{
         farm::HostFeature,
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::HasPrometheus,
+        ic::{
+            AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet,
+            VmResourceOverrides,
+        },
         simulate_network::{ProductionSubnetTopology, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
@@ -52,7 +54,6 @@ const PAGES: u32 = ((NUMBER_OF_BYTES_TO_WRITE) / (64 * 1024) as u32) * 2;
 /// Production value is 600ms
 const TUNED_INITIAL_NOTARIZATION_DELAY: Duration = Duration::from_millis(600);
 
-const DOWNLOAD_PROMETHEUS_DATA: bool = true;
 // Timeout parameters
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
@@ -72,7 +73,6 @@ fn main() -> Result<()> {
             NUMBER_OF_BYTES_TO_WRITE,
             PAGES,
             CONCURRENT_REQUESTS,
-            DOWNLOAD_PROMETHEUS_DATA,
         )
     };
     SystemTestGroup::new()
@@ -94,7 +94,7 @@ pub fn setup(env: TestEnv, subnet_size: usize, initial_notary_delay: Duration) {
 
     UniversalVm::new(JAEGER_VM_NAME.to_string())
         .with_required_host_features(vec![HostFeature::Performance])
-        .with_vm_resources(VmResources {
+        .with_resource_overrides(VmResourceOverrides {
             vcpus: Some(NrOfVCPUs::new(16)),
             memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(1024)),
@@ -112,17 +112,16 @@ pub fn setup(env: TestEnv, subnet_size: usize, initial_notary_delay: Duration) {
         "Jaeger frontend available at: http://[{}]:16686", jaeger_ipv6
     );
 
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(16)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-    };
     InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
         .with_jaeger_addr(SocketAddr::new(IpAddr::V6(jaeger_ipv6), 4317))
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(vm_resources)
+                .with_resource_overrides(VmResourceOverrides {
+                    vcpus: Some(NrOfVCPUs::new(16)),
+                    memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
+                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+                })
                 .with_initial_notary_delay(initial_notary_delay)
                 .add_nodes(subnet_size),
         )
@@ -155,7 +154,6 @@ pub fn fill_execution_rounds(
     data: u32,
     pages: u32,
     concurrent_requests: usize,
-    download_prometheus_data: bool,
 ) {
     let log = env.logger();
     info!(
@@ -197,7 +195,7 @@ pub fn fill_execution_rounds(
             &log,
         ));
         canister_id = canister_id_ranges
-            .generate_canister_id(Some(canister_id))
+            .next_canister_id(Some(canister_id))
             .expect("Canister ID can be generated");
 
         currently_installing_canisters += 1;
@@ -217,7 +215,7 @@ pub fn fill_execution_rounds(
                     &log,
                 ));
                 canister_id = canister_id_ranges
-                    .generate_canister_id(Some(canister_id))
+                    .next_canister_id(Some(canister_id))
                     .expect("Canister ID can be generated");
 
                 currently_installing_canisters += 1;
@@ -263,12 +261,4 @@ pub fn fill_execution_rounds(
 
     // Poll the workload futures to completion
     block_on(async { while futures.next().await.is_some() {} });
-
-    // Download Prometheus data if required.
-    if download_prometheus_data {
-        info!(&log, "Waiting before download.");
-        std::thread::sleep(Duration::from_secs(100));
-        info!(&log, "Downloading p8s data");
-        env.download_prometheus_data_dir_if_exists();
-    }
 }

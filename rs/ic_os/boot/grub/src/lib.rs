@@ -1,3 +1,9 @@
+//! Read, modify, and write GRUB environment blocks. Used by HostOS tools
+//! to manage GuestOS A/B boot partition selection and boot cycle state
+//! (stable, first_boot, failsafe_check, install). HostOS manages this because
+//! it launches the GuestOS VM and must read grubenv to determine which
+//! partition and kernel to boot (`guest_vm_runner`, `hostos_tool`).
+
 use ic_sys::fs::{Clobber, write_atomically};
 use regex::Regex;
 use std::io::{BufRead, BufReader, Read, Write};

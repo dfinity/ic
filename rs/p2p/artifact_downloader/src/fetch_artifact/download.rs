@@ -9,7 +9,7 @@ use axum::{
     http::{Request, StatusCode},
     routing::any,
 };
-use backoff::{ExponentialBackoffBuilder, backoff::Backoff};
+use backon::{BackoffBuilder, ExponentialBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{
@@ -160,6 +160,13 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             build_axum_router(pool_clone),
         )
     }
+
+    /// Returns a watcher over the bouncer used by this assembler, so callers can react to the
+    /// artifact becoming [`BouncerValue::Unwanted`] (e.g. to cancel in-progress assembly work).
+    pub(crate) fn bouncer_watcher(&self) -> watch::Receiver<Bouncer<Artifact::Id>> {
+        self.bouncer_rx.clone()
+    }
+
     /// Waits until advert resolves to wanted. If the bouncer value becomes Unwanted, false is returned.
     #[instrument(skip_all)]
     async fn should_download(
@@ -206,10 +213,12 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             return AssembleResult::Unwanted;
         }
 
-        let mut artifact_download_backoff = ExponentialBackoffBuilder::new()
-            .with_initial_interval(MIN_ARTIFACT_RPC_TIMEOUT)
-            .with_max_interval(MAX_ARTIFACT_RPC_TIMEOUT)
-            .with_max_elapsed_time(None)
+        let mut artifact_download_backoff = ExponentialBuilder::new()
+            .with_min_delay(MIN_ARTIFACT_RPC_TIMEOUT)
+            .with_max_delay(MAX_ARTIFACT_RPC_TIMEOUT)
+            .with_factor(1.5)
+            .with_jitter()
+            .without_max_times()
             .build();
 
         match artifact {
@@ -230,7 +239,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
                 let result = loop {
                     let next_request_at = Instant::now()
                         + artifact_download_backoff
-                            .next_backoff()
+                            .next()
                             .unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT);
                     if let Some(peer) = peer_rx.peers().into_iter().choose(&mut rng) {
                         let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));

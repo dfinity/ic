@@ -79,6 +79,11 @@ disk.img
 *-img.tar.zst
 dev-root-ca.crt
 
+# Downloaded SEV recovery inputs (fetched by build-sev-recovery.sh)
+ic-os/guestos/envs/sev-recovery/alternative_guestos_proposal.cbor
+ic-os/guestos/envs/sev-recovery/base-update-img.tar.zst
+ic-os/guestos/envs/sev-recovery/update-img-*.tar.zst
+
 # IC-OS binaries
 cpp/**/infogetty
 cpp/**/infogetty.o
@@ -140,9 +145,8 @@ profile.json
 test_tmpdir/**
 
 # Bare metal deployment secrets files
-zh2-dll01.*
-dm1-dll32.*
-dm1-dll66.*
+/zh2*
+/dm1*
 
 # Claude Code settings
 .claude/settings.local.json

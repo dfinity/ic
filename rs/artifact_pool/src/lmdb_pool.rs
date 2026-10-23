@@ -17,7 +17,6 @@ use ic_types::consensus::dkg::DkgSummary;
 use ic_types::{
     Height, Time,
     artifact::{CertificationMessageId, ConsensusMessageId, IDkgMessageId},
-    batch::BatchPayload,
     consensus::{
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
         ConsensusMessageHash, ConsensusMessageHashable, DataPayload, EquivocationProof,
@@ -27,7 +26,6 @@ use ic_types::{
         certification::{
             Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
         },
-        dkg::DkgDataPayload,
         idkg::{
             EcdsaSigShare, IDkgArtifactId, IDkgArtifactIdData, IDkgArtifactIdDataOf, IDkgMessage,
             IDkgMessageType, IDkgPrefix, IDkgPrefixOf, IterationPattern, SchnorrSigShare, SigShare,
@@ -407,8 +405,11 @@ fn create_db_env(path: &Path, read_only: bool, max_dbs: c_uint) -> Environment {
         // canister sandbox process. Details in NODE-166
         let mut fd: lmdb_sys::mdb_filehandle_t = lmdb_sys::mdb_filehandle_t::default();
         lmdb_sys::mdb_env_get_fd(db_env.env(), &mut fd);
-        nix::fcntl::fcntl(fd, nix::fcntl::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC))
-            .expect("Unable to mark FD_CLOEXEC");
+        nix::fcntl::fcntl(
+            std::os::fd::BorrowedFd::borrow_raw(fd),
+            nix::fcntl::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC),
+        )
+        .expect("Unable to mark FD_CLOEXEC");
     };
     db_env
 }
@@ -1035,11 +1036,7 @@ impl PoolArtifact for ConsensusMessage {
                         dkg: DkgSummary::default(),
                         idkg: None,
                     }),
-                    PayloadType::Data => BlockPayload::Data(DataPayload {
-                        batch: BatchPayload::default(),
-                        dkg: DkgDataPayload::new_empty(start_height),
-                        idkg: None,
-                    }),
+                    PayloadType::Data => BlockPayload::Data(DataPayload::new_empty(start_height)),
                 }),
             );
             value.msg = proposal.into_message();
@@ -2258,9 +2255,9 @@ mod tests {
 
         let hashes = [
             CryptoHash(vec![]),
-            CryptoHash(vec![2u8; 1]),
-            CryptoHash(vec![2u8; 32]),
-            CryptoHash(vec![2u8; 128]),
+            CryptoHash(vec![2_u8; 1]),
+            CryptoHash(vec![2_u8; 32]),
+            CryptoHash(vec![2_u8; 128]),
         ];
 
         let message_types = [IDkgMessageType::Dealing, IDkgMessageType::EcdsaSigShare];

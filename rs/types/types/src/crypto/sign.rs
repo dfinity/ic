@@ -1,18 +1,20 @@
 //! Defines signature types.
 
 use super::hash::domain_separator::DomainSeparator;
-use crate::canister_http::CanisterHttpResponseMetadata;
+use crate::canister_http::CanisterHttpResponseReceipt;
 use crate::consensus::{
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent, UpgradePermitRequest,
     certification::CertificationContent,
     dkg::DealingContent,
     idkg::{IDkgComplaintContent, IDkgOpeningContent},
 };
 use crate::crypto::SignedBytesWithoutDomainSeparator;
 use crate::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
-use crate::crypto::vetkd::VetKdEncryptedKeyShareContent;
-use crate::messages::{Delegation, MessageId, QueryResponseHash, WebAuthnEnvelope};
+use crate::crypto::vetkd::VetKdEncryptedKeyShareSigningContent;
+use crate::messages::{
+    Delegation, MessageId, QueryResponseHash, SenderInfoContent, WebAuthnEnvelope,
+};
 use std::convert::TryFrom;
 
 /// The domain separator to be used when calculating the sender signature for a
@@ -35,7 +37,7 @@ where
 {
     fn as_signed_bytes(&self) -> Vec<u8> {
         let mut bytes = self.domain();
-        bytes.append(&mut self.as_signed_bytes_without_domain_separator());
+        self.write_signed_bytes_without_domain_separator(&mut bytes);
         bytes
     }
 }
@@ -53,7 +55,7 @@ mod private {
     use super::*;
     use crate::{
         crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
-        messages::QueryResponseHash,
+        messages::{QueryResponseHash, SenderInfoContent},
     };
 
     pub trait SignatureDomainSeal {}
@@ -62,14 +64,16 @@ mod private {
     impl SignatureDomainSeal for DealingContent {}
     impl SignatureDomainSeal for NotarizationContent {}
     impl SignatureDomainSeal for FinalizationContent {}
+    impl SignatureDomainSeal for UpgradePermitRequest {}
     impl SignatureDomainSeal for IDkgDealing {}
     impl SignatureDomainSeal for SignedIDkgDealing {}
     impl SignatureDomainSeal for IDkgComplaintContent {}
     impl SignatureDomainSeal for IDkgOpeningContent {}
     impl SignatureDomainSeal for WebAuthnEnvelope {}
     impl SignatureDomainSeal for Delegation {}
-    impl SignatureDomainSeal for CanisterHttpResponseMetadata {}
+    impl SignatureDomainSeal for CanisterHttpResponseReceipt {}
     impl SignatureDomainSeal for MessageId {}
+    impl<'a> SignatureDomainSeal for SenderInfoContent<'a> {}
     impl SignatureDomainSeal for CertificationContent {}
     impl SignatureDomainSeal for CatchUpContent {}
     impl SignatureDomainSeal for CatchUpContentProtobufBytes {}
@@ -77,10 +81,10 @@ mod private {
     impl SignatureDomainSeal for RandomTapeContent {}
     impl SignatureDomainSeal for SignableMock {}
     impl SignatureDomainSeal for QueryResponseHash {}
-    impl SignatureDomainSeal for VetKdEncryptedKeyShareContent {}
+    impl SignatureDomainSeal for VetKdEncryptedKeyShareSigningContent<'_> {}
 }
 
-impl SignatureDomain for CanisterHttpResponseMetadata {
+impl SignatureDomain for CanisterHttpResponseReceipt {
     fn domain(&self) -> Vec<u8> {
         domain_with_prepended_length(
             DomainSeparator::CryptoHashOfCanisterHttpResponseMetadata.as_str(),
@@ -109,6 +113,12 @@ impl SignatureDomain for NotarizationContent {
 impl SignatureDomain for FinalizationContent {
     fn domain(&self) -> Vec<u8> {
         domain_with_prepended_length(DomainSeparator::FinalizationContent.as_str())
+    }
+}
+
+impl SignatureDomain for UpgradePermitRequest {
+    fn domain(&self) -> Vec<u8> {
+        domain_with_prepended_length(DomainSeparator::UpgradePermitRequest.as_str())
     }
 }
 
@@ -155,6 +165,12 @@ impl SignatureDomain for MessageId {
     }
 }
 
+impl<'a> SignatureDomain for SenderInfoContent<'a> {
+    fn domain(&self) -> Vec<u8> {
+        domain_with_prepended_length("ic-sender-info")
+    }
+}
+
 impl SignatureDomain for CertificationContent {
     fn domain(&self) -> Vec<u8> {
         domain_with_prepended_length(DomainSeparator::CertificationContent.as_str())
@@ -194,7 +210,7 @@ impl SignatureDomain for QueryResponseHash {
     }
 }
 
-impl SignatureDomain for VetKdEncryptedKeyShareContent {
+impl SignatureDomain for VetKdEncryptedKeyShareSigningContent<'_> {
     fn domain(&self) -> Vec<u8> {
         domain_with_prepended_length(DomainSeparator::VetKdEncryptedKeyShareContent.as_str())
     }
@@ -251,7 +267,7 @@ impl SignatureDomain for SignableMock {
 }
 
 impl SignedBytesWithoutDomainSeparator for SignableMock {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        self.signed_bytes_without_domain.clone()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.signed_bytes_without_domain);
     }
 }

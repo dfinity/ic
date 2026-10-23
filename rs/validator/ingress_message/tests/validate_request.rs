@@ -1990,6 +1990,351 @@ fn max_ingress_expiry_at(current_time: Time) -> Time {
     current_time + MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_VALIDATOR
 }
 
+mod sender_info {
+    use super::*;
+    use ic_types::messages::{RawSignedSenderInfo, SenderInfoContent};
+    use ic_validator_http_request_test_utils::AuthenticationScheme::Direct;
+    use ic_validator_http_request_test_utils::DirectAuthenticationScheme::CanisterSignature;
+
+    /// Creates a canister signer, signs the given info bytes, and returns the
+    /// verifier builder (with root of trust configured), the signer, and a
+    /// valid `RawSignedSenderInfo`.
+    fn valid_sender_info_setup(
+        info_bytes: Vec<u8>,
+    ) -> (
+        IngressMessageVerifierBuilder,
+        CanisterSigner,
+        RawSignedSenderInfo,
+    ) {
+        let rng = &mut reproducible_rng();
+        let root_of_trust = RootOfTrust::new_random(rng);
+        let builder = default_verifier().with_root_of_trust(root_of_trust.public_key);
+        let signer = CanisterSigner {
+            seed: CANISTER_SIGNATURE_SEED.to_vec(),
+            canister_id: CANISTER_ID_SIGNER,
+            root_public_key: root_of_trust.public_key,
+            root_secret_key: root_of_trust.secret_key,
+        };
+        let sig = signer.sign(&SenderInfoContent(&info_bytes));
+        let raw = RawSignedSenderInfo {
+            info: Blob(info_bytes),
+            signer: Blob(CANISTER_ID_SIGNER.get().into_vec()),
+            sig: Blob(sig.0),
+        };
+        (builder, signer, raw)
+    }
+
+    #[test]
+    fn should_accept_valid_sender_info_for_update_call() {
+        let (builder, signer, sender_info) = valid_sender_info_setup(vec![1, 2, 3]);
+        let verifier = builder.build();
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(Direct(CanisterSignature(signer)))
+            .with_sender_info(sender_info)
+            .build();
+        assert_eq!(verifier.validate_request(&request), Ok(()));
+    }
+
+    #[test]
+    fn should_accept_valid_sender_info_for_query() {
+        let (builder, signer, sender_info) = valid_sender_info_setup(vec![1, 2, 3]);
+        let verifier = builder.build();
+        let request = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(Direct(CanisterSignature(signer)))
+            .with_sender_info(sender_info)
+            .build();
+        assert_eq!(verifier.validate_request(&request), Ok(()));
+    }
+
+    #[test]
+    fn should_reject_sender_info_with_wrong_signer() {
+        let (builder, signer, mut sender_info) = valid_sender_info_setup(vec![1, 2, 3]);
+        let verifier = builder.build();
+        sender_info.signer = Blob(CANISTER_ID_WRONG_SIGNER.get().into_vec());
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(Direct(CanisterSignature(signer)))
+            .with_sender_info(sender_info)
+            .build();
+        assert_matches!(
+            verifier.validate_request(&request),
+            Err(RequestValidationError::InvalidSenderInfo(_))
+        );
+    }
+
+    #[test]
+    fn should_reject_sender_info_with_corrupted_sig() {
+        let (builder, signer, mut sender_info) = valid_sender_info_setup(vec![1, 2, 3]);
+        let verifier = builder.build();
+        sender_info.sig.0[0] ^= 0xff;
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(Direct(CanisterSignature(signer)))
+            .with_sender_info(sender_info)
+            .build();
+        assert_matches!(
+            verifier.validate_request(&request),
+            Err(RequestValidationError::InvalidSenderInfo(_))
+        );
+    }
+
+    #[test]
+    fn should_reject_sender_info_with_wrong_info_bytes() {
+        let (builder, signer, mut sender_info) = valid_sender_info_setup(vec![1, 2, 3]);
+        let verifier = builder.build();
+        sender_info.info = Blob(vec![4, 5, 6]);
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(Direct(CanisterSignature(signer)))
+            .with_sender_info(sender_info)
+            .build();
+        assert_matches!(
+            verifier.validate_request(&request),
+            Err(RequestValidationError::InvalidSenderInfo(_))
+        );
+    }
+
+    #[test]
+    fn should_reject_sender_info_with_ed25519_authentication() {
+        let rng = &mut reproducible_rng();
+        let verifier = default_verifier()
+            .with_root_of_trust(hard_coded_root_of_trust().public_key)
+            .build();
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(Direct(random_user_key_pair(rng)))
+            .with_sender_info(RawSignedSenderInfo {
+                info: Blob(vec![1, 2, 3]),
+                signer: Blob(CANISTER_ID_SIGNER.get().into_vec()),
+                sig: Blob(vec![4, 5, 6]),
+            })
+            .build();
+        assert_matches!(
+            verifier.validate_request(&request),
+            Err(RequestValidationError::InvalidSenderInfo(_))
+        );
+    }
+
+    #[test]
+    fn should_reject_sender_info_with_malformed_sender_pubkey() {
+        let verifier = default_verifier()
+            .with_root_of_trust(hard_coded_root_of_trust().public_key)
+            .build();
+
+        // Use a canister signature auth scheme but override the public key
+        // with garbage bytes.
+        let rng = &mut reproducible_rng();
+        let root_of_trust = RootOfTrust::new_random(rng);
+        let signer = CanisterSigner {
+            seed: CANISTER_SIGNATURE_SEED.to_vec(),
+            canister_id: CANISTER_ID_SIGNER,
+            root_public_key: root_of_trust.public_key,
+            root_secret_key: root_of_trust.secret_key,
+        };
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(Direct(CanisterSignature(signer)))
+            .with_authentication_sender_public_key(Some(Blob(vec![0xDE, 0xAD])))
+            .with_sender_info(RawSignedSenderInfo {
+                info: Blob(vec![1, 2, 3]),
+                signer: Blob(CANISTER_ID_SIGNER.get().into_vec()),
+                sig: Blob(vec![4, 5, 6]),
+            })
+            .build();
+
+        let result = verifier.validate_request(&request);
+        // The envelope signature check fails first (before sender_info is checked),
+        // because the malformed public key can't verify the request signature.
+        assert_matches!(
+            result,
+            Err(RequestValidationError::InvalidSignature(_))
+                | Err(RequestValidationError::UserIdDoesNotMatchPublicKey(..))
+        );
+    }
+
+    #[test]
+    fn should_reject_sender_info_with_anonymous_authentication() {
+        let verifier = default_verifier()
+            .with_root_of_trust(hard_coded_root_of_trust().public_key)
+            .build();
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Anonymous)
+            .with_sender_info(RawSignedSenderInfo {
+                info: Blob(vec![1, 2, 3]),
+                signer: Blob(CANISTER_ID_SIGNER.get().into_vec()),
+                sig: Blob(vec![4, 5, 6]),
+            })
+            .build();
+        assert_matches!(
+            verifier.validate_request(&request),
+            Err(RequestValidationError::InvalidSenderInfo(_))
+        );
+    }
+}
+
+mod delegation_permissions {
+    use super::*;
+    use ic_types::messages::DelegationPermissions;
+    use ic_validator_http_request_test_utils::DelegationChain;
+
+    #[test]
+    fn should_reject_update_call_when_delegation_restricts_to_queries() {
+        let rng = &mut reproducible_rng();
+        let verifier = verifier_at_time(CURRENT_TIME).build();
+        let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
+            .delegate_to_with_permissions(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                DelegationPermissions::Queries,
+            )
+            .build();
+
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+
+        assert_matches!(
+            verifier.validate_request(&request),
+            Err(RequestValidationError::UpdateCallNotPermittedByDelegation)
+        );
+    }
+
+    #[test]
+    fn should_accept_query_and_read_state_when_delegation_restricts_to_queries() {
+        let rng = &mut reproducible_rng();
+        let verifier = verifier_at_time(CURRENT_TIME).build();
+        let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
+            .delegate_to_with_permissions(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                DelegationPermissions::Queries,
+            )
+            .build();
+
+        let query = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
+            .build();
+        assert_eq!(verifier.validate_request(&query), Ok(()));
+
+        let read_state = HttpRequestBuilder::new_read_state()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+        assert_eq!(verifier.validate_request(&read_state), Ok(()));
+    }
+
+    #[test]
+    fn should_accept_update_call_when_delegation_permissions_are_all() {
+        let rng = &mut reproducible_rng();
+        let verifier = verifier_at_time(CURRENT_TIME).build();
+        let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
+            .delegate_to_with_permissions(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                DelegationPermissions::All,
+            )
+            .build();
+
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+
+        assert_eq!(verifier.validate_request(&request), Ok(()));
+    }
+
+    #[test]
+    fn should_reject_update_call_when_any_delegation_in_chain_restricts_to_queries() {
+        let rng = &mut reproducible_rng();
+        let verifier = verifier_at_time(CURRENT_TIME).build();
+        // The restriction sits in the middle of the chain; subsequent
+        // unrestricted delegations must not lift it.
+        let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
+            .delegate_to_with_permissions(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                DelegationPermissions::Queries,
+            )
+            .delegate_to(random_user_key_pair(rng), CURRENT_TIME)
+            .build();
+
+        let update = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
+            .build();
+        assert_matches!(
+            verifier.validate_request(&update),
+            Err(RequestValidationError::UpdateCallNotPermittedByDelegation)
+        );
+
+        let query = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+        assert_eq!(verifier.validate_request(&query), Ok(()));
+    }
+
+    #[test]
+    fn should_apply_both_targets_and_permissions_restrictions_in_a_chain() {
+        let rng = &mut reproducible_rng();
+        let verifier = verifier_at_time(CURRENT_TIME).build();
+        let requested_canister_id = CanisterId::from(42);
+        // A chain that restricts the targets in one delegation and the
+        // permissions in another: both restrictions must apply.
+        let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
+            .delegate_to_with_targets(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                vec![requested_canister_id, CanisterId::from(43)],
+            )
+            .delegate_to_with_permissions(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                DelegationPermissions::Queries,
+            )
+            .build();
+
+        // Update call to an in-target canister: rejected by the queries-only
+        // restriction (the target is satisfied, so it is the permissions
+        // restriction firing, not the target one).
+        let update = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_canister_id(Blob(requested_canister_id.get().to_vec()))
+            .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
+            .build();
+        assert_matches!(
+            verifier.validate_request(&update),
+            Err(RequestValidationError::UpdateCallNotPermittedByDelegation)
+        );
+
+        // Query to an in-target canister: permitted (queries are allowed and
+        // the target matches).
+        let query_in_targets = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_canister_id(Blob(requested_canister_id.get().to_vec()))
+            .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
+            .build();
+        assert_eq!(verifier.validate_request(&query_in_targets), Ok(()));
+
+        // Query to an out-of-target canister: rejected by the targets
+        // restriction, which applies alongside the permissions restriction.
+        let query_out_of_targets = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_canister_id(Blob(CanisterId::from(44).get().to_vec()))
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+        assert_matches!(
+            verifier.validate_request(&query_out_of_targets),
+            Err(RequestValidationError::CanisterNotInDelegationTargets(_))
+        );
+    }
+}
+
 fn default_verifier() -> IngressMessageVerifierBuilder {
     IngressMessageVerifier::builder().with_time_provider(TimeProvider::Constant(CURRENT_TIME))
 }

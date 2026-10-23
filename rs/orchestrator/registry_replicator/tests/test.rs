@@ -282,6 +282,31 @@ async fn random_mutate(pocket_ic: &PocketIcHelper, rng: &mut ReproducibleRng) ->
     }
 }
 
+const POLL_MAX_RETRIES: usize = 10;
+const POLL_BACKOFF: Duration = Duration::from_millis(500);
+
+/// Polls the replicator. In the test environment, it can happen that we get transient errors, like
+/// a timeout since it is set to `TEST_POLL_DELAY`. To avoid test flakes due to these, we retry
+/// polling a few times.
+async fn poll_with_retries(replicator: &RegistryReplicator) -> Result<(), String> {
+    let mut last_err = None;
+    for _ in 0..POLL_MAX_RETRIES {
+        match replicator.poll().await {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                last_err = Some(e);
+                eprintln!("Retrying poll due to error: {:?}", last_err);
+                tokio::time::sleep(POLL_BACKOFF).await;
+            }
+        }
+    }
+    Err(format!(
+        "Failed to poll after {} retries. Last error: {:?}",
+        POLL_MAX_RETRIES,
+        last_err.unwrap()
+    ))
+}
+
 const CONDITION_TIMEOUT: Duration = Duration::from_mins(2);
 const CONDITION_BACKOFF: Duration = Duration::from_millis(500);
 
@@ -407,7 +432,7 @@ async fn test_poll_and_start_polling_and_stop_polling_correctly_update_local_sto
     assert_replicator_not_up_to_date_yet(&replicator, latest_version, &records, &new_record);
 
     // Poll once, local store and client should contain latest changes
-    replicator.poll().await.unwrap();
+    poll_with_retries(&replicator).await.unwrap();
 
     let (records, latest_version, _) = pocket_ic.get_all_certified_records().await;
     assert_replicator_up_to_date(&replicator, latest_version, &records, &new_record).await;
@@ -444,7 +469,7 @@ async fn test_poll_and_start_polling_and_stop_polling_correctly_update_local_sto
     let new_record = random_mutate(&pocket_ic, &mut rng).await;
 
     // Manually poll to pick up the new version
-    replicator.poll().await.unwrap();
+    poll_with_retries(&replicator).await.unwrap();
 
     // After manually polling, local store and client should contain latest changes
     let (records, latest_version, _) = pocket_ic.get_all_certified_records().await;
@@ -466,7 +491,7 @@ async fn test_poll_and_start_polling_and_stop_polling_correctly_update_local_sto
     assert_replicator_not_up_to_date_yet(&replicator, latest_version, &records, &new_record);
 
     // Poll once, local store and client should contain latest changes
-    replicator.poll().await.unwrap();
+    poll_with_retries(&replicator).await.unwrap();
 
     let (records, latest_version, _) = pocket_ic.get_all_certified_records().await;
     assert_replicator_up_to_date(&replicator, latest_version, &records, &new_record).await;

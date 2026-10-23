@@ -231,7 +231,7 @@ impl TryFrom<AccountIdentifier> for icrc_ledger_types::icrc1::account::Account {
             owner: Principal::from_str(&value.address).with_context(|| {
                 format!(
                     "Unable to convert accountidentifier.address {:?} to Principal",
-                    &value.address
+                    value.address
                 )
             })?,
             subaccount,
@@ -268,7 +268,7 @@ impl TryFrom<AccountIdentifier> for icp_ledger::AccountIdentifier {
         icp_ledger::AccountIdentifier::from_hex(&value.address).map_err(|err| {
                 anyhow!(
                     "Unable to convert accountidentifier.address {:?} to AccountIdentifier. Error: {:?}",
-                    &value.address,
+                    value.address,
                     err
                 )
             })

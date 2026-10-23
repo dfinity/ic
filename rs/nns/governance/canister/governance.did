@@ -24,6 +24,8 @@ type Action = variant {
   BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
   TakeCanisterSnapshot : TakeCanisterSnapshot;
   LoadCanisterSnapshot : LoadCanisterSnapshot;
+  CreateCanisterAndInstallCode : CreateCanisterAndInstallCode;
+  UpdateStandardEngineReplicaVersion : UpdateStandardEngineReplicaVersion;
 };
 
 type AddHotKey = record {
@@ -66,10 +68,12 @@ type CanisterSettings = record {
   freezing_threshold : opt nat64;
   controllers : opt Controllers;
   log_visibility : opt int32;
+  snapshot_visibility : opt int32;
   wasm_memory_limit : opt nat64;
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
   wasm_memory_threshold : opt nat64;
+  reserved_cycles_limit : opt nat64;
 };
 
 type CanisterStatusResultV2 = record {
@@ -85,6 +89,11 @@ type CanisterStatusResultV2 = record {
 type CanisterSummary = record {
   status : opt CanisterStatusResultV2;
   canister_id : opt principal;
+};
+
+type CanisterUpgradeOptions = record {
+  skip_pre_upgrade : opt bool;
+  wasm_memory_persistence : opt int32;
 };
 
 type Change = variant {
@@ -231,6 +240,33 @@ type Countries = record {
   iso_codes : vec text;
 };
 
+type CreateCanisterAndInstallCode = record {
+  host_subnet_id : opt principal;
+  canister_settings : opt CanisterSettings;
+  wasm_module_hash : opt blob;
+  install_arg_hash : opt blob;
+};
+
+type CreateCanisterAndInstallCodeRequest = record {
+  host_subnet_id : opt principal;
+  canister_settings : opt CanisterSettings;
+  wasm_module : opt WasmModule;
+  install_arg : opt blob;
+};
+
+type CreateCanisterAndInstallCodeOk = record {
+  canister_id : opt principal;
+};
+
+type TakeCanisterSnapshotOk = record {
+  snapshot_id : blob;
+};
+
+type SuccessfulProposalExecutionValue = variant {
+  CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeOk;
+  TakeCanisterSnapshot : TakeCanisterSnapshotOk;
+};
+
 type CreateServiceNervousSystem = record {
   url : opt text;
   governance_parameters : opt GovernanceParameters;
@@ -303,6 +339,17 @@ type Followees = record {
 
 type GetNeuronsFundAuditInfoRequest = record {
   nns_proposal_id : opt ProposalId;
+};
+
+type MaturityModulation = record {
+  current_value_permyriad : opt int32;
+  updated_at_timestamp_seconds : opt nat64;
+};
+
+type GetMaturityModulationRequest = record {};
+
+type GetMaturityModulationResponse = record {
+  maturity_modulation : opt MaturityModulation;
 };
 
 type GetNeuronsFundAuditInfoResponse = record {
@@ -431,14 +478,19 @@ type InstallCode = record {
   canister_id : opt principal;
   arg_hash : opt blob;
   install_mode : opt int32;
+  canister_upgrade_options : opt CanisterUpgradeOptions;
 };
 
 type InstallCodeRequest = record {
   arg : opt blob;
+  // If we add support for chunked WASMs later, the WasmModule type should
+  // probably be used in place of this field in order to be consistent with
+  // CreateCanisterAndInstallCodeRequest.
   wasm_module : opt blob;
   skip_stopping_before_installing : opt bool;
   canister_id : opt principal;
   install_mode : opt int32;
+  canister_upgrade_options : opt CanisterUpgradeOptions;
 };
 
 type KnownNeuron = record {
@@ -776,6 +828,12 @@ type Neuron = record {
   // Per NNS policy, this is opt. Nevertheless, it will never be null.
   potential_voting_power : opt nat64;
 
+  // Base value (in e8s) used for the "8-year gang" dissolve delay bonus. For neurons that had the
+  // maximum dissolve delay of 8 years before the maximum was reduced, this is set to the total
+  // staked value net of fees (including staked maturity) captured at the time of migration.
+  // For all other neurons, this is 0.
+  eight_year_gang_bonus_base_e8s : opt nat64;
+
   // The maturity disbursements in progress, i.e. the disbursements that are initiated but not
   // finalized. The finalization happens 7 days after the disbursement is initiated.
   maturity_disbursements_in_progress : opt vec MaturityDisbursement;
@@ -870,6 +928,10 @@ type NeuronInfo = record {
   voting_power_refreshed_timestamp_seconds : opt nat64;
   deciding_voting_power : opt nat64;
   potential_voting_power : opt nat64;
+  // See analogous field in Neuron.
+  eight_year_gang_bonus_base_e8s : opt nat64;
+  // See analogous field in Neuron.
+  staked_maturity_e8s_equivalent : opt nat64;
 };
 
 type NeuronStakeTransfer = record {
@@ -1042,6 +1104,8 @@ type ProposalActionRequest = variant {
   BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
   TakeCanisterSnapshot : TakeCanisterSnapshot;
   LoadCanisterSnapshot : LoadCanisterSnapshot;
+  CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeRequest;
+  UpdateStandardEngineReplicaVersion : UpdateStandardEngineReplicaVersion;
 };
 
 // Creates a rented subnet from a rental request (in the Subnet Rental
@@ -1074,6 +1138,10 @@ type FulfillSubnetRentalRequest = record {
   //
   //     https://github.com/dfinity/ic/releases/latest
   replica_version_id : opt text;
+
+  // Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+  // If not set, handling defaults to the NNS subnet.
+  initial_dkg_subnet_id : opt principal;
 };
 
 // Declares an approved set of alternative replica virtual machine software for
@@ -1093,6 +1161,13 @@ type BlessAlternativeGuestOsVersion = record {
   // (Here, we refer to the version being replaced as the "base" version.)
   base_guest_launch_measurements : opt GuestLaunchMeasurements; };
 
+// Changes what replica version(s) are run by Cloud Engines.
+type UpdateStandardEngineReplicaVersion = record {
+  new_replica_version_id : opt text;
+  old_replica_version_id : opt text;
+  deployment_progress : opt float64;
+};
+
 type GuestLaunchMeasurements = record {
   guest_launch_measurements : opt vec GuestLaunchMeasurement;
 };
@@ -1108,6 +1183,8 @@ type GuestLaunchMeasurement = record {
 type GuestLaunchMeasurementMetadata = record {
   // Kernel command line used for this measurement.
   kernel_cmdline : opt text;
+  // Virtual CPU type used for this measurement.
+  vcpu_type : opt text;
 };
 
 type TakeCanisterSnapshot = record {
@@ -1135,6 +1212,7 @@ type ProposalData = record {
   original_total_community_fund_maturity_e8s_equivalent : opt nat64;
   total_potential_voting_power : opt nat64;
   topic: opt int32;
+  success_value : opt SuccessfulProposalExecutionValue;
 };
 
 type ProposalInfo = record {
@@ -1156,6 +1234,7 @@ type ProposalInfo = record {
   proposer : opt NeuronId;
   executed_timestamp_seconds : nat64;
   total_potential_voting_power : opt nat64;
+  success_value : opt SuccessfulProposalExecutionValue;
 };
 
 type RegisterVote = record {
@@ -1404,6 +1483,10 @@ type CustomProposalCriticality = record {
   additional_critical_native_action_ids : opt vec nat64;
 };
 
+type WasmModule = variant {
+  Inlined : blob;
+};
+
 type WaitForQuietState = record {
   current_deadline_timestamp_seconds : nat64;
 };
@@ -1546,6 +1629,9 @@ service : (Governance) -> {
       Result_2,
     ) query;
   get_latest_reward_event : () -> (RewardEvent) query;
+  get_maturity_modulation : (GetMaturityModulationRequest) -> (
+      GetMaturityModulationResponse,
+    ) query;
   get_metrics : () -> (Result_3) query;
   get_monthly_node_provider_rewards : () -> (Result_4);
   get_most_recent_monthly_node_provider_rewards : () -> (

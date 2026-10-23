@@ -8,9 +8,8 @@ use crate::{
     crypto::{
         AlgorithmId,
         canister_threshold_sig::{
-            EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript,
-            ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-            ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
+            EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript, ThresholdEcdsaSigInputs,
+            ThresholdSchnorrSigInputs,
             error::{
                 IDkgParamsValidationError, ThresholdEcdsaSigInputsCreationError,
                 ThresholdSchnorrSigInputsCreationError,
@@ -20,7 +19,7 @@ use crate::{
                 IDkgTranscriptType,
             },
         },
-        vetkd::{VetKdArgs, VetKdEncryptedKey},
+        vetkd::VetKdArgs,
     },
     messages::CallbackId,
 };
@@ -46,9 +45,6 @@ use super::{
     ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
     schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
 };
-
-/// PseudoRandomId is defined in execution context as plain 32-byte vector, we give it a synonym here.
-pub type PseudoRandomId = [u8; 32];
 
 /// RequestId is used for two purposes:
 /// 1. to identify the matching request in signature request contexts.
@@ -1183,13 +1179,6 @@ impl ThresholdSigInputs<'_> {
             ThresholdSigInputs::VetKd(_) => SignatureScheme::VetKd,
         }
     }
-}
-
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
-pub enum CombinedSignature {
-    Ecdsa(ThresholdEcdsaCombinedSignature),
-    Schnorr(ThresholdSchnorrCombinedSignature),
-    VetKd(VetKdEncryptedKey),
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]

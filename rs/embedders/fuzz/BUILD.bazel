@@ -25,6 +25,7 @@ rust_library(
         "//rs/cycles_account_manager",
         "//rs/embedders",
         "//rs/interfaces",
+        "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/registry/subnet_type",

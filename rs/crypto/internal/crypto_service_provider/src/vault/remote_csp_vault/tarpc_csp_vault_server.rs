@@ -686,7 +686,7 @@ impl<C: CspVault + 'static> TarpcCspVaultServerImpl<C> {
             let (conn, _addr) = self.listener.accept().await.unwrap_or_else(|e| {
                 panic!(
                     "Error listening at socket {:?}: {}",
-                    &self.listener.local_addr(),
+                    self.listener.local_addr(),
                     e
                 )
             });

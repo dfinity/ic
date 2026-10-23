@@ -29,27 +29,27 @@ pub struct FsTrimMetrics {
 impl Default for FsTrimMetrics {
     fn default() -> Self {
         Self {
-            last_duration_milliseconds: 0f64,
+            last_duration_milliseconds: 0_f64,
             last_run_success: true,
-            total_runs: 0f64,
+            total_runs: 0_f64,
 
-            last_duration_milliseconds_datadir: 0f64,
+            last_duration_milliseconds_datadir: 0_f64,
             last_run_success_datadir: true,
-            total_runs_datadir: 0f64,
+            total_runs_datadir: 0_f64,
         }
     }
 }
 
 impl FsTrimMetrics {
     pub(crate) fn update(&mut self, success: bool, duration: Duration) -> Result<()> {
-        self.total_runs += 1f64;
+        self.total_runs += 1_f64;
         self.last_run_success = success;
         self.last_duration_milliseconds = duration.as_millis() as f64;
         Ok(())
     }
 
     pub(crate) fn update_datadir(&mut self, success: bool, duration: Duration) -> Result<()> {
-        self.total_runs_datadir += 1f64;
+        self.total_runs_datadir += 1_f64;
         self.last_run_success_datadir = success;
         self.last_duration_milliseconds_datadir = duration.as_millis() as f64;
         Ok(())
@@ -132,7 +132,7 @@ impl FsTrimMetrics {
 }
 
 fn is_f64_finite_and_0_or_larger(value: f64) -> bool {
-    value.is_finite() && value.is_sign_positive() && value >= 0f64
+    value.is_finite() && value.is_sign_positive() && value >= 0_f64
 }
 
 fn parse_metrics_value(key: &str, value: &str) -> Result<f64> {
@@ -165,9 +165,9 @@ where
         let mut total_runs: Option<f64> = None;
 
         // Default datadir fields (we treat them as optional in the metrics file)
-        let mut datadir_last_duration_milliseconds: f64 = 0f64;
+        let mut datadir_last_duration_milliseconds: f64 = 0_f64;
         let mut datadir_last_run_success: bool = true;
-        let mut datadir_total_runs: f64 = 0f64;
+        let mut datadir_total_runs: f64 = 0_f64;
 
         for line_or_err in lines {
             let line = line_or_err.map_err(|e| format_err!("failed to read line: {}", e))?;
@@ -178,7 +178,7 @@ where
                         last_duration_milliseconds.get_or_insert(parse_metrics_value(key, value)?);
                     }
                     METRICS_LAST_RUN_SUCCESS => {
-                        last_run_success.get_or_insert(parse_metrics_value(key, value)? > 0f64);
+                        last_run_success.get_or_insert(parse_metrics_value(key, value)? > 0_f64);
                     }
                     METRICS_RUNS_TOTAL => {
                         total_runs.get_or_insert(parse_metrics_value(key, value)?);
@@ -187,7 +187,7 @@ where
                         datadir_last_duration_milliseconds = parse_metrics_value(key, value)?;
                     }
                     METRICS_LAST_RUN_SUCCESS_DATADIR => {
-                        datadir_last_run_success = parse_metrics_value(key, value)? > 0f64;
+                        datadir_last_run_success = parse_metrics_value(key, value)? > 0_f64;
                     }
                     METRICS_RUNS_TOTAL_DATADIR => {
                         datadir_total_runs = parse_metrics_value(key, value)?;

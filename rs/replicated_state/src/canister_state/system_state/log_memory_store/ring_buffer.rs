@@ -6,35 +6,41 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::PageMap;
 use ic_management_canister_types_private::{CanisterLogRecord, DataSize, FetchCanisterLogsFilter};
+use ic_types::canister_log::{
+    MAX_FETCH_CANISTER_LOGS_RESULT_BYTES, MIN_AGGREGATE_LOG_MEMORY_LIMIT,
+};
 use more_asserts::assert_le;
 
 // PageMap file layout.
-pub(crate) const VIRTUAL_PAGE_SIZE: usize = 4_096;
+pub(super) const VIRTUAL_PAGE_SIZE: usize = 4_096;
 // Header layout constants.
-pub(crate) const HEADER_OFFSET: MemoryAddress = MemoryAddress::new(0);
-pub(crate) const HEADER_SIZE: MemorySize = MemorySize::new(VIRTUAL_PAGE_SIZE as u64);
+pub(super) const HEADER_OFFSET: MemoryAddress = MemoryAddress::new(0);
+pub(super) const HEADER_SIZE: MemorySize = MemorySize::new(VIRTUAL_PAGE_SIZE as u64);
 // Index table layout constants.
-pub(crate) const INDEX_TABLE_OFFSET: MemoryAddress = HEADER_OFFSET.add_size(HEADER_SIZE);
-pub(crate) const INDEX_TABLE_PAGES: usize = 1;
-pub(crate) const INDEX_TABLE_SIZE: MemorySize =
+pub(super) const INDEX_TABLE_OFFSET: MemoryAddress = HEADER_OFFSET.add_size(HEADER_SIZE);
+pub(super) const INDEX_TABLE_PAGES: usize = 1;
+pub(super) const INDEX_TABLE_SIZE: MemorySize =
     MemorySize::new((INDEX_TABLE_PAGES * VIRTUAL_PAGE_SIZE) as u64);
-pub(crate) const INDEX_ENTRY_SIZE: MemorySize = MemorySize::new(28);
-pub(crate) const INDEX_ENTRY_COUNT_MAX: u64 = INDEX_TABLE_SIZE.get() / INDEX_ENTRY_SIZE.get();
+pub(super) const INDEX_ENTRY_SIZE: MemorySize = MemorySize::new(28);
+pub(super) const INDEX_ENTRY_COUNT_MAX: u64 = INDEX_TABLE_SIZE.get() / INDEX_ENTRY_SIZE.get();
 // Data region layout constants.
-pub(crate) const DATA_REGION_OFFSET: MemoryAddress = INDEX_TABLE_OFFSET.add_size(INDEX_TABLE_SIZE);
+pub(super) const DATA_REGION_OFFSET: MemoryAddress = INDEX_TABLE_OFFSET.add_size(INDEX_TABLE_SIZE);
 
 // Ring buffer constraints.
 
 /// Maximum total size of log records returned in a single message.
-pub(crate) const RESULT_MAX_SIZE: MemorySize = MemorySize::new(2_000_000);
-const _: () = assert!(RESULT_MAX_SIZE.get() <= 2_000_000, "Exceeds 2 MB");
+///
+/// This bounds the stored data size of the records returned by `records()`, and in
+/// turn the size of the Candid-encoded `fetch_canister_logs` response.
+pub(super) const RESULT_MAX_SIZE: MemorySize =
+    MemorySize::new(MAX_FETCH_CANISTER_LOGS_RESULT_BYTES as u64);
 
 // With index table of 1 page (4 KiB) and 28 bytes per entry -> 146 entries max.
 // With 2 MB result max size limit we want each index entry segment to be under
 // say 20% of that (400 KB). So 146 segments turns into ~55 MB total data capacity.
 // Small segments help to reduce work on refining log records filtering
 // when fetching logs.
-pub(crate) const DATA_CAPACITY_MAX: MemorySize = MemorySize::new(55_000_000); // 55 MB
+pub(super) const DATA_CAPACITY_MAX: MemorySize = MemorySize::new(55_000_000); // 55 MB
 const DATA_SEGMENT_SIZE_MAX: u64 = DATA_CAPACITY_MAX.get() / INDEX_ENTRY_COUNT_MAX;
 // Ensure data segment size is significantly smaller than max result size, say 20%.
 const _: () = assert!(5 * DATA_SEGMENT_SIZE_MAX <= RESULT_MAX_SIZE.get());
@@ -44,8 +50,13 @@ const _: () = assert!(5 * DATA_SEGMENT_SIZE_MAX <= RESULT_MAX_SIZE.get());
 /// Log memory limit can be zero to disable logging,
 /// but when it is non-zero it must be at least this value
 /// to properly account for the size of at least one OS page.
-pub(crate) const DATA_CAPACITY_MIN: usize = VIRTUAL_PAGE_SIZE;
+/// Non-zero limits below this value are rejected when canister settings are
+/// validated.
+pub(super) const DATA_CAPACITY_MIN: usize = VIRTUAL_PAGE_SIZE;
 const _: () = assert!(VIRTUAL_PAGE_SIZE <= DATA_CAPACITY_MIN); // data capacity must be at least one page.
+// The user-facing minimum log memory limit matches the ring buffer's minimum
+// data capacity, so that an accepted non-zero limit is applied as is.
+const _: () = assert!(MIN_AGGREGATE_LOG_MEMORY_LIMIT == DATA_CAPACITY_MIN);
 
 pub(super) struct RingBuffer {
     io: StructIO,
@@ -84,7 +95,23 @@ impl RingBuffer {
         self.io.load_header()
     }
 
+    /// Returns the timestamp of the oldest live record, or `None` if the
+    /// buffer is empty. Takes an already-loaded `header` to avoid a
+    /// redundant page-map read when the caller has one in hand.
+    ///
+    /// Reads the record header at `data_head` — the same access pattern used
+    /// by `load_index_table` to reconstruct its `front` entry.
+    pub fn first_timestamp(&self, header: &Header) -> Option<u64> {
+        if header.data_size.get() == 0 {
+            return None;
+        }
+        self.io
+            .load_record_without_content(header, header.data_head)
+            .map(|r| r.timestamp)
+    }
+
     /// Returns the data capacity of the ring buffer.
+    #[cfg(test)]
     pub fn byte_capacity(&self) -> usize {
         self.io.load_header().data_capacity.get() as usize
     }
@@ -93,6 +120,12 @@ impl RingBuffer {
     #[cfg(test)]
     pub fn bytes_used(&self) -> usize {
         self.io.load_header().data_size.get() as usize
+    }
+
+    /// Returns next_idx of the ring buffer.
+    #[cfg(test)]
+    pub fn next_idx(&self) -> u64 {
+        self.io.load_header().next_idx
     }
 
     /// Clears the ring buffer.
@@ -108,35 +141,41 @@ impl RingBuffer {
         self.append_log(vec![record.clone()]);
     }
 
-    pub fn append_log(&mut self, records: Vec<CanisterLogRecord>) {
-        self.append_log_iter(records);
-    }
-
     /// Appends records from an iterator.
-    pub fn append_log_iter(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
+    pub fn append_log(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
         let mut iter = records.into_iter().peekable();
         if iter.peek().is_none() {
             return; // Exit early if no records.
         }
         let mut index_table = self.io.load_index_table();
         let mut h = self.io.load_header();
-        for record in iter.map(LogRecord::from) {
+        for mut record in iter.map(LogRecord::from) {
             // Check that records are added in order, otherwise it breaks the index.
             if record.idx < h.next_idx {
-                debug_assert!(false, "Log record idx must be >= than next idx");
+                debug_assert!(
+                    false,
+                    "Log record idx {} must be >= than next idx {}",
+                    record.idx, h.next_idx
+                );
                 continue;
             }
             if record.timestamp < h.max_timestamp {
-                debug_assert!(false, "Log record timestamp must be >= than max timestamp");
+                debug_assert!(
+                    false,
+                    "Log record timestamp {} must be >= than max timestamp {}",
+                    record.timestamp, h.max_timestamp
+                );
                 continue;
             }
 
+            // A single record must fit the ring buffer. That holds when the record is
+            // created, but not once the capacity has been lowered underneath it (see
+            // `LogRecord::truncate_to_capacity`), so re-establish it here — truncating
+            // the record rather than dropping it, which is what `add_record` does when
+            // the same limit is applied at creation time.
+            record.truncate_to_capacity(h.data_capacity.get() as usize);
+
             let added_size = MemorySize::new(record.bytes_len() as u64);
-            let capacity = MemorySize::new(self.byte_capacity() as u64);
-            if added_size > capacity {
-                debug_assert!(false, "Log record size exceeds ring buffer capacity");
-                return;
-            }
             self.evict_for_size(&mut h, added_size);
 
             // Save the record at the tail position.
@@ -194,7 +233,7 @@ impl RingBuffer {
     ///
     /// - No filter: return the most recent records (tail), trimming older ones
     ///   from the start so total data size ≤ result_max_size.
-    /// - With filter: return the most oldest records (head), trimming newer ones
+    /// - With filter: return the oldest records (head), trimming newer ones
     ///   from the end so total data size ≤ result_max_size.
     pub fn records(&self, maybe_filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
         let header = self.io.load_header();
@@ -218,6 +257,11 @@ impl RingBuffer {
                     }
                     pos = header.advance_position(pos, MemorySize::new(record.bytes_len() as u64));
                     records.push(CanisterLogRecord::from(record));
+                    // Stop at the tail — required when the buffer is exactly full
+                    // (data_head == data_tail), where is_alive() is true everywhere.
+                    if pos == header.data_tail {
+                        break;
+                    }
                 }
 
                 // Trim older records from the front so total data size ≤ limit.
@@ -242,12 +286,22 @@ impl RingBuffer {
                     Some(e) => e,
                 };
 
-                // Scan forward from approx start — collect matching records until limit
-                // or until a non-matching record is seen after we started collecting.
+                // Scan forward from approx start — collect matching records until the
+                // result size limit is hit or the scan reaches a record past the range.
                 let mut records: Vec<CanisterLogRecord> = Vec::new();
                 let mut total_size = 0;
                 let mut pos = approx_start.position;
                 while let Some(record) = self.io.load_record(&header, pos) {
+                    // Records are scanned in ascending key order, so once we reach a
+                    // record past the range's end no later record can match. Stop even
+                    // if nothing matched yet — otherwise a filter whose range lies
+                    // entirely below the live records would scan the whole buffer.
+                    // (The approx start may sit before the range, so earlier
+                    // non-matching records with keys below the range are skipped, not
+                    // treated as past-end.)
+                    if record.is_past_range_end(&filter) {
+                        break;
+                    }
                     let distance = MemorySize::new(record.bytes_len() as u64);
                     if record.matches(&filter) {
                         let canister_log_record = CanisterLogRecord::from(record);
@@ -256,12 +310,9 @@ impl RingBuffer {
                             break;
                         }
                         records.push(canister_log_record);
-                    } else if !records.is_empty() {
-                        // Stop after the first non-matching record once we have matches.
-                        break;
                     }
                     let new_pos = header.advance_position(pos, distance);
-                    // corrupted or zero-length record — avoid infinite loop
+                    // corrupted record — avoid infinite loop
                     if new_pos == pos {
                         break;
                     }
@@ -288,7 +339,7 @@ impl RingBuffer {
     }
 }
 
-pub struct RingBufferIterator<'a> {
+pub(super) struct RingBufferIterator<'a> {
     io: &'a StructIO,
     header: Header,
     pos: MemoryPosition,
@@ -356,6 +407,7 @@ mod tests {
 
         assert_eq!(rb.byte_capacity(), data_capacity.get() as usize);
         assert_eq!(rb.bytes_used(), 0);
+        assert_eq!(rb.next_idx(), 0);
     }
 
     #[test]
@@ -373,20 +425,17 @@ mod tests {
         assert_eq!(rb.pop_front().unwrap(), r0);
         assert_eq!(rb.pop_front().unwrap(), r1);
         assert!(rb.pop_front().is_none());
+        assert_eq!(rb.next_idx(), 2);
     }
 
     #[test]
     fn test_exact_fit_no_eviction() {
-        let record_size: usize = 25;
-        let page_map = PageMap::new_for_testing();
-        let data_capacity = MemorySize::new(3 * record_size as u64);
-        let mut rb = RingBuffer::new(page_map, data_capacity);
-
         let r0 = log_record(0, 100, "12345");
-        assert_eq!(bytes_len(&r0), record_size);
         let r1 = log_record(1, 200, "12345");
         let r2 = log_record(2, 300, "12345");
         let r3 = log_record(3, 400, "12345");
+        let data_capacity = MemorySize::new(3 * bytes_len(&r0) as u64);
+        let mut rb = RingBuffer::new(PageMap::new_for_testing(), data_capacity);
 
         // Add and remove one record to test wrap-around.
         rb.append(&r0);
@@ -400,20 +449,17 @@ mod tests {
         assert_eq!(rb.pop_front().unwrap(), r1);
         assert_eq!(rb.pop_front().unwrap(), r2);
         assert_eq!(rb.pop_front().unwrap(), r3);
+        assert_eq!(rb.next_idx(), 4);
     }
 
     #[test]
     fn test_eviction_when_adding_exceeds_capacity() {
-        let record_size: usize = 25;
-        let page_map = PageMap::new_for_testing();
-        let data_capacity = MemorySize::new(3 * record_size as u64);
-        let mut rb = RingBuffer::new(page_map, data_capacity);
-
         let r0 = log_record(0, 100, "12345");
-        assert_eq!(bytes_len(&r0), record_size);
         let r1 = log_record(1, 200, "12345");
         let r2 = log_record(2, 300, "12345");
-        let r3 = log_record(3, 400, "123456"); // 26 bytes to force eviction.
+        let r3 = log_record(3, 400, "123456"); // one byte longer than r0..r2, forces eviction.
+        let data_capacity = MemorySize::new(3 * bytes_len(&r0) as u64);
+        let mut rb = RingBuffer::new(PageMap::new_for_testing(), data_capacity);
 
         // Add and remove one record to test wrap-around.
         rb.append(&r0);
@@ -427,6 +473,7 @@ mod tests {
         assert_eq!(rb.pop_front().unwrap(), r2);
         assert_eq!(rb.pop_front().unwrap(), r3);
         assert!(rb.pop_front().is_none());
+        assert_eq!(rb.next_idx(), 4);
     }
 
     #[test]
@@ -542,6 +589,32 @@ mod tests {
         let records: Vec<CanisterLogRecord> = rb.iter().collect();
 
         assert!(records.is_empty());
+    }
+
+    #[test]
+    fn test_records_no_filter_exactly_full_buffer() {
+        // Regression: records(None) would loop infinitely on an exactly-full buffer
+        // (data_head == data_tail, data_size == data_capacity) because is_alive()
+        // returns true for every position in that state.
+        let r0 = log_record(0, 100, "12345");
+        let r1 = log_record(1, 200, "12345");
+        let r2 = log_record(2, 300, "12345");
+        let data_capacity = MemorySize::new(3 * bytes_len(&r0) as u64);
+        let mut rb = RingBuffer::new(PageMap::new_for_testing(), data_capacity);
+
+        rb.append(&r0);
+        rb.append(&r1);
+        rb.append(&r2);
+
+        // Verify the buffer is exactly full (the condition that triggers the bug).
+        assert_eq!(rb.bytes_used(), data_capacity.get() as usize);
+
+        // This must return all 3 records and terminate — not loop infinitely.
+        let records = rb.records(None);
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0], r0);
+        assert_eq!(records[1], r1);
+        assert_eq!(records[2], r2);
     }
 
     #[test]

@@ -244,7 +244,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
     assert_eq!(
         machine.cycle_balance(SNS_WASM_CANISTER_ID),
         EXPECTED_SNS_CREATION_FEE
-            - SNS_CANISTER_COUNT_AT_INSTALL as u128 * initial_canister_creation_cycles,
+            - SNS_CANISTER_COUNT_AT_INSTALL * initial_canister_creation_cycles,
     );
 }
 

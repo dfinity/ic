@@ -252,7 +252,7 @@ impl<Message> ReplyManager<Message> {
 
     pub fn flush_with_errors(&self) {
         let mut mut_repr = self.repr.lock().unwrap();
-        for (_cookie, cell) in mut_repr.cells.iter() {
+        for cell in mut_repr.cells.values() {
             cell.post_result(Err(Error::ServerError));
         }
         mut_repr.cells.clear();

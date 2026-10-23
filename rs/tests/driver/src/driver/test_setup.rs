@@ -1,6 +1,5 @@
-use crate::driver::ic::VmResources;
+use crate::driver::ic::VmResourceOverrides;
 use crate::driver::test_env::TestEnvAttribute;
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -11,7 +10,7 @@ pub struct GroupSetup {
     /// For now, the group timeout strictly translates to the corresponding group
     /// TTL.
     pub group_timeout: Option<Duration>,
-    pub default_vm_resources: Option<VmResources>,
+    pub vm_resource_overrides: VmResourceOverrides,
 }
 
 impl GroupSetup {
@@ -21,8 +20,11 @@ impl GroupSetup {
             group_base_name: group_base_name.clone(),
             ..Default::default()
         };
-        let time = Utc::now().format("%Y-%m-%dT%H-%M-%S-%6f");
-        res.infra_group_name = format!("{group_base_name}--{time}").replace('_', "-");
+        let time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("bad things")
+            .as_micros();
+        res.infra_group_name = format!("{group_base_name}--{time:?}").replace('_', "-");
         res.group_timeout = timeout;
         res
     }
@@ -35,12 +37,25 @@ impl TestEnvAttribute for GroupSetup {
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub enum InfraProvider {
+pub enum SystemTestBackend {
     Farm,
+    Local,
 }
 
-impl TestEnvAttribute for InfraProvider {
+impl SystemTestBackend {
+    /// Determines the backend from the `SYSTEM_TEST_BACKEND` environment
+    /// variable, defaulting to [`SystemTestBackend::Farm`] unless it is set to
+    /// `"local"`.
+    pub fn from_env() -> Self {
+        match std::env::var("SYSTEM_TEST_BACKEND").as_deref() {
+            Ok("local") => SystemTestBackend::Local,
+            _ => SystemTestBackend::Farm,
+        }
+    }
+}
+
+impl TestEnvAttribute for SystemTestBackend {
     fn attribute_name() -> String {
-        "infra_provider".to_string()
+        "system_test_backend".to_string()
     }
 }

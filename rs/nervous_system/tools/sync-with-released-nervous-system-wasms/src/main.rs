@@ -3,10 +3,12 @@ use futures::{StreamExt, stream};
 use ic_agent::Agent;
 use ic_base_types::CanisterId;
 use ic_nervous_system_agent::nns::sns_wasm;
+use ic_nervous_system_string::clamp_string_len;
 use ic_nns_constants::{
     BITCOIN_TESTNET_CANISTER_ID, CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID,
-    CYCLES_MINTING_CANISTER_ID, DOGECOIN_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, DOGECOIN_CANISTER_ID, ENGINE_CONTROLLER_CANISTER_ID,
+    GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID,
+    INTERNET_IDENTITY_FRONTEND_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
     MIGRATION_CANISTER_ID, NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
@@ -18,7 +20,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
-pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 12] = [
+pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 13] = [
     ("registry", REGISTRY_CANISTER_ID),
     ("governance", GOVERNANCE_CANISTER_ID),
     ("governance-canister_test", GOVERNANCE_CANISTER_ID),
@@ -31,6 +33,7 @@ pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 12] = [
     ("node-rewards", NODE_REWARDS_CANISTER_ID),
     ("cycles_ledger_index", CYCLES_LEDGER_INDEX_CANISTER_ID),
     ("migration", MIGRATION_CANISTER_ID),
+    ("engine-controller", ENGINE_CONTROLLER_CANISTER_ID),
 ];
 
 struct ExternalCanisterInfo<'a> {
@@ -41,7 +44,7 @@ struct ExternalCanisterInfo<'a> {
     test_filename: Option<&'a str>,
 }
 
-const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 7] = [
+const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 8] = [
     (
         "cycles_ledger",
         ExternalCanisterInfo {
@@ -53,13 +56,23 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 7] = [
         },
     ),
     (
-        "internet_identity_test",
+        "internet_identity_backend",
         ExternalCanisterInfo {
             repository: "dfinity/internet-identity",
             tag_name_prefix: None,
             filename: "internet_identity_production.wasm.gz",
-            test_filename: Some("internet_identity_dev.wasm.gz"),
+            test_filename: None,
             canister_id: IDENTITY_CANISTER_ID,
+        },
+    ),
+    (
+        "internet_identity_frontend",
+        ExternalCanisterInfo {
+            repository: "dfinity/internet-identity",
+            tag_name_prefix: None,
+            filename: "internet_identity_frontend.wasm.gz",
+            test_filename: None,
+            canister_id: INTERNET_IDENTITY_FRONTEND_CANISTER_ID,
         },
     ),
     (
@@ -206,7 +219,7 @@ impl Tag {
             return Ok(None);
         }
 
-        let release: Release = res.json().await?;
+        let release: Release = decode_json_response(res, &release_url).await?;
 
         if release.tag_name != self.name {
             return Err(anyhow!(
@@ -248,30 +261,17 @@ struct ReleaseAsset {
 impl ReleaseAsset {
     // Returns the sha256 hash of the asset content.
     async fn sha256(&self) -> Result<String> {
-        let (client, token) = github_api_client_and_token()?;
-
-        let asset_bytes = client
-            .get(self.browser_download_url.clone())
-            .bearer_auth(&token)
-            .send()
-            .await?
-            .bytes()
-            .await?;
+        let response = fetch_github_url(&self.browser_download_url).await?;
+        let asset_bytes = response.bytes().await?;
 
         Ok(module_hash_hex(sha2::Sha256::digest(&asset_bytes).to_vec()))
     }
 
     // Returns the textual content of the asset.
     async fn text(&self) -> Result<String> {
-        let (client, token) = github_api_client_and_token()?;
+        let response = fetch_github_url(&self.browser_download_url).await?;
 
-        Ok(client
-            .get(self.browser_download_url.clone())
-            .bearer_auth(&token)
-            .send()
-            .await?
-            .text()
-            .await?)
+        Ok(response.text().await?)
     }
 }
 
@@ -309,21 +309,14 @@ async fn get_mainnet_canister_release(
     canister_filename: String,
     expected_module_hash_str: String,
 ) -> Result<Release> {
-    let (client, token) = github_api_client_and_token()?;
-
     let tags_per_page = 30; // maximum allowed is 100, but let's save bandwidth since typically we should find the deployed canister WASM early
     let mut page = 1;
     loop {
         let tags_url = format!(
             "{GITHUB_API}/repos/{canister_repository}/tags?per_page={tags_per_page}&page={page}"
         );
-        let tags: Vec<Tag> = client
-            .get(&tags_url)
-            .bearer_auth(&token)
-            .send()
-            .await?
-            .json()
-            .await?;
+        let response = fetch_github_url(&tags_url).await?;
+        let tags: Vec<Tag> = decode_json_response(response, &tags_url).await?;
 
         for tag in &tags {
             if let Some(ref tag_name_prefix) = canister_tag_name_prefix
@@ -626,4 +619,71 @@ fn update_mainnet_canisters_bzl_file(
     serde_json::to_writer_pretty(file, &m).unwrap();
 
     Ok(())
+}
+
+// Shared request plumbing and diagnostic-only helpers below. `convert_response_to_result` and
+// `decode_json_response` provide more diagnostics than the Reqwest library when there is a
+// failure.
+
+/// Maximum number of response-body bytes to include in an error/log message. The GitHub API can
+/// return large HTML error pages (e.g., during an outage); truncating keeps logs readable while
+/// still showing enough of the body to diagnose the failure.
+const MAX_LOGGED_BODY_LEN: usize = 2000;
+
+/// Diagnostic-only: returns `response` unchanged if its status is a success. Otherwise, reads the
+/// body and returns an error containing the status and the (possibly truncated) response body.
+///
+/// `url` is not used unless `response`'s status is not success; it is only there to add to the
+/// diagnostics in that case.
+async fn convert_response_to_result(
+    response: reqwest::Response,
+    url: &str,
+) -> Result<reqwest::Response> {
+    let status = response.status();
+    if status.is_success() {
+        return Ok(response);
+    }
+
+    let body = response
+        .text()
+        .await
+        .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
+    Err(anyhow!(
+        "GET {url} failed with status {status}. Response body: {}",
+        clamp_string_len(&body, MAX_LOGGED_BODY_LEN)
+    ))
+}
+
+/// Sends an authenticated GET request to `url` (a GitHub API or release-asset-download URL) and
+/// returns the response after checking (via [`convert_response_to_result`]) that its status is a
+/// success.
+async fn fetch_github_url(url: &str) -> Result<reqwest::Response> {
+    let (client, token) = github_api_client_and_token()?;
+    let response = client.get(url).bearer_auth(&token).send().await?;
+    convert_response_to_result(response, url).await
+}
+
+/// Diagnostic-only: like [`reqwest::Response::json`], but on failure (either a non-success
+/// status, or a body that fails to decode as JSON), the returned error includes the status and
+/// the (possibly abridged) response body.
+///
+/// `url` is not used unless decoding fails; it is only there to add to the diagnostics in that
+/// case.
+async fn decode_json_response<T: serde::de::DeserializeOwned>(
+    response: reqwest::Response,
+    url: &str,
+) -> Result<T> {
+    let response = convert_response_to_result(response, url).await?;
+    let body = response
+        .text()
+        .await
+        .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
+
+    serde_json::from_str(&body).map_err(|e| {
+        anyhow!(
+            "GET {url} returned a success status, but the response body failed to decode as \
+             JSON: {e}. Response body: {}",
+            clamp_string_len(&body, MAX_LOGGED_BODY_LEN)
+        )
+    })
 }

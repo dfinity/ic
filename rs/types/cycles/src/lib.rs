@@ -1,7 +1,18 @@
+mod compound_cycles;
 mod cycles;
+mod cycles_account_manager_subnet_config;
+mod cycles_cost_schedule;
 mod cycles_use_case;
 mod nominal_cycles;
 
-pub use cycles::Cycles;
-pub use cycles_use_case::CyclesUseCase;
-pub use nominal_cycles::NominalCycles;
+pub use compound_cycles::CompoundCycles;
+pub use cycles::{Cycles, serde_as_u64_pair};
+pub use cycles_account_manager_subnet_config::CyclesAccountManagerSubnetConfig;
+pub use cycles_cost_schedule::CanisterCyclesCostSchedule;
+pub use cycles_use_case::{
+    BurnedCycles, CanisterCreation, ComputeAllocation, CyclesUseCase, CyclesUseCaseKind,
+    CyclesUseCaseNonRefundableKind, CyclesUseCaseRefundableKind, DeletedCanisters, DroppedMessages,
+    ECDSAOutcalls, HTTPOutcalls, IngressInduction, Instructions, Memory,
+    RequestAndResponseTransmission, SchnorrOutcalls, Uninstall, VetKd,
+};
+pub use nominal_cycles::{NominalCycles, testing::NominalCyclesTesting};

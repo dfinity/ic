@@ -149,9 +149,9 @@ fn run_fstrim_tool(node: &IcNodeSnapshot, logger: &Logger) {
 }
 
 fn assert_metrics_are_initialized(metrics: &FsTrimMetrics) {
-    assert_eq!(metrics.total_runs, 0f64);
+    assert_eq!(metrics.total_runs, 0_f64);
     assert!(metrics.last_run_success);
-    assert_eq!(metrics.last_duration_milliseconds, 0f64);
+    assert_eq!(metrics.last_duration_milliseconds, 0_f64);
 }
 
 fn assert_successful_run_and_metrics_valid_and_updated(
@@ -162,6 +162,6 @@ fn assert_successful_run_and_metrics_valid_and_updated(
     assert!(updated_metrics.last_run_success);
     assert_eq!(
         updated_metrics.total_runs,
-        initial_metrics.total_runs + 1f64
+        initial_metrics.total_runs + 1_f64
     );
 }

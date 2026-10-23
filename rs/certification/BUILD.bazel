@@ -3,50 +3,70 @@ load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/tree_hash",
-    "//rs/crypto/utils/threshold_sig",
-    "//rs/crypto/utils/threshold_sig_der",
-    "//rs/tree_deserializer",
-    "//rs/types/types",
-    "@crate_index//:hex",
-    "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/canonical_state",
-    "//rs/certification/test-utils",
-    "//rs/crypto/internal/crypto_lib/types",
-    "//rs/crypto/test_utils/reproducible_rng",
-    "//rs/types/base_types",
-    "@crate_index//:assert_matches",
-    "@crate_index//:rand",
-    "@crate_index//:rstest",
-]
-
 rust_library(
     name = "certification",
     srcs = glob(["src/**"]),
     crate_name = "ic_certification",
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/tree_hash",
+        "//rs/crypto/utils/threshold_sig",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/tree_deserializer",
+        "//rs/types/types",
+        "@crate_index//:hex",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+    ],
 )
 
 rust_test(
     name = "certification_test",
     crate = ":certification",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/certification/test-utils",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/crypto/tree_hash",
+        "//rs/crypto/utils/threshold_sig",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/tree_deserializer",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:hex",
+        "@crate_index//:rand",
+        "@crate_index//:rstest",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+    ],
 )
 
 rust_bench(
     name = "certification_bench",
     srcs = ["benches/certification.rs"],
     crate_root = "benches/certification.rs",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+    deps = [
+        # Keep sorted.
         ":certification",
+        "//rs/canonical_state",
+        "//rs/certification/test-utils",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/crypto/tree_hash",
+        "//rs/crypto/utils/threshold_sig",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/tree_deserializer",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:assert_matches",
         "@crate_index//:criterion",
+        "@crate_index//:hex",
+        "@crate_index//:rand",
+        "@crate_index//:rstest",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
     ],
 )

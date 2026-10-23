@@ -7,7 +7,7 @@ case $1 in
     -h | --help)
         cat <<EOF >&2
         usage:
-            $0 --bin path/to/dir/   # builds all fuzzing binaries in the given directory.           
+            $0 --bin path/to/dir/   # builds all fuzzing binaries in the given directory.
             $0 --zip path/to/dir/   # builds and zips' all binaries in given directory. Includes a version.txt file with sha256sum.
 EOF
         exit 0
@@ -31,7 +31,7 @@ EOF
         LIST_OF_FUZZERS=$(bazel query 'attr(tags, "libfuzzer", //rs/...)')
 
         for FUZZER in $LIST_OF_FUZZERS; do
-            bazel build --config=lint --config=fuzzing $FUZZER
+            bazel build --config=fuzzing $FUZZER
             SOURCE_BINARY="$WORKSPACE/$(bazel cquery --config=fuzzing --output=files $FUZZER)"
             if [ $1 == "--zip" ]; then # zip branch
                 SOURCE_BASENAME=$(basename $SOURCE_BINARY)
@@ -59,12 +59,12 @@ EOF
         # Add a dummy seed corpus file for AFL
         echo "A dummy corpus file to make AFL work" >seed_corpus.txt
         for FUZZER in $LIST_OF_FUZZERS; do
-            bazel build --config=lint --config=afl $FUZZER
+            bazel build --config=afl $FUZZER
             SOURCE_BINARY="$WORKSPACE/$(bazel cquery --config=fuzzing --output=files $FUZZER)"
             if [ $1 == "--zip" ]; then # zip branch
                 SOURCE_BASENAME=$(basename $SOURCE_BINARY)
                 zip -j "${SOURCE_BASENAME}_seed_corpus.zip" seed_corpus.txt
-                zip -j "${AFL_ZIP_PREFIX}_${SOURCE_BASENAME}-${CURRENT_TIME}.zip" $SOURCE_BINARY /afl/afl-fuzz /afl/afl-showmap
+                zip -j "${AFL_ZIP_PREFIX}_${SOURCE_BASENAME}-${CURRENT_TIME}.zip" $SOURCE_BINARY /usr/local/bin/{afl-fuzz,afl-showmap}
                 zip -ru "${AFL_ZIP_PREFIX}_${SOURCE_BASENAME}-${CURRENT_TIME}.zip" "${SOURCE_BASENAME}_seed_corpus.zip"
                 rm -r "${SOURCE_BASENAME}_seed_corpus.zip"
             else # bin branch

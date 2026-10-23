@@ -1,7 +1,7 @@
+use flate2::{Compression, read::GzDecoder, write::GzEncoder};
 use ic_crypto_sha2::Sha256;
 use ic_wasm;
 use lazy_static::lazy_static;
-use libflate::gzip;
 use std::io::Read;
 
 /// A small, valid WASM suitable for tests.
@@ -34,17 +34,14 @@ pub fn annotate_wasm_with_metadata(
 
 /// Gzips a wasm, returning the hash of its compressed representation.
 pub fn gzip_wasm(wasm: &[u8]) -> Vec<u8> {
-    let mut encoder = gzip::Encoder::new(Vec::new()).expect("Failed to create gzip encoder.");
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
     std::io::copy(&mut &wasm[..], &mut encoder).expect("Failed to copy WASM bytes.");
-    encoder
-        .finish()
-        .into_result()
-        .expect("Failed to finish gzip encoding.")
+    encoder.finish().expect("Failed to finish gzip encoding.")
 }
 
 /// Decompresses a previously gzipped wasm.
 pub fn ungzip_wasm(gzipped_bytes: &[u8]) -> Vec<u8> {
-    let mut decoder = gzip::Decoder::new(gzipped_bytes).expect("Failed to create gzip decoder.");
+    let mut decoder = GzDecoder::new(gzipped_bytes);
     let mut wasm_buf = Vec::new();
     decoder
         .read_to_end(&mut wasm_buf)

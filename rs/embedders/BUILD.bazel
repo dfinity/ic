@@ -50,13 +50,12 @@ rust_library(
         "//rs/types/wasm_types",
         "//rs/utils",
         "//rs/utils/lru_cache",
-        "@crate_index//:anyhow",
         "@crate_index//:bincode",
         "@crate_index//:candid",
+        "@crate_index//:flate2",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:itertools",
         "@crate_index//:libc",
-        "@crate_index//:libflate",
         "@crate_index//:nix",
         "@crate_index//:num-traits",
         "@crate_index//:prometheus",
@@ -65,10 +64,10 @@ rust_library(
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:slog",
+        "@crate_index//:target-lexicon",
         "@crate_index//:tempfile",
         "@crate_index//:wasm-encoder",
         "@crate_index//:wasmparser",
-        "@crate_index//:wasmprinter",
         "@crate_index//:wasmtime",
         "@crate_index//:wirm",
     ],
@@ -93,6 +92,7 @@ rust_test(
     crate = ":embedders",
     deps = [
         # Keep sorted.
+        "//rs/config",
         "//rs/interfaces",
         "//rs/test_utilities",
         "//rs/test_utilities/types",
@@ -139,6 +139,26 @@ rust_test(
     ],
 )
 
+rust_test(
+    name = "precompiled_universal_canister_test",
+    srcs = ["tests/precompiled_universal_canister.rs"],
+    crate_root = "tests/precompiled_universal_canister.rs",
+    data = ["//rs/universal_canister/impl:universal_canister.module"],
+    env = {
+        "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
+    },
+    # The module is compiled for each architecture and OS, so check it on all.
+    tags = ["test_all_platforms"],
+    deps = [
+        # Keep sorted.
+        ":embedders",
+        "//rs/config",
+        "//rs/universal_canister/lib",
+        "@crate_index//:bincode",
+        "@crate_index//:wasmtime",
+    ],
+)
+
 # Run some tests using wasm spec files.
 # To add a test suite, see the `http_archive` pulling in the testsuite
 # and add a new target.
@@ -152,6 +172,7 @@ rust_ic_test_suite_with_extra_srcs(
         exclude = [
             "tests/wasmtime_simple.rs",
             "tests/instrumentation.rs",
+            "tests/precompiled_universal_canister.rs",
             "tests/system_api.rs",
             "tests/sandbox_safe_system_state.rs",
         ],
@@ -186,6 +207,7 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/config",
         "//rs/cycles_account_manager",
         "//rs/interfaces",
+        "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/nns/constants",
         "//rs/registry/routing_table",
@@ -204,7 +226,6 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/wasm_types",
-        "@crate_index//:anyhow",
         "@crate_index//:assert_matches",
         "@crate_index//:lazy_static",
         "@crate_index//:libc",
@@ -293,6 +314,7 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
+        ":embedders",
         "//rs/rust_canisters/canister_test",
         "//rs/test_utilities/execution_environment",
         "//rs/types/types",
@@ -329,8 +351,8 @@ rust_ic_bench(
         "//rs/types/wasm_types",
         "@crate_index//:candid",
         "@crate_index//:criterion",
+        "@crate_index//:flate2",
         "@crate_index//:lazy_static",
-        "@crate_index//:libflate",
         "@crate_index//:rayon",
         "@crate_index//:wat",
     ],

@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 use super::services::{self, initial_sync_is_completed};
 use crate::{
     MultiTokenAppState,

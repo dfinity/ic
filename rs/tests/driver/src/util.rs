@@ -6,7 +6,7 @@ use crate::{
     retry_with_msg, retry_with_msg_async,
     types::*,
 };
-use anyhow::{anyhow, bail};
+use anyhow::{Context, anyhow, bail};
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
 use config_tool::guestos::generate_ic_config;
@@ -16,7 +16,7 @@ use futures::{
     future::{join_all, select_all, try_join_all},
 };
 use ic_agent::{
-    Agent, AgentError, Identity, Signature,
+    Agent, AgentError, Identity, RequestId, Signature,
     agent::{
         CallResponse, EnvelopeContent, RejectCode, RejectResponse,
         http_transport::reqwest_transport::reqwest,
@@ -26,7 +26,7 @@ use ic_agent::{
     identity::BasicIdentity,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
-use ic_cdk::management_canister::{
+use ic_cdk_management_canister::{
     SignWithEcdsaResult, SignWithSchnorrResult, VetKDDeriveKeyResult,
 };
 use ic_config::{ConfigOptional, ConfigSource};
@@ -54,7 +54,13 @@ use ic_types::{
 };
 use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
-use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
+use ic_utils::{
+    call::SyncCall,
+    interfaces::{
+        ManagementCanister,
+        management_canister::{CanisterLogRecord, FetchCanisterLogsArgs},
+    },
+};
 use icp_ledger::{
     AccountBalanceArgs, AccountIdentifier, DEFAULT_TRANSFER_FEE, Memo, SendArgs, Subaccount,
     Tokens, tokens_from_proto,
@@ -62,7 +68,9 @@ use icp_ledger::{
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use on_wire::FromWire;
+use serde::{Deserialize, Deserializer};
 use slog::{Logger, debug, info};
+use ssh2::Session;
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
@@ -288,9 +296,11 @@ impl<'a> UniversalCanister<'a> {
 
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
+        let mut create_builder = mgr.create_canister();
+        if let Some(ca) = compute_allocation {
+            create_builder = create_builder.with_compute_allocation(ca);
+        }
+        let canister_id = create_builder
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
@@ -583,6 +593,30 @@ impl<'a> UniversalCanister<'a> {
             .call_and_wait()
             .await
     }
+
+    /// Submits `payload` as an ingress message to the canister's `update`
+    /// method without waiting for the call to complete, and returns the ID of
+    /// the submitted message, so that its status can be polled later. `None` if
+    /// the call happened to complete before the submission returned, in which
+    /// case there is nothing left to poll for.
+    ///
+    /// Useful for update calls that are not expected to complete for a long
+    /// time, or at all.
+    pub async fn submit_update<P: Into<Vec<u8>>>(
+        &self,
+        payload: P,
+    ) -> Result<Option<RequestId>, AgentError> {
+        let response = self
+            .agent
+            .update(&self.canister_id, "update")
+            .with_arg(payload.into())
+            .call()
+            .await?;
+        Ok(match response {
+            CallResponse::Response(_) => None,
+            CallResponse::Poll(request_id) => Some(request_id),
+        })
+    }
 }
 
 /// Provides an abstraction to the message canister.
@@ -658,9 +692,11 @@ impl<'a> MessageCanister<'a> {
     ) -> Result<MessageCanister<'a>, String> {
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
+        let mut create_builder = mgr.create_canister();
+        if let Some(ca) = compute_allocation {
+            create_builder = create_builder.with_compute_allocation(ca);
+        }
+        let canister_id = create_builder
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
@@ -724,6 +760,14 @@ impl<'a> MessageCanister<'a> {
     /// Forwards a message to the `receiver` that calls
     /// `receiver.method(payload)` along with the specified amount of cycles
     /// and returns the result.
+    ///
+    /// If the receiver rejects the call, the message canister re-rejects it via
+    /// `msg_reject(err.to_string())`. The caller therefore always observes the
+    /// reject code `CanisterReject` and a reject message of the form
+    /// `"call rejected: <code> - <message>"` (ic-cdk's `CallRejected` `Display`),
+    /// where `<code>` and `<message>` are the receiver's original reject code and
+    /// message. Don't rely on the observed reject code or on a prefix of the
+    /// message when classifying such errors.
     pub async fn forward_with_cycles_to(
         &self,
         receiver: &Principal,
@@ -748,6 +792,9 @@ impl<'a> MessageCanister<'a> {
 
     /// Forwards a message to the `receiver` that calls
     /// `receiver.method(payload)` and returns the result.
+    ///
+    /// See [`Self::forward_with_cycles_to`] for how rejects of the receiver are
+    /// reported.
     pub async fn forward_to(
         &self,
         receiver: &Principal,
@@ -793,6 +840,19 @@ impl<'a> MessageCanister<'a> {
             .await
             .unwrap_or_else(|err| panic!("Could not read message: {err}"))
     }
+
+    pub async fn fetch_logs(&self) -> Vec<CanisterLogRecord> {
+        let mgr = ManagementCanister::create(self.agent);
+        mgr.fetch_canister_logs(&FetchCanisterLogsArgs {
+            canister_id: self.canister_id,
+            filter: None,
+        })
+        .call()
+        .await
+        .unwrap_or_else(|err| panic!("Could not fetch canister logs: {err}"))
+        .0
+        .canister_log_records
+    }
 }
 
 /// Provides an abstraction to the signer canister.
@@ -829,9 +889,11 @@ impl<'a> SignerCanister<'a> {
     ) -> SignerCanister<'a> {
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
+        let mut create_builder = mgr.create_canister();
+        if let Some(ca) = compute_allocation {
+            create_builder = create_builder.with_compute_allocation(ca);
+        }
+        let canister_id = create_builder
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
@@ -994,14 +1056,10 @@ pub async fn agent_with_client_identity(
 
 // Creates an identity to be used with `Agent`.
 pub fn random_ed25519_identity() -> BasicIdentity {
-    let rng = ring::rand::SystemRandom::new();
-    let key_pair = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng)
-        .expect("Could not generate a key pair.");
-
-    BasicIdentity::from_key_pair(
-        ring::signature::Ed25519KeyPair::from_pkcs8(key_pair.as_ref())
-            .expect("Could not read the key pair."),
-    )
+    use rand::RngCore;
+    let mut raw_key = [0_u8; 32];
+    rand::thread_rng().fill_bytes(&mut raw_key);
+    BasicIdentity::from_raw_key(&raw_key)
 }
 
 pub fn get_nns_node(topo_snapshot: &TopologySnapshot) -> IcNodeSnapshot {
@@ -1292,7 +1350,8 @@ pub async fn get_balance(canister_id: &Principal, agent: &Agent) -> u128 {
     let mgr = ManagementCanister::create(agent);
     let canister_status = mgr
         .canister_status(canister_id)
-        .call_and_wait()
+        .as_update()
+        .call()
         .await
         .unwrap_or_else(|err| panic!("Could not get canister status: {err}"))
         .0;
@@ -1337,7 +1396,7 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
         }
         Err(_) => {
             let rt = {
-                let cpus = num_cpus::get();
+                let cpus = crate::driver::group::available_parallelism();
                 let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
                 Builder::new_multi_thread()
                     .worker_threads(workers)
@@ -1466,7 +1525,8 @@ pub fn to_principal_id(principal: &Principal) -> PrincipalId {
 pub async fn agent_observes_canister_module(agent: &Agent, canister_id: &Principal) -> bool {
     ManagementCanister::create(agent)
         .canister_status(canister_id)
-        .call_and_wait()
+        .as_update()
+        .call()
         .await
         .is_ok_and(|s| s.0.module_hash.is_some())
 }
@@ -1549,6 +1609,9 @@ pub fn get_config() -> ConfigOptional {
         domain_name: "".to_string(),
         node_reward_type: "".to_string(),
         malicious_behavior: "null".to_string(),
+        extra_api_boundary_node_trust_anchors_pem: "null".to_string(),
+        engine_management_canister_id: "null".to_string(),
+        peer_guest_vm_address: None,
     };
 
     let ic_json =
@@ -1632,6 +1695,236 @@ impl LogStream {
 
         let bf = BufReader::new(stream);
         Ok(bf.lines())
+    }
+}
+
+/// A builder for querying `journalctl` on a remote node over SSH.
+///
+/// Use the builder methods to configure the query (e.g. limit the number of entries, follow new
+/// entries, look at the previous boot), then call [`search`](Self::search) or
+/// [`contains`](Self::contains) to execute it. The search pattern is a PCRE2 regular expression
+/// (see `pcre2pattern(3)`) that `journalctl --grep=` matches case-sensitively against the raw,
+/// possibly multi-line `MESSAGE` field of each entry rather than against its JSON encoding,
+/// so `^`, `$` and `.` refer to the message text, and `(?i)` in the pattern overrides the case
+/// sensitivity. Matching entries are returned in chronological order.
+pub struct JournalStreamer {
+    session: Session,
+    query: JournalQuery,
+}
+
+/// The [`Session`]-free part of a [`JournalStreamer`]: the configured query, from which the
+/// `journalctl` command lines are built.
+#[derive(Default)]
+struct JournalQuery {
+    follow: bool,
+    previous_boot: bool,
+    max_lines: Option<usize>,
+    from_cursor: Option<String>,
+}
+
+const JOURNALCTL: &str = "journalctl --output json --output-fields='MESSAGE,__CURSOR' --all";
+
+impl JournalQuery {
+    /// The command printing the newest journal entry.
+    fn newest_entry_command() -> String {
+        // Without `--grep=`: together with a pattern, `--lines=N` makes journalctl imply
+        // `--reverse`.
+        format!("{JOURNALCTL} --lines=1")
+    }
+
+    /// The command printing the entries matching `search_regex`.
+    fn search_command(&self, search_regex: &str) -> String {
+        let mut command = JOURNALCTL.to_string();
+        if self.follow {
+            command.push_str(" --follow");
+        }
+        if self.previous_boot {
+            command.push_str(" --boot=-1");
+        }
+        if let Some(from_cursor) = &self.from_cursor {
+            command.push_str(&format!(
+                " --after-cursor={}",
+                shell_single_quote(from_cursor)
+            ));
+        }
+        if let Some(max_lines) = self.max_lines {
+            if !self.follow {
+                // `--lines=+N` rather than `--lines=N`: together with `--grep=` the latter makes
+                // journalctl imply `--reverse`, which reverses the output and, with
+                // `--after-cursor=`, walks backwards from the cursor.
+                command.push_str(&format!(" --lines=+{max_lines}"));
+            } else if self.from_cursor.is_none() {
+                // In follow mode `--lines=` only selects the backlog, which a cursor selects
+                // already.
+                command.push_str(&format!(" --lines={max_lines}"));
+            }
+        }
+        // journalctl matches all-lowercase patterns case-insensitively unless told otherwise. The
+        // argument of `--case-sensitive` is optional, so `=true` keeps the flag independent of the
+        // word that follows it.
+        command.push_str(&format!(
+            " --case-sensitive=true --grep={}",
+            shell_single_quote(search_regex)
+        ));
+        match self.max_lines {
+            // `head` returns after `max_lines` matches, upon which journalctl notices that its
+            // stdout has been closed and exits. The exit status of the pipeline is head's, so the
+            // guard turns an empty result (journalctl failed before matching anything) back into a
+            // non-zero exit status, which surfaces journalctl's stderr.
+            Some(max_lines) if self.follow => format!(
+                "out=$({command} | head --lines={max_lines}); [ -n \"$out\" ] && printf '%s\\n' \"$out\""
+            ),
+            _ => command,
+        }
+    }
+}
+
+/// Quotes `s` as a single bash word.
+fn shell_single_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
+}
+
+/// Deserialization target for a single JSON record emitted by
+/// `journalctl --output json --output-fields='MESSAGE,__CURSOR'`.
+#[derive(Deserialize)]
+struct JournalOutput {
+    // Absent only in an entry without a `MESSAGE` field returned by the cursor lookup; `--grep=`
+    // skips such entries.
+    #[serde(alias = "MESSAGE", default, deserialize_with = "deserialize_message")]
+    message: String,
+    #[serde(alias = "__CURSOR")]
+    cursor: String,
+}
+
+/// Deserializes a `MESSAGE` field, which `journalctl --output json` emits as an array of byte
+/// values instead of a string when it contains control characters (other than tab and newline),
+/// DEL or C1 characters, or invalid UTF-8, and as an array of such values for an entry with
+/// several `MESSAGE=` fields.
+fn deserialize_message<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    fn flatten(value: serde_json::Value) -> String {
+        match value {
+            serde_json::Value::String(message) => message,
+            serde_json::Value::Array(values)
+                if values.iter().all(|value| {
+                    value
+                        .as_u64()
+                        .is_some_and(|byte| byte <= u64::from(u8::MAX))
+                }) =>
+            {
+                let bytes = values
+                    .iter()
+                    .map(|value| value.as_u64().unwrap() as u8)
+                    .collect::<Vec<_>>();
+                String::from_utf8_lossy(&bytes).into_owned()
+            }
+            serde_json::Value::Array(values) => values
+                .into_iter()
+                .map(flatten)
+                .collect::<Vec<_>>()
+                .join("\n"),
+            _ => String::new(),
+        }
+    }
+    Ok(flatten(serde_json::Value::deserialize(deserializer)?))
+}
+
+/// Parses the JSON records that `journalctl --output json` prints one per line.
+fn parse_journal_output(output: &str) -> anyhow::Result<Vec<JournalOutput>> {
+    output
+        .lines()
+        .map(|line| {
+            serde_json::from_str(line)
+                .with_context(|| format!("Invalid journalctl output line: {line}"))
+        })
+        .collect()
+}
+
+impl JournalStreamer {
+    /// Creates a new `JournalStreamer` that will run `journalctl` commands
+    /// over the given SSH `session`.
+    pub fn new(session: Session) -> Self {
+        Self {
+            session,
+            query: JournalQuery::default(),
+        }
+    }
+
+    /// Returns at most the first `max_lines` matching entries.
+    ///
+    /// Without [`follow`](Self::follow) this maps to `journalctl --lines=+N`. With `follow` the
+    /// search returns as soon as `max_lines` entries matched; the entries considered are the last
+    /// `max_lines` entries of the journal (not matches) followed by the new ones, or, after
+    /// [`from_now`](Self::from_now), every entry after the cursor.
+    pub fn max_lines(mut self, max_lines: usize) -> Self {
+        self.query.max_lines = Some(max_lines);
+        self
+    }
+
+    /// Enables follow mode (maps to `journalctl --follow`), causing `journalctl` to block and wait
+    /// for new entries instead of returning immediately. Only entries of the current boot are
+    /// followed (journalctl implies `--boot`), so a cursor from an earlier boot starts at the
+    /// first entry of the current boot.
+    /// Searching for a string after calling this function will return only when the SSH session is
+    /// closed, i.e. when the node shuts down or reboots. Even then, it will probably return an
+    /// error with `transport read`. Thus, it is recommended to also call `max_lines` to return as
+    /// soon as the expected number of entries matched.
+    pub fn follow(mut self) -> Self {
+        self.query.follow = true;
+        self
+    }
+
+    /// Restricts the search to the previous boot's journal entries (maps to `journalctl
+    /// --boot=-1`).
+    pub fn previous_boot(mut self) -> Self {
+        self.query.previous_boot = true;
+        self
+    }
+
+    /// Anchors subsequent searches to start after the current latest journal entry. This is useful
+    /// for ignoring pre-existing log lines and only matching entries that appear after this call.
+    ///
+    /// Returns an error on transport errors or if the journal is empty and there is no cursor to
+    /// anchor to.
+    pub fn from_now(mut self) -> anyhow::Result<Self> {
+        let output =
+            execute_bash_script_from_session(&self.session, &JournalQuery::newest_entry_command())?;
+        let cursor = parse_journal_output(&output)?
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow!("No journal entries found"))?
+            .cursor;
+
+        self.query.from_cursor = Some(cursor);
+        Ok(self)
+    }
+
+    /// Executes the configured `journalctl` query and returns whether there are any entries
+    /// matching `search_regex`.
+    ///
+    /// Without [`follow`](Self::follow), no match is reported as an error (journalctl exits with
+    /// status 1), which is why callers wanting a boolean use `unwrap_or_default()`. With `follow`,
+    /// an error means that the SSH session was closed or that journalctl exited without matching
+    /// anything.
+    pub fn contains(&self, search_regex: &str) -> anyhow::Result<bool> {
+        self.search_and_return_cursors(search_regex)
+            .map(|matches| !matches.is_empty())
+    }
+
+    /// Executes the configured `journalctl` query and returns the messages of the entries matching
+    /// `search_regex`. See [`contains`](Self::contains) for when no match is an error.
+    pub fn search(&self, search_regex: &str) -> anyhow::Result<Vec<String>> {
+        self.search_and_return_cursors(search_regex)
+            .map(|iter| iter.into_iter().map(|output| output.message).collect())
+    }
+
+    /// Executes the `journalctl --grep=` command over SSH, parses the JSON output, and returns
+    /// `(message, cursor)` pairs for entries matching `search_regex`.
+    fn search_and_return_cursors(&self, search_regex: &str) -> anyhow::Result<Vec<JournalOutput>> {
+        let output = execute_bash_script_from_session(
+            &self.session,
+            &self.query.search_command(search_regex),
+        )?;
+        parse_journal_output(&output)
     }
 }
 
@@ -1994,6 +2287,7 @@ pub fn sign_query(content: &HttpQueryContent, identity: &impl Identity) -> Signa
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
         nonce: None,
+        sender_info: None,
     };
     identity.sign(&msg).unwrap()
 }
@@ -2007,6 +2301,7 @@ pub fn sign_update(content: &HttpCallContent, identity: &impl Identity) -> Signa
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
         nonce: content.nonce.clone().map(|blob| blob.0),
+        sender_info: None,
     };
     identity.sign(&msg).unwrap()
 }
@@ -2052,4 +2347,117 @@ where
     let duration = start.elapsed();
     info!(log, "Executed '{}' in: {:?}", description, duration);
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn journal_query_search_command() {
+        let base = "journalctl --output json --output-fields='MESSAGE,__CURSOR' --all";
+
+        assert_eq!(
+            JournalQuery::default().search_command("is halted"),
+            format!("{base} --case-sensitive=true --grep='is halted'")
+        );
+        assert_eq!(
+            JournalQuery {
+                previous_boot: true,
+                ..Default::default()
+            }
+            .search_command("Orchestrator shut down gracefully"),
+            format!(
+                "{base} --boot=-1 --case-sensitive=true --grep='Orchestrator shut down gracefully'"
+            )
+        );
+        // Single quotes in the pattern must not end the quoted word.
+        assert_eq!(
+            JournalQuery::default().search_command("it's"),
+            format!("{base} --case-sensitive=true --grep='it'\\''s'")
+        );
+        // Without `--follow`, `--lines=+N`: `--lines=N` would make journalctl imply `--reverse`.
+        assert_eq!(
+            JournalQuery {
+                max_lines: Some(2),
+                ..Default::default()
+            }
+            .search_command("x"),
+            format!("{base} --lines=+2 --case-sensitive=true --grep='x'")
+        );
+        // Follow mode without `max_lines`: nothing terminates the command.
+        assert_eq!(
+            JournalQuery {
+                follow: true,
+                ..Default::default()
+            }
+            .search_command("x"),
+            format!("{base} --follow --case-sensitive=true --grep='x'")
+        );
+        // Follow mode without a cursor: the backlog is the last `max_lines` entries; `head` returns
+        // after `max_lines` matches and the guard fails the command when journalctl exits without
+        // matching anything.
+        assert_eq!(
+            JournalQuery {
+                follow: true,
+                max_lines: Some(1),
+                ..Default::default()
+            }
+            .search_command("FileHashMismatchError"),
+            format!(
+                "out=$({base} --follow --lines=1 --case-sensitive=true --grep='FileHashMismatchError' | head --lines=1); [ -n \"$out\" ] && printf '%s\\n' \"$out\""
+            )
+        );
+        // Follow mode with a cursor: the cursor selects the backlog, so no `--lines=`.
+        assert_eq!(
+            JournalQuery {
+                follow: true,
+                max_lines: Some(1),
+                from_cursor: Some("s=1;i=2".to_string()),
+                ..Default::default()
+            }
+            .search_command("is halted"),
+            format!(
+                "out=$({base} --follow --after-cursor='s=1;i=2' --case-sensitive=true --grep='is halted' | head --lines=1); [ -n \"$out\" ] && printf '%s\\n' \"$out\""
+            )
+        );
+    }
+
+    #[test]
+    fn journal_query_newest_entry_command() {
+        assert_eq!(
+            JournalQuery::newest_entry_command(),
+            "journalctl --output json --output-fields='MESSAGE,__CURSOR' --all --lines=1"
+        );
+    }
+
+    #[test]
+    fn parse_journal_output_message_encodings() {
+        let output = [
+            r#"{"MESSAGE":"plain","__CURSOR":"c1"}"#,
+            // Control characters or invalid UTF-8 make journalctl emit the message as bytes.
+            r#"{"MESSAGE":[104,105,27,255],"__CURSOR":"c2"}"#,
+            // An entry with several `MESSAGE=` fields is emitted as an array.
+            r#"{"MESSAGE":["first",[115,101,99,111,110,100]],"__CURSOR":"c3"}"#,
+            // The newest entry may have no `MESSAGE` field at all.
+            r#"{"__CURSOR":"c4"}"#,
+        ]
+        .join("\n");
+
+        let parsed = parse_journal_output(&output).unwrap();
+        assert_eq!(
+            parsed
+                .iter()
+                .map(|output| (output.message.as_str(), output.cursor.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("plain", "c1"),
+                ("hi\u{1b}\u{fffd}", "c2"),
+                ("first\nsecond", "c3"),
+                ("", "c4"),
+            ]
+        );
+
+        assert!(parse_journal_output("-- No entries --").is_err());
+    }
 }

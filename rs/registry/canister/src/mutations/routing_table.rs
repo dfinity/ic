@@ -1,7 +1,7 @@
 use crate::{
-    common::LOG_PREFIX,
-    mutations::node_management::common::{
-        get_key_family_iter_at_version, get_key_family_raw_iter_at_version,
+    common::{
+        LOG_PREFIX,
+        key_family::{get_key_family_iter_at_version, get_key_family_raw_iter_at_version},
     },
     pb::v1::SubnetForCanister,
     registry::Registry,
@@ -16,7 +16,7 @@ use ic_registry_keys::{
 };
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable,
-    routing_table_insert_subnet,
+    routing_table_insert_subnet, routing_table_insert_subnet_and_reroute_or_panic,
 };
 use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 use ic_registry_transport::{delete, upsert};
@@ -296,15 +296,29 @@ impl Registry {
         routing_table_into_registry_mutation(self, routing_table)
     }
 
+    /// Subnet deletion is (currently) a manual process and we don't expect to actually delete
+    /// a subnet while a canister migration is ongoing (instead we expect to disable the
+    /// canister migration API first and only delete a subnet once there's no ongoing canister
+    /// migration). However, e.g., if a subnet is permanently stuck, it might be impossible to
+    /// successfully complete an ongoing canister migration and in this case, we'd like to still
+    /// be able to delete such a subnet. In this case, the outcome should be as if the migration
+    /// completed before the subnet got deleted.
     pub fn migrate_canisters_to_subnet(
         &self,
         version: u64,
         canister_ids: Vec<CanisterId>,
-        subnet_id: SubnetId,
+        target_subnet_id: SubnetId,
     ) -> Vec<RegistryMutation> {
         self.modify_routing_table(version, |routing_table| {
+            let target_subnet_in_routing_table = routing_table
+                .iter()
+                .any(|(_range, sid)| *sid == target_subnet_id);
             for canister_id in canister_ids {
-                routing_table.assign_canister(canister_id, subnet_id);
+                if target_subnet_in_routing_table {
+                    routing_table.assign_canister(canister_id, target_subnet_id);
+                } else {
+                    routing_table.unassign_canister(canister_id);
+                }
             }
             routing_table.optimize();
         })
@@ -318,6 +332,22 @@ impl Registry {
     ) -> Vec<RegistryMutation> {
         self.modify_routing_table(version, |routing_table| {
             routing_table_insert_subnet(routing_table, subnet_id_to_add).unwrap();
+        })
+    }
+
+    /// Handle adding a subnet to the routing table.
+    pub fn add_subnet_to_routing_table_and_reroute(
+        &self,
+        version: u64,
+        canister_id_ranges: CanisterIdRanges,
+        subnet_id_to_add: SubnetId,
+    ) -> Vec<RegistryMutation> {
+        self.modify_routing_table(version, |routing_table| {
+            routing_table_insert_subnet_and_reroute_or_panic(
+                subnet_id_to_add,
+                routing_table,
+                canister_id_ranges,
+            )
         })
     }
 
@@ -345,6 +375,24 @@ impl Registry {
                 .assign_ranges(canister_id_ranges, destination)
                 .unwrap();
             routing_table.optimize();
+        })
+    }
+
+    /// Makes a registry mutation that merges all canister ID ranges currently
+    /// assigned to the `source` subnet into the canister ID range set of the
+    /// `destination` subnet. After the mutation, `source` does not host any
+    /// canister ID range anymore.
+    pub fn merge_subnets_mutation(
+        &self,
+        version: u64,
+        source: SubnetId,
+        destination: SubnetId,
+    ) -> Vec<RegistryMutation> {
+        self.modify_routing_table(version, |routing_table| {
+            let source_ranges = routing_table.ranges(source);
+            routing_table
+                .assign_ranges(source_ranges, destination)
+                .unwrap();
         })
     }
 
@@ -443,7 +491,7 @@ mod tests {
     use crate::common::test_helpers::invariant_compliant_registry;
 
     use super::*;
-    use crate::mutations::node_management::common::get_key_family;
+    use crate::common::key_family::get_key_family;
     use assert_matches::assert_matches;
     use ic_base_types::CanisterId;
     use ic_registry_keys::CANISTER_RANGES_PREFIX;

@@ -27,7 +27,7 @@ use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::{
     CanisterId, CryptoHashOfState, Height, RegistryVersion, SubnetId,
-    consensus::certification::{Certification, CertificationContent},
+    consensus::certification::{Certification, CertificationContent, SignedCertificationContent},
     crypto::Signed,
     signature::ThresholdSignature,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
@@ -89,7 +89,7 @@ pub fn certify_height(state_manager: &impl StateManager, h: Height) -> Certifica
 
     let certification = Certification {
         height: h,
-        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: Signed {
             content: CertificationContent::new(hash),
             signature: ThresholdSignature::fake(),
@@ -107,7 +107,7 @@ impl Verifier for RejectingVerifier {
     fn validate(
         &self,
         _subnet_id: SubnetId,
-        _certification: &Certification,
+        _certification: &SignedCertificationContent,
         _registry_version: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
         Err(InvalidCertificationReason::RejectedByRejectingVerifier.into())
@@ -157,7 +157,7 @@ pub fn encode_decode_stream_test<
         });
 
         state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
-
+        state_manager.flush_hash_channel();
         certify_height(&state_manager, Height::new(1));
 
         let slice = state_manager
@@ -195,7 +195,8 @@ pub fn encode_decode_stream_test<
 /// `CertifiedStreamSlice`, and checks that:
 ///
 ///  1. the payload is the same as that of a `CertifiedStreamSlice` with both
-///     witness and payload beginning at `msg_begin` and the same limits; and
+///     witness and payload beginning at `msg_begin` and covering the same
+///     messages; and
 ///  2. the witness is the same as that of a `CertifiedStreamSlice` with both
 ///     witness and payload beginning at `witness_begin` and matching message limit.
 ///
@@ -219,7 +220,7 @@ pub fn encode_partial_slice_test(
         });
 
         state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
-
+        state_manager.flush_hash_channel();
         certify_height(&state_manager, Height::new(1));
 
         let slice = state_manager
@@ -232,30 +233,24 @@ pub fn encode_partial_slice_test(
             )
             .expect("failed to encode certified stream");
 
+        // Actual message count, potentially cut short by `byte_limit`.
+        let msg_count = stream_encoding::decode_stream_slice(&slice.payload)
+            .expect("failed to decode slice payload")
+            .1
+            .messages()
+            .map_or(0, |messages| messages.len());
+
         // Slice with the same payload and matching witness.
         let same_payload_slice = state_manager
             .encode_certified_stream_slice(
                 destination_subnet,
                 Some(msg_begin),
                 Some(msg_begin),
-                Some(msg_limit),
-                Some(byte_limit),
+                Some(msg_count),
+                None,
             )
             .expect("failed to encode certified stream");
         assert_eq!(same_payload_slice.payload, slice.payload);
-
-        let receiver_metrics = MetricsRegistry::new();
-        let (receiver_state_manager, _tmp) =
-            state_manager_with_verifier_result(destination_subnet, true, &receiver_metrics, log);
-
-        let decoded_slice = receiver_state_manager
-            .decode_certified_stream_slice(
-                sender_subnet,
-                RegistryVersion::new(1),
-                &same_payload_slice,
-            )
-            .unwrap_or_else(|e| panic!("Failed to decode slice with error {e:?}"));
-        let msg_count = decoded_slice.messages().map_or(0, |m| m.len());
 
         // Slice with the same witness and matching payload.
         let same_witness_slice = state_manager
@@ -268,6 +263,10 @@ pub fn encode_partial_slice_test(
             )
             .expect("failed to encode certified stream");
         assert_eq!(same_witness_slice.merkle_proof, slice.merkle_proof);
+
+        let receiver_metrics = MetricsRegistry::new();
+        let (receiver_state_manager, _tmp) =
+            state_manager_with_verifier_result(destination_subnet, true, &receiver_metrics, log);
 
         // Sanity check: if an actual partial slice, decoding should fail.
         if witness_begin != msg_begin {
@@ -313,6 +312,7 @@ pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
     });
 
     state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
+    state_manager.flush_hash_channel();
 
     certify_height(state_manager, Height::new(2));
 
@@ -568,11 +568,13 @@ fn state_manager_with_verifier_result(
         verifier,
         own_subnet_id,
         SubnetType::Application,
-        log,
-        metrics_registry,
         &config,
         None,
         ic_types::malicious_flags::MaliciousFlags::default(),
+        tokio::sync::watch::channel(Height::from(0)).0,
+        None,
+        metrics_registry,
+        log,
     );
     (state_manager, tmp)
 }
@@ -622,11 +624,13 @@ fn state_manager_test_with_state_sync_and_verifier_result<
             verifier,
             own_subnet,
             SubnetType::Application,
-            log.clone(),
-            &metrics_registry,
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            tokio::sync::watch::channel(Height::from(0)).0,
+            None,
+            &metrics_registry,
+            log.clone(),
         ));
         f(&metrics_registry, sm.clone(), StateSync::new(sm, log));
     })
@@ -660,11 +664,13 @@ where
                 Arc::clone(&verifier),
                 own_subnet,
                 SubnetType::Application,
-                log_sm.clone(),
-                &metrics_registry,
                 &config,
                 starting_height,
                 ic_types::malicious_flags::MaliciousFlags::default(),
+                tokio::sync::watch::channel(Height::from(0)).0,
+                None,
+                &metrics_registry,
+                log_sm.clone(),
             ));
             let state_sync = StateSync::new(state_manager.clone(), log.clone());
 
@@ -718,11 +724,13 @@ where
                 Arc::clone(&verifier),
                 own_subnet,
                 SubnetType::Application,
-                log.clone(),
-                &metrics_registry,
                 &config,
                 starting_height,
                 ic_types::malicious_flags::MaliciousFlags::default(),
+                tokio::sync::watch::channel(Height::from(0)).0,
+                None,
+                &metrics_registry,
+                log.clone(),
             );
 
             (metrics_registry, state_manager)
@@ -780,11 +788,13 @@ where
                 Arc::clone(&verifier),
                 own_subnet,
                 SubnetType::Application,
-                log.clone(),
-                &metrics_registry,
                 &config,
                 starting_height,
                 ic_types::malicious_flags::MaliciousFlags::default(),
+                tokio::sync::watch::channel(Height::from(0)).0,
+                None,
+                &metrics_registry,
+                log.clone(),
             );
 
             (metrics_registry, state_manager)

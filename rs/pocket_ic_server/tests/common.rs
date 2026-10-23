@@ -89,11 +89,9 @@ pub fn send_signal_to_pic(pic: PocketIc, mut child: Child, shutdown_signal: Opti
         .unwrap();
         let status = child.wait().unwrap();
         assert!(status.success());
-        // the PocketIC instance can't be deleted and thus dropping the PocketIC instance panics
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            drop(pic);
-        }))
-        .unwrap_err();
+        // The PocketIC instance can't be deleted on the server,
+        // but dropping the PocketIC instance is still safe.
+        drop(pic);
     } else {
         // Delete the PocketIC instance.
         drop(pic);

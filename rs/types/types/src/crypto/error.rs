@@ -1,7 +1,7 @@
 //! Defines crypto error types.
 pub mod conversions;
 pub use super::CryptoError;
-use crate::crypto::AlgorithmId;
+use crate::crypto::{AlgorithmId, ellipsized_hex};
 use serde::{Deserialize, Serialize};
 use std::fmt; // Probably move all the errors into this file
 
@@ -13,7 +13,7 @@ pub struct InvalidArgumentError {
 
 impl fmt::Display for InvalidArgumentError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Semantic error in argument: {}", &self.message)
+        write!(f, "Semantic error in argument: {}", self.message)
     }
 }
 
@@ -25,7 +25,16 @@ pub struct InternalError {
 
 impl fmt::Display for InternalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Internal error: {}", &self.internal_error)
+        write!(f, "Internal error: {}", self.internal_error)
+    }
+}
+
+/// Renders optional byte strings for an error message, hex-encoding and
+/// ellipsizing the bytes if they are present.
+fn optional_bytes_for_error(bytes: Option<&[u8]>) -> String {
+    match bytes {
+        Some(bytes) => format!("0x{}", ellipsized_hex(bytes)),
+        None => "<none>".to_string(),
     }
 }
 
@@ -41,10 +50,10 @@ impl fmt::Display for MalformedPublicKeyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Malformed {:?} public key: 0x{:?}. Internal error: {}",
-            &self.algorithm,
-            &self.key_bytes.as_ref().map(hex::encode),
-            &self.internal_error
+            "Malformed {:?} public key: {}. Internal error: {}",
+            self.algorithm,
+            optional_bytes_for_error(self.key_bytes.as_deref()),
+            self.internal_error
         )
     }
 }
@@ -61,10 +70,10 @@ impl fmt::Display for MalformedDataError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Malformed {:?} data: 0x{:?}. Internal error: {}",
-            &self.algorithm,
-            &self.data.as_ref().map(hex::encode),
-            &self.internal_error
+            "Malformed {:?} data: {}. Internal error: {}",
+            self.algorithm,
+            optional_bytes_for_error(self.data.as_deref()),
+            self.internal_error
         )
     }
 }
@@ -81,7 +90,7 @@ impl fmt::Display for KeyNotFoundError {
         write!(
             f,
             "Secret key with id {} not found in secret key store. Internal error: {}",
-            &self.key_id, &self.internal_error
+            self.key_id, self.internal_error
         )
     }
 }

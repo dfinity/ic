@@ -164,7 +164,7 @@ fn combine_commitments_via_interpolation(
     commitment_type: PolynomialCommitmentType,
     curve: EccCurveType,
     reconstruction_threshold: usize,
-    verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+    verified_dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
 ) -> CanisterThresholdResult<CombinedCommitment> {
     // First verify the dealings are of the expected type
     for dealing in verified_dealings.values() {
@@ -177,8 +177,8 @@ fn combine_commitments_via_interpolation(
     let mut indexes = Vec::with_capacity(verified_dealings.len());
 
     for (index, dealing) in verified_dealings {
-        indexes.push(*index);
-        commitments.push(dealing.commitment.clone());
+        indexes.push(index);
+        commitments.push(dealing.commitment);
     }
 
     let coefficients = LagrangeCoefficients::at_zero(curve, &indexes)?;
@@ -209,7 +209,7 @@ impl IDkgTranscriptInternal {
     pub fn new(
         curve: EccCurveType,
         reconstruction_threshold: usize,
-        verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        verified_dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
         operation_mode: &IDkgTranscriptOperationInternal,
     ) -> CanisterThresholdResult<IDkgTranscriptInternal> {
         // Check all dealings have correct length and are on the same curve

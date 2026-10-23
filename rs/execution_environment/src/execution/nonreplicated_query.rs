@@ -8,17 +8,18 @@
 use crate::execution::common::{validate_canister, validate_method};
 use crate::execution_environment::RoundLimits;
 use crate::{Hypervisor, NonReplicatedQueryKind, metrics::CallTreeMetricsNoOp};
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_embedders::wasmtime_embedder::system_api::{ApiType, ExecutionParameters};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallContextId, RequestMetadata};
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{NumInstructions, Time};
 use ic_types_cycles::Cycles;
 use prometheus::IntCounter;
+use std::sync::Arc;
 
 // Execute non replicated query.
 #[allow(clippy::too_many_arguments)]
@@ -30,11 +31,11 @@ pub fn execute_non_replicated_query(
     data_certificate: Option<Vec<u8>>,
     time: Time,
     execution_parameters: ExecutionParameters,
-    network_topology: &NetworkTopology,
+    network_topology: Arc<NetworkTopology>,
     hypervisor: &Hypervisor,
     round_limits: &mut RoundLimits,
     state_changes_error: &IntCounter,
-    cost_schedule: CanisterCyclesCostSchedule,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> (
     CanisterState,
     NumInstructions,
@@ -70,17 +71,24 @@ pub fn execute_non_replicated_query(
 
     let mut preserve_changes = false;
     let (api_type, call_context_id) = match query_kind {
-        NonReplicatedQueryKind::Pure { caller } => (
+        NonReplicatedQueryKind::Pure {
+            caller,
+            sender_info,
+        } => (
             ApiType::non_replicated_query(
                 time,
                 caller,
                 hypervisor.subnet_id(),
                 payload.to_vec(),
                 data_certificate,
+                sender_info,
             ),
             None,
         ),
-        NonReplicatedQueryKind::Stateful { call_origin } => {
+        NonReplicatedQueryKind::Stateful {
+            call_origin,
+            sender_info,
+        } => {
             preserve_changes = true;
             let caller = match call_origin {
                 CallOrigin::Query(source, ..) => source.get(),
@@ -94,6 +102,7 @@ pub fn execute_non_replicated_query(
                     Cycles::zero(),
                     time,
                     RequestMetadata::for_new_call_tree(time),
+                    sender_info.clone(),
                 )
                 .unwrap();
             (
@@ -104,6 +113,7 @@ pub fn execute_non_replicated_query(
                     payload.to_vec(),
                     data_certificate,
                     call_context_id,
+                    sender_info,
                 ),
                 Some(call_context_id),
             )
@@ -127,7 +137,7 @@ pub fn execute_non_replicated_query(
         state_changes_error,
         &CallTreeMetricsNoOp,
         time,
-        cost_schedule,
+        subnet_cycles_config,
     );
     canister.system_state = output_system_state;
     if preserve_changes {

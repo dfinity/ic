@@ -182,7 +182,7 @@ impl QueryStatsPayloadBuilderImpl {
             return vec![];
         }
 
-        let Ok(previous_ids) =
+        let Ok((previous_ids, has_submitted)) =
             self.get_previous_ids(self.node_id, current_stats.epoch, past_payloads, context)
         else {
             return vec![];
@@ -196,7 +196,10 @@ impl QueryStatsPayloadBuilderImpl {
             .cloned()
             .collect::<Vec<_>>();
 
-        if messages.is_empty() {
+        // Skip if there is nothing new to report and we've already submitted for this epoch.
+        // If we have not yet submitted for this epoch, fall through to send an empty payload
+        // so the aggregator can see that this node has moved past this epoch.
+        if messages.is_empty() && has_submitted {
             return vec![];
         }
 
@@ -273,7 +276,7 @@ impl QueryStatsPayloadBuilderImpl {
 
         // Get the previous ids, that have been already reported by this node in the epoch
         // NOTE: This also checks that the epoch that is being reported has not been aggregated yet
-        let previous_ids = self.get_previous_ids(
+        let (previous_ids, _) = self.get_previous_ids(
             payload.proposer,
             payload.epoch,
             past_payloads,
@@ -304,13 +307,16 @@ impl QueryStatsPayloadBuilderImpl {
     ///
     /// This function also returns an error, if we are requesting data on an epoch,
     /// that has been already aggregated.
+    ///
+    /// Returns `(previous_canister_ids, has_submitted)` where `has_submitted` is true if this
+    /// node has already submitted any report (even empty) for the given epoch.
     fn get_previous_ids(
         &self,
         node_id: NodeId,
         epoch: QueryStatsEpoch,
         past_payloads: &[PastPayload],
         context: &ValidationContext,
-    ) -> Result<BTreeSet<CanisterId>, PayloadValidationError> {
+    ) -> Result<(BTreeSet<CanisterId>, bool), PayloadValidationError> {
         // Get unaggregated stats from certified state
         let certified_height = context.certified_height;
         let state_stats = &match self.state_reader.get_state_at(certified_height) {
@@ -363,13 +369,16 @@ impl QueryStatsPayloadBuilderImpl {
         }
 
         // Check the certified state for stats that we have already sent
+        let mut has_submitted_in_state = false;
         if let Some(state_stats) = get_stats_for_node_id_and_epoch(state_stats, &node_id, &epoch)
+            .inspect(|_| has_submitted_in_state = true)
             .map(|record| record.keys())
         {
             previous_ids.extend(state_stats);
         }
 
         // Check past payloads for stats already sent
+        let mut has_submitted_in_past = false;
         previous_ids.extend(
             past_payloads
                 .iter()
@@ -387,6 +396,10 @@ impl QueryStatsPayloadBuilderImpl {
                 })
                 // Filter out payloads that have a different epoch or are sent from different node
                 .filter(|stats| stats.epoch == epoch && stats.proposer == node_id)
+                // Track whether this node has submitted anything for this epoch
+                .inspect(|_| {
+                    has_submitted_in_past = true;
+                })
                 // Map payload to CanisterIds
                 .flat_map(|stats| {
                     stats
@@ -397,7 +410,10 @@ impl QueryStatsPayloadBuilderImpl {
                 }),
         );
 
-        Ok(previous_ids)
+        Ok((
+            previous_ids,
+            has_submitted_in_state || has_submitted_in_past,
+        ))
     }
 }
 
@@ -756,6 +772,78 @@ mod tests {
         }
     }
 
+    /// When current stats are empty and the node has not yet submitted for the epoch,
+    /// the builder must emit a non-empty metadata-only payload so the aggregator can
+    /// see that this node has moved past the epoch.
+    #[test]
+    fn idle_epoch_first_build_returns_metadata_only_payload() {
+        let test_stats = test_epoch_stats(0, 0);
+        let state = test_state(RawQueryStats::default());
+        let payload_builder = setup_payload_builder_impl(state, test_stats);
+        let validation_context = test_validation_context();
+
+        let payload = payload_builder.build_payload_impl(
+            Height::new(1),
+            MAX_PAYLOAD_SIZE,
+            &[],
+            &validation_context,
+        );
+
+        assert!(!payload.is_empty());
+        let deserialized = QueryStatsPayload::deserialize(&payload).unwrap().unwrap();
+        assert_eq!(deserialized.epoch, QueryStatsEpoch::new(0));
+        assert_eq!(deserialized.proposer, node_test_id(1));
+        assert!(deserialized.stats.is_empty());
+    }
+
+    /// Once an empty-stats payload from a prior block is in past_payloads, subsequent
+    /// builds must return vec![] to avoid sending duplicate epoch-advancement signals.
+    #[test]
+    fn idle_epoch_subsequent_build_returns_empty_after_past_payload() {
+        let test_stats = test_epoch_stats(0, 0);
+        let state = test_state(RawQueryStats::default());
+        let payload_builder = setup_payload_builder_impl(state, test_stats.clone());
+        let validation_context = test_validation_context();
+
+        let prior_empty_payload = payload_from_range(&test_stats, 0..0, node_test_id(1));
+        let prior_past_payload = as_past_payload(&prior_empty_payload, 1);
+
+        let payload = payload_builder.build_payload_impl(
+            Height::new(2),
+            MAX_PAYLOAD_SIZE,
+            &[prior_past_payload],
+            &validation_context,
+        );
+
+        assert!(payload.is_empty());
+    }
+
+    /// Once an empty-epoch sentinel is recorded in replicated state, subsequent builds
+    /// must also return vec![] (the has_submitted_in_state path).
+    #[test]
+    fn idle_epoch_subsequent_build_returns_empty_after_state_submission() {
+        let test_stats = test_epoch_stats(0, 0);
+        // epoch_stats_for_state with an empty range inserts node -> epoch -> {} into
+        // state, which is the sentinel for a prior empty submission.
+        let state = test_state(epoch_stats_for_state(
+            &test_stats,
+            0..0,
+            node_test_id(1),
+            None,
+        ));
+        let payload_builder = setup_payload_builder_impl(state, test_stats);
+        let validation_context = test_validation_context();
+
+        let payload = payload_builder.build_payload_impl(
+            Height::new(1),
+            MAX_PAYLOAD_SIZE,
+            &[],
+            &validation_context,
+        );
+
+        assert!(payload.is_empty());
+    }
+
     fn test_validation_context() -> ValidationContext {
         ValidationContext {
             registry_version: RegistryVersion::new(0),
@@ -871,7 +959,7 @@ mod tests {
                 .stats
                 .entry(canister_id)
                 // NOTE: This assumes that there are no nodeids identical in stats1 and stats2
-                .and_modify(|entry| entry.extend(stat2.clone().into_iter()))
+                .and_modify(|entry| entry.extend(stat2.clone()))
                 .or_insert(stat2);
         }
 

@@ -7,11 +7,12 @@ use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, ClearChunkStoreArgs,
-    DeleteCanisterSnapshotArgs, FetchCanisterLogsRequest, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload as _,
-    ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
-    RenameCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
+    CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, CanisterMetricsArgs,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, FetchCanisterLogsRequest,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    Method, Payload as _, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs, StoredChunksArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
     UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
@@ -154,10 +155,13 @@ impl Request {
             Ok(Method::StartCanister)
             | Ok(Method::CanisterStatus)
             | Ok(Method::DeleteCanister)
-            | Ok(Method::UninstallCode)
             | Ok(Method::DepositCycles)
             | Ok(Method::StopCanister) => match CanisterIdRecord::decode(&self.method_payload) {
                 Ok(record) => Some(record.get_canister_id()),
+                Err(_) => None,
+            },
+            Ok(Method::UninstallCode) => match UninstallCodeArgs::decode(&self.method_payload) {
+                Ok(args) => Some(args.get_canister_id()),
                 Err(_) => None,
             },
             Ok(Method::CanisterInfo) => match CanisterInfoRequest::decode(&self.method_payload) {
@@ -256,7 +260,14 @@ impl Request {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },
-            Ok(Method::CreateCanister)
+            Ok(Method::CanisterMetrics) => {
+                match CanisterMetricsArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::ListCanisters)
+            | Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)
             | Ok(Method::FlexibleHttpRequest)
@@ -276,6 +287,7 @@ impl Request {
             | Ok(Method::BitcoinGetSuccessors)
             | Ok(Method::BitcoinGetCurrentFeePercentiles)
             | Ok(Method::NodeMetricsHistory)
+            | Ok(Method::SubnetMetrics)
             | Ok(Method::SubnetInfo) => {
                 // No effective canister id.
                 None
@@ -547,7 +559,9 @@ impl Hash for Response {
 }
 
 /// XNet message type (like `Request` and `Response`) for guaranteed delivery of
-/// refunds for best-effort calls.
+/// cycles that are refunded outside of a response: e.g. the payment of a dropped
+/// best-effort call; or the unspent part of an HTTP outcall's payment that was
+/// only settled after the response was already delivered.
 ///
 /// Represents an _anonymous refund_.
 ///

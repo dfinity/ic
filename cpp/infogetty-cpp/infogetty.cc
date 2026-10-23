@@ -5,7 +5,7 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <systemd/sd-journal.h>
+#include <syslog.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -24,7 +24,7 @@ check_panic_errno(int return_code, const std::string& tty_dev, const char* info)
     }
 
     std::string message = "infogetty(" + tty_dev + ") " + info + ": " + strerror(errno);
-    sd_journal_print(LOG_ERR, "%s", message.c_str());
+    syslog(LOG_ERR, "%s", message.c_str());
     _exit(1);
 }
 
@@ -145,7 +145,7 @@ parse_commandline_options(int argc, char** argv)
         if (arg == "-u") {
             ++n;
             if (n >= argc) {
-                sd_journal_print(LOG_ERR, "missing argument to -u switch");
+                syslog(LOG_ERR, "missing argument to -u switch");
                 _exit(1);
             }
             opts.login_user = argv[n];

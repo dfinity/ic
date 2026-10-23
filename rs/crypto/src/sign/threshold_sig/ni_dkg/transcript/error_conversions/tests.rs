@@ -21,7 +21,7 @@ mod load_transcript_error_conversions {
         assert_eq!(
             result,
             DkgLoadTranscriptError::InvalidTranscript(InvalidArgumentError {
-                message: "Malformed Unspecified data: 0xNone. Internal error: some error"
+                message: "Malformed Unspecified data: <none>. Internal error: some error"
                     .to_string()
             })
         );

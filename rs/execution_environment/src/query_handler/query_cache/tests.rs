@@ -3,10 +3,15 @@ use crate::{
     InternalHttpQueryHandler, metrics,
     query_handler::query_cache::{EntryEnv, EntryKey, EntryValue},
 };
+use assert_matches::assert_matches;
+use candid::Decode;
 use ic_base_types::CanisterId;
 use ic_error_types::ErrorCode;
 use ic_heap_bytes::{DeterministicHeapBytes, HeapBytes, total_bytes};
 use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
+use ic_management_canister_types_private::{
+    CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType, Payload,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities::universal_canister::wasm;
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
@@ -16,12 +21,11 @@ use ic_types::{
     ingress::WasmResult,
     messages::{
         CanisterTask, CertificateDelegationFormat, CertificateDelegationMetadata, Query,
-        QuerySource,
+        QuerySource, SignedSenderInfo,
     },
     time,
 };
-use ic_types_cycles::CyclesUseCase;
-use ic_types_test_utils::ids::subnet_test_id;
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Memory};
 use ic_universal_canister::call_args;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
@@ -222,6 +226,7 @@ fn query_cache_reports_memory_bytes_metric_on_invalidation() {
         method_name: "method".into(),
         method_payload: vec![],
         certificate_delegation_format: None,
+        sender_info: None,
     };
 
     // Assert initial cache state.
@@ -242,6 +247,7 @@ fn query_cache_reports_memory_bytes_metric_on_invalidation() {
         test.state(),
         &SystemApiCallCounters::default(),
         &evaluated_stats,
+        0,
         0,
     );
     assert_eq!(0, m.hits.get());
@@ -336,6 +342,7 @@ fn query_cache_returns_different_results_for_different_sources() {
                     user_id: user_test_id(1),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: a_id,
                 method_name: method.into(),
@@ -361,6 +368,7 @@ fn query_cache_returns_different_results_for_different_sources() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: a_id,
                 method_name: method.into(),
@@ -379,6 +387,74 @@ fn query_cache_returns_different_results_for_different_sources() {
             a_id.get()
         };
         assert_eq!(Ok(WasmResult::Reply(caller.into())), res_2);
+    });
+}
+
+#[test]
+fn query_cache_sender_info_is_not_ignored() {
+    for_query_and_composite_query(wasm().reply_data(&[42]), |test, a_id, _b_id, method, q| {
+        let res_1 = test.query(
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(1),
+                    ingress_expiry: 0,
+                    nonce: None,
+                    sender_info: None,
+                },
+                receiver: a_id,
+                method_name: method.into(),
+                method_payload: q.clone(),
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+            /*certificate_delegation_metadata=*/ None,
+        );
+        assert_eq!(query_cache_metrics(&test).misses.get(), 1);
+        assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
+
+        // Different sender_info => different cache key => cache miss.
+        let res_2 = test.query(
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(1),
+                    ingress_expiry: 0,
+                    nonce: None,
+                    sender_info: Some(SignedSenderInfo {
+                        info: vec![1, 2, 3],
+                        signer: CanisterId::from_u64(123),
+                        sig: vec![4, 5, 6],
+                    }),
+                },
+                receiver: a_id,
+                method_name: method.into(),
+                method_payload: q.clone(),
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+            /*certificate_delegation_metadata=*/ None,
+        );
+        assert_eq!(query_cache_metrics(&test).misses.get(), 2);
+        assert_eq!(res_2, Ok(WasmResult::Reply(vec![42])));
+
+        // Same sender_info again => cache hit.
+        let res_3 = test.query(
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(1),
+                    ingress_expiry: 0,
+                    nonce: None,
+                    sender_info: None,
+                },
+                receiver: a_id,
+                method_name: method.into(),
+                method_payload: q,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+            /*certificate_delegation_metadata=*/ None,
+        );
+        assert_eq!(query_cache_metrics(&test).misses.get(), 2);
+        assert_eq!(res_3, Ok(WasmResult::Reply(vec![42])));
     });
 }
 
@@ -539,7 +615,10 @@ fn query_cache_ignores_balance_changes_when_query_does_not_read_balance() {
         // Change the canister balance.
         test.canister_state_mut(b_id)
             .system_state
-            .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
+            .consume_cycles(CompoundCycles::<Memory>::new(
+                1_u64.into(),
+                CanisterCyclesCostSchedule::Normal,
+            ));
 
         // Run the same query for the second time.
         let res_2 = test.non_replicated_query(a_id, method, q);
@@ -569,7 +648,10 @@ fn query_cache_ignores_balance_and_time_changes_when_query_is_static() {
         // Change the canister balance.
         test.canister_state_mut(b_id)
             .system_state
-            .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
+            .consume_cycles(CompoundCycles::<Memory>::new(
+                1_u64.into(),
+                CanisterCyclesCostSchedule::Normal,
+            ));
         // Change the time.
         test.state_mut().metadata.batch_time += Duration::from_secs(1);
 
@@ -722,7 +804,10 @@ fn query_cache_returns_different_results_for_different_canister_balances() {
         // Change the canister balance.
         test.canister_state_mut(b_id)
             .system_state
-            .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
+            .consume_cycles(CompoundCycles::<Memory>::new(
+                1_u64.into(),
+                CanisterCyclesCostSchedule::Normal,
+            ));
 
         let res_2 = test.non_replicated_query(a_id, method, q);
         let m = query_cache_metrics(&test);
@@ -749,7 +834,10 @@ fn query_cache_returns_different_results_for_different_canister_balance128s() {
         // Change the canister balance.
         test.canister_state_mut(b_id)
             .system_state
-            .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
+            .consume_cycles(CompoundCycles::<Memory>::new(
+                1_u64.into(),
+                CanisterCyclesCostSchedule::Normal,
+            ));
 
         let res_2 = test.non_replicated_query(a_id, method, q);
         let m = query_cache_metrics(&test);
@@ -787,7 +875,10 @@ fn query_cache_returns_different_results_on_combined_invalidation() {
             .bump_canister_version();
         test.canister_state_mut(b_id)
             .system_state
-            .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
+            .consume_cycles(CompoundCycles::<Memory>::new(
+                1_u64.into(),
+                CanisterCyclesCostSchedule::Normal,
+            ));
 
         let res_2 = test.non_replicated_query(a_id, method, q);
         assert_eq!(res_1, res_2);
@@ -833,10 +924,12 @@ fn query_cache_frees_memory_after_invalidated_entries() {
     assert_gt!(heap_bytes, BIG_RESPONSE_SIZE);
 
     // Set the canister balance to 42, so the second reply will have just 42 bytes.
-    test.canister_state_mut(id).system_state.remove_cycles(
-        ((BIG_RESPONSE_SIZE - SMALL_RESPONSE_SIZE) as u64).into(),
-        CyclesUseCase::Memory,
-    );
+    test.canister_state_mut(id)
+        .system_state
+        .consume_cycles(CompoundCycles::<Memory>::new(
+            ((BIG_RESPONSE_SIZE - SMALL_RESPONSE_SIZE) as u64).into(),
+            CanisterCyclesCostSchedule::Normal,
+        ));
 
     // The new 42 reply must invalidate and replace the previous 1MB reply in the cache.
     let res = test
@@ -1439,7 +1532,7 @@ fn query_cache_never_caches_calls_to_management_canister() {
 }
 
 #[test]
-fn composite_query_cache_never_caches_calls_to_management_canister() {
+fn composite_query_cache_never_caches_rejected_calls_to_management_canister() {
     let mut test = builder_with_query_cache_expiry_times().build();
     let a_id = test.universal_canister().unwrap();
     let q = wasm()
@@ -1451,15 +1544,137 @@ fn composite_query_cache_never_caches_calls_to_management_canister() {
         .build();
 
     let res_1 = test.non_replicated_query(a_id, "composite_query", q.clone());
-    assert_eq!(query_cache_metrics(&test).hits.get(), 0);
-    assert_eq!(query_cache_metrics(&test).misses.get(), 1);
-    // There should be no route to the management canister.
-    let message = format!("Canister {} not found", subnet_test_id(1));
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 1);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 1);
+    // `raw_rand` is not a management canister query method.
+    let message = "Query method raw_rand not found.";
     assert_eq!(Ok(WasmResult::Reply(message.as_bytes().to_owned())), res_1);
 
+    // Do not change balance or time: the result must still not be cached.
     let res_2 = test.non_replicated_query(a_id, "composite_query", q.clone());
-    assert_eq!(query_cache_metrics(&test).hits.get(), 0);
-    assert_eq!(query_cache_metrics(&test).misses.get(), 2);
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 2);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 2);
+    assert_eq!(res_1, res_2);
+}
+
+#[test]
+fn composite_query_cache_never_caches_successful_calls_to_management_canister() {
+    let mut test = builder_with_query_cache_expiry_times().build();
+    let a_id = test.universal_canister().unwrap();
+    // A canister is always allowed to request its own status.
+    let q = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            "canister_status",
+            call_args()
+                .other_side(CanisterIdRecord::from(a_id).encode())
+                .on_reject(wasm().reject_message().append_and_reply()),
+        )
+        .build();
+
+    let res_1 = test.non_replicated_query(a_id, "composite_query", q.clone());
+    assert_matches!(res_1, Ok(WasmResult::Reply(_)));
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 1);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 1);
+
+    // Do not change balance or time: the result must still not be cached.
+    let res_2 = test.non_replicated_query(a_id, "composite_query", q.clone());
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 2);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 2);
+    assert_eq!(res_1, res_2);
+}
+
+#[test]
+fn composite_query_cache_never_caches_calls_to_management_canister_from_callback() {
+    let mut test = builder_with_query_cache_expiry_times().build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+    // Canister A calls the management canister in the reply callback of a nested
+    // composite query call to canister B.
+    // A canister is always allowed to request its own status.
+    let b = wasm().reply_data(&[42]).build();
+    let a = wasm()
+        .composite_query(
+            b_id,
+            call_args().other_side(b).on_reply(
+                wasm().call_simple(
+                    CanisterId::ic_00(),
+                    "canister_status",
+                    call_args()
+                        .other_side(CanisterIdRecord::from(a_id).encode())
+                        .on_reject(wasm().reject_message().append_and_reply()),
+                ),
+            ),
+        )
+        .build();
+
+    let res_1 = test.non_replicated_query(a_id, "composite_query", a.clone());
+    // The call to the management canister succeeded, i.e. the reply is the
+    // canister status of canister A and not a reject message.
+    let reply = res_1.clone().unwrap();
+    let status = Decode!(&reply.bytes(), CanisterStatusResultV2).unwrap();
+    assert_eq!(status.status(), CanisterStatusType::Running);
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 1);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 1);
+
+    // Do not change balance or time: the result must still not be cached.
+    let res_2 = test.non_replicated_query(a_id, "composite_query", a.clone());
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 2);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 2);
+    assert_eq!(res_1, res_2);
+}
+
+#[test]
+fn composite_query_cache_never_caches_calls_to_management_canister_from_nested_call() {
+    let mut test = builder_with_query_cache_expiry_times().build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+    // Canister B, called by canister A in a nested composite query call, calls
+    // the management canister to request its own status.
+    // A canister is always allowed to request its own status.
+    let b = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            "canister_status",
+            call_args()
+                .other_side(CanisterIdRecord::from(b_id).encode())
+                .on_reject(wasm().reject_message().append_and_reply()),
+        )
+        .build();
+    let a = wasm()
+        // By default the on reply and on reject handlers propagate the other side response.
+        .composite_query(b_id, call_args().other_side(b))
+        .build();
+
+    let res_1 = test.non_replicated_query(a_id, "composite_query", a.clone());
+    // The call to the management canister succeeded, i.e. the reply is the
+    // canister status of canister B and not a reject message.
+    let reply = res_1.clone().unwrap();
+    let status = Decode!(&reply.bytes(), CanisterStatusResultV2).unwrap();
+    assert_eq!(status.status(), CanisterStatusType::Running);
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 1);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 1);
+
+    // Do not change balance or time: the result must still not be cached.
+    let res_2 = test.non_replicated_query(a_id, "composite_query", a.clone());
+    let m = query_cache_metrics(&test);
+    assert_eq!(m.hits.get(), 0);
+    assert_eq!(m.misses.get(), 2);
+    assert_eq!(m.invalidated_entries_by_ic00_call.get(), 2);
     assert_eq!(res_1, res_2);
 }
 
@@ -1555,6 +1770,10 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::MsgArgDataCopy
         | SystemApiCallId::MsgArgDataSize
         | SystemApiCallId::MsgCallerCopy
+        | SystemApiCallId::MsgCallerInfoDataCopy
+        | SystemApiCallId::MsgCallerInfoDataSize
+        | SystemApiCallId::MsgCallerInfoSignerCopy
+        | SystemApiCallId::MsgCallerInfoSignerSize
         | SystemApiCallId::MsgCallerSize
         | SystemApiCallId::MsgCyclesAccept
         | SystemApiCallId::MsgCyclesAccept128
@@ -1575,6 +1794,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::PerformanceCounter
         | SystemApiCallId::SubnetSelfSize
         | SystemApiCallId::SubnetSelfCopy
+        | SystemApiCallId::SubnetSelfNodeCount
         | SystemApiCallId::Stable64Grow
         | SystemApiCallId::Stable64Read
         | SystemApiCallId::Stable64Size
@@ -1632,8 +1852,9 @@ fn total_bytes_future_proof_guard() {
         method_name: String::new(),
         method_payload: vec![],
         certificate_delegation_format: None,
+        sender_info: None,
     };
-    assert_eq!(size_of_val(&key), 112);
+    assert_eq!(size_of_val(&key), 168);
     assert_eq!(total_bytes(&key), size_of_val(&key));
 
     // Key with some heap data.
@@ -1643,8 +1864,9 @@ fn total_bytes_future_proof_guard() {
         method_name: " ".repeat(HEAP_BYTES),
         method_payload: vec![42; HEAP_BYTES],
         certificate_delegation_format: None,
+        sender_info: None,
     };
-    assert_eq!(size_of_val(&key), 112);
+    assert_eq!(size_of_val(&key), 168);
     assert_eq!(total_bytes(&key), size_of_val(&key) + HEAP_BYTES * 2);
 
     // Value with no heap data.

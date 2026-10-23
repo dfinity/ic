@@ -185,9 +185,11 @@ use crate::{
     metrics::{CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS, IDkgClientMetrics, timed_call},
     pre_signer::{IDkgPreSigner, IDkgPreSignerImpl},
     signer::{ThresholdSigner, ThresholdSignerImpl},
-    utils::{IDkgBlockReaderImpl, build_thread_pool},
+    utils::IDkgBlockReaderImpl,
 };
-use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
+use ic_consensus_utils::{
+    bouncer_metrics::BouncerMetrics, build_thread_pool, crypto::ConsensusCrypto,
+};
 use ic_interfaces::{
     consensus_pool::{ConsensusBlockCache, ConsensusPoolCache},
     crypto::IDkgProtocol,
@@ -327,8 +329,9 @@ impl IDkgImpl {
             Ok(transcripts) => transcripts,
             Err(err) => {
                 warn!(
+                    every_n_seconds => 10,
                     self.logger,
-                    "purge_inactive_transcripts(): abort due to: {}", err,
+                    "purge_inactive_transcripts(): abort due to: {}", err
                 );
                 return;
             }
@@ -337,6 +340,7 @@ impl IDkgImpl {
         match IDkgProtocol::retain_active_transcripts(&*self.crypto, &active_transcripts) {
             Err(IDkgRetainKeysError::TransientInternalError { internal_error }) => {
                 warn!(
+                    every_n_seconds => 10,
                     self.logger,
                     "purge_inactive_transcripts(): failed due to transient error: {}",
                     internal_error
@@ -348,6 +352,7 @@ impl IDkgImpl {
             }
             Err(error) => {
                 error!(
+                    every_n_seconds => 10,
                     self.logger,
                     "{}: failed with error = {:?}",
                     CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
@@ -387,11 +392,12 @@ fn get_active_transcripts(
             }
             Err(error) => {
                 warn!(
+                    every_n_seconds => 10,
                     logger,
                     "purge_inactive_transcripts(): failed to resolve transcript ref: err = {:?}, \
                         {:?}",
                     error,
-                    transcript_ref,
+                    transcript_ref
                 );
                 metrics
                     .client_errors
@@ -623,15 +629,17 @@ mod tests {
     use self::test_utils::TestIDkgBlockReader;
 
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_logger::no_op_logger;
     use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_test_utilities_consensus::idkg::{
-        FakeCertifiedStateSnapshot, fake_ecdsa_idkg_master_public_key_id,
-        fake_master_public_key_ids_for_all_algorithms,
-        fake_master_public_key_ids_for_all_idkg_algorithms, fake_pre_signature_stash,
-        fake_signature_request_context_from_id, request_id,
+    use ic_test_utilities_consensus::{
+        FakeCertifiedStateSnapshot,
+        idkg::{
+            fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+            fake_master_public_key_ids_for_all_idkg_algorithms, fake_pre_signature_stash,
+            fake_signature_request_context_from_id, request_id,
+        },
     };
     use ic_types::{
         consensus::idkg::{
@@ -752,7 +760,8 @@ mod tests {
         const EXPECTED_CERTIFIED_HEIGHT: u64 = 10;
         const EXPECTED_FINALIZED_HEIGHT: u64 = 12;
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { mut pool, .. } = dependencies(pool_config.clone(), 1);
+            let Dependencies { mut pool, .. } =
+                DependenciesBuilder::new(pool_config.clone(), 1).build();
 
             let state_manager = Arc::new(RefMockStateManager::default());
             state_manager

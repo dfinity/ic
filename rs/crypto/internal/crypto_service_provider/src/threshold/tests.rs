@@ -169,7 +169,7 @@ pub mod util {
                         )
                         .is_err(),
                     "Individual signature verification accepted incorrect message '{:?}' instead of '{:?}'",
-                    &incorrect_message,
+                    incorrect_message,
                     message
                 );
             }

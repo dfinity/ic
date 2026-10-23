@@ -14,12 +14,20 @@ exports_files([
 
 genrule(
     name = "build-bootloader-tree",
-    srcs = [],
+    srcs = [
+        "context/docker-base",
+    ],
     outs = [
         "bootloader-tree.tar",
     ],
-    cmd = "$(location build-bootloader-tree.sh) -o $@",
-    tags = ["manual"],
+    cmd = "$(location build-bootloader-tree.sh) -b $< -o $@",
+    # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)
+    # so we need this Namespace.so-specific execution property to open up the network on RBE:
+    exec_properties = {"namespace_requires_network": "true"},
+    tags = [
+        "manual",
+        "requires-network",
+    ],
     target_compatible_with = [
         "@platforms//os:linux",
     ],

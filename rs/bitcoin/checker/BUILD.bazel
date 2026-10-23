@@ -45,6 +45,7 @@ rust_canister(
     compile_data = [
         "templates/dashboard.html",
     ],
+    hidden_endpoints = "hidden_endpoints.conf",
     service_file = "btc_checker_canister.did",
     deps = [
         # Keep sorted.
@@ -61,6 +62,7 @@ rust_canister(
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-canister-log",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:ic-stable-structures",
@@ -98,6 +100,7 @@ rust_ic_test(
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:regex",
     ],

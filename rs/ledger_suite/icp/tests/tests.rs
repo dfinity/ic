@@ -448,7 +448,7 @@ fn archive_blocks_small_test() {
             .query_(
                 "iter_blocks_pb",
                 protobuf,
-                IterBlocksArgs::new(0usize, 128usize),
+                IterBlocksArgs::new(0_usize, 128_usize),
             )
             .await?;
         println!("[test] retrieved {} blocks", blocks.len());
@@ -491,7 +491,7 @@ fn archive_blocks_small_test() {
                 .query_(
                     "iter_blocks_pb",
                     protobuf,
-                    IterBlocksArgs::new(0usize, 128usize),
+                    IterBlocksArgs::new(0_usize, 128_usize),
                 )
                 .await?;
             // Because blocks is emptied by append we need the length for the log message.
@@ -593,7 +593,7 @@ fn archive_blocks_large_test() {
             let mut blocks = vec![];
             // Need to make multiple queries due to query message size limit.
             let blocks_per_query: usize = 2000;
-            for i in 0usize..(blocks_per_archive_node / blocks_per_query) - 1 {
+            for i in 0_usize..(blocks_per_archive_node / blocks_per_query) - 1 {
                 let offset = i * blocks_per_query;
                 println!(
                     "[test] retrieving blocks[{}..{}] from the ledger",
@@ -645,7 +645,7 @@ fn archive_blocks_large_test() {
                 let mut blocks = vec![];
                 // Need to make multiple queries due to query message size limit.
                 let blocks_per_query: usize = 2000;
-                for i in 0usize..blocks_per_archive_node / blocks_per_query {
+                for i in 0_usize..blocks_per_archive_node / blocks_per_query {
                     let offset = i * blocks_per_query;
                     println!(
                         "[test] retrieving blocks[{}..{}]",
@@ -1179,7 +1179,7 @@ fn transaction_test() {
                 .query_(
                     "iter_blocks_pb",
                     protobuf,
-                    IterBlocksArgs::new(0usize, 100usize),
+                    IterBlocksArgs::new(0_usize, 100_usize),
                 )
                 .await?;
             blocks
@@ -1255,7 +1255,7 @@ fn get_block_test() {
         // This is how many blocks we want to generate for this test.
         // Generating blocks is done by proxy, that is, by creating multiple
         // accounts (since each account will generate a Mint transaction).
-        let num_blocks = 32u64;
+        let num_blocks = 32_u64;
 
         // Generate initial blocks just below the archive threshold.
         let accounts = make_accounts(num_blocks - 1, 1);
@@ -1417,7 +1417,7 @@ fn get_multiple_blocks_test() {
         // This is how many blocks we want to generate for this test.
         // Generating blocks is done by proxy, that is, by creating multiple
         // accounts (since each account will generate a Mint transaction).
-        let num_blocks = 14u64;
+        let num_blocks = 14_u64;
 
         let accounts = make_accounts(num_blocks - 1, 1);
 
@@ -1627,7 +1627,7 @@ fn only_ledger_can_append_blocks_to_archive_nodes() {
 
         let minting_account = create_sender(0);
 
-        let num_blocks = 8u64;
+        let num_blocks = 8_u64;
 
         let accounts = make_accounts(num_blocks, 1);
 
@@ -2066,7 +2066,7 @@ async fn ledger_assert_num_blocks(ledger: &Canister<'_>, num_expected: usize) {
         .query_(
             "iter_blocks_pb",
             protobuf,
-            IterBlocksArgs::new(0usize, 99999usize),
+            IterBlocksArgs::new(0_usize, 99999_usize),
         )
         .await
         .unwrap();
@@ -2134,7 +2134,7 @@ fn send_dfx_test() {
 
         let account1 = create_sender(1);
         let ai1 = AccountIdentifier::new(account1.get_principal_id(), None);
-        let subaccount = [1u8; 32];
+        let subaccount = [1_u8; 32];
         let ai2 = AccountIdentifier::new(account1.get_principal_id(), Some(Subaccount(subaccount)));
         let accounts = HashMap::from([
             (ai1, Tokens::from_e8s(1_000_000_000)),

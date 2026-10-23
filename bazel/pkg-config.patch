@@ -1,0 +1,36 @@
+# Default `print_system_libs` to false, i.e. don't force
+# PKG_CONFIG_ALLOW_SYSTEM_LIBS=1 when probing.
+#
+# With that variable set (the crate's upstream default), pkg-config prints
+# `-L` flags even for directories on the system library search path, so a
+# plain probe of a host library emits the host library dir (e.g.
+# -L/usr/lib/x86_64-linux-gnu) as a rustc link-search path. That dir ends up
+# in the link line ahead of the hermetic toolchain's library search paths,
+# which makes `-lc` resolve to the HOST glibc while the crt objects come from
+# the hermetic glibc — an incompatible mix (undefined
+# __libc_csu_init/__libc_csu_fini, wrong GLIBC_ symbol versions).
+#
+# Without the variable, pkg-config's own system-dir filtering kicks in: the
+# probe keeps its version checks, `-l` libs, -I include paths (for bindgen)
+# and -D defines, but no host `-L` dir leaks into the link line. The `-l`
+# libs resolve against cc_import dependencies that link the host library by
+# explicit path (see e.g. the devicemapper-sys annotation in
+# bazel/rust.MODULE.bazel and third_party/BUILD.devmapper.bazel).
+#
+# `print_system_cflags` intentionally stays true: without
+# PKG_CONFIG_ALLOW_SYSTEM_CFLAGS, pkg-config would also filter the system
+# `-I` dirs that bindgen needs.
+#
+# See: https://github.com/hermeticbuild/hermetic-llvm/issues/697
+diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -477,7 +477,7 @@
+             max_version: Bound::Unbounded,
+             extra_args: vec![],
+             print_system_cflags: true,
+-            print_system_libs: true,
++            print_system_libs: false,
+             cargo_metadata: true,
+             env_metadata: true,
+         }

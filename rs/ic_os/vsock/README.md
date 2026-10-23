@@ -1,10 +1,10 @@
 # Vsock
 
-The vsock is the GuestOS’s only means of communicating with the HostOS. The vsock exists to perform certain functions unavailable to the GuestOS.
+The vsock is the GuestOS’s primary command channel for communicating with the HostOS. The vsock exists to perform certain functions unavailable to the GuestOS.
 
 The `vsock_guest` binary runs in the GuestOS and sends messages over the vsock channel to the `vsock_host` binary running in the HostOS.
 
-`vsock_guest` is used solely by the orchestator.
+`vsock_guest` is used solely by the orchestrator.
 
 The `protocol` module defines the communication protocol and offers utility functions for communication.
 

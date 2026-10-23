@@ -17,6 +17,8 @@
 //! `VetKdArgs<'a>` (`'_` is forbidden, named lifetimes cannot be declared, and
 //! elision does not work inside the macro).
 
+#![allow(clippy::result_large_err)]
+
 use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
@@ -25,10 +27,10 @@ use ic_interfaces::crypto::{
     ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner,
     ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner, VetKdProtocol,
 };
-use ic_types::canister_http::CanisterHttpResponseMetadata;
+use ic_types::canister_http::CanisterHttpResponseReceipt;
 use ic_types::consensus::{
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent, UpgradePermitRequest,
     certification::CertificationContent,
     dkg as consensus_dkg,
     idkg::{IDkgComplaintContent, IDkgOpeningContent},
@@ -67,7 +69,7 @@ use ic_types::crypto::{
     IndividualMultiSigOf, ThresholdSigShareOf, UserPublicKey,
 };
 use ic_types::messages::{MessageId, QueryResponseHash, WebAuthnEnvelope};
-use ic_types::signature::BasicSignatureBatch;
+use ic_types::signature::{BasicSigBatchEntry, BasicSignatureBatch};
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -84,7 +86,7 @@ macro_rules! impl_basic_signer {
 }
 
 macro_rules! impl_basic_sig_verifier {
-    ($t:ty, $verify:ident, $combine:ident, $verify_batch:ident) => {
+    ($t:ty, $verify:ident, $combine:ident, $verify_batch:ident, $verify_sigs_batch:ident) => {
         impl BasicSigVerifier<$t> for MockCrypto {
             fn verify_basic_sig(
                 &self,
@@ -115,6 +117,24 @@ macro_rules! impl_basic_sig_verifier {
                 registry_version: RegistryVersion,
             ) -> CryptoResult<()> {
                 self.$verify_batch(signature_batch, message, registry_version)
+            }
+
+            fn verify_basic_sig_batch_multi_msg(
+                &self,
+                inputs: &[BasicSigBatchEntry<'_, $t>],
+            ) -> CryptoResult<()> {
+                let owned: Vec<(NodeId, BasicSigOf<$t>, $t, RegistryVersion)> = inputs
+                    .iter()
+                    .map(|entry| {
+                        (
+                            entry.signer,
+                            entry.signature.clone(),
+                            entry.message.clone(),
+                            entry.registry_version,
+                        )
+                    })
+                    .collect();
+                self.$verify_sigs_batch(owned)
             }
         }
     };
@@ -287,8 +307,12 @@ mockall::mock! {
         ) -> CryptoResult<BasicSigOf<IDkgOpeningContent>>;
 
         pub fn sign_basic_http(
-            &self, message: &CanisterHttpResponseMetadata,
-        ) -> CryptoResult<BasicSigOf<CanisterHttpResponseMetadata>>;
+            &self, message: &CanisterHttpResponseReceipt,
+        ) -> CryptoResult<BasicSigOf<CanisterHttpResponseReceipt>>;
+
+        pub fn sign_basic_upgrade_permit_request(
+            &self, message: &UpgradePermitRequest,
+        ) -> CryptoResult<BasicSigOf<UpgradePermitRequest>>;
 
         pub fn sign_basic_query(
             &self, message: &QueryResponseHash,
@@ -315,6 +339,11 @@ mockall::mock! {
             message: &BlockMetadata, registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
+        pub fn verify_basic_sig_batch_multi_msg_block(
+            &self,
+            inputs: Vec<(NodeId, BasicSigOf<BlockMetadata>, BlockMetadata, RegistryVersion)>,
+        ) -> CryptoResult<()>;
+
         // consensus_dkg::DealingContent
         pub fn verify_basic_sig_dkg_dealing_content(
             &self, signature: &BasicSigOf<consensus_dkg::DealingContent>,
@@ -333,6 +362,11 @@ mockall::mock! {
             signature_batch: &BasicSignatureBatch<consensus_dkg::DealingContent>,
             message: &consensus_dkg::DealingContent,
             registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn verify_basic_sig_batch_multi_msg_dkg_dealing_content(
+            &self,
+            inputs: Vec<(NodeId, BasicSigOf<consensus_dkg::DealingContent>, consensus_dkg::DealingContent, RegistryVersion)>,
         ) -> CryptoResult<()>;
 
         // SignedIDkgDealing
@@ -354,6 +388,11 @@ mockall::mock! {
             message: &SignedIDkgDealing, registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
+        pub fn verify_basic_sig_batch_multi_msg_signed_idkg_dealing(
+            &self,
+            inputs: Vec<(NodeId, BasicSigOf<SignedIDkgDealing>, SignedIDkgDealing, RegistryVersion)>,
+        ) -> CryptoResult<()>;
+
         // IDkgDealing
         pub fn verify_basic_sig_idkg_dealing(
             &self, signature: &BasicSigOf<IDkgDealing>,
@@ -369,6 +408,11 @@ mockall::mock! {
         pub fn verify_basic_sig_batch_idkg(
             &self, signature_batch: &BasicSignatureBatch<IDkgDealing>,
             message: &IDkgDealing, registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn verify_basic_sig_batch_multi_msg_idkg(
+            &self,
+            inputs: Vec<(NodeId, BasicSigOf<IDkgDealing>, IDkgDealing, RegistryVersion)>,
         ) -> CryptoResult<()>;
 
         // IDkgComplaintContent
@@ -390,6 +434,11 @@ mockall::mock! {
             message: &IDkgComplaintContent, registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
+        pub fn verify_basic_sig_batch_multi_msg_idkg_complaint(
+            &self,
+            inputs: Vec<(NodeId, BasicSigOf<IDkgComplaintContent>, IDkgComplaintContent, RegistryVersion)>,
+        ) -> CryptoResult<()>;
+
         // IDkgOpeningContent
         pub fn verify_basic_sig_idkg_opening(
             &self, signature: &BasicSigOf<IDkgOpeningContent>,
@@ -409,25 +458,71 @@ mockall::mock! {
             message: &IDkgOpeningContent, registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
-        // CanisterHttpResponseMetadata
+        pub fn verify_basic_sig_batch_multi_msg_idkg_opening(
+            &self,
+            inputs: Vec<(NodeId, BasicSigOf<IDkgOpeningContent>, IDkgOpeningContent, RegistryVersion)>,
+        ) -> CryptoResult<()>;
+
+        // CanisterHttpResponseReceipt
         pub fn verify_basic_sig_http(
             &self,
-            signature: &BasicSigOf<CanisterHttpResponseMetadata>,
-            message: &CanisterHttpResponseMetadata, signer: NodeId,
+            signature: &BasicSigOf<CanisterHttpResponseReceipt>,
+            message: &CanisterHttpResponseReceipt, signer: NodeId,
             registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
         pub fn combine_basic_sig_http(
             &self,
-            signatures: BTreeMap<NodeId, BasicSigOf<CanisterHttpResponseMetadata>>,
+            signatures: BTreeMap<NodeId, BasicSigOf<CanisterHttpResponseReceipt>>,
             registry_version: RegistryVersion,
-        ) -> CryptoResult<BasicSignatureBatch<CanisterHttpResponseMetadata>>;
+        ) -> CryptoResult<BasicSignatureBatch<CanisterHttpResponseReceipt>>;
 
         pub fn verify_basic_sig_batch_http(
             &self,
-            signature_batch: &BasicSignatureBatch<CanisterHttpResponseMetadata>,
-            message: &CanisterHttpResponseMetadata,
+            signature_batch: &BasicSignatureBatch<CanisterHttpResponseReceipt>,
+            message: &CanisterHttpResponseReceipt,
             registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn verify_basic_sig_batch_multi_msg_http(
+            &self,
+            inputs: Vec<(
+                NodeId,
+                BasicSigOf<CanisterHttpResponseReceipt>,
+                CanisterHttpResponseReceipt,
+                RegistryVersion,
+            )>,
+        ) -> CryptoResult<()>;
+
+        // UpgradePermitRequest
+        pub fn verify_basic_sig_upgrade_permit_request(
+            &self,
+            signature: &BasicSigOf<UpgradePermitRequest>,
+            message: &UpgradePermitRequest, signer: NodeId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn combine_basic_sig_upgrade_permit_request(
+            &self,
+            signatures: BTreeMap<NodeId, BasicSigOf<UpgradePermitRequest>>,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<BasicSignatureBatch<UpgradePermitRequest>>;
+
+        pub fn verify_basic_sig_batch_upgrade_permit_request(
+            &self,
+            signature_batch: &BasicSignatureBatch<UpgradePermitRequest>,
+            message: &UpgradePermitRequest,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn verify_basic_sig_batch_multi_msg_upgrade_permit_request(
+            &self,
+            inputs: Vec<(
+                NodeId,
+                BasicSigOf<UpgradePermitRequest>,
+                UpgradePermitRequest,
+                RegistryVersion,
+            )>,
         ) -> CryptoResult<()>;
 
         // ── ThresholdSigner<T> ──────────────────────────────────────────
@@ -625,7 +720,7 @@ mockall::mock! {
 
         pub fn ni_dkg_create_transcript(
             &self, config: &NiDkgConfig,
-            verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+            verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
         ) -> Result<NiDkgTranscript, DkgCreateTranscriptError>;
 
         pub fn ni_dkg_load_transcript(
@@ -659,7 +754,7 @@ mockall::mock! {
 
         pub fn idkg_create_transcript(
             &self, params: &IDkgTranscriptParams,
-            dealings: &BatchSignedIDkgDealings,
+            dealings: BatchSignedIDkgDealings,
         ) -> Result<IDkgTranscript, IDkgCreateTranscriptError>;
 
         pub fn idkg_verify_transcript(
@@ -725,50 +820,65 @@ impl_basic_signer!(SignedIDkgDealing, sign_basic_signed_idkg_dealing);
 impl_basic_signer!(IDkgDealing, sign_basic_idkg_dealing);
 impl_basic_signer!(IDkgComplaintContent, sign_basic_idkg_complaint);
 impl_basic_signer!(IDkgOpeningContent, sign_basic_idkg_opening);
-impl_basic_signer!(CanisterHttpResponseMetadata, sign_basic_http);
+impl_basic_signer!(CanisterHttpResponseReceipt, sign_basic_http);
+impl_basic_signer!(UpgradePermitRequest, sign_basic_upgrade_permit_request);
 impl_basic_signer!(QueryResponseHash, sign_basic_query);
 
 impl_basic_sig_verifier!(
     BlockMetadata,
     verify_basic_sig_block,
     combine_basic_sig_block,
-    verify_basic_sig_batch_block
+    verify_basic_sig_batch_block,
+    verify_basic_sig_batch_multi_msg_block
 );
 impl_basic_sig_verifier!(
     consensus_dkg::DealingContent,
     verify_basic_sig_dkg_dealing_content,
     combine_basic_sig_dkg_dealing_content,
-    verify_basic_sig_batch_dkg_dealing_content
+    verify_basic_sig_batch_dkg_dealing_content,
+    verify_basic_sig_batch_multi_msg_dkg_dealing_content
 );
 impl_basic_sig_verifier!(
     SignedIDkgDealing,
     verify_basic_sig_signed_idkg_dealing,
     combine_basic_sig_signed_idkg_dealing,
-    verify_basic_sig_batch_signed_idkg_dealing
+    verify_basic_sig_batch_signed_idkg_dealing,
+    verify_basic_sig_batch_multi_msg_signed_idkg_dealing
 );
 impl_basic_sig_verifier!(
     IDkgDealing,
     verify_basic_sig_idkg_dealing,
     combine_basic_sig_idkg_dealing,
-    verify_basic_sig_batch_idkg
+    verify_basic_sig_batch_idkg,
+    verify_basic_sig_batch_multi_msg_idkg
 );
 impl_basic_sig_verifier!(
     IDkgComplaintContent,
     verify_basic_sig_idkg_complaint,
     combine_basic_sig_idkg_complaint,
-    verify_basic_sig_batch_idkg_complaint
+    verify_basic_sig_batch_idkg_complaint,
+    verify_basic_sig_batch_multi_msg_idkg_complaint
 );
 impl_basic_sig_verifier!(
     IDkgOpeningContent,
     verify_basic_sig_idkg_opening,
     combine_basic_sig_idkg_opening,
-    verify_basic_sig_batch_idkg_opening
+    verify_basic_sig_batch_idkg_opening,
+    verify_basic_sig_batch_multi_msg_idkg_opening
 );
 impl_basic_sig_verifier!(
-    CanisterHttpResponseMetadata,
+    CanisterHttpResponseReceipt,
     verify_basic_sig_http,
     combine_basic_sig_http,
-    verify_basic_sig_batch_http
+    verify_basic_sig_batch_http,
+    verify_basic_sig_batch_multi_msg_http
+);
+impl_basic_sig_verifier!(
+    UpgradePermitRequest,
+    verify_basic_sig_upgrade_permit_request,
+    combine_basic_sig_upgrade_permit_request,
+    verify_basic_sig_batch_upgrade_permit_request,
+    verify_basic_sig_batch_multi_msg_upgrade_permit_request
 );
 
 impl_threshold_signer!(CertificationContent, sign_threshold_certification);
@@ -847,7 +957,7 @@ impl NiDkgAlgorithm for MockCrypto {
     fn create_transcript(
         &self,
         config: &NiDkgConfig,
-        verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+        verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
         self.ni_dkg_create_transcript(config, verified_dealings)
     }
@@ -898,7 +1008,7 @@ impl IDkgProtocol for MockCrypto {
     fn create_transcript(
         &self,
         params: &IDkgTranscriptParams,
-        dealings: &BatchSignedIDkgDealings,
+        dealings: BatchSignedIDkgDealings,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
         self.idkg_create_transcript(params, dealings)
     }

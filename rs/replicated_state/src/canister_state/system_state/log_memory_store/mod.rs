@@ -9,40 +9,90 @@ use crate::canister_state::system_state::log_memory_store::{
     header::Header,
     log_record::LogRecord,
     memory::MemorySize,
-    ring_buffer::{DATA_CAPACITY_MIN, HEADER_SIZE, RingBuffer, VIRTUAL_PAGE_SIZE},
+    ring_buffer::{
+        DATA_CAPACITY_MIN, HEADER_SIZE, INDEX_TABLE_PAGES, RingBuffer, VIRTUAL_PAGE_SIZE,
+    },
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
-use ic_config::flag_status::FlagStatus;
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use std::collections::VecDeque;
 use std::sync::Arc;
-
-/// Upper bound on stored delta-log sizes used for metrics.
-/// Limits memory growth, 10k covers expected per-round
-/// number of messages per canister (and so delta log appends).
-const DELTA_LOG_SIZES_CAP: usize = 10_000;
 use std::sync::OnceLock;
+use std::time::Duration;
 
+/// Returns the ring buffer data capacity to use for a non-zero log memory limit.
+///
+/// Non-zero limits below `DATA_CAPACITY_MIN` are rejected when canister settings
+/// are validated, so the clamping here is only a safety net for the release
+/// build; in debug builds such a limit trips the assertion instead.
+fn data_capacity_for_limit(limit: usize) -> usize {
+    debug_assert!(
+        limit >= DATA_CAPACITY_MIN,
+        "non-zero log memory limit {limit} is below the minimum {DATA_CAPACITY_MIN}"
+    );
+    limit.max(DATA_CAPACITY_MIN)
+}
+
+/// Canister log storage backed by a PageMap-based ring buffer.
+///
+/// Using PageMap allows log data to be stored outside the heap and
+/// checkpointed efficiently via copy-on-write pages.
+///
+/// Stores the canister's accumulated log records. During execution,
+/// log messages are collected into delta logs in the sandbox, then
+/// appended to this store in bulk after each message completes.
+///
+/// The ring buffer has a configurable capacity. Resizing reads all
+/// existing records and rewrites them into a new ring buffer of the
+/// requested size.
+///
+/// When the ring buffer is full, oldest records at the head are
+/// evicted to make room for new ones.
+///
+/// An index table partitions the data region into segments, enabling
+/// filtered queries by record index or timestamp without scanning
+/// the entire ring buffer. Returned results are trimmed to fit within
+/// the maximum message response size.
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
-    feature_flag: FlagStatus,
-
+    /// Optional PageMap for storing log records ring-buffer with metadata.
+    /// It can be None when canister code is uninstalled and logs are
+    /// removed.
     #[validate_eq(CompareWithValidateEq)]
     maybe_page_map: Option<PageMap>,
+
+    /// A persistent high-water mark for log record indexing.
+    ///
+    /// This value is persisted independently of the `PageMap` to ensure that
+    /// global record IDs continue to increment monotonically, even if the
+    /// underlying logs are cleared or the canister is reinstalled.
+    ///
+    /// It is updated with the current `next_idx()` whenever the logs are
+    /// modified: appended, cleared or deallocated.
+    persistent_next_idx: u64,
 
     /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
     #[validate_eq(Ignore)]
     header_cache: OnceLock<Option<Header>>,
 
-    /// (!) No need to preserve across checkpoints.
-    /// Tracks the size of each delta log appended during a round.
-    /// Multiple logs can be appended in one round (e.g. heartbeat, timers, or message executions).
-    /// The collected sizes are used to expose per-round memory usage metrics
-    /// and the record is cleared at the end of the round.
-    delta_log_sizes: VecDeque<usize>,
+    /// Cached timestamp of the oldest live record. Makes the retention
+    /// metric's per-round observation (`max_timestamp − first_timestamp`)
+    /// an O(1) field read instead of a cold page-map read at `data_head`.
+    ///
+    /// Plain `Option<u64>` (not `OnceLock` like `header_cache`) because we
+    /// populate eagerly from every mutation site; no lazy init under
+    /// `&self` needed. Not persisted across checkpoints; rebuilt in
+    /// `new_inner`.
+    #[validate_eq(Ignore)]
+    first_timestamp_cache: Option<u64>,
+}
+
+impl Default for LogMemoryStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LogMemoryStore {
@@ -51,26 +101,32 @@ impl LogMemoryStore {
     /// The store technically exists but has 0 capacity and is considered "uninitialized".
     /// Any attempts to append logs will be silently ignored until the store is
     /// explicitly resized to a non-zero capacity.
-    pub fn new(feature_flag: FlagStatus) -> Self {
-        Self::new_inner(feature_flag, None)
+    pub fn new() -> Self {
+        const DEFAULT_NEXT_IDX: u64 = 0;
+        Self::new_inner(None, DEFAULT_NEXT_IDX)
     }
 
     /// Creates a new store from a checkpoint.
-    pub fn from_checkpoint(feature_flag: FlagStatus, maybe_page_map: Option<PageMap>) -> Self {
-        Self::new_inner(feature_flag, maybe_page_map)
+    pub fn from_checkpoint(maybe_page_map: Option<PageMap>, persistent_next_idx: u64) -> Self {
+        Self::new_inner(maybe_page_map, persistent_next_idx)
     }
 
-    fn new_inner(feature_flag: FlagStatus, maybe_page_map: Option<PageMap>) -> Self {
-        Self {
-            feature_flag,
-            maybe_page_map: if feature_flag == FlagStatus::Enabled {
-                maybe_page_map
-            } else {
-                None
-            },
+    fn new_inner(maybe_page_map: Option<PageMap>, persistent_next_idx: u64) -> Self {
+        // Rebuild the first-timestamp cache from the ring buffer so the
+        // invariant holds immediately after `from_checkpoint`, without
+        // waiting for the next mutation to populate it.
+        let first_timestamp_cache = maybe_page_map
+            .clone()
+            .and_then(RingBuffer::load_checked)
+            .and_then(|rb| rb.first_timestamp(&rb.get_header()));
+        let store = Self {
+            maybe_page_map,
+            persistent_next_idx,
             header_cache: OnceLock::new(),
-            delta_log_sizes: VecDeque::new(),
-        }
+            first_timestamp_cache,
+        };
+        debug_assert!(store.stats_ok());
+        store
     }
 
     /// Provides access to the underlying `PageMap`.
@@ -97,17 +153,34 @@ impl LogMemoryStore {
     pub fn clear(&mut self) {
         if let Some(mut ring_buffer) = self.load_ring_buffer() {
             ring_buffer.clear();
-            self.maybe_page_map = Some(ring_buffer.to_page_map());
-            self.header_cache = OnceLock::from(Some(ring_buffer.get_header()));
+            self.save_ring_buffer(ring_buffer);
         } else {
             self.header_cache = OnceLock::new();
+            self.first_timestamp_cache = None;
+            debug_assert!(self.stats_ok());
         }
+    }
+
+    /// Update page_map, header_cache, first_timestamp_cache and persistent_next_idx.
+    fn save_ring_buffer(&mut self, ring_buffer: RingBuffer) {
+        let header = ring_buffer.get_header();
+        let first_timestamp = ring_buffer.first_timestamp(&header);
+        self.maybe_page_map = Some(ring_buffer.to_page_map());
+        self.header_cache = OnceLock::from(Some(header));
+        self.first_timestamp_cache = first_timestamp;
+        // Must come after header_cache update, since next_idx() reads from it.
+        self.persistent_next_idx = self.next_idx();
+        debug_assert!(self.stats_ok());
     }
 
     /// Deallocates underlying memory.
     pub fn deallocate(&mut self) {
+        // Must come before clearing the page map and header cache, since next_idx() reads from them.
+        self.persistent_next_idx = self.next_idx();
         self.maybe_page_map = None;
         self.header_cache = OnceLock::new();
+        self.first_timestamp_cache = None;
+        debug_assert!(self.stats_ok());
     }
 
     /// Loads the ring buffer from the page map.
@@ -117,6 +190,33 @@ impl LogMemoryStore {
             .and_then(RingBuffer::load_checked)
     }
 
+    /// Invariant: populated caches must match what a fresh read of the ring
+    /// buffer would return. Intended to be called only via `debug_assert!`;
+    /// the `cfg!` guard keeps the body a no-op in release regardless of
+    /// caller, so it's fine for the check to be expensive.
+    fn stats_ok(&self) -> bool {
+        if !cfg!(debug_assertions) {
+            return true;
+        }
+        let ring_buffer = self.load_ring_buffer();
+        let actual_header = ring_buffer.as_ref().map(|rb| rb.get_header());
+        // `header_cache` is lazy: if populated, must match; if empty, skip.
+        if let Some(cached) = self.header_cache.get()
+            && *cached != actual_header
+        {
+            return false;
+        }
+        // `first_timestamp_cache` is kept eagerly in sync, so must always match.
+        let actual_first_ts = ring_buffer
+            .as_ref()
+            .zip(actual_header.as_ref())
+            .and_then(|(rb, h)| rb.first_timestamp(h));
+        if self.first_timestamp_cache != actual_first_ts {
+            return false;
+        }
+        true
+    }
+
     /// Returns the ring buffer header.
     fn get_header(&self) -> Option<Header> {
         *self
@@ -124,7 +224,30 @@ impl LogMemoryStore {
             .get_or_init(|| self.load_ring_buffer().map(|rb| rb.get_header()))
     }
 
-    /// Returns actual memory usage of the ring buffer.
+    /// Returns the timestamp of the most recently appended record, or `None`
+    /// if the buffer is empty. O(1) via the cached header.
+    pub fn max_timestamp(&self) -> Option<u64> {
+        let header = self.get_header()?;
+        (header.data_size.get() > 0).then_some(header.max_timestamp)
+    }
+
+    /// Returns the timestamp of the oldest live record, or `None` if the
+    /// buffer is empty. O(1) field read — the cache is kept in sync with
+    /// the ring buffer by every mutation.
+    pub fn first_timestamp(&self) -> Option<u64> {
+        self.first_timestamp_cache
+    }
+
+    /// Returns the time span between the oldest and newest records, or
+    /// `None` if the buffer is empty. Returns `Duration::ZERO` when both
+    /// timestamps are equal (single record).
+    pub fn retention(&self) -> Option<Duration> {
+        let max = self.max_timestamp()?;
+        let first = self.first_timestamp()?;
+        Some(Duration::from_nanos(max.saturating_sub(first)))
+    }
+
+    /// Returns the total allocated memory.
     pub fn memory_usage(&self) -> usize {
         self.total_virtual_memory_usage()
     }
@@ -132,15 +255,23 @@ impl LogMemoryStore {
     /// Returns the total virtual memory usage of the ring buffer.
     ///
     /// Includes header, index table and data region.
-    /// It is 'virtual' because it is not alligned to actual OS page size.
+    /// It is 'virtual' because it is not aligned to actual OS page size.
     pub fn total_virtual_memory_usage(&self) -> usize {
         self.get_header()
-            .map(|h| {
-                (HEADER_SIZE.get()
-                    + h.index_table_pages as u64 * VIRTUAL_PAGE_SIZE as u64
-                    + h.data_capacity.get()) as usize
-            })
+            .map(|h| self.virtual_memory_for_data_capacity(h.data_capacity.get() as usize))
             .unwrap_or(0)
+    }
+
+    /// Single source of truth for the ring-buffer memory layout formula.
+    ///
+    /// Returns the total virtual bytes consumed by a ring buffer whose data
+    /// region has the given capacity: header + index table + data.
+    fn virtual_memory_for_data_capacity(&self, data_capacity: usize) -> usize {
+        let index_table_pages = self
+            .get_header()
+            .map(|h| h.index_table_pages as usize)
+            .unwrap_or(INDEX_TABLE_PAGES);
+        HEADER_SIZE.get() as usize + index_table_pages * VIRTUAL_PAGE_SIZE + data_capacity
     }
 
     /// Returns the data capacity of the ring buffer.
@@ -148,6 +279,22 @@ impl LogMemoryStore {
         self.get_header()
             .map(|h| h.data_capacity.get() as usize)
             .unwrap_or(0)
+    }
+
+    /// Returns `true` if calling `resize(limit)` would actually do work
+    /// (migrate records, reallocate, or deallocate), `false` if it would
+    /// be a no-op.
+    ///
+    /// Also used as the early-return guard inside `resize_impl`, so the
+    /// two cannot diverge.
+    pub fn would_resize(&self, limit: usize) -> bool {
+        if limit == 0 {
+            // Limit zero deallocates — work only if allocated.
+            return self.maybe_page_map.is_some();
+        }
+        let target_limit = data_capacity_for_limit(limit);
+        let current_capacity = self.get_header().map(|h| h.data_capacity.get() as usize);
+        current_capacity != Some(target_limit)
     }
 
     /// Resizes the ring buffer to the specified limit, preserving existing records.
@@ -166,15 +313,15 @@ impl LogMemoryStore {
     }
 
     fn resize_impl(&mut self, limit: usize, create_page_map: impl FnOnce() -> PageMap) {
-        if self.feature_flag == FlagStatus::Disabled || limit == 0 {
+        if !self.would_resize(limit) {
+            return;
+        }
+        if limit == 0 {
             self.deallocate();
             return;
         }
-        let target_limit = limit.max(DATA_CAPACITY_MIN);
+        let target_limit = data_capacity_for_limit(limit);
         let current_capacity = self.get_header().map(|h| h.data_capacity.get() as usize);
-        if current_capacity == Some(target_limit) {
-            return; // Only resize if the capacity actually changes.
-        }
 
         // Determine the PageMap strategy and create a new ring buffer.
         let page_map = match current_capacity {
@@ -187,17 +334,20 @@ impl LogMemoryStore {
 
         // Migrate records.
         if let Some(old_buffer) = self.load_ring_buffer() {
-            new_buffer.append_log_iter(old_buffer.iter());
+            new_buffer.append_log(old_buffer.iter());
         }
 
         // Update of the state.
-        self.maybe_page_map = Some(new_buffer.to_page_map());
-        self.header_cache = OnceLock::from(Some(new_buffer.get_header()));
+        self.save_ring_buffer(new_buffer);
     }
 
-    /// Returns the next log record `idx`.
+    /// Returns the monotonic sequence index for the next log record.
+    ///
+    /// Calculates the maximum of the `persistent_next_idx` and the current
+    /// buffer's index to prevent ID collisions across lifecycle events.
     pub fn next_idx(&self) -> u64 {
-        self.get_header().map(|h| h.next_idx).unwrap_or(0)
+        self.persistent_next_idx
+            .max(self.get_header().map(|h| h.next_idx).unwrap_or(0))
     }
 
     /// Returns true if the ring buffer is empty.
@@ -205,10 +355,7 @@ impl LogMemoryStore {
         self.bytes_used() == 0
     }
 
-    /// Returns the number of bytes used by the ring buffer.
-    ///
-    /// This is the actual number of bytes used by the ring buffer, not the
-    /// allocated capacity.
+    /// Returns bytes occupied by stored log records (not allocated capacity).
     pub fn bytes_used(&self) -> usize {
         self.get_header()
             .map(|h| h.data_size.get() as usize)
@@ -216,53 +363,62 @@ impl LogMemoryStore {
     }
 
     /// Returns the canister log records, optionally filtered.
+    ///
+    /// The result is trimmed to fit within the maximum message response size
+    /// (`RESULT_MAX_SIZE`), so this must NOT be used (e.g. with a `None` filter)
+    /// to obtain the complete set of stored records: doing so silently drops
+    /// records once they exceed the response-size limit. Callers that need all
+    /// records must use [`Self::all_records_for_testing`] instead.
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
         self.load_ring_buffer()
             .map(|rb| rb.records(filter))
             .unwrap_or_default()
     }
 
+    /// Returns all canister log records currently stored in the ring buffer.
+    ///
+    /// Unlike `records`, this does not trim the result to the maximum message
+    /// response size, so it is only intended for testing.
+    pub fn all_records_for_testing(&self) -> Vec<CanisterLogRecord> {
+        self.load_ring_buffer()
+            .map(|rb| rb.iter().collect())
+            .unwrap_or_default()
+    }
+
     /// Appends a delta log to the ring buffer if it exists.
+    ///
+    /// The records are removed from the delta log even if there is no ring
+    /// buffer, so that appending the same delta log again has no effect.
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
-        if self.feature_flag == FlagStatus::Disabled {
-            self.deallocate();
+        if delta_log.is_empty() {
+            // No records to append, but still carry the monotone index forward.
+            // This case is particularly relevant for migrating canister logs
+            // from the legacy `canister_log` which can be empty after uninstalling
+            // the canister in which case we still want to preserve `next_idx`.
+            // This way, a service can continuously fetch canister logs
+            // by keeping track of the last fetched index which is monotonically
+            // increasing.
+            self.persistent_next_idx = self.persistent_next_idx.max(delta_log.next_idx());
             return;
         }
-        if delta_log.is_empty() {
-            return; // Don't append if delta is empty.
-        }
         let Some(mut ring_buffer) = self.load_ring_buffer() else {
-            return; // No ring buffer exists.
+            // No ring buffer exists (e.g., log_memory_limit is zero), but still
+            // carry the monotone index forward so consumers can track progress.
+            self.persistent_next_idx = self.persistent_next_idx.max(delta_log.next_idx());
+            delta_log.take_records();
+            return;
         };
-        // Record the size of the appended delta log for metrics.
-        self.push_delta_log_size(delta_log.bytes_used());
-        // Append the delta records and persist the ring buffer.
-        ring_buffer.append_log(delta_log.records_mut().drain(..).collect());
-        self.maybe_page_map = Some(ring_buffer.to_page_map());
-        self.header_cache = OnceLock::from(Some(ring_buffer.get_header()));
-    }
-
-    /// Records the size of the appended delta log.
-    fn push_delta_log_size(&mut self, size: usize) {
-        if self.delta_log_sizes.len() >= DELTA_LOG_SIZES_CAP {
-            self.delta_log_sizes.pop_front();
+        // If the delta overflowed and evicted records, there is a gap between the
+        // aggregate's next expected index and the delta's first record. Clear the
+        // ring buffer to maintain index continuity.
+        if let Some(first) = delta_log.records().front()
+            && first.idx > self.next_idx()
+        {
+            ring_buffer.clear();
         }
-        self.delta_log_sizes.push_back(size);
-    }
-
-    /// Returns true if the delta log sizes are not empty.
-    pub fn has_delta_log_sizes(&self) -> bool {
-        !self.delta_log_sizes.is_empty()
-    }
-
-    /// Returns delta_log sizes.
-    pub fn delta_log_sizes(&self) -> Vec<usize> {
-        self.delta_log_sizes.iter().cloned().collect()
-    }
-
-    /// Clears the delta_log sizes.
-    pub fn clear_delta_log_sizes(&mut self) {
-        self.delta_log_sizes.clear();
+        // Append the delta records and persist the ring buffer.
+        ring_buffer.append_log(delta_log.take_records());
+        self.save_ring_buffer(ring_buffer);
     }
 
     /// Calculates the total memory footprint of canister log records
@@ -279,7 +435,7 @@ impl LogMemoryStore {
 
     /// Calculates the size of a single log record when encoded
     /// and stored within the `LogMemoryStore`.
-    pub fn estimate_record_size(content_size: usize) -> usize {
+    pub const fn estimate_record_size(content_size: usize) -> usize {
         LogRecord::estimate_bytes_len(content_size)
     }
 }
@@ -287,26 +443,26 @@ impl LogMemoryStore {
 impl Clone for LogMemoryStore {
     fn clone(&self) -> Self {
         Self {
-            feature_flag: self.feature_flag,
             // PageMap is a persistent data structure, so clone is cheap and creates
             // an independent snapshot.
             maybe_page_map: self.maybe_page_map.clone(),
-            delta_log_sizes: self.delta_log_sizes.clone(),
+            persistent_next_idx: self.persistent_next_idx,
             // OnceLock is not Clone, so we must manually clone the state.
             header_cache: match self.header_cache.get() {
                 Some(val) => OnceLock::from(*val),
                 None => OnceLock::new(),
             },
+            first_timestamp_cache: self.first_timestamp_cache,
         }
     }
 }
 
 impl PartialEq for LogMemoryStore {
     fn eq(&self, other: &Self) -> bool {
-        // header_cache is a transient cache and should not be compared.
-        self.feature_flag == other.feature_flag
-            && self.maybe_page_map == other.maybe_page_map
-            && self.delta_log_sizes == other.delta_log_sizes
+        // header_cache and first_timestamp_cache are transient caches and
+        // should not be compared.
+        self.maybe_page_map == other.maybe_page_map
+            && self.persistent_next_idx == other.persistent_next_idx
     }
 }
 

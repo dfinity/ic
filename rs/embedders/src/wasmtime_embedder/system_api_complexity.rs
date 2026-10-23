@@ -55,6 +55,10 @@ pub mod overhead {
     pub const MSG_ARG_DATA_COPY: NumInstructions = NumInstructions::new(500);
     pub const MSG_ARG_DATA_SIZE: NumInstructions = NumInstructions::new(500);
     pub const MSG_CALLER_COPY: NumInstructions = NumInstructions::new(500);
+    pub const MSG_CALLER_INFO_DATA_COPY: NumInstructions = NumInstructions::new(500);
+    pub const MSG_CALLER_INFO_DATA_SIZE: NumInstructions = NumInstructions::new(500);
+    pub const MSG_CALLER_INFO_SIGNER_COPY: NumInstructions = NumInstructions::new(500);
+    pub const MSG_CALLER_INFO_SIGNER_SIZE: NumInstructions = NumInstructions::new(500);
     pub const MSG_CALLER_SIZE: NumInstructions = NumInstructions::new(500);
     pub const MSG_CYCLES_ACCEPT: NumInstructions = NumInstructions::new(500);
     pub const MSG_CYCLES_ACCEPT128: NumInstructions = NumInstructions::new(500);
@@ -74,6 +78,7 @@ pub mod overhead {
     pub const PERFORMANCE_COUNTER: NumInstructions = NumInstructions::new(200);
     pub const SUBNET_SELF_SIZE: NumInstructions = NumInstructions::new(500);
     pub const SUBNET_SELF_COPY: NumInstructions = NumInstructions::new(500);
+    pub const SUBNET_SELF_NODE_COUNT: NumInstructions = NumInstructions::new(500);
     pub const STABLE_GROW: NumInstructions = NumInstructions::new(500);
     pub const STABLE_READ: NumInstructions = NumInstructions::new(20);
     pub const STABLE_SIZE: NumInstructions = NumInstructions::new(20);

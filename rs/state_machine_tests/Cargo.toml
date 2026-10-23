@@ -20,8 +20,8 @@ ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
+ic-consensus-upgrade = { path = "../consensus/upgrade" }
 ic-consensus-utils = { path = "../consensus/utils" }
-ic-limits = { path = "../limits" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-test-utils-crypto-returning-ok = { path = "../crypto/test_utils/crypto_returning_ok" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
@@ -39,21 +39,25 @@ ic-interfaces = { path = "../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
+ic-query-stats = { path = "../query_stats" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
+ic-registry-resource-limits = { path = "../registry/resource_limits" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-secp256k1 = { path = "../../packages/ic-secp256k1" }
+ic-secp256r1 = { path = "../../packages/ic-secp256r1" }
 ic-state-layout = { path = "../state_layout" }
 ic-state-manager = { path = "../state_manager" }
 ic-test-state-machine-client = "3.0"
@@ -62,10 +66,11 @@ ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
-ic-types-cycles = { path = "../types/cycles" }
 ic-types = { path = "../types/types" }
+ic-types-cycles = { path = "../types/cycles" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
-maplit = "1.0.2"
+maplit = { workspace = true }
+p256 = { workspace = true }
 rand = { workspace = true }
 rcgen = { workspace = true }
 serde = { workspace = true }
@@ -80,6 +85,7 @@ wat = { workspace = true }
 
 [dev-dependencies]
 ic-base-types = { path = "../types/base_types" }
+ic-certification = { path = "../certification" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 proptest = { workspace = true }
 test-strategy = "0.4.0"

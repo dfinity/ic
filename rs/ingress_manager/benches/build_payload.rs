@@ -80,7 +80,7 @@ where
         replicated_state = replicated_state.with_canister(
             CanisterStateBuilder::new()
                 .with_canister_id(*canister_id)
-                .with_cycles(Cycles::new(500_000_000_000)) /* 500 billion cycles */
+                .with_cycles(Cycles::new(50_000_000_000_000)) /* 50 trillion cycles */
                 .build(),
         );
     }

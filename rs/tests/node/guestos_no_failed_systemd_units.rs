@@ -31,12 +31,43 @@ fn check_no_failed_systemd_units(env: TestEnv) {
             .expect("Failed to establish SSH session to GuestOS node");
 
         let failed_units = node
-            .block_on_bash_script("systemctl list-units --failed --no-legend --no-pager")
+            .block_on_bash_script("systemctl list-units --failed --no-legend --no-pager --plain")
             .expect("Failed to run systemctl list-units --failed on GuestOS node");
         info!(
             logger,
             "Node {}: systemctl list-units --failed:\n{}", node.node_id, failed_units
         );
+        if !failed_units.trim().is_empty() {
+            for line in failed_units.lines() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                // With `--plain`, lines have no leading status glyph or tree
+                // structure, so the first whitespace-separated token is the
+                // unit name.
+                let Some(unit) = line.split_whitespace().next() else {
+                    continue;
+                };
+                let cmd = format!("journalctl -u '{}' --no-pager -n 500", unit);
+                match node.block_on_bash_script(&cmd) {
+                    Ok(journal) => info!(
+                        logger,
+                        "Node {}: journalctl -u {} (last 500 lines):\n{}",
+                        node.node_id,
+                        unit,
+                        journal
+                    ),
+                    Err(err) => info!(
+                        logger,
+                        "Node {}: failed to fetch journalctl logs for unit {}: {}",
+                        node.node_id,
+                        unit,
+                        err
+                    ),
+                }
+            }
+        }
         assert!(
             failed_units.trim().is_empty(),
             "Node {} has failed systemd units:\n{}",
@@ -47,10 +78,62 @@ fn check_no_failed_systemd_units(env: TestEnv) {
     info!(logger, "No failed systemd units found on any GuestOS node.");
 }
 
+/// Assert that the kernel took `oops=panic panic=10 softlockup_panic=1
+/// watchdog_thresh=60` from the command line
+/// (ic-os/bootloader/guestos_boot_args.template): a GuestOS that hits a kernel
+/// Oops, panic or soft lockup must reboot instead of hanging. Shares this
+/// group's single node to avoid a dedicated target.
+fn check_kernel_panic_params(env: TestEnv) {
+    let logger = env.logger();
+    for node in env.topology_snapshot().subnets().flat_map(|s| s.nodes()) {
+        node.await_can_login_as_admin_via_ssh()
+            .expect("Failed to establish SSH session to GuestOS node");
+        let out = node
+            .block_on_bash_script(
+                "cat /proc/cmdline; cd /proc/sys/kernel && \
+                 cat panic_on_oops panic softlockup_panic watchdog_thresh soft_watchdog",
+            )
+            .expect("Failed to read the kernel cmdline and panic/lockup sysctls on GuestOS node");
+        info!(
+            logger,
+            "Node {}: kernel cmdline and panic/lockup sysctls:\n{}", node.node_id, out
+        );
+        let mut lines = out.lines();
+        let cmdline: Vec<&str> = lines
+            .next()
+            .unwrap_or_default()
+            .split_whitespace()
+            .collect();
+        for param in [
+            "oops=panic",
+            "panic=10",
+            "softlockup_panic=1",
+            "watchdog_thresh=60",
+        ] {
+            assert!(
+                cmdline.contains(&param),
+                "Node {} did not boot with {param}:\n{}",
+                node.node_id,
+                out
+            );
+        }
+        // kernel.panic_on_oops, kernel.panic, kernel.softlockup_panic, kernel.watchdog_thresh and
+        // kernel.soft_watchdog (the soft-lockup detector is enabled), in the order read above.
+        assert_eq!(
+            lines.collect::<Vec<_>>(),
+            ["1", "10", "1", "60", "1"],
+            "Node {}: unexpected panic/lockup sysctls:\n{}",
+            node.node_id,
+            out
+        );
+    }
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(check_no_failed_systemd_units))
+        .add_test(systest!(check_kernel_panic_params))
         .execute_from_args()?;
 
     Ok(())

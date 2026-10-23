@@ -22,22 +22,26 @@ def launch_bare_metal(name, image_zst_file):
             requirement("simple-parsing"),
             requirement("tqdm"),
         ],
+        config_settings = {
+            "@rules_python//python/config_settings:bootstrap_impl": "script",
+        },
         tags = ["manual"],
     )
     sh_binary(
         name = name,
         srcs = ["//toolchains/sysimage:proc_wrapper.sh"],
         args = [
-            "python3",
             "$(location :" + binary_name + ")",
             "--inject_configuration_tool",
             "$(location //rs/ic_os/dev_test_tools/setupos-image-config:setupos-inject-config)",
+            "--mcopy_tool",
+            "$(location @mtools//:mcopy)",
             "--upload_img",
             "$(location " + image_zst_file + ")",
             "--deterministic_ips_tool",
             "$(location //rs/ic_os/networking/deterministic_ips:deterministic-ips)",
-            "--idrac_script",
-            "$(location //ic-os/dev-tools/bare_metal_deployment:redfish_scripts)" + "/IdracRedfishSupport-0.0.8.data/scripts/VirtualDiskExpansionREDFISH.py",
+            "--idrac_script_dir",
+            "$(location //ic-os/dev-tools/bare_metal_deployment:redfish_scripts)",
             "--benchmark_driver_script",
             "$(location //ic-os/dev-tools/bare_metal_deployment:benchmark_driver.sh)",
             "--benchmark_runner_script",
@@ -49,6 +53,7 @@ def launch_bare_metal(name, image_zst_file):
         data = [
             ":" + binary_name,
             image_zst_file,
+            "@mtools//:mcopy",
             "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-inject-config",
             "//ic-os/dev-tools/bare_metal_deployment:redfish_scripts",
             "//ic-os/dev-tools/bare_metal_deployment:benchmark_runner.sh",

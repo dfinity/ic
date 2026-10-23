@@ -11,12 +11,15 @@ message GetDiskEncryptionKeyRequest {
 }
 
 message GetDiskEncryptionKeyResponse {
-  // The disk encryption key
+  // The disk encryption passphrase of the Store partition.
   optional bytes key = 1;
 
   // The SEV attestation package of the server which proves that the server
   // is running a genuine GuestOS version.
   optional attestation.SevAttestationPackage sev_attestation_package = 2;
+
+  // The detached LUKS header for the Store partition.
+  optional bytes luks_header = 3;
 }
 
 message SignalStatusRequest {

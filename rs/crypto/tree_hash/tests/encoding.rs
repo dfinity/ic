@@ -9,7 +9,7 @@ fn arbitrary_invalid_cbor_encoding() -> impl Strategy<Value = Cbor> {
         Just(Cbor::Null),
         any::<bool>().prop_map(Cbor::Bool),
         any::<f64>().prop_map(Cbor::Float),
-        (5..100i128).prop_map(Cbor::Integer),
+        (5..100_i128).prop_map(Cbor::Integer),
         prop::collection::vec(any::<u8>(), 0..40).prop_map(Cbor::Bytes),
         ".*".prop_map(Cbor::Text),
     ];

@@ -169,7 +169,7 @@ fn test_account_suitable_for_aggregation() {
     };
 
     // Account with subaccount (not suitable for aggregation)
-    let subaccount = [1u8; 32];
+    let subaccount = [1_u8; 32];
     let non_aggregatable_account = Account {
         owner: principal,
         subaccount: Some(subaccount),

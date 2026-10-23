@@ -2,19 +2,23 @@ use crate::{
     args::OrchestratorArgs,
     boundary_node::BoundaryNodeManager,
     catch_up_package_provider::{CatchUpPackageProvider, LocalCUPReader},
+    cloud_engine::CloudEngineManager,
     dashboard::{Dashboard, OrchestratorDashboard},
     firewall::Firewall,
     hostos_upgrade::HostosUpgrader,
     ipv4_network::Ipv4Configurator,
     metrics::OrchestratorMetrics,
-    process_manager::ProcessManager,
+    processes::{
+        IcBoundaryProcessConfig, IcGatewayProcessConfig, MultipleProcessesManager, ProcessManager,
+        ReplicaProcessConfig,
+    },
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessManager,
     upgrade::{OrchestratorControlFlow, Upgrade},
 };
 use anyhow::Context;
-use backoff::ExponentialBackoffBuilder;
+use backon::ExponentialBuilder;
 use config_tool::guestos::network::{get_best_interface_name, get_interface_addresses};
 use guest_upgrade_server::orchestrator::new_disk_encryption_key_exchange_server_agent_for_orchestrator;
 use ic_config::{
@@ -24,19 +28,19 @@ use ic_config::{
 use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{NodeKeyGenerationError, generate_node_keys_once};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_image_upgrader::ImageUpgrader;
+use ic_image_upgrader::{ImageUpgrader, ManagebootRunnerImpl};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{ReplicaVersion, SubnetId, hostos_version::HostosVersion};
+use ic_types::{PlatformVersion, ReplicaVersion, SubnetId, hostos_version::HostosVersion};
 use std::{
     collections::HashMap,
     convert::TryFrom,
     future::Future,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock},
+    path::Path,
+    sync::{Arc, RwLock},
     thread,
     time::Duration,
 };
@@ -74,6 +78,7 @@ pub struct Orchestrator {
     upgrade: Option<Upgrade>,
     hostos_upgrade: Option<HostosUpgrader>,
     boundary_node_manager: Option<BoundaryNodeManager>,
+    cloud_engine_manager: Option<CloudEngineManager>,
     firewall: Option<Firewall>,
     ssh_access_manager: Option<SshAccessManager>,
     orchestrator_dashboard: Option<OrchestratorDashboard>,
@@ -131,11 +136,20 @@ impl Orchestrator {
         .unwrap()?;
 
         let metrics_registry = MetricsRegistry::global();
-        let replica_version = load_version_from_file(&logger, &args.version_file)
+        let replica_version = load_version_from_file(&logger, &args.replica_version_file)
             .map_err(|()| OrchestratorInstantiationError::VersionFileError)?;
+        let guestos_version = load_version_from_file(&logger, &args.guestos_version_file)
+            .map_err(|()| OrchestratorInstantiationError::VersionFileError)?;
+        let platform_version = PlatformVersion {
+            guestos_version: guestos_version.clone(),
+            replica_version: replica_version.clone(),
+        };
         info!(
             logger,
-            "Orchestrator started: version={}, config={:?}", replica_version, config
+            "Orchestrator started: replica_version={}, guestos_version={}, config={:?}",
+            replica_version,
+            guestos_version,
+            config
         );
         UtilityCommand::notify_host(
             format!("node-id {node_id}: starting with version {replica_version}").as_str(),
@@ -227,7 +241,7 @@ impl Orchestrator {
 
         metrics
             .orchestrator_info
-            .with_label_values(&[replica_version.as_ref()])
+            .with_label_values(&[replica_version.as_ref(), guestos_version.as_ref()])
             .set(1);
 
         let mut registration = NodeRegistration::new(
@@ -240,12 +254,9 @@ impl Orchestrator {
             Arc::clone(&crypto) as _,
         );
 
-        let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));
-        let ic_binary_directory = args
-            .ic_binary_directory
-            .as_ref()
-            .unwrap_or(&PathBuf::from("/tmp"))
-            .clone();
+        let manageboot_runner = Box::new(ManagebootRunnerImpl::new(
+            args.ic_binary_directory.join("manageboot.sh"),
+        ));
 
         // Create a read-only CUP reader that can be shared among Dashboard and Firewall
         // They read from the same file, so they'll see the same persisted CUP
@@ -260,6 +271,41 @@ impl Orchestrator {
             logger.clone(),
             node_id,
         );
+
+        let replica_process_config = ReplicaProcessConfig {
+            ic_binary_dir: args.ic_binary_directory.clone(),
+            cup_path: local_cup_reader.get_cup_path(),
+            replica_config_file: args.replica_config_file.clone(),
+        };
+        let ic_gateway_process_config = IcGatewayProcessConfig {
+            ic_binary_dir: args.ic_binary_directory.clone(),
+            ic_gateway_env_file: args.ic_gateway_env_file.clone(),
+            acme_cache_dir: args.acme_cache_dir(),
+        };
+        let ic_boundary_process_config = IcBoundaryProcessConfig {
+            ic_binary_dir: args.ic_binary_directory.clone(),
+            ic_boundary_env_file: args.ic_boundary_env_file.clone(),
+            crypto_config: config.crypto.clone(),
+        };
+
+        // Published by the cloud engine task, consumed by the process manager.
+        let engine_config = Arc::new(RwLock::new(None));
+
+        let processes_manager = MultipleProcessesManager::new(
+            replica_process_config,
+            ic_gateway_process_config,
+            Arc::clone(&engine_config),
+            Arc::clone(&registry),
+            Arc::clone(&metrics),
+            logger.clone(),
+        );
+        let ic_boundary_manager = ProcessManager::new(
+            ic_boundary_process_config,
+            Arc::clone(&metrics),
+            logger.clone(),
+        );
+        let mut process_observers = processes_manager.observers();
+        process_observers.push(ic_boundary_manager.observer());
 
         if args.enable_provisional_registration {
             // will not return until the node is registered
@@ -278,13 +324,13 @@ impl Orchestrator {
             Upgrade::new(
                 Arc::clone(&registry) as _,
                 Arc::clone(&metrics),
-                Arc::clone(&replica_process),
+                processes_manager,
+                manageboot_runner,
                 cup_provider,
                 Arc::clone(&subnet_assignment),
-                replica_version.clone(),
+                platform_version.clone(),
                 args.replica_config_file.clone(),
                 node_id,
-                ic_binary_directory.clone(),
                 Arc::clone(&registry_replicator) as _,
                 args.replica_binary_dir.clone(),
                 logger.clone(),
@@ -322,11 +368,22 @@ impl Orchestrator {
 
         let boundary_node = BoundaryNodeManager::new(
             Arc::clone(&registry),
-            Arc::clone(&metrics),
-            replica_version.clone(),
+            ic_boundary_manager,
+            // Boundary nodes don't run fast upgrades, the corresponding binary is not
+            // overlaid.
+            guestos_version.clone(),
             node_id,
-            ic_binary_directory.clone(),
-            config.crypto.clone(),
+            logger.clone(),
+        );
+
+        let cloud_engine_manager = CloudEngineManager::new(
+            Arc::clone(&registry),
+            Arc::clone(&subnet_assignment),
+            Arc::clone(&crypto) as _,
+            config.cloud_engine.engine_management_canister_id,
+            config.http_handler.listen_addr,
+            engine_config,
+            Arc::clone(&metrics),
             logger.clone(),
         );
 
@@ -335,6 +392,7 @@ impl Orchestrator {
             Arc::clone(&registry),
             Arc::clone(&metrics),
             config.firewall.clone(),
+            config.cloud_engine_firewall.clone(),
             config.boundary_node_firewall.clone(),
             local_cup_reader.clone(),
             logger.clone(),
@@ -343,7 +401,7 @@ impl Orchestrator {
         let ipv4_configurator = Ipv4Configurator::new(
             Arc::clone(&registry),
             Arc::clone(&metrics),
-            ic_binary_directory,
+            args.ic_binary_directory,
             logger.clone(),
         );
 
@@ -361,9 +419,9 @@ impl Orchestrator {
             firewall.get_last_applied_version(),
             ipv4_configurator.get_last_applied_version(),
             registry_replicator.get_latest_certified_time(),
-            replica_process,
+            process_observers,
             Arc::clone(&subnet_assignment),
-            replica_version,
+            platform_version,
             hostos_version.ok(),
             local_cup_reader,
             logger.clone(),
@@ -375,6 +433,7 @@ impl Orchestrator {
             upgrade,
             hostos_upgrade,
             boundary_node_manager: Some(boundary_node),
+            cloud_engine_manager,
             firewall: Some(firewall),
             ssh_access_manager: Some(ssh_access_manager),
             orchestrator_dashboard,
@@ -479,10 +538,11 @@ impl Orchestrator {
             }
 
             info!(log, "Shut down the upgrade loop");
-            if let Err(e) = upgrade.stop_replica() {
-                warn!(log, "Failed to stop the replica process: {e}");
+            if let Err(e) = upgrade.stop_children() {
+                warn!(log, "Failed to stop child processes: {e}");
+            } else {
+                info!(log, "Shut down the child processes");
             }
-            info!(log, "Shut down the replica process");
         }
 
         async fn hostos_upgrade_checks(
@@ -504,18 +564,23 @@ impl Orchestrator {
             // increases by a factor of 1.75, maxing out at two hours.
             // e.g. (roughly) 1, 1.75, 3, 5.25, 9.5, 16.5, 28.75, 50.25, 88, 120, 120
             //
-            // Additionally, there's a random +=50% range added to each delay, for jitter.
-            let backoff = ExponentialBackoffBuilder::new()
-                .with_initial_interval(Duration::from_secs(60))
-                .with_randomization_factor(0.5)
-                .with_multiplier(1.75)
-                .with_max_interval(Duration::from_secs(2 * 60 * 60))
-                .with_max_elapsed_time(None)
-                .build();
+            // Additionally, some (random) jitter is added.
+            let max_interval = Duration::from_secs(2 * 60 * 60);
+            let backoff_builder = ExponentialBuilder::new()
+                .with_min_delay(Duration::from_secs(60))
+                .with_jitter()
+                .with_factor(1.75)
+                .with_max_delay(max_interval)
+                .without_max_times();
             let liveness_timeout = Duration::from_secs(15 * 60);
 
             upgrade
-                .upgrade_loop(cancellation_token, backoff, liveness_timeout)
+                .upgrade_loop(
+                    cancellation_token,
+                    backoff_builder,
+                    max_interval,
+                    liveness_timeout,
+                )
                 .await;
         }
 
@@ -525,6 +590,20 @@ impl Orchestrator {
         ) {
             loop {
                 boundary_node_manager.check().await;
+
+                tokio::select! {
+                    _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
+                    _ = cancellation_token.cancelled() => break
+                }
+            }
+        }
+
+        async fn cloud_engine_check(
+            mut cloud_engine_manager: CloudEngineManager,
+            cancellation_token: CancellationToken,
+        ) {
+            loop {
+                cloud_engine_manager.check().await;
 
                 tokio::select! {
                     _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
@@ -619,6 +698,13 @@ impl Orchestrator {
             );
         }
 
+        if let Some(cloud_engine) = self.cloud_engine_manager.take() {
+            self.task_tracker.spawn(
+                "cloud_engine_management",
+                cloud_engine_check(cloud_engine, cancellation_token.clone()),
+            );
+        }
+
         if let (Some(ssh), Some(firewall), Some(ipv4_configurator)) = (
             self.ssh_access_manager.take(),
             self.firewall.take(),
@@ -670,14 +756,15 @@ impl Orchestrator {
             ..Default::default()
         };
 
+        // `MetricsHttpEndpoint::new` spawns the server: register first or scrapes can miss these.
+        let metrics = OrchestratorMetrics::new(metrics_registry);
+
         let metrics_endpoint = MetricsHttpEndpoint::new(
             tokio::runtime::Handle::current(),
             metrics_config,
             metrics_registry.clone(),
             logger,
         );
-
-        let metrics = OrchestratorMetrics::new(metrics_registry);
 
         (metrics, metrics_endpoint)
     }

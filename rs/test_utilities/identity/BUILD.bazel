@@ -2,20 +2,18 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-ed25519",
-    "//rs/canister_client/sender",
-    "//rs/types/types",
-    "@crate_index//:lazy_static",
-    "@crate_index//:rand",
-    "@crate_index//:rand_chacha",
-]
-
 rust_library(
     name = "identity",
     srcs = glob(["src/**"]),
     crate_name = "ic_test_identity",
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-ed25519",
+        "//rs/canister_client/sender",
+        "//rs/types/types",
+        "@crate_index//:lazy_static",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+    ],
 )

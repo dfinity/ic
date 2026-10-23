@@ -11,7 +11,7 @@ use ic_btc_checker::{
 use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
 use ic_cdk::call::Error;
-use ic_cdk::management_canister::TransformArgs;
+use ic_cdk_management_canister::TransformArgs;
 use ic_http_types as http;
 use ic_management_canister_types::HttpRequestResult;
 use logs::{DEBUG, Log, LogEntry, Priority, WARN};
@@ -397,7 +397,7 @@ impl FetchEnv for BtcCheckerCanisterEnv {
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {
-        use ic_cdk::management_canister::http_request;
+        use ic_cdk_management_canister::http_request;
         let request = provider
             .create_request(txid, max_response_bytes)
             .map_err(|err| HttpGetTxError::Rejected {
@@ -418,12 +418,12 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                         .or_default() += 1;
                     // Calculate size bucket as a series of power of 2s.
                     // Note that the max is bounded by `max_response_bytes`, which fits `u32`.
-                    let size = 2u32.pow((response.body.len() as f64).log2().floor() as u32);
+                    let size = 2_u32.pow((response.body.len() as f64).log2().floor() as u32);
                     *stat.http_response_size.entry(size).or_default() += 1;
                 });
 
                 // Ensure response is 200 before decoding
-                if response.status != 200u32 {
+                if response.status != 200_u32 {
                     // All non-200 status are treated as transient errors
                     return Err(HttpGetTxError::Rejected {
                         code: 2, //SYS_TRANSIENT

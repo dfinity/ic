@@ -16,7 +16,7 @@ macro_rules! systest {
     ($function:path; $arg:expr_2021) => {
         ic_system_test_driver::driver::dsl::TestFunction::new(
             &format!("{}({:?})", std::stringify!($function), $arg),
-            |env| ($function(env, $arg)),
+            move |env| ($function(env, $arg)),
         )
     };
 }

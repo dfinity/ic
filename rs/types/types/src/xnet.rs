@@ -1,6 +1,6 @@
 //! Types used by the Xnet component.
 use crate::ProxyDecodeError;
-use crate::{consensus::certification::Certification, messages::StreamMessage};
+use crate::{consensus::certification::SignedCertificationContent, messages::StreamMessage};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::state::queues::v1 as pb_queues;
@@ -211,6 +211,10 @@ pub enum RejectReason {
     /// `StateError` variants that shouldn't be possible to occur for requests.
     /// It is not expected that this reason will ever be used.
     Unknown = 7,
+
+    /// Request rejected because either the sending or receiving subnet is a CloudEngine subnet,
+    /// which does not allow guaranteed-response calls or attached cycles.
+    EngineNotAllowed = 8,
 }
 
 impl RejectReason {
@@ -231,6 +235,7 @@ impl From<RejectReason> for pb_queues::RejectReason {
             RejectReason::QueueFull => Self::QueueFull,
             RejectReason::OutOfMemory => Self::OutOfMemory,
             RejectReason::Unknown => Self::Unknown,
+            RejectReason::EngineNotAllowed => Self::EngineNotAllowed,
         }
     }
 }
@@ -250,6 +255,7 @@ impl TryFrom<pb_queues::RejectReason> for RejectReason {
             pb_queues::RejectReason::QueueFull => Ok(Self::QueueFull),
             pb_queues::RejectReason::OutOfMemory => Ok(Self::OutOfMemory),
             pb_queues::RejectReason::Unknown => Ok(Self::Unknown),
+            pb_queues::RejectReason::EngineNotAllowed => Ok(Self::EngineNotAllowed),
         }
     }
 }
@@ -385,7 +391,7 @@ pub struct CertifiedStreamSlice {
     pub merkle_proof: Vec<u8>,
 
     /// The certification of the root hash.
-    pub certification: Certification,
+    pub certification: SignedCertificationContent,
 }
 
 pub mod testing {

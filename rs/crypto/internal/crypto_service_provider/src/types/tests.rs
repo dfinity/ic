@@ -83,7 +83,7 @@ fn should_redact_csp_secret_key_thres_debug() {
 
 #[test]
 fn should_redact_csp_secret_key_tls_ed25519_debug() {
-    let cspsk_tls = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes::new(vec![1u8; 3]));
+    let cspsk_tls = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes::new(vec![1_u8; 3]));
     assert_eq!(
         "CspSecretKey::TlsEd25519 - REDACTED",
         format!("{cspsk_tls:?}")
@@ -286,26 +286,26 @@ fn csp_signatures_should_have_a_nice_debug_representation() {
     let test_vectors = vec![
         (
             CspSignature::EcdsaP256(ecdsa_secp256r1_types::SignatureBytes(
-                [0u8; ecdsa_secp256r1_types::SignatureBytes::SIZE],
+                [0_u8; ecdsa_secp256r1_types::SignatureBytes::SIZE],
             )),
             "CspSignature::EcdsaP256(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\")",
         ),
         (
             CspSignature::EcdsaSecp256k1(ecdsa_secp256k1_types::SignatureBytes(
-                [0u8; ecdsa_secp256k1_types::SignatureBytes::SIZE],
+                [0_u8; ecdsa_secp256k1_types::SignatureBytes::SIZE],
             )),
             "CspSignature::EcdsaSecp256k1(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\")",
         ),
         (
             CspSignature::Ed25519(ed25519_types::SignatureBytes(
-                [0u8; ed25519_types::SignatureBytes::SIZE],
+                [0_u8; ed25519_types::SignatureBytes::SIZE],
             )),
             "CspSignature::Ed25519(SignatureBytes(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\"))",
         ),
         (
             CspSignature::MultiBls12_381(MultiBls12_381_Signature::Individual(
                 multi_types::IndividualSignatureBytes(
-                    [0u8; multi_types::IndividualSignatureBytes::SIZE],
+                    [0_u8; multi_types::IndividualSignatureBytes::SIZE],
                 ),
             )),
             "CspSignature::MultiBls12_381(Individual(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))",
@@ -313,7 +313,7 @@ fn csp_signatures_should_have_a_nice_debug_representation() {
         (
             CspSignature::MultiBls12_381(MultiBls12_381_Signature::Combined(
                 multi_types::CombinedSignatureBytes(
-                    [0u8; multi_types::CombinedSignatureBytes::SIZE],
+                    [0_u8; multi_types::CombinedSignatureBytes::SIZE],
                 ),
             )),
             "CspSignature::MultiBls12_381(Combined(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))",
@@ -321,7 +321,7 @@ fn csp_signatures_should_have_a_nice_debug_representation() {
         (
             CspSignature::ThresBls12_381(ThresBls12_381_Signature::Individual(
                 threshold_types::IndividualSignatureBytes(
-                    [0u8; multi_types::IndividualSignatureBytes::SIZE],
+                    [0_u8; multi_types::IndividualSignatureBytes::SIZE],
                 ),
             )),
             "CspSignature::ThresBls12_381(Individual(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))",
@@ -329,7 +329,7 @@ fn csp_signatures_should_have_a_nice_debug_representation() {
         (
             CspSignature::ThresBls12_381(ThresBls12_381_Signature::Combined(
                 threshold_types::CombinedSignatureBytes(
-                    [0u8; multi_types::CombinedSignatureBytes::SIZE],
+                    [0_u8; multi_types::CombinedSignatureBytes::SIZE],
                 ),
             )),
             "CspSignature::ThresBls12_381(Combined(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))",

@@ -1,21 +1,20 @@
-use std::collections::BTreeMap;
-
 use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_crypto_tree_hash::{Digest, Witness};
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
     validation::ValidationResult,
 };
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
 use ic_types::{
     CryptoHashOfPartialState, Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
     batch::{BatchPayload, ValidationContext},
     consensus::{
-        Block, BlockPayload, DataPayload, FinalizationContent, FinalizationShare,
-        NotarizationContent, NotarizationShare, Payload, RandomBeacon, RandomBeaconContent,
-        RandomBeaconShare, RandomTapeContent, RandomTapeShare, Rank, SummaryPayload,
-        certification::{Certification, CertificationContent},
-        dkg::{DkgDataPayload, DkgSummary},
+        Block, BlockPayload, CatchUpContent, CatchUpPackage, DataPayload, FinalizationContent,
+        FinalizationShare, NotarizationContent, NotarizationShare, Payload, RandomBeacon,
+        RandomBeaconContent, RandomBeaconShare, RandomTapeContent, RandomTapeShare, Rank,
+        SummaryPayload,
+        certification::{Certification, CertificationContent, SignedCertificationContent},
+        dkg::{DkgDataPayload, DkgSummary, SubnetSplittingStatus},
         hashed,
     },
     crypto::{
@@ -28,6 +27,7 @@ use ic_types::{
     },
 };
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 pub trait Fake {
     fn fake() -> Self;
@@ -44,11 +44,7 @@ impl Fake for SummaryPayload {
 
 impl Fake for DataPayload {
     fn fake() -> Self {
-        Self {
-            batch: BatchPayload::default(),
-            dkg: DkgDataPayload::new_empty(Height::from(0)),
-            idkg: None,
-        }
+        Self::new_empty(Height::from(0))
     }
 }
 
@@ -61,12 +57,12 @@ impl Fake for DkgSummary {
             /*current_transcripts=*/
             empty_ni_dkg_transcripts_with_committee(registry_version),
             /*next_transcripts=*/ BTreeMap::default(),
-            /*transcript_for_new_subnets=*/ Vec::default(),
             RegistryVersion::from(registry_version),
             /*interval_length=*/ Height::new(59),
             /*next_interval_length=*/ Height::new(59),
             /*height=*/ Height::new(0),
-            /*initial_dkg_attempts=*/ BTreeMap::default(),
+            /*remote_dkg_attempts=*/ BTreeMap::default(),
+            /*subnet_splitting_status=*/ SubnetSplittingStatus::default(),
         )
     }
 }
@@ -75,7 +71,7 @@ impl Fake for Certification {
     fn fake() -> Self {
         Certification {
             height: Height::new(0),
-            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
                     vec![],
@@ -188,6 +184,33 @@ impl<T> FakeContent<T> for Signed<T, ThresholdSignature<T>> {
         }
     }
 }
+
+/// Creates a [`CatchUpPackage`] with a fake signature for the given content.
+///
+/// Unlike [`CatchUpPackage::fake`], the signer is the DKG id of the current high-threshold
+/// transcript in the DKG summary of the content, as it is for real CUPs. This is required for the
+/// CUP to pass the signer check of CUP verification.
+pub fn fake_catch_up_package(content: CatchUpContent) -> CatchUpPackage {
+    let signer = content
+        .block
+        .as_ref()
+        .payload
+        .as_ref()
+        .as_summary()
+        .dkg
+        .current_transcript(&NiDkgTag::HighThreshold)
+        .expect("the DKG summary has no current high-threshold transcript")
+        .dkg_id
+        .clone();
+    CatchUpPackage {
+        content,
+        signature: ThresholdSignature {
+            signer,
+            signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+        },
+    }
+}
+
 pub trait FakeContentUpdate {
     fn update_content(&mut self);
 }
@@ -231,7 +254,11 @@ impl<T: CryptoHashable, S: Signable> FakeContentSigner<T>
 impl FakeContentSigner<&Block> for NotarizationShare {
     fn fake(block: &Block, signer: NodeId) -> NotarizationShare {
         Signed {
-            content: NotarizationContent::new(block.height, ic_types::crypto::crypto_hash(block)),
+            content: NotarizationContent::new(
+                block.height,
+                ic_types::crypto::crypto_hash(block),
+                block.version.clone(),
+            ),
             signature: MultiSignatureShare::fake(signer),
         }
     }
@@ -240,9 +267,12 @@ impl FakeContentSigner<&Block> for NotarizationShare {
 impl FakeContentSigner<&Block> for FinalizationShare {
     fn fake(block: &Block, signer: NodeId) -> FinalizationShare {
         let height = block.height;
-        let block = ic_types::crypto::crypto_hash(block);
         Signed {
-            content: FinalizationContent::new(height, block),
+            content: FinalizationContent::new(
+                height,
+                ic_types::crypto::crypto_hash(block),
+                block.version.clone(),
+            ),
             signature: MultiSignatureShare::fake(signer),
         }
     }
@@ -255,7 +285,11 @@ impl FakeContentSigner<&RandomBeacon> for RandomBeaconShare {
             signer,
         };
         let height = parent.content.height.increment();
-        let beacon = RandomBeaconContent::new(height, ic_types::crypto::crypto_hash(parent));
+        let beacon = RandomBeaconContent::new(
+            height,
+            ic_types::crypto::crypto_hash(parent),
+            parent.content.version.clone(),
+        );
         Signed {
             content: beacon,
             signature,
@@ -270,7 +304,7 @@ impl FakeContentSigner<Height> for RandomTapeShare {
             signer,
         };
         Signed {
-            content: RandomTapeContent::new(height),
+            content: RandomTapeContent::new(height, test_replica_version()),
             signature,
         }
     }
@@ -296,6 +330,7 @@ impl FromParent for Block {
             parent.height.increment(),
             Rank(0),
             parent.context.clone(),
+            parent.version.clone(),
         )
     }
 }
@@ -305,6 +340,7 @@ impl FromParent for RandomBeacon {
         Self::fake(RandomBeaconContent::new(
             parent.content.height.increment(),
             ic_types::crypto::crypto_hash(parent),
+            parent.content.version.clone(),
         ))
     }
 }
@@ -346,7 +382,7 @@ impl Verifier for FakeVerifier {
     fn validate(
         &self,
         _subnet_id: SubnetId,
-        _certification: &Certification,
+        _certification: &SignedCertificationContent,
         _registry_version: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
         Ok(())
@@ -355,6 +391,7 @@ impl Verifier for FakeVerifier {
 
 #[cfg(test)]
 mod tests {
+    use ic_test_utilities_types::ids::test_replica_version;
     use ic_types::consensus::HasVersion;
 
     use super::*;
@@ -365,11 +402,7 @@ mod tests {
             CryptoHashOf::from(CryptoHash(Vec::new())),
             Payload::new(
                 ic_types::crypto::crypto_hash,
-                BlockPayload::Data(DataPayload {
-                    batch: BatchPayload::default(),
-                    dkg: DkgDataPayload::new_empty(Height::from(1)),
-                    idkg: None,
-                }),
+                BlockPayload::Data(DataPayload::new_empty(Height::from(1))),
             ),
             Height::from(123),
             Rank(456),
@@ -378,6 +411,7 @@ mod tests {
                 certified_height: Height::from(42),
                 time: ic_types::time::UNIX_EPOCH,
             },
+            test_replica_version(),
         );
         let bytes1 = bincode::serialize(&block).unwrap();
         let fake_block = bincode::deserialize::<FakeBlock>(&bytes1).unwrap();
@@ -392,11 +426,7 @@ mod tests {
             CryptoHashOf::from(CryptoHash(Vec::new())),
             Payload::new(
                 ic_types::crypto::crypto_hash,
-                BlockPayload::Data(DataPayload {
-                    batch: BatchPayload::default(),
-                    dkg: DkgDataPayload::new_empty(Height::from(1)),
-                    idkg: None,
-                }),
+                BlockPayload::Data(DataPayload::new_empty(Height::from(1))),
             ),
             Height::from(123),
             Rank(456),
@@ -405,6 +435,7 @@ mod tests {
                 certified_height: Height::from(42),
                 time: ic_types::time::UNIX_EPOCH,
             },
+            test_replica_version(),
         );
 
         // fake block is binary compatible

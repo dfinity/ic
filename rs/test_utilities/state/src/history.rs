@@ -2,7 +2,7 @@ use ic_interfaces::execution_environment::{
     IngressHistoryError, IngressHistoryReader, IngressHistoryWriter,
 };
 use ic_replicated_state::ReplicatedState;
-use ic_types::{Height, ingress::IngressStatus, messages::MessageId};
+use ic_types::{ExecutionRound, Height, ingress::IngressStatus, messages::MessageId};
 use mockall::*;
 use std::sync::Arc;
 
@@ -17,6 +17,7 @@ mock! {
             state: &mut ReplicatedState,
             message_id: MessageId,
             status: IngressStatus,
+            current_round: ExecutionRound,
         ) -> Arc<IngressStatus>;
     }
 

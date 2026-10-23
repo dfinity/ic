@@ -1,10 +1,15 @@
 use crate::{common::LOG_PREFIX, mutations::common::has_duplicates, registry::Registry};
 use candid::{CandidType, Deserialize};
 use dfn_core::println;
-use ic_base_types::{SubnetId, subnet_id_into_protobuf};
+use ic_base_types::{PrincipalId, SubnetId, subnet_id_into_protobuf};
 use ic_management_canister_types_private::MasterPublicKeyId;
-use ic_protobuf::registry::subnet::v1::{
-    SubnetFeatures as SubnetFeaturesPb, SubnetRecord as SubnetRecordPb,
+use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
+use ic_protobuf::{
+    registry::subnet::v1::{
+        ResourceLimits as ResourceLimitsPb, SubnetFeatures as SubnetFeaturesPb,
+        SubnetRecord as SubnetRecordPb, SubnetType as SubnetTypePb,
+    },
+    types::v1::PrincipalId as PrincipalIdPb,
 };
 use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
@@ -18,16 +23,48 @@ use std::collections::HashSet;
 
 /// Updates the subnet's configuration in the registry.
 ///
-/// This method is called by the governance canister, after a proposal
-/// for updating a new subnet has been accepted.
+/// This method is called by:
+///   * the governance canister, after a proposal for updating a subnet has
+///     been accepted (no scope restriction); and
+///   * the engine controller canister, which may only target CloudEngine
+///     subnets and is further restricted to a small subset of fields (see
+///     [`ensure_engine_controller_payload_scope`]).
 impl Registry {
-    pub fn do_update_subnet(&mut self, payload: UpdateSubnetPayload) {
-        println!("{}do_update_subnet: {:?}", LOG_PREFIX, payload);
-
-        self.validate_update_payload_chain_key_config(&payload);
-        self.validate_update_sev_feature(&payload);
+    pub fn do_update_subnet(&mut self, caller: PrincipalId, mut payload: UpdateSubnetPayload) {
+        println!("{LOG_PREFIX}do_update_subnet: caller={caller}, payload={payload:?}");
 
         let subnet_id = payload.subnet_id;
+
+        // The engine controller canister is only allowed to mutate CloudEngine
+        // subnets, and only a small subset of fields. Other authorized callers
+        // (governance) can update any subnet and any field.
+        if caller == ENGINE_CONTROLLER_CANISTER_ID.get() {
+            let subnet_record = self.get_subnet_or_panic(subnet_id);
+            assert_eq!(
+                subnet_record.subnet_type,
+                i32::from(SubnetTypePb::CloudEngine),
+                "{LOG_PREFIX}do_update_subnet: engine controller may only update CloudEngine \
+                 subnets; subnet {subnet_id} has subnet_type {:?}",
+                subnet_record.subnet_type,
+            );
+            ensure_engine_controller_payload_scope(&payload);
+
+            // The engine controller manages the state limits only, so a limit
+            // it leaves unset keeps its current value rather than being reset
+            // (e.g. query limits set by a proposal).
+            if let Some(limits) = payload.resource_limits.as_mut() {
+                let current = subnet_record.resource_limits.unwrap_or_default();
+                limits.maximum_state_size =
+                    limits.maximum_state_size.or(current.maximum_state_size);
+                limits.maximum_state_delta =
+                    limits.maximum_state_delta.or(current.maximum_state_delta);
+                limits.maximum_query_instructions = current.maximum_query_instructions;
+                limits.maximum_query_walltime_seconds = current.maximum_query_walltime_seconds;
+            }
+        }
+
+        self.validate_update_payload_chain_key_config(&payload);
+        self.validate_sev_is_not_disabled(&payload);
 
         let new_subnet_record =
             merge_subnet_record(self.get_subnet_or_panic(subnet_id), payload.clone());
@@ -142,27 +179,32 @@ impl Registry {
         }
     }
 
-    /// Validates that AMD Secure Encrypted Virtualization (SEV) is never disabled on a subnet.
+    /// Panics if the proposal would disable AMD Secure Encrypted Virtualization (SEV).
     ///
-    /// Panics when attempting to turn off SEV for an SEV-enabled subnet
-    fn validate_update_sev_feature(&self, payload: &UpdateSubnetPayload) {
+    /// Enabling SEV is allowed; that the subnet can actually run with SEV is enforced by the SEV
+    /// subnet invariants (see `check_sev_subnet_invariants`).
+    fn validate_sev_is_not_disabled(&self, payload: &UpdateSubnetPayload) {
+        // Leaving `features` unset keeps the subnet's features as they are.
+        let Some(payload_features) = payload.features else {
+            return;
+        };
         let subnet_id = payload.subnet_id;
 
-        let Some(subnet_features) = self.get_subnet_or_panic(subnet_id).features else {
-            return;
-        };
+        // A payload with `features: Some(_)` replaces the subnet record's features wholesale (see
+        // `merge_subnet_record`), so `sev_enabled: None` would implicitly disable SEV. Comparing
+        // the effective values, i.e. the rust-level `SubnetFeatures` where both `None` and
+        // `Some(false)` mean disabled, catches that as well as an explicit disable.
+        let new_sev_enabled = SubnetFeatures::from(payload_features).sev_enabled;
+        let old_sev_enabled = self
+            .get_subnet_or_panic(subnet_id)
+            .features
+            .is_some_and(|features| SubnetFeatures::from(features).sev_enabled);
 
-        let Some(update_features) = payload.features else {
-            return;
-        };
-
-        // panic if SEV is enable and the update tries to disable it
-        let attempting_to_disable =
-            subnet_features.sev_enabled == Some(true) && update_features.sev_enabled == Some(false);
-        if attempting_to_disable {
+        if old_sev_enabled && !new_sev_enabled {
             panic!(
-                "{LOG_PREFIX}Proposal attempts to disable SEV for Subnet '{subnet_id}', \
-                but SEV cannot be turned off once enabled.",
+                "{LOG_PREFIX}Proposal attempts to disable SEV for Subnet '{subnet_id}': SEV \
+                 cannot be turned off once enabled. Since setting `features` replaces all of \
+                 them, `sev_enabled` has to be set as well to keep SEV enabled.",
             );
         }
     }
@@ -201,6 +243,126 @@ impl Registry {
     }
 }
 
+/// Defence-in-depth check that the engine controller canister never reaches
+/// `do_update_subnet` with anything other than the small set of fields it is
+/// allowed to manage, currently:
+///
+/// - `subnet_admins`
+/// - `is_halted`
+/// - `cooling_down`
+/// - `resource_limits`, but only its state limits (`maximum_state_size`,
+///   `maximum_state_delta`)
+///
+/// The engine controller proxy already enforces this, but mirroring the check
+/// here keeps the registry's invariants self-contained and prevents future
+/// drift if the proxy's surface ever changes.
+///
+/// Uses exhaustive destructuring so adding a new field to `UpdateSubnetPayload`
+/// will fail to compile here until it is explicitly classified as
+/// allowed-or-disallowed.
+fn ensure_engine_controller_payload_scope(payload: &UpdateSubnetPayload) {
+    let UpdateSubnetPayload {
+        subnet_id: _,
+        // The fields the engine controller is allowed to set.
+        subnet_admins: _,
+        is_halted: _,
+        cooling_down: _,
+        resource_limits,
+
+        max_ingress_bytes_per_message,
+        max_ingress_bytes_per_block,
+        max_ingress_messages_per_block,
+        max_block_payload_size,
+        unit_delay_millis,
+        initial_notary_delay_millis,
+        dkg_interval_length,
+        dkg_dealings_per_block,
+        start_as_nns,
+        subnet_type,
+        halt_at_cup_height,
+        features,
+        chain_key_config,
+        chain_key_signing_enable,
+        chain_key_signing_disable,
+        max_number_of_canisters,
+        ssh_readonly_access,
+        ssh_backup_access,
+        max_artifact_streams_per_peer,
+        max_chunk_wait_ms,
+        max_duplicity,
+        max_chunk_size,
+        receive_check_cache_size,
+        pfn_evaluation_period_ms,
+        registry_poll_period_ms,
+        retransmission_request_ms,
+        set_gossip_config_to_default,
+    } = payload;
+
+    let mut disallowed: Vec<&'static str> = vec![];
+    macro_rules! check_none {
+        ($field:expr, $name:literal) => {
+            if $field.is_some() {
+                disallowed.push($name);
+            }
+        };
+    }
+    check_none!(
+        max_ingress_bytes_per_message,
+        "max_ingress_bytes_per_message"
+    );
+    check_none!(max_ingress_bytes_per_block, "max_ingress_bytes_per_block");
+    check_none!(
+        max_ingress_messages_per_block,
+        "max_ingress_messages_per_block"
+    );
+    check_none!(max_block_payload_size, "max_block_payload_size");
+    check_none!(unit_delay_millis, "unit_delay_millis");
+    check_none!(initial_notary_delay_millis, "initial_notary_delay_millis");
+    check_none!(dkg_interval_length, "dkg_interval_length");
+    check_none!(dkg_dealings_per_block, "dkg_dealings_per_block");
+    check_none!(start_as_nns, "start_as_nns");
+    check_none!(subnet_type, "subnet_type");
+    check_none!(halt_at_cup_height, "halt_at_cup_height");
+    check_none!(features, "features");
+    if let Some(resource_limits) = resource_limits {
+        check_none!(
+            resource_limits.maximum_query_instructions,
+            "resource_limits.maximum_query_instructions"
+        );
+        check_none!(
+            resource_limits.maximum_query_walltime_seconds,
+            "resource_limits.maximum_query_walltime_seconds"
+        );
+    }
+    check_none!(chain_key_config, "chain_key_config");
+    check_none!(chain_key_signing_enable, "chain_key_signing_enable");
+    check_none!(chain_key_signing_disable, "chain_key_signing_disable");
+    check_none!(max_number_of_canisters, "max_number_of_canisters");
+    check_none!(ssh_readonly_access, "ssh_readonly_access");
+    check_none!(ssh_backup_access, "ssh_backup_access");
+    check_none!(
+        max_artifact_streams_per_peer,
+        "max_artifact_streams_per_peer"
+    );
+    check_none!(max_chunk_wait_ms, "max_chunk_wait_ms");
+    check_none!(max_duplicity, "max_duplicity");
+    check_none!(max_chunk_size, "max_chunk_size");
+    check_none!(receive_check_cache_size, "receive_check_cache_size");
+    check_none!(pfn_evaluation_period_ms, "pfn_evaluation_period_ms");
+    check_none!(registry_poll_period_ms, "registry_poll_period_ms");
+    check_none!(retransmission_request_ms, "retransmission_request_ms");
+    if *set_gossip_config_to_default {
+        disallowed.push("set_gossip_config_to_default");
+    }
+
+    assert!(
+        disallowed.is_empty(),
+        "{LOG_PREFIX}do_update_subnet: engine controller may only update \
+         `subnet_admins`, `is_halted`, `cooling_down` and the state limits in \
+         `resource_limits`, but the following fields were also set: {disallowed:?}",
+    );
+}
+
 /// The payload of a proposal to update an existing subnet's configuration.
 ///
 /// See /rs/protobuf/def/registry/subnet/v1/subnet.proto
@@ -208,11 +370,16 @@ impl Registry {
 ///
 /// Setting a field to `None` means that its value should not be changed. The
 /// rest of the fields will be overwritten in the SubnetRecord.
+/// In particular, this means that nested optional fields are unconditionally
+/// assigned in the subnet record instead of treating a nested `None` as a no-op.
+/// This is inconsistent to top-level optional fields and could be confusing.
+/// Tooling like `ic-admin` deals with that by filling unset nested fields with
+/// values from the current subnet record.
 ///
 /// Note that `replica_version_id` and `membership`
 /// are intentionally left out as they are updated via other proposals and/or
 /// handlers because they are subject to invariants, e.g. the replica version
-/// must be "blessed".
+/// must be "elected".
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct UpdateSubnetPayload {
     pub subnet_id: SubnetId,
@@ -233,7 +400,13 @@ pub struct UpdateSubnetPayload {
     pub is_halted: Option<bool>,
     pub halt_at_cup_height: Option<bool>,
 
+    /// When `Some`, starts (`true`) or stops (`false`) "cooling down" the
+    /// subnet. See `ic_replicated_state::SubnetTopology::cooling_down` for the
+    /// exact semantics.
+    pub cooling_down: Option<bool>,
+
     pub features: Option<SubnetFeaturesPb>,
+    pub resource_limits: Option<ResourceLimitsPb>,
 
     pub chain_key_config: Option<ChainKeyConfig>,
     pub chain_key_signing_enable: Option<Vec<MasterPublicKeyId>>,
@@ -243,6 +416,11 @@ pub struct UpdateSubnetPayload {
 
     pub ssh_readonly_access: Option<Vec<String>>,
     pub ssh_backup_access: Option<Vec<String>>,
+
+    /// When `Some`, replaces the subnet's admin list with the given principals
+    /// (an empty `Vec` clears the list). `None` leaves the existing list
+    /// unchanged.
+    pub subnet_admins: Option<Vec<PrincipalId>>,
 
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub max_artifact_streams_per_peer: Option<u32>,
@@ -443,13 +621,16 @@ fn merge_subnet_record(
         subnet_type,
         is_halted,
         halt_at_cup_height,
+        cooling_down,
         features,
+        resource_limits,
         chain_key_config,
         chain_key_signing_enable: _,
         chain_key_signing_disable: _,
         max_number_of_canisters,
         ssh_readonly_access,
         ssh_backup_access,
+        subnet_admins,
         // Deprecated/unused values follow
         max_artifact_streams_per_peer: _,
         max_chunk_wait_ms: _,
@@ -482,8 +663,10 @@ fn merge_subnet_record(
 
     maybe_set!(subnet_record, is_halted);
     maybe_set!(subnet_record, halt_at_cup_height);
+    maybe_set!(subnet_record, cooling_down);
 
     maybe_set_option!(subnet_record, features);
+    maybe_set_option!(subnet_record, resource_limits);
 
     let chain_key_config = chain_key_config.map(|chain_key_config| {
         ChainKeyConfigInternal::try_from(chain_key_config)
@@ -496,6 +679,10 @@ fn merge_subnet_record(
     maybe_set!(subnet_record, ssh_readonly_access);
     maybe_set!(subnet_record, ssh_backup_access);
 
+    if let Some(subnet_admins) = subnet_admins {
+        subnet_record.subnet_admins = subnet_admins.into_iter().map(PrincipalIdPb::from).collect();
+    }
+
     subnet_record
 }
 
@@ -503,22 +690,26 @@ fn merge_subnet_record(
 mod tests {
     use super::*;
     use crate::common::test_helpers::{
-        add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
-        prepare_registry_with_nodes, prepare_registry_with_nodes_and_chip_id,
+        add_fake_subnet, add_guest_launch_measurements_to_replica_version,
+        get_invariant_compliant_subnet_record, invariant_compliant_registry,
+        prepare_registry_with_cloud_engine_subnet, prepare_registry_with_nodes,
+        prepare_registry_with_nodes_and_chip_id,
     };
     use ic_management_canister_types_private::{
         EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
+    use ic_nns_constants::{ENGINE_CONTROLLER_CANISTER_ID, GOVERNANCE_CANISTER_ID};
     use ic_protobuf::registry::subnet::v1::{
         CanisterCyclesCostSchedule, ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
         SubnetRecord as SubnetRecordPb,
     };
     use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
+    use ic_registry_resource_limits::ResourceLimits;
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
-    use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
+    use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
+    use ic_types::{NumBytes, NumInstructions, PrincipalId, SubnetId};
     use maplit::btreemap;
     use std::str::FromStr;
 
@@ -537,10 +728,13 @@ mod tests {
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
+            cooling_down: None,
             features: None,
+            resource_limits: None,
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -567,13 +761,14 @@ mod tests {
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
+            cooling_down: false,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -581,6 +776,7 @@ mod tests {
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             subnet_admins: vec![],
+            resource_limits: Default::default(),
             recalled_replica_version_ids: vec![],
         };
 
@@ -618,6 +814,7 @@ mod tests {
             subnet_type: None,
             is_halted: Some(true),
             halt_at_cup_height: Some(false),
+            cooling_down: Some(true),
             features: Some(
                 SubnetFeatures {
                     canister_sandboxing: false,
@@ -626,9 +823,19 @@ mod tests {
                 }
                 .into(),
             ),
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(42)),
+                    maximum_state_delta: Some(NumBytes::new(64)),
+                    maximum_query_instructions: Some(NumInstructions::new(128)),
+                    maximum_query_walltime_seconds: Some(30),
+                }
+                .into(),
+            ),
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
+            subnet_admins: None,
             chain_key_config: Some(chain_key_config.clone()),
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -654,13 +861,14 @@ mod tests {
                 max_block_payload_size: 200,
                 unit_delay_millis: 300,
                 initial_notary_delay_millis: 200,
-                replica_version_id: ReplicaVersion::default().into(),
+                replica_version_id: test_replica_version().to_string(),
                 dkg_interval_length: 8,
                 dkg_dealings_per_block: 1,
                 start_as_nns: true,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: true,
                 halt_at_cup_height: false,
+                cooling_down: true,
                 features: Some(
                     SubnetFeatures {
                         canister_sandboxing: false,
@@ -677,6 +885,15 @@ mod tests {
                 ssh_backup_access: vec!["pub_key_1".to_string()],
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                resource_limits: Some(
+                    ResourceLimits {
+                        maximum_state_size: Some(NumBytes::new(42)),
+                        maximum_state_delta: Some(NumBytes::new(64)),
+                        maximum_query_instructions: Some(NumInstructions::new(128)),
+                        maximum_query_walltime_seconds: Some(30),
+                    }
+                    .into()
+                ),
                 recalled_replica_version_ids: vec![],
             }
         );
@@ -692,13 +909,14 @@ mod tests {
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
+            cooling_down: false,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -706,6 +924,14 @@ mod tests {
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             subnet_admins: vec![],
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(42)),
+                    maximum_state_delta: Some(NumBytes::new(64)),
+                    ..Default::default()
+                }
+                .into(),
+            ),
             recalled_replica_version_ids: vec![],
         };
 
@@ -728,10 +954,13 @@ mod tests {
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: Some(true),
+            cooling_down: None,
             features: None,
+            resource_limits: None,
             max_number_of_canisters: Some(50),
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -756,13 +985,14 @@ mod tests {
                 max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 100,
                 initial_notary_delay_millis: 1500,
-                replica_version_id: ReplicaVersion::default().into(),
+                replica_version_id: test_replica_version().to_string(),
                 dkg_interval_length: 2,
                 dkg_dealings_per_block: 1,
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
                 halt_at_cup_height: true,
+                cooling_down: false,
                 features: None,
                 max_number_of_canisters: 50,
                 ssh_readonly_access: vec![],
@@ -770,7 +1000,62 @@ mod tests {
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                resource_limits: Some(
+                    ResourceLimits {
+                        maximum_state_size: Some(NumBytes::new(42)),
+                        maximum_state_delta: Some(NumBytes::new(64)),
+                        ..Default::default()
+                    }
+                    .into()
+                ),
                 recalled_replica_version_ids: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn resource_limits_resets_all_fields() {
+        let subnet_record = SubnetRecordPb {
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(42)),
+                    maximum_state_delta: Some(NumBytes::new(64)),
+                    ..Default::default()
+                }
+                .into(),
+            ),
+            ..Default::default()
+        };
+
+        let subnet_id = SubnetId::from(
+            PrincipalId::from_str(
+                "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
+            )
+            .unwrap(),
+        );
+        let payload = UpdateSubnetPayload {
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(128)),
+                    maximum_state_delta: None,
+                    ..Default::default()
+                }
+                .into(),
+            ),
+            ..make_empty_update_payload(subnet_id)
+        };
+        assert_eq!(
+            merge_subnet_record(subnet_record, payload),
+            SubnetRecordPb {
+                resource_limits: Some(
+                    ResourceLimits {
+                        maximum_state_size: Some(NumBytes::new(128)),
+                        maximum_state_delta: None,
+                        ..Default::default()
+                    }
+                    .into()
+                ),
+                ..Default::default()
             }
         );
     }
@@ -826,7 +1111,7 @@ mod tests {
         payload.chain_key_signing_enable = Some(vec![MasterPublicKeyId::Ecdsa(key)]);
 
         // Should panic because we are trying to enable a key that hasn't previously held it
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     #[test]
@@ -881,7 +1166,7 @@ mod tests {
 
         payload.chain_key_signing_enable = Some(vec![MasterPublicKeyId::Ecdsa(key)]);
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     #[test]
@@ -971,15 +1256,15 @@ mod tests {
             max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     /// Returns an invariant-compliant Registry instance and an ID of a subnet
-    /// with an existing subnet record.
+    /// with an existing subnet record (SEV disabled).
     fn make_registry_for_update_subnet_tests() -> (Registry, SubnetId) {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_chip_id(1, 2);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1002,69 +1287,139 @@ mod tests {
         (registry, subnet_id)
     }
 
-    fn update_sev(subnet_id: SubnetId, enabled: bool) -> UpdateSubnetPayload {
+    /// Same as `make_registry_for_update_subnet_tests`, but the subnet is SEV-capable: its nodes
+    /// have a chip ID and its GuestOS version has launch measurements, as the SEV invariants
+    /// demand. SEV itself is enabled iff `sev_enabled`.
+    fn make_sev_capable_registry_for_update_subnet_tests(
+        sev_enabled: bool,
+    ) -> (Registry, SubnetId) {
+        let mut registry = invariant_compliant_registry(0);
+        add_guest_launch_measurements_to_replica_version(
+            &mut registry,
+            test_replica_version().as_ref(),
+        );
+
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_chip_id(1, 2);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let mut subnet_list_record = registry.get_subnet_list_record();
+
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+            .iter()
+            .next()
+            .expect("should contain at least one node ID");
+        let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
+        subnet_record.features = Some(SubnetFeaturesPb {
+            canister_sandboxing: false,
+            http_requests: false,
+            sev_enabled: Some(sev_enabled),
+        });
+
+        let subnet_id = subnet_test_id(1000);
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
+        ));
+
+        (registry, subnet_id)
+    }
+
+    /// An otherwise empty payload that replaces the subnet's features with the given
+    /// `sev_enabled` and no other feature.
+    fn payload_setting_sev(subnet_id: SubnetId, sev_enabled: Option<bool>) -> UpdateSubnetPayload {
         let mut payload = make_empty_update_payload(subnet_id);
         payload.features = Some(SubnetFeaturesPb {
             canister_sandboxing: false,
             http_requests: false,
-            sev_enabled: Some(enabled),
+            sev_enabled,
         });
         payload
     }
 
     #[test]
-    fn test_can_enable_sev_if_disabled() {
-        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+    fn test_sev_enabled_can_be_set_on_existing_subnet() {
+        let (mut registry, subnet_id) =
+            make_sev_capable_registry_for_update_subnet_tests(/* sev_enabled = */ false);
 
-        // transition from unset -> false -> true
-        registry.do_update_subnet(update_sev(subnet_id, false));
-        registry.do_update_subnet(update_sev(subnet_id, true));
+        registry.do_update_subnet(
+            GOVERNANCE_CANISTER_ID.get(),
+            payload_setting_sev(subnet_id, Some(true)),
+        );
 
         let subnet_features = registry
             .get_subnet_or_panic(subnet_id)
             .features
-            .expect("failed to get subnet features");
-
-        assert_eq!(
-            subnet_features.sev_enabled,
-            Some(true),
-            "Expected SEV enabled to be Some(true), but was {:?}",
-            subnet_features.sev_enabled
-        );
+            .expect("subnet should have features set");
+        assert_eq!(subnet_features.sev_enabled, Some(true));
     }
 
+    /// Enabling SEV remains subject to the SEV invariants, which is what keeps SEV from being
+    /// enabled on a subnet that cannot run it.
     #[test]
-    fn test_can_enable_sev_if_unset() {
+    #[should_panic(expected = "is SEV-enabled, but the following nodes are missing a chip ID")]
+    fn test_sev_enabled_cannot_be_set_if_a_node_has_no_chip_id() {
         let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
 
-        // transition from unset (implicitly) -> true
-        registry.do_update_subnet(update_sev(subnet_id, true));
-
-        let subnet_features = registry
-            .get_subnet_or_panic(subnet_id)
-            .features
-            .expect("failed to get subnet features");
-
-        assert_eq!(
-            subnet_features.sev_enabled,
-            Some(true),
-            "Expected SEV enabled to be Some(true), but was {:?}",
-            subnet_features.sev_enabled
+        registry.do_update_subnet(
+            GOVERNANCE_CANISTER_ID.get(),
+            payload_setting_sev(subnet_id, Some(true)),
         );
     }
 
     #[test]
     #[should_panic(
-        expected = "Proposal attempts to disable SEV for Subnet 'ge6io-epiam-aaaaa-aaaap-yai', \
-        but SEV cannot be turned off once enabled."
+        expected = "Proposal attempts to disable SEV for Subnet 'ge6io-epiam-aaaaa-aaaap-yai'"
     )]
-    fn test_cannot_disable_sev_if_enabled() {
-        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+    fn test_sev_enabled_cannot_be_disabled_explicitly() {
+        let (mut registry, subnet_id) =
+            make_sev_capable_registry_for_update_subnet_tests(/* sev_enabled = */ true);
 
-        // Enable SEV first as it is initially unset.
-        registry.do_update_subnet(update_sev(subnet_id, true));
-        // This should trigger the panic
-        registry.do_update_subnet(update_sev(subnet_id, false));
+        registry.do_update_subnet(
+            GOVERNANCE_CANISTER_ID.get(),
+            payload_setting_sev(subnet_id, Some(false)),
+        );
+    }
+
+    /// Regression test: `features = Some(_)` with `sev_enabled = None` must not silently
+    /// disable SEV.
+    #[test]
+    #[should_panic(
+        expected = "Proposal attempts to disable SEV for Subnet 'ge6io-epiam-aaaaa-aaaap-yai'"
+    )]
+    fn test_sev_enabled_cannot_be_disabled_implicitly() {
+        let (mut registry, subnet_id) =
+            make_sev_capable_registry_for_update_subnet_tests(/* sev_enabled = */ true);
+
+        registry.do_update_subnet(
+            GOVERNANCE_CANISTER_ID.get(),
+            payload_setting_sev(subnet_id, None),
+        );
+    }
+
+    #[test]
+    fn test_sev_enabled_no_op_keeps_subnet_sev_enabled() {
+        let (mut registry, subnet_id) =
+            make_sev_capable_registry_for_update_subnet_tests(/* sev_enabled = */ true);
+
+        // Update non-SEV features while explicitly preserving sev_enabled = true.
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.features = Some(SubnetFeaturesPb {
+            canister_sandboxing: true,
+            http_requests: true,
+            sev_enabled: Some(true),
+        });
+
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
+
+        let subnet_features = registry
+            .get_subnet_or_panic(subnet_id)
+            .features
+            .expect("subnet should have features set");
+        assert_eq!(subnet_features.sev_enabled, Some(true));
+        assert!(subnet_features.canister_sandboxing);
+        assert!(subnet_features.http_requests);
     }
 
     #[test]
@@ -1079,7 +1434,7 @@ mod tests {
         });
 
         // Should not panic because we are not changing SEV-related subnet features.
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     #[test]
@@ -1090,7 +1445,7 @@ mod tests {
         {
             let mut payload = make_empty_update_payload(subnet_id);
             payload.features = None;
-            registry.do_update_subnet(payload);
+            registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
         }
 
         // Enable non-SEV-related features that can be enabled after the subnet was created.
@@ -1101,7 +1456,7 @@ mod tests {
                 http_requests: true,
                 sev_enabled: None,
             });
-            registry.do_update_subnet(payload);
+            registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
         }
     }
 
@@ -1168,7 +1523,7 @@ mod tests {
 
         payload.chain_key_signing_enable = Some(vec![master_public_key_held_by_subnet.clone()]);
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
 
         // Make sure it's actually in the list of enabled chain keys.
         assert!(
@@ -1197,7 +1552,7 @@ mod tests {
 
         payload.chain_key_signing_disable = Some(vec![master_public_key_held_by_subnet.clone()]);
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
 
         // Ensure it's now removed from list of enabled subnets.
         assert!(
@@ -1284,7 +1639,7 @@ mod tests {
         payload.chain_key_signing_disable = Some(vec![MasterPublicKeyId::Ecdsa(key.clone())]);
 
         // Should panic because we are trying to enable/disable same key
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     #[test]
@@ -1355,7 +1710,7 @@ mod tests {
             ..make_empty_update_payload(subnet_id)
         };
 
-        registry.do_update_subnet(payload.clone());
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload.clone());
 
         // Try to update the subnet by adding a new key and removing one of the existing keys
         let payload = UpdateSubnetPayload {
@@ -1367,7 +1722,7 @@ mod tests {
         };
 
         // Should panic because we are trying to delete an existing key
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     #[test]
@@ -1387,7 +1742,7 @@ mod tests {
             None,
         );
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     #[test]
@@ -1407,7 +1762,7 @@ mod tests {
             Some(99),
         );
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     fn update_subnet_payload_with_key_config(
@@ -1427,5 +1782,317 @@ mod tests {
             max_parallel_pre_signature_transcripts_in_creation: None,
         });
         payload
+    }
+
+    /// Adds a rented (Application + Free cost schedule) subnet to the registry,
+    /// so that setting subnet admins is permitted by the registry invariant.
+    fn make_registry_with_rented_subnet() -> (Registry, SubnetId) {
+        let mut registry = invariant_compliant_registry(0);
+
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let mut subnet_list_record = registry.get_subnet_list_record();
+
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+            .iter()
+            .next()
+            .expect("should contain at least one node ID and key");
+        let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
+        subnet_record.subnet_type = i32::from(SubnetType::Application);
+        subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
+
+        let subnet_id = subnet_test_id(1000);
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
+        ));
+
+        (registry, subnet_id)
+    }
+
+    #[test]
+    fn can_set_subnet_admins() {
+        let (mut registry, subnet_id) = make_registry_with_rented_subnet();
+
+        let user1 = *TEST_USER1_PRINCIPAL;
+        let user2 = *TEST_USER2_PRINCIPAL;
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![user1, user2]);
+
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
+
+        assert_eq!(
+            registry.get_subnet_or_panic(subnet_id).subnet_admins,
+            vec![PrincipalIdPb::from(user1), PrincipalIdPb::from(user2)],
+        );
+    }
+
+    #[test]
+    fn can_clear_subnet_admins() {
+        let (mut registry, subnet_id) = make_registry_with_rented_subnet();
+
+        let user1 = *TEST_USER1_PRINCIPAL;
+
+        // First set an admin.
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![user1]);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
+        assert_eq!(
+            registry.get_subnet_or_panic(subnet_id).subnet_admins,
+            vec![PrincipalIdPb::from(user1)],
+        );
+
+        // Then clear it via Some(vec![]).
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![]);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
+        assert_eq!(
+            registry.get_subnet_or_panic(subnet_id).subnet_admins,
+            Vec::<PrincipalIdPb>::new(),
+        );
+    }
+
+    #[test]
+    fn none_subnet_admins_leaves_existing_admins_unchanged() {
+        let (mut registry, subnet_id) = make_registry_with_rented_subnet();
+
+        let user1 = *TEST_USER1_PRINCIPAL;
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![user1]);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
+
+        // A subsequent update with `subnet_admins: None` must not change the list.
+        let payload = make_empty_update_payload(subnet_id);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
+
+        assert_eq!(
+            registry.get_subnet_or_panic(subnet_id).subnet_admins,
+            vec![PrincipalIdPb::from(user1)],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "subnet admins, which exceeds the maximum of")]
+    fn cannot_set_more_than_max_subnet_admins() {
+        let (mut registry, subnet_id) = make_registry_with_rented_subnet();
+
+        // 11 admins exceeds MAX_SUBNET_ADMINS (10).
+        let admins = (0..11_u64)
+            .map(|i| PrincipalId::new_user_test_id(2000 + i))
+            .collect::<Vec<_>>();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(admins);
+
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "is not a rented or cloud engine subnet but has a non-empty subnet admins list"
+    )]
+    fn cannot_set_subnet_admins_on_non_rented_subnet() {
+        // Use the default test fixture which produces an Application + Normal subnet
+        // (not rented), so setting admins must violate the invariant.
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![*TEST_USER1_PRINCIPAL]);
+
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
+    }
+
+    /// Builds a registry that already has a `CloudEngine` subnet, suitable
+    /// for exercising the engine-controller permission checks on
+    /// `do_update_subnet`.
+    fn make_registry_with_cloud_engine_subnet() -> (Registry, SubnetId) {
+        let mut registry = invariant_compliant_registry(0);
+        let (mutate_request, subnet_id) = prepare_registry_with_cloud_engine_subnet(1, 2);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+        (registry, subnet_id)
+    }
+
+    #[test]
+    fn engine_controller_can_update_cloud_engine_subnet_admins() {
+        let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
+
+        let new_admins = vec![*TEST_USER1_PRINCIPAL, *TEST_USER2_PRINCIPAL];
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(new_admins.clone());
+
+        registry.do_update_subnet(ENGINE_CONTROLLER_CANISTER_ID.get(), payload);
+
+        let subnet_record = registry.get_subnet_or_panic(subnet_id);
+        let stored: Vec<PrincipalId> = subnet_record
+            .subnet_admins
+            .into_iter()
+            .map(|p| PrincipalId::try_from(p.raw.as_slice()).unwrap())
+            .collect();
+        assert_eq!(stored, new_admins);
+    }
+
+    #[test]
+    #[should_panic(expected = "engine controller may only update CloudEngine subnets")]
+    fn engine_controller_cannot_update_non_cloud_engine_subnet() {
+        // Default fixture is an Application subnet.
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![*TEST_USER1_PRINCIPAL]);
+
+        registry.do_update_subnet(ENGINE_CONTROLLER_CANISTER_ID.get(), payload);
+    }
+
+    #[test]
+    #[should_panic(expected = "max_number_of_canisters")]
+    fn engine_controller_cannot_update_disallowed_fields() {
+        let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        // `max_number_of_canisters` is outside the engine controller's scope.
+        payload.max_number_of_canisters = Some(123);
+
+        registry.do_update_subnet(ENGINE_CONTROLLER_CANISTER_ID.get(), payload);
+    }
+
+    #[test]
+    fn engine_controller_can_set_is_halted() {
+        let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.is_halted = Some(true);
+
+        registry.do_update_subnet(ENGINE_CONTROLLER_CANISTER_ID.get(), payload);
+
+        assert!(registry.get_subnet_or_panic(subnet_id).is_halted);
+    }
+
+    #[test]
+    fn engine_controller_can_set_cooling_down() {
+        let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
+
+        // Sanity check: subnets do not cool down by default.
+        assert!(!registry.get_subnet_or_panic(subnet_id).cooling_down);
+
+        for cooling_down in [true, false] {
+            let mut payload = make_empty_update_payload(subnet_id);
+            payload.cooling_down = Some(cooling_down);
+
+            registry.do_update_subnet(ENGINE_CONTROLLER_CANISTER_ID.get(), payload);
+
+            assert_eq!(
+                registry.get_subnet_or_panic(subnet_id).cooling_down,
+                cooling_down
+            );
+        }
+    }
+
+    /// The engine controller may set the state limits (`maximum_state_size`,
+    /// `maximum_state_delta`) of a CloudEngine subnet, but no other limit. So,
+    /// unlike for governance (see `resource_limits_resets_all_fields`), a limit
+    /// that the engine controller leaves unset keeps its current value instead
+    /// of being reset.
+    #[test]
+    fn test_engine_controller_sets_state_limits_and_keeps_unset_limits() {
+        // Step 1: Prepare the world: a CloudEngine subnet on which governance
+        // has set all four limits. The values are arbitrary, but distinct, so
+        // that we can tell which ones survive.
+        let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
+        let mut governance_payload = make_empty_update_payload(subnet_id);
+        governance_payload.resource_limits = Some(ResourceLimitsPb {
+            maximum_state_size: Some(1_000),
+            maximum_state_delta: Some(200),
+            maximum_query_instructions: Some(30),
+            maximum_query_walltime_seconds: Some(4),
+        });
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), governance_payload);
+
+        // Step 2: Run the code under test: the engine controller sets only the
+        // state size.
+        let mut engine_controller_payload = make_empty_update_payload(subnet_id);
+        engine_controller_payload.resource_limits = Some(ResourceLimitsPb {
+            maximum_state_size: Some(500),
+            maximum_state_delta: None,
+            maximum_query_instructions: None,
+            maximum_query_walltime_seconds: None,
+        });
+        registry.do_update_subnet(
+            ENGINE_CONTROLLER_CANISTER_ID.get(),
+            engine_controller_payload,
+        );
+
+        // Step 3: Verify result(s): the state size is the new one; the state
+        // delta and both query limits are still what governance set.
+        assert_eq!(
+            registry.get_subnet_or_panic(subnet_id).resource_limits,
+            Some(ResourceLimitsPb {
+                maximum_state_size: Some(500),
+                maximum_state_delta: Some(200),
+                maximum_query_instructions: Some(30),
+                maximum_query_walltime_seconds: Some(4),
+            }),
+        );
+    }
+
+    /// The query limits stay governance-only: an engine controller payload
+    /// that sets one is rejected, even alongside an allowed state limit.
+    #[test]
+    #[should_panic(expected = "resource_limits.maximum_query_instructions")]
+    fn test_engine_controller_cannot_set_query_limits() {
+        // Step 1: Prepare the world.
+        let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.resource_limits = Some(ResourceLimitsPb {
+            maximum_state_size: Some(500),
+            maximum_state_delta: None,
+            maximum_query_instructions: Some(30),
+            maximum_query_walltime_seconds: None,
+        });
+
+        // Step 2: Run the code under test.
+        registry.do_update_subnet(ENGINE_CONTROLLER_CANISTER_ID.get(), payload);
+
+        // Step 3: Verify result(s): the call above panics, naming the
+        // offending field (see `should_panic`).
+    }
+
+    #[test]
+    fn governance_can_set_cooling_down() {
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        // Sanity check: subnets do not cool down by default.
+        assert!(!registry.get_subnet_or_panic(subnet_id).cooling_down);
+
+        for cooling_down in [true, false] {
+            let mut payload = make_empty_update_payload(subnet_id);
+            payload.cooling_down = Some(cooling_down);
+
+            registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
+
+            assert_eq!(
+                registry.get_subnet_or_panic(subnet_id).cooling_down,
+                cooling_down
+            );
+        }
+    }
+
+    #[test]
+    fn governance_is_not_restricted_to_cloud_engine_subnets() {
+        // Sanity check: governance must still be able to update non-CloudEngine
+        // subnets (it goes through the same code path now).
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.max_number_of_canisters = Some(123);
+
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
+
+        let subnet_record = registry.get_subnet_or_panic(subnet_id);
+        assert_eq!(subnet_record.max_number_of_canisters, 123);
     }
 }

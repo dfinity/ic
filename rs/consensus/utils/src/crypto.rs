@@ -1,10 +1,10 @@
 use ic_interfaces::{crypto::*, validation::ValidationResult};
 use ic_types::{
     NodeId, RegistryVersion,
-    canister_http::CanisterHttpResponseMetadata,
+    canister_http::CanisterHttpResponseReceipt,
     consensus::{
         BlockMetadata, CatchUpContent, FinalizationContent, NotarizationContent,
-        RandomBeaconContent, RandomTapeContent, dkg,
+        RandomBeaconContent, RandomTapeContent, UpgradePermitRequest, dkg,
         hashed::Hashed,
         idkg::{IDkgComplaintContent, IDkgOpeningContent},
     },
@@ -425,17 +425,14 @@ pub trait ConsensusCrypto:
     + SignVerify<IDkgDealing, BasicSignature<IDkgDealing>, RegistryVersion>
     + SignVerify<IDkgComplaintContent, BasicSignature<IDkgComplaintContent>, RegistryVersion>
     + SignVerify<IDkgOpeningContent, BasicSignature<IDkgOpeningContent>, RegistryVersion>
+    + SignVerify<UpgradePermitRequest, BasicSignature<UpgradePermitRequest>, RegistryVersion>
     + SignVerify<RandomBeaconContent, ThresholdSignatureShare<RandomBeaconContent>, NiDkgId>
     + SignVerify<RandomTapeContent, ThresholdSignatureShare<RandomTapeContent>, NiDkgId>
     + SignVerify<CatchUpContent, ThresholdSignatureShare<CatchUpContent>, NiDkgId>
     + SignVerify<dkg::DealingContent, BasicSignature<dkg::DealingContent>, RegistryVersion>
     + SignVerify<
-        CanisterHttpResponseMetadata,
-        BasicSignature<CanisterHttpResponseMetadata>,
-        RegistryVersion,
-    > + SignVerify<
-        CanisterHttpResponseMetadata,
-        BasicSignature<CanisterHttpResponseMetadata>,
+        CanisterHttpResponseReceipt,
+        BasicSignature<CanisterHttpResponseReceipt>,
         RegistryVersion,
     > + Aggregate<
         NotarizationContent,
@@ -467,11 +464,6 @@ pub trait ConsensusCrypto:
         ThresholdSignatureShare<CatchUpContent>,
         NiDkgId,
         ThresholdSignature<CatchUpContent>,
-    > + Aggregate<
-        CanisterHttpResponseMetadata,
-        BasicSignature<CanisterHttpResponseMetadata>,
-        RegistryVersion,
-        BasicSignatureBatch<CanisterHttpResponseMetadata>,
     > + Crypto
     + Send
     + Sync

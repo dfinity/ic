@@ -4,27 +4,18 @@ load("@rules_rust//rust:defs.bzl", "rust_proc_macro", "rust_test")
 # In the meantime, allow everyone to use this.
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    "@crate_index//:quote",
-    "@crate_index//:syn",
-]
-
-DEV_DEPENDENCIES = [
-    "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
-]
-
-LIB_SRCS = glob(
-    ["src/**/*.rs"],
-    exclude = ["**/*tests*/**"],
-)
-
 rust_proc_macro(
     name = "instruction_stats_update_attribute",
-    srcs = LIB_SRCS,
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["**/*tests*/**"],
+    ),
     crate_name = "ic_nervous_system_instruction_stats_update_attribute",
     version = "0.0.1",
-    deps = DEPENDENCIES,
+    deps = [
+        "@crate_index//:quote",
+        "@crate_index//:syn",
+    ],
 )
 
 rust_test(
@@ -33,5 +24,8 @@ rust_test(
     proc_macro_deps = [
         ":instruction_stats_update_attribute",
     ],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+    ],
 )

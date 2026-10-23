@@ -19,6 +19,7 @@ use ic_prep_lib::{
     node::{NodeConfiguration, NodeIndex, NodeSecretKeyStore},
     subnet_configuration::{SubnetConfig, SubnetRunningState},
 };
+use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -30,11 +31,11 @@ use ic_state_machine_tests::StateMachine;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_types::{
-    ids::{node_test_id, user_anonymous_id},
+    ids::{node_test_id, test_replica_version, user_anonymous_id},
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    CanisterId, Height, NodeId, ReplicaVersion, Time,
+    CanisterId, Height, NodeId, PlatformVersion, Time,
     artifact::UnvalidatedArtifactMutation,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{Query, QuerySource, SignedIngress},
@@ -222,13 +223,15 @@ pub fn get_ic_config() -> IcConfig {
         },
     );
 
+    let replica_version = test_replica_version();
+
     let mut topology_config: TopologyConfig = TopologyConfig::default();
     topology_config.insert_subnet(
         subnet_index,
         SubnetConfig::new(
             subnet_index,
             subnet_nodes,
-            ReplicaVersion::default(),
+            replica_version.clone(),
             /*max_ingress_bytes_per_message=*/ None,
             /*max_ingress_bytes_per_block=*/ None,
             /*max_ingress_messages_per_block=*/ None,
@@ -238,10 +241,12 @@ pub fn get_ic_config() -> IcConfig {
             /*dkg_interval_length=*/ Some(Height::from(19)),
             /*dkg_dealings_per_block=*/ None,
             SubnetType::System,
+            CanisterCyclesCostSchedule::Normal,
             /*max_instructions_per_message=*/ None,
             /*max_instructions_per_round=*/ None,
             /*max_instructions_per_install_code=*/ None,
             /*features=*/ None,
+            /*resource_limits=*/ None,
             /*chain_key_config=*/ None,
             /*max_number_of_canisters=*/ None,
             /*ssh_readonly_access=*/ vec![],
@@ -259,7 +264,7 @@ pub fn get_ic_config() -> IcConfig {
     IcConfig::new(
         prep_dir,
         topology_config,
-        ReplicaVersion::default(),
+        replica_version,
         /* generate_subnet_records= */ true,
         /* nns_subnet_id= */ Some(subnet_index),
         /* release_package_url= */ None,
@@ -286,6 +291,8 @@ where
         let _rt_guard = rt.enter();
 
         let metrics_registry = MetricsRegistry::new();
+
+        let replica_version = ic_config.initial_replica_version_id.clone();
 
         let init_ic = ic_config.initialize().expect("can't fail");
 
@@ -345,6 +352,10 @@ where
                 config.clone(),
                 temp_node,
                 subnet_id,
+                PlatformVersion {
+                    guestos_version: replica_version.clone(),
+                    replica_version,
+                },
                 registry.clone(),
                 crypto,
                 None,
@@ -592,6 +603,7 @@ impl LocalTestRuntime {
                 user_id: user_anonymous_id(),
                 ingress_expiry: 0,
                 nonce: None,
+                sender_info: None,
             },
             receiver: canister_id,
             method_name: method_name.into(),

@@ -123,12 +123,12 @@ mod tests {
 
         assert!(
             index
-                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1_u8; 32]))
                 .is_ok()
         );
 
         assert_eq!(
-            index.get_neuron_id_by_subaccount(&Subaccount([1u8; 32])),
+            index.get_neuron_id_by_subaccount(&Subaccount([1_u8; 32])),
             Some(NeuronId { id: 1 })
         );
     }
@@ -139,17 +139,17 @@ mod tests {
 
         assert!(
             index
-                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1_u8; 32]))
                 .is_ok()
         );
         assert!(
             index
-                .remove_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .remove_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1_u8; 32]))
                 .is_ok()
         );
 
         assert_eq!(
-            index.get_neuron_id_by_subaccount(&Subaccount([1u8; 32])),
+            index.get_neuron_id_by_subaccount(&Subaccount([1_u8; 32])),
             None
         );
     }
@@ -160,18 +160,18 @@ mod tests {
 
         assert!(
             index
-                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1_u8; 32]))
                 .is_ok()
         );
         assert_matches!(
-            index.add_neuron_subaccount(NeuronId { id: 2 }, &Subaccount([1u8; 32])),
+            index.add_neuron_subaccount(NeuronId { id: 2 }, &Subaccount([1_u8; 32])),
             Err(GovernanceError{error_type, error_message: message})
                 if error_type == ErrorType::PreconditionFailed as i32 && message.contains("already exists in the index")
         );
 
         // The index should still have the first neuron.
         assert_eq!(
-            index.get_neuron_id_by_subaccount(&Subaccount([1u8; 32])),
+            index.get_neuron_id_by_subaccount(&Subaccount([1_u8; 32])),
             Some(NeuronId { id: 1 })
         );
     }
@@ -182,7 +182,7 @@ mod tests {
 
         // The index is empty so remove should fail.
         assert_matches!(
-            index.remove_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32])),
+            index.remove_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1_u8; 32])),
             Err(GovernanceError{error_type, error_message: message})
                 if error_type == ErrorType::PreconditionFailed as i32 && message.contains("already absent in the index")
         );
@@ -194,18 +194,18 @@ mod tests {
 
         assert!(
             index
-                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1_u8; 32]))
                 .is_ok()
         );
         assert_matches!(
-            index.remove_neuron_subaccount(NeuronId { id: 2 }, &Subaccount([1u8; 32])),
+            index.remove_neuron_subaccount(NeuronId { id: 2 }, &Subaccount([1_u8; 32])),
             Err(GovernanceError{error_type, error_message: message})
                 if error_type == ErrorType::PreconditionFailed as i32 && message.contains("exists in the index with a different neuron id")
         );
 
         // The index should still have the first neuron.
         assert_eq!(
-            index.get_neuron_id_by_subaccount(&Subaccount([1u8; 32])),
+            index.get_neuron_id_by_subaccount(&Subaccount([1_u8; 32])),
             Some(NeuronId { id: 1 })
         );
     }
@@ -216,21 +216,21 @@ mod tests {
 
         assert!(
             index
-                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1_u8; 32]))
                 .is_ok()
         );
         assert!(
             index
-                .add_neuron_subaccount(NeuronId { id: 2 }, &Subaccount([2u8; 32]))
+                .add_neuron_subaccount(NeuronId { id: 2 }, &Subaccount([2_u8; 32]))
                 .is_ok()
         );
 
         assert_eq!(
-            index.get_neuron_id_by_subaccount(&Subaccount([1u8; 32])),
+            index.get_neuron_id_by_subaccount(&Subaccount([1_u8; 32])),
             Some(NeuronId { id: 1 })
         );
         assert_eq!(
-            index.get_neuron_id_by_subaccount(&Subaccount([2u8; 32])),
+            index.get_neuron_id_by_subaccount(&Subaccount([2_u8; 32])),
             Some(NeuronId { id: 2 })
         );
     }
@@ -243,7 +243,7 @@ mod tests {
 
         assert!(
             index
-                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1_u8; 32]))
                 .is_ok()
         );
 
@@ -256,10 +256,10 @@ mod tests {
 
         assert!(
             index
-                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1_u8; 32]))
                 .is_ok()
         );
 
-        assert!(index.contains_entry(NeuronId { id: 1 }, &Subaccount([1u8; 32])));
+        assert!(index.contains_entry(NeuronId { id: 1 }, &Subaccount([1_u8; 32])));
     }
 }

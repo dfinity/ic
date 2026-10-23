@@ -52,7 +52,7 @@ use syn::{
 /// because the purpose of `ExhaustiveSet` is to test *correct serialization*. Exploring the
 /// entire state space is not necessary for our purposes.
 ///
-/// Instead, we can can construct the exhaustive set by letting each struct field cycle
+/// Instead, we can construct the exhaustive set by letting each struct field cycle
 /// through its own set at the same time. For `Example` that would mean
 ///
 /// ```

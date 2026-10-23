@@ -2,7 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use arc_swap::ArcSwapOption;
 use futures_util::future::ready;
-use ic_bn_lib_common::traits::dns::CloneableDnsResolver;
+use ic_bn_lib::dns::resolvers::CloneableDnsResolver;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 
 use crate::snapshot::RegistrySnapshot;

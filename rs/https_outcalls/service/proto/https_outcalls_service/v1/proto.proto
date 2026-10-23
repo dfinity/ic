@@ -14,6 +14,7 @@ enum HttpMethod {
   HTTP_METHOD_HEAD = 3;
   HTTP_METHOD_PUT = 4;
   HTTP_METHOD_DELETE = 5;
+  HTTP_METHOD_PATCH = 6;
 }
 
 message HttpsOutcallRequest {

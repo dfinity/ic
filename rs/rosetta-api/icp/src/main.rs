@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use clap::Parser;
 use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key_from_der, parse_threshold_sig_key_from_pem_file,
@@ -107,7 +108,7 @@ impl ParsedNetworkConfig {
                 match environment {
                     Environment::Production | Environment::Test => {
                         // The mainnet root key
-                        let decoded = base64::decode(MAINNET_ROOT_KEY).unwrap();
+                        let decoded = BASE64_STANDARD.decode(MAINNET_ROOT_KEY).unwrap();
                         Some(parse_threshold_sig_key_from_der(&decoded).unwrap())
                     }
                     Environment::DeprecatedTestnet => None,

@@ -33,7 +33,6 @@ rust_test(
     crate = ":lib",
     deps = [
         # Keep sorted.
-        ":lib",
         "@crate_index//:scraper",
     ],
 )

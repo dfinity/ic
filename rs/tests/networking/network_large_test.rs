@@ -13,23 +13,25 @@ Runbook::
 
 end::catalog[] */
 
-use anyhow::Result;
+use anyhow::{Result, bail};
+use ic_consensus_system_test_utils::rw_message::get_cert_time;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
-    systest,
+    retry_with_msg, systest,
     util::{MessageCanister, assert_create_agent, block_on},
 };
 use ic_types::Height;
 use slog::info;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // Timeout parameters
 const TASK_TIMEOUT: Duration = Duration::from_secs(320 * 60);
@@ -46,23 +48,28 @@ const NODES: usize = 3 * FAULTY + 1; // 49
 
 const IDLE_DURATION: Duration = Duration::from_secs(10 * 60);
 
+/// How recent the certified state of the node that receives the update must be before the update
+/// is submitted after the (f+1)-th node is restarted. Replicas accept an update only if its expiry,
+/// which the test driver sets up to 270 s ahead of the wall clock, is at most 330 s after their
+/// latest finalized block, so that block must be less than 60 s old. The certified state is at
+/// least as old as that block; 30 s leaves room for clock drift between test driver and node.
+const MAX_CERTIFIED_STATE_AGE: Duration = Duration::from_secs(30);
+
 pub fn setup(env: TestEnv) {
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(8)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(4195000)), // 4GiB
-        boot_image_minimal_size_gibibytes: None,
-    };
     InternetComputer::new()
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(8)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(4195000)), // 4GiB
+            ..VmResourceOverrides::default()
+        })
         .add_subnet(
             Subnet::new(SubnetType::System)
-                .with_default_vm_resources(vm_resources)
                 // Use low DKG interval to confirm system works across interval boundaries.
                 .with_dkg_interval_length(Height::from(99))
                 .add_nodes(NODES),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(vm_resources)
                 .with_dkg_interval_length(Height::from(49))
                 .add_nodes(1),
         )
@@ -176,6 +183,28 @@ pub fn test(env: TestEnv) {
         &log,
         Height::new(1),
     );
+    // The first blocks finalized after the restart were proposed before the halt and carry
+    // pre-halt timestamps, and a replica that validates an update against such a stale finalized
+    // block silently drops it. Only submit the update once `node` has certified a recent block.
+    retry_with_msg!(
+        format!("certified state of node {} is recent", node.node_id),
+        log.clone(),
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || {
+            let certified_at = get_cert_time(&node.get_public_url(), node.effective_canister_id())
+                .map(|nanos| UNIX_EPOCH + Duration::from_nanos(nanos))
+                .map_err(anyhow::Error::msg)?;
+            let age = SystemTime::now()
+                .duration_since(certified_at)
+                .unwrap_or_default();
+            if age > MAX_CERTIFIED_STATE_AGE {
+                bail!("certified state is {age:?} old");
+            }
+            Ok(())
+        }
+    )
+    .expect("Subnet did not resume producing blocks");
 
     info!(log, "Storing message '{}' ...", UPDATE_MSG_5);
     block_on(message_canister.try_store_msg(UPDATE_MSG_5)).expect("Update canister call failed.");

@@ -7,6 +7,7 @@ use ic_base_types::CanisterId;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use more_asserts::debug_assert_le;
 
+use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
     wasm_executor::{
         CanisterStateChanges, PausedWasmExecution, WasmExecutionResult, wasm_execution_error,
@@ -22,11 +23,11 @@ use ic_sys::PAGE_SIZE;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,
-    Response,
+    Response, SenderInfo,
 };
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::{NumBytes, NumInstructions, Time};
-use ic_types_cycles::{Cycles, CyclesUseCase};
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions, RequestAndResponseTransmission};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
@@ -108,9 +109,12 @@ const RESERVED_CLEANUP_INSTRUCTIONS_IN_PERCENT: u64 = 5;
 #[derive(Debug)]
 struct PausedResponseHelper {
     refund_for_sent_cycles: Cycles,
-    refund_for_response_transmission: Cycles,
+    prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    refund_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
+    executed_wasm_instructions: NumInstructions,
 }
 
 /// A helper that implements and keeps track of response execution steps.
@@ -118,9 +122,34 @@ struct PausedResponseHelper {
 struct ResponseHelper {
     canister: CanisterState,
     refund_for_sent_cycles: Cycles,
-    refund_for_response_transmission: Cycles,
+    prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    refund_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    /// Cycles prepaid for the execution of this response.
+    ///
+    /// Initially the prepayment recorded in the callback when the corresponding call
+    /// was performed, i.e., the cycles required for executing the response in the
+    /// Wasm execution mode the canister had at that time. Before the callback is
+    /// executed, `adjust_prepayment_for_response_execution()` replaces this with the
+    /// cycles required for executing the response in the canister's current Wasm
+    /// execution mode; for responses whose callback is not executed at all,
+    /// `early_finish()` settles the prepayment in full instead.
+    prepayment_for_response_execution: CompoundCycles<Instructions>,
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
+    /// Instructions already executed by this callback, if previously paused.
+    ///
+    /// *Finished* Wasm executions are charged based on
+    /// `output.num_instructions_left`. Paused slices only update the round
+    /// limits. If resuming a paused execution fails, there is no
+    /// `output.num_instructions_left` to derive the charge from. Hence, we track
+    /// the executed instructions, to make it possible to charge for failed
+    /// resumptions.
+    ///
+    /// Reset once a Wasm execution has finished and updated the instruction
+    /// limits correspondingly, so that the next Wasm execution (the cleanup
+    /// callback) starts counting from zero.
+    executed_wasm_instructions: NumInstructions,
     applied_subnet_memory_reservation: NumBytes,
     deallocation_sender: DeallocationSender,
 }
@@ -172,8 +201,7 @@ impl ResponseHelper {
                 round.counters.response_cycles_refund_error,
                 &response.response_payload,
                 original.callback.prepayment_for_response_transmission,
-                original.subnet_size,
-                round.cost_schedule,
+                original.subnet_cycles_config,
             );
 
         let canister = clean_canister.clone();
@@ -182,9 +210,15 @@ impl ResponseHelper {
         let mut helper = Self {
             canister,
             refund_for_sent_cycles,
+            prepayment_for_response_transmission: original
+                .callback
+                .prepayment_for_response_transmission,
+            prepayment_for_call_transmission: original.callback.prepayment_for_call_transmission,
             refund_for_response_transmission,
+            prepayment_for_response_execution: original.callback.prepayment_for_response_execution,
             initial_cycles_balance,
             response_sender,
+            executed_wasm_instructions: NumInstructions::new(0),
             applied_subnet_memory_reservation: NumBytes::new(0),
             deallocation_sender: deallocation_sender.clone(),
         };
@@ -200,12 +234,70 @@ impl ResponseHelper {
     fn apply_initial_refunds(&mut self) {
         self.canister
             .system_state
-            .add_cycles(self.refund_for_sent_cycles, CyclesUseCase::NonConsumed);
+            .add_cycles(self.refund_for_sent_cycles);
 
-        self.canister.system_state.add_cycles(
+        // `self.prepayment_for_call_transmission` might be zero for any responses
+        // to requests that were produced before this field was stored in callbacks.
+        // In that scenario, use `self.prepayment_for_response_transmission` for some
+        // partial update to consumed metrics (the ones that behave like counters)
+        // during refund phase. This does not affect the refund to balance or the
+        // metrics that behave like gauges as these are updated based on the refund amount.
+        // This code can be dropped when all callbacks have the `prepayment_for_call_transmission`
+        // field set.
+        let prepayment_for_call_transmission = if self.prepayment_for_call_transmission.is_zero() {
+            self.prepayment_for_response_transmission
+        } else {
+            self.prepayment_for_call_transmission
+        };
+        self.canister.system_state.refund_cycles(
+            prepayment_for_call_transmission,
             self.refund_for_response_transmission,
-            CyclesUseCase::RequestAndResponseTransmission,
         );
+    }
+
+    /// Returns the Wasm execution mode of the canister executing this response.
+    ///
+    /// This is the mode of the code that actually runs the callback, which is not
+    /// necessarily the mode the canister had when it performed the corresponding
+    /// call: the canister might have been upgraded in the meantime.
+    fn wasm_execution_mode(&self) -> WasmExecutionMode {
+        self.canister
+            .execution_state
+            .as_ref()
+            .map_or(WasmExecutionMode::Wasm32, |state| state.wasm_execution_mode)
+    }
+
+    /// Adjusts the cycles prepaid for the execution of this response to the cycles
+    /// required for executing it in the canister's current Wasm execution mode.
+    ///
+    /// The cycles were prepaid when the corresponding call was performed, i.e.,
+    /// using the instruction costs of the Wasm execution mode of the canister at
+    /// that time. If the canister has been upgraded since then, then the missing
+    /// cycles are withdrawn from the canister's balance (without applying the
+    /// freezing threshold) or the excess cycles are refunded to it.
+    ///
+    /// Returns an error if the canister's balance does not cover the additional
+    /// prepayment, in which case the canister state is left unchanged.
+    fn adjust_prepayment_for_response_execution(
+        &mut self,
+        original: &OriginalContext,
+        round: &RoundContext,
+    ) -> Result<(), CanisterOutOfCyclesError> {
+        let reveal_top_up = self
+            .canister
+            .controllers()
+            .contains(&original.call_origin.get_principal());
+        let execution_mode = self.wasm_execution_mode();
+        self.prepayment_for_response_execution = round
+            .cycles_account_manager
+            .adjust_prepayment_for_response_execution(
+                &mut self.canister.system_state,
+                self.prepayment_for_response_execution,
+                original.subnet_cycles_config,
+                execution_mode,
+                reveal_top_up,
+            )?;
+        Ok(())
     }
 
     /// Checks that the canister has not been uninstalled:
@@ -274,14 +366,25 @@ impl ResponseHelper {
 
     /// Returns a struct with all the necessary information to replay the
     /// initial steps in subsequent rounds.
-    fn pause(self, round_limits: &mut RoundLimits) -> PausedResponseHelper {
+    /// The given `slice_executed_instructions` are the instructions executed by
+    /// the slice of the Wasm execution that is being paused; they are added to
+    /// the instructions executed by its earlier slices.
+    fn pause(
+        self,
+        round_limits: &mut RoundLimits,
+        slice_executed_instructions: NumInstructions,
+    ) -> PausedResponseHelper {
         self.revert_subnet_memory_reservation(round_limits);
         self.deallocation_sender.send(Box::new(self.canister));
         PausedResponseHelper {
             refund_for_sent_cycles: self.refund_for_sent_cycles,
+            prepayment_for_response_transmission: self.prepayment_for_response_transmission,
+            prepayment_for_call_transmission: self.prepayment_for_call_transmission,
             refund_for_response_transmission: self.refund_for_response_transmission,
             initial_cycles_balance: self.initial_cycles_balance,
             response_sender: self.response_sender,
+            executed_wasm_instructions: self.executed_wasm_instructions
+                + slice_executed_instructions,
         }
     }
 
@@ -292,8 +395,8 @@ impl ResponseHelper {
     /// call context, and execution state because it is not possible to invoke
     /// the cleanup callback in such cases.
     ///
-    /// It returns an error if the cycles balance of the clean canister differs
-    /// from the cycles balances at the start of the DTS execution.
+    /// It returns an error if the cycles balance of the clean canister dropped
+    /// below the cycles balance at the start of the DTS execution.
     #[allow(clippy::result_large_err)]
     fn resume(
         paused: PausedResponseHelper,
@@ -318,9 +421,13 @@ impl ResponseHelper {
         let mut helper = Self {
             canister: clean_canister.clone(),
             refund_for_sent_cycles: paused.refund_for_sent_cycles,
+            prepayment_for_response_transmission: paused.prepayment_for_response_transmission,
+            prepayment_for_call_transmission: paused.prepayment_for_call_transmission,
             refund_for_response_transmission: paused.refund_for_response_transmission,
+            prepayment_for_response_execution: original.callback.prepayment_for_response_execution,
             initial_cycles_balance: clean_canister.system_state.balance(),
             response_sender: paused.response_sender,
+            executed_wasm_instructions: paused.executed_wasm_instructions,
             applied_subnet_memory_reservation: NumBytes::new(0),
             deallocation_sender: deallocation_sender.clone(),
         };
@@ -337,10 +444,35 @@ impl ResponseHelper {
             .validate(&call_context, original, round, round_limits)
             .expect("Failed to resume DTS response: validation");
 
-        // The cycles balance of the clean canister must not change during the
-        // DTS execution.
-        if helper.initial_cycles_balance != paused.initial_cycles_balance {
+        // The cycles balance of the clean canister must not decrease during the
+        // DTS execution: the initial steps are replayed on the clean canister
+        // state and a lower balance might no longer be able to cover them.
+        // An increase is safe: all cycles changes of the DTS execution are
+        // applied relative to the balance of the clean canister state and hence
+        // the additional cycles are preserved.
+        if helper.initial_cycles_balance < paused.initial_cycles_balance {
             let msg = "Mismatch in cycles balance when resuming a response call".to_string();
+            let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
+            return Err((helper, err));
+        }
+
+        // Replay the adjustment of the prepayment for the response execution: the
+        // initial steps are replayed on the clean canister state, which does not
+        // contain the changes of the ongoing DTS execution.
+        //
+        // The required prepayment is the same as in `execute_response()`: the Wasm
+        // module, and hence its Wasm execution mode, cannot change while a DTS
+        // execution of this canister is in progress because installing code is not
+        // executed for a canister that has a paused or an aborted execution (see
+        // `can_execute_subnet_msg()`), i.e., it is deferred to a later round. Should
+        // the paused execution be aborted nevertheless, e.g., before a checkpoint,
+        // then the response execution starts over in `execute_response()`, where the
+        // prepayment is adjusted afresh for whatever module is installed by then.
+        //
+        // Together with the check above that the cycles balance of the clean canister
+        // has not decreased, this replay is therefore expected to succeed.
+        if let Err(err) = helper.adjust_prepayment_for_response_execution(original, round) {
+            let msg = format!("Failed to prepay for resuming a response call: {err}");
             let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
             return Err((helper, err));
         }
@@ -353,17 +485,25 @@ impl ResponseHelper {
     fn handle_wasm_execution_of_response_callback(
         mut self,
         mut output: WasmExecutionOutput,
-        canister_state_changes: CanisterStateChanges,
+        mut canister_state_changes: CanisterStateChanges,
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: &ResourceSaturation,
         reserved_cleanup_instructions: NumInstructions,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
+        // Canister logs are persisted even if the other changes are not.
+        canister_state_changes
+            .system_state_modifications
+            .apply_canister_log(&mut self.canister.system_state, round.hypervisor.metrics());
+
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
+                round.cost_schedule,
+                true, // strict
                 round.log,
                 round.counters.charging_from_balance_error,
             );
@@ -407,14 +547,21 @@ impl ResponseHelper {
             &mut self.canister.system_state,
             &mut output,
             round_limits,
+            round.cycles_account_manager,
+            original.subnet_cycles_config,
+            subnet_memory_saturation,
+            original.call_origin.get_principal(),
             round.time,
-            round.network_topology,
+            &round.network_topology,
             round.hypervisor.subnet_id(),
+            round.hypervisor.metrics(),
             round.log,
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
-            is_composite_query(&original.call_origin),
+            // Composite queries are always executed in the non-replicated mode,
+            // where their responses are handled by the query handler.
+            false,
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
@@ -438,59 +585,63 @@ impl ResponseHelper {
     fn handle_wasm_execution_of_cleanup_callback(
         mut self,
         mut output: WasmExecutionOutput,
-        canister_state_changes: CanisterStateChanges,
+        mut canister_state_changes: CanisterStateChanges,
         callback_err: HypervisorError,
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: &ResourceSaturation,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
-        // The ingress induction debit can interfere with cycles changes that happened concurrently
-        // during the cleanup callback execution. If the balance of the canister is not enough to
-        // cover the debit + the amount of removed cycles during execution, the canister might end
-        // up with an incorrect balance. To avoid this, we check if the balance is enough to cover
-        // the debit + the removed cycles to ensure that the cycles change can be performed.
-        //
-        // This allows the cleanup callback to always succeed at the expense of some ingress
-        // messages being inducted for free in this edge case. This is acceptable because the cleanup
-        // callback is expected to always run and allow the canister to perform important cleanup tasks,
-        // like releasing locks or undoing other state changes.
-        let ingress_induction_cycles_debit =
-            self.canister.system_state.ingress_induction_cycles_debit();
-        let removed_cycles = canister_state_changes
+        // Canister logs are persisted even if the other changes are not.
+        canister_state_changes
             .system_state_modifications
-            .removed_cycles();
-        if self.canister.system_state.balance() < ingress_induction_cycles_debit + removed_cycles {
-            self.canister
-                .system_state
-                .remove_charge_from_ingress_induction_cycles_debit(
-                    ingress_induction_cycles_debit - removed_cycles,
-                );
-        }
-        self.canister
-            .system_state
-            .apply_ingress_induction_cycles_debit(
-                self.canister.canister_id(),
-                round.log,
-                round.counters.charging_from_balance_error,
-            );
+            .apply_canister_log(&mut self.canister.system_state, round.hypervisor.metrics());
 
+        // Apply the state changes of the cleanup callback first, and only then
+        // charge the ingress induction cycles debit.
+        //
+        // The debit is charged using the saturating arithmetic of
+        // `apply_ingress_induction_cycles_debit`: if the remaining balance is
+        // smaller than the debit, only the available cycles are charged and the
+        // rest of the debit is dropped (some ingress messages end up inducted for
+        // free in this edge case). This allows the cleanup callback to always
+        // succeed, which is important because it is expected to always run and
+        // allow the canister to perform important cleanup tasks, like releasing
+        // locks or undoing other state changes.
         apply_canister_state_changes(
             canister_state_changes,
             self.canister.execution_state.as_mut().unwrap(),
             &mut self.canister.system_state,
             &mut output,
             round_limits,
+            round.cycles_account_manager,
+            original.subnet_cycles_config,
+            subnet_memory_saturation,
+            original.call_origin.get_principal(),
             round.time,
-            round.network_topology,
+            &round.network_topology,
             round.hypervisor.subnet_id(),
+            round.hypervisor.metrics(),
             round.log,
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
-            is_composite_query(&original.call_origin),
+            // Composite queries are always executed in the non-replicated mode,
+            // where their responses are handled by the query handler.
+            false,
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
+
+        self.canister
+            .system_state
+            .apply_ingress_induction_cycles_debit(
+                self.canister.canister_id(),
+                round.cost_schedule,
+                false, // lenient: a cleanup callback may burn the balance below the debit
+                round.log,
+                round.counters.charging_from_balance_error,
+            );
 
         match output.wasm_result {
             Ok(_) => {
@@ -557,20 +708,16 @@ impl ResponseHelper {
             round.counters.ingress_with_cycles_error,
         );
 
-        let wasm_execution_mode = self
-            .canister
-            .execution_state
-            .as_ref()
-            .map_or(WasmExecutionMode::Wasm32, |state| state.wasm_execution_mode);
+        let wasm_execution_mode = self.wasm_execution_mode();
+        let prepayment_for_response_execution = self.prepayment_for_response_execution;
 
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             instructions_left,
             original.message_instruction_limit,
-            original.callback.prepayment_for_response_execution,
+            prepayment_for_response_execution,
             round.counters.execution_refund_error,
-            original.subnet_size,
-            round.cost_schedule,
+            original.subnet_cycles_config,
             wasm_execution_mode,
             round.log,
         );
@@ -607,13 +754,37 @@ impl ResponseHelper {
 
     /// Completes execution of the response and cleanup callbacks without
     /// consuming any instructions and without producing any heap delta.
+    ///
+    /// No Wasm code is executed at all, hence the fixed per-message execution fee is
+    /// all that is due: it is charged here and the rest of the cycles prepaid for the
+    /// response execution is refunded, independently of the Wasm execution mode the
+    /// cycles were prepaid for and of the one the canister has now. In particular,
+    /// the canister keeps the rest of its prepayment even if the prepayment falls
+    /// short of what its current Wasm execution mode requires.
+    ///
+    /// Note that the prepayment is never topped up here: the additional cycles would
+    /// be refunded right away and, unlike this refund, the withdrawal could fail.
     fn early_finish(
-        self,
+        mut self,
         result: Result<Option<WasmResult>, HypervisorError>,
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
+        let execution_mode = self.wasm_execution_mode();
+        round
+            .cycles_account_manager
+            .settle_prepayment_for_unexecuted_response(
+                &mut self.canister.system_state,
+                self.prepayment_for_response_execution,
+                original.subnet_cycles_config,
+                execution_mode,
+            );
+        // The prepayment has been settled in full, hence there is nothing left for
+        // `finish()` to settle.
+        self.prepayment_for_response_execution =
+            CompoundCycles::new(Cycles::zero(), original.subnet_cycles_config.cost_schedule);
+
         self.finish(
             result,
             original.message_instruction_limit,
@@ -669,20 +840,13 @@ struct OriginalContext {
     request_metadata: RequestMetadata,
     message_instruction_limit: NumInstructions,
     message: Arc<Response>,
-    subnet_size: usize,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     canister_id: CanisterId,
     instructions_executed: NumInstructions,
     log_dirty_pages: FlagStatus,
-}
-
-fn is_composite_query(origin: &CallOrigin) -> bool {
-    match origin {
-        CallOrigin::CanisterQuery { .. } => true,
-        CallOrigin::CanisterUpdate { .. }
-        | CallOrigin::Ingress { .. }
-        | CallOrigin::Query { .. }
-        | CallOrigin::SystemTask => false,
-    }
+    /// Sender info from the ingress message that created the call context.
+    /// `None` for call contexts created by inter-canister calls.
+    sender_info: Option<SenderInfo>,
 }
 
 /// Struct used to hold necessary information for the
@@ -711,6 +875,7 @@ impl PausedExecution for PausedResponseExecution {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
         _subnet_size: usize,
         call_tree_metrics: &dyn CallTreeMetrics,
         deallocation_sender: &DeallocationSender,
@@ -724,6 +889,7 @@ impl PausedExecution for PausedResponseExecution {
         // The height of the `clean_canister` state increases with every call of
         // `resume()`. We re-create the helper based on `clean_canister` so that
         // the Wasm state changes are applied to the up-to-date state.
+        let executed_wasm_instructions = self.helper.executed_wasm_instructions;
         let (helper, result) = match ResponseHelper::resume(
             self.helper,
             &clean_canister,
@@ -746,18 +912,35 @@ impl PausedExecution for PausedResponseExecution {
                     err,
                 );
                 self.paused_wasm_execution.abort();
-                let result = wasm_execution_error(
-                    err,
-                    self.execution_parameters.instruction_limits.message(),
+                // The instructions already executed by the paused Wasm execution
+                // are still charged: they have been executed and hence consumed
+                // round instructions, but the paused Wasm execution never
+                // finishes and hence yields no `num_instructions_left` to derive
+                // them from.
+                let instructions_left = NumInstructions::new(
+                    self.execution_parameters
+                        .instruction_limits
+                        .message()
+                        .get()
+                        .saturating_sub(executed_wasm_instructions.get()),
                 );
+                let result = wasm_execution_error(err, instructions_left);
                 (helper, result)
             }
+        };
+        // The subnet memory usage might have changed while the execution was
+        // paused. Use the current saturation for storage reservation, both when
+        // finishing this execution and for subsequent Wasm executions (e.g., the
+        // cleanup callback).
+        let execution_parameters = ExecutionParameters {
+            subnet_memory_saturation,
+            ..self.execution_parameters
         };
         process_response_result(
             result,
             clean_canister,
             helper,
-            self.execution_parameters,
+            execution_parameters,
             self.reserved_cleanup_instructions,
             self.original,
             round,
@@ -766,7 +949,10 @@ impl PausedExecution for PausedResponseExecution {
         )
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (CanisterMessageOrTask, CompoundCycles<Instructions>) {
         info!(
             log,
             "[DTS] Aborting paused response callback {:?} of canister {}.",
@@ -779,7 +965,13 @@ impl PausedExecution for PausedResponseExecution {
             callback: self.original.callback,
         };
         // No cycles were prepaid for execution during this DTS execution.
-        (CanisterMessageOrTask::Message(message), Cycles::zero())
+        (
+            CanisterMessageOrTask::Message(message),
+            CompoundCycles::new(
+                Cycles::zero(),
+                self.original.subnet_cycles_config.cost_schedule,
+            ),
+        )
     }
 
     fn input(&self) -> CanisterMessageOrTask {
@@ -814,6 +1006,7 @@ impl PausedExecution for PausedCleanupExecution {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
         _subnet_size: usize,
         call_tree_metrics: &dyn CallTreeMetrics,
         deallocation_sender: &DeallocationSender,
@@ -830,6 +1023,7 @@ impl PausedExecution for PausedCleanupExecution {
         //
         // Note that we don't apply changes from the response callback execution
         // because the cleanup callback runs only if the response callback fails.
+        let executed_wasm_instructions = self.helper.executed_wasm_instructions;
         let (helper, result) = match ResponseHelper::resume(
             self.helper,
             &clean_canister,
@@ -852,18 +1046,34 @@ impl PausedExecution for PausedCleanupExecution {
                     err,
                 );
                 self.paused_wasm_execution.abort();
-                let result = wasm_execution_error(
-                    err,
-                    self.execution_parameters.instruction_limits.message(),
+                // The instructions already executed by the paused Wasm execution
+                // are still charged: they have been executed and hence consumed
+                // round instructions, but the paused Wasm execution never
+                // finishes and hence yields no `num_instructions_left` to derive
+                // them from.
+                let instructions_left = NumInstructions::new(
+                    self.execution_parameters
+                        .instruction_limits
+                        .message()
+                        .get()
+                        .saturating_sub(executed_wasm_instructions.get()),
                 );
+                let result = wasm_execution_error(err, instructions_left);
                 (helper, result)
             }
+        };
+        // The subnet memory usage might have changed while the cleanup callback
+        // was paused. Use the current saturation for storage reservation when
+        // finishing the cleanup callback.
+        let execution_parameters = ExecutionParameters {
+            subnet_memory_saturation,
+            ..self.execution_parameters
         };
         process_cleanup_result(
             result,
             clean_canister,
             helper,
-            self.execution_parameters,
+            execution_parameters,
             self.callback_err,
             self.original,
             round,
@@ -872,7 +1082,10 @@ impl PausedExecution for PausedCleanupExecution {
         )
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (CanisterMessageOrTask, CompoundCycles<Instructions>) {
         info!(
             log,
             "[DTS] Aborting paused cleanup callback {:?} of canister {}.",
@@ -885,7 +1098,13 @@ impl PausedExecution for PausedCleanupExecution {
             callback: self.original.callback,
         };
         // No cycles were prepaid for execution during this DTS execution.
-        (CanisterMessageOrTask::Message(message), Cycles::zero())
+        (
+            CanisterMessageOrTask::Message(message),
+            CompoundCycles::new(
+                Cycles::zero(),
+                self.original.subnet_cycles_config.cost_schedule,
+            ),
+        )
     }
 
     fn input(&self) -> CanisterMessageOrTask {
@@ -910,7 +1129,7 @@ pub fn execute_response(
     execution_parameters: ExecutionParameters,
     round: RoundContext,
     round_limits: &mut RoundLimits,
-    subnet_size: usize,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     call_tree_metrics: &dyn CallTreeMetrics,
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
@@ -945,10 +1164,11 @@ pub fn execute_response(
         request_metadata: call_context.metadata().clone(),
         message_instruction_limit: execution_parameters.instruction_limits.message(),
         message: Arc::clone(&response),
-        subnet_size,
+        subnet_cycles_config,
         canister_id: clean_canister.canister_id(),
         instructions_executed: call_context.instructions_executed(),
         log_dirty_pages,
+        sender_info: call_context.sender_info().cloned(),
     };
 
     let mut helper = ResponseHelper::new(
@@ -960,12 +1180,27 @@ pub fn execute_response(
         deallocation_sender,
     );
     helper.apply_initial_refunds();
-    let helper = match helper.validate(&call_context, &original, &round, round_limits) {
+    let mut helper = match helper.validate(&call_context, &original, &round, round_limits) {
         Ok(helper) => helper,
         Err(result) => {
             return result;
         }
     };
+
+    // The cycles prepaid for this response execution when the corresponding call was
+    // performed might not match the cost of executing it in the canister's current
+    // Wasm execution mode. If the canister cannot pay a shortfall, then the response
+    // is rejected without executing the callback.
+    if let Err(err) = helper.adjust_prepayment_for_response_execution(&original, &round) {
+        info!(
+            round.log,
+            "Failed response callback execution of canister {} due to insufficient cycles for the additional prepayment: {:?}.",
+            original.canister_id,
+            err,
+        );
+        let result = Err(HypervisorError::InsufficientCyclesBalance(err));
+        return helper.early_finish(result, &original, &round, round_limits);
+    }
 
     let closure = match response.response_payload {
         Payload::Data(_) => original.callback.on_reply.clone(),
@@ -988,6 +1223,7 @@ pub fn execute_response(
             call_context_id,
             call_context.has_responded(),
             call_context.instructions_executed(),
+            call_context.sender_info().cloned(),
         ),
         Payload::Reject(context) => ApiType::reject_callback(
             time,
@@ -997,6 +1233,7 @@ pub fn execute_response(
             call_context_id,
             call_context.has_responded(),
             call_context.instructions_executed(),
+            call_context.sender_info().cloned(),
         ),
     };
 
@@ -1013,8 +1250,8 @@ pub fn execute_response(
         func_ref,
         original.request_metadata.clone(),
         round_limits,
-        round.network_topology,
-        round.cost_schedule,
+        round.network_topology.clone(),
+        original.subnet_cycles_config,
     );
 
     process_response_result(
@@ -1048,7 +1285,7 @@ fn reserve_cleanup_instructions(
 #[allow(clippy::too_many_arguments)]
 fn execute_response_cleanup(
     clean_canister: CanisterState,
-    helper: ResponseHelper,
+    mut helper: ResponseHelper,
     cleanup_closure: WasmClosure,
     callback_err: HypervisorError,
     instructions_left: NumInstructions,
@@ -1061,6 +1298,10 @@ fn execute_response_cleanup(
     execution_parameters
         .instruction_limits
         .update(instructions_left);
+    // The instructions executed by the response callback are reflected in the
+    // instruction limits updated above. Hence the next Wasm execution (the
+    // cleanup callback) starts counting from zero.
+    helper.executed_wasm_instructions = NumInstructions::new(0);
     let func_ref = match original.call_origin {
         CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
             FuncRef::UpdateClosure(cleanup_closure)
@@ -1081,6 +1322,7 @@ fn execute_response_cleanup(
             time: original.time,
             reject_code,
             call_context_instructions_executed: original.instructions_executed,
+            sender_info: original.sender_info.clone(),
         },
         helper.canister().execution_state.as_ref().unwrap(),
         &helper.canister().system_state,
@@ -1090,8 +1332,8 @@ fn execute_response_cleanup(
         func_ref,
         original.request_metadata.clone(),
         round_limits,
-        round.network_topology,
-        round.cost_schedule,
+        round.network_topology.clone(),
+        original.subnet_cycles_config,
     );
     process_cleanup_result(
         result,
@@ -1132,7 +1374,7 @@ fn process_response_result(
             update_round_limits(round_limits, &slice);
             let paused_execution = Box::new(PausedResponseExecution {
                 paused_wasm_execution,
-                helper: helper.pause(round_limits),
+                helper: helper.pause(round_limits, slice.executed_instructions),
                 execution_parameters,
                 reserved_cleanup_instructions,
                 original,
@@ -1146,8 +1388,10 @@ fn process_response_result(
             }
         }
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
+            // The Wasm execution ran with the message limit reduced by the
+            // instructions reserved for the cleanup callback.
             let instructions_used =
-                original.message_instruction_limit - output.num_instructions_left;
+                execution_parameters.instruction_limits.message() - output.num_instructions_left;
             if instructions_used >= execution_parameters.instruction_limits.slice() {
                 info!(
                     round.log,
@@ -1166,6 +1410,7 @@ fn process_response_result(
                 &original,
                 &round,
                 round_limits,
+                &execution_parameters.subnet_memory_saturation,
                 reserved_cleanup_instructions,
                 call_tree_metrics,
             ) {
@@ -1232,7 +1477,7 @@ fn process_cleanup_result(
             update_round_limits(round_limits, &slice);
             let paused_execution = Box::new(PausedCleanupExecution {
                 paused_wasm_execution,
-                helper: helper.pause(round_limits),
+                helper: helper.pause(round_limits, slice.executed_instructions),
                 execution_parameters,
                 callback_err,
                 original,
@@ -1267,6 +1512,7 @@ fn process_cleanup_result(
                 &original,
                 &round,
                 round_limits,
+                &execution_parameters.subnet_memory_saturation,
                 call_tree_metrics,
             )
         }

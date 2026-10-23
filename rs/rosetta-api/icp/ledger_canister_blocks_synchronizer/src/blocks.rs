@@ -297,7 +297,7 @@ mod database_access {
             .map(|block| block.unwrap())?;
         Ok(block_idx)
     }
-    // The option is left None if both verified and unverified blocks should be querried. It is set to False for only unverified blocks and True for only verified blocks
+    // The option is left None if both verified and unverified blocks should be queried. It is set to False for only unverified blocks and True for only verified blocks
     pub fn get_first_hashed_block(
         con: &mut Connection,
         verified: Option<bool>,
@@ -321,7 +321,7 @@ mod database_access {
             None => Err(BlockStoreError::Other("Blockchain is empty".to_string())),
         }
     }
-    // The option is left None if both verified and unverified blocks should be querried. It is set to False for only unverified blocks and True for only verified blocks
+    // The option is left None if both verified and unverified blocks should be queried. It is set to False for only unverified blocks and True for only verified blocks
 
     pub fn get_latest_hashed_block(
         con: &mut Connection,
@@ -1505,7 +1505,7 @@ impl Blocks {
         let mut connection = self
             .connection
             .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+            .map_err(|e| format!("Unable to acquire the connection mutex: {e:?}"))?;
 
         let sql_tx = connection
             .transaction()
@@ -1552,7 +1552,7 @@ impl Blocks {
                     .take()
                     .into_values()
                     .collect();
-                transactions.sort_by(|(idx1, _), (idx2, _)| idx1.cmp(idx2));
+                transactions.sort_by_key(|(idx1, _)| *idx1);
                 let rosetta_block = RosettaBlock {
                     index: *current_rosetta_block_index.borrow(),
                     parent_hash: current_rosetta_block_parent_hash
@@ -1691,7 +1691,7 @@ impl Blocks {
         let connection = self
             .connection
             .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+            .map_err(|e| format!("Unable to acquire the connection mutex: {e:?}"))?;
         let block_idx = match connection
             .prepare_cached("SELECT MAX(rosetta_block_idx) FROM rosetta_blocks")
             .map_err(|e| format!("Unable to prepare query: {e:?}"))?
@@ -1715,7 +1715,7 @@ impl Blocks {
         let connection = self
             .connection
             .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+            .map_err(|e| format!("Unable to acquire the connection mutex: {e:?}"))?;
         let mut statement = connection
             .prepare_cached(
                 "SELECT parent_hash, timestamp FROM rosetta_blocks WHERE rosetta_block_idx=:idx",
@@ -1743,7 +1743,7 @@ impl Blocks {
         let connection = self
             .connection
             .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+            .map_err(|e| format!("Unable to acquire the connection mutex: {e:?}"))?;
         let mut statement = connection
             .prepare_cached(
                 r#"SELECT blocks.block_idx, encoded_block
@@ -1907,7 +1907,7 @@ VALUES (:idx, :block_idx)"#,
         let account = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
 
         // Create a mint transaction with a large amount
-        let large_amount = 10000000000000000000u64; // Exceeds i64::MAX
+        let large_amount = 10000000000000000000_u64; // Exceeds i64::MAX
         let transaction = Transaction {
             operation: Operation::Mint {
                 to: account,
@@ -1940,7 +1940,7 @@ VALUES (:idx, :block_idx)"#,
         // Verify the balance history
         let history = blocks.get_account_balance_history(&account, None).unwrap();
         assert_eq!(history.len(), 1);
-        assert_eq!(history[0], (0u64, Tokens::from_e8s(large_amount)));
+        assert_eq!(history[0], (0_u64, Tokens::from_e8s(large_amount)));
     }
 
     #[test]
@@ -1953,51 +1953,51 @@ VALUES (:idx, :block_idx)"#,
 
         let account1 = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
         let account2 = AccountIdentifier::new(
-            ic_types::PrincipalId(Principal::from_slice(&[1u8; 29])),
+            ic_types::PrincipalId(Principal::from_slice(&[1_u8; 29])),
             None,
         );
 
         // Scenario 1: Existing database with small INTEGER values (backwards compatible)
-        let small_value1 = 1000000u64; // 0.01 ICP
-        let small_value2 = 5000000000u64; // 50 ICP
+        let small_value1 = 1000000_u64; // 0.01 ICP
+        let small_value2 = 5000000000_u64; // 50 ICP
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![1u64, account1.to_hex(), small_value1 as i64],
+                params![1_u64, account1.to_hex(), small_value1 as i64],
             )
             .unwrap();
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![2u64, account2.to_hex(), small_value2 as i64],
+                params![2_u64, account2.to_hex(), small_value2 as i64],
             )
             .unwrap();
 
         // Scenario 2: New large values using bit-reinterpretation
-        let large_value1 = 10000000000000000000u64; // The problematic value from the original error
-        let large_value2 = 18446744073709551615u64; // u64::MAX
+        let large_value1 = 10000000000000000000_u64; // The problematic value from the original error
+        let large_value2 = 18446744073709551615_u64; // u64::MAX
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![3u64, account1.to_hex(), large_value1 as i64], // Stored as negative i64
+                params![3_u64, account1.to_hex(), large_value1 as i64], // Stored as negative i64
             )
             .unwrap();
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![4u64, account2.to_hex(), large_value2 as i64], // Stored as -1
+                params![4_u64, account2.to_hex(), large_value2 as i64], // Stored as -1
             )
             .unwrap();
 
         // Test reading all values - should work seamlessly with bit-reinterpretation
         let balance1 =
-            database_access::get_account_balance(&mut connection, &1u64, &account1).unwrap();
+            database_access::get_account_balance(&mut connection, &1_u64, &account1).unwrap();
         let balance2 =
-            database_access::get_account_balance(&mut connection, &2u64, &account2).unwrap();
+            database_access::get_account_balance(&mut connection, &2_u64, &account2).unwrap();
         let balance3 =
-            database_access::get_account_balance(&mut connection, &3u64, &account1).unwrap();
+            database_access::get_account_balance(&mut connection, &3_u64, &account1).unwrap();
         let balance4 =
-            database_access::get_account_balance(&mut connection, &4u64, &account2).unwrap();
+            database_access::get_account_balance(&mut connection, &4_u64, &account2).unwrap();
 
         // All values should be read correctly regardless of magnitude
         assert_eq!(balance1, Some(small_value1));
@@ -2007,9 +2007,9 @@ VALUES (:idx, :block_idx)"#,
 
         // Test that the latest balance query works correctly (should return the large values)
         let latest_balance1 =
-            database_access::get_account_balance(&mut connection, &10u64, &account1).unwrap();
+            database_access::get_account_balance(&mut connection, &10_u64, &account1).unwrap();
         let latest_balance2 =
-            database_access::get_account_balance(&mut connection, &10u64, &account2).unwrap();
+            database_access::get_account_balance(&mut connection, &10_u64, &account2).unwrap();
 
         assert_eq!(latest_balance1, Some(large_value1));
         assert_eq!(latest_balance2, Some(large_value2));
@@ -2026,30 +2026,30 @@ VALUES (:idx, :block_idx)"#,
         let account = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
 
         // Test 1: Small value (fits in i64) - stored as positive
-        let small_value = 1000000u64; // 0.01 ICP in e8s
+        let small_value = 1000000_u64; // 0.01 ICP in e8s
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![1u64, account.to_hex(), small_value as i64],
+                params![1_u64, account.to_hex(), small_value as i64],
             )
             .unwrap();
 
         let balance =
-            database_access::get_account_balance(&mut connection, &1u64, &account).unwrap();
+            database_access::get_account_balance(&mut connection, &1_u64, &account).unwrap();
         assert_eq!(balance, Some(small_value));
 
         // Test 2: Large value (exceeds i64::MAX) - stored as negative i64, reinterpreted as u64
-        let large_value = 10000000000000000000u64; // Exceeds i64::MAX
+        let large_value = 10000000000000000000_u64; // Exceeds i64::MAX
         let large_value_as_i64 = large_value as i64; // This becomes negative
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![2u64, account.to_hex(), large_value_as_i64],
+                params![2_u64, account.to_hex(), large_value_as_i64],
             )
             .unwrap();
 
         let balance =
-            database_access::get_account_balance(&mut connection, &2u64, &account).unwrap();
+            database_access::get_account_balance(&mut connection, &2_u64, &account).unwrap();
         assert_eq!(balance, Some(large_value)); // Should recover the original value
 
         // Test 3: u64::MAX value
@@ -2058,19 +2058,19 @@ VALUES (:idx, :block_idx)"#,
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![3u64, account.to_hex(), max_value_as_i64],
+                params![3_u64, account.to_hex(), max_value_as_i64],
             )
             .unwrap();
 
         let balance =
-            database_access::get_account_balance(&mut connection, &3u64, &account).unwrap();
+            database_access::get_account_balance(&mut connection, &3_u64, &account).unwrap();
         assert_eq!(balance, Some(max_value)); // Should recover u64::MAX
 
         // Verify that bit reinterpretation works correctly
-        assert_eq!(large_value_as_i64, -8446744073709551616i64);
-        assert_eq!(max_value_as_i64, -1i64);
-        assert_eq!((-8446744073709551616i64) as u64, 10000000000000000000u64);
-        assert_eq!((-1i64) as u64, u64::MAX);
+        assert_eq!(large_value_as_i64, -8446744073709551616_i64);
+        assert_eq!(max_value_as_i64, -1_i64);
+        assert_eq!((-8446744073709551616_i64) as u64, 10000000000000000000_u64);
+        assert_eq!((-1_i64) as u64, u64::MAX);
     }
 
     #[test]

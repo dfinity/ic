@@ -16,9 +16,8 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  pull-requests: write
+  contents: read
   packages: write
-  contents: write
 
 jobs:
   get-images:
@@ -28,7 +27,7 @@ jobs:
       matrix: ${{ steps.parse-images.outputs.matrix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Read Container Images
         id: parse-images
@@ -47,7 +46,7 @@ jobs:
         include: ${{ fromJson(needs.get-images.outputs.matrix) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Login to GHCR
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
@@ -57,10 +56,23 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Crane
+        env:
+          # Keep CRANE_SHA256 in sync with CRANE_VERSION. It is the sha256 of
+          # go-containerregistry_Linux_x86_64.tar.gz listed in the release's
+          # checksums.txt, e.g.:
+          #   curl -fsSL https://github.com/google/go-containerregistry/releases/download/$CRANE_VERSION/checksums.txt
+          CRANE_VERSION: v0.21.9
+          CRANE_SHA256: 5c16d8ddb971cb1d5e6ed8b1e743da8224414eeba2c2762d8f1a61b2f095699e
         run: |
-          curl -fsL https://github.com/google/go-containerregistry/releases/download/v0.20.2/go-containerregistry_Linux_x86_64.tar.gz | tar xz crane
+          set -euo pipefail
+          curl -fsSL -o crane.tar.gz \
+            "https://github.com/google/go-containerregistry/releases/download/$CRANE_VERSION/go-containerregistry_Linux_x86_64.tar.gz"
+          echo "$CRANE_SHA256  crane.tar.gz" | sha256sum --check --strict -
+          tar xzf crane.tar.gz crane
+          rm crane.tar.gz
           chmod +x crane
           sudo mv crane /usr/local/bin/crane
+          crane version
 
       - name: Mirror Container
         run: |

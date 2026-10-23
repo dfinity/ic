@@ -369,7 +369,7 @@ async fn test_wrong_canister_id(
         env.logger(),
         rosetta_api_bin_path,
         node_url,
-        8101,
+        8102,
         some_can_id,
         some_can_id,
         rosetta_workspace_path,

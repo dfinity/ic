@@ -1,10 +1,10 @@
-use std::io::Write;
+use std::{fs::read_to_string, io::Write, str::FromStr};
 
 use candid::Encode;
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, HttpMethod};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_machine_tests::{StateMachine, two_subnets_simple};
-use ic_subnet_splitting::post_split_estimations::{Estimates, LoadEstimates, StateSizeEstimates};
+use ic_subnet_splitting::post_split_estimations::{LoadEstimates, StateSizeEstimates};
 use ic_test_utilities_logger::with_test_logger;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::CanisterId;
@@ -12,6 +12,9 @@ use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm};
 use proxy_canister::{RemoteHttpRequest, UnvalidatedCanisterHttpRequestArgs};
 use slog::{Logger, info};
+
+const EPSILON: f64 = 0.005;
+const MAX_CUTS: usize = 10;
 
 /// Checks whether the first argument is equal to the second argument with a relative error
 /// tolerance up to the third argument.
@@ -31,7 +34,7 @@ macro_rules! assert_near {
 #[test]
 /// Tests that three tools needed for subnet splitting are compatible with each other:
 /// 1. `state-tool`, which extracts load metrics and manifest from the replicated state,
-/// 2. TODO(CON-1569): a tool which takes the output of the `state-tool` and proposes a good split,
+/// 2. `split-finder`, which takes the output of the `state-tool` and proposes a good split,
 /// 3. `subnet-splitting-tool`, which takes the outputs from the above two tools, and returns
 ///    estimated loads/sizes after splitting a subnet.
 fn load_metrics_e2e_test() {
@@ -89,16 +92,55 @@ fn load_metrics_e2e_test() {
         let load_samples_path = dir.path().join("load_samples.csv");
         ic_state_tool::commands::canister_metrics::get(checkpoint_dir.clone(), &load_samples_path)
             .expect("Should compute canister metrics for a valid checkpoint");
+        let communication_samples_path = dir.path().join("comm_samples.csv");
+        // TODO(CON-1569): use actual connectivity metrics
+        {
+            let communication_data = include_str!("../test_data/fake_communication_sample.csv");
+            let mut communication_samples_file =
+                std::fs::File::create(&communication_samples_path).unwrap();
+            write!(communication_samples_file, "{communication_data}").unwrap();
+        }
 
-        // TODO(CON-1569): use a tool for finding a good split, once it's in the `ic-public` repo.
-        // For now we use a static set of ranges.
-        let mut canister_ids = state_machine.get_canister_ids();
-        canister_ids.sort();
-        // middle half of the canisters
-        let canister_id_ranges = vec![CanisterIdRange {
-            start: canister_ids[5],
-            end: canister_ids[14],
-        }];
+        info!(
+            logger,
+            "Using `split-finder` to find candidate canister ranges to be migrated"
+        );
+        let split_output_path = dir.path().join("split_output.csv");
+        let split_finder_path =
+            std::env::var("SPLIT_FINDER_PATH").expect("SPLIT_FINDER_PATH not set");
+        let output = std::process::Command::new(split_finder_path)
+            .args(["--load-path", &load_samples_path.display().to_string()])
+            .args([
+                "--load-baseline-path",
+                &load_samples_baseline_path.display().to_string(),
+            ])
+            .args([
+                "--communication-data-path",
+                &communication_samples_path.display().to_string(),
+            ])
+            .args(["--output-path", &split_output_path.display().to_string()])
+            .args(["--load-type", "instructions_executed"])
+            .args(["--epsilon-load", &EPSILON.to_string()])
+            .args(["--max-cuts", &MAX_CUTS.to_string()])
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "The script returned a non-zero value:\n\n === stdout ===\n{}\n\n === stderr ===\n{}",
+            str::from_utf8(&output.stdout).unwrap(),
+            str::from_utf8(&output.stderr).unwrap(),
+        );
+        let canister_id_ranges: Vec<CanisterIdRange> = read_to_string(&split_output_path)
+            .expect("The split-finder script should have produced a valid output")
+            .lines()
+            .map(|line| CanisterIdRange::from_str(line).expect("Not a valid CanisterIdRange"))
+            .collect();
+        assert!(
+            canister_id_ranges.len() <= MAX_CUTS.div_ceil(2),
+            "The split-finder script should have produced at most {MAX_CUTS} because we \
+            passed {MAX_CUTS} as the `--max-cuts` argument"
+        );
 
         // And finally use the `subnet-splitting-tool` to estimate the loads on each subnet after a
         // split.
@@ -123,54 +165,95 @@ fn load_metrics_e2e_test() {
             .expect("Should succeed given valid inputs")
         );
 
-        assert_eq!(
-            canisters_installed,
-            Estimates {
-                source: 10,
-                destination: 10,
-            }
-        );
+        // The `split-finder` solves a symmetric MILP, so the two resulting canister groups are
+        // interchangeable: which one is reported as `source` and which as `destination` is
+        // arbitrary and may flip across CBC solver versions/platforms. We therefore accept either
+        // orientation, but require it to be *consistent* across all metrics. Rather than checking
+        // each metric's orientation in isolation (which would also accept a physically impossible
+        // per-metric mix), we track which of the two global labelings — original or fully swapped —
+        // remains viable, and assert at the end that at least one does.
+        //
+        // `orientation_unflipped` stays `true` only while every metric matches with
+        // `source == $a && destination == $b`; `orientation_flipped` only while every metric
+        // matches the swapped labeling. Symmetric metrics (`$a == $b`) satisfy both and thus do
+        // not constrain the orientation.
+        let mut orientation_unflipped = true;
+        let mut orientation_flipped = true;
+        macro_rules! assert_eq_oriented {
+            ($actual:expr, $a:expr, $b:expr) => {
+                let actual = &$actual;
+                let unflipped_ok = actual.source == $a && actual.destination == $b;
+                let flipped_ok = actual.source == $b && actual.destination == $a;
+                assert!(
+                    unflipped_ok || flipped_ok,
+                    "{} = {actual:?} does not match the expected {{{}, {}}} (in either orientation)",
+                    stringify!($actual),
+                    $a,
+                    $b,
+                );
+                orientation_unflipped &= unflipped_ok;
+                orientation_flipped &= flipped_ok;
+            };
+        }
+
         // Accept up to 10% error. The precise values are not important here and they're very sensitive
         // to the changes to the replicated state / execution. It's mostly a sanity check that the
         // returned values are not too ridiculous and they might have to be updated once in a while.
-        assert_near!(states_sizes_bytes.source, 4662083, 0.1);
-        assert_near!(states_sizes_bytes.destination, 4662072, 0.1);
-        assert_near!(instructions_executed.source, 7664259, 0.1);
-        assert_near!(instructions_executed.destination, 7680855, 0.1);
-        assert_eq!(
-            ingress_messages_executed,
-            Estimates {
-                source: 19,
-                destination: 20,
-            }
+        // These metrics are near-symmetric, so they do not pin down the orientation; the
+        // orientation is determined and checked for consistency by the exact `assert_eq_oriented`
+        // checks below, and these `assert_near` checks pass in either orientation.
+        assert_near!(
+            states_sizes_bytes
+                .source
+                .min(states_sizes_bytes.destination),
+            3705962,
+            0.1
         );
-        assert_eq!(
-            remote_subnet_messages_executed_lower_bound,
-            Estimates {
-                source: 5,
-                destination: 5,
-            }
+        assert_near!(
+            states_sizes_bytes
+                .source
+                .max(states_sizes_bytes.destination),
+            5558934,
+            0.1
         );
-        assert_eq!(
-            local_subnet_messages_executed_upper_bound,
-            Estimates {
-                source: 13,
-                destination: 15,
-            }
+        assert_near!(
+            instructions_executed
+                .source
+                .min(instructions_executed.destination),
+            144343027,
+            0.1
         );
-        assert_eq!(
-            http_outcalls_executed,
-            Estimates {
-                source: 5,
-                destination: 5,
-            }
+        assert_near!(
+            instructions_executed
+                .source
+                .max(instructions_executed.destination),
+            145772259,
+            0.1
         );
-        assert_eq!(
-            heartbeats_and_global_timers_executed,
-            Estimates {
-                source: 379,
-                destination: 315,
-            }
+        assert_eq_oriented!(canisters_installed, 12, 8);
+        assert_eq_oriented!(ingress_messages_executed, 24, 15);
+        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 6, 4);
+        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 17, 11);
+        assert_eq_oriented!(http_outcalls_executed, 6, 4);
+        assert_eq_oriented!(heartbeats_and_global_timers_executed, 326, 368);
+        // A single split cannot report some metrics in the original orientation and others in the
+        // swapped one, so require all the orientation-sensitive metrics to agree on one labeling.
+        assert!(
+            orientation_unflipped || orientation_flipped,
+            "The source/destination orientation is inconsistent across metrics: some match only \
+             the original labeling and others only the swapped labeling, which cannot arise from \
+             a single split."
+        );
+        // Check if the split finder found a split satisfying the load constraints
+        assert_near!(
+            instructions_executed.source,
+            instructions_executed.total() / 2,
+            EPSILON
+        );
+        assert_near!(
+            instructions_executed.destination,
+            instructions_executed.total() / 2,
+            EPSILON
         );
     })
 }

@@ -71,7 +71,7 @@ async fn handle_call((msg, bytes_received_on_call, _): (CallMessage, u32, u32)) 
     // Perform and await the downstream calls; collect the responses.
     let downstream_replies = (futures::future::join_all(futures).await)
         .into_iter()
-        .zip(calls.into_iter())
+        .zip(calls)
         .map(|(reply, call)| match reply {
             Ok(reply) => {
                 let (reply, bytes_sent_on_reply, _) = decode::<ReplyMessage>(reply.into_bytes());

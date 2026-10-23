@@ -161,7 +161,7 @@ pub fn test_threshold_signatures(
                     )
                     .is_err(),
                 "Individual signature verification accepted incorrect message '{:?}' instead of '{:?}'",
-                &incorrect_message,
+                incorrect_message,
                 message
             );
         }

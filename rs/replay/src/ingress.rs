@@ -23,11 +23,12 @@ use ic_nns_governance_api::{
 };
 use ic_protobuf::registry::{
     replica_version::v1::ReplicaVersionRecord,
-    subnet::v1::{SubnetRecord, SubnetType},
+    subnet::v1::{SubnetListRecord, SubnetRecord, SubnetType},
 };
 use ic_registry_client_helpers::subnet::get_node_ids_from_subnet_record;
 use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_record_key,
+    make_default_initial_dkg_subnet_id_key, make_replica_version_key, make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_transport::{
     pb::v1::{Precondition, RegistryMutation, registry_mutation},
@@ -120,7 +121,10 @@ pub(crate) fn agent_with_principal_as_sender(principal: &PrincipalId) -> Result<
         .map_err(|err| err.to_string())
 }
 
-pub fn cmd_add_neuron(time: Time, cmd: &WithNeuronCmd) -> Result<Vec<IngressWithPrinter>, String> {
+pub(crate) fn cmd_add_neuron(
+    time: Time,
+    cmd: &WithNeuronCmd,
+) -> Result<Vec<IngressWithPrinter>, String> {
     let mut msgs = vec![];
 
     let controller = cmd.neuron_controller;
@@ -193,7 +197,7 @@ pub fn cmd_add_neuron(time: Time, cmd: &WithNeuronCmd) -> Result<Vec<IngressWith
     Ok(msgs)
 }
 
-pub fn cmd_make_trusted_neurons_follow_neuron(
+pub(crate) fn cmd_make_trusted_neurons_follow_neuron(
     time: Time,
     cmd: &WithTrustedNeuronsFollowingNeuronCmd,
 ) -> Result<Vec<SignedIngress>, String> {
@@ -289,7 +293,7 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
     Ok(msgs)
 }
 
-pub fn cmd_add_ledger_account(
+pub(crate) fn cmd_add_ledger_account(
     time: Time,
     cmd: &WithLedgerAccountCmd,
 ) -> Result<Vec<SignedIngress>, String> {
@@ -319,7 +323,27 @@ pub fn cmd_add_ledger_account(
     ])
 }
 
-/// Creates signed ingress messages to potentially add a new blessed replica
+/// Creates an ingress message that updates the subnet list record in the registry to contain only
+/// the player's subnet id.
+///
+/// It also unsets the default Initial DKG subnet ID such that the invariant checking that the
+/// latter is present in the subnet list is satisfied.
+pub(crate) fn cmd_overwrite_subnet_list_with_singleton(
+    agent: &Agent,
+    player: &crate::player::Player,
+    time: Time,
+) -> Result<Vec<SignedIngress>, String> {
+    let initial_dkg_msg = unset_default_initial_dkg_subnet_id(agent, time)?;
+
+    let subnet_list_record = SubnetListRecord {
+        subnets: vec![player.subnet_id.get().into_vec()],
+    };
+    let subnet_list_msg = update_subnet_list_record(agent, subnet_list_record, time)?;
+
+    Ok(vec![initial_dkg_msg, subnet_list_msg])
+}
+
+/// Creates signed ingress messages to potentially add a new replica
 /// version and updates the subnet record with this replica version.
 pub(crate) fn cmd_upgrade_subnet_to_replica_version(
     agent: &Agent,
@@ -332,17 +356,11 @@ pub(crate) fn cmd_upgrade_subnet_to_replica_version(
 
     let mut msgs = Vec::new();
 
-    if cmd.add_and_bless_replica_version {
+    if cmd.add_replica_version {
         msgs.push(add_replica_version(
             agent,
             replica_version_id.clone(),
             replica_version_record,
-            context_time,
-        )?);
-        msgs.push(bless_replica_version(
-            agent,
-            player,
-            replica_version_id.clone(),
             context_time,
         )?);
     }
@@ -360,7 +378,7 @@ pub(crate) fn cmd_upgrade_subnet_to_replica_version(
 
 /// Read the registry from the specified local store and send them to the
 /// registry canister with slight modifications.
-pub fn cmd_add_registry_content(
+pub(crate) fn cmd_add_registry_content(
     agent: &Agent,
     cmd: &AddRegistryContentCmd,
     subnet_id: SubnetId,
@@ -460,7 +478,7 @@ fn show_mutation_type(mutation_type: i32) -> &'static str {
 }
 
 /// Applies 'mutations' to the registry.
-pub fn atomic_mutate(
+fn atomic_mutate(
     agent: &Agent,
     canister_id: CanisterId,
     mutations: Vec<RegistryMutation>,
@@ -472,37 +490,8 @@ pub fn atomic_mutate(
     make_signed_ingress(agent, canister_id, "atomic_mutate", payload, expiry)
 }
 
-/// Bless a new replica version by mutating the registry canister.
-pub(crate) fn bless_replica_version(
-    agent: &Agent,
-    player: &crate::player::Player,
-    replica_version_id: String,
-    context_time: Time,
-) -> Result<SignedIngress, String> {
-    let mut mutation = RegistryMutation::default();
-    mutation.set_mutation_type(registry_mutation::Type::Upsert);
-    mutation.key = make_blessed_replica_versions_key().into_bytes();
-    let mut blessed_versions = player.get_blessed_replica_versions(context_time)?;
-    blessed_versions
-        .blessed_version_ids
-        .push(replica_version_id);
-
-    let mut buf = Vec::new();
-    match blessed_versions.encode(&mut buf) {
-        Ok(_) => mutation.value = buf,
-        Err(error) => panic!("Error encoding the value to protobuf: {error:?}"),
-    }
-    atomic_mutate(
-        agent,
-        REGISTRY_CANISTER_ID,
-        vec![mutation],
-        vec![],
-        context_time,
-    )
-}
-
 /// Add a new replica version by mutating the registry canister.
-pub fn add_replica_version(
+fn add_replica_version(
     agent: &Agent,
     replica_version_id: String,
     record: ReplicaVersionRecord,
@@ -527,7 +516,7 @@ pub fn add_replica_version(
 }
 
 /// Update subnet record.
-pub fn update_subnet_record(
+fn update_subnet_record(
     agent: &Agent,
     subnet_id: SubnetId,
     record: SubnetRecord,
@@ -542,6 +531,48 @@ pub fn update_subnet_record(
         Ok(_) => mutation.value = buf,
         Err(error) => panic!("Error encoding the value to protobuf: {error:?}"),
     }
+    atomic_mutate(
+        agent,
+        REGISTRY_CANISTER_ID,
+        vec![mutation],
+        vec![],
+        context_time,
+    )
+}
+
+/// Update subnet list record.
+fn update_subnet_list_record(
+    agent: &Agent,
+    record: SubnetListRecord,
+    context_time: Time,
+) -> Result<SignedIngress, String> {
+    let mut mutation = RegistryMutation::default();
+    mutation.set_mutation_type(registry_mutation::Type::Update);
+    mutation.key = make_subnet_list_record_key().as_bytes().to_vec();
+
+    let mut buf = Vec::new();
+    match record.encode(&mut buf) {
+        Ok(_) => mutation.value = buf,
+        Err(error) => panic!("Error encoding the value to protobuf: {error:?}"),
+    }
+    atomic_mutate(
+        agent,
+        REGISTRY_CANISTER_ID,
+        vec![mutation],
+        vec![],
+        context_time,
+    )
+}
+
+/// Unset default initial DKG subnet ID.
+fn unset_default_initial_dkg_subnet_id(
+    agent: &Agent,
+    context_time: Time,
+) -> Result<SignedIngress, String> {
+    let mut mutation = RegistryMutation::default();
+    mutation.set_mutation_type(registry_mutation::Type::Delete);
+    mutation.key = make_default_initial_dkg_subnet_id_key().as_bytes().to_vec();
+
     atomic_mutate(
         agent,
         REGISTRY_CANISTER_ID,

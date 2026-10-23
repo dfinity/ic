@@ -7,7 +7,7 @@ on:
 
 # This helps avoid duplicate reviews from this bot.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
@@ -19,7 +19,7 @@ jobs:
     steps:
       # IMPORTANT: we use `pull_request_target` so this can run on external PRs and have write permissions (to post a comment)
       # However this means that no checkout step can be introduced, as that would expose a security vulnerability.
-      - uses: actions/github-script@v6
+      - uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
         id: mainStep
         # If the PR requires governance-team to approve, GitHub will force governance-team to
         # be in requested_teams. Therefore, the following condition is always
@@ -31,6 +31,19 @@ jobs:
           retries: 3
           script: |
             const pullRequestNumber = context.payload.number;
+
+            // Skip reminder if only build files were changed.
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: "dfinity",
+              repo: "ic",
+              pull_number: pullRequestNumber,
+            });
+            const buildFilePattern = /^(BUILD\.bazel|BUILD|WORKSPACE|WORKSPACE\.bazel|.*\.bazel|.*\.bzl)$/;
+            const hasNonBuildFiles = files.some(f => !buildFilePattern.test(f.filename.split('/').pop()));
+            if (!hasNonBuildFiles) {
+              console.log("Skipping reminder: PR only changes build files.");
+              return;
+            }
 
             // Skip reminder if we already reminded (to avoid spam).
             const reviews = await github.rest.pulls.listReviews({

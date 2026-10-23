@@ -1,16 +1,18 @@
 use crate::{
     CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS, Clock, IcClock,
     governance::{LOG_PREFIX, TimeWarp},
-    neuron::types::Neuron,
+    neuron::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
-    pb::v1::{GovernanceError, Topic, VotingPowerEconomics, governance_error::ErrorType},
+    pb::v1::{
+        GovernanceError, NeuronDissolveStateSnapshot, Topic, VotingPowerEconomics,
+        governance_error::ErrorType,
+    },
     storage::{
         neuron_indexes::CorruptedNeuronIndexes, neurons::NeuronSections,
         with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
         with_stable_neuron_store_mut, with_voting_history_store_mut,
     },
 };
-use dyn_clone::DynClone;
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
 use ic_nervous_system_governance::index::{
@@ -65,6 +67,10 @@ pub enum NeuronStoreError {
         neuron_id: NeuronId,
     },
     NeuronIdGenerationUnavailable,
+    NeuronSubaccountGenerationUnavailable,
+    SubaccountAlreadyExists {
+        subaccount: Subaccount,
+    },
     InvalidOperation {
         reason: String,
     },
@@ -169,6 +175,16 @@ impl Display for NeuronStoreError {
                     Likely due to uninitialized RNG."
                 )
             }
+            NeuronStoreError::NeuronSubaccountGenerationUnavailable => {
+                write!(
+                    f,
+                    "Neuron subaccount generation is not available currently. \
+                    Likely due to uninitialized RNG."
+                )
+            }
+            NeuronStoreError::SubaccountAlreadyExists { subaccount } => {
+                write!(f, "There is already a neuron with subaccount {subaccount}.")
+            }
             NeuronStoreError::InvalidOperation { reason } => {
                 write!(f, "Invalid operation: {reason}")
             }
@@ -195,6 +211,8 @@ impl From<NeuronStoreError> for GovernanceError {
             NeuronStoreError::InvalidData { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::NotAuthorizedToGetFullNeuron { .. } => ErrorType::NotAuthorized,
             NeuronStoreError::NeuronIdGenerationUnavailable => ErrorType::Unavailable,
+            NeuronStoreError::NeuronSubaccountGenerationUnavailable => ErrorType::Unavailable,
+            NeuronStoreError::SubaccountAlreadyExists { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::InvalidOperation { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::TotalPotentialVotingPowerOverflow => ErrorType::PreconditionFailed,
             NeuronStoreError::TotalDecidingVotingPowerOverflow => ErrorType::PreconditionFailed,
@@ -203,10 +221,32 @@ impl From<NeuronStoreError> for GovernanceError {
     }
 }
 
-trait PracticalClock: Clock + Send + Sync + Debug + DynClone {}
-dyn_clone::clone_trait_object!(PracticalClock);
+trait PracticalClock: Clock + Send + Sync + Debug + ClonePracticalClock {}
 
 impl PracticalClock for IcClock {}
+
+/// Helper (super)trait of PracticalClock that makes `Box<dyn PracticalClock>`
+/// cloneable. A trait object cannot require `Clone` directly (`Clone: Sized`),
+/// so instead, every `Clone` implementor of PracticalClock gets this for free
+/// via the blanket impl below.
+trait ClonePracticalClock {
+    fn clone_box(&self) -> Box<dyn PracticalClock>;
+}
+
+impl<T> ClonePracticalClock for T
+where
+    T: PracticalClock + Clone + 'static,
+{
+    fn clone_box(&self) -> Box<dyn PracticalClock> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn PracticalClock> {
+    fn clone(&self) -> Self {
+        self.as_ref().clone_box()
+    }
+}
 
 // TODO impl PracticalClock for MockClock {}
 // This does not work, because MockClock does not implement Clone. Not sure how
@@ -297,6 +337,32 @@ impl NeuronStore {
                  {:?}. Trying again...",
                 LOG_PREFIX,
                 neuron_id,
+            );
+        }
+    }
+
+    /// Generates a unique random neuron subaccount, retrying on collision.
+    pub fn new_neuron_subaccount(
+        &self,
+        random: &mut dyn RandomnessGenerator,
+    ) -> Result<Subaccount, NeuronStoreError> {
+        loop {
+            let subaccount = Subaccount(
+                random
+                    .random_byte_array()
+                    .map_err(|_| NeuronStoreError::NeuronSubaccountGenerationUnavailable)?,
+            );
+
+            if !self.has_neuron_with_subaccount(subaccount) {
+                return Ok(subaccount);
+            }
+
+            ic_cdk::println!(
+                "{}WARNING: A suspiciously near-impossible event has just occurred: \
+                 we randomly picked a neuron subaccount, but it's already used: \
+                 {:?}. Trying again...",
+                LOG_PREFIX,
+                subaccount,
             );
         }
     }
@@ -437,7 +503,20 @@ impl NeuronStore {
         })
     }
 
-    pub fn has_neuron_with_subaccount(&self, subaccount: Subaccount) -> bool {
+    /// Checks that a deterministic (caller-supplied) subaccount is not already
+    /// in use. Unlike random subaccounts (which retry on collision), deterministic
+    /// subaccounts must fail immediately since retrying would produce the same result.
+    pub fn ensure_subaccount_available(
+        &self,
+        subaccount: Subaccount,
+    ) -> Result<Subaccount, NeuronStoreError> {
+        if self.has_neuron_with_subaccount(subaccount) {
+            return Err(NeuronStoreError::SubaccountAlreadyExists { subaccount });
+        }
+        Ok(subaccount)
+    }
+
+    fn has_neuron_with_subaccount(&self, subaccount: Subaccount) -> bool {
         self.get_neuron_id_for_subaccount(subaccount).is_some()
     }
 
@@ -771,6 +850,15 @@ impl NeuronStore {
                 })?
                 .map_err(|e| NeuronStoreError::InvalidData { reason: e })?;
             Ok(())
+        })
+    }
+
+    pub fn clamp_dissolve_delay_for_all_neurons_or_panic(
+        &mut self,
+        now_seconds: u64,
+    ) -> HashMap<u64, NeuronDissolveStateSnapshot> {
+        with_stable_neuron_store_mut(|stable_neuron_store| {
+            stable_neuron_store.clamp_dissolve_delay_for_all_neurons_or_panic(now_seconds)
         })
     }
 

@@ -262,7 +262,7 @@ mod multi_call_results {
                     0x716724f03_u64.into(),
                     0x73b467f76_u64.into(),
                 ],
-                gas_used_ratio: vec![1f64; 6],
+                gas_used_ratio: vec![1_f64; 6],
                 reward: vec![
                     vec![0x5f5e100_u32.into()],
                     vec![0x55d4a80_u32.into()],

@@ -130,7 +130,7 @@ impl SnsClient {
             app_node.effective_canister_id(),
             // Mint a very large amount of cycles, to make sure nothing fails
             // because this canister doesn't have enough cycles.
-            900_000_000_000_000_000u64,
+            900_000_000_000_000_000_u64,
             &log,
         ));
         block_on(deposit_cycles(

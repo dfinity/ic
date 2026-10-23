@@ -11,6 +11,7 @@ use ic_prep_lib::{
     prep_state_directory::IcPrepStateDir,
     subnet_configuration::{SubnetConfig, SubnetRunningState},
 };
+use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::ReplicaVersion;
@@ -145,7 +146,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
         SubnetConfig::new(
             SUBNET_ID,
             subnet_nodes,
-            ReplicaVersion::default(),
+            ReplicaVersion::try_from("test_replica_version").unwrap(),
             None,
             /*max_ingress_bytes_per_block=*/ None,
             None,
@@ -155,6 +156,8 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
             None,
             None,
             SubnetType::System,
+            CanisterCyclesCostSchedule::Normal,
+            None,
             None,
             None,
             None,
@@ -172,7 +175,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
     let ic_config = IcConfig::new(
         /* target_dir= */ temp_dir.path(),
         topology_config,
-        ReplicaVersion::default(),
+        ReplicaVersion::try_from("test_replica_version").unwrap(),
         /* generate_subnet_records= */ true, // see note above
         /* nns_subnet_index= */ Some(0),
         /* release_package_url= */ None,

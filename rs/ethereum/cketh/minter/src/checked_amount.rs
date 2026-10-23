@@ -185,7 +185,7 @@ impl<Unit> TryFrom<candid::Nat> for CheckedAmountOf<Unit> {
 
     fn try_from(value: candid::Nat) -> Result<Self, Self::Error> {
         let value_bytes = value.0.to_bytes_be();
-        let mut value_u256 = [0u8; 32];
+        let mut value_u256 = [0_u8; 32];
         if value_bytes.len() <= 32 {
             value_u256[32 - value_bytes.len()..].copy_from_slice(&value_bytes);
         } else {
@@ -216,15 +216,15 @@ impl<Unit> From<CheckedAmountOf<Unit>> for candid::Nat {
 
 impl<Unit> fmt::Debug for CheckedAmountOf<Unit> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use thousands::Separable;
-        write!(f, "{}", self.0.separate_with_underscores())
+        use ic_utils_thousands::separate_with_underscores;
+        write!(f, "{}", separate_with_underscores(self.0))
     }
 }
 
 impl<Unit> fmt::Display for CheckedAmountOf<Unit> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use thousands::Separable;
-        write!(f, "{}", self.0.separate_with_underscores())
+        use ic_utils_thousands::separate_with_underscores;
+        write!(f, "{}", separate_with_underscores(self.0))
     }
 }
 

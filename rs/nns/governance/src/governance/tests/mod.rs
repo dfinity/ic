@@ -7,7 +7,9 @@ use crate::{
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::{E8, assert_is_err, assert_is_ok};
+use ic_nervous_system_common::{
+    E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, assert_is_err, assert_is_ok,
+};
 #[cfg(feature = "test")]
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
@@ -22,6 +24,7 @@ use lazy_static::lazy_static;
 use maplit::hashmap;
 use std::{convert::TryFrom, time::Duration};
 
+mod get_maturity_modulation;
 mod get_neuron_index;
 mod list_neurons;
 mod list_proposals;
@@ -1000,7 +1003,7 @@ mod metrics_tests {
         assert!(s.contains(&format!(
             "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"1\",proposal_topic=\"{}\",proposal_type=\"{}\"}} {} 10",
             Topic::NeuronManagement.as_str_name(),
-            &manage_neuron_action.as_str_name(),
+            manage_neuron_action.as_str_name(),
             deadline_ts,
         )));
 
@@ -1010,7 +1013,7 @@ mod metrics_tests {
         assert!(s.contains(&format!(
             "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"3\",proposal_topic=\"{}\",proposal_type=\"{}\"}} {} 10",
             Topic::Governance.as_str_name(),
-            &motion_action.as_str_name(),
+            motion_action.as_str_name(),
             deadline_ts,
         )));
 
@@ -1131,7 +1134,7 @@ mod neuron_archiving_tests {
             let staked_maturity_e8s_equivalent = Some(staked_maturity_e8s_equivalent);
             let mut neuron = NeuronBuilder::new(
                 NeuronId { id: 1 },
-                Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+                Subaccount::try_from(&[0_u8; 32] as &[u8]).unwrap(),
                 PrincipalId::new_user_test_id(1),
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: 42,
@@ -1219,7 +1222,7 @@ fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
         .add_neuron(
             NeuronBuilder::new(
                 NeuronId { id: 1 },
-                Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+                Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
                 PrincipalId::new_user_test_id(1),
                 DissolveStateAndAge::NotDissolving {
                     dissolve_delay_seconds: 42,
@@ -1280,7 +1283,7 @@ fn test_validate_execute_nns_function() {
         (
             ExecuteNnsFunction {
                 nns_function: NnsFunction::CreateSubnet as i32,
-                payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX + 1],
+                payload: vec![1_u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX + 1],
             },
             format!(
                 "The maximum NNS function payload size in a proposal action is {} bytes, \
@@ -1345,7 +1348,7 @@ fn test_validate_execute_nns_function() {
     let ok_test_cases = vec![
         ExecuteNnsFunction {
             nns_function: NnsFunction::CreateSubnet as i32,
-            payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX],
+            payload: vec![1_u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX],
         },
         ExecuteNnsFunction {
             nns_function: NnsFunction::AssignNoid as i32,
@@ -1394,6 +1397,66 @@ fn test_validate_execute_nns_function() {
         let actual_result = governance.validate_execute_nns_function(&valid_execute_nns_function);
         assert_eq!(actual_result, Ok(()));
     }
+}
+
+/// A node provider stored with id = None (possible from pre-validation-era state) must not
+/// cause validate_assign_noid_payload to panic. It should be treated as non-matching and
+/// the function should return a clean "not registered" error.
+#[test]
+fn test_validate_assign_noid_tolerates_node_provider_with_none_id() {
+    // Step 1: Prepare the world.
+    // Mix a legacy entry (id = None) with a valid entry to ensure neither panics nor false match.
+    let governance = Governance::new(
+        api::Governance {
+            economics: Some(api::NetworkEconomics::with_default_values()),
+            node_providers: vec![
+                api::NodeProvider {
+                    // This used to cause a panic in the code under test,
+                    // whereas, now, it just logs a warning.
+                    id: None,
+                    ..Default::default()
+                },
+                api::NodeProvider {
+                    id: Some(PrincipalId::new_node_test_id(1)),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        },
+        Arc::new(MockEnvironment::new(vec![], 100)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
+    );
+
+    let new_valid_assign_node_operator_proposal_action = |node_provider_principal_id| {
+        let payload = Encode!(&AddNodeOperatorPayload {
+            node_provider_principal_id: Some(node_provider_principal_id),
+            ..Default::default()
+        })
+        .unwrap();
+        ValidExecuteNnsFunction::try_from(ExecuteNnsFunction {
+            nns_function: NnsFunction::AssignNoid as i32,
+            payload,
+        })
+        .unwrap()
+    };
+
+    // Step 2: Run the code under test.
+    // The following calls must not panic — that's the main thing this test verifies.
+    let unregistered_node_provider_result = governance.validate_execute_nns_function(
+        &new_valid_assign_node_operator_proposal_action(PrincipalId::new_node_test_id(99)),
+    );
+    let registered_node_provider_result = governance.validate_execute_nns_function(
+        &new_valid_assign_node_operator_proposal_action(PrincipalId::new_node_test_id(1)),
+    );
+
+    // Step 3: Verify result(s).
+    // Unregistered provider → clean error, no panic.
+    let err = unregistered_node_provider_result.unwrap_err();
+    assert!(err.error_message.contains("not registered"));
+    // Registered provider → ok.
+    assert_eq!(registered_node_provider_result, Ok(()));
 }
 
 #[test]
@@ -1717,4 +1780,58 @@ fn test_record_known_neuron_abstentions() {
             vec![]
         );
     });
+}
+
+#[test]
+fn test_post_upgrade_migrates_neuron_minimum_dissolve_delay_to_vote_seconds() {
+    let _mission70 = crate::temporarily_enable_mission_70_voting_rewards();
+    // Simulate the old production state: 6 months.
+    let mut heap_data = HeapGovernanceData {
+        economics: Some(NetworkEconomics {
+            voting_power_economics: Some(VotingPowerEconomics {
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(6 * ONE_MONTH_SECONDS),
+                ..VotingPowerEconomics::with_default_values()
+            }),
+            ..NetworkEconomics::with_default_values()
+        }),
+        ..Default::default()
+    };
+
+    Governance::maybe_reduce_neuron_minimum_dissolve_delay_to_vote_seconds(&mut heap_data);
+
+    let actual = heap_data
+        .economics
+        .as_ref()
+        .unwrap()
+        .voting_power_economics
+        .as_ref()
+        .unwrap()
+        .neuron_minimum_dissolve_delay_to_vote_seconds;
+    assert_eq!(
+        actual,
+        Some(
+            VotingPowerEconomics::MISSION_70_DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
+        ),
+    );
+}
+
+#[test]
+#[should_panic(expected = "unexpectedly below 2 weeks")]
+fn test_post_upgrade_panics_if_neuron_minimum_dissolve_delay_to_vote_seconds_below_two_weeks() {
+    let _mission70 = crate::temporarily_enable_mission_70_voting_rewards();
+    let one_week_seconds = 7 * ONE_DAY_SECONDS;
+
+    let mut heap_data = HeapGovernanceData {
+        economics: Some(NetworkEconomics {
+            voting_power_economics: Some(VotingPowerEconomics {
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(one_week_seconds),
+                ..VotingPowerEconomics::with_default_values()
+            }),
+            ..NetworkEconomics::with_default_values()
+        }),
+        ..Default::default()
+    };
+
+    // Should panic because the value is below 2 weeks.
+    Governance::maybe_reduce_neuron_minimum_dissolve_delay_to_vote_seconds(&mut heap_data);
 }

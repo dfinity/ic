@@ -45,7 +45,7 @@ impl ProposalCriticality {
 /// It also does not make much sense for *_of_total to be greater than *_of_exercised, since the
 /// denominator of the former is not less than that of the latter (and the numerator for both is the
 /// same). However, if such a thing were to occur, it would still be possible for a proposal to
-/// pass. It's just that that *_of_exercised requirement would be superfluous.
+/// pass. It's just that *_of_exercised requirement would be superfluous.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct VotingPowerThresholds {
     /// Out of the total available voting power, this much must vote to adopt.

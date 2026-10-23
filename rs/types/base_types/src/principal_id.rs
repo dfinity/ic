@@ -97,8 +97,17 @@ impl PrincipalId {
     pub const MAX_LENGTH_IN_BYTES: usize = 29;
     const HASH_LEN_IN_BYTES: usize = 28;
 
-    pub fn as_slice(&self) -> &[u8] {
+    pub const fn as_slice(&self) -> &[u8] {
         self.0.as_slice()
+    }
+
+    #[allow(clippy::len_without_is_empty)]
+    pub const fn len(&self) -> u8 {
+        self.0.len()
+    }
+
+    pub const fn as_fixed_bytes(&self) -> &[u8; Self::MAX_LENGTH_IN_BYTES] {
+        self.0.as_fixed_bytes()
     }
 
     pub fn to_vec(&self) -> Vec<u8> {
@@ -231,7 +240,7 @@ impl PrincipalId {
     }
 
     pub const fn new_user_test_id(n: u64) -> Self {
-        let mut bytes = [0u8; Self::MAX_LENGTH_IN_BYTES];
+        let mut bytes = [0_u8; Self::MAX_LENGTH_IN_BYTES];
         let n_bytes = n.to_le_bytes();
 
         // Copy the u64 bytes into the array
@@ -360,7 +369,7 @@ impl<'a> Arbitrary<'a> for PrincipalId {
     fn arbitrary(u: &mut Unstructured<'a>) -> ArbitraryResult<Self> {
         let principal = match u8::arbitrary(u)? {
             u8::MAX => PrincipalId(Principal::management_canister()),
-            254u8 => PrincipalId::new_anonymous(),
+            254_u8 => PrincipalId::new_anonymous(),
             _ => {
                 let length: usize = u.int_in_range(1..=PrincipalId::MAX_LENGTH_IN_BYTES)?;
                 let mut result: Vec<u8> = Vec::with_capacity(length);

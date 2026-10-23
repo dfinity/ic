@@ -3,7 +3,7 @@ use super::*;
 use crate::{
     governance::Environment,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
-    pb::v1::Subaccount,
+    pb::v1::{MaturityModulation, Subaccount},
     test_utils::{MockEnvironment, MockRandomness},
 };
 
@@ -89,7 +89,7 @@ fn test_initiate_maturity_disbursement_to_provided_account_successful() {
                 to_account: Some(Account {
                     owner: Some(PrincipalId::new_user_test_id(2)),
                     subaccount: Some(Subaccount {
-                        subaccount: vec![2u8; 32]
+                        subaccount: vec![2_u8; 32]
                     }),
                 }),
                 to_account_identifier: None,
@@ -112,7 +112,7 @@ fn test_initiate_maturity_disbursement_to_provided_account_successful() {
             destination: Some(Destination::AccountToDisburseTo(Account {
                 owner: Some(PrincipalId::new_user_test_id(2)),
                 subaccount: Some(Subaccount {
-                    subaccount: vec![2u8; 32]
+                    subaccount: vec![2_u8; 32]
                 }),
             })),
             timestamp_of_disbursement_seconds: NOW_SECONDS,
@@ -206,7 +206,7 @@ fn test_initiate_maturity_disbursement_account_identifier_invalid() {
                 percentage_to_disburse: 50,
                 to_account: None,
                 to_account_identifier: Some(AccountIdentifierProto {
-                    hash: vec![1u8; 1000],
+                    hash: vec![1_u8; 1000],
                 }),
             },
             NOW_SECONDS,
@@ -233,11 +233,11 @@ fn test_initiate_maturity_disbursement_both_account_and_account_identifier_inval
                 to_account: Some(Account {
                     owner: Some(PrincipalId::new_user_test_id(2)),
                     subaccount: Some(Subaccount {
-                        subaccount: vec![2u8; 32]
+                        subaccount: vec![2_u8; 32]
                     }),
                 }),
                 to_account_identifier: Some(AccountIdentifierProto {
-                    hash: vec![3u8; 32],
+                    hash: vec![3_u8; 32],
                 }),
             },
             NOW_SECONDS,
@@ -342,7 +342,7 @@ fn test_initiate_maturity_disbursement_neuron_invalid_destination() {
                 to_account: Some(Account {
                     owner: Some(PrincipalId::new_user_test_id(2)),
                     subaccount: Some(Subaccount {
-                        subaccount: vec![1u8; 33],
+                        subaccount: vec![1_u8; 33],
                     }),
                 }),
                 to_account_identifier: None,
@@ -537,15 +537,16 @@ fn set_governance_for_test(
     maturity_modulation: i32,
 ) {
     let mut governance = Governance::new(
-        GovernanceApi {
-            cached_daily_maturity_modulation_basis_points: Some(maturity_modulation),
-            ..Default::default()
-        },
+        GovernanceApi::default(),
         MOCK_ENVIRONMENT.with(|env| env.clone()),
         Arc::new(mock_ledger),
         Arc::new(MockCMC::default()),
         Box::new(MockRandomness::new()),
     );
+    governance.heap_data.maturity_modulation = Some(MaturityModulation {
+        current_value_permyriad: Some(maturity_modulation),
+        ..Default::default()
+    });
     for neuron in neurons {
         governance.neuron_store.add_neuron(neuron).unwrap();
     }
@@ -617,9 +618,7 @@ async fn test_finalize_maturity_disbursement_no_maturity_modulation() {
         DEFAULT_MATURITY_MODULATION_BASIS_POINTS,
     );
     TEST_GOVERNANCE.with_borrow_mut(|governance| {
-        governance
-            .heap_data
-            .cached_daily_maturity_modulation_basis_points = None;
+        governance.heap_data.maturity_modulation = None;
     });
 
     // Step 2: Initiate the maturity disbursement and advance to disbursement time.

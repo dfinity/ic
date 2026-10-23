@@ -14,7 +14,7 @@ pub(crate) fn check_node_operator_invariants(
     strict: bool,
 ) -> Result<(), InvariantCheckError> {
     if strict {
-        for node_record in get_all_node_records(snapshot) {
+        for node_record in get_all_node_records(snapshot).into_values() {
             let node_operator_id = PrincipalId::try_from(node_record.node_operator_id).unwrap();
             let key = make_node_operator_record_key(node_operator_id);
             match snapshot.get(key.as_bytes()) {

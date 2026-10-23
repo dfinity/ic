@@ -6,13 +6,11 @@ use ic_config::{
 use ic_embedders::{
     wasm_utils::instrumentation::WasmMemoryType,
     wasm_utils::instrumentation::instruction_to_cost,
-    wasmtime_embedder::{
-        CanisterMemoryType,
-        system_api::{ApiType, sandbox_safe_system_state::CallbackUpdate},
-        system_api_complexity,
-    },
+    wasmtime_embedder::{CanisterMemoryType, system_api::ApiType, system_api_complexity},
 };
-use ic_interfaces::execution_environment::{HypervisorError, SystemApi, TrapCode};
+use ic_interfaces::execution_environment::{
+    CanisterBacktrace, Heap, HypervisorError, SystemApi, TrapCode,
+};
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
@@ -315,11 +313,9 @@ fn stack_overflow_traps() {
                 panic!("Unexpected error {err:?}");
             };
             assert_eq!(trap_code, TrapCode::StackOverflow);
-            // TODO(DSM): Re-enable backtrace checking when backtraces are enabled again.
-            // for (_index, name) in backtrace.unwrap().0 {
-            //     assert_eq!(name, Some("f".to_string()));
-            // }
-            assert!(backtrace.is_none());
+            for (_index, name) in backtrace.unwrap().0 {
+                assert_eq!(name, Some("f".to_string()));
+            }
         })
         .unwrap();
 
@@ -580,67 +576,6 @@ fn zero_size_memory() {
         panic!("Expected CalledTrap error, but got {err}.");
     };
     assert_eq!(message, std::str::from_utf8(&[0; 0]).unwrap().to_string());
-}
-
-#[cfg(target_os = "linux")]
-#[test]
-fn read_before_write_stats() {
-    // This wasm does a direct write to page 0.
-    let direct_wat = r#"
-            (module
-                (import "ic0" "msg_reply" (func $msg_reply))
-                (memory (export "memory") 1)
-                (func (export "canister_update write")
-                    (i32.store (i32.const 0) (i32.const 111))
-                    (call $msg_reply)
-                )
-            )"#;
-    let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .with_wat(direct_wat)
-        .with_api_type(ApiType::update(
-            UNIX_EPOCH,
-            vec![],
-            Cycles::zero(),
-            PrincipalId::new_user_test_id(0),
-            0.into(),
-        ))
-        .build();
-    instance
-        .run(FuncRef::Method(WasmMethod::Update("write".to_string())))
-        .unwrap();
-    let stats = instance.get_stats();
-    assert_eq!(stats.wasm_direct_write_count, 1);
-    assert_eq!(stats.wasm_read_before_write_count, 0);
-
-    // This wasm does a read then write to page 0.
-    let read_then_write_wat = r#"
-            (module
-                (import "ic0" "msg_reply" (func $msg_reply))
-                (memory (export "memory") 1)
-                (func (export "canister_update write")
-                    (drop (i32.load (i32.const 4096)))
-                    (i32.store (i32.const 4096) (i32.const 111))
-                    (call $msg_reply)
-                )
-            )"#;
-    let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .with_wat(read_then_write_wat)
-        .with_api_type(ApiType::update(
-            UNIX_EPOCH,
-            vec![],
-            Cycles::zero(),
-            PrincipalId::new_user_test_id(0),
-            0.into(),
-        ))
-        .build();
-    instance
-        .run(FuncRef::Method(WasmMethod::Update("write".to_string())))
-        .unwrap();
-    let stats = instance.get_stats();
-    assert_eq!(stats.wasm_direct_write_count, 0);
-    assert_eq!(stats.wasm_read_before_write_count, 1);
 }
 
 #[test]
@@ -1304,6 +1239,52 @@ fn stable64_read_out_of_bounds() {
     assert_eq!(trap_code, StableMemoryOutOfBounds);
 }
 
+/// A `stable64_read`/`stable64_write` with a `size` argument so large that
+/// `size + overhead` would overflow an `i64` must trap.
+#[test]
+fn stable64_read_write_huge_size_traps_on_bounds() {
+    fn func_ref(name: &str) -> FuncRef {
+        FuncRef::Method(WasmMethod::Update(name.to_string()))
+    }
+
+    // 2^63: `size + overhead` wraps to a negative i64, which previously forced
+    // the instruction counter to a hugely negative value before any bounds
+    // check ran.
+    let wat = r#"
+        (module
+            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+            (import "ic0" "stable64_read"
+                (func $stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+            (import "ic0" "stable64_write"
+                (func $stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+            (func (export "canister_update test_read")
+                (drop (call $stable_grow (i32.const 1)))
+                (call $stable64_read (i64.const 0) (i64.const 0) (i64.const 0x8000000000000000))
+            )
+            (func (export "canister_update test_write")
+                (drop (call $stable_grow (i32.const 1)))
+                (call $stable64_write (i64.const 0) (i64.const 0) (i64.const 0x8000000000000000))
+            )
+            (memory 1 1)
+        )"#;
+
+    use TrapCode::*;
+
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+    let err = instance.run(func_ref("test_read")).unwrap_err();
+    let HypervisorError::Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {err}");
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
+
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+    let err = instance.run(func_ref("test_write")).unwrap_err();
+    let HypervisorError::Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {err}");
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
+}
+
 #[test]
 fn stable_write_out_of_bounds() {
     fn func_ref(name: &str) -> FuncRef {
@@ -1655,19 +1636,11 @@ fn wasm_heap_oob_access() {
     let err = instance
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
-    // TODO(DSM): Re-enable backtrace checking when backtraces are enabled again.
-    // assert_eq!(
-    //     err,
-    //     HypervisorError::Trapped {
-    //         trap_code: TrapCode::HeapOutOfBounds,
-    //         backtrace: Some(CanisterBacktrace(vec![(5, Some("foo".to_string()))]))
-    //     }
-    // );
     assert_eq!(
         err,
         HypervisorError::Trapped {
             trap_code: TrapCode::HeapOutOfBounds,
-            backtrace: None
+            backtrace: Some(CanisterBacktrace(vec![(5, Some("foo".to_string()))]))
         }
     );
 }
@@ -2176,6 +2149,8 @@ fn wasm64_import_system_api_functions() {
         (func $ic0_subnet_self_size (result i64)))
       (import "ic0" "subnet_self_copy"
         (func $ic0_subnet_self_copy (param i64) (param i64) (param i64)))
+      (import "ic0" "subnet_self_node_count"
+        (func $ic0_subnet_self_node_count (result i32)))
 
         (global $g1 (export "g1") (mut i64) (i64.const 0))
         (func $test (export "canister_update test")
@@ -2255,13 +2230,14 @@ fn wasm64_msg_caller_copy() {
     )"#;
 
     let caller = user_test_id(24).get();
-    let payload = vec![0u8; 32];
+    let payload = vec![0_u8; 32];
     let api = ApiType::update(
         UNIX_EPOCH,
         payload,
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -2331,6 +2307,7 @@ fn wasm64_msg_arg_data_copy() {
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -2391,7 +2368,7 @@ fn wasm64_msg_method_name_copy() {
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
     let msg_name = "test".to_string();
-    let api = ApiType::inspect_message(caller, msg_name.clone(), payload, UNIX_EPOCH);
+    let api = ApiType::inspect_message(caller, msg_name.clone(), payload, UNIX_EPOCH, None);
 
     let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
@@ -2461,6 +2438,7 @@ fn wasm64_msg_reply_data_append() {
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
     let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
@@ -2511,6 +2489,7 @@ fn wasm64_msg_reject() {
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
     let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
@@ -2561,6 +2540,7 @@ fn wasm64_reject_msg_copy() {
         call_context_test_id(13),
         false,
         NumInstructions::new(700),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -2627,6 +2607,7 @@ fn wasm64_root_key() {
         Cycles::zero(),
         user_test_id(24).get(),
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -2667,7 +2648,12 @@ fn wasm64_root_key() {
         .store_data_mut()
         .system_api_mut()
         .unwrap()
-        .ic0_root_key_copy(0, 0, expected_size, &mut expected_heap)
+        .ic0_root_key_copy(
+            0,
+            0,
+            expected_size,
+            &mut Heap::unchecked(&mut expected_heap),
+        )
         .unwrap();
     assert_eq!(wasm_heap, expected_heap);
 }
@@ -2699,6 +2685,7 @@ fn wasm64_canister_self_copy() {
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -2769,6 +2756,7 @@ fn wasm64_subnet_self_size() {
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -2791,6 +2779,59 @@ fn wasm64_subnet_self_size() {
                 .unwrap()
                 .ic0_subnet_self_size()
                 .unwrap() as i64
+        )
+    );
+}
+
+#[test]
+fn wasm64_subnet_self_node_count() {
+    // `ic0.subnet_self_node_count` returns an `i32` irrespective of the main
+    // memory type, so a Wasm64 canister imports it with an `i32` result too.
+    let wat = r#"
+    (module
+      (import "ic0" "subnet_self_node_count"
+        (func $ic0_subnet_self_node_count (result i32)))
+
+      (global $g1 (export "g1") (mut i32) (i32.const 0))
+      (func $test (export "canister_update test")
+        (call $ic0_subnet_self_node_count)
+        global.set $g1
+      )
+
+      (memory (export "memory") i64 1)
+    )"#;
+
+    let caller = user_test_id(24).get();
+    let payload: Vec<u8> = vec![1, 3, 5, 7];
+    let api = ApiType::update(
+        UNIX_EPOCH,
+        payload.clone(),
+        Cycles::zero(),
+        caller,
+        call_context_test_id(13),
+        None,
+    );
+
+    let config = ic_config::embedders::Config::default();
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_api_type(api)
+        .build();
+
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    assert_eq!(
+        res.exported_globals[0],
+        Global::I32(
+            instance
+                .store_data()
+                .system_api()
+                .unwrap()
+                .ic0_subnet_self_node_count()
+                .unwrap() as i32
         )
     );
 }
@@ -2822,6 +2863,7 @@ fn wasm64_subnet_self_copy() {
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -2861,7 +2903,12 @@ fn wasm64_subnet_self_copy() {
         .store_data()
         .system_api()
         .unwrap()
-        .ic0_subnet_self_copy(0, 0, subnet_id_size, &mut expected_heap)
+        .ic0_subnet_self_copy(
+            0,
+            0,
+            subnet_id_size,
+            &mut Heap::unchecked(&mut expected_heap),
+        )
         .unwrap();
 
     assert_eq!(wasm_heap, expected_heap);
@@ -2896,6 +2943,7 @@ fn wasm64_trap() {
         Cycles::zero(),
         user_test_id(24).get(),
         call_context_test_id(13),
+        None,
     );
     let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
@@ -2936,6 +2984,7 @@ fn wasm64_canister_cycle_balance128() {
         Cycles::zero(),
         user_test_id(24).get(),
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -3001,6 +3050,7 @@ fn wasm64_canister_liquid_cycle_balance128() {
         Cycles::zero(),
         user_test_id(24).get(),
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -3031,7 +3081,7 @@ fn wasm64_canister_liquid_cycle_balance128() {
         .store_data_mut()
         .system_api_mut()
         .unwrap()
-        .ic0_canister_liquid_cycle_balance128(0, &mut expected_heap)
+        .ic0_canister_liquid_cycle_balance128(0, &mut Heap::unchecked(&mut expected_heap))
         .unwrap();
     assert_eq!(wasm_heap, expected_heap);
 
@@ -3075,6 +3125,7 @@ fn wasm64_msg_cycles_refunded128() {
         call_context_test_id(13),
         false,
         NumInstructions::new(700),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -3137,6 +3188,7 @@ fn wasm64_cycles_burn128() {
         Cycles::zero(),
         user_test_id(24).get(),
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -3210,6 +3262,7 @@ fn large_wasm64_memory_allocation_test() {
             Cycles::zero(),
             user_test_id(24).get(),
             call_context_test_id(13),
+            None,
         ))
         .with_wat(&wat)
         .build();
@@ -3276,6 +3329,7 @@ fn large_wasm64_stable_read_write_test() {
             Cycles::zero(),
             user_test_id(24).get(),
             call_context_test_id(13),
+            None,
         ))
         .with_wat(wat)
         .build();
@@ -3340,6 +3394,7 @@ fn wasm64_saturate_fun_index() {
         Cycles::zero(),
         user_test_id(24).get(),
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -3356,40 +3411,32 @@ fn wasm64_saturate_fun_index() {
         .unwrap()
         .take_system_state_modifications();
 
-    // call_perform should trigger one callback update
-    let callback_update = system_state_modifications
-        .callback_updates
+    // call_perform should enqueue one OutputRequest carrying its callback closures.
+    let output_request = system_state_modifications
+        .requests()
         .first()
-        .unwrap()
-        .clone();
-    match callback_update {
-        CallbackUpdate::Register(_id, callback) => {
-            assert_eq!(
-                callback.on_reply,
-                WasmClosure {
-                    func_idx: u32::MAX,
-                    env: 22
-                }
-            );
-            assert_eq!(
-                callback.on_reject,
-                WasmClosure {
-                    func_idx: u32::MAX,
-                    env: 44
-                }
-            );
-            assert_eq!(
-                callback.on_cleanup,
-                Some(WasmClosure {
-                    func_idx: u32::MAX,
-                    env: 66
-                })
-            );
+        .expect("Expected an outgoing request with its callback");
+    assert_eq!(
+        output_request.on_reply,
+        WasmClosure {
+            func_idx: u32::MAX,
+            env: 22
         }
-        CallbackUpdate::Unregister(_) => {
-            panic!("Expected registration of new calback")
+    );
+    assert_eq!(
+        output_request.on_reject,
+        WasmClosure {
+            func_idx: u32::MAX,
+            env: 44
         }
-    }
+    );
+    assert_eq!(
+        output_request.on_cleanup,
+        Some(WasmClosure {
+            func_idx: u32::MAX,
+            env: 66
+        })
+    );
 }
 
 #[test]
@@ -3499,9 +3546,6 @@ fn test_environment_variable_system_api() {
     env_vars.insert("TEST_VAR_1".to_string(), "Hello World".to_string());
     env_vars.insert("TEST_VAR_2".to_string(), "Test Value".to_string());
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.environment_variables = FlagStatus::Enabled;
-
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_api_type(ApiType::update(
             UNIX_EPOCH,
@@ -3509,8 +3553,8 @@ fn test_environment_variable_system_api() {
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),
             0.into(),
+            None,
         ))
-        .with_config(config)
         .with_environment_variables(env_vars)
         .with_wat(wat)
         .build();
@@ -3527,50 +3571,9 @@ fn test_environment_variable_system_api() {
     );
 }
 
-// TODO(EXC-2071): Delete test when feature flag is removed.
-#[test]
-fn test_environment_variable_system_api_not_enabled() {
-    let wat = r#"
-    (module
-        (import "ic0" "env_var_count" (func $ic0_env_var_count (result i32)))
-
-        (func (export "canister_update go")
-            (call $ic0_env_var_count)
-            drop
-        )
-    )"#;
-
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.environment_variables = FlagStatus::Disabled;
-
-    let builder = WasmtimeInstanceBuilder::new()
-        .with_wat(wat)
-        .with_config(config)
-        .with_api_type(ApiType::update(
-            UNIX_EPOCH,
-            vec![],
-            Cycles::zero(),
-            PrincipalId::new_user_test_id(0),
-            0.into(),
-        ));
-
-    let instance = builder.try_build();
-    assert!(instance.is_err());
-    assert_matches!(
-        instance.err().unwrap().0,
-        HypervisorError::WasmEngineError { .. }
-    );
-}
-
 #[cfg(target_os = "linux")]
-fn run_instance_and_check_stats(
-    wat: &str,
-    use_deterministic_tracker: bool,
-    expected_os_pages: usize,
-    expected_wasm_pages: usize,
-) {
+fn run_instance_and_check_stats(wat: &str, expected_os_pages: usize, expected_wasm_pages: usize) {
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(use_deterministic_tracker)
         .with_wat(wat)
         .with_api_type(ApiType::update(
             UNIX_EPOCH,
@@ -3578,6 +3581,7 @@ fn run_instance_and_check_stats(
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),
             0.into(),
+            None,
         ))
         .build();
 
@@ -3587,129 +3591,15 @@ fn run_instance_and_check_stats(
 
     let stats = instance.get_stats();
 
-    if use_deterministic_tracker {
-        // Deterministic tracker gives exact counts
-        assert_eq!(
-            stats.wasm_accessed_os_pages_count, expected_os_pages,
-            "Expected exactly {} accessed OS pages, got {}",
-            expected_os_pages, stats.wasm_accessed_os_pages_count
-        );
-        assert_eq!(
-            stats.wasm_accessed_wasm_pages_count, expected_wasm_pages,
-            "Expected exactly {} accessed Wasm pages, got {}",
-            expected_wasm_pages, stats.wasm_accessed_wasm_pages_count
-        );
-    } else {
-        // Prefetching tracker gives at least the expected counts
-        assert!(
-            stats.wasm_accessed_os_pages_count >= expected_os_pages,
-            "Expected at least {} accessed OS pages, got {}",
-            expected_os_pages,
-            stats.wasm_accessed_os_pages_count
-        );
-        assert!(
-            stats.wasm_accessed_wasm_pages_count >= expected_wasm_pages,
-            "Expected at least {} accessed Wasm pages, got {}",
-            expected_wasm_pages,
-            stats.wasm_accessed_wasm_pages_count
-        );
-    }
-}
-
-#[cfg(target_os = "linux")]
-#[test]
-fn wasm_accessed_os_pages_count_is_correct() {
-    // Access a single OS page within the first Wasm page
-    // With prefetching enabled, accessing one page will prefetch multiple pages.
-    run_instance_and_check_stats(
-        r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (memory (export "memory") 2)
-            (func (export "canister_update test")
-                ;; Read from offset 0 (first OS page of first Wasm page)
-                (drop (i32.load (i32.const 0)))
-                (call $msg_reply)
-            )
-        )"#,
-        false,
-        1,
-        1,
+    assert_eq!(
+        stats.wasm_accessed_os_pages_count, expected_os_pages,
+        "Expected exactly {} accessed OS pages, got {}",
+        expected_os_pages, stats.wasm_accessed_os_pages_count
     );
-
-    // Access multiple OS pages within the same Wasm page
-    // With prefetching, we should access at least 3 OS pages, but likely more.
-    run_instance_and_check_stats(
-        r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (memory (export "memory") 2)
-            (func (export "canister_update test")
-                ;; Read from offset 0 (OS page 0)
-                (drop (i32.load (i32.const 0)))
-                ;; Read from offset 4096 (OS page 1)
-                (drop (i32.load (i32.const 4096)))
-                ;; Read from offset 8192 (OS page 2)
-                (drop (i32.load (i32.const 8192)))
-                (call $msg_reply)
-            )
-        )"#,
-        false,
-        3,
-        1,
-    );
-
-    // Access OS pages across multiple Wasm pages
-    // With prefetching, we should access at least 4 OS pages across 3 Wasm pages.
-    run_instance_and_check_stats(
-        &format!(
-            r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (memory (export "memory") 3)
-            (func (export "canister_update test")
-                ;; Access first OS page of first Wasm page (offset 0)
-                (drop (i32.load (i32.const 0)))
-                ;; Access first OS page of second Wasm page (offset 65536)
-                (drop (i32.load (i32.const {})))
-                ;; Access second OS page of second Wasm page (offset 65536 + 4096)
-                (drop (i32.load (i32.const {})))
-                ;; Access first OS page of third Wasm page (offset 131072)
-                (drop (i32.load (i32.const {})))
-                (call $msg_reply)
-            )
-        )"#,
-            WASM_PAGE_SIZE_IN_BYTES,
-            WASM_PAGE_SIZE_IN_BYTES + ic_sys::PAGE_SIZE,
-            2 * WASM_PAGE_SIZE_IN_BYTES
-        ),
-        false,
-        4,
-        3,
-    );
-
-    // Verify that both reads and writes are counted
-    // With prefetching, we should access at least 4 OS pages (2 reads + 2 writes).
-    run_instance_and_check_stats(
-        r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (memory (export "memory") 2)
-            (func (export "canister_update test")
-                ;; Read from OS page 0
-                (drop (i32.load (i32.const 100)))
-                ;; Write to OS page 1
-                (i32.store (i32.const 5000) (i32.const 42))
-                ;; Read from OS page 2
-                (drop (i32.load (i32.const 9000)))
-                ;; Write to OS page 3
-                (i32.store (i32.const 13000) (i32.const 43))
-                (call $msg_reply)
-            )
-        )"#,
-        false,
-        4,
-        1,
+    assert_eq!(
+        stats.wasm_accessed_wasm_pages_count, expected_wasm_pages,
+        "Expected exactly {} accessed Wasm pages, got {}",
+        expected_wasm_pages, stats.wasm_accessed_wasm_pages_count
     );
 }
 
@@ -3730,7 +3620,6 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
                 (call $msg_reply)
             )
         )"#,
-        true,
         OS_PAGES_PER_WASM_PAGE,
         1,
     );
@@ -3751,7 +3640,6 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
                 (call $msg_reply)
             )
         )"#,
-        true,
         OS_PAGES_PER_WASM_PAGE,
         1,
     );
@@ -3773,7 +3661,6 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
                 (call $msg_reply)
             )
         )"#,
-        true,
         OS_PAGES_PER_WASM_PAGE,
         1,
     );
@@ -3798,7 +3685,6 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
             WASM_PAGE_SIZE_IN_BYTES,
             2 * WASM_PAGE_SIZE_IN_BYTES
         ),
-        true,
         3 * OS_PAGES_PER_WASM_PAGE,
         3,
     );
@@ -3817,8 +3703,517 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
                 (call $msg_reply)
             )
         )"#,
-        true,
         2 * OS_PAGES_PER_WASM_PAGE,
         2,
+    );
+}
+
+#[cfg(target_os = "linux")]
+fn run_wasm_and_get_instructions_used(
+    wat: &str,
+    page_overhead: NumInstructions,
+) -> NumInstructions {
+    let config = Config {
+        page_overhead,
+        ..Default::default()
+    };
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_api_type(ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            PrincipalId::new_user_test_id(0),
+            0.into(),
+            None,
+        ))
+        .build();
+
+    let instruction_limit = DEFAULT_NUM_INSTRUCTIONS;
+    instance.set_instruction_counter(instruction_limit.get() as i64);
+
+    instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    let remaining = instance.instruction_counter() as u64;
+    NumInstructions::from(instruction_limit.get() - remaining)
+}
+
+/// Asserts how many OS pages the memory tracker charges for while running
+/// `wat`, by running it twice and diffing: once with a per-OS-page overhead of
+/// zero (which isolates the rest of the message cost) and once with an overhead
+/// of one instruction per OS page (so the difference is the page count).
+#[cfg(target_os = "linux")]
+fn assert_deterministic_charges_extra(
+    wat: &str,
+    expected_extra_instructions: u64,
+    description: &str,
+) {
+    let uncharged = run_wasm_and_get_instructions_used(wat, NumInstructions::new(0));
+    let charged = run_wasm_and_get_instructions_used(wat, NumInstructions::new(1));
+    assert_eq!(
+        charged.get() - uncharged.get(),
+        expected_extra_instructions,
+        "{}",
+        description
+    );
+}
+
+#[cfg(target_os = "linux")]
+fn make_memory_access_wat(body: &str) -> String {
+    format!(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (memory (export "memory") 8)
+            (func (export "canister_update test")
+                {}
+                (call $msg_reply)
+            )
+        )"#,
+        body
+    )
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_accessed_pages() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Single read - charges for 1 Wasm page accessed (16 OS pages)
+    let wat = make_memory_access_wat("(drop (i32.load (i32.const 0)))");
+    assert_deterministic_charges_extra(
+        &wat,
+        OS_PAGES_PER_WASM_PAGE as u64,
+        &format!(
+            "Expected {} extra instructions for accessing 1 Wasm page",
+            OS_PAGES_PER_WASM_PAGE
+        ),
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_dirty_pages() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Single write - charges for access (16) + dirty (16) = 32 OS pages
+    let wat = make_memory_access_wat("(i32.store (i32.const 100) (i32.const 42))");
+    assert_deterministic_charges_extra(
+        &wat,
+        2 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 32 extra instructions (16 for access + 16 for dirty)",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_multiple_pages() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // 2 reads + 1 write across 3 different Wasm pages
+    let body = format!(
+        r#"
+                (drop (i32.load (i32.const 0)))
+                (drop (i32.load (i32.const {})))
+                (i32.store (i32.const {}) (i32.const 42))
+        "#,
+        WASM_PAGE_SIZE_IN_BYTES,
+        2 * WASM_PAGE_SIZE_IN_BYTES
+    );
+    let wat = make_memory_access_wat(&body);
+
+    // Charges: 3 pages accessed (48) + 1 page dirty (16) = 64 instructions
+    assert_deterministic_charges_extra(
+        &wat,
+        4 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 64 extra instructions (3 accesses + 1 dirty)",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_no_extra_charge_for_same_page() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Multiple accesses to the same Wasm page - should only charge once
+    let wat = make_memory_access_wat(
+        r#"
+                (drop (i32.load (i32.const 100)))
+                (drop (i32.load (i32.const 200)))
+                (drop (i32.load (i32.const 300)))
+        "#,
+    );
+
+    // Only charges once for accessing the same Wasm page (16 instructions)
+    assert_deterministic_charges_extra(
+        &wat,
+        OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 16 extra instructions for accessing same page multiple times",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_read_then_write_same_page() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Read then write to the same Wasm page
+    let wat = make_memory_access_wat(
+        r#"
+                (drop (i32.load (i32.const 100)))
+                (i32.store (i32.const 200) (i32.const 42))
+        "#,
+    );
+
+    // Charges: 1 page accessed (16) + 1 page dirty (16) = 32 instructions
+    assert_deterministic_charges_extra(
+        &wat,
+        2 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 32 extra instructions (read then write same page)",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_multiple_writes_same_page() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Multiple writes to the same Wasm page - access once, dirty once
+    let wat = make_memory_access_wat(
+        r#"
+                (i32.store (i32.const 100) (i32.const 1))
+                (i32.store (i32.const 200) (i32.const 2))
+                (i32.store (i32.const 300) (i32.const 3))
+        "#,
+    );
+
+    // Charges: 1 page accessed (16) + 1 page dirty (16) = 32 instructions
+    assert_deterministic_charges_extra(
+        &wat,
+        2 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 32 extra instructions (multiple writes to same page)",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_sparse_page_access() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Access pages 0, 2, 4, 6 (sparse pattern)
+    let body = format!(
+        r#"
+                (drop (i32.load (i32.const 0)))
+                (drop (i32.load (i32.const {})))
+                (drop (i32.load (i32.const {})))
+                (drop (i32.load (i32.const {})))
+        "#,
+        2 * WASM_PAGE_SIZE_IN_BYTES,
+        4 * WASM_PAGE_SIZE_IN_BYTES,
+        6 * WASM_PAGE_SIZE_IN_BYTES
+    );
+    let wat = make_memory_access_wat(&body);
+
+    // Charges: 4 pages accessed = 64 instructions
+    assert_deterministic_charges_extra(
+        &wat,
+        4 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 64 extra instructions (4 sparse page accesses)",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_sequential_writes() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Write to 5 sequential Wasm pages
+    let body = format!(
+        r#"
+                (i32.store (i32.const 0) (i32.const 1))
+                (i32.store (i32.const {}) (i32.const 2))
+                (i32.store (i32.const {}) (i32.const 3))
+                (i32.store (i32.const {}) (i32.const 4))
+                (i32.store (i32.const {}) (i32.const 5))
+        "#,
+        WASM_PAGE_SIZE_IN_BYTES,
+        2 * WASM_PAGE_SIZE_IN_BYTES,
+        3 * WASM_PAGE_SIZE_IN_BYTES,
+        4 * WASM_PAGE_SIZE_IN_BYTES
+    );
+    let wat = make_memory_access_wat(&body);
+
+    // Charges: 5 pages accessed (80) + 5 pages dirty (80) = 160 instructions
+    assert_deterministic_charges_extra(
+        &wat,
+        10 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 160 extra instructions (5 pages accessed + 5 pages dirty)",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_mixed_read_write_pattern() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Mixed pattern: read page 0, write page 1, read page 2, write page 3
+    let body = format!(
+        r#"
+                (drop (i32.load (i32.const 0)))
+                (i32.store (i32.const {}) (i32.const 1))
+                (drop (i32.load (i32.const {})))
+                (i32.store (i32.const {}) (i32.const 2))
+        "#,
+        WASM_PAGE_SIZE_IN_BYTES,
+        2 * WASM_PAGE_SIZE_IN_BYTES,
+        3 * WASM_PAGE_SIZE_IN_BYTES
+    );
+    let wat = make_memory_access_wat(&body);
+
+    // Charges: 4 pages accessed (64) + 2 pages dirty (32) = 96 instructions
+    assert_deterministic_charges_extra(
+        &wat,
+        6 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 96 extra instructions (4 accesses + 2 dirty)",
+    );
+}
+
+// Verifies that instruction charging works correctly for pages accessed
+// in memory that was grown at runtime via memory.grow.
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_after_memory_grow() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Start with 1 page, grow by 4, then write to a page in the grown region.
+    let body = format!(
+        r#"
+                (drop (memory.grow (i32.const 4)))
+                (i32.store (i32.const {}) (i32.const 42))
+        "#,
+        // Write to the 3rd Wasm page (inside the grown region).
+        2 * WASM_PAGE_SIZE_IN_BYTES
+    );
+    let wat = format!(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (memory (export "memory") 1)
+            (func (export "canister_update test")
+                {}
+                (call $msg_reply)
+            )
+        )"#,
+        body
+    );
+
+    // 1 page accessed + dirty in the grown region = 2 * OS_PAGES_PER_WASM_PAGE
+    assert_deterministic_charges_extra(
+        &wat,
+        2 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected extra instructions for accessing a page in grown memory",
+    );
+}
+
+// Verifies that the deterministic tracker's page charges can push the
+// instruction counter below zero, leading to an out-of-instructions trap.
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_exhausts_instructions_on_page_faults() {
+    // Access many pages with a very low instruction limit.
+    // Each Wasm page access charges OS_PAGES_PER_WASM_PAGE instructions,
+    // and each write additionally charges for dirty.
+    let body = format!(
+        r#"
+                (i32.store (i32.const 0) (i32.const 1))
+                (i32.store (i32.const {}) (i32.const 2))
+                (i32.store (i32.const {}) (i32.const 3))
+                (i32.store (i32.const {}) (i32.const 4))
+                (i32.store (i32.const {}) (i32.const 5))
+                (i32.store (i32.const {}) (i32.const 6))
+                (i32.store (i32.const {}) (i32.const 7))
+                (i32.store (i32.const {}) (i32.const 8))
+        "#,
+        WASM_PAGE_SIZE_IN_BYTES,
+        2 * WASM_PAGE_SIZE_IN_BYTES,
+        3 * WASM_PAGE_SIZE_IN_BYTES,
+        4 * WASM_PAGE_SIZE_IN_BYTES,
+        5 * WASM_PAGE_SIZE_IN_BYTES,
+        6 * WASM_PAGE_SIZE_IN_BYTES,
+        7 * WASM_PAGE_SIZE_IN_BYTES,
+    );
+    let wat = format!(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (memory (export "memory") 8)
+            (func (export "canister_update test")
+                {}
+                (call $msg_reply)
+            )
+        )"#,
+        body
+    );
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_wat(&wat)
+        .with_api_type(ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            PrincipalId::new_user_test_id(0),
+            0.into(),
+            None,
+        ))
+        .build();
+
+    // Set a very low instruction limit: just enough for a few page faults
+    // but not enough for all 8 writes (each needing access + dirty charges).
+    // 8 pages * 2 (access + dirty) * 16 OS pages = 256 instructions just for
+    // page charges, plus the Wasm instructions themselves.
+    // Set the limit low enough that page charges exhaust it.
+    instance.set_instruction_counter(10);
+
+    let result = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
+    // The execution should fail with an out-of-instructions error.
+    assert_matches!(result, Err(HypervisorError::InstructionLimitExceeded(_)));
+}
+
+// An i32.load at offset WASM_PAGE_SIZE - 3 reads 4 bytes spanning two Wasm
+// pages. Verifies that both pages are charged.
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_cross_page_access() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // i32.load at the last byte of Wasm page 0 that crosses into page 1.
+    let body = format!(
+        "(drop (i32.load (i32.const {})))",
+        WASM_PAGE_SIZE_IN_BYTES - 3
+    );
+    let wat = make_memory_access_wat(&body);
+
+    // Should charge for 2 Wasm pages accessed (the load spans the boundary).
+    assert_deterministic_charges_extra(
+        &wat,
+        2 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected extra instructions for 2 pages due to cross-boundary access",
+    );
+}
+
+// Checks that dirty page and accessed page counts in InstanceStats
+// match the expected values for specific access patterns.
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_reports_correct_page_stats() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Read page 0, write page 1, write page 2
+    let body = format!(
+        r#"
+                (drop (i32.load (i32.const 0)))
+                (i32.store (i32.const {}) (i32.const 1))
+                (i32.store (i32.const {}) (i32.const 2))
+        "#,
+        WASM_PAGE_SIZE_IN_BYTES,
+        2 * WASM_PAGE_SIZE_IN_BYTES
+    );
+    let wat = make_memory_access_wat(&body);
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_wat(&wat)
+        .with_api_type(ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            PrincipalId::new_user_test_id(0),
+            0.into(),
+            None,
+        ))
+        .build();
+
+    instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    let stats = instance.get_stats();
+
+    // 3 Wasm pages accessed
+    assert_eq!(
+        stats.wasm_accessed_wasm_pages_count, 3,
+        "Expected 3 Wasm pages accessed (pages 0, 1, 2)"
+    );
+    assert_eq!(
+        stats.wasm_accessed_os_pages_count,
+        3 * OS_PAGES_PER_WASM_PAGE,
+        "Expected {} OS pages accessed",
+        3 * OS_PAGES_PER_WASM_PAGE
+    );
+
+    // 2 Wasm pages dirty (pages 1 and 2 were written)
+    assert_eq!(
+        stats.wasm_dirty_wasm_pages_count, 2,
+        "Expected 2 Wasm pages dirty (pages 1 and 2)"
+    );
+    assert_eq!(
+        stats.wasm_dirty_os_pages_count,
+        2 * OS_PAGES_PER_WASM_PAGE,
+        "Expected {} OS dirty pages",
+        2 * OS_PAGES_PER_WASM_PAGE
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_reports_zero_dirty_pages_for_reads() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    let body = format!(
+        r#"
+                (drop (i32.load (i32.const 0)))
+                (drop (i32.load (i32.const {})))
+        "#,
+        WASM_PAGE_SIZE_IN_BYTES
+    );
+    let wat = make_memory_access_wat(&body);
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_wat(&wat)
+        .with_api_type(ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            PrincipalId::new_user_test_id(0),
+            0.into(),
+            None,
+        ))
+        .build();
+
+    instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    let stats = instance.get_stats();
+
+    assert_eq!(
+        stats.wasm_accessed_wasm_pages_count, 2,
+        "Expected 2 Wasm pages accessed"
+    );
+    assert_eq!(
+        stats.wasm_accessed_os_pages_count,
+        2 * OS_PAGES_PER_WASM_PAGE,
+        "Expected {} OS pages accessed",
+        2 * OS_PAGES_PER_WASM_PAGE
+    );
+    assert_eq!(
+        stats.wasm_dirty_wasm_pages_count, 0,
+        "Expected 0 dirty Wasm pages for read-only access"
+    );
+    assert_eq!(
+        stats.wasm_dirty_os_pages_count, 0,
+        "Expected 0 dirty OS pages for read-only access"
     );
 }

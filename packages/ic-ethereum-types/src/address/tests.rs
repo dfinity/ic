@@ -73,7 +73,7 @@ mod from_32_bytes {
 
     fn thirty_two_bytes_from_ethereum_string(s: &str) -> [u8; 32] {
         assert!(s.starts_with("0x"), "string must start with 0x");
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0_u8; 32];
         hex::decode_to_slice(&s[2..], &mut bytes).unwrap();
         bytes
     }

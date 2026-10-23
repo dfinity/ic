@@ -52,6 +52,9 @@ fn forum_topic_kind(canister: &TargetCanister) -> ForumTopicKind {
         | TargetCanister::CkEthIndex
         | TargetCanister::CkEthLedger
         | TargetCanister::CkEthMinter
+        | TargetCanister::CkSolIndex
+        | TargetCanister::CkSolLedger
+        | TargetCanister::CkSolMinter
         | TargetCanister::EvmRpc
         | TargetCanister::LedgerSuiteOrchestrator
         | TargetCanister::SolRpc => ForumTopicKind::ApplicationCanisterManagement,
@@ -187,11 +190,12 @@ impl ForumTopic {
                     aggregate_install_mode.to_string()
                 };
                 format!(
-                    "{} {} to {} the {}",
+                    "{} {} to {} the {} {}",
                     pluralize("Proposal", proposals.len()),
                     display_sequence(proposal_ids.as_slice()),
                     summary_install_mode,
                     display_sequence(canister_names.as_slice()),
+                    pluralize("canister", canister_names.len())
                 )
             }
         }
@@ -210,7 +214,7 @@ impl ForumTopic {
                 ));
                 for (proposal_id, summary) in proposals {
                     res.push(format!(
-                        "* Proposal [{}](https://dashboard.internetcomputer.org/proposal/{}): {} the {}",
+                        "* Proposal [{}](https://dashboard.internetcomputer.org/proposal/{}): {} the {} canister",
                         proposal_id, proposal_id, summary.install_mode, summary.canister
                     ))
                 }

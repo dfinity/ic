@@ -13,7 +13,7 @@ use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities_consensus::{fake::*, make_genesis};
 use ic_test_utilities_types::{
-    ids::{node_test_id, subnet_test_id},
+    ids::{node_test_id, subnet_test_id, test_replica_version},
     messages::SignedIngressBuilder,
 };
 use ic_types::consensus::dkg::{DkgDataPayload, DkgSummary};
@@ -36,6 +36,7 @@ where
         let mut consensus_pool = ConsensusPoolImpl::new(
             node_test_id(0),
             subnet_test_id(0),
+            &test_replica_version(),
             make_genesis(DkgSummary::fake()).into(),
             pool_config,
             ic_metrics::MetricsRegistry::new(),
@@ -158,6 +159,7 @@ fn add_validated_block(criterion: &mut Criterion) {
                         let mut pool = ConsensusPoolImpl::new(
                             node_test_id(0),
                             subnet_test_id(0),
+                            &test_replica_version(),
                             make_genesis(DkgSummary::fake()).into(),
                             pool_config.clone(),
                             ic_metrics::MetricsRegistry::new(),

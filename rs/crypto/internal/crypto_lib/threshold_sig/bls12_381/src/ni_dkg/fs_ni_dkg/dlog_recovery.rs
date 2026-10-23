@@ -12,7 +12,7 @@ impl HonestDealerDlogLookupTable {
     fn create() -> Self {
         let mut x = Gt::identity();
 
-        let mut table = vec![0u32; CHUNK_SIZE];
+        let mut table = vec![0_u32; CHUNK_SIZE];
         for i in CHUNK_MIN..=CHUNK_MAX {
             table[i as usize] = x.short_hash_for_linear_search();
             x += Gt::generator();
@@ -35,7 +35,7 @@ impl HonestDealerDlogLookupTable {
             .collect::<Vec<_>>();
 
         // This code assumes that CHUNK_MAX fits in a u16
-        let mut scan_results = vec![0u16; targets.len()];
+        let mut scan_results = vec![0_u16; targets.len()];
 
         for x in CHUNK_MIN..=CHUNK_MAX {
             let x_hash = self.table[x as usize];

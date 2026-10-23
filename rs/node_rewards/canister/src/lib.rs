@@ -9,7 +9,7 @@ use crate::storage::NaiveDateStorable;
 use candid::Principal;
 use chrono::{Datelike, NaiveDate};
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_management_canister_types::NodeMetrics;
+use ic_cdk_management_canister::NodeMetrics;
 use ic_stable_structures::Storable;
 use ic_stable_structures::storable::Bound;
 use prost::Message;
@@ -67,7 +67,7 @@ impl Storable for NaiveDateStorable {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        let mut arr = [0u8; 4];
+        let mut arr = [0_u8; 4];
         arr.copy_from_slice(&bytes);
         let days = i32::from_be_bytes(arr);
         Self(NaiveDate::from_num_days_from_ce_opt(days).unwrap())

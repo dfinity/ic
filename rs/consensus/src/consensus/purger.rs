@@ -320,7 +320,7 @@ impl Purger {
 
         self.state_manager.update_fast_forward_height(height);
 
-        let extra_heights_to_keep = get_pending_idkg_cup_heights(pool);
+        let extra_heights_to_keep = get_pending_cup_heights(pool);
         self.state_manager
             .remove_inmemory_states_below(height, &extra_heights_to_keep);
         trace!(
@@ -453,9 +453,9 @@ fn get_purge_height(pool_reader: &PoolReader<'_>) -> Option<Height> {
         })
 }
 
-/// Return the heights of all finalized IDKG summary blocks for which
-/// there exists no CUP artifact yet.
-fn get_pending_idkg_cup_heights(pool: &PoolReader<'_>) -> BTreeSet<Height> {
+/// Return the heights of all finalized summary blocks above the latest CUP
+/// for which there exists no CUP artifact yet.
+fn get_pending_cup_heights(pool: &PoolReader<'_>) -> BTreeSet<Height> {
     let mut pending_cup_heights = BTreeSet::new();
     let cup = pool.get_highest_catch_up_package();
     let summary = cup.content.block.as_ref().payload.as_ref().as_summary();
@@ -463,9 +463,7 @@ fn get_pending_idkg_cup_heights(pool: &PoolReader<'_>) -> BTreeSet<Height> {
 
     while let Some(block) = pool.get_finalized_block(next_start_height) {
         let summary = block.payload.as_ref().as_summary();
-        if summary.idkg.is_some() {
-            pending_cup_heights.insert(next_start_height);
-        }
+        pending_cup_heights.insert(next_start_height);
         next_start_height = summary.dkg.get_next_start_height();
     }
     pending_cup_heights
@@ -474,19 +472,12 @@ fn get_pending_idkg_cup_heights(pool: &PoolReader<'_>) -> BTreeSet<Height> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_interfaces::p2p::consensus::MutablePool;
-    use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::message_routing::FakeMessageRouting;
-    use ic_test_utilities_consensus::{fake::FakeContentUpdate, idkg::empty_idkg_payload};
-    use ic_types::{
-        CryptoHashOfState, SubnetId,
-        consensus::{BlockPayload, BlockProposal, Payload, Rank},
-        crypto::CryptoHash,
-    };
+    use ic_types::{CryptoHashOfState, consensus::Rank, crypto::CryptoHash};
     use std::{
         collections::HashSet,
         sync::{Arc, RwLock},
@@ -500,8 +491,9 @@ mod tests {
                 state_manager,
                 replica_config,
                 registry,
+                message_routing,
                 ..
-            } = dependencies(pool_config, 1);
+            } = DependenciesBuilder::new(pool_config, 1).build();
 
             state_manager
                 .get_mut()
@@ -545,17 +537,17 @@ mod tests {
                 .withf(move |height| *height == *checkpoint_purge_height_clone.read().unwrap())
                 .return_const(());
 
-            let mut message_routing = MockMessageRouting::new();
             let expected_batch_height = Arc::new(RwLock::new(Height::from(0)));
             let expected_batch_height_clone = Arc::clone(&expected_batch_height);
             message_routing
+                .get_mut()
                 .expect_expected_batch_height()
                 .returning(move || *expected_batch_height_clone.read().unwrap());
 
             let purger = Purger::new(
                 replica_config,
                 state_manager,
-                Arc::new(message_routing),
+                message_routing,
                 registry,
                 no_op_logger(),
                 MetricsRegistry::new(),
@@ -639,7 +631,7 @@ mod tests {
                 replica_config,
                 registry,
                 ..
-            } = dependencies(pool_config, 3);
+            } = DependenciesBuilder::new(pool_config, 3).build();
             state_manager
                 .get_mut()
                 .expect_latest_state_height()
@@ -675,7 +667,7 @@ mod tests {
                 replica_config,
                 registry,
                 ..
-            } = dependencies(pool_config, 3);
+            } = DependenciesBuilder::new(pool_config, 3).build();
             state_manager
                 .get_mut()
                 .expect_latest_state_height()
@@ -714,7 +706,7 @@ mod tests {
     #[test]
     fn test_get_purge_height() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
+            let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1).build();
 
             // Initial purge height is None.
             assert_eq!(get_purge_height(&PoolReader::new(&pool)), None);
@@ -737,31 +729,17 @@ mod tests {
         })
     }
 
-    /// Create the next block and initialize it with an empty IDKG payload,
-    /// then insert it into the test pool.
-    fn init_idkg_in_next_round(pool: &mut TestConsensusPool, subnet_id: SubnetId) {
-        let mut block: BlockProposal = pool.make_next_block();
-        let idkg_payload = empty_idkg_payload(subnet_id);
-        let mut block_payload = block.as_ref().payload.as_ref().clone();
-        match &mut block_payload {
-            BlockPayload::Summary(summary) => summary.idkg = Some(idkg_payload),
-            BlockPayload::Data(data) => data.idkg = Some(idkg_payload),
-        };
-        block.content.as_mut().payload = Payload::new(ic_types::crypto::crypto_hash, block_payload);
-        block.update_content();
-        pool.advance_round_with_block(&block);
-    }
-
     #[test]
-    fn test_get_pending_idkg_cup_heights() {
+    fn test_get_pending_cup_heights() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 mut pool,
                 state_manager,
                 replica_config,
                 registry,
+                message_routing,
                 ..
-            } = dependencies(pool_config, 10);
+            } = DependenciesBuilder::new(pool_config, 10).build();
 
             let expected_extra_heights = Arc::new(RwLock::new(BTreeSet::new()));
             let extra_heights_clone = Arc::clone(&expected_extra_heights);
@@ -780,9 +758,9 @@ mod tests {
                 .return_const(());
 
             let purger = Purger::new(
-                replica_config.clone(),
+                replica_config,
                 state_manager.clone(),
-                Arc::new(MockMessageRouting::new()),
+                message_routing,
                 registry,
                 no_op_logger(),
                 MetricsRegistry::new(),
@@ -791,31 +769,34 @@ mod tests {
             // Initially, there should be no pending cup heights.
             purger.purge_replicated_state_by_finalized_certified_height(&PoolReader::new(&pool));
 
-            // Put some stuff in the pool.
+            // Put some stuff in the pool, below the first CUP threshold.
             pool.advance_round_normal_operation_n(10);
-            // There should be no pending cup heights.
+            // There should still be no pending cup heights.
             purger.purge_replicated_state_by_finalized_certified_height(&PoolReader::new(&pool));
 
-            // Put more stuff in the pool above the CUP threshold,
-            // without creating a CUP (DKG interval length is 60).
+            // Advance past the first CUP threshold without creating a CUP
+            // (DKG interval length is 60).
             pool.advance_round_normal_operation_no_cup_n(60);
-            // There should still be no pending cup heights
+            // There should be one pending CUP height
+            *expected_extra_heights.write().unwrap() = BTreeSet::from([Height::from(60)]);
             purger.purge_replicated_state_by_finalized_certified_height(&PoolReader::new(&pool));
-
-            // Initialize IDKG payloads starting with the next round
-            init_idkg_in_next_round(&mut pool, replica_config.subnet_id);
 
             // Advance past another CUP height, without creating the CUP
             pool.advance_round_normal_operation_no_cup_n(60);
-            // There should be one pending CUP height
-            *expected_extra_heights.write().unwrap() = BTreeSet::from([Height::from(120)]);
+            // There should be two pending CUP heights
+            *expected_extra_heights.write().unwrap() =
+                BTreeSet::from([Height::from(60), Height::from(120)]);
             purger.purge_replicated_state_by_finalized_certified_height(&PoolReader::new(&pool));
 
             // Advance past another two CUP heights, without creating the CUP
             pool.advance_round_normal_operation_no_cup_n(120);
-            // There should be three pending CUP heights
-            *expected_extra_heights.write().unwrap() =
-                BTreeSet::from([Height::from(120), Height::from(180), Height::from(240)]);
+            // There should be four pending CUP heights
+            *expected_extra_heights.write().unwrap() = BTreeSet::from([
+                Height::from(60),
+                Height::from(120),
+                Height::from(180),
+                Height::from(240),
+            ]);
             purger.purge_replicated_state_by_finalized_certified_height(&PoolReader::new(&pool));
 
             // Insert the CUP at height 180
@@ -842,20 +823,21 @@ mod tests {
                 state_manager,
                 replica_config,
                 registry,
+                message_routing,
                 ..
-            } = dependencies(pool_config, 10);
+            } = DependenciesBuilder::new(pool_config, 10).build();
             state_manager
                 .get_mut()
                 .expect_latest_state_height()
                 .returning(|| Height::new(0));
-            let mut message_routing = MockMessageRouting::new();
             message_routing
+                .get_mut()
                 .expect_expected_batch_height()
                 .returning(|| Height::new(0));
             let purger = Purger::new(
                 replica_config,
                 state_manager,
-                Arc::new(message_routing),
+                message_routing,
                 registry,
                 no_op_logger(),
                 MetricsRegistry::new(),

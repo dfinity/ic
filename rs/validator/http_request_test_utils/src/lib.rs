@@ -7,9 +7,9 @@ use ic_crypto_tree_hash::Path;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{CanisterSig, Signable};
 use ic_types::messages::{
-    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-    HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, MessageId, Query,
-    ReadState, SignedDelegation, SignedIngressContent,
+    Blob, Delegation, DelegationPermissions, HttpCallContent, HttpCanisterUpdate, HttpQueryContent,
+    HttpReadState, HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery,
+    MessageId, Query, RawSignedSenderInfo, ReadState, SignedDelegation, SignedIngressContent,
 };
 use ic_types::time::GENESIS;
 use ic_types::{CanisterId, PrincipalId, Time};
@@ -96,6 +96,7 @@ fn dummy_call_request_content() -> HttpCanisterUpdate {
         sender: Default::default(),
         ingress_expiry: 0,
         nonce: None,
+        sender_info: None,
     }
 }
 
@@ -107,6 +108,7 @@ fn dummy_query_call_request_content() -> HttpUserQuery {
         sender: Default::default(),
         ingress_expiry: 0,
         nonce: None,
+        sender_info: None,
     }
 }
 
@@ -174,6 +176,20 @@ impl<C: HttpRequestEnvelopeContent, T> HttpRequestBuilderGeneric<C, T> {
 
     pub fn with_nonce(mut self, nonce: Vec<u8>) -> Self {
         self.content.set_nonce(nonce);
+        self
+    }
+}
+
+impl<T> HttpRequestBuilderGeneric<HttpCanisterUpdate, T> {
+    pub fn with_sender_info(mut self, sender_info: RawSignedSenderInfo) -> Self {
+        self.content.sender_info = Some(sender_info);
+        self
+    }
+}
+
+impl<T> HttpRequestBuilderGeneric<HttpUserQuery, T> {
+    pub fn with_sender_info(mut self, sender_info: RawSignedSenderInfo) -> Self {
+        self.content.sender_info = Some(sender_info);
         self
     }
 }
@@ -511,7 +527,21 @@ impl DirectAuthenticationScheme {
         expiration: Time,
         targets: Vec<CanisterId>,
     ) -> SignedDelegation {
-        let delegation = Delegation::new_with_targets(other.public_key_der(), expiration, targets);
+        let delegation = Delegation::new(other.public_key_der(), expiration).with_targets(targets);
+        let signature = self.sign(&delegation);
+        SignedDelegation::new(delegation, signature)
+    }
+
+    /// Creates a delegation that restricts the kinds of calls the delegate
+    /// may make.
+    fn delegate_to_with_permissions(
+        &self,
+        other: &DirectAuthenticationScheme,
+        expiration: Time,
+        permissions: DelegationPermissions,
+    ) -> SignedDelegation {
+        let delegation =
+            Delegation::new(other.public_key_der(), expiration).with_permissions(permissions);
         let signature = self.sign(&delegation);
         SignedDelegation::new(delegation, signature)
     }
@@ -575,6 +605,19 @@ impl DelegationChainBuilder {
         let current_end = self.end.unwrap_or_else(|| self.start.clone());
         self.signed_delegations
             .push(current_end.delegate_to_with_targets(&new_end, expiration, targets));
+        self.end = Some(new_end);
+        self
+    }
+
+    pub fn delegate_to_with_permissions(
+        mut self,
+        new_end: DirectAuthenticationScheme,
+        expiration: Time,
+        permissions: DelegationPermissions,
+    ) -> Self {
+        let current_end = self.end.unwrap_or_else(|| self.start.clone());
+        self.signed_delegations
+            .push(current_end.delegate_to_with_permissions(&new_end, expiration, permissions));
         self.end = Some(new_end);
         self
     }
@@ -668,7 +711,7 @@ impl SignedDelegationBuilder {
     pub fn build(self) -> SignedDelegation {
         let delegation = match self.targets {
             Some(canister_ids) => {
-                Delegation::new_with_targets(self.pubkey, self.expiration, canister_ids)
+                Delegation::new(self.pubkey, self.expiration).with_targets(canister_ids)
             }
             None => Delegation::new(self.pubkey, self.expiration),
         };
@@ -780,4 +823,23 @@ pub fn hard_coded_root_of_trust() -> RootOfTrust {
         public_key,
         secret_key,
     }
+}
+
+pub fn icp_mainnet_root_public_key_for_testing() -> ThresholdSigPublicKey {
+    use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
+
+    // Copied from https://github.com/dfinity/ic/blob/d4a83a9e33b49efd80141d593fbc97157055f0b8/rs/crypto/utils/threshold_sig_der/tests/tests.rs#L29
+    const ICP_MAINNET_ROOT_PUBLIC_KEY_BYTES_FOR_TESTING: [u8; 96] = [
+        0x81, 0x4C, 0x0E, 0x6E, 0xC7, 0x1F, 0xAB, 0x58, 0x3B, 0x08, 0xBD, 0x81, 0x37, 0x3C, 0x25,
+        0x5C, 0x3C, 0x37, 0x1B, 0x2E, 0x84, 0x86, 0x3C, 0x98, 0xA4, 0xF1, 0xE0, 0x8B, 0x74, 0x23,
+        0x5D, 0x14, 0xFB, 0x5D, 0x9C, 0x0C, 0xD5, 0x46, 0xD9, 0x68, 0x5F, 0x91, 0x3A, 0x0C, 0x0B,
+        0x2C, 0xC5, 0x34, 0x15, 0x83, 0xBF, 0x4B, 0x43, 0x92, 0xE4, 0x67, 0xDB, 0x96, 0xD6, 0x5B,
+        0x9B, 0xB4, 0xCB, 0x71, 0x71, 0x12, 0xF8, 0x47, 0x2E, 0x0D, 0x5A, 0x4D, 0x14, 0x50, 0x5F,
+        0xFD, 0x74, 0x84, 0xB0, 0x12, 0x91, 0x09, 0x1C, 0x5F, 0x87, 0xB9, 0x88, 0x83, 0x46, 0x3F,
+        0x98, 0x09, 0x1A, 0x0B, 0xAA, 0xAE,
+    ];
+
+    ThresholdSigPublicKey::from(bls12_381::PublicKeyBytes(
+        ICP_MAINNET_ROOT_PUBLIC_KEY_BYTES_FOR_TESTING,
+    ))
 }

@@ -1,10 +1,13 @@
+use ic_certification_version::MAX_SUPPORTED_CERTIFICATION_VERSION;
 use ic_protobuf::state::{queues::v1 as pb_queues, system_metadata::v1 as pb_metadata};
 use ic_replicated_state::{Stream, metadata_state::SubnetMetrics};
 use ic_test_utilities_state::{arb_stream, arb_subnet_metrics};
 use std::convert::TryInto;
 
 #[test_strategy::proptest]
-fn roundtrip_conversion_stream_proptest(#[strategy(arb_stream(0, 10, 0, 100))] stream: Stream) {
+fn roundtrip_conversion_stream_proptest(
+    #[strategy(arb_stream(0, 10, 0, 100, MAX_SUPPORTED_CERTIFICATION_VERSION))] stream: Stream,
+) {
     assert_eq!(stream, pb_queues::Stream::from(&stream).try_into().unwrap());
 }
 

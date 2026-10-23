@@ -19,6 +19,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, NominalCyclesTesting};
 use itertools::Itertools;
 use proptest::prelude::*;
 use std::fs::File;
@@ -27,11 +28,7 @@ use std::sync::Arc;
 fn default_canister_state_bits() -> CanisterStateBits {
     CanisterStateBits {
         controllers: BTreeSet::new(),
-        last_full_execution_round: ExecutionRound::from(0),
         compute_allocation: ComputeAllocation::try_from(0).unwrap(),
-        accumulated_priority: AccumulatedPriority::default(),
-        priority_credit: AccumulatedPriority::default(),
-        long_execution_mode: LongExecutionMode::default(),
         execution_state_bits: None,
         memory_allocation: MemoryAllocation::default(),
         wasm_memory_threshold: NumBytes::new(0),
@@ -40,13 +37,15 @@ fn default_canister_state_bits() -> CanisterStateBits {
         cycles_debit: Cycles::zero(),
         reserved_balance: Cycles::zero(),
         reserved_balance_limit: None,
+        minimum_incoming_canister_call_cycles: Cycles::zero(),
         status: CanisterStatus::Stopped,
         rounds_scheduled: 0,
         scheduled_as_first: 0,
         executed: 0,
         interrupted_during_execution: 0,
         certified_data: vec![],
-        consumed_cycles: NominalCycles::from(0),
+        consumed_cycles: NominalCycles::zero(),
+        consumed_cycles_monotonic: NominalCycles::zero(),
         stable_memory_size: NumWasmPages::from(0),
         heap_delta_debit: NumBytes::from(0),
         install_code_debit: NumInstructions::from(0),
@@ -54,17 +53,18 @@ fn default_canister_state_bits() -> CanisterStateBits {
         task_queue: TaskQueue::default(),
         global_timer_nanos: None,
         canister_version: 0,
+        canister_creation_timestamp_nanos: None,
         consumed_cycles_by_use_cases: BTreeMap::new(),
+        consumed_cycles_by_use_cases_monotonic: BTreeMap::new(),
         canister_history: CanisterHistory::default(),
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),
         log_visibility: Default::default(),
         snapshot_visibility: Default::default(),
+        status_visibility: Default::default(),
         log_memory_limit: NumBytes::from(0),
-        canister_log: CanisterLog::default_aggregate(),
         wasm_memory_limit: None,
         next_snapshot_id: 0,
-        snapshots_memory_usage: NumBytes::from(0),
         environment_variables: BTreeMap::new(),
         instructions_executed: NumInstructions::new(0),
         ingress_messages_executed: 0,
@@ -72,6 +72,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         local_subnet_messages_executed: 0,
         http_outcalls_executed: 0,
         heartbeats_and_global_timers_executed: 0,
+        log_memory_store_persistent_next_idx: 0,
     }
 }
 
@@ -132,6 +133,30 @@ fn test_encode_decode_non_empty_controllers() {
     expected_controllers.insert(canister_test_id(0).get());
     expected_controllers.insert(IC_00.into());
     assert_eq!(canister_state_bits.controllers, expected_controllers);
+}
+
+#[test]
+fn test_encode_decode_consumed_cycles_monotonic() {
+    let canister_state_bits = CanisterStateBits {
+        consumed_cycles: NominalCycles::new(1000),
+        consumed_cycles_monotonic: NominalCycles::new(900),
+        ..default_canister_state_bits()
+    };
+
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+    let decoded = CanisterStateBits::try_from(pb_bits.clone()).unwrap();
+
+    assert_eq!(decoded.consumed_cycles, NominalCycles::new(1000));
+    assert_eq!(decoded.consumed_cycles_monotonic, NominalCycles::new(900));
+
+    // The field is absent in checkpoints written before it was introduced; it
+    // decodes as zero, which is what the by-use-case map did when it was introduced.
+    let mut pb_bits = pb_bits;
+    pb_bits.consumed_cycles_monotonic = None;
+    let decoded = CanisterStateBits::try_from(pb_bits).unwrap();
+
+    assert_eq!(decoded.consumed_cycles, NominalCycles::new(1000));
+    assert_eq!(decoded.consumed_cycles_monotonic, NominalCycles::zero());
 }
 
 #[test]
@@ -258,6 +283,7 @@ fn test_canister_snapshots_decode() {
         source: SnapshotSource::taken_from_canister(),
         global_timer: Some(CanisterTimer::Inactive),
         on_low_wasm_memory_hook_status: Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
+        restored: true,
     };
 
     let pb_bits =
@@ -315,8 +341,18 @@ fn test_encode_decode_task_queue() {
         call_context_id: 1.into(),
         respondent: canister_test_id(43),
         cycles_sent: Cycles::new(6),
-        prepayment_for_response_execution: Cycles::new(169),
-        prepayment_for_response_transmission: Cycles::new(2197),
+        prepayment_for_response_execution: CompoundCycles::new(
+            Cycles::new(169),
+            CanisterCyclesCostSchedule::Normal,
+        ),
+        prepayment_for_response_transmission: CompoundCycles::new(
+            Cycles::new(2197),
+            CanisterCyclesCostSchedule::Normal,
+        ),
+        prepayment_for_call_transmission: CompoundCycles::new(
+            Cycles::new(3213),
+            CanisterCyclesCostSchedule::Normal,
+        ),
         on_reply: WasmClosure::new(13, 14),
         on_reject: WasmClosure::new(15, 16),
         on_cleanup: Some(WasmClosure::new(17, 18)),
@@ -325,16 +361,25 @@ fn test_encode_decode_task_queue() {
     for task in [
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Ingress(Arc::clone(&ingress)),
-            prepaid_execution_cycles: Cycles::new(1),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::new(1),
+                CanisterCyclesCostSchedule::Normal,
+            ),
             call_id: InstallCodeCallId::new(0),
         },
         ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Message(CanisterMessage::Request(Arc::clone(&request))),
-            prepaid_execution_cycles: Cycles::new(2),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::new(2),
+                CanisterCyclesCostSchedule::Normal,
+            ),
         },
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Request(Arc::clone(&request)),
-            prepaid_execution_cycles: Cycles::new(3),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::new(3),
+                CanisterCyclesCostSchedule::Normal,
+            ),
             call_id: InstallCodeCallId::new(3_u64),
         },
         ExecutionTask::AbortedExecution {
@@ -342,11 +387,17 @@ fn test_encode_decode_task_queue() {
                 response: Arc::clone(&response),
                 callback: Arc::clone(&callback),
             }),
-            prepaid_execution_cycles: Cycles::new(4),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::new(4),
+                CanisterCyclesCostSchedule::Normal,
+            ),
         },
         ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Message(CanisterMessage::Ingress(Arc::clone(&ingress))),
-            prepaid_execution_cycles: Cycles::new(5),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::new(5),
+                CanisterCyclesCostSchedule::Normal,
+            ),
         },
     ] {
         let mut task_queue = TaskQueue::default();
@@ -561,6 +612,66 @@ fn test_can_remove_unverified_marker_file_twice() {
             .unwrap()
             .finalize_and_remove_unverified_marker(None);
         assert!(res.is_ok());
+    });
+}
+
+#[test]
+fn test_state_sync_checkpoint_stays_unverified_between_marker_removals() {
+    // `finalize_and_remove_unverified_marker` removes the unverified marker before the state sync marker.
+    // Readers on other threads, like the state sync advert loop calling `verified_or_state_sync_checkpoint_heights`,
+    // can observe the checkpoint in between and must still see an unverified state sync checkpoint.
+    with_test_replica_logger(|log| {
+        let tempdir = tmpdir("state_layout");
+        let root_path = tempdir.path().to_path_buf();
+        let metrics_registry = ic_metrics::MetricsRegistry::new();
+        let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
+
+        let height = Height::new(1);
+        let scratchpad_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+            state_layout.state_sync_scratchpad(height),
+            height,
+        )
+        .expect("failed to create checkpoint layout");
+        File::create(scratchpad_layout.raw_path().join(SYSTEM_METADATA_FILE)).unwrap();
+        // State sync marks its scratchpad before promoting it, which adds the unverified marker.
+        scratchpad_layout
+            .create_state_sync_checkpoint_marker()
+            .unwrap();
+        let checkpoint = state_layout
+            .promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height)
+            .unwrap()
+            .as_readonly();
+        assert!(checkpoint.is_unverified_state_sync_checkpoint());
+
+        checkpoint.remove_unverified_checkpoint_marker().unwrap();
+        assert!(checkpoint.is_unverified_state_sync_checkpoint());
+        assert!(matches!(
+            state_layout.checkpoint_status(height),
+            Ok(CheckpointStatus::UnverifiedStateSync)
+        ));
+        assert_eq!(
+            state_layout
+                .verified_or_state_sync_checkpoint_heights()
+                .unwrap(),
+            vec![height]
+        );
+        assert!(
+            state_layout
+                .verified_checkpoint_heights()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(matches!(
+            state_layout.checkpoint_verified(height),
+            Err(LayoutError::CheckpointUnverified(_))
+        ));
+
+        checkpoint.remove_state_sync_checkpoint_marker().unwrap();
+        assert!(checkpoint.is_checkpoint_verified());
+        assert_eq!(
+            state_layout.verified_checkpoint_heights().unwrap(),
+            vec![height]
+        );
     });
 }
 
@@ -795,6 +906,48 @@ fn test_all_existing_wasm_files() {
         wasm_paths,
         BTreeSet::from([wasm_path_1, wasm_path_2, wasm_path_3, wasm_path_4])
     )
+}
+
+#[test]
+fn test_delete_canister_dir() {
+    let tmp = tmpdir("checkpoint");
+    let checkpoint_layout: CheckpointLayout<RwPolicy<()>> =
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
+
+    // Deleting a canister without a directory is a no-op.
+    checkpoint_layout
+        .delete_canister_dir(&canister_test_id(42))
+        .unwrap();
+    assert!(checkpoint_layout.canister_ids().unwrap().is_empty());
+
+    // Create directories for two canisters, one of them with a wasm file.
+    let canister_layout = checkpoint_layout.canister(&canister_test_id(42)).unwrap();
+    File::create(canister_layout.wasm().path()).unwrap();
+    let _ = checkpoint_layout.canister(&canister_test_id(43)).unwrap();
+    assert_eq!(
+        checkpoint_layout.canister_ids().unwrap(),
+        vec![canister_test_id(42), canister_test_id(43)]
+    );
+
+    // Deleting a canister removes its directory with all its contents, but leaves
+    // the other canister alone.
+    checkpoint_layout
+        .delete_canister_dir(&canister_test_id(42))
+        .unwrap();
+    assert!(!canister_layout.raw_path().exists());
+    assert_eq!(
+        checkpoint_layout.canister_ids().unwrap(),
+        vec![canister_test_id(43)]
+    );
+
+    // Deleting the same canister again is a no-op.
+    checkpoint_layout
+        .delete_canister_dir(&canister_test_id(42))
+        .unwrap();
+    assert_eq!(
+        checkpoint_layout.canister_ids().unwrap(),
+        vec![canister_test_id(43)]
+    );
 }
 
 #[test]
@@ -1152,6 +1305,70 @@ fn can_add_and_delete_canister_snapshots(
     }
 }
 
+/// Tests that deleting a snapshot's directory is idempotent, i.e. that deleting a
+/// snapshot that has no directory is a no-op rather than a `NotFound` I/O error.
+///
+/// This is relied upon by the flush of `UnflushedCheckpointOp::DeleteSnapshot`: a
+/// snapshot created from uploaded metadata has no directory in tip until its `PageMap`s
+/// are first flushed, so deleting it before then would otherwise fail.
+#[test]
+fn delete_snapshot_dir_is_idempotent() {
+    let tmp = tmpdir("checkpoint");
+    let checkpoint_layout: CheckpointLayout<WriteOnly> =
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
+
+    let canister_id = canister_test_id(100);
+    let snapshot_id = SnapshotId::from((canister_id, 0));
+    let other_snapshot_id = SnapshotId::from((canister_id, 1));
+
+    let snapshot_ids = || {
+        let mut snapshot_ids = checkpoint_layout.snapshot_ids().unwrap();
+        snapshot_ids.sort();
+        snapshot_ids
+    };
+    let num_canister_dirs = || {
+        std::fs::read_dir(checkpoint_layout.raw_path().join(SNAPSHOTS_DIR))
+            .unwrap()
+            .count()
+    };
+
+    // Deleting a snapshot that never had a directory is a no-op.
+    checkpoint_layout.delete_snapshot_dir(&snapshot_id).unwrap();
+    assert!(snapshot_ids().is_empty());
+
+    // Create the directories of two snapshots of the same canister.
+    checkpoint_layout.snapshot(&snapshot_id).unwrap();
+    checkpoint_layout.snapshot(&other_snapshot_id).unwrap();
+    let mut expected_snapshot_ids = vec![snapshot_id, other_snapshot_id];
+    expected_snapshot_ids.sort();
+    assert_eq!(snapshot_ids(), expected_snapshot_ids);
+    assert_eq!(num_canister_dirs(), 1);
+
+    // Deleting one of them retains the other, as well as the canister's directory.
+    checkpoint_layout.delete_snapshot_dir(&snapshot_id).unwrap();
+    assert_eq!(snapshot_ids(), vec![other_snapshot_id]);
+    assert_eq!(num_canister_dirs(), 1);
+
+    // And deleting it again is a no-op.
+    checkpoint_layout.delete_snapshot_dir(&snapshot_id).unwrap();
+    assert_eq!(snapshot_ids(), vec![other_snapshot_id]);
+    assert_eq!(num_canister_dirs(), 1);
+
+    // Deleting the canister's last snapshot also removes the canister's directory.
+    checkpoint_layout
+        .delete_snapshot_dir(&other_snapshot_id)
+        .unwrap();
+    assert!(snapshot_ids().is_empty());
+    assert_eq!(num_canister_dirs(), 0);
+
+    // As is deleting it again.
+    checkpoint_layout
+        .delete_snapshot_dir(&other_snapshot_id)
+        .unwrap();
+    assert!(snapshot_ids().is_empty());
+    assert_eq!(num_canister_dirs(), 0);
+}
+
 #[test]
 fn test_encode_decode_empty_task_queue() {
     let task_queue = TaskQueue::default();
@@ -1174,7 +1391,10 @@ fn test_encode_decode_non_empty_task_queue() {
 
     task_queue.enqueue(ExecutionTask::AbortedExecution {
         input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
-        prepaid_execution_cycles: Cycles::zero(),
+        prepaid_execution_cycles: CompoundCycles::new(
+            Cycles::zero(),
+            CanisterCyclesCostSchedule::Normal,
+        ),
     });
 
     // A canister state with non empty TaskQueue.
@@ -1224,8 +1444,18 @@ mod mainnet_compatibility_tests {
                 call_context_id: CallContextId::new(1),
                 respondent,
                 cycles_sent: Cycles::new(100),
-                prepayment_for_response_execution: Cycles::zero(),
-                prepayment_for_response_transmission: Cycles::zero(),
+                prepayment_for_response_execution: CompoundCycles::new(
+                    Cycles::zero(),
+                    CanisterCyclesCostSchedule::Normal,
+                ),
+                prepayment_for_response_transmission: CompoundCycles::new(
+                    Cycles::zero(),
+                    CanisterCyclesCostSchedule::Normal,
+                ),
+                prepayment_for_call_transmission: CompoundCycles::new(
+                    Cycles::zero(),
+                    CanisterCyclesCostSchedule::Normal,
+                ),
                 on_reply: WasmClosure::new(1, 2),
                 on_reject: WasmClosure::new(3, 4),
                 on_cleanup: None,
@@ -1264,7 +1494,10 @@ mod mainnet_compatibility_tests {
                     response: response1,
                     callback: Arc::new(callback1),
                 }),
-                prepaid_execution_cycles: Cycles::new(10),
+                prepaid_execution_cycles: CompoundCycles::new(
+                    Cycles::new(10),
+                    CanisterCyclesCostSchedule::Normal,
+                ),
             });
 
             CanisterStateBits {
@@ -1303,26 +1536,13 @@ mod mainnet_compatibility_tests {
                 .expect("Failed to convert the protobuf to CanisterStateBits");
 
             let CanisterStateBits {
-                task_queue,
-                mut status,
-                ..
+                task_queue, status, ..
             } = canister_state_bits;
             let CanisterStateBits {
                 task_queue: expected_task_queue,
                 status: expected_status,
                 ..
             } = make_task_queue_and_status();
-
-            // Forward compatibility hack: the old version did not use `with_callback()`,
-            // so it was not bumping `next_callback_id`. Explicitly set it to 3.
-            //
-            // TODO(DSM-95): Drop in the release after the next.
-            if let CanisterStatus::Running {
-                call_context_manager,
-            } = &mut status
-            {
-                call_context_manager.set_next_callback_id(3);
-            }
 
             assert_eq!(expected_task_queue, task_queue);
             assert_eq!(expected_status, status);

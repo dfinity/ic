@@ -18,6 +18,7 @@ mod targets {
                 invalid_canister_id,
                 to_blob(CanisterId::from(3)),
             ]),
+            permissions: None,
         };
 
         let targets = delegation.targets();
@@ -33,6 +34,7 @@ mod targets {
         let delegation = Delegation {
             pubkey: Blob(vec![]),
             expiration: CURRENT_TIME,
+            permissions: None,
             targets: Some(vec![
                 to_blob(canister_id_3),
                 to_blob(canister_id_3),
@@ -61,8 +63,8 @@ mod try_from {
         use crate::UserId;
         use crate::messages::http::{Authentication, HttpCallContent, HttpRequestError};
         use crate::messages::{
-            Blob, HttpCanisterUpdate, HttpRequest, HttpRequestEnvelope, SignedIngressContent,
-            UserSignature,
+            Blob, HttpCanisterUpdate, HttpRequest, HttpRequestEnvelope, RawSignedSenderInfo,
+            SignedIngressContent, SignedSenderInfo, UserSignature,
         };
         use assert_matches::assert_matches;
 
@@ -74,6 +76,11 @@ mod try_from {
                 sender: Blob(fixed::principal_id().to_vec()),
                 ingress_expiry: fixed::ingress_expiry(),
                 nonce: Some(Blob(fixed::nonce())),
+                sender_info: Some(RawSignedSenderInfo {
+                    info: Blob(fixed::sender_info_info()),
+                    signer: to_blob(fixed::canister_id()),
+                    sig: Blob(fixed::sender_info_sig()),
+                }),
             }
         }
 
@@ -85,6 +92,11 @@ mod try_from {
                 fixed::arg().0,
                 fixed::ingress_expiry(),
                 Some(fixed::nonce()),
+                Some(SignedSenderInfo {
+                    info: fixed::sender_info_info(),
+                    signer: fixed::canister_id(),
+                    sig: fixed::sender_info_sig(),
+                }),
             )
         }
 
@@ -108,6 +120,29 @@ mod try_from {
                     auth: Authentication::Anonymous,
                 })
             )
+        }
+
+        #[test]
+        fn should_fail_creating_http_requests_with_invalid_sender_info_signer() {
+            let envelope = HttpRequestEnvelope {
+                content: HttpCallContent::Call {
+                    update: HttpCanisterUpdate {
+                        sender_info: Some(RawSignedSenderInfo {
+                            info: Blob(fixed::sender_info_info()),
+                            signer: fixed::invalid_serialized_printipal_id(),
+                            sig: Blob(fixed::sender_info_sig()),
+                        }),
+                        ..default_call_content()
+                    },
+                },
+                sender_pubkey: None,
+                sender_sig: None,
+                sender_delegation: None,
+            };
+
+            let request = HttpRequest::try_from(envelope);
+
+            assert_matches!(request, Err(HttpRequestError::InvalidPrincipalId(_)));
         }
 
         #[test]
@@ -341,7 +376,8 @@ mod try_from {
             Authentication, HttpQueryContent, HttpRequestError, HttpUserQuery,
         };
         use crate::messages::{
-            Blob, HttpRequest, HttpRequestEnvelope, Query, QuerySource, UserSignature,
+            Blob, HttpRequest, HttpRequestEnvelope, Query, QuerySource, RawSignedSenderInfo,
+            SignedSenderInfo, UserSignature,
         };
         use assert_matches::assert_matches;
 
@@ -353,6 +389,11 @@ mod try_from {
                 sender: Blob(fixed::principal_id().to_vec()),
                 ingress_expiry: fixed::ingress_expiry(),
                 nonce: Some(Blob(fixed::nonce())),
+                sender_info: Some(RawSignedSenderInfo {
+                    info: Blob(fixed::sender_info_info()),
+                    signer: to_blob(fixed::canister_id()),
+                    sig: Blob(fixed::sender_info_sig()),
+                }),
             }
         }
 
@@ -362,6 +403,25 @@ mod try_from {
                     user_id: UserId::from(fixed::principal_id()),
                     ingress_expiry: fixed::ingress_expiry(),
                     nonce: Some(fixed::nonce()),
+                    sender_info: Some(SignedSenderInfo {
+                        info: fixed::sender_info_info(),
+                        signer: fixed::canister_id(),
+                        sig: fixed::sender_info_sig(),
+                    }),
+                },
+                receiver: fixed::canister_id(),
+                method_name: fixed::method_name(),
+                method_payload: fixed::arg().0,
+            }
+        }
+
+        pub fn default_user_query_content_without_sender_info() -> Query {
+            Query {
+                source: QuerySource::User {
+                    user_id: UserId::from(fixed::principal_id()),
+                    ingress_expiry: fixed::ingress_expiry(),
+                    nonce: Some(fixed::nonce()),
+                    sender_info: None,
                 },
                 receiver: fixed::canister_id(),
                 method_name: fixed::method_name(),
@@ -425,6 +485,29 @@ mod try_from {
                     })
                 );
             }
+        }
+
+        #[test]
+        fn should_fail_creating_http_requests_with_invalid_sender_info_signer() {
+            let envelope = HttpRequestEnvelope {
+                content: HttpQueryContent::Query {
+                    query: HttpUserQuery {
+                        sender_info: Some(RawSignedSenderInfo {
+                            info: Blob(fixed::sender_info_info()),
+                            signer: fixed::invalid_serialized_printipal_id(),
+                            sig: Blob(fixed::sender_info_sig()),
+                        }),
+                        ..default_http_user_query_content()
+                    },
+                },
+                sender_pubkey: None,
+                sender_sig: None,
+                sender_delegation: None,
+            };
+
+            let request = HttpRequest::try_from(envelope);
+
+            assert_matches!(request, Err(HttpRequestError::InvalidPrincipalId(_)));
         }
 
         #[test]
@@ -539,6 +622,14 @@ mod try_from {
             b"dummy_nonce".to_vec()
         }
 
+        pub fn sender_info_info() -> Vec<u8> {
+            vec![1, 2, 3]
+        }
+
+        pub fn sender_info_sig() -> Vec<u8> {
+            vec![4, 5, 6]
+        }
+
         pub fn pubkey() -> Vec<u8> {
             vec![3]
         }
@@ -561,7 +652,6 @@ mod hashing {
         Time,
         messages::{Blob, HttpQueryResponse, HttpQueryResponseReply, QueryResponseHash},
     };
-    use hex_literal::hex;
 
     #[test]
     fn hashing_query_response_reply() {
@@ -571,6 +661,17 @@ mod hashing {
                 arg: Blob(b"some_bytes".to_vec()),
             },
         };
+        let user_query = query::default_user_query_content_without_sender_info();
+        let query_response_hash = QueryResponseHash::new(
+            &query_response,
+            &user_query,
+            Time::from_nanos_since_unix_epoch(time),
+        );
+        assert_eq!(
+            hex::encode(query_response_hash.as_bytes()),
+            "7e94e73d1647506682a6300385bc99a63d1ef655222e5a3235f784ca3e80dca4"
+        );
+
         let user_query = query::default_user_query_content();
         let query_response_hash = QueryResponseHash::new(
             &query_response,
@@ -578,8 +679,8 @@ mod hashing {
             Time::from_nanos_since_unix_epoch(time),
         );
         assert_eq!(
-            query_response_hash.as_bytes(),
-            &hex!("7e94e73d1647506682a6300385bc99a63d1ef655222e5a3235f784ca3e80dca4")
+            hex::encode(query_response_hash.as_bytes()),
+            "6759237ceba8b6c5964cf0294d0ed42341f1f2c89cc76c4006cdbee002d37ec0"
         );
     }
 
@@ -591,6 +692,17 @@ mod hashing {
             reject_message: "system error".to_string(),
             error_code: "IC500".to_string(),
         };
+        let user_query = query::default_user_query_content_without_sender_info();
+        let query_response_hash = QueryResponseHash::new(
+            &query_response,
+            &user_query,
+            Time::from_nanos_since_unix_epoch(time),
+        );
+        assert_eq!(
+            hex::encode(query_response_hash.as_bytes()),
+            "bd80f930dfd3eafdf2d5c03031da9b5ec62963701abcb217d31c84005bd8db87"
+        );
+
         let user_query = query::default_user_query_content();
         let query_response_hash = QueryResponseHash::new(
             &query_response,
@@ -598,8 +710,8 @@ mod hashing {
             Time::from_nanos_since_unix_epoch(time),
         );
         assert_eq!(
-            query_response_hash.as_bytes(),
-            &hex!("bd80f930dfd3eafdf2d5c03031da9b5ec62963701abcb217d31c84005bd8db87")
+            hex::encode(query_response_hash.as_bytes()),
+            "481c75f8d7a90cf85685c8126b272566184ffed6374f61efcba9f40f3e69cbc2"
         );
     }
 }
@@ -608,8 +720,8 @@ mod cbor_serialization {
     use crate::{
         AmountOf, Time,
         messages::{
-            Blob, Delegation, HttpQueryResponse, HttpQueryResponseReply, HttpStatusResponse,
-            ReplicaHealthStatus, SignedDelegation,
+            Blob, Delegation, DelegationPermissions, HttpQueryResponse, HttpQueryResponseReply,
+            HttpStatusResponse, ReplicaHealthStatus, SignedDelegation,
             http::{HttpSignedQueryResponse, NodeSignature, btreemap},
         },
         time::UNIX_EPOCH,
@@ -733,6 +845,7 @@ mod cbor_serialization {
                 root_key: None,
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
+                guestos_version: None,
                 replica_health_status: Some(ReplicaHealthStatus::Starting),
                 certified_height: None,
             },
@@ -750,6 +863,7 @@ mod cbor_serialization {
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
+                guestos_version: None,
                 replica_health_status: Some(ReplicaHealthStatus::Healthy),
                 certified_height: None,
             },
@@ -768,6 +882,7 @@ mod cbor_serialization {
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
+                guestos_version: None,
                 replica_health_status: None,
                 certified_height: None,
             },
@@ -785,6 +900,7 @@ mod cbor_serialization {
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
+                guestos_version: None,
                 replica_health_status: Some(ReplicaHealthStatus::Healthy),
                 certified_height: Some(AmountOf::new(1)),
             },
@@ -804,11 +920,13 @@ mod cbor_serialization {
                 pubkey: Blob(vec![1, 2, 3]),
                 expiration: UNIX_EPOCH,
                 targets: None,
+                permissions: None,
             },
             Value::Map(btreemap! {
                 text("pubkey") => bytes(&[1, 2, 3]),
                 text("expiration") => int(0),
                 text("targets") => Value::Null,
+                text("permissions") => Value::Null,
             }),
         );
 
@@ -817,13 +935,106 @@ mod cbor_serialization {
                 pubkey: Blob(vec![1, 2, 3]),
                 expiration: UNIX_EPOCH,
                 targets: Some(vec![Blob(vec![4, 5, 6])]),
+                permissions: None,
             },
             Value::Map(btreemap! {
                 text("pubkey") => bytes(&[1, 2, 3]),
                 text("expiration") => int(0),
                 text("targets") => Value::Array(vec![bytes(&[4, 5, 6])]),
+                text("permissions") => Value::Null,
             }),
         );
+
+        assert_cbor_ser_equal(
+            &Delegation {
+                pubkey: Blob(vec![1, 2, 3]),
+                expiration: UNIX_EPOCH,
+                targets: None,
+                permissions: Some(DelegationPermissions::Queries),
+            },
+            Value::Map(btreemap! {
+                text("pubkey") => bytes(&[1, 2, 3]),
+                text("expiration") => int(0),
+                text("targets") => Value::Null,
+                text("permissions") => text("queries"),
+            }),
+        );
+
+        // A delegation may carry both `targets` and `permissions`.
+        assert_cbor_ser_equal(
+            &Delegation {
+                pubkey: Blob(vec![1, 2, 3]),
+                expiration: UNIX_EPOCH,
+                targets: Some(vec![Blob(vec![4, 5, 6])]),
+                permissions: Some(DelegationPermissions::Queries),
+            },
+            Value::Map(btreemap! {
+                text("pubkey") => bytes(&[1, 2, 3]),
+                text("expiration") => int(0),
+                text("targets") => Value::Array(vec![bytes(&[4, 5, 6])]),
+                text("permissions") => text("queries"),
+            }),
+        );
+    }
+
+    /// Verifies that the optional `permissions` field survives a full CBOR
+    /// wire round-trip (serialize to bytes, deserialize back), since
+    /// requests carry delegations as CBOR on the wire. An absent field must
+    /// deserialize to `None` so that delegations predating this field remain
+    /// parseable.
+    #[test]
+    fn delegation_permissions_cbor_round_trip() {
+        use crate::crypto::Signable;
+
+        for permissions in [
+            None,
+            Some(DelegationPermissions::Queries),
+            Some(DelegationPermissions::All),
+        ] {
+            let delegation = Delegation {
+                pubkey: Blob(vec![1, 2, 3]),
+                expiration: UNIX_EPOCH,
+                targets: None,
+                permissions,
+            };
+            let bytes = serde_cbor::to_vec(&delegation).unwrap();
+            let decoded: Delegation = serde_cbor::from_slice(&bytes).unwrap();
+            assert_eq!(decoded.permissions, permissions);
+            // The signed bytes (which include the permissions field) must
+            // also match, i.e. the round-trip preserves what gets signed.
+            assert_eq!(decoded.as_signed_bytes(), delegation.as_signed_bytes());
+        }
+
+        // A delegation encoded without the `permissions` key (as produced by
+        // implementations predating the field) deserializes to `None`.
+        let without_permissions = Value::Map(btreemap! {
+            text("pubkey") => bytes(&[1, 2, 3]),
+            text("expiration") => int(0),
+        });
+        let decoded: Delegation = serde_cbor::value::from_value(without_permissions).unwrap();
+        assert_eq!(decoded.permissions, None);
+        assert_eq!(decoded.targets, None);
+    }
+
+    /// A delegation whose `permissions` field carries an unsupported value
+    /// (anything other than `"queries"`/`"all"`, including case and
+    /// whitespace variants of them) must fail to deserialize, so requests
+    /// carrying such a delegation are rejected when decoded.
+    #[test]
+    fn delegation_permissions_rejects_unsupported_value() {
+        for unsupported in [
+            "writes", "updates", "", "QUERIES", "queries ", " queries", "All", "all ",
+        ] {
+            let encoded = Value::Map(btreemap! {
+                text("pubkey") => bytes(&[1, 2, 3]),
+                text("expiration") => int(0),
+                text("permissions") => text(unsupported),
+            });
+            assert!(
+                serde_cbor::value::from_value::<Delegation>(encoded).is_err(),
+                "permissions value {unsupported:?} unexpectedly deserialized"
+            );
+        }
     }
 
     #[test]
@@ -834,6 +1045,7 @@ mod cbor_serialization {
                     pubkey: Blob(vec![1, 2, 3]),
                     expiration: UNIX_EPOCH,
                     targets: None,
+                    permissions: None,
                 },
                 signature: Blob(vec![4, 5, 6]),
             },
@@ -842,6 +1054,7 @@ mod cbor_serialization {
                     text("pubkey") => bytes(&[1, 2, 3]),
                     text("expiration") => int(0),
                     text("targets") => Value::Null,
+                    text("permissions") => Value::Null,
                 }),
                 text("signature") => bytes(&[4, 5, 6]),
             }),
@@ -949,6 +1162,7 @@ mod to_authentication {
                     sender: Blob(vec![4]),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
             },
             sender_delegation,
@@ -967,7 +1181,7 @@ mod to_authentication {
     fn dummy_delegation() -> Option<Vec<SignedDelegation>> {
         let delegation_pubkey = Blob(vec![7, 8, 9]);
         let delegation_signature = Blob(vec![10, 11, 12]);
-        let expiration = 54378u64;
+        let expiration = 54378_u64;
         Some(vec![SignedDelegation::new(
             Delegation::new(
                 delegation_pubkey.to_vec(),

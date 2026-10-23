@@ -59,11 +59,24 @@ fn create_unique_working_dir() -> PathBuf {
     path
 }
 
-fn execute_test_scenario_with_default_cmd(scenario_name: &str) -> Output {
-    let working_dir = create_unique_working_dir();
+/// Prepares a command running the test-driver binary on the given scenario.
+///
+/// `XML_OUTPUT_FILE` is dropped from the child's environment on purpose: the
+/// driver writes its JUnit XML report there, and these children are not the
+/// process Bazel launched as the test, so they would otherwise each overwrite
+/// the test.xml that Bazel expects *this* test to produce.
+fn driver_command(scenario_name: &str) -> Command {
     let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
     let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    cmd.env("TEST_SCENARIO_NAME", scenario_name)
+        .env_remove("XML_OUTPUT_FILE");
+    cmd
+}
+
+fn execute_test_scenario_with_default_cmd(scenario_name: &str) -> Output {
+    let working_dir = create_unique_working_dir();
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",
@@ -95,7 +108,7 @@ fn test_scenario_without_errors_succeeds() {
     );
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(
-        &summary, /* successes */ 4, /* failures */ 0, /* skipped */ 0,
+        &summary, /* successes */ 3, /* failures */ 0, /* skipped */ 0,
     );
     assert_name_and_message_eq(&summary.success[0], "setup", SUCCESS);
     assert_name_and_message_eq(&summary.success[1], "test_to_succeed", SUCCESS);
@@ -112,7 +125,7 @@ fn test_scenario_with_test_panic_fails() {
     );
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(
-        &summary, /* successes */ 3, /* failures */ 1, /* skipped */ 0,
+        &summary, /* successes */ 2, /* failures */ 1, /* skipped */ 0,
     );
     assert_name_and_message_eq(&summary.success[0], "setup", SUCCESS);
     assert_name_and_message_eq(
@@ -126,9 +139,8 @@ fn test_scenario_with_test_panic_fails() {
 fn test_scenario_with_default_farm_url_succeeds() {
     let working_dir = create_unique_working_dir();
     let scenario_name = "test_without_errors";
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",
@@ -154,9 +166,8 @@ fn test_scenario_with_default_farm_url_succeeds() {
 fn test_scenario_with_custom_farm_url_succeeds() {
     let working_dir = create_unique_working_dir();
     let scenario_name = "test_without_errors";
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",
@@ -184,9 +195,8 @@ fn test_scenario_with_custom_farm_url_succeeds() {
 fn test_scenario_with_skipped_panic_test_succeeds() {
     let working_dir = create_unique_working_dir();
     let scenario_name = "test_with_panic";
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",
@@ -203,7 +213,7 @@ fn test_scenario_with_skipped_panic_test_succeeds() {
     );
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(
-        &summary, /* successes */ 3, /* failures */ 0, /* skipped */ 1,
+        &summary, /* successes */ 2, /* failures */ 0, /* skipped */ 1,
     );
     assert_name_and_message_eq(&summary.success[0], "setup", SUCCESS);
     assert_name_and_message_eq(&summary.skipped[0], "test_to_fail", SKIP);
@@ -213,9 +223,8 @@ fn test_scenario_with_skipped_panic_test_succeeds() {
 fn test_scenario_with_non_skipped_panic_test_fails() {
     let working_dir = create_unique_working_dir();
     let scenario_name = "test_with_panic";
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",
@@ -232,7 +241,7 @@ fn test_scenario_with_non_skipped_panic_test_fails() {
     );
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(
-        &summary, /* successes */ 3, /* failures */ 1, /* skipped */ 0,
+        &summary, /* successes */ 2, /* failures */ 1, /* skipped */ 0,
     );
     assert_name_and_message_eq(&summary.success[0], "setup", SUCCESS);
     assert_name_and_message_eq(
@@ -246,9 +255,8 @@ fn test_scenario_with_non_skipped_panic_test_fails() {
 fn test_scenario_with_two_skipped_panic_tests_succeeds() {
     let working_dir = create_unique_working_dir();
     let scenario_name = "test_with_two_panics";
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",
@@ -265,7 +273,7 @@ fn test_scenario_with_two_skipped_panic_tests_succeeds() {
     );
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(
-        &summary, /* successes */ 4, /* failures */ 0, /* skipped */ 2,
+        &summary, /* successes */ 3, /* failures */ 0, /* skipped */ 2,
     );
     assert_name_and_message_eq(&summary.success[0], "setup", SUCCESS);
     assert_name_and_message_eq(&summary.success[1], "test_to_succeed", SUCCESS);
@@ -283,7 +291,7 @@ fn test_scenario_with_setup_panic_fails() {
     );
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(
-        &summary, /* successes */ 2, /* failures */ 2, /* skipped */ 0,
+        &summary, /* successes */ 1, /* failures */ 2, /* skipped */ 0,
     );
     assert_name_and_message_eq(&summary.failure[0], "setup", Some("this setup panics"));
     assert_name_and_message_eq(
@@ -303,7 +311,7 @@ fn test_that_runs_out_of_time() {
     );
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(
-        &summary, /* successes */ 3, /* failures */ 1, /* skipped */ 0,
+        &summary, /* successes */ 2, /* failures */ 1, /* skipped */ 0,
     );
     assert_name_and_message_eq(&summary.success[0], "setup", SUCCESS);
     assert_name_and_message_eq(
@@ -333,7 +341,7 @@ fn test_that_runs_1_parallel_task() {
     );
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(
-        &summary, /* successes */ 4, /* failures */ 0, /* skipped */ 0,
+        &summary, /* successes */ 3, /* failures */ 0, /* skipped */ 0,
     );
     assert_name_and_message_eq(&summary.success[0], "setup", SUCCESS);
     assert_name_and_message_eq(&summary.success[1], "test_to_succeed_3sec", SUCCESS);
@@ -349,7 +357,7 @@ fn test_that_runs_2_parallel_tasks() {
     );
     let mut summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(
-        &summary, /* successes */ 5, /* failures */ 0, /* skipped */ 0,
+        &summary, /* successes */ 4, /* failures */ 0, /* skipped */ 0,
     );
     // parallel sets of tasks are not ordered, so we first sort them for assertion
     summary.success[1..=2].sort_by(|t1, t2| t1.name.cmp(&t2.name));
@@ -368,7 +376,7 @@ fn test_that_runs_3_parallel_tasks() {
     );
     let mut summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(
-        &summary, /* successes */ 6, /* failures */ 0, /* skipped */ 0,
+        &summary, /* successes */ 5, /* failures */ 0, /* skipped */ 0,
     );
     // parallel sets of tasks are not ordered, so we first sort them for assertion
     summary.success[1..=3].sort_by(|t1, t2| t1.name.cmp(&t2.name));
@@ -390,7 +398,7 @@ fn test_that_runs_3_parallel_tasks_one_of_which_fails() {
     );
     let mut summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(
-        &summary, /* successes */ 5, /* failures */ 1, /* skipped */ 0,
+        &summary, /* successes */ 4, /* failures */ 1, /* skipped */ 0,
     );
     // parallel sets of tasks are not ordered, so we first sort them for assertion
     summary.success[1..=2].sort_by(|t1, t2| t1.name.cmp(&t2.name));
@@ -416,7 +424,7 @@ fn test_that_runs_2_parallel_tasks_then_one_task_then_2_parallel_tasks() {
     );
     let mut summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(
-        &summary, /* successes */ 8, /* failures */ 0, /* skipped */ 0,
+        &summary, /* successes */ 7, /* failures */ 0, /* skipped */ 0,
     );
     // parallel sets of tasks are not ordered, so we first sort them for assertion
     summary.success[1..=2].sort_by(|t1, t2| t1.name.cmp(&t2.name));
@@ -441,7 +449,7 @@ fn test_that_runs_2_parallel_tasks_then_one_failing_task_then_2_parallel_tasks()
     );
     let mut summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(
-        &summary, /* successes */ 7, /* failures */ 1, /* skipped */ 0,
+        &summary, /* successes */ 6, /* failures */ 1, /* skipped */ 0,
     );
     // parallel sets of tasks are not ordered, so we sort them for assertion first
     summary.success[1..=2].sort_by(|t1, t2| t1.name.cmp(&t2.name));
@@ -468,7 +476,7 @@ fn test_overall_group_timeout_in_test() {
     );
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(
-        &summary, /* successes */ 1, /* failures */ 3, /* skipped */ 0,
+        &summary, /* successes */ 1, /* failures */ 2, /* skipped */ 0,
     );
     assert_name_and_message_eq(&summary.success[0], "setup", SUCCESS);
     assert_name_and_message_eq(
@@ -488,7 +496,7 @@ fn test_overall_group_timeout_in_setup() {
     );
     // panic!("{:?}", result);
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
-    assert_test_summary_size(&summary, 0, 4, 0);
+    assert_test_summary_size(&summary, 0, 3, 0);
     assert_name_and_message_eq(&summary.failure[0], "setup", Some("Timeout after 5s"));
     assert_name_and_message_eq(
         &summary.failure[1],
@@ -515,7 +523,7 @@ fn test_test_spawning_proc_gets_stopped() {
     assert!(err_str.contains("magicchild1"));
     assert!(!err_str.contains("magicchild10"));
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
-    assert_test_summary_size(&summary, 3, 1, 0);
+    assert_test_summary_size(&summary, 2, 1, 0);
     assert_name_and_message_eq(
         &summary.failure[0],
         "spawning_process",
@@ -527,9 +535,8 @@ fn test_test_spawning_proc_gets_stopped() {
 fn test_setup_failure_file_written() {
     let working_dir = create_unique_working_dir();
     let scenario_name = "test_without_errors";
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",
@@ -554,9 +561,8 @@ fn test_setup_failure_file_written() {
 fn test_setup_failure_file_not_written() {
     let working_dir = create_unique_working_dir();
     let scenario_name = "test_with_setup_panic";
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",

@@ -1,11 +1,7 @@
-#![allow(deprecated)]
-use candid::{Decode, candid_method};
+use candid::{Decode, Encode, candid_method};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{
-    api::{
-        call::{arg_data_raw, reply, reply_raw},
-        caller, print,
-    },
+    api::{debug_print, msg_arg_data, msg_caller, msg_reply},
     futures::internals::{in_executor_context, in_query_executor_context},
     post_upgrade, query,
 };
@@ -182,11 +178,11 @@ fn set_last_upgrade_timestamp(timestamp: u64) {
 // Append the Blocks to the internal Vec
 fn append_blocks(blocks: Vec<EncodedBlock>) {
     assert_eq!(
-        PrincipalId::from(caller()),
+        PrincipalId::from(msg_caller()),
         ledger_canister_id().get(),
         "Only Ledger canister is allowed to append blocks to an Archive Node"
     );
-    print(format!(
+    debug_print(format!(
         "[archive node] append_blocks(): archive size: {} blocks, appending {} blocks",
         blocks_len(),
         blocks.len()
@@ -197,7 +193,7 @@ fn append_blocks(blocks: Vec<EncodedBlock>) {
     if total_block_size() > max_memory_size_bytes() {
         ic_cdk::trap("No space left");
     }
-    print(format!(
+    debug_print(format!(
         "[archive node] append_blocks(): done. archive size: {} blocks",
         blocks_len()
     ));
@@ -223,7 +219,7 @@ fn remaining_capacity() -> u64 {
     let remaining_capacity = max_memory_size_bytes()
         .checked_sub(total_block_size())
         .unwrap();
-    print(format!(
+    debug_print(format!(
         "[archive node] remaining_capacity: {remaining_capacity} bytes"
     ));
     remaining_capacity
@@ -236,12 +232,12 @@ fn init(
 ) {
     match max_memory_size_bytes {
         None => {
-            print(format!(
+            debug_print(format!(
                 "[archive node] init(): using default maximum memory size: {DEFAULT_MAX_MEMORY_SIZE} bytes and height offset {block_height_offset}"
             ));
         }
         Some(max_memory_size_bytes) => {
-            print(format!(
+            debug_print(format!(
                 "[archive node] init(): using maximum memory size: {max_memory_size_bytes} bytes and height offset {block_height_offset}"
             ));
         }
@@ -267,16 +263,16 @@ fn get_block(block_height: BlockIndex) -> BlockRes {
 fn get_block_() {
     in_query_executor_context(|| {
         let arg: BlockIndex =
-            from_proto_bytes(arg_data_raw()).expect("failed to decode get_block_pb argument");
+            from_proto_bytes(msg_arg_data()).expect("failed to decode get_block_pb argument");
         let res = to_proto_bytes(get_block(arg)).expect("failed to encode get_block_pb response");
-        reply_raw(&res)
+        msg_reply(&res)
     })
 }
 
 #[unsafe(export_name = "canister_init")]
 fn main() {
     in_executor_context(|| {
-        let bytes = arg_data_raw();
+        let bytes = msg_arg_data();
         let (archive_canister_id, block_height_offset, opt_max_size) =
             Decode!(&bytes, ic_base_types::CanisterId, u64, Option<u64>)
                 .expect("failed to decode init arguments");
@@ -286,16 +282,16 @@ fn main() {
 
 #[unsafe(export_name = "canister_update remaining_capacity")]
 fn remaining_capacity_() {
-    in_executor_context(|| reply((remaining_capacity(),)))
+    in_executor_context(|| msg_reply(Encode!(&remaining_capacity()).unwrap()))
 }
 
 #[unsafe(export_name = "canister_update append_blocks")]
 fn append_blocks_() {
     in_executor_context(|| {
-        let blocks = Decode!(&arg_data_raw(), Vec<EncodedBlock>)
+        let blocks = Decode!(&msg_arg_data(), Vec<EncodedBlock>)
             .expect("failed to decode append_blocks argument");
         append_blocks(blocks);
-        reply(());
+        msg_reply(Encode!().unwrap());
     })
 }
 
@@ -309,9 +305,9 @@ fn append_blocks_() {
 fn iter_blocks_() {
     in_query_executor_context(|| {
         let IterBlocksArgs { start, length } =
-            from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
+            from_proto_bytes(msg_arg_data()).expect("failed to decode iter_blocks_pb argument");
         let length = length.min(icp_ledger::max_blocks_per_request(&PrincipalId::from(
-            caller(),
+            msg_caller(),
         )));
         let blocks_len = blocks_len() as usize;
         let start = start.min(blocks_len);
@@ -322,7 +318,7 @@ fn iter_blocks_() {
         }
         let res_proto = to_proto_bytes(IterBlocksRes(blocks))
             .expect("failed to encode iter_blocks_pb response");
-        reply_raw(&res_proto)
+        msg_reply(&res_proto)
     })
 }
 
@@ -332,11 +328,11 @@ fn iter_blocks_() {
 fn get_blocks_() {
     in_query_executor_context(|| {
         let GetBlocksArgs { start, length } =
-            from_proto_bytes(arg_data_raw()).expect("failed to decode get_blocks_pb argument");
+            from_proto_bytes(msg_arg_data()).expect("failed to decode get_blocks_pb argument");
         let from_offset = block_height_offset();
         let length = length
             .min(usize::MAX as u64)
-            .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64);
+            .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(msg_caller())) as u64);
         let local_blocks_range = from_offset..from_offset + blocks_len();
         let requested_range = start..start + length;
         if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
@@ -348,7 +344,7 @@ fn get_blocks_() {
                 local_blocks_range.end
             )));
             let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb response");
-            reply_raw(&res_proto);
+            msg_reply(&res_proto);
             return;
         }
         let mut blocks = vec![];
@@ -359,7 +355,7 @@ fn get_blocks_() {
         }
         let res_proto = to_proto_bytes(GetBlocksRes(Ok(blocks)))
             .expect("failed to encode get_blocks_pb response");
-        reply_raw(&res_proto);
+        msg_reply(&res_proto);
     })
 }
 
@@ -378,8 +374,8 @@ fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult
 fn get_blocks_candid_() {
     in_query_executor_context(|| {
         let args =
-            Decode!(&arg_data_raw(), GetBlocksArgs).expect("failed to decode get_blocks argument");
-        reply((get_blocks(args),));
+            Decode!(&msg_arg_data(), GetBlocksArgs).expect("failed to decode get_blocks argument");
+        msg_reply(Encode!(&get_blocks(args)).unwrap());
     })
 }
 
@@ -395,7 +391,7 @@ fn post_upgrade(upgrade_arg: Option<ArchiveUpgradeArgument>) {
     // We do not support migration from scratch stable memory anymore
     assert_eq!(stable_memory_version(), MEMORY_VERSION_MEM_MGR_INSTALLED);
     if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
-        print(format!(
+        debug_print(format!(
             "Changing the max_memory_size_bytes to {max_memory_size_bytes}"
         ));
         set_max_memory_size_bytes(max_memory_size_bytes);
@@ -426,12 +422,12 @@ fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     )?;
     w.encode_gauge(
         "archive_node_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
+        (ic_cdk::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
@@ -492,7 +488,7 @@ fn read_encoded_blocks(start: u64, length: usize) -> Result<Vec<EncodedBlock>, G
         &block_range,
         &range_utils::take(
             &requested_range,
-            icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())),
+            icp_ledger::max_blocks_per_request(&PrincipalId::from(msg_caller())),
         ),
     ) {
         Ok(range) => range,
@@ -511,16 +507,16 @@ fn read_encoded_blocks(start: u64, length: usize) -> Result<Vec<EncodedBlock>, G
 #[unsafe(export_name = "canister_query get_encoded_blocks")]
 fn get_encoded_blocks_blocks_() {
     in_query_executor_context(|| {
-        let args = Decode!(&arg_data_raw(), GetBlocksArgs)
+        let args = Decode!(&msg_arg_data(), GetBlocksArgs)
             .expect("failed to decode get_encoded_blocks argument");
-        reply((get_encoded_blocks(args),));
+        msg_reply(Encode!(&get_encoded_blocks(args)).unwrap());
     })
 }
 
 #[unsafe(export_name = "canister_query __get_candid_interface_tmp_hack")]
 fn get_canidid_interface() {
     in_query_executor_context(|| {
-        reply((include_str!(env!("LEDGER_ARCHIVE_DID_PATH")),));
+        msg_reply(Encode!(&include_str!(env!("LEDGER_ARCHIVE_DID_PATH"))).unwrap());
     })
 }
 

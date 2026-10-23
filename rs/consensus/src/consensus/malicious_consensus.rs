@@ -138,16 +138,17 @@ impl ConsensusImpl {
     ) -> Option<BlockProposal> {
         let height = parent.height().increment();
         let mut context = parent.as_ref().context.clone();
-        context.certified_height = self.state_manager.latest_certified_height();
+        context.certified_height = self.state_reader.latest_certified_height();
 
         // Note that we will skip blockmaking if registry versions or replica_versions
         // are missing or temporarily not retrievable.
         let registry_version = pool.registry_version(height)?;
+        let last_summary_block = pool.dkg_summary_block(parent.as_ref())?;
 
         // Get the subnet records that are relevant to making a block
         let stable_registry_version = self
             .block_maker
-            .get_stable_registry_version(parent.as_ref())?;
+            .get_stable_registry_version(parent.as_ref(), &last_summary_block)?;
         let subnet_records = block_maker::subnet_records_for_registry_version(
             &self.block_maker,
             registry_version,
@@ -158,6 +159,7 @@ impl ConsensusImpl {
             pool,
             context,
             parent,
+            &last_summary_block,
             height,
             rank,
             registry_version,
@@ -276,7 +278,11 @@ impl ConsensusImpl {
         pool: &PoolReader<'_>,
         block: &Block,
     ) -> Option<FinalizationShare> {
-        let content = FinalizationContent::new(block.height, ic_types::crypto::crypto_hash(block));
+        let content = FinalizationContent::new(
+            block.height,
+            ic_types::crypto::crypto_hash(block),
+            self.replica_config.replica_version().clone(),
+        );
         let signature = self
             .finalizer
             .crypto

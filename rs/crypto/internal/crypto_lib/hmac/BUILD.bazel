@@ -2,23 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test",
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/sha2",
-]
-
-MACRO_DEPENDENCIES = []
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:hex",
-    "@crate_index//:wycheproof",
-]
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_doc_test(
     name = "hmac_doc_test",
     crate = ":hmac",
@@ -27,25 +10,31 @@ rust_doc_test(
 rust_library(
     name = "hmac",
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
     crate_name = "ic_crypto_internal_hmac",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/sha2",
+    ],
 )
 
 rust_test(
     name = "hmac_test",
-    aliases = ALIASES,
     crate = ":hmac",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/sha2",
+    ],
 )
 
 rust_test_suite(
     name = "hmac_integration",
     srcs = glob(["tests/**/*.rs"]),
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":hmac"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":hmac",
+        "//rs/crypto/sha2",
+        "@crate_index//:hex",
+        "@crate_index//:wycheproof",
+    ],
 )

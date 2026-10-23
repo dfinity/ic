@@ -1,10 +1,11 @@
-use crate::registry::Registry;
+use crate::{common::key_family::get_key_family_iter, registry::Registry};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::{
-    subnet::v1::SubnetListRecord, unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
+    replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetListRecord,
+    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_keys::{
-    make_api_boundary_node_record_key, make_node_record_key,
+    REPLICA_VERSION_KEY_PREFIX, make_api_boundary_node_record_key, make_node_record_key,
     make_unassigned_nodes_config_record_key,
 };
 use prost::Message;
@@ -18,8 +19,14 @@ pub fn get_subnet_ids_from_subnet_list(subnet_list: SubnetListRecord) -> Vec<Sub
         .collect()
 }
 
-fn blessed_versions_to_string(blessed: &[String]) -> String {
-    format!("[{}]", blessed.join(", "))
+pub fn get_elected_replica_version_ids(registry: &Registry) -> Vec<String> {
+    get_key_family_iter::<ReplicaVersionRecord>(registry, REPLICA_VERSION_KEY_PREFIX)
+        .map(|(k, _)| k)
+        .collect()
+}
+
+fn replica_versions_to_string(versions: &[String]) -> String {
+    format!("[{}]", versions.join(", "))
 }
 
 pub(crate) fn check_api_boundary_nodes_exist(registry: &Registry, node_ids: &[NodeId]) {
@@ -35,13 +42,13 @@ pub(crate) fn check_api_boundary_nodes_exist(registry: &Registry, node_ids: &[No
     });
 }
 
-pub(crate) fn check_replica_version_is_blessed(registry: &Registry, replica_version_id: &str) {
-    let blessed_version_ids = registry.get_blessed_replica_version_ids();
+pub(crate) fn check_replica_version_is_elected(registry: &Registry, replica_version_id: &str) {
+    let version_ids = get_elected_replica_version_ids(registry);
     assert!(
-        blessed_version_ids.contains(&replica_version_id.to_string()),
-        "Replica version '{}' is NOT blessed. The blessed versions are: {}.",
+        version_ids.contains(&replica_version_id.to_string()),
+        "Replica version '{}' is NOT elected. The elected versions are: {}.",
         replica_version_id,
-        blessed_versions_to_string(&blessed_version_ids)
+        replica_versions_to_string(&version_ids)
     );
 }
 

@@ -1,5 +1,4 @@
 mod partitions;
-mod proposal;
 mod recovery;
 mod verity;
 
@@ -9,11 +8,14 @@ mod tests;
 use anyhow::{Context, Result};
 use command_runner::{CommandRunner, RealCommandRunner};
 use ic_device::mount::PartitionProvider;
+use ic_os_logging::init_kmsg_logging;
 use linux_kernel_command_line::KernelCommandLine;
 use recovery::extract_and_verify_recovery_rootfs_hash;
 use sev_guest::firmware::SevGuestFirmware;
 use std::path::Path;
+use std::process::ExitCode;
 use std::str::FromStr;
+use tracing::{error, info, warn};
 use verity::veritysetup;
 
 /// Opens the root filesystem with dm-verity verification.
@@ -23,7 +25,20 @@ use verity::veritysetup;
 /// command line. If that fails, it falls back reading and verifying an alternative GuestOS
 /// proposal which allows booting from a recovery root filesystem.
 #[cfg(target_os = "linux")]
-fn main() -> Result<()> {
+fn main() -> ExitCode {
+    init_kmsg_logging();
+    // Returning Result from main would write the result to stderr, but we want to write it to
+    // kmsg, so wrap it.
+    if let Err(e) = main_() {
+        error!("{e:#}");
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn main_() -> Result<()> {
     // We should be very careful about erroring out before the run() call. We should not block
     // the regular (non-recovery) code path just because some dependency for the recovery
     // code path has failed.
@@ -58,7 +73,7 @@ pub fn run(
     // Try to get SEV Firmware handle
     let sev_firmware = sev_firmware_provider();
 
-    eprintln!("Attempting to open root device with base root hash from kernel cmdline");
+    info!("Attempting to open root device with base root hash from kernel cmdline");
     match veritysetup(
         root_device,
         &base_root_hash,
@@ -66,15 +81,15 @@ pub fn run(
         sev_firmware.is_ok(),
     ) {
         Ok(_) => {
-            eprintln!("Successfully opened root device with base root hash");
+            info!("Successfully opened root device with base root hash");
             return Ok(());
         }
         Err(e) => {
-            eprintln!("Failed to open root device with base root hash: {e:?}");
+            warn!("Failed to open root device with base root hash: {e:?}");
         }
     }
 
-    eprintln!("Trying alternative GuestOS proposal");
+    info!("Trying alternative GuestOS proposal");
 
     let recovery_hash = extract_and_verify_recovery_rootfs_hash(
         root_device,
@@ -84,12 +99,12 @@ pub fn run(
     )
     .context("Failed to extract/verify alternative GuestOS proposal")?;
 
-    eprintln!(
+    info!(
         "Found and verified alternative GuestOS proposal, attempting to open with recovery root \
         hash"
     );
     veritysetup(root_device, &recovery_hash, command_runner, true)?;
-    eprintln!("Successfully opened root device with recovery root hash");
+    info!("Successfully opened root device with recovery root hash");
 
     Ok(())
 }

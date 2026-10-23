@@ -11,6 +11,7 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    time::Duration,
 };
 use tokio::net::TcpStream;
 use tower::{BoxError, Service};
@@ -39,6 +40,9 @@ impl TlsConnector {
     pub fn new(tls: Arc<dyn TlsConfig>) -> Self {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
+        // Fail fast on a stuck TCP connect instead of relying solely on the
+        // per-query timeout (defense in depth against connection-setup storms).
+        http.set_connect_timeout(Some(Duration::from_secs(5)));
         Self {
             connection_type: ConnectionType::Tls,
             http,
@@ -51,6 +55,9 @@ impl TlsConnector {
     pub fn new_for_tests(tls: Arc<dyn TlsConfig>) -> Self {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
+        // Fail fast on a stuck TCP connect instead of relying solely on the
+        // per-query timeout (defense in depth against connection-setup storms).
+        http.set_connect_timeout(Some(Duration::from_secs(5)));
         Self {
             connection_type: ConnectionType::Raw,
             http,

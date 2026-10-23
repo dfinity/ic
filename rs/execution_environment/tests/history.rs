@@ -7,17 +7,15 @@ use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_types::ids::{
     canister_test_id, message_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
-    Height,
+    ExecutionRound, Height,
     ingress::{IngressState, IngressStatus, WasmResult},
     time::UNIX_EPOCH,
 };
-use std::sync::Arc;
 use tokio::sync::mpsc::{channel, error::TryRecvError};
 
 use IngressStatus::*;
@@ -82,14 +80,18 @@ fn failed() -> IngressStatus {
     }
 }
 
-fn valid_transitions() -> Vec<(IngressStatus, Vec<IngressStatus>)> {
+/// The valid state transitions, as `(origin status, next statuses)` pairs. An
+/// origin of `None` stands for `IngressStatus::Unknown`, i.e. for the absence of
+/// an ingress history entry (which is why it is not a status one can transition
+/// *to*: recording an `IngressStatus::Unknown` is a bug).
+fn valid_transitions() -> Vec<(Option<IngressStatus>, Vec<IngressStatus>)> {
     vec![
+        (None, vec![received(), processing(), completed(), failed()]),
+        (Some(received()), vec![processing(), completed(), failed()]),
         (
-            Unknown,
-            vec![Unknown, received(), processing(), completed(), failed()],
+            Some(processing()),
+            vec![processing(), completed(), failed()],
         ),
-        (received(), vec![processing(), completed(), failed()]),
-        (processing(), vec![processing(), completed(), failed()]),
     ]
 }
 
@@ -98,12 +100,8 @@ fn valid_transitions() -> Vec<(IngressStatus, Vec<IngressStatus>)> {
 #[test]
 fn test_terminal_states_are_transmitted() {
     with_test_replica_logger(|log| {
-        let mut state_manager = MockStateManager::new();
-
-        let last_committed_state_height = Height::new(10);
-        state_manager
-            .expect_latest_state_height()
-            .return_const(last_committed_state_height);
+        let current_round = ExecutionRound::from(11);
+        let expected_height = Height::from(current_round.get());
 
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         let (completed_execution_messages_tx, mut completed_execution_messages_rx) = channel(100);
@@ -112,18 +110,27 @@ fn test_terminal_states_are_transmitted() {
             log,
             &MetricsRegistry::new(),
             completed_execution_messages_tx,
-            Arc::new(state_manager),
         );
         let message_id = message_test_id(1);
 
-        ingress_history_writer.set_status(&mut state, message_id.clone(), received());
+        ingress_history_writer.set_status(
+            &mut state,
+            message_id.clone(),
+            received(),
+            ExecutionRound::from(0),
+        );
         assert_eq!(
             completed_execution_messages_rx.try_recv(),
             Err(TryRecvError::Empty),
             "Non terminal state should not trigger a transmission."
         );
 
-        ingress_history_writer.set_status(&mut state, message_id.clone(), processing());
+        ingress_history_writer.set_status(
+            &mut state,
+            message_id.clone(),
+            processing(),
+            ExecutionRound::from(0),
+        );
         assert_eq!(
             completed_execution_messages_rx.try_recv(),
             Err(TryRecvError::Empty),
@@ -132,26 +139,30 @@ fn test_terminal_states_are_transmitted() {
 
         {
             let mut state = state.clone();
-            ingress_history_writer.set_status(&mut state, message_id.clone(), completed());
+            ingress_history_writer.set_status(
+                &mut state,
+                message_id.clone(),
+                completed(),
+                current_round,
+            );
             assert_eq!(
                 completed_execution_messages_rx.try_recv(),
-                Ok((
-                    message_id.clone(),
-                    last_committed_state_height + Height::from(1)
-                )),
+                Ok((message_id.clone(), expected_height)),
                 "Terminal state, `Completed`, should trigger the height of state to be sent"
             );
         }
 
         {
             let mut state = state.clone();
-            ingress_history_writer.set_status(&mut state, message_id.clone(), failed());
+            ingress_history_writer.set_status(
+                &mut state,
+                message_id.clone(),
+                failed(),
+                current_round,
+            );
             assert_eq!(
                 completed_execution_messages_rx.try_recv(),
-                Ok((
-                    message_id.clone(),
-                    last_committed_state_height + Height::from(1)
-                )),
+                Ok((message_id.clone(), expected_height)),
                 "Terminal state, `Failed`, should trigger the height of state to be sent"
             );
         }
@@ -163,20 +174,25 @@ fn test_valid_transitions() {
     with_test_replica_logger(|log| {
         let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-        let state_reader = Arc::new(FakeStateManager::new());
         let (completed_execution_messages_tx, _) = channel(1);
         let ingress_history_writer = IngressHistoryWriterImpl::new(
             Config::default(),
             log,
             &MetricsRegistry::new(),
             completed_execution_messages_tx,
-            state_reader,
         );
         let message_id = message_test_id(1);
 
         for (origin_state, next_states) in valid_transitions().into_iter() {
             let mut state = state.clone();
-            ingress_history_writer.set_status(&mut state, message_id.clone(), origin_state);
+            if let Some(origin_state) = origin_state {
+                ingress_history_writer.set_status(
+                    &mut state,
+                    message_id.clone(),
+                    origin_state,
+                    ExecutionRound::from(0),
+                );
+            }
 
             for next_state in next_states {
                 let mut state = state.clone();
@@ -184,6 +200,7 @@ fn test_valid_transitions() {
                     &mut state,
                     message_id.clone(),
                     next_state.clone(),
+                    ExecutionRound::from(0),
                 );
                 assert_eq!(state.get_ingress_status(&message_id), &next_state);
             }
@@ -194,14 +211,12 @@ fn test_valid_transitions() {
 #[test]
 fn test_invalid_transitions() {
     with_test_replica_logger(|log| {
-        let state_reader = Arc::new(FakeStateManager::new());
         let (completed_execution_messages_tx, _) = channel(1);
         let ingress_history_writer = IngressHistoryWriterImpl::new(
             Config::default(),
             log,
             &MetricsRegistry::new(),
             completed_execution_messages_tx,
-            state_reader,
         );
         let message_id = message_test_id(1);
 
@@ -214,15 +229,16 @@ fn test_invalid_transitions() {
                     .into_iter()
                     .map(move |next| (origin.clone(), next))
             })
-            .collect::<HashSet<(IngressStatus, IngressStatus)>>();
+            .collect::<HashSet<(Option<IngressStatus>, IngressStatus)>>();
 
         let all_statuses = [Unknown, received(), processing(), completed(), failed()];
-        // creates the cartesian product of all states and filters out the valid
-        // transitions
+        // creates the cartesian product of all states (with `Unknown` as an origin
+        // standing for the absence of an entry) and filters out the valid transitions
 
         for (origin_state, next_state) in all_statuses
             .iter()
             .flat_map(|from| {
+                let from = (*from != Unknown).then(|| from.clone());
                 all_statuses
                     .iter()
                     .map(move |to| (from.clone(), to.clone()))
@@ -234,15 +250,19 @@ fn test_invalid_transitions() {
             let ingress_history_writer = std::panic::AssertUnwindSafe(&ingress_history_writer);
             let result = std::panic::catch_unwind(|| {
                 let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-                ingress_history_writer.set_status(
-                    &mut state,
-                    message_id.clone(),
-                    origin_state.clone(),
-                );
+                if let Some(origin_state) = origin_state.clone() {
+                    ingress_history_writer.set_status(
+                        &mut state,
+                        message_id.clone(),
+                        origin_state,
+                        ExecutionRound::from(0),
+                    );
+                }
                 ingress_history_writer.set_status(
                     &mut state,
                     message_id.clone(),
                     next_state.clone(),
+                    ExecutionRound::from(0),
                 )
             });
             assert!(

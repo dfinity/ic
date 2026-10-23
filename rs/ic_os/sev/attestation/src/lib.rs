@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 
 pub mod attestation_package;
+pub mod attestation_report;
 pub mod custom_data;
 mod proto_gen;
 
@@ -56,6 +57,13 @@ impl VerificationError {
 
     pub fn invalid_signature(err: impl Display) -> Self {
         VerificationErrorDetail::InvalidSignature(VerificationErrorDescription {
+            message: err.to_string(),
+        })
+        .into()
+    }
+
+    pub fn invalid_policy(err: impl Display) -> Self {
+        VerificationErrorDetail::InvalidPolicy(VerificationErrorDescription {
             message: err.to_string(),
         })
         .into()

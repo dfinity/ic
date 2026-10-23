@@ -7,7 +7,7 @@ use crate::canister_http::{
 use crate::consensus::{
     Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
     CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent, UpgradeAuthorizationShare,
     certification::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
     },
@@ -128,6 +128,8 @@ mod private {
     impl CryptoHashDomainSeal for CanisterHttpResponse {}
     impl CryptoHashDomainSeal for CanisterHttpResponseMetadata {}
     impl CryptoHashDomainSeal for CanisterHttpResponseShare {}
+
+    impl CryptoHashDomainSeal for UpgradeAuthorizationShare {}
 
     impl CryptoHashDomainSeal for CryptoHashableTestDummy {}
 }
@@ -410,6 +412,12 @@ impl CryptoHashDomain for Signed<IDkgOpeningContent, BasicSignature<IDkgOpeningC
     }
 }
 
+impl CryptoHashDomain for UpgradeAuthorizationShare {
+    fn domain(&self) -> String {
+        DomainSeparator::UpgradeAuthorizationShare.to_string()
+    }
+}
+
 impl CryptoHashDomain for CryptoHashableTestDummy {
     fn domain(&self) -> String {
         "test_struct_domain".to_string()
@@ -455,7 +463,7 @@ pub fn crypto_hash<T: CryptoHashable>(data: &T) -> CryptoHashOf<T> {
 pub fn randomness_from_crypto_hashable<T: CryptoHashable>(hashable: &T) -> Randomness {
     let hash = crypto_hash(hashable);
     let CryptoHash(hash_bytes) = hash.get();
-    let mut seed = [0u8; 32];
+    let mut seed = [0_u8; 32];
     let n = hash_bytes.len().min(32);
     seed[0..n].copy_from_slice(&hash_bytes[0..n]);
     Randomness::from(seed)

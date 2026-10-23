@@ -1,5 +1,8 @@
 use crate::events::MinterEventAssert;
-use crate::{MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL};
+use crate::{
+    FEE_PERCENTILES_REFRESH_INTERVAL, MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL,
+    PROCESS_LOGIC_INTERVAL, drain_startup_tasks,
+};
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
 use ic_ckdoge_minter::{
@@ -11,14 +14,20 @@ use ic_ckdoge_minter::{
     },
     event::{CkDogeMinterEvent, CkDogeMinterEventType},
     lifecycle::{MinterArg, upgrade::UpgradeArgs},
+    updates::icrc21::StandardRecord,
 };
 use ic_management_canister_types::{CanisterId, CanisterStatusResult};
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc21::errors::Icrc21Error;
+use icrc_ledger_types::icrc21::requests::ConsentMessageRequest;
+use icrc_ledger_types::icrc21::responses::ConsentInfo;
 use pocket_ic::common::rest::RawMessageId;
 use pocket_ic::{PocketIc, RejectResponse};
 use std::sync::Arc;
 use std::time::Duration;
+
+const AWAIT_STATUS_MAX_TICKS: usize = 20;
 
 pub struct MinterCanister {
     pub(crate) env: Arc<PocketIc>,
@@ -159,6 +168,31 @@ impl MinterCanister {
         Decode!(&call_result, Result<WithdrawalFee, EstimateWithdrawalFeeError>).unwrap()
     }
 
+    pub fn await_fee_refresh(&self) {
+        let refreshes_before = self.count_fee_percentile_refreshes();
+        self.env
+            .advance_time(FEE_PERCENTILES_REFRESH_INTERVAL + Duration::from_secs(1));
+        let max_ticks = 100;
+        for _ in 0..max_ticks {
+            self.env.tick();
+            if self.count_fee_percentile_refreshes() > refreshes_before {
+                return;
+            }
+        }
+        dbg!(self.get_logs());
+        panic!(
+            "BUG: did not observe a successful fee-percentile refresh within {max_ticks} ticks \
+             (the RefreshFeePercentiles task may have run but failed to compute a median fee)"
+        );
+    }
+
+    fn count_fee_percentile_refreshes(&self) -> usize {
+        self.get_logs()
+            .iter()
+            .filter(|entry| entry.message.contains("update median fee per vbyte"))
+            .count()
+    }
+
     pub fn retrieve_doge_status(&self, ledger_burn_index: u64) -> RetrieveDogeStatus {
         let call_result = self
             .env
@@ -194,15 +228,28 @@ impl MinterCanister {
     where
         P: Fn(&Txid) -> bool,
     {
+        // The minter retries a failed resubmission only in its next `ProcessLogic` run.
+        const MAX_PROCESS_LOGIC_RUNS: usize = 3;
+
+        let is_submitted = |tx_status: &RetrieveDogeStatus| match tx_status {
+            RetrieveDogeStatus::Submitted { txid } => predicate(txid),
+            _ => false,
+        };
         self.env
             .advance_time(MAX_TIME_IN_QUEUE + Duration::from_nanos(1));
-        let status = self.await_doge_transaction_with_status(ledger_burn_index, |tx_status| {
-            matches!(tx_status, RetrieveDogeStatus::Submitted { txid } if predicate(txid))
-        });
-        match status {
-            RetrieveDogeStatus::Submitted { txid, .. } => txid,
-            _ => unreachable!(),
+        let mut last_status = None;
+        for _ in 0..MAX_PROCESS_LOGIC_RUNS {
+            match self.try_await_doge_transaction_with_status(ledger_burn_index, is_submitted) {
+                Ok(RetrieveDogeStatus::Submitted { txid }) => return txid,
+                Ok(_) => unreachable!(),
+                Err(status) => last_status = status,
+            }
+            self.env.advance_time(PROCESS_LOGIC_INTERVAL);
         }
+        dbg!(self.get_logs());
+        panic!(
+            "Unexpected transaction status after {MAX_PROCESS_LOGIC_RUNS} ProcessLogic runs; last status {last_status:?}"
+        )
     }
 
     pub fn await_finalized_doge_transaction(&self, ledger_burn_index: u64) -> Txid {
@@ -223,18 +270,33 @@ impl MinterCanister {
     where
         F: Fn(&RetrieveDogeStatus) -> bool,
     {
+        self.try_await_doge_transaction_with_status(ledger_burn_index, filter)
+            .unwrap_or_else(|last_status| {
+                dbg!(self.get_logs());
+                panic!(
+                    "Unexpected transaction status in {AWAIT_STATUS_MAX_TICKS} ticks; last status {last_status:?}"
+                )
+            })
+    }
+
+    fn try_await_doge_transaction_with_status<F>(
+        &self,
+        ledger_burn_index: u64,
+        filter: F,
+    ) -> Result<RetrieveDogeStatus, Option<RetrieveDogeStatus>>
+    where
+        F: Fn(&RetrieveDogeStatus) -> bool,
+    {
         let mut last_status = None;
-        let max_ticks = 20;
-        for _ in 0..max_ticks {
+        for _ in 0..AWAIT_STATUS_MAX_TICKS {
             let status = self.retrieve_doge_status(ledger_burn_index);
             if filter(&status) {
-                return status;
+                return Ok(status);
             }
             last_status = Some(status);
             self.env.tick();
         }
-        dbg!(self.get_logs());
-        panic!("Unexpected transaction status in {max_ticks} ticks; last status {last_status:?}")
+        Err(last_status)
     }
 
     pub fn get_logs(&self) -> Vec<LogEntry<Priority>> {
@@ -303,6 +365,36 @@ impl MinterCanister {
         Decode!(&call_result, Vec<CkDogeMinterEvent>).unwrap()
     }
 
+    pub fn icrc10_supported_standards(&self) -> Vec<StandardRecord> {
+        let call_result = self
+            .env
+            .query_call(
+                self.id,
+                Principal::anonymous(),
+                "icrc10_supported_standards",
+                Encode!().unwrap(),
+            )
+            .expect("BUG: failed to call icrc10_supported_standards");
+        Decode!(&call_result, Vec<StandardRecord>).unwrap()
+    }
+
+    pub fn icrc21_canister_call_consent_message(
+        &self,
+        sender: Principal,
+        request: &ConsentMessageRequest,
+    ) -> Result<ConsentInfo, Icrc21Error> {
+        let call_result = self
+            .env
+            .update_call(
+                self.id,
+                sender,
+                "icrc21_canister_call_consent_message",
+                Encode!(request).unwrap(),
+            )
+            .expect("BUG: failed to call icrc21_canister_call_consent_message");
+        Decode!(&call_result, Result<ConsentInfo, Icrc21Error>).unwrap()
+    }
+
     pub fn id(&self) -> CanisterId {
         self.id
     }
@@ -317,8 +409,7 @@ impl MinterCanister {
                 Some(NNS_ROOT_PRINCIPAL),
             )
             .expect("BUG: failed to upgrade minter");
-        // run immediate tasks after upgrade, like refreshing fee percentiles.
-        self.env.tick();
+        drain_startup_tasks(&self.env);
     }
 }
 

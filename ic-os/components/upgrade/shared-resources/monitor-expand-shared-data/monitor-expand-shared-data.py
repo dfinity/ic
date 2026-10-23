@@ -115,6 +115,9 @@ def expand_lv(device_name, lv_name, mount_point, fs_free, required_avail, expand
     # leave the XFS filesystem larger than the underlying logical volume.
     subprocess.run(["sync"], check=True)
 
+    sys.stderr.write("Expanded %s by %d MiB\n" % (device_name, expand_size))
+    sys.stderr.flush()
+
 
 def main():
     # Total VG and LV sizes change only if we call lvextend below.

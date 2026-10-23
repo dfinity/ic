@@ -36,7 +36,7 @@ rust_test(
     ],
     env = {
         "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
-        "TLA_MODULES": "$(locations :tla_models)",
+        "TLA_MODULES": "$(rootpaths :tla_models)",
     },
     proc_macro_deps = [
         ":proc_macros",
@@ -71,7 +71,7 @@ rust_test(
     env = {
         "JAVABASE": "$(JAVABASE)",
         "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
-        "TLA_MODULES": "$(locations :tla_models)",
+        "TLA_MODULES": "$(rootpaths :tla_models)",
     },
     proc_macro_deps = [
         ":proc_macros",
@@ -99,7 +99,7 @@ rust_test(
     ],
     env = {
         "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
-        "TLA_MODULES": "$(locations :tla_models)",
+        "TLA_MODULES": "$(rootpaths :tla_models)",
     },
     proc_macro_deps = [
         ":proc_macros",

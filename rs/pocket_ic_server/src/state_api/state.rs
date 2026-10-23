@@ -16,7 +16,7 @@ use axum::{
 };
 use axum_server::Handle;
 use axum_server::tls_rustls::RustlsConfig;
-use base64;
+use base64::prelude::*;
 use clap::Parser;
 use fqdn::fqdn;
 use futures::future::Shared;
@@ -27,22 +27,23 @@ use http::{
         IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
     },
 };
-use ic_bn_lib_common::{
-    traits::http::Client,
-    types::http::{ClientOptions, ConnInfo},
+use ic_gateway::ic_bn_lib::http::{
+    client::{Client, ClientOptions},
+    server::conn::ConnInfo,
 };
 use ic_gateway::{
     Cli, ProvidesCustomDomains,
     ic_bn_lib::{
         custom_domains::LocalFileProvider,
+        dns::resolvers::Resolver,
+        health::HealthManager,
         http::{
-            dns::Resolver,
             headers::{X_IC_CANISTER_ID, X_REQUEST_ID, X_REQUESTED_WITH},
             proxy::proxy,
         },
         ic_agent::agent::route_provider::RoundRobinRouteProvider,
-        utils::health_manager::HealthManager,
     },
+    routing::domain::CustomDomainStorage,
     setup_router,
 };
 use ic_types::{CanisterId, NodeId, PrincipalId, SubnetId, canister_http::CanisterHttpRequestId};
@@ -64,7 +65,7 @@ use std::{
 use tokio::{
     sync::mpsc::Receiver,
     sync::mpsc::error::TryRecvError,
-    sync::{Mutex, RwLock, mpsc},
+    sync::{Mutex, RwLock, mpsc, oneshot},
     task::{JoinHandle, JoinSet, spawn, spawn_blocking},
     time::{self, sleep},
 };
@@ -274,7 +275,10 @@ pub enum PocketIcError {
     SubnetRequestRoutingError(String),
     InvalidCanisterHttpRequestId((SubnetId, CanisterHttpRequestId)),
     InvalidMockCanisterHttpResponses((usize, usize)),
+    NotAFlexibleCanisterHttpRequest((SubnetId, CanisterHttpRequestId)),
+    TooManyMockCanisterHttpResponses((usize, usize)),
     InvalidRejectCode(u64),
+    CanisterHttpRejectMessageTooLong((usize, usize)),
     SettingTimeIntoPast((u64, u64)),
     Forbidden(String),
     BlockmakerNotFound(NodeId),
@@ -337,8 +341,29 @@ impl std::fmt::Debug for OpOut {
                     "InvalidMockCanisterHttpResponses(actual={actual},expected={expected})"
                 )
             }
+            OpOut::Error(PocketIcError::NotAFlexibleCanisterHttpRequest((
+                subnet_id,
+                canister_http_request_id,
+            ))) => {
+                write!(
+                    f,
+                    "NotAFlexibleCanisterHttpRequest({subnet_id},{canister_http_request_id:?})"
+                )
+            }
+            OpOut::Error(PocketIcError::TooManyMockCanisterHttpResponses((actual, max))) => {
+                write!(
+                    f,
+                    "TooManyMockCanisterHttpResponses(actual={actual},max={max})"
+                )
+            }
             OpOut::Error(PocketIcError::InvalidRejectCode(code)) => {
                 write!(f, "InvalidRejectCode({code})")
+            }
+            OpOut::Error(PocketIcError::CanisterHttpRejectMessageTooLong((actual, max))) => {
+                write!(
+                    f,
+                    "CanisterHttpRejectMessageTooLong(actual={actual},max={max})"
+                )
             }
             OpOut::Error(PocketIcError::SettingTimeIntoPast((current, set))) => {
                 write!(f, "SettingTimeIntoPast(current={current},set={set})")
@@ -352,8 +377,10 @@ impl std::fmt::Debug for OpOut {
             OpOut::Error(PocketIcError::CanisterSnapshotError(msg)) => {
                 write!(f, "CanisterSnapshotError({msg})")
             }
-            OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
-            OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
+            OpOut::Bytes(bytes) => write!(f, "Bytes({})", BASE64_STANDARD.encode(bytes)),
+            OpOut::StableMemBytes(bytes) => {
+                write!(f, "StableMemory({})", BASE64_STANDARD.encode(bytes))
+            }
             OpOut::MaybeSubnetId(Some(subnet_id)) => write!(f, "SubnetId({subnet_id})"),
             OpOut::MaybeSubnetId(None) => write!(f, "NoSubnetId"),
             OpOut::RawResponse(fut) => {
@@ -364,7 +391,7 @@ impl std::fmt::Debug for OpOut {
                         "{}:{:?}:{}",
                         status,
                         headers,
-                        base64::encode(bytes)
+                        BASE64_STANDARD.encode(bytes)
                     ))
                 )
             }
@@ -818,7 +845,7 @@ impl ApiState {
                 let custom_domain_providers: Vec<Arc<dyn ProvidesCustomDomains>> =
                     domain_custom_provider_local_file
                         .map(|path| {
-                            Arc::new(LocalFileProvider::new(path.into()))
+                            Arc::new(LocalFileProvider::new(path.into(), 0, None))
                                 as Arc<dyn ProvidesCustomDomains>
                         })
                         .into_iter()
@@ -826,9 +853,14 @@ impl ApiState {
                 args.push("--domain-custom-provider-poll-interval".to_string());
                 args.push("1s".to_string());
                 args.push("--ic-unsafe-root-key-fetch".to_string());
+                // hickory >= 0.26.2 fails lookups on (false) DNSSEC-bogus
+                // answers, see hickory-dns#3963.
+                // TODO: remove this once we upgrade to a hickory-dns that includes
+                // https://github.com/hickory-dns/hickory-dns/pull/4062.
+                args.push("--dns-dnssec-disabled".to_string());
                 let cli = Cli::parse_from(args);
 
-                let resolver = Resolver::default();
+                let resolver = Resolver::new((&cli.dns).into()).unwrap();
 
                 let http_client_opts: ClientOptions = (&cli.http_client).into();
                 let http_client = Arc::new(
@@ -850,17 +882,26 @@ impl ApiState {
 
                 let (_, reload_handle) = reload::Layer::new(EnvFilter::new("warn"));
                 let health_manager = Arc::new(HealthManager::default());
+                let registry = ic_gateway::ic_bn_lib::prometheus::Registry::new();
+                let custom_domain_storage =
+                    Arc::new(CustomDomainStorage::new(custom_domain_providers, &registry));
+                tasks.add_interval(
+                    "custom_domain_storage",
+                    custom_domain_storage.clone(),
+                    cli.domain.domain_custom_provider_poll_interval,
+                );
                 let ic_gateway_router = setup_router(
                     &cli,
-                    custom_domain_providers,
+                    custom_domain_storage,
                     reload_handle,
                     &mut tasks,
                     health_manager,
                     http_client,
                     http_client_hyper,
                     Arc::new(route_provider),
-                    &ic_gateway::ic_bn_lib::prometheus::Registry::new(),
+                    &registry,
                     CancellationToken::new(),
+                    None,
                     None,
                     None,
                     None,
@@ -965,6 +1006,9 @@ impl ApiState {
         let mut instance = instances[instance_id].lock().await;
         if instance.progress_thread.is_none() {
             let (tx, mut rx) = mpsc::channel::<()>(1);
+            // Used to signal that the certified time has been set for the first time
+            // so that this function only returns after that happened.
+            let (certified_time_tx, certified_time_rx) = oneshot::channel::<()>();
             let handle = spawn(async move {
                 let mut now = SystemTime::now();
                 let time = ic_types::Time::from_nanos_since_unix_epoch(
@@ -983,6 +1027,9 @@ impl ApiState {
                 .await
                 .is_some()
                 {
+                    // The receiver is dropped if the `auto_progress` future was cancelled
+                    // (e.g., because the client disconnected) and thus we ignore the result.
+                    let _ = certified_time_tx.send(());
                     debug!("Starting auto progress for instance {}.", instance_id);
                     loop {
                         let old = std::mem::replace(&mut now, SystemTime::now());
@@ -1022,6 +1069,14 @@ impl ApiState {
                 }
             });
             instance.progress_thread = Some(ProgressThread { handle, sender: tx });
+            // Drop the locks so that the progress thread can execute its first operation
+            // setting the certified time.
+            drop(instance);
+            drop(instances);
+            // Wait until the certified time has been set for the first time.
+            // The sender is dropped without sending if the progress thread stopped
+            // before setting the certified time and thus we ignore the result.
+            let _ = certified_time_rx.await;
             Ok(())
         } else {
             Err("Auto progress mode has already been enabled.".to_string())

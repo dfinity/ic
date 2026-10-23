@@ -18,7 +18,7 @@ build:
     - rs/types/base_types/proto
 lint:
   use:
-    - DEFAULT
+    - STANDARD
   ignore_only:
     RPC_RESPONSE_STANDARD_NAME:
       - https_outcalls_service/v1/proto.proto

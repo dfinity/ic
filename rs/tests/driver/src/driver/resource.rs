@@ -3,29 +3,48 @@ use crate::driver::farm::FileId;
 use crate::driver::farm::ImageLocation;
 use crate::driver::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
 use crate::driver::farm::VMCreateResponse;
+use crate::driver::farm::VmAllocationMode;
 use crate::driver::farm::{CreateVmRequest, HostFeature};
 use crate::driver::farm::{Farm, VmType};
+use crate::driver::ic::VmResources;
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
-use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResources};
+use crate::driver::ic::{ImageSizeGiB, VmResourceOverrides};
+use crate::driver::ic_images::get_empty_disk_image;
 use crate::driver::nested::{NestedNode, NestedNodeSpec};
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::test_env_api::{
-    get_empty_disk_img_sha256, get_empty_disk_img_url, get_guestos_img_sha256, get_guestos_img_url,
-};
-use crate::driver::test_setup::{GroupSetup, InfraProvider};
+use crate::driver::test_env_api::{get_guestos_img_sha256, get_guestos_img_url};
+use crate::driver::test_setup::{GroupSetup, SystemTestBackend};
 use crate::driver::universal_vm::UniversalVm;
 use anyhow;
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::Ipv6Addr;
+use std::path::PathBuf;
 use url::Url;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
-const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
+const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(4 * 1024 * 1024); // 4GiB
+const DEFAULT_VM_RESOURCES: VmResources = VmResources {
+    vcpus: DEFAULT_VCPUS_PER_VM,
+    memory_kibibytes: DEFAULT_MEMORY_KIB_PER_VM,
+    boot_image_minimal_size_gibibytes: None,
+};
 
-pub const HOSTOS_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(32);
-pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(33554432); // 32GiB
+pub const HOSTOS_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(8);
+/// Allocates 16 GiB so the nested GuestOS retains the standard 4 GiB
+/// ([`DEFAULT_MEMORY_KIB_PER_VM`]) after the two host deductions: 8 GiB for
+/// HostOS ([`HOSTOS_MEMORY_RESERVED_GIB`]) and 4 GiB for the upgrade VM
+/// (`UPGRADE_VM_MEMORY_GIB` in `rs/ic_os/os_tools/guest_vm_runner/src/guest_vm_config.rs`).
+pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(16 * 1024 * 1024); // 16GiB
+const DEFAULT_NESTED_VM_RESOURCES: VmResources = VmResources {
+    vcpus: HOSTOS_VCPUS_PER_VM,
+    memory_kibibytes: HOSTOS_MEMORY_KIB_PER_VM,
+    boot_image_minimal_size_gibibytes: None,
+};
+
+pub const HOSTOS_VCPUS_RESERVED: u64 = 4;
+pub const HOSTOS_MEMORY_RESERVED_GIB: u64 = 8;
 
 /// A declaration of resources needed to instantiate a InternetComputer.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
@@ -38,47 +57,44 @@ pub struct ResourceRequest {
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
-pub struct DiskImage {
-    pub image_type: ImageType,
-    pub url: Url,
-    pub sha256: String,
-}
-
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
-pub enum ImageType {
-    IcOsImage,
-    PrometheusImage,
-    UniversalImage,
+pub enum DiskImage {
+    /// Image downloaded by a Farm host via URL with sha256 verification.
+    Url {
+        /// Whether this is an IC-OS image (GuestOS, HostOS, SetupOS).
+        ///
+        /// Farm applies IC-OS-specific handling to images announced as IC-OS
+        /// images (`icOsImageViaUrl`) and attaches all other images as-is
+        /// (`imageViaUrl`).
+        ic_os_image: bool,
+        url: Url,
+        sha256: String,
+    },
+    /// Image already present locally on disk. Used by the Local backend.
+    Local { path: PathBuf },
 }
 
 impl From<DiskImage> for ImageLocation {
     fn from(src: DiskImage) -> ImageLocation {
-        match src.image_type {
-            ImageType::IcOsImage => IcOsImageViaUrl {
-                url: src.url.clone(),
-                sha256: src.sha256,
-            },
-            _ => ImageViaUrl {
-                url: src.url.clone(),
-                sha256: src.sha256,
-            },
+        match src {
+            DiskImage::Url {
+                ic_os_image: true,
+                url,
+                sha256,
+            } => IcOsImageViaUrl { url, sha256 },
+            DiskImage::Url { url, sha256, .. } => ImageViaUrl { url, sha256 },
+            DiskImage::Local { path } => panic!(
+                "DiskImage::Local is not supported by the Farm backend. Path: {:?}",
+                path
+            ),
         }
     }
 }
 
 impl ResourceRequest {
-    pub fn new(
-        image_type: ImageType,
-        primary_image_url: Url,
-        primary_image_sha256: String,
-    ) -> Self {
+    pub fn new(primary_image: DiskImage) -> Self {
         Self {
             group_name: Default::default(),
-            primary_image: DiskImage {
-                image_type,
-                url: primary_image_url,
-                sha256: primary_image_sha256,
-            },
+            primary_image,
             vm_configs: Default::default(),
         }
     }
@@ -95,15 +111,25 @@ impl ResourceRequest {
 /// We assume that there is only one possible VM configuration available.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct VmSpec {
-    pub name: String,
-    pub vcpus: NrOfVCPUs,
-    pub memory_kibibytes: AmountOfMemoryKiB,
-    pub boot_image: BootImage,
-    pub boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
-    pub has_ipv4: bool,
-    pub vm_allocation: Option<VmAllocationStrategy>,
-    pub required_host_features: Vec<HostFeature>,
-    pub alternate_template: Option<VmType>,
+    name: String,
+    vcpus: NrOfVCPUs,
+    memory_kibibytes: AmountOfMemoryKiB,
+    boot_image: BootImage,
+    boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
+    has_ipv4: bool,
+    vm_allocation_mode: Option<VmAllocationMode>,
+    required_host_features: Vec<HostFeature>,
+    alternate_template: Option<VmType>,
+}
+
+impl VmSpec {
+    pub fn vcpus(&self) -> NrOfVCPUs {
+        self.vcpus
+    }
+
+    pub fn memory_kibibytes(&self) -> AmountOfMemoryKiB {
+        self.memory_kibibytes
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Serialize, Deserialize)]
@@ -140,7 +166,6 @@ pub struct AllocatedVm {
     pub hostname: String,
     pub ipv6: Ipv6Addr,
     pub mac6: String,
-    pub ipv4: Option<Ipv4Addr>,
     pub bare_metal: bool,
 }
 
@@ -151,22 +176,57 @@ pub fn get_resource_request(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let (ic_os_img_sha256, ic_os_img_url) = (get_guestos_img_sha256(), get_guestos_img_url());
-
-    let mut res_req = ResourceRequest::new(ImageType::IcOsImage, ic_os_img_url, ic_os_img_sha256);
+    // The GuestOS image URL/hash environment variables are only populated for
+    // the Farm backend. Under the Local backend they are unset (the image is
+    // provided as a local path via `ENV_DEPS__GUESTOS_DISK_IMG_PATH`), so we
+    // must not call `get_guestos_img_url`/`get_guestos_img_sha256` there.
+    let primary_image = match SystemTestBackend::read_attribute(test_env) {
+        SystemTestBackend::Farm => DiskImage::Url {
+            ic_os_image: true,
+            url: get_guestos_img_url(test_env),
+            sha256: get_guestos_img_sha256(),
+        },
+        SystemTestBackend::Local => {
+            let var = "ENV_DEPS__GUESTOS_DISK_IMG_PATH";
+            DiskImage::Local {
+                path: PathBuf::from(
+                    std::env::var(var)
+                        .unwrap_or_else(|_| panic!("Failed to read '{var}' for Local backend")),
+                ),
+            }
+        }
+    };
+    let mut res_req = ResourceRequest::new(primary_image);
     let group_setup = GroupSetup::read_attribute(test_env);
-    let default_vm_resources = group_setup.default_vm_resources;
+    let group_resource_overrides = group_setup.vm_resource_overrides;
+    let ic_resource_overrides = config.vm_resource_overrides;
     res_req.group_name = group_name.to_string();
     for s in &config.subnets {
+        let subnet_resource_overrides = Some(s.vm_resource_overrides);
         for n in &s.nodes {
-            res_req.add_vm_request(vm_spec_from_node(n, default_vm_resources));
+            res_req.add_vm_request(vm_spec_from_node(
+                n,
+                subnet_resource_overrides,
+                ic_resource_overrides,
+                group_resource_overrides,
+            ));
         }
     }
     for n in &config.unassigned_nodes {
-        res_req.add_vm_request(vm_spec_from_node(n, default_vm_resources));
+        res_req.add_vm_request(vm_spec_from_node(
+            n,
+            None,
+            ic_resource_overrides,
+            group_resource_overrides,
+        ));
     }
     for n in &config.api_boundary_nodes {
-        res_req.add_vm_request(vm_spec_from_node(n, default_vm_resources));
+        res_req.add_vm_request(vm_spec_from_node(
+            n,
+            None,
+            ic_resource_overrides,
+            group_resource_overrides,
+        ));
     }
     Ok(res_req)
 }
@@ -178,20 +238,12 @@ pub fn get_resource_request_for_nested_nodes(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let empty_disk_img_url = get_empty_disk_img_url()?;
-    let empty_disk_img_sha256 = get_empty_disk_img_sha256()?;
-
-    // Add a VM request for each node.
-    let mut res_req = ResourceRequest::new(
-        ImageType::IcOsImage,
-        empty_disk_img_url,
-        empty_disk_img_sha256,
-    );
+    let mut res_req = ResourceRequest::new(get_empty_disk_image(test_env)?);
     let group_setup = GroupSetup::read_attribute(test_env);
-    let default_vm_resources = group_setup.default_vm_resources;
+    let group_resource_overrides = group_setup.vm_resource_overrides;
     res_req.group_name = group_name.to_string();
     for node in nodes {
-        res_req.add_vm_request(vm_spec_from_nested_node(node, default_vm_resources)?);
+        res_req.add_vm_request(vm_spec_from_nested_node(node, group_resource_overrides)?);
     }
 
     Ok(res_req)
@@ -202,90 +254,94 @@ pub fn get_resource_request_for_nested_nodes(
 /// https://github.com/dfinity-lab/farm/actions?query=branch%3Amaster+is%3Asuccess
 /// Following through to the "Upload UVM images to S3" job and copying the <SHA256-HASH> from the line:
 /// upload: ../../../../../nix/store/...-nixos-disk-image-out-refs-discarded/nixos.img.zst to s3://dfinity-download/farm/universal-vm/<SHA256-HASH>/x86_64-linux/universal-vm.img.zst
-const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
-    "c314e927f9ad976db110910cfef262eec2dddfff05ef3a84b0717a901630b367";
+pub const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
+    "2b4bf56402e24895e7c247a699ac45d26ddc52fd951ce0dbba301b19e378f63e";
+
+/// Returns the default Universal VM disk image as a Farm-style URL.
+pub fn default_universal_vm_disk_image() -> DiskImage {
+    DiskImage::Url {
+        ic_os_image: false,
+        url: Url::parse(&format!("http://download.proxy-global.dfinity.network:8080/farm/universal-vm/{DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux/universal-vm.img.zst")).expect("should not fail!"),
+        sha256: String::from(DEFAULT_UNIVERSAL_VM_IMG_SHA256),
+    }
+}
 
 pub fn get_resource_request_for_universal_vm(
     universal_vm: &UniversalVm,
     group_setup: &GroupSetup,
     group_name: &str,
+    env: &TestEnv,
 ) -> anyhow::Result<ResourceRequest> {
-    let primary_image = universal_vm.primary_image.clone().unwrap_or_else(|| DiskImage {
-        image_type: ImageType::UniversalImage,
-        url: Url::parse(&format!("http://download.proxy-global.dfinity.network:8080/farm/universal-vm/{DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux/universal-vm.img.zst")).expect("should not fail!"),
-        sha256: String::from(DEFAULT_UNIVERSAL_VM_IMG_SHA256),
-    });
-    let mut res_req = ResourceRequest::new(
-        primary_image.image_type.clone(),
-        primary_image.url.clone(),
-        primary_image.sha256,
-    );
+    let primary_image = match universal_vm.primary_image.clone() {
+        Some(image) => image,
+        None => match SystemTestBackend::read_attribute(env) {
+            SystemTestBackend::Farm => default_universal_vm_disk_image(),
+            SystemTestBackend::Local => {
+                let var = "ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH";
+                DiskImage::Local {
+                    path: PathBuf::from(
+                        std::env::var(var)
+                            .unwrap_or_else(|_| panic!("Failed to read '{var}' for Local backend")),
+                    ),
+                }
+            }
+        },
+    };
+    let mut res_req = ResourceRequest::new(primary_image);
     res_req.group_name = group_name.to_string();
-    let vm_resources = universal_vm.vm_resources;
+
+    let resolved_vm_resources = universal_vm
+        .vm_resource_overrides
+        .layer(&group_setup.vm_resource_overrides)
+        .base(&DEFAULT_VM_RESOURCES);
+
     res_req.add_vm_request(VmSpec {
         name: universal_vm.name.clone(),
-        vcpus: vm_resources.vcpus.unwrap_or_else(|| {
-            group_setup
-                .default_vm_resources
-                .and_then(|vm_resources| vm_resources.vcpus)
-                .unwrap_or(DEFAULT_VCPUS_PER_VM)
-        }),
-        memory_kibibytes: vm_resources.memory_kibibytes.unwrap_or_else(|| {
-            group_setup
-                .default_vm_resources
-                .and_then(|vm_resources| vm_resources.memory_kibibytes)
-                .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM)
-        }),
+        vcpus: resolved_vm_resources.vcpus,
+        memory_kibibytes: resolved_vm_resources.memory_kibibytes,
         boot_image: BootImage::GroupDefault,
-        boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
-            || {
-                group_setup
-                    .default_vm_resources
-                    .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes)
-            },
-        ),
+        boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: universal_vm.has_ipv4,
-        vm_allocation: universal_vm.vm_allocation.clone(),
+        vm_allocation_mode: None,
         required_host_features: universal_vm.required_host_features.clone(),
         alternate_template: None,
     });
     Ok(res_req)
 }
 
-pub fn allocate_resources(
-    farm: &Farm,
-    req: &ResourceRequest,
-    env: &TestEnv,
-) -> FarmResult<ResourceGroup> {
+pub fn allocate_resources(req: &ResourceRequest, env: &TestEnv) -> FarmResult<ResourceGroup> {
     let group_name = req.group_name.clone();
+    let backend = SystemTestBackend::read_attribute(env);
 
-    let mut threads = vec![];
-    for vm_config in req.vm_configs.iter() {
-        let farm_cloned = farm.clone();
-        let vm_name = vm_config.name.clone();
-        let create_vm_request = CreateVmRequest::new(
-            vm_name.clone(),
-            vm_config
-                .alternate_template
-                .clone()
-                .unwrap_or(VmType::Production),
-            vm_config.vcpus,
-            vm_config.memory_kibibytes,
-            vec![],
-            match &vm_config.boot_image {
-                BootImage::GroupDefault => From::from(req.primary_image.clone()),
-                BootImage::Image(disk_image) => From::from(disk_image.clone()),
-                BootImage::File(id) => ImageLocation::IcOsImageViaId { id: id.clone() },
-            },
-            vm_config.boot_image_minimal_size_gibibytes,
-            vm_config.has_ipv4,
-            vm_config.vm_allocation.clone(),
-            vm_config.required_host_features.clone(),
-        );
-        let group_name = group_name.clone();
+    let mut res_group = ResourceGroup::new(group_name.clone());
 
-        match InfraProvider::read_attribute(env) {
-            InfraProvider::Farm => {
+    match backend {
+        SystemTestBackend::Farm => {
+            let farm = Farm::from_test_env(env, "allocate_resources");
+            let mut threads = vec![];
+            for vm_config in req.vm_configs.iter() {
+                let farm_cloned = farm.clone();
+                let vm_name = vm_config.name.clone();
+                let create_vm_request = CreateVmRequest::new(
+                    vm_name.clone(),
+                    vm_config
+                        .alternate_template
+                        .clone()
+                        .unwrap_or(VmType::Production),
+                    vm_config.vcpus,
+                    vm_config.memory_kibibytes,
+                    vec![],
+                    match &vm_config.boot_image {
+                        BootImage::GroupDefault => From::from(req.primary_image.clone()),
+                        BootImage::Image(disk_image) => From::from(disk_image.clone()),
+                        BootImage::File(id) => ImageLocation::IcOsImageViaId { id: id.clone() },
+                    },
+                    vm_config.boot_image_minimal_size_gibibytes,
+                    vm_config.has_ipv4,
+                    None,
+                    vm_config.required_host_features.clone(),
+                );
+                let group_name = group_name.clone();
                 threads.push(std::thread::spawn(move || {
                     (
                         vm_name,
@@ -293,11 +349,6 @@ pub fn allocate_resources(
                     )
                 }));
             }
-        }
-    }
-    let mut res_group = ResourceGroup::new(group_name.clone());
-    match InfraProvider::read_attribute(env) {
-        InfraProvider::Farm => {
             for thread in threads {
                 let (vm_name, created_vm) = thread
                     .join()
@@ -312,7 +363,45 @@ pub fn allocate_resources(
                     name: vm_name,
                     group_name: group_name.clone(),
                     hostname,
-                    ipv4: None,
+                    ipv6,
+                    mac6,
+                    bare_metal: false,
+                });
+            }
+        }
+        SystemTestBackend::Local => {
+            let backend = crate::driver::local_backend::LocalBackend::from_test_env(env)
+                .expect("LocalBackend::from_test_env failed");
+            for vm_config in req.vm_configs.iter() {
+                let vm_name = vm_config.name.clone();
+                let primary_image: DiskImage = match &vm_config.boot_image {
+                    BootImage::GroupDefault => req.primary_image.clone(),
+                    BootImage::Image(disk_image) => disk_image.clone(),
+                    BootImage::File(_) => {
+                        panic!("BootImage::File is not supported by the Local backend")
+                    }
+                };
+                let created = backend
+                    .create_vm(
+                        &group_name,
+                        &vm_name,
+                        vm_config.vcpus.get(),
+                        vm_config.memory_kibibytes.get(),
+                        primary_image,
+                        vm_config.boot_image_minimal_size_gibibytes.map(|s| s.get()),
+                        vm_config.has_ipv4,
+                    )
+                    .expect("LocalBackend::create_vm failed");
+                let VMCreateResponse {
+                    hostname,
+                    ipv6,
+                    mac6,
+                    ..
+                } = created;
+                res_group.add_vm(AllocatedVm {
+                    name: vm_name,
+                    group_name: group_name.clone(),
+                    hostname,
                     ipv6,
                     mac6,
                     bare_metal: false,
@@ -323,68 +412,65 @@ pub fn allocate_resources(
     Ok(res_group)
 }
 
-fn vm_spec_from_node(n: &Node, default_vm_resources: Option<VmResources>) -> VmSpec {
-    let vm_resources = &n.vm_resources;
+fn vm_spec_from_node(
+    n: &Node,
+    subnet_vm_resource_overrides: Option<VmResourceOverrides>,
+    ic_vm_resource_overrides: VmResourceOverrides,
+    group_vm_resource_overrides: VmResourceOverrides,
+) -> VmSpec {
+    let mut vm_resources = n.vm_resource_overrides;
+    if let Some(subnet_vm_resource_overrides) = subnet_vm_resource_overrides {
+        vm_resources = vm_resources.layer(&subnet_vm_resource_overrides);
+    }
+    let resolved_vm_resources = vm_resources
+        .layer(&ic_vm_resource_overrides)
+        .layer(&group_vm_resource_overrides)
+        .base(&DEFAULT_VM_RESOURCES);
+
     VmSpec {
         name: n.id().to_string(),
-        vcpus: vm_resources.vcpus.unwrap_or_else(|| {
-            default_vm_resources
-                .and_then(|vm_resources| vm_resources.vcpus)
-                .unwrap_or(DEFAULT_VCPUS_PER_VM)
-        }),
-        memory_kibibytes: vm_resources.memory_kibibytes.unwrap_or_else(|| {
-            default_vm_resources
-                .and_then(|vm_resources| vm_resources.memory_kibibytes)
-                .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM)
-        }),
+        vcpus: resolved_vm_resources.vcpus,
+        memory_kibibytes: resolved_vm_resources.memory_kibibytes,
         boot_image: n.boot_image.clone(),
-        boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
-            || {
-                default_vm_resources
-                    .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes)
-            },
-        ),
+        boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: false,
-        vm_allocation: n.vm_allocation.clone(),
+        vm_allocation_mode: None,
         required_host_features: n.required_host_features.clone(),
         alternate_template: None,
     }
 }
 
 /// Create a `VmSpec` for a given Nested VM, using the specified image file.
+///
+/// Note: There must be enough vCPUs and memory for the HostOS VM and nested
+/// GuestOS VM.
 fn vm_spec_from_nested_node(
     node: &NestedNode,
-    default_vm_resources: Option<VmResources>,
+    group_vm_resource_overrides: VmResourceOverrides,
 ) -> anyhow::Result<VmSpec> {
-    let vm_resources = match &node.node_spec {
-        NestedNodeSpec::Vm(vm_resources) => vm_resources,
+    let (node_vm_resource_overrides, required_host_features) = match &node.node_spec {
+        NestedNodeSpec::Vm {
+            vm_resource_overrides,
+            required_host_features,
+        } => (*vm_resource_overrides, required_host_features.clone()),
         NestedNodeSpec::BareMetal { .. } => {
             bail!("Bare metal nodes are not supported by get_resource_request_for_nested_nodes")
         }
     };
+
+    let resolved_vm_resources = node_vm_resource_overrides
+        .layer(&group_vm_resource_overrides)
+        .base(&DEFAULT_NESTED_VM_RESOURCES);
+
     Ok(VmSpec {
         name: node.name.clone(),
-        // Note that the nested GuestOS VM uses half the vCPUs and memory of this host VM.
-        vcpus: vm_resources.vcpus.unwrap_or_else(|| {
-            default_vm_resources
-                .and_then(|vm_resources| vm_resources.vcpus)
-                .unwrap_or(HOSTOS_VCPUS_PER_VM)
-        }),
-        memory_kibibytes: vm_resources.memory_kibibytes.unwrap_or_else(|| {
-            default_vm_resources
-                .and_then(|vm_resources| vm_resources.memory_kibibytes)
-                .unwrap_or(HOSTOS_MEMORY_KIB_PER_VM)
-        }),
+        vcpus: resolved_vm_resources.vcpus,
+        memory_kibibytes: resolved_vm_resources.memory_kibibytes,
         boot_image: node.boot_image.clone(),
-        boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
-            || {
-                default_vm_resources
-                    .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes)
-            },
-        ),
+        boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: false,
-        vm_allocation: None,
-        required_host_features: Vec::new(),
+        vm_allocation_mode: None,
+        required_host_features,
         alternate_template: None,
     })
 }

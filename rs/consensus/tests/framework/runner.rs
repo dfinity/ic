@@ -17,7 +17,6 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tokio::sync::watch;
 
 fn stop_immediately(_: &ConsensusInstance<'_>) -> bool {
     true
@@ -141,6 +140,8 @@ impl<'a> ConsensusRunner<'a> {
             consensus_crypto.clone(),
             replica_logger.clone(),
             pool_reader,
+            deps.registry_client.clone(),
+            deps.replica_config.clone(),
         )));
         let malicious_flags = MaliciousFlags::default();
         let consensus = ic_consensus::consensus::ConsensusImpl::new(
@@ -154,6 +155,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.canister_http_payload_builder.clone(),
             deps.query_stats_payload_builder.clone(),
             deps.chain_key_payload_builder.clone(),
+            deps.upgrade_payload_builder.clone(),
             deps.dkg_pool.clone(),
             deps.idkg_pool.clone(),
             dkg_key_manager.clone(),
@@ -171,7 +173,9 @@ impl<'a> ConsensusRunner<'a> {
             deps.message_routing.clone(),
         );
         let dkg = ic_consensus_dkg::DkgImpl::new(
-            deps.replica_config.node_id,
+            deps.replica_config.clone(),
+            Arc::clone(&deps.registry_client),
+            deps.state_manager.clone(),
             Arc::clone(&consensus_crypto),
             deps.consensus_pool.read().unwrap().get_cache(),
             dkg_key_manager,
@@ -195,7 +199,6 @@ impl<'a> ConsensusRunner<'a> {
             deps.consensus_pool.read().unwrap().get_cache(),
             deps.metrics_registry.clone(),
             replica_logger.clone(),
-            watch::channel(Height::from(0)).0,
         );
         let now = self.time.get_relative_time();
         let in_queue: Queue<Input> = Default::default();
@@ -250,7 +253,7 @@ impl<'a> ConsensusRunner<'a> {
 
     /// Run a single step of all instances to finish processing their messages.
     /// Return the updated NetworkStatus.
-    fn process(&self) -> NetworkStatus {
+    fn process(&mut self) -> NetworkStatus {
         let delivered = self.config.delivery.deliver_next(self);
         let mut idle_since = self.idle_since.borrow_mut();
 
@@ -273,7 +276,6 @@ impl<'a> ConsensusRunner<'a> {
             // only stop when all instances satisfy StopPredicate
             if !(self.stop_predicate)(instance) {
                 stopped = false;
-                break;
             }
         }
         if stopped {
@@ -303,6 +305,7 @@ impl Default for ConsensusRunnerConfig {
             stall_clocks: false,
             execution: GlobalMessage::new(false),
             delivery: Sequential::new(),
+            dkg_interval_length: 19,
         }
     }
 }

@@ -1,6 +1,6 @@
 # https://hub.docker.com/_/ubuntu
-# ubuntu:noble-20250910
-FROM ghcr.io/dfinity/library/ubuntu@sha256:985be7c735afdf6f18aaa122c23f87d989c30bba4e9aa24c8278912aac339a8d as base
+# ubuntu:resolute-20260413
+FROM ghcr.io/dfinity/library/ubuntu@sha256:5e275723f82c67e387ba9e3c24baa0abdcb268917f276a0561c97bef9450d0b4 as base
 
 ENV TZ=UTC
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
@@ -14,113 +14,99 @@ RUN echo "[storage]\nrootless_storage_path=\"/tmp/containers\"" > /etc/container
 # marker for scripts to check if they are running in this container
 RUN touch /home/ubuntu/.ic-build-container
 
-# Todo: split out essential packages from application-level packages
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
-# Install a version of google-android-platform-tools-installer with e2fsdroid
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    mkdir e2fsdroid && \
-    cd e2fsdroid && \
-    curl -fsSLO http://mirrors.kernel.org/ubuntu/pool/multiverse/g/google-android-installers/google-android-platform-tools-installer_35.0.0+1710437545-3build2_amd64.deb && \
-    curl -fsSLO http://mirrors.kernel.org/ubuntu/pool/multiverse/g/google-android-installers/google-android-licenses_1710437545-3build2_all.deb && \
-    dpkg-deb -R google-android-platform-tools-installer_35.0.0+1710437545-3build2_amd64.deb contents && \
-    cd contents && \
-    sed -i 's/35.0.0/33.0.2/' DEBIAN/control DEBIAN/postinst && \
-    sed -i '/Version/ s/$/+downgraded/' DEBIAN/control && \
-    rm usr/share/google-android-platform-tools-installer/platform-tools_r35.0.0-linux.zip.sha1 && \
-    echo "6bf4f747ad929b02378b44ce083b4502d26109c7  platform-tools_r33.0.2-linux.zip" > usr/share/google-android-platform-tools-installer/platform-tools_r33.0.2-linux.zip.sha1 && \
-    find . -type f -not -path "./DEBIAN/*" -exec md5sum {} + | sort -k 2 | sed 's/\.\/\(.*\)/\1/' > DEBIAN/md5sums && \
-    cd .. && \
-    dpkg-deb -b contents/ downgraded.deb && \
-    apt -yqq install ./downgraded.deb ./google-android-licenses_1710437545-3build2_all.deb && \
-    apt-mark hold google-android-platform-tools-installer && \
-    cd .. && \
-    rm -rf e2fsdroid
+# Drop troublesome SSH file (Potentially related: Debian #1072221)
+RUN rm -f /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf
 
-ARG mkcert_version=1.4.4
-ARG mkcert_sha=6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
-RUN curl -fsSL https://github.com/FiloSottile/mkcert/releases/download/v${mkcert_version}/mkcert-v${mkcert_version}-linux-amd64 -o /usr/local/bin/mkcert && \
-    echo "$mkcert_sha /usr/local/bin/mkcert" | sha256sum --check && \
-    chmod +x /usr/local/bin/mkcert
+## The image carries two users so the runtime UID can match the host's:
+## - ubuntu (1000): DFINITY devenv
+## - buildifier (1001): CI runners and namespace.so devboxes
+## All tools are installed as root and usable by all. The extra users are only
+## there for convenience to avoid running the image as root.
+RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
+    # both buildifier and ubuntu users need to be able to access root permissions
+    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 ARG bazelisk_sha=22e7d3a188699982f661cf4687137ee52d1f24fec1ec893d91a6c4d791a75de8
 RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.28.1/bazelisk-linux-amd64 -o /usr/bin/bazel && \
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
     chmod 777 /usr/bin/bazel
 
-# Add mold linker
-ARG MOLD_BIN="/usr/local/bin/mold"
-ARG MOLD_VERSION=2.37.1
-RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-$(uname -m)-linux.tar.gz" | tar -C /usr/local --strip-components=1 -xzf - && \
-    echo "98a45fcc651424551f56b8bc4f697ae7ae66930da59b1ef9dfeeaa4da64cb2c6  ${MOLD_BIN}" | shasum -a 256 -c - && \
-    ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
+# Use lld as the default linker instead of GNU bfd ld (which is ~6x slower).
+# For our large Rust debug binaries lld links roughly as fast as eg mold and
+# with comparable memory use. Bazel uses its own hermetic (clang/lld) toolchain
+# and is unaffected; this changes the system linker used by cargo builds and by
+# Bazel builds that opt out of the hermetic toolchain (--hermetic_cc=false,
+# e.g. --config=afl).
+RUN ln -sf "$(command -v ld.lld)" "$(realpath /usr/bin/ld)"
 
 # Add motoko compiler
-ARG motoko_version=0.16.3
-RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
+# This is only used by Cargo; Bazel pulls its own via rules_motoko
+# NOTE: keep version in line with rules_motoko (`motoko.toolchain` in MODULE.bazel)
+#       and update motoko_sha whenever motoko_version changes
+ARG motoko_version=1.11.0
+ARG motoko_sha=f84e566d9d7c255677c753ebe8e7319f60cce04f9ea761e6a55472886d0e5d56
+RUN motoko_tar="$(mktemp)" && \
+    curl -fsSL "https://github.com/caffeinelabs/motoko/releases/download/${motoko_version}/motoko-Linux-x86_64-${motoko_version}.tar.gz" -o "$motoko_tar" && \
+    echo "$motoko_sha $motoko_tar" | sha256sum --check && \
+    tar -xzf "$motoko_tar" -C /usr/local/bin && \
+    rm -f "$motoko_tar" && \
+    chmod +x /usr/local/bin/moc
 
-# Create user groups needed for github actions runner
-RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
-    # CI before script requires sudo \
-    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-
-# Install AFLplusplus for fuzzing
-# LLVM is only a build time dependency now since we link the fuzzer lib from the hermetic toolchain directly
-ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
-ARG LLVM_VERSION=21
-RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
-    echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main" | tee -a /etc/apt/sources.list.d/llvm.list && \
-    apt -yq update && \
-    apt -yqq install --no-install-recommends lld-${LLVM_VERSION} llvm-${LLVM_VERSION} llvm-${LLVM_VERSION}-dev clang-${LLVM_VERSION} libclang-rt-${LLVM_VERSION}-dev && \
-    mkdir -p /afl && \
-    chown -R ubuntu:ubuntu /afl && \
+# Install AFLplusplus v4.35c (`make install` puts the executables in /usr/local/bin/)
+# NOTE: when bumping, pin the commit the upstream tag points to (its ^{} line if annotated):
+#       git ls-remote https://github.com/AFLplusplus/AFLplusplus.git 'refs/tags/<tag>*'
+ARG aflplusplus_commit=b449e4c544eaac1a0a9b7d1f2f15d5921907585e
+RUN git clone --depth=1 --revision="$aflplusplus_commit" https://github.com/AFLplusplus/AFLplusplus.git /afl && \
     cd /afl && \
-    git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
-    cd AFLplusplus && \
-    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make all && \
-    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make install && \
-    mv afl-fuzz afl-showmap  /afl && \
-    cd .. && rm -rf AFLplusplus
+    test "$(git rev-parse HEAD)" = "$aflplusplus_commit" && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config CC=/usr/bin/clang CXX=/usr/bin/clang++ make all && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config CC=/usr/bin/clang CXX=/usr/bin/clang++ make install && \
+    rm -rf /afl
 
-USER ubuntu
-# Set PATH for ubuntu user
-ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
-
-# Add Rust/Cargo support
-RUN mkdir -p /tmp/rust-version/
-COPY rust-toolchain.toml /tmp/rust-version/rust-toolchain.toml
-# Read the channel from the toolchain file
-RUN sed </tmp/rust-version/rust-toolchain.toml -n 's/^channel = "\(.*\)"$/\1/p' > /tmp/rust-version/version
-RUN echo "Rust version:" "$(cat /tmp/rust-version/version)"
-RUN curl --fail https://sh.rustup.rs -sSf \
-    | sh -s -- -y --default-toolchain "$(cat /tmp/rust-version/version)-x86_64-unknown-linux-gnu" --no-modify-path && \
-    rustup default "$(cat /tmp/rust-version/version)-x86_64-unknown-linux-gnu" && \
-    rustup target add wasm32-unknown-unknown && \
-    rustup component add clippy
-RUN rm -rf /tmp/rust-version
-
-# Add cargo-audit
-ARG CARGO_AUDIT_VERSION=0.22.0
-RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
-# Add zshrc generated from zsh-newuser-install (option 2)
-COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
+# Install rustup proxies system-wide as root:
+# - Binaries land in /opt/cargo/bin/ owned by root, world-readable.
+# - The toolchain (incl. targets/components) lives in /ic/rust-toolchain.toml
+#   and gets fetched on the first `cargo` invocation.
+# - CARGO_HOME/RUSTUP_HOME are only set for the install step; runtime users
+#   fall back to their default $HOME/.{cargo,rustup} for per-user state.
+# - The installer must be named rustup-init: rustup picks its mode from argv[0].
+ENV PATH=/ic/bin:/opt/cargo/bin:$PATH
+# NOTE: update rustup_sha whenever rustup_version changes
+ARG rustup_version=1.29.2
+ARG rustup_sha=5be191e8c70a5007074254cb74d78dbfdd25cd5a61c27de7b8e5410122ec24f4
+RUN rustup_dir="$(mktemp -d)" && \
+    curl -fsSL "https://static.rust-lang.org/rustup/archive/${rustup_version}/x86_64-unknown-linux-gnu/rustup-init" -o "$rustup_dir/rustup-init" && \
+    echo "$rustup_sha $rustup_dir/rustup-init" | sha256sum --check && \
+    chmod +x "$rustup_dir/rustup-init" && \
+    CARGO_HOME=/opt/cargo RUSTUP_HOME=/opt/rustup "$rustup_dir/rustup-init" -y --default-toolchain none --no-modify-path && \
+    rm -rf "$rustup_dir" /opt/rustup
 
 WORKDIR /
-# Use buildifier (uid 1001) if /entrypoint.sh is overriden
-# In GitHub that is the case and we need 1001 and we set it via ARG.
-ARG CI_USER="root"
-USER $CI_USER
+# Bake the entrypoint into the image so it works without the repo bind-mounted.
+COPY ./ci/container/init.sh /ci/container/init.sh
+ENTRYPOINT ["/ci/container/init.sh"]
 CMD ["/bin/bash"]
 
 FROM base as build
 
+USER buildifier
+
 FROM base as dev
 
-# Temporarily switch to root to install development packages.
-# We will switch back to the non-root user at the end of this stage.
-USER root
+# Add GitHub CLI repository to get the latest version
+# NOTE: GitHub lists the keyring's SHA256 in https://github.com/cli/cli/blob/trunk/docs/install_linux.md
+ARG githubcli_keyring_sha=6084d5d7bd8e288441e0e94fc6275570895da18e6751f70f057485dc2d1a811b
+RUN mkdir -p -m 755 /etc/apt/keyrings \
+	&& out=$(mktemp) && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o "$out" \
+	&& echo "$githubcli_keyring_sha $out" | sha256sum --check \
+	&& cat $out | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+	&& chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+	&& mkdir -p -m 755 /etc/apt/sources.list.d \
+	&& echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
 
 # Install additional packages for development but not needed on CI:
 ARG PACKAGE_DEV_FILE=ci/container/files/packages.dev
@@ -129,15 +115,7 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_DEV_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_DEV_FILE)"
 
-# Install GitHub CLI `gh` following: https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian
-RUN (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
-	&& sudo mkdir -p -m 755 /etc/apt/keyrings \
-	&& out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-	&& cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
-	&& sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-	&& sudo mkdir -p -m 755 /etc/apt/sources.list.d \
-	&& echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-	&& sudo apt update \
-	&& sudo apt install gh -y
+# Add zshrc generated from zsh-newuser-install (option 2)
+COPY ./ci/container/files/zshrc /etc/zsh/zshrc
 
-USER $CI_USER
+USER ubuntu

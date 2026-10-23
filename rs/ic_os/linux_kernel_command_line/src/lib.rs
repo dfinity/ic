@@ -1,5 +1,6 @@
+//! Parse, modify, and serialize Linux kernel command line strings.
+
 use regex::Regex;
-/// Utilities to manipulate a kernel command line reliably.
 use std::error::Error as StdError;
 use std::fmt;
 use std::fmt::{Display, Write};

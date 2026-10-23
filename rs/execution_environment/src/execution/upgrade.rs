@@ -9,11 +9,12 @@ use crate::canister_manager::types::{
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
 use crate::execution::install_code::{
-    CanisterMemoryHandling, InstallCodeHelper, OriginalContext, PausedInstallCodeHelper,
-    canister_layout, finish_err,
+    InstallCodeHelper, OriginalContext, PausedInstallCodeHelper, finish_err,
 };
 use crate::execution_environment::{RoundContext, RoundLimits};
+use crate::hypervisor::{CanisterMemoryHandling, MemoryHandling, MemorySource};
 use ic_base_types::PrincipalId;
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
     wasmtime_embedder::system_api::ApiType,
@@ -30,9 +31,7 @@ use ic_replicated_state::{
 };
 use ic_types::messages::{CanisterCall, RequestMetadata};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
-use ic_types_cycles::Cycles;
-
-use super::install_code::MemoryHandling;
+use ic_types_cycles::{CompoundCycles, Instructions};
 
 #[cfg(test)]
 mod tests;
@@ -112,7 +111,7 @@ pub(crate) fn execute_upgrade(
             original,
             round,
             err,
-            helper.take_canister_log(),
+            helper.clone_log_memory_store(),
         );
     }
 
@@ -129,7 +128,7 @@ pub(crate) fn execute_upgrade(
                 original,
                 round,
                 (canister_id, HypervisorError::WasmModuleNotFound).into(),
-                helper.take_canister_log(),
+                helper.clone_log_memory_store(),
             );
         }
     };
@@ -164,8 +163,8 @@ pub(crate) fn execute_upgrade(
             FuncRef::Method(method),
             RequestMetadata::for_new_call_tree(original.time),
             round_limits,
-            round.network_topology,
-            round.cost_schedule,
+            round.network_topology.clone(),
+            original.subnet_cycles_config,
         );
 
         match wasm_execution_result {
@@ -194,7 +193,7 @@ pub(crate) fn execute_upgrade(
                     ingress_status_with_processing_state(&original.message, original.time);
                 let paused_execution = Box::new(PausedPreUpgradeExecution {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     context,
                     original,
                 });
@@ -238,7 +237,7 @@ fn upgrade_stage_1_process_pre_upgrade_result(
             original,
             round,
             err,
-            helper.take_canister_log(),
+            helper.clone_log_memory_store(),
         );
     }
 
@@ -276,51 +275,50 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                 original,
                 round,
                 err,
-                helper.take_canister_log(),
+                helper.clone_log_memory_store(),
             );
         }
     };
 
     let module_hash = wasm_module.module_hash();
     // Stage 2: create a new execution state based on the new Wasm code, deactivate global timer, and bump canister version.
-    // Replace the execution state of the canister with a new execution state, but
-    // persist the stable memory (if it exists).
-    let layout = canister_layout(&original.canister_layout_path, &canister_id);
+    // Replace the execution state of the canister with a new execution state that
+    // persists the stable memory and, if the `wasm_memory_persistence: opt keep`
+    // upgrade option is used (which requires enhanced orthogonal persistence),
+    // also the main memory.
+    let memory_handling = CanisterMemoryHandling {
+        stable_memory_handling: MemoryHandling::Keep,
+        main_memory_handling: main_memory_handling(context.mode),
+    };
+    // Note that the memories to preserve are taken from the helper's canister,
+    // i.e. as they are after `canister_pre_upgrade()` has run, and not from the
+    // clean canister.
+    // Stage 1 rejects an upgrade of a canister without an execution state with
+    // `WasmModuleNotFound` and no step in between can remove it, so the old
+    // execution state is present here.
+    let old = helper
+        .canister()
+        .execution_state
+        .as_ref()
+        .expect("upgrading a canister without an execution state");
+    let new_memories = MemorySource::Preserve {
+        old,
+        handling: memory_handling,
+    };
     let (instructions_from_compilation, result) = round.hypervisor.create_execution_state(
         wasm_module,
-        layout.raw_path(),
         canister_id,
+        round.time,
         round_limits,
         original.compilation_cost_handling,
+        new_memories,
     );
 
     helper.charge_for_compilation(instructions_from_compilation);
 
-    let main_memory_handling = match determine_main_memory_handling(
-        context.mode,
-        &helper.canister().execution_state,
-        &result,
-    ) {
-        Ok(memory_handling) => memory_handling,
-        Err(err) => {
-            let instructions_left = helper.instructions_left();
-            return finish_err(
-                clean_canister,
-                instructions_left,
-                original,
-                round,
-                err,
-                helper.take_canister_log(),
-            );
-        }
-    };
-
-    let memory_handling = CanisterMemoryHandling {
-        stable_memory_handling: MemoryHandling::Keep,
-        main_memory_handling,
-    };
-
-    if let Err(err) = helper.replace_execution_state_and_allocations(result, memory_handling) {
+    if let Err(err) =
+        validate_wasm_memory_persistence(context.mode, &helper.canister().execution_state, &result)
+    {
         let instructions_left = helper.instructions_left();
         return finish_err(
             clean_canister,
@@ -328,7 +326,19 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             original,
             round,
             err,
-            helper.take_canister_log(),
+            helper.clone_log_memory_store(),
+        );
+    }
+
+    if let Err(err) = helper.replace_execution_state_and_allocations(result) {
+        let instructions_left = helper.instructions_left();
+        return finish_err(
+            clean_canister,
+            instructions_left,
+            original,
+            round,
+            err,
+            helper.clone_log_memory_store(),
         );
     }
 
@@ -364,8 +374,8 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             FuncRef::Method(method),
             RequestMetadata::for_new_call_tree(original.time),
             round_limits,
-            round.network_topology,
-            round.cost_schedule,
+            round.network_topology.clone(),
+            original.subnet_cycles_config,
         );
 
         match wasm_execution_result {
@@ -395,7 +405,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                     ingress_status_with_processing_state(&original.message, original.time);
                 let paused_execution = Box::new(PausedStartExecutionDuringUpgrade {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     context_sender,
                     context_arg: context.arg,
                     original,
@@ -441,7 +451,7 @@ fn upgrade_stage_3b_process_start_result(
             original,
             round,
             err,
-            helper.take_canister_log(),
+            helper.clone_log_memory_store(),
         );
     }
 
@@ -489,8 +499,8 @@ fn upgrade_stage_4a_call_post_upgrade(
         FuncRef::Method(method),
         RequestMetadata::for_new_call_tree(original.time),
         round_limits,
-        round.network_topology,
-        round.cost_schedule,
+        round.network_topology.clone(),
+        original.subnet_cycles_config,
     );
     match wasm_execution_result {
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
@@ -517,7 +527,7 @@ fn upgrade_stage_4a_call_post_upgrade(
                 ingress_status_with_processing_state(&original.message, original.time);
             let paused_execution = Box::new(PausedPostUpgradeExecution {
                 paused_wasm_execution,
-                paused_helper: helper.pause(),
+                paused_helper: helper.pause(slice.executed_instructions),
                 original,
             });
             DtsInstallCodeResult::Paused {
@@ -556,7 +566,7 @@ fn upgrade_stage_4b_process_post_upgrade_result(
             original,
             round,
             err,
-            helper.take_canister_log(),
+            helper.clone_log_memory_store(),
         );
     }
     helper.finish(clean_canister, original, round, round_limits)
@@ -579,6 +589,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
     ) -> DtsInstallCodeResult {
         info!(
             round.log,
@@ -590,6 +601,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
             self.paused_helper,
             &self.original,
             &round,
+            subnet_memory_saturation,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -636,7 +648,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedPreUpgradeExecution {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     ..*self
                 });
                 DtsInstallCodeResult::Paused {
@@ -650,7 +662,14 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (
+        CanisterCall,
+        InstallCodeCallId,
+        CompoundCycles<Instructions>,
+    ) {
         info!(
             log,
             "[DTS] Aborting (canister_pre_upgrade) execution of canister {}.",
@@ -683,6 +702,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
     ) -> DtsInstallCodeResult {
         info!(
             round.log,
@@ -694,6 +714,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
             self.paused_helper,
             &self.original,
             &round,
+            subnet_memory_saturation,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -741,7 +762,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedStartExecutionDuringUpgrade {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     ..*self
                 });
                 DtsInstallCodeResult::Paused {
@@ -755,7 +776,14 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (
+        CanisterCall,
+        InstallCodeCallId,
+        CompoundCycles<Instructions>,
+    ) {
         info!(
             log,
             "[DTS] Aborting (start) execution of canister {}.", self.original.canister_id
@@ -786,6 +814,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
     ) -> DtsInstallCodeResult {
         info!(
             round.log,
@@ -797,6 +826,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
             self.paused_helper,
             &self.original,
             &round,
+            subnet_memory_saturation,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -842,7 +872,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedPostUpgradeExecution {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     ..*self
                 });
                 DtsInstallCodeResult::Paused {
@@ -856,7 +886,14 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (
+        CanisterCall,
+        InstallCodeCallId,
+        CompoundCycles<Instructions>,
+    ) {
         info!(
             log,
             "[DTS] Aborting (canister_post_upgrade) execution of canister {}.",
@@ -871,17 +908,36 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
     }
 }
 
-/// Determines main memory handling based on the `wasm_memory_persistence` upgrade options.
-/// Integrates two safety checks:
+/// Determines main memory handling based on the `wasm_memory_persistence` upgrade option.
+/// The choice only depends on the install mode; whether it is legitimate is checked
+/// separately by `validate_wasm_memory_persistence`, which needs the new execution
+/// state and hence can only run once that state has been created.
+fn main_memory_handling(install_mode: CanisterInstallModeV2) -> MemoryHandling {
+    match install_mode {
+        CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+            ..
+        })) => MemoryHandling::Keep,
+        CanisterInstallModeV2::Upgrade(None)
+        | CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+            wasm_memory_persistence: None | Some(WasmMemoryPersistence::Replace),
+            ..
+        })) => MemoryHandling::Replace,
+        // These two modes cannot occur during an upgrade.
+        CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => unreachable!(),
+    }
+}
+
+/// Two safety checks on the `wasm_memory_persistence` upgrade option:
 /// - The `wasm_memory_persistence` upgrade option is not omitted in error, when
 ///   the old canister implementation uses enhanced orthogonal persistence.
 /// - The `wasm_memory_persistence: opt keep` option is not applied to a new canister
 ///   implementation that does not support enhanced orthogonal persistence.
-fn determine_main_memory_handling(
+fn validate_wasm_memory_persistence(
     install_mode: CanisterInstallModeV2,
     old_state: &Option<ExecutionState>,
     new_state_candidate: &HypervisorResult<ExecutionState>,
-) -> Result<MemoryHandling, CanisterManagerError> {
+) -> Result<(), CanisterManagerError> {
     let old_state_uses_orthogonal_persistence = || {
         old_state
             .as_ref()
@@ -903,7 +959,7 @@ fn determine_main_memory_handling(
                 let message = "Enhanced orthogonal persistence requires the `wasm_memory_persistence` upgrade option.".to_string();
                 return Err(CanisterManagerError::MissingUpgradeOptionError { message });
             }
-            Ok(MemoryHandling::Replace)
+            Ok(())
         }
         CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
             wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
@@ -914,12 +970,12 @@ fn determine_main_memory_handling(
                 let message = "The `wasm_memory_persistence: opt Keep` upgrade option requires that the new canister module supports enhanced orthogonal persistence.".to_string();
                 return Err(CanisterManagerError::InvalidUpgradeOptionError { message });
             }
-            Ok(MemoryHandling::Keep)
+            Ok(())
         }
         CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
             wasm_memory_persistence: Some(WasmMemoryPersistence::Replace),
             ..
-        })) => Ok(MemoryHandling::Replace),
+        })) => Ok(()),
         // These two modes cannot occur during an upgrade.
         CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => unreachable!(),
     }

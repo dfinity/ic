@@ -179,7 +179,7 @@ fn test_decode_no_update() {
         decode_certified_deltas_no_chunks(1, &cid, &pk, &payload[..]).unwrap(),
         (
             vec![],
-            RegistryVersion::from(1u64),
+            RegistryVersion::from(1_u64),
             Time::from_nanos_since_unix_epoch(REPLICA_TIME)
         ),
     )
@@ -196,7 +196,7 @@ fn test_decode_single_delta() {
         decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]).unwrap(),
         (
             vec![set_key(1, "key", "value")],
-            RegistryVersion::from(1u64),
+            RegistryVersion::from(1_u64),
             Time::from_nanos_since_unix_epoch(REPLICA_TIME),
         ),
     )
@@ -223,7 +223,7 @@ fn test_decode_prefix() {
                 rem_key(2, "key1"),
                 set_key(2, "key2", "value22"),
             ],
-            RegistryVersion::from(3u64),
+            RegistryVersion::from(3_u64),
             Time::from_nanos_since_unix_epoch(REPLICA_TIME),
         ),
     )
@@ -249,7 +249,7 @@ fn test_decode_bad_root_hash() {
 
 #[test]
 fn test_decode_bad_sig() {
-    let bad_sig = CombinedThresholdSig(vec![0u8; 32]);
+    let bad_sig = CombinedThresholdSig(vec![0_u8; 32]);
 
     let (cid, pk, payload) = make_certified_delta(
         vec![make_change(vec![upsert("key", "value")])],
@@ -282,7 +282,7 @@ fn test_missing_tail_is_ok() {
                 set_key(2, "key2", "value2"),
                 set_key(3, "key3", "value3"),
             ],
-            RegistryVersion::from(4u64),
+            RegistryVersion::from(4_u64),
             Time::from_nanos_since_unix_epoch(REPLICA_TIME),
         ),
     )
@@ -399,7 +399,7 @@ fn test_honest_chunked() {
         result,
         (
             vec![set_key(1, "giant_blob", monolithic_blob)],
-            RegistryVersion::from(1u64),
+            RegistryVersion::from(1_u64),
             Time::from_nanos_since_unix_epoch(REPLICA_TIME),
         ),
     );

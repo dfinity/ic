@@ -11,6 +11,241 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-10-02: Proposal 144200
+
+http://dashboard.internetcomputer.org/proposal/144200
+
+## Added
+
+* Added a new `NnsFunction` variant `MergeSubnets`, which proposes to merge a
+  subnet into another subnet: in the routing table, reassigns all canister
+  ranges hosted by the source subnet to the destination subnet. The source
+  subnet is not deleted.
+
+
+# 2026-09-01: Proposal 143761
+
+http://dashboard.internetcomputer.org/proposal/143761
+
+## Added
+
+* `UpdateCanisterSettings` and `CreateCanisterAndInstallCode` proposals can now
+  set `reserved_cycles_limit`, the upper bound on the cycles a canister may hold
+  in reserved cycles.
+
+
+# 2026-08-21: Proposal 143660
+
+https://dashboard.internetcomputer.org/proposal/143660
+
+## Changed
+
+* Relaxed requirements on replica versions used in
+  UpdateStandardEngineReplicaVersion. The motivation is just to facilitate
+  testing. Previously, 40 character hexadecimal was required. Now, whatever
+  ReplicaVersion::try_from accepts is accepted.
+
+
+# 2026-08-14: Proposal 143577
+
+http://dashboard.internetcomputer.org/proposal/143577
+
+## Fixed
+
+* `validate_assign_noid_payload` no longer panics when a node provider has
+  `id = None`. It now skips such providers safely, preventing all
+  `AddNodeOperator` proposal submissions from being blocked.
+
+
+# 2026-08-07: Proposal 143410
+
+http://dashboard.internetcomputer.org/proposal/143410
+
+## Added
+
+* Added a new proposal type: `UpdateStandardEngineReplicaVersion`. Change what
+  replica version(s) are run by Cloud Engines.
+
+* Added support for upgrade options to `InstallCode` proposals.
+
+
+# 2026-07-17: Proposal 142936
+
+http://dashboard.internetcomputer.org/proposal/142936
+
+## Fixed
+
+* Corrected the `DeleteSubnet` proposal description: dropped the outdated
+  "Currently limited to CloudEngine subnets" clause, added that the subnet
+  is also removed from the subnet list, and noted that system subnets cannot
+  be deleted.
+
+
+# 2026-07-03: Proposal 142679
+
+http://dashboard.internetcomputer.org/proposal/142679
+
+## Fixed
+
+* Delete zombie neuron during claim_neuron when Ledger is unavailable.
+
+
+# 2026-05-17: Proposal 142447
+
+http://dashboard.internetcomputer.org/proposal/142447
+
+## Added
+
+* Added a new field to GuestLaunchMeasurementMetadata to identify the VCPU type.
+
+* Added a new `NnsFunction` variant `SetDefaultInitialDkgSubnet`, which
+  proposes to set or unset the default subnet to which `SetupInitialDKG`
+  management canister calls are routed when no subnet is specified explicitly
+  in the request.
+
+
+# 2026-05-17: Proposal 141779
+
+http://dashboard.internetcomputer.org/proposal/141779
+
+## Changed
+
+* Neuron spawning and maturity disbursement finalization now read the locally
+  computed Mission 70 maturity modulation (derived from the XRC-backed price
+  history) instead of the CMC-polled `cached_daily_maturity_modulation_basis_points`.
+
+
+# 2026-05-13: Proposal 141771
+
+http://dashboard.internetcomputer.org/proposal/141771
+
+## Fixed
+
+* Tolerate XRC failures when updating maturity modulation: compute the average
+  over available days using last-observation-carried-forward, and advance past
+  days where XRC returns no rate so that a single persistent gap no longer
+  stalls maturity modulation updates.
+
+
+# 2026-05-08: Proposal 141738
+
+http://dashboard.internetcomputer.org/proposal/141738
+
+## Added
+
+* Daily timer task that fetches ICP/XDR rates from the Exchange Rate Canister, maintains a 365-day price history in Governance state, and computes Mission 70 maturity modulation locally. The computed value is not yet consumed by spawning or disbursement; that switchover will happen in a follow-up PR.
+
+* `get_maturity_modulation` query endpoint that returns the current Mission 70 maturity modulation value, including `current_value_permyriad` and `updated_at_timestamp_seconds`.
+
+* Expose `staked_maturity_e8s_equivalent` on `NeuronInfo`, so external callers
+  can read staked maturity from `get_neuron_info` / `list_neurons` responses.
+
+## Changed
+
+* The first Mission 70 maturity modulation calculation skips the daily speed limit, so the initial
+  value reflects the target directly (subject to global bounds) instead of being clamped to a tiny
+  step away from zero.
+
+
+# 2026-04-25: Proposal 141565
+
+http://dashboard.internetcomputer.org/proposal/141565
+
+## Added
+
+* `TakeCanisterSnapshot` proposals now store the new snapshot ID in the
+  `success_value` field.
+
+## Changed
+
+* Relax eight year gang membership requirement(s): Instead of needing to have dissolve
+  delay >= 8 * 365.25 days (8 "years"), which is exactly 252_460_800 seconds, a second
+  round of induction requires only that neurons had dissolve delay >= 8 * 365 days,
+  which is exactly 252_288_000 seconds. This is less than a 0.07% difference.
+  Additionally, to avoid bonusing newly staked ICP, the neuron must currently be aging
+  since before March 30 (midnight UTC). (Furthermore, neurons that are already members
+  will not have their eight year gang bonus base re-assessed.)
+
+
+# 2026-04-17: Proposal 141441
+
+http://dashboard.internetcomputer.org/proposal/141441
+
+## Added
+
+* Enabled CreateCanisterAndInstallCode proposals.
+
+## Changed
+
+* The minimum dissolve delay required to submit non-manage-neuron proposals is now
+  a fixed 6 months, decoupled from the voting eligibility threshold which can be lower.
+
+* Enable Mission 70 voting rewards changes. This includes the following:
+  1. Reduce max dissolve delay from 8 years to 2 years. This includes capping existing neurons via data migration.
+  2. Reduce voting rewards pool by approximately 36.71% (equivalently, scale by 0.6329 times).
+  3. Dissolve delay bonus: quadratic instead of linear, with a maximum of 3x instead of 2x.
+  4. Reduce the minimum dissolve delay needed to vote to 2 weeks instead of 6 months.
+  5. 8 year gang 10% bonus.
+
+
+# 2026-04-14: Proposal 141380
+
+http://dashboard.internetcomputer.org/proposal/141380
+
+## Fixed
+
+* When result in `get_node_providers_rewards_cached` is `Err`,
+  release INFLIGHT (i.e. set it to `false`).
+
+
+# 2026-04-11: Proposal 141331
+
+http://dashboard.internetcomputer.org/proposal/141331
+
+Maintenance release. New code is disabled by flags.
+
+
+# 2026-04-06: Proposal 141242
+
+http://dashboard.internetcomputer.org/proposal/141242
+
+## Added
+
+- Proposal type `DeleteSubnet`, currently limited to CloudEngine subnets.
+- Tag neurons that have the maximum dissolve delay of 8 years with their bonus base
+  (`eight_year_gang_bonus_base_e8s`), in preparation for the dissolve delay bonus
+  grandfathering when the maximum dissolve delay is reduced to 2 years.
+- Expose data that will be used to determine the bonus that "8 year gang" neurons
+  will receive, starting in the near future. This data consists of the staked amount
+  in neurons with 8 year dissolve delay at the beginning of Mission 70. This will be
+  used in the near future to determine voting power (and consequently, voting rewards),
+  once other aspects of voting power/rewards are in production.
+
+
+# 2026-03-27: Proposal 141090
+
+http://dashboard.internetcomputer.org/proposal/141090
+
+## Added
+
+- Support for `snapshot_visibility` in `UpdateCanisterSettings` proposals.
+- Tag neurons that have the maximum dissolve delay of 8 years with their bonus base
+  (`eight_year_gang_bonus_base_e8s`), in preparation for the dissolve delay bonus
+  grandfathering when the maximum dissolve delay is reduced to 2 years.
+
+
+# 2026-03-20: Proposal 140958
+
+http://dashboard.internetcomputer.org/proposal/140958
+
+## Changed
+
+- `CreateServiceNervousSystem` proposals no longer reject SNS configurations
+  where the sum of developer-allocated tokens exceeds
+  `swap_distribution.total_e8s`. With the Neurons' Fund discontinued, this
+  validation is no longer needed.
+
+
 # 2026-03-13: Proposal 140859
 
 http://dashboard.internetcomputer.org/proposal/140859

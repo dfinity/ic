@@ -1,6 +1,6 @@
 use crate::external_canister_types::{
-    BitcoinCanisterArg, CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig,
-    DogecoinCanisterArg, InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig,
+    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, DummyAuthConfig,
+    InternetIdentityFrontendInit, InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig,
     OpenIdEmailVerification, RateLimitConfig, SnsAggregatorConfig, StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
@@ -12,6 +12,7 @@ use axum::{
     extract::State,
     response::{Html, IntoResponse},
 };
+use base64::prelude::*;
 use bitcoin::Network as BitcoinAdapterNetwork;
 use bitcoin::dogecoin::Network as DogecoinAdapterNetwork;
 use bytes::Bytes;
@@ -29,7 +30,8 @@ use ic_boundary::{Health, RootKey, status};
 use ic_btc_adapter::config::{Config as BitcoinAdapterConfig, IncomingSource as BtcIncomingSource};
 use ic_btc_adapter::{AdapterNetwork, start_server as start_btc_server};
 use ic_btc_interface::{
-    Fees as BitcoinFees, InitConfig as BitcoinInitConfig, Network as BitcoinNetwork,
+    CanisterArg as BitcoinCanisterArg, Fees as BitcoinFees, InitConfig as BitcoinInitConfig,
+    Network as BitcoinNetwork,
 };
 use ic_config::adapters::AdaptersConfig;
 use ic_config::execution_environment::MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT;
@@ -39,18 +41,22 @@ use ic_config::{
 };
 use ic_crypto_sha2::Sha256;
 use ic_doge_interface::{
-    Fees as DogecoinFees, InitConfig as DogecoinInitConfig, Network as DogecoinNetwork,
+    CanisterArg as DogecoinCanisterArg, Fees as DogecoinFees, InitConfig as DogecoinInitConfig,
+    Network as DogecoinNetwork,
 };
 use ic_http_endpoints_public::query;
 use ic_http_endpoints_public::{
-    CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
-    SubnetReadStateServiceBuilder, call_async, call_sync, metrics::HttpHandlerMetrics, read_state,
+    IngressValidatorBuilder, QueryServiceBuilder, ReadStateServiceBuilder, call_async, call_sync,
+    metrics::HttpHandlerMetrics, read_state,
 };
 use ic_https_outcalls_adapter::{
     Config as HttpsOutcallsConfig, IncomingSource as CanisterHttpIncomingSource,
     start_server as start_canister_http_server,
 };
-use ic_https_outcalls_adapter_client::{CanisterHttpAdapterClientImpl, setup_canister_http_client};
+use ic_https_outcalls_adapter_client::{
+    CanisterHttpAdapterClientImpl, setup_canister_http_channel, setup_canister_http_client,
+};
+use ic_https_outcalls_pricing::{NetworkUsage, PricingError, PricingFactory};
 use ic_https_outcalls_service::HttpsOutcallRequest;
 use ic_https_outcalls_service::HttpsOutcallResponse;
 use ic_https_outcalls_service::HttpsOutcallResult;
@@ -70,7 +76,8 @@ use ic_management_canister_types_private::{
     MasterPublicKeyId, Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
     ReadCanisterSnapshotMetadataResponse, SchnorrAlgorithm, SchnorrKeyId, SnapshotVisibility,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, VetKdCurve, VetKdKeyId,
+    StatusVisibility, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    VetKdCurve, VetKdKeyId,
 };
 use ic_metrics::MetricsRegistry;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
@@ -78,9 +85,9 @@ use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     BITCOIN_TESTNET_CANISTER_ID, CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID,
     CYCLES_MINTING_CANISTER_ID, DOGECOIN_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID,
-    LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID,
-    NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
+    INTERNET_IDENTITY_FRONTEND_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID,
+    LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_governance_api::{NetworkEconomics, Neuron, neuron::DissolveState};
@@ -105,22 +112,27 @@ use ic_sns_wasm::pb::v1::{AddWasmRequest, AddWasmResponse, SnsCanisterType, SnsW
 use ic_state_machine_tests::{
     FakeVerifier, StateMachine, StateMachineBuilder, StateMachineConfig, StateMachineStateDir,
     SubmitIngressError, Subnets, WasmResult, add_global_registry_records,
-    add_initial_registry_records,
+    add_initial_registry_records, remove_chain_key_registry_records,
+    remove_subnet_local_registry_records, update_global_registry_records,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::messages::{CertificateDelegationFormat, CertificateDelegationMetadata};
+use ic_types::messages::{
+    CertificateDelegationFormat, CertificateDelegationMetadata, SignedSenderInfo,
+};
 use ic_types::{
-    CanisterId, Height, NumInstructions, PrincipalId, RegistryVersion, SnapshotId, SubnetId,
+    CanisterId, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SnapshotId,
+    SubnetId,
     artifact::UnvalidatedArtifactMutation,
-    batch::CanisterCyclesCostSchedule,
     canister_http::{
-        CanisterHttpReject, CanisterHttpRequest as AdapterCanisterHttpRequest,
+        CanisterHttpPaymentReceipt, CanisterHttpReject,
+        CanisterHttpRequest as AdapterCanisterHttpRequest, CanisterHttpRequestContext,
         CanisterHttpRequestId, CanisterHttpResponse as AdapterCanisterHttpResponse,
-        CanisterHttpResponseContent,
+        CanisterHttpResponseContent, MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, PricingVersion,
+        Replication, ReplicationKind,
     },
-    crypto::{BasicSig, BasicSigOf, CryptoResult, Signable},
+    crypto::{BasicSig, BasicSigOf, CryptoResult, Signable, threshold_sig::IcRootOfTrust},
     malicious_flags::MaliciousFlags,
     messages::{
         CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId as OtherMessageId,
@@ -128,18 +140,20 @@ use ic_types::{
     },
     time::GENESIS,
 };
-use ic_types::{NumBytes, Time};
-use ic_types_cycles::Cycles;
+use ic_types::{CountBytes, NumBytes, Time};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_validator_http_request_test_utils::icp_mainnet_root_public_key_for_testing;
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Subaccount, Tokens};
 use icrc_ledger_types::icrc1::account::Account;
 use itertools::Itertools;
 use pocket_ic::common::rest::{
-    self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
-    CanisterHttpResponse, ExtendedSubnetConfigSet, IcpConfig, IcpConfigFlag, IcpFeatures,
-    IcpFeaturesConfig, IncompleteStateFlag, MockCanisterHttpResponse, RawAddCycles,
-    RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
-    SubnetInstructionConfig, SubnetKind, Topology,
+    self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod,
+    CanisterHttpPricingVersion, CanisterHttpReplication, CanisterHttpRequest, CanisterHttpResponse,
+    ExtendedSubnetConfigSet, IcpConfig, IcpConfigFlag, IcpFeatures, IcpFeaturesConfig,
+    IncompleteStateFlag, MockCanisterHttpResponse, MockFlexibleCanisterHttpResponse, RawAddCycles,
+    RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSenderInfo,
+    RawSetStableMemory, SubnetInstructionConfig, SubnetKind, Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse, copy_dir};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -188,6 +202,8 @@ const MAINNET_FIDUCIARY_SUBNET_ID: &str =
     "pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae";
 const MAINNET_SNS_SUBNET_ID: &str =
     "x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae";
+const MAINNET_TEST_THRESHOLD_KEYS_SUBNET_ID: &str =
+    "fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae";
 
 const REGISTRY_CANISTER_WASM: &[u8] = include_bytes!(env!("REGISTRY_CANISTER_WASM_PATH"));
 const CYCLES_MINTING_CANISTER_WASM: &[u8] =
@@ -212,8 +228,10 @@ const SNS_LEDGER_INDEX_CANISTER_WASM: &[u8] =
     include_bytes!(env!("SNS_LEDGER_INDEX_CANISTER_WASM_PATH"));
 const SNS_AGGREGATOR_TEST_CANISTER_WASM: &[u8] =
     include_bytes!(env!("SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH"));
-const INTERNET_IDENTITY_TEST_CANISTER_WASM: &[u8] =
-    include_bytes!(env!("INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH"));
+const INTERNET_IDENTITY_BACKEND_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("INTERNET_IDENTITY_BACKEND_CANISTER_WASM_PATH"));
+const INTERNET_IDENTITY_FRONTEND_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("INTERNET_IDENTITY_FRONTEND_CANISTER_WASM_PATH"));
 const NNS_DAPP_TEST_CANISTER_WASM: &[u8] = include_bytes!(env!("NNS_DAPP_TEST_CANISTER_WASM_PATH"));
 const BITCOIN_TESTNET_CANISTER_WASM: &[u8] =
     include_bytes!(env!("BITCOIN_TESTNET_CANISTER_WASM_PATH"));
@@ -448,7 +466,7 @@ pub(crate) type CanisterHttpClient = Arc<
         Box<
             dyn NonBlockingChannel<
                     AdapterCanisterHttpRequest,
-                    Response = AdapterCanisterHttpResponse,
+                    Response = (AdapterCanisterHttpResponse, CanisterHttpPaymentReceipt),
                 > + Send,
         >,
     >,
@@ -479,12 +497,18 @@ impl Subnet {
             https_outcalls_uds_path: Some(uds_path),
             ..Default::default()
         };
-        let client = setup_canister_http_client(
+        let channel = setup_canister_http_channel(
             state_machine.runtime.handle().clone(),
             &state_machine.metrics_registry,
-            adapter_config,
+            &adapter_config,
+            &state_machine.replica_logger,
+        );
+        let client = setup_canister_http_client(
+            state_machine.runtime.handle().clone(),
+            channel,
             state_machine.transform_handler.lock().unwrap().clone(),
             MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
+            &state_machine.metrics_registry,
             state_machine.replica_logger.clone(),
         );
         let canister_http = Arc::new(Mutex::new(CanisterHttp {
@@ -522,6 +546,9 @@ impl SubnetsImpl {
     pub(crate) fn get_all(&self) -> Vec<Arc<Subnet>> {
         self.subnets.read().unwrap().values().cloned().collect()
     }
+    fn remove(&self, subnet_id: SubnetId) -> Option<Arc<Subnet>> {
+        self.subnets.write().unwrap().remove(&subnet_id)
+    }
     fn clear(&self) {
         self.subnets.write().unwrap().clear();
     }
@@ -551,7 +578,7 @@ struct PocketIcStateDir {
 
 impl PocketIcStateDir {
     fn new(state_dir: Option<PathBuf>) -> Result<Self, String> {
-        if wsl::is_wsl()
+        if *ic_sys::IS_WSL
             && let Some(state_dir) = state_dir
         {
             let temp_dir = TempDir::new()
@@ -691,8 +718,9 @@ impl PocketIcSubnets {
         // bound PocketIc resource consumption
         hypervisor_config.embedders_config.max_sandbox_count = 64;
         hypervisor_config.embedders_config.max_sandbox_idle_time = Duration::from_secs(30);
-        hypervisor_config.embedders_config.max_sandboxes_rss =
-            NumBytes::new(2 * 1024 * 1024 * 1024);
+        hypervisor_config
+            .embedders_config
+            .default_subnet_heap_delta_capacity = NumBytes::new(6 * 1024 * 1024 * 1024);
         // shorter query stats epoch length for faster query stats aggregation
         hypervisor_config.query_stats_epoch_length = 60;
         // enable canister debug prints
@@ -890,7 +918,30 @@ impl PocketIcSubnets {
         let mut subnet_chain_keys = vec![];
         if subnet_kind == SubnetKind::II || subnet_kind == SubnetKind::Fiduciary {
             for algorithm in [SchnorrAlgorithm::Bip340Secp256k1, SchnorrAlgorithm::Ed25519] {
-                for name in ["key_1", "test_key_1", "dfx_test_key"] {
+                let key_id = SchnorrKeyId {
+                    algorithm,
+                    name: "key_1".to_string(),
+                };
+                subnet_chain_keys.push(MasterPublicKeyId::Schnorr(key_id));
+            }
+
+            for curve in [EcdsaCurve::Secp256k1, EcdsaCurve::Secp256r1] {
+                let key_id = EcdsaKeyId {
+                    curve,
+                    name: "key_1".to_string(),
+                };
+                subnet_chain_keys.push(MasterPublicKeyId::Ecdsa(key_id));
+            }
+
+            let key_id = VetKdKeyId {
+                curve: VetKdCurve::Bls12_381_G2,
+                name: "key_1".to_string(),
+            };
+            subnet_chain_keys.push(MasterPublicKeyId::VetKd(key_id));
+        }
+        if subnet_kind == SubnetKind::TestThresholdKeys {
+            for algorithm in [SchnorrAlgorithm::Bip340Secp256k1, SchnorrAlgorithm::Ed25519] {
+                for name in ["test_key_1", "dfx_test_key"] {
                     let key_id = SchnorrKeyId {
                         algorithm,
                         name: name.to_string(),
@@ -899,15 +950,17 @@ impl PocketIcSubnets {
                 }
             }
 
-            for name in ["key_1", "test_key_1", "dfx_test_key"] {
-                let key_id = EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: name.to_string(),
-                };
-                subnet_chain_keys.push(MasterPublicKeyId::Ecdsa(key_id));
+            for curve in [EcdsaCurve::Secp256k1, EcdsaCurve::Secp256r1] {
+                for name in ["test_key_1", "dfx_test_key"] {
+                    let key_id = EcdsaKeyId {
+                        curve,
+                        name: name.to_string(),
+                    };
+                    subnet_chain_keys.push(MasterPublicKeyId::Ecdsa(key_id));
+                }
             }
 
-            for name in ["key_1", "test_key_1", "dfx_test_key"] {
+            for name in ["test_key_1", "dfx_test_key"] {
                 let key_id = VetKdKeyId {
                     curve: VetKdCurve::Bls12_381_G2,
                     name: name.to_string(),
@@ -1076,7 +1129,8 @@ impl PocketIcSubnets {
                 self.deploy_sns(config);
             }
             if let Some(ref config) = ii {
-                self.deploy_ii(config);
+                self.deploy_ii_backend(config);
+                self.deploy_ii_frontend(config);
             }
             if let Some(ref config) = nns_ui {
                 self.deploy_nns_ui(config);
@@ -1142,6 +1196,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                status_visibility: Some(StatusVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(REGISTRY_CANISTER_ID.get()),
@@ -1164,6 +1220,17 @@ impl PocketIcSubnets {
         }
 
         // Upload registry to the registry canister.
+        self.sync_registry_to_canister(nns_subnet);
+    }
+
+    /// Applies all registry data provider mutations that have not yet been
+    /// applied to the registry canister, advancing the registry canister to
+    /// the latest version of the local registry data provider. This keeps the
+    /// registry canister and the local registry data provider in sync so that
+    /// `sync_registry_from_canister` does not loop forever waiting for the
+    /// registry canister to reach a version that the local registry data
+    /// provider has already surpassed.
+    fn sync_registry_to_canister(&mut self, nns_subnet: Arc<Subnet>) {
         let mutation_requests: Vec<_> = self
             .registry_data_provider
             .export_versions_as_atomic_mutation_requests()
@@ -1226,6 +1293,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                status_visibility: Some(StatusVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(CYCLES_MINTING_CANISTER_ID.get()),
@@ -1397,6 +1466,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                status_visibility: Some(StatusVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(LEDGER_CANISTER_ID.get()),
@@ -1479,6 +1550,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                status_visibility: Some(StatusVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(LEDGER_INDEX_CANISTER_ID.get()),
@@ -1559,6 +1632,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                status_visibility: Some(StatusVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
                 Some(CYCLES_LEDGER_CANISTER_ID.get()),
@@ -1624,6 +1699,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                status_visibility: Some(StatusVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
                 Some(CYCLES_LEDGER_INDEX_CANISTER_ID.get()),
@@ -1695,6 +1772,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                status_visibility: Some(StatusVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(GOVERNANCE_CANISTER_ID.get()),
@@ -1773,6 +1852,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                status_visibility: Some(StatusVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(ROOT_CANISTER_ID.get()),
@@ -1841,6 +1922,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                status_visibility: Some(StatusVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(SNS_WASM_CANISTER_ID.get()),
@@ -1940,6 +2023,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                status_visibility: Some(StatusVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = sns_subnet.state_machine.create_canister_with_cycles(
                 Some(SNS_AGGREGATOR_CANISTER_ID.get()),
@@ -1972,7 +2057,7 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_ii(&self, config: &IcpFeaturesConfig) {
+    fn deploy_ii_backend(&self, config: &IcpFeaturesConfig) {
         // Using a match here to force an update after changing
         // the type of `IcpFeaturesConfig`.
         match config {
@@ -2014,6 +2099,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                status_visibility: Some(StatusVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
                 Some(IDENTITY_CANISTER_ID.get()),
@@ -2027,18 +2114,40 @@ impl PocketIcSubnets {
             // The initial values have been adapted from the mainnet values obtained by calling
             // `dfx canister call rdmx6-jaaaa-aaaaa-aaadq-cai config --ic`:
             //     record {
-            //       fetch_root_key = null;
+            //       doh_config = opt opt record {
+            //         max_cache_age_secs = opt (3_600 : nat64);
+            //         allowed_domains = vec { "gmail.com"; "googlemail.com"; "outlook.com"; "hotmail.com"; "msn.com"; "live.com"; "icloud.com"; "me.com"; "mac.com"; "yahoo.com"; "ymail.com"; "aol.com"; "zoho.com"; "fastmail.com"; "fastmail.fm"; "hey.com"; "yandex.com"; "yandex.ru"; "mail.ru"; "qq.com"; "163.com"; "126.com"; "naver.com"; "daum.net";};
+            //       };
             //       is_production = opt true;
+            //       backend_canister_id = opt principal "rdmx6-jaaaa-aaaaa-aaadq-cai";
             //       enable_dapps_explorer = opt false;
             //       assigned_user_number_range = opt record {
             //         10_000 : nat64;
             //         7_569_744 : nat64;
             //       };
             //       new_flow_origins = opt vec { "https://id.ai" };
+            //       dnssec_config = opt opt record {
+            //         root_anchors = vec {
+            //           record {
+            //             algorithm = 8 : nat8;
+            //             key_tag = 20_326 : nat16;
+            //             digest_type = 2 : nat8;
+            //             digest = blob "\e0\6d\44\b8\0b\8f\1d\39\a9\5c\0b\0d\7c\65\d0\84\58\e8\80\40\9b\bc\68\34\57\10\42\37\c7\f8\ec\8d";
+            //           };
+            //           record {
+            //             algorithm = 8 : nat8;
+            //             key_tag = 38_696 : nat16;
+            //             digest_type = 2 : nat8;
+            //             digest = blob "\68\3d\2d\0a\cb\8c\9b\71\2a\19\48\b2\7f\74\12\19\29\8d\0a\45\0d\61\2c\48\3a\f4\44\a4\c0\fb\2b\16";
+            //           };
+            //         };
+            //       };
+            //       notifications_allow_insecure_endpoint = null;
+            //       notifications_enabled = opt true;
             //       archive_config = opt record {
             //         polling_interval_ns = 15_000_000_000 : nat64;
             //         entries_buffer_limit = 10_000 : nat64;
-            //         module_hash = blob "\f5\59\00\84\1f\c3\d6\3d\58\01\c1\b6\65\c3\34\6b\c4\8c\58\24\ba\84\3f\55\6a\26\22\6b\60\2f\79\5e";
+            //         module_hash = blob "\24\ff\2e\51\86\b6\78\7c\27\4f\f8\a6\1e\90\15\0d\9f\db\08\38\15\6e\e4\4f\e3\fa\f8\0d\12\85\2b\b4";
             //         entries_fetch_limit = 1_000 : nat16;
             //       };
             //       canister_creation_cycles_cost = opt (0 : nat64);
@@ -2050,21 +2159,25 @@ impl PocketIcSubnets {
             //           api_host = null;
             //         }
             //       };
+            //       enable_dnssec_email_recovery = opt false;
             //       related_origins = opt vec {
             //         "https://id.ai";
             //         "https://identity.ic0.app";
             //         "https://identity.internetcomputer.org";
             //         "https://identity.icp0.io";
+            //         "https://identity.icp.net";
             //       };
             //       openid_configs = opt vec {
             //         record {
             //           auth_uri = "https://accounts.google.com/o/oauth2/v2/auth";
             //           jwks_uri = "https://www.googleapis.com/oauth2/v3/certs";
-            //           logo = "<svg viewBox=\"0 0 24 24\"><path d=\"M12.19 2.83A9.15 9.15 0 0 0 4 16.11c1.5 3 4.6 5.06 8.18 5.06 2.47 0 4.55-.82 6.07-2.22a8.95 8.95 0 0 0 2.73-6.74c0-.65-.06-1.28-.17-1.88h-8.63v3.55h4.93a4.23 4.23 0 0 1-1.84 2.76c-3.03 2-7.12.55-8.22-2.9h-.01a5.5 5.5 0 0 1 5.14-7.26 5 5 0 0 1 3.5 1.37l2.63-2.63a8.8 8.8 0 0 0-6.13-2.39z\" style=\"fill: currentColor;\"></path></svg>";
+            //           logo = "<svg viewBox=\"0 0 24 24\"><clipPath id=\"__google-logo-path\"><path d=\"M12 10v4.5h6.47c-.5 2.7-3 4.74-6.47 4.74-3.9 0-7.1-3.3-7.1-7.25S8.1 4.75 12 4.75c1.8 0 3.35.6 4.6 1.8l3.4-3.4C18 1.2 15.24 0 12 0 5.4 0 0 5.4 0 12s5.4 12 12 12c7 0 11.5-4.9 11.5-11.7 0-.8-.1-1.54-.2-2.3H12z\"></path></clipPath><g style=\"clip-path:url(#__google-logo-path); transform: scale(0.75); transform-origin: center center;\"><foreignObject height=\"28\" transform=\"translate(-2,-2)\" width=\"28\"><div style=\"width:100%;height:100%;background:conic-gradient(#FF4641,#FD5061 40deg,#FD5061 60deg,#3186FF 85deg,#3186FF 117deg,#00A5B7 142deg,#0EBC5F 167deg,#0EBC5F 200deg,#6CC500 226deg,#FFCC00 253deg,#FFD314 268deg,#FFCC00 292deg,#FF4641 327deg)\"></div></foreignObject><rect fill=\"#3186FF\" height=\"8\" width=\"16\" x=\"11\" y=\"8\"></rect></g></svg>";
             //           name = "Google";
             //           fedcm_uri = opt "";
+            //           email_verification = opt variant { Google };
             //           issuer = "https://accounts.google.com";
             //           auth_scope = vec { "openid"; "profile"; "email" };
+            //           seed_jwks = null;
             //           client_id = "775077467414-rgoesk3egruq26c61s6ta8bpjetjqvgo.apps.googleusercontent.com";
             //         };
             //         record {
@@ -2073,26 +2186,34 @@ impl PocketIcSubnets {
             //           logo = "<svg viewBox=\"0 0 24 24\"><path d=\"M14.8 3.2c1-1.2 1.2-2.7 1-3.2-1 0-2.2.7-2.9 1.5-.9 1.2-1.1 2.6-.9 3 .6.2 2-.3 2.8-1.3ZM9.2 20c1.2 0 1.6-.8 3.2-.8 1.5 0 1.8.8 3.1.8s2.3-1.2 3-2.5c1-1.4 1.3-2.8 1.4-2.8 0 0-2.6-1.2-2.6-4.1 0-2.5 2-3.7 2.1-3.8a4.5 4.5 0 0 0-3.9-2c-1.4 0-2.6.8-3.4.8-.8 0-1.9-.8-3.2-.8-2.3 0-4.8 2-4.8 6 0 2.3 1 4.8 2 6.5 1 1.5 1.9 2.7 3 2.7Z\" style=\"fill: currentColor;\"></path></svg>";
             //           name = "Apple";
             //           fedcm_uri = opt "";
+            //           email_verification = opt variant { Unknown };
             //           issuer = "https://appleid.apple.com";
             //           auth_scope = vec { "openid" };
+            //           seed_jwks = null;
             //           client_id = "ai.id.auth";
             //         };
             //         record {
             //           auth_uri = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
             //           jwks_uri = "https://login.microsoftonline.com/common/discovery/v2.0/keys";
-            //           logo = "<svg viewBox=\"0 0 24 24\"><path d=\"M2.5 2.5h9v9h-9zm10 0h9v9h-9zm-10 10h9v9h-9zm10 0h9v9h-9z\" style=\"fill: currentColor;\"></path></svg>";
+            //           logo = "<svg viewBox=\"0 0 24 24\"><path fill=\"#f25124\" d=\"M2.5 2.5h9v9h-9z\"/><path fill=\"#7eba02\" d=\"M12.5 2.5h9v9h-9z\"/><path fill=\"#01a3ee\" d=\"M2.5 12.5h9v9h-9z\"/><path fill=\"#feba01\" d=\"M12.5 12.5h9v9h-9z\"/></svg>";
             //           name = "Microsoft";
             //           fedcm_uri = opt "";
+            //           email_verification = opt variant { Microsoft };
             //           issuer = "https://login.microsoftonline.com/{tid}/v2.0";
             //           auth_scope = vec { "openid"; "profile"; "email" };
+            //           seed_jwks = null;
             //           client_id = "80d5203e-9ba2-4acf-97a1-88d926a0bbbf";
             //         };
             //       };
+            //       backend_origin = opt "https://backend.id.ai";
             //       captcha_config = opt record {
             //         max_unsolved_captchas = 500 : nat64;
             //         captcha_trigger = variant { Static = variant { CaptchaDisabled } };
             //       };
+            //       mcp_official_url = opt opt "https://mcp.internetcomputer.org/mcp";
             //       dummy_auth = opt null;
+            //       notifications_allow_insecure_sender_list = null;
+            //       sso_allow_insecure_discovery = null;
             //       register_rate_limit = opt record {
             //         max_tokens = 25_000 : nat64;
             //         time_per_token_ns = 1_000_000_000 : nat64;
@@ -2107,7 +2228,7 @@ impl PocketIcSubnets {
                 // https://github.com/dfinity/internet-identity/blob/22d1d7659f0832d010aba7c84948c42bc771af0d/dfx.json#L8
                 Some(vec![OpenIdConfig {
                   name: "Google".to_string(),
-                  logo: "<svg viewBox=\"0 0 24 24\"><path d=\"M12.19 2.83A9.15 9.15 0 0 0 4 16.11c1.5 3 4.6 5.06 8.18 5.06 2.47 0 4.55-.82 6.07-2.22a8.95 8.95 0 0 0 2.73-6.74c0-.65-.06-1.28-.17-1.88h-8.63v3.55h4.93a4.23 4.23 0 0 1-1.84 2.76c-3.03 2-7.12.55-8.22-2.9h-.01a5.5 5.5 0 0 1 5.14-7.26 5 5 0 0 1 3.5 1.37l2.63-2.63a8.8 8.8 0 0 0-6.13-2.39z\" style=\"fill: currentColor;\"></path></svg>".to_string(),
+                  logo: "<svg viewBox=\"0 0 24 24\"><clipPath id=\"__google-logo-path\"><path d=\"M12 10v4.5h6.47c-.5 2.7-3 4.74-6.47 4.74-3.9 0-7.1-3.3-7.1-7.25S8.1 4.75 12 4.75c1.8 0 3.35.6 4.6 1.8l3.4-3.4C18 1.2 15.24 0 12 0 5.4 0 0 5.4 0 12s5.4 12 12 12c7 0 11.5-4.9 11.5-11.7 0-.8-.1-1.54-.2-2.3H12z\"></path></clipPath><g style=\"clip-path:url(#__google-logo-path); transform: scale(0.75); transform-origin: center center;\"><foreignObject height=\"28\" transform=\"translate(-2,-2)\" width=\"28\"><div style=\"width:100%;height:100%;background:conic-gradient(#FF4641,#FD5061 40deg,#FD5061 60deg,#3186FF 85deg,#3186FF 117deg,#00A5B7 142deg,#0EBC5F 167deg,#0EBC5F 200deg,#6CC500 226deg,#FFCC00 253deg,#FFD314 268deg,#FFCC00 292deg,#FF4641 327deg)\"></div></foreignObject><rect fill=\"#3186FF\" height=\"8\" width=\"16\" x=\"11\" y=\"8\"></rect></g></svg>".to_string(),
                   issuer: "https://accounts.google.com".to_string(),
                   client_id: "775077467414-q1ajffledt8bjj82p2rl5a09co8cf4rf.apps.googleusercontent.com".to_string(),
                   jwks_uri: "https://www.googleapis.com/oauth2/v3/certs".to_string(),
@@ -2115,11 +2236,15 @@ impl PocketIcSubnets {
                   auth_scope: vec!["openid".to_string(), "profile".to_string(), "email".to_string()],
                   fedcm_uri: Some("".to_string()),
                   email_verification: Some(OpenIdEmailVerification::Google),
+                  seed_jwks: None,
                 }])
             } else {
                 None
             };
-            let internet_identity_test_args = Some(InternetIdentityInit {
+            let dummy_auth_config = DummyAuthConfig {
+                prompt_for_index: true,
+            };
+            let internet_identity_backend_args = Some(InternetIdentityInit {
                 assigned_user_number_range: None, // DIFFERENT FROM ICP MAINNET
                 archive_config: None,             // DIFFERENT FROM ICP MAINNET
                 canister_creation_cycles_cost: Some(0),
@@ -2134,24 +2259,125 @@ impl PocketIcSubnets {
                 related_origins: None,         // DIFFERENT FROM ICP MAINNET
                 new_flow_origins: None,        // DIFFERENT FROM ICP MAINNET
                 openid_configs: openid_google, // DIFFERENT FROM ICP MAINNET
-                analytics_config: None,        // DIFFERENT FROM ICP MAINNET
-                fetch_root_key: Some(true),    // DIFFERENT FROM ICP MAINNET
+                sso_allow_insecure_discovery: None,
+                notifications_allow_insecure_sender_list: None,
+                notifications_allow_insecure_endpoint: None,
+                analytics_config: None, // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
-                dummy_auth: Some(None),
-                backend_canister_id: None,
-                backend_origin: None,
+                dummy_auth: Some(Some(dummy_auth_config)), // DIFFERENT FROM ICP MAINNET
+                backend_canister_id: Some(IDENTITY_CANISTER_ID.get().0),
+                backend_origin: None,               // DIFFERENT FROM ICP MAINNET
+                enable_dnssec_email_recovery: None, // DIFFERENT FROM ICP MAINNET
+                dnssec_config: None,                // DIFFERENT FROM ICP MAINNET
+                doh_config: None,                   // DIFFERENT FROM ICP MAINNET
+                mcp_official_url: None,             // DIFFERENT FROM ICP MAINNET
+                notifications_enabled: None,        // DIFFERENT FROM ICP MAINNET
             });
             ii_subnet
                 .state_machine
                 .install_wasm_in_mode(
                     canister_id,
                     CanisterInstallMode::Install,
-                    INTERNET_IDENTITY_TEST_CANISTER_WASM.to_vec(),
-                    Encode!(&internet_identity_test_args).unwrap(),
+                    INTERNET_IDENTITY_BACKEND_CANISTER_WASM.to_vec(),
+                    Encode!(&internet_identity_backend_args).unwrap(),
                 )
                 .unwrap();
         }
+    }
+
+    fn deploy_ii_frontend(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
+        // Nothing to do if the II subnet does not exist (yet).
+        let Some(ref ii_subnet) = self.ii_subnet else {
+            return;
+        };
+
+        // Nothing to do if the II backend has not been deployed (yet).
+        if !ii_subnet
+            .state_machine
+            .canister_exists(IDENTITY_CANISTER_ID)
+        {
+            return;
+        }
+
+        // Nothing to do if the II frontend has already been deployed.
+        if ii_subnet
+            .state_machine
+            .canister_exists(INTERNET_IDENTITY_FRONTEND_CANISTER_ID)
+        {
+            return;
+        }
+
+        let gateway_port = self.gateway_port.expect(
+            "The HTTP gateway is supposed to be created if the `ii` ICP feature is specified.",
+        );
+
+        // dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"uqzsh-gqaaa-aaaaq-qaada-cai";})' --ic
+        // settings = record {
+        //     freezing_threshold = opt (2_592_000 : nat);
+        //     wasm_memory_threshold = opt (0 : nat);
+        //     controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+        //     reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+        //     log_visibility = opt variant { controllers };
+        //     wasm_memory_limit = opt (3_221_225_472 : nat);
+        //     memory_allocation = opt (0 : nat);
+        //     compute_allocation = opt (0 : nat);
+        // };
+        let settings = Some(CanisterSettingsArgs {
+            controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+            compute_allocation: Some(0_u64.into()),
+            memory_allocation: Some(0_u64.into()),
+            freezing_threshold: Some(2_592_000_u64.into()),
+            reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+            log_visibility: Some(LogVisibilityV2::Controllers),
+            log_memory_limit: Some(4_096_u64.into()),
+            wasm_memory_limit: Some(3_221_225_472_u64.into()),
+            wasm_memory_threshold: Some(0_u64.into()),
+            environment_variables: None,
+            snapshot_visibility: Some(SnapshotVisibility::Controllers),
+            status_visibility: Some(StatusVisibility::Controllers),
+            minimum_incoming_canister_call_cycles: None,
+        });
+
+        let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
+            Some(INTERNET_IDENTITY_FRONTEND_CANISTER_ID.get()),
+            Cycles::from(INITIAL_CYCLES),
+            settings,
+        );
+
+        // Install the Internet Identity frontend canister.
+        let backend_origin = format!("http://{IDENTITY_CANISTER_ID}.localhost:{gateway_port}");
+        let frontend_origins = vec![
+            format!("http://{INTERNET_IDENTITY_FRONTEND_CANISTER_ID}.localhost:{gateway_port}"),
+            format!("http://id.ai.localhost:{gateway_port}"),
+        ];
+        let dummy_auth_config = DummyAuthConfig {
+            prompt_for_index: true,
+        };
+        let ii_frontend_init_payload = InternetIdentityFrontendInit {
+            backend_canister_id: IDENTITY_CANISTER_ID.get().0,
+            backend_origin,
+            related_origins: Some(frontend_origins),
+            fetch_root_key: Some(true),
+            analytics_config: None,
+            dummy_auth: Some(Some(dummy_auth_config)),
+            dev_csp: Some(true),
+        };
+        ii_subnet
+            .state_machine
+            .install_wasm_in_mode(
+                canister_id,
+                CanisterInstallMode::Install,
+                INTERNET_IDENTITY_FRONTEND_CANISTER_WASM.to_vec(),
+                Encode!(&ii_frontend_init_payload).unwrap(),
+            )
+            .unwrap();
     }
 
     fn deploy_nns_ui(&self, config: &IcpFeaturesConfig) {
@@ -2195,6 +2421,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                status_visibility: Some(StatusVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(NNS_UI_CANISTER_ID.get()),
@@ -2219,7 +2447,7 @@ impl PocketIcSubnets {
               ("ICP_SWAP_URL".to_string(), format!("http://uvevg-iyaaa-aaaak-ac27q-cai.raw.localhost:{gateway_port}")),
               /* Kong swap canister is not deployed by PocketIC! */
               ("KONG_SWAP_URL".to_string(), format!("http://xvemo-ap777-77774-qaalq-cai.raw.localhost:{gateway_port}")),
-              ("IDENTITY_SERVICE_URL".to_string(), format!("http://{IDENTITY_CANISTER_ID}.localhost:{gateway_port}")),
+              ("IDENTITY_SERVICE_URL".to_string(), format!("http://{INTERNET_IDENTITY_FRONTEND_CANISTER_ID}.localhost:{gateway_port}")),
               ("INDEX_CANISTER_ID".to_string(), LEDGER_INDEX_CANISTER_ID.to_string()),
               ("LEDGER_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
               ("OWN_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
@@ -2293,6 +2521,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                status_visibility: Some(StatusVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = btc_subnet.state_machine.create_canister_with_cycles(
                 Some(BITCOIN_TESTNET_CANISTER_ID.get()),
@@ -2368,6 +2598,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                status_visibility: Some(StatusVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = btc_subnet.state_machine.create_canister_with_cycles(
                 Some(DOGECOIN_CANISTER_ID.get()),
@@ -2435,6 +2667,8 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                status_visibility: Some(StatusVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(MIGRATION_CANISTER_ID.get()),
@@ -2445,7 +2679,7 @@ impl PocketIcSubnets {
 
             // Install the canister migration orchestrator canister.
             // TODO: replace by public interface
-            #[derive(CandidType, Deserialize, Default)]
+            #[derive(Default, CandidType, Deserialize)]
             struct MigrationCanisterInitArgs {
                 allowlist: Option<Vec<Principal>>,
             }
@@ -2571,6 +2805,135 @@ impl PocketIcSubnets {
             subnet.state_machine.reload_registry();
         }
     }
+
+    fn delete_subnet(
+        &mut self,
+        subnet_id: SubnetId,
+        default_effective_canister_id: Principal,
+    ) -> Result<(), PocketIcError> {
+        let config_pos = self
+            .subnet_configs
+            .iter()
+            .position(|c| c.subnet_id == subnet_id)
+            .ok_or(PocketIcError::SubnetNotFound(subnet_id.get().0))?;
+
+        let subnet_kind = self.subnet_configs[config_pos].subnet_kind;
+        if subnet_kind.is_named() {
+            return Err(PocketIcError::Forbidden(format!(
+                "Cannot delete named subnet {} (kind: {:?}).",
+                subnet_id, subnet_kind
+            )));
+        }
+
+        if let Some(root_subnet) = self.nns_subnet.as_ref()
+            && root_subnet.get_subnet_id() == subnet_id
+        {
+            return Err(PocketIcError::Forbidden(
+                "Cannot delete the root subnet of the PocketIC instance.".to_string(),
+            ));
+        }
+
+        let default_canister_id: CanisterId = PrincipalId(default_effective_canister_id)
+            .try_into()
+            .unwrap();
+        // The default effective canister ID is used as the routing target for canister
+        // creation calls that don't specify an explicit subnet (provisional API with ic_00
+        // as effective ID, or no effective principal). Deleting its subnet would break
+        // all such calls.
+        if let Some((_, default_subnet_id)) = self.routing_table.lookup_entry(default_canister_id)
+            && default_subnet_id == subnet_id
+        {
+            return Err(PocketIcError::Forbidden(format!(
+                "Cannot delete subnet {} which contains the default effective canister ID.",
+                subnet_id
+            )));
+        }
+
+        let config = self.subnet_configs.remove(config_pos);
+
+        let subnet = self
+            .subnets
+            .remove(subnet_id)
+            .expect("subnet in subnet_configs must be in subnets");
+
+        subnet.state_machine.drop_payload_builder();
+
+        self.routing_table.remove_subnet(subnet_id);
+
+        for subnets in self.chain_keys.values_mut() {
+            subnets.retain(|&sid| sid != subnet_id);
+        }
+        let empty_chain_key_ids: Vec<MasterPublicKeyId> = self
+            .chain_keys
+            .iter()
+            .filter(|(_, subnets)| subnets.is_empty())
+            .map(|(key_id, _)| key_id.clone())
+            .collect();
+        self.chain_keys.retain(|_, subnets| !subnets.is_empty());
+
+        // Delete the subnet state directory from disk.
+        if let Some(state_dir) = self.state_dir.get() {
+            let subnet_seed = compute_subnet_seed(config.ranges.clone(), config.alloc_range);
+            let subnet_state_dir = state_dir.join(hex::encode(subnet_seed));
+            if subnet_state_dir.exists()
+                && let Err(e) = std::fs::remove_dir_all(&subnet_state_dir)
+            {
+                eprintln!(
+                    "Failed to delete subnet state directory {}: {}",
+                    subnet_state_dir.display(),
+                    e
+                );
+            }
+        }
+
+        // Update global registry records to reflect the removed subnet.
+        if let Some(nns_subnet) = self.nns_subnet.clone() {
+            let next_version =
+                RegistryVersion::new(self.registry_data_provider.latest_version().get() + 1);
+            remove_chain_key_registry_records(
+                &empty_chain_key_ids,
+                self.registry_data_provider.clone(),
+                next_version,
+            );
+            let subnet_list = self
+                .subnets
+                .get_all()
+                .into_iter()
+                .map(|s| s.get_subnet_id())
+                .collect();
+            update_global_registry_records(
+                next_version,
+                self.routing_table.clone(),
+                subnet_list,
+                self.chain_keys.clone(),
+                self.registry_data_provider.clone(),
+            );
+            remove_subnet_local_registry_records(
+                subnet_id,
+                &subnet.state_machine.nodes,
+                self.registry_data_provider.clone(),
+                next_version,
+            );
+            self.persist_registry_changes();
+            // Apply the registry changes to the registry canister as well if the
+            // `registry` ICP feature is enabled so that the registry canister and
+            // the local registry data provider stay in sync (otherwise
+            // `sync_registry_from_canister` would loop forever).
+            if let Some(icp_features) = &self.icp_features
+                && icp_features.registry.is_some()
+            {
+                self.sync_registry_to_canister(nns_subnet);
+            }
+        }
+
+        // Drop the StateMachine, waiting until no other Arc holders remain.
+        let state_machine = subnet.state_machine.clone();
+        drop(subnet);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5 * 60);
+        drop_state_machine(state_machine, deadline);
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -2603,7 +2966,27 @@ pub struct PocketIc {
     mainnet_routing_table: RoutingTable,
     state_label: StateLabel,
     subnets: PocketIcSubnets,
+    malicious_flags: MaliciousFlags,
     default_effective_canister_id: Principal,
+}
+
+fn drop_state_machine(state_machine: Arc<StateMachine>, deadline: std::time::Instant) {
+    let mut state_machine = Some(state_machine);
+    loop {
+        match Arc::try_unwrap(state_machine.take().unwrap()) {
+            Ok(sm) => {
+                sm.drop();
+                break;
+            }
+            Err(sm) => {
+                state_machine = Some(sm);
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
+        if std::time::Instant::now() > deadline {
+            panic!("Timed out while dropping StateMachine.");
+        }
+    }
 }
 
 impl Drop for PocketIc {
@@ -2630,24 +3013,10 @@ impl Drop for PocketIc {
             .collect();
         self.subnets.clear();
         // for every StateMachine, wait until nobody else has an Arc to that StateMachine
-        // and then drop that StateMachine
-        let start = std::time::Instant::now();
+        // and then drop that StateMachine; the deadline is shared across all StateMachines
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5 * 60);
         for state_machine in state_machines {
-            let mut state_machine = Some(state_machine);
-            while state_machine.is_some() {
-                match Arc::try_unwrap(state_machine.take().unwrap()) {
-                    Ok(sm) => {
-                        sm.drop();
-                        break;
-                    }
-                    Err(sm) => {
-                        state_machine = Some(sm);
-                    }
-                }
-                if start.elapsed() > std::time::Duration::from_secs(5 * 60) {
-                    panic!("Timed out while dropping PocketIC.");
-                }
-            }
+            drop_state_machine(state_machine, deadline);
         }
     }
 }
@@ -2709,6 +3078,7 @@ impl PocketIc {
         auto_progress_enabled: bool,
         gateway_port: Option<u16>,
         mainnet_nns_subnet_id: bool,
+        malicious_flags: MaliciousFlags,
     ) -> Result<Self, String> {
         if let Some(time) = initial_time {
             let systime: SystemTime = time.into();
@@ -2899,17 +3269,20 @@ impl PocketIc {
                         let temp_state_dir = TempDir::new().unwrap();
                         copy_dir(subnet_state_dir, temp_state_dir.path())
                             .expect("Failed to copy state directory");
+                        let metrics_registry = MetricsRegistry::new();
                         let state_manager = StateManagerImpl::new(
                             Arc::new(FakeVerifier),
                             SubnetId::new(PrincipalId::default()),
                             conv_type(subnet_kind),
-                            no_op_logger(),
-                            &MetricsRegistry::new(),
                             &ic_config::state_manager::Config::new(
                                 temp_state_dir.path().to_path_buf(),
                             ),
                             None,
                             MaliciousFlags::default(),
+                            tokio::sync::watch::channel(ic_types::Height::from(0)).0,
+                            None,
+                            &metrics_registry,
+                            no_op_logger(),
                         );
                         let metadata = state_manager.get_latest_state().take().metadata.clone();
                         // Shut down the temporary state manager to avoid race conditions.
@@ -3066,6 +3439,7 @@ impl PocketIc {
             mainnet_routing_table,
             state_label,
             subnets,
+            malicious_flags,
             default_effective_canister_id,
         })
     }
@@ -3110,7 +3484,7 @@ impl HasStateLabel for PocketIc {
 fn conv_type(inp: rest::SubnetKind) -> SubnetType {
     use rest::SubnetKind::*;
     match inp {
-        Application | Fiduciary | SNS => SubnetType::Application,
+        Application | Fiduciary | SNS | TestThresholdKeys => SubnetType::Application,
         CloudEngine => SubnetType::CloudEngine,
         Bitcoin | II | NNS | System => SubnetType::System,
         VerifiedApplication => SubnetType::VerifiedApplication,
@@ -3123,6 +3497,7 @@ fn subnet_size(subnet: SubnetKind) -> u64 {
         Application => 13,
         CloudEngine => 13,
         VerifiedApplication => 13,
+        TestThresholdKeys => 13,
         Fiduciary => 34,
         SNS => 34,
         Bitcoin => 13,
@@ -3156,6 +3531,11 @@ fn subnet_kind_subnet_id(subnet_kind: SubnetKind) -> Option<SubnetId> {
                 .into(),
         ),
         SNS => Some(PrincipalId::from_str(MAINNET_SNS_SUBNET_ID).unwrap().into()),
+        TestThresholdKeys => Some(
+            PrincipalId::from_str(MAINNET_TEST_THRESHOLD_KEYS_SUBNET_ID)
+                .unwrap()
+                .into(),
+        ),
     }
 }
 
@@ -3227,10 +3607,15 @@ impl RangeGen {
         Ok(())
     }
 
-    /// Returns the next canister id range from the top
+    /// Returns the next canister id range from the middle of the canister ID space.
     pub fn next_range(&mut self) -> CanisterIdRange {
         loop {
-            let offset = (u64::MAX / CANISTER_IDS_PER_SUBNET) - 1 - self.range_offset;
+            // Use the midpoint instead of u64::MAX so that the upper half of the canister ID
+            // space remains available for subnets created via the registry canister's
+            // `create_subnet` endpoint, which allocates new ranges by appending directly after
+            // the last existing range in the routing table.
+            let midpoint = u64::MAX / 2;
+            let offset = (midpoint / CANISTER_IDS_PER_SUBNET) - 1 - self.range_offset;
             self.range_offset += 1;
             let start = offset * CANISTER_IDS_PER_SUBNET;
             let end = ((offset + 1) * CANISTER_IDS_PER_SUBNET) - 1;
@@ -3373,6 +3758,7 @@ fn http_method_from(
         ic_types::canister_http::CanisterHttpMethod::HEAD => CanisterHttpMethod::HEAD,
         ic_types::canister_http::CanisterHttpMethod::PUT => CanisterHttpMethod::PUT,
         ic_types::canister_http::CanisterHttpMethod::DELETE => CanisterHttpMethod::DELETE,
+        ic_types::canister_http::CanisterHttpMethod::PATCH => CanisterHttpMethod::PATCH,
     }
 }
 
@@ -3382,6 +3768,31 @@ fn http_header_from(
     CanisterHttpHeader {
         name: http_header.name.clone(),
         value: http_header.value.clone(),
+    }
+}
+
+fn replication_from(replication: &Replication) -> CanisterHttpReplication {
+    // `Replication::kind()` already derives the committee size, so the conversion
+    // only has to rename the variants.
+    match replication.kind() {
+        ReplicationKind::FullyReplicated => CanisterHttpReplication::FullyReplicated,
+        ReplicationKind::NonReplicated => CanisterHttpReplication::NonReplicated,
+        ReplicationKind::Flexible {
+            total_requests,
+            min_responses,
+            max_responses,
+        } => CanisterHttpReplication::Flexible {
+            total_requests,
+            min_responses,
+            max_responses,
+        },
+    }
+}
+
+fn pricing_version_from(pricing_version: &PricingVersion) -> CanisterHttpPricingVersion {
+    match pricing_version {
+        PricingVersion::Legacy => CanisterHttpPricingVersion::Legacy,
+        PricingVersion::PayAsYouGo => CanisterHttpPricingVersion::PayAsYouGo,
     }
 }
 
@@ -3401,8 +3812,10 @@ fn get_canister_http_requests(pic: &PocketIc) -> Vec<CanisterHttpRequest> {
                 http_method: http_method_from(&c.http_method),
                 url: c.url,
                 headers: c.headers.iter().map(http_header_from).collect(),
-                body: c.body.unwrap_or_default(),
+                body: c.body.map_or_else(Vec::new, |body| body.as_ref().clone()),
                 max_response_bytes: c.max_response_bytes.map(|b| b.get()),
+                replication: replication_from(&c.replication),
+                pricing_version: pricing_version_from(&c.pricing_version),
             })
             .collect();
         res.append(&mut cur);
@@ -3418,6 +3831,16 @@ impl Operation for GetCanisterHttp {
 
     fn id(&self) -> OpId {
         OpId("get_canister_http".into())
+    }
+}
+
+/// The nodes of `sm` that perform the HTTP outcall described by `context`, i.e.
+/// the ones that produce a response to it.
+fn outcall_nodes(sm: &StateMachine, context: &CanisterHttpRequestContext) -> Vec<NodeId> {
+    match &context.replication {
+        Replication::FullyReplicated => sm.nodes.iter().map(|node| node.node_id).collect(),
+        Replication::NonReplicated(node_id) => vec![*node_id],
+        Replication::Flexible { committee, .. } => committee.iter().copied().collect(),
     }
 }
 
@@ -3441,7 +3864,6 @@ impl Operation for ProcessCanisterHttpInternal {
             let mut client = client.lock().unwrap();
             for (id, context) in new_requests {
                 if let Ok(()) = client.send(AdapterCanisterHttpRequest {
-                    timeout: context.time + Duration::from_secs(5 * 60),
                     id,
                     context,
                     socks_proxy_addrs: vec![],
@@ -3454,16 +3876,19 @@ impl Operation for ProcessCanisterHttpInternal {
                     Err(_) => {
                         break;
                     }
-                    Ok(response) => {
+                    Ok((response, payment_receipt)) => {
                         canister_http.pending.remove(&response.id);
                         if let Some(context) = sm.canister_http_request_contexts().get(&response.id)
                         {
-                            sm.mock_canister_http_response(
-                                response.id.get(),
-                                response.timeout,
-                                context.request.sender,
-                                vec![response.content; sm.nodes.len()],
-                            );
+                            // Only one real outcall is made, so every node that would have
+                            // performed it reports the same response and the same spend.
+                            let responses = outcall_nodes(&sm, context)
+                                .into_iter()
+                                .map(|node_id| {
+                                    (node_id, (response.content.clone(), payment_receipt.clone()))
+                                })
+                                .collect();
+                            sm.mock_canister_http_response_for_nodes(response.id.get(), responses);
                         }
                     }
                 }
@@ -3535,47 +3960,53 @@ async fn setup_adapter_mock(
 
 // END COPY
 
-fn process_mock_canister_https_response(
-    pic: &PocketIc,
-    mock_canister_http_response: &MockCanisterHttpResponse,
-) -> OpOut {
-    let response_to_reject_code = |response: &CanisterHttpResponse| match response {
-        CanisterHttpResponse::CanisterHttpReply(_) => None,
-        CanisterHttpResponse::CanisterHttpReject(reject) => Some(reject.reject_code),
-    };
-    let mut reject_codes: Vec<_> = mock_canister_http_response
-        .additional_responses
-        .iter()
-        .filter_map(response_to_reject_code)
-        .collect();
-    if let Some(reject_code) = response_to_reject_code(&mock_canister_http_response.response) {
-        reject_codes.push(reject_code)
-    }
-    for reject_code in reject_codes {
-        if ic_error_types::RejectCode::try_from(reject_code).is_err() {
-            return OpOut::Error(PocketIcError::InvalidRejectCode(reject_code));
+/// Checks that every mocked response in `responses` is one a node of the outcall's
+/// subnet could have produced: a reject's code must be a valid one and its message
+/// within the size a node truncates its reject messages to.
+fn validate_mock_canister_http_responses<'a>(
+    responses: impl Iterator<Item = &'a CanisterHttpResponse>,
+) -> Result<(), OpOut> {
+    for response in responses {
+        let CanisterHttpResponse::CanisterHttpReject(reject) = response else {
+            continue;
+        };
+        if ic_error_types::RejectCode::try_from(reject.reject_code).is_err() {
+            return Err(OpOut::Error(PocketIcError::InvalidRejectCode(
+                reject.reject_code,
+            )));
+        }
+        // A node prunes an oversized reject message before signing and gossiping
+        // it, so a longer message is not something any node could have reported:
+        // it would both be priced above what a node can be charged for gossiping
+        // a reject and produce a response share that peers reject as too large.
+        if reject.message.len() > MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES {
+            return Err(OpOut::Error(
+                PocketIcError::CanisterHttpRejectMessageTooLong((
+                    reject.message.len(),
+                    MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES,
+                )),
+            ));
         }
     }
-    let subnet_id =
-        ic_types::SubnetId::new(ic_types::PrincipalId(mock_canister_http_response.subnet_id));
-    let Some(subnet) = pic.subnets.get(subnet_id) else {
-        return OpOut::Error(PocketIcError::SubnetNotFound(
-            mock_canister_http_response.subnet_id,
-        ));
-    };
-    let canister_http_request_id =
-        CanisterHttpRequestId::from(mock_canister_http_response.request_id);
-    let contexts = subnet.canister_http_request_contexts();
-    let Some(context) = contexts.get(&canister_http_request_id) else {
-        return OpOut::Error(PocketIcError::InvalidCanisterHttpRequestId((
-            subnet_id,
-            canister_http_request_id,
-        )));
-    };
-    let timeout = context.time + Duration::from_secs(5 * 60);
-    let canister_id = context.request.sender;
+    Ok(())
+}
 
-    let response_to_content = |response: &CanisterHttpResponse| match response {
+/// Turns one mocked response into the response content a node would have
+/// produced, together with the cycles that node reports having spent on the
+/// outcall.
+///
+/// The spend is derived with the same pricing machinery a real node uses, except
+/// that a mocked outcall is charged no response time: what a node would be charged
+/// for the time an outcall took is wall-clock time, which would make the cost of a
+/// mocked outcall depend on the machine running the test.
+fn mock_canister_http_response_content(
+    pic: &PocketIc,
+    subnet: &StateMachine,
+    canister_http_request_id: CanisterHttpRequestId,
+    context: &CanisterHttpRequestContext,
+    response: &CanisterHttpResponse,
+) -> (CanisterHttpResponseContent, CanisterHttpPaymentReceipt) {
+    match response {
         CanisterHttpResponse::CanisterHttpReply(reply) => {
             let response = HttpsOutcallResponse {
                 status: reply.status.into(),
@@ -3615,31 +4046,134 @@ fn process_mock_canister_https_response(
                 1,
                 MetricsRegistry::new(),
                 subnet.replica_logger.clone(),
-            );
+            )
+            .without_response_time_charge();
             client
                 .send(AdapterCanisterHttpRequest {
-                    timeout,
                     id: canister_http_request_id,
                     context: context.clone(),
                     socks_proxy_addrs: vec![],
                 })
                 .unwrap();
-            let response = loop {
+            loop {
                 match client.try_receive() {
                     Err(_) => std::thread::sleep(Duration::from_millis(10)),
-                    Ok(r) => {
-                        break r;
+                    Ok((response, payment_receipt)) => {
+                        break (response.content, payment_receipt);
                     }
                 }
-            };
-            response.content
+            }
         }
         CanisterHttpResponse::CanisterHttpReject(reject) => {
-            CanisterHttpResponseContent::Reject(CanisterHttpReject {
+            // The reject code was checked by `validate_mock_canister_http_rejects`
+            // before any response was converted.
+            let reject = CanisterHttpReject {
                 reject_code: ic_error_types::RejectCode::try_from(reject.reject_code).unwrap(),
                 message: reject.message.clone(),
-            })
+            };
+            let mut budget =
+                PricingFactory::new(&MetricsRegistry::new(), subnet.replica_logger.clone())
+                    .new_tracker(context);
+            // A rejecting node ran no transform and, unlike a real one, spent no
+            // time on an outcall that downloaded nothing. It does gossip its reject
+            // body to its peers though, which is what it is charged for here.
+            budget
+                .subtract_network_usage(NetworkUsage {
+                    response_size: NumBytes::from(0),
+                    response_time: Duration::ZERO,
+                })
+                .expect("an outcall that consumed no network resources is never charged");
+            // A node that cannot pay for gossiping its reject reports an
+            // out-of-cycles reject instead of the one it produced, just like the
+            // HTTPS outcalls client does.
+            let reject =
+                match budget.subtract_gossip_usage(NumBytes::from(reject.count_bytes() as u64)) {
+                    Ok(()) => reject,
+                    Err(PricingError::InsufficientCycles) => CanisterHttpReject {
+                        reject_code: ic_error_types::RejectCode::CanisterReject,
+                        message: "Insufficient cycles".to_string(),
+                    },
+                };
+            (
+                CanisterHttpResponseContent::Reject(reject),
+                budget.create_payment_receipt(),
+            )
         }
+    }
+}
+
+/// The pending canister HTTP outcall a mock refers to: the subnet it was made on,
+/// its request ID, and its request context.
+type PendingCanisterHttpRequest = (
+    Arc<StateMachine>,
+    CanisterHttpRequestId,
+    CanisterHttpRequestContext,
+);
+
+/// Resolves the subnet and the pending canister HTTP outcall a mock refers to.
+fn pending_canister_http_request(
+    pic: &PocketIc,
+    raw_subnet_id: Principal,
+    request_id: u64,
+) -> Result<PendingCanisterHttpRequest, OpOut> {
+    let subnet_id = ic_types::SubnetId::new(ic_types::PrincipalId(raw_subnet_id));
+    let Some(subnet) = pic.subnets.get(subnet_id) else {
+        return Err(OpOut::Error(PocketIcError::SubnetNotFound(raw_subnet_id)));
+    };
+    let canister_http_request_id = CanisterHttpRequestId::from(request_id);
+    let Some(context) = subnet
+        .canister_http_request_contexts()
+        .remove(&canister_http_request_id)
+    else {
+        return Err(OpOut::Error(PocketIcError::InvalidCanisterHttpRequestId((
+            subnet_id,
+            canister_http_request_id,
+        ))));
+    };
+    Ok((subnet, canister_http_request_id, context))
+}
+
+fn process_mock_canister_https_response(
+    pic: &PocketIc,
+    mock_canister_http_response: &MockCanisterHttpResponse,
+) -> OpOut {
+    let (subnet, canister_http_request_id, context) = match pending_canister_http_request(
+        pic,
+        mock_canister_http_response.subnet_id,
+        mock_canister_http_response.request_id,
+    ) {
+        Ok(request) => request,
+        Err(err) => return err,
+    };
+    if let Err(err) = validate_mock_canister_http_responses(
+        std::iter::once(&mock_canister_http_response.response)
+            .chain(mock_canister_http_response.additional_responses.iter()),
+    ) {
+        return err;
+    }
+
+    // The number of responses is checked before any of them is converted, so that a
+    // mismatch does not run the transform function of the calling canister.
+    let num_responses = if mock_canister_http_response.additional_responses.is_empty() {
+        subnet.nodes.len()
+    } else {
+        mock_canister_http_response.additional_responses.len() + 1
+    };
+    if num_responses != subnet.nodes.len() {
+        return OpOut::Error(PocketIcError::InvalidMockCanisterHttpResponses((
+            num_responses,
+            subnet.nodes.len(),
+        )));
+    }
+
+    let response_to_content = |response: &CanisterHttpResponse| {
+        mock_canister_http_response_content(
+            pic,
+            &subnet,
+            canister_http_request_id,
+            &context,
+            response,
+        )
     };
     let content = response_to_content(&mock_canister_http_response.response);
     let mut contents: Vec<_> = if !mock_canister_http_response.additional_responses.is_empty() {
@@ -3652,17 +4186,74 @@ fn process_mock_canister_https_response(
         vec![content.clone(); subnet.nodes.len() - 1]
     };
     contents.push(content);
-    if contents.len() != subnet.nodes.len() {
-        return OpOut::Error(PocketIcError::InvalidMockCanisterHttpResponses((
-            contents.len(),
-            subnet.nodes.len(),
+    // Every node of the subnet answers, which is the contract of this
+    // (non-flexible) mock. That is exactly what a fully replicated outcall needs,
+    // since its committee is the whole node set; for a non-replicated one the
+    // payload builder only looks at the designated node's share and ignores the
+    // rest. A flexible outcall is not answered this way — its committee is answered
+    // node by node, by `process_mock_flexible_canister_https_response` — though
+    // nothing here has to reject one, since the surplus shares are simply ignored.
+    let responses = std::iter::zip(subnet.nodes.iter(), contents)
+        .map(|(node, content)| (node.node_id, content))
+        .collect();
+    subnet.mock_canister_http_response_for_nodes(mock_canister_http_response.request_id, responses);
+    OpOut::NoOutput
+}
+
+fn process_mock_flexible_canister_https_response(
+    pic: &PocketIc,
+    mock_flexible_canister_http_response: &MockFlexibleCanisterHttpResponse,
+) -> OpOut {
+    let (subnet, canister_http_request_id, context) = match pending_canister_http_request(
+        pic,
+        mock_flexible_canister_http_response.subnet_id,
+        mock_flexible_canister_http_response.request_id,
+    ) {
+        Ok(request) => request,
+        Err(err) => return err,
+    };
+    if let Err(err) =
+        validate_mock_canister_http_responses(mock_flexible_canister_http_response.responses.iter())
+    {
+        return err;
+    }
+    let Replication::Flexible { committee, .. } = &context.replication else {
+        return OpOut::Error(PocketIcError::NotAFlexibleCanisterHttpRequest((
+            subnet.get_subnet_id(),
+            canister_http_request_id,
+        )));
+    };
+    let num_responses = mock_flexible_canister_http_response.responses.len();
+    if num_responses > committee.len() {
+        return OpOut::Error(PocketIcError::TooManyMockCanisterHttpResponses((
+            num_responses,
+            committee.len(),
         )));
     }
-    subnet.mock_canister_http_response(
-        mock_canister_http_response.request_id,
-        timeout,
-        canister_id,
-        contents,
+
+    // The responses are assigned to the committee's nodes one each, in the
+    // deterministic order in which the `BTreeSet` iterates them. The assigned
+    // node IDs remain observable in per-node error details.
+    let responses = std::iter::zip(
+        committee.iter(),
+        mock_flexible_canister_http_response.responses.iter(),
+    )
+    .map(|(node_id, response)| {
+        (
+            *node_id,
+            mock_canister_http_response_content(
+                pic,
+                &subnet,
+                canister_http_request_id,
+                &context,
+                response,
+            ),
+        )
+    })
+    .collect();
+    subnet.mock_canister_http_response_for_nodes(
+        mock_flexible_canister_http_response.request_id,
+        responses,
     );
     OpOut::NoOutput
 }
@@ -3681,6 +4272,27 @@ impl Operation for MockCanisterHttp {
         OpId(format!(
             "mock_canister_http({:?})",
             self.mock_canister_http_response
+        ))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct MockFlexibleCanisterHttp {
+    pub mock_flexible_canister_http_response: MockFlexibleCanisterHttpResponse,
+}
+
+impl Operation for MockFlexibleCanisterHttp {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        process_mock_flexible_canister_https_response(
+            pic,
+            &self.mock_flexible_canister_http_response,
+        )
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!(
+            "mock_flexible_canister_http({:?})",
+            self.mock_flexible_canister_http_response
         ))
     }
 }
@@ -3997,7 +4609,7 @@ impl Operation for CanisterSnapshotDownload {
             self.sender,
             self.canister_id,
             self.snapshot_id,
-            base64::encode_config(self.snapshot_dir.display().to_string(), base64::URL_SAFE)
+            BASE64_URL_SAFE.encode(self.snapshot_dir.display().to_string())
         ))
     }
 }
@@ -4023,7 +4635,7 @@ fn upload_blob_from_file(
         .map_err(|e| format!("Could not open {} file: {}", blob_kind.description(), e))?;
     while offset < length {
         let chunk_size = std::cmp::min(length - offset, MAX_CHUNK_SIZE);
-        let mut chunk = vec![0u8; chunk_size as usize];
+        let mut chunk = vec![0_u8; chunk_size as usize];
         file.read_exact(&mut chunk)
             .map_err(|e| format!("Could not read {} file: {}", blob_kind.description(), e))?;
         let kind = match blob_kind {
@@ -4174,7 +4786,7 @@ impl Operation for CanisterSnapshotUpload {
             "canister_snapshot_upload(sender={},canister_id={},snapshot_dir='{}')",
             self.sender,
             self.canister_id,
-            base64::encode_config(self.snapshot_dir.display().to_string(), base64::URL_SAFE)
+            BASE64_URL_SAFE.encode(self.snapshot_dir.display().to_string())
         ))
     }
 }
@@ -4188,11 +4800,12 @@ impl Operation for SubmitIngressMessage {
         let subnet = route_call(pic, canister_call);
         match subnet {
             Ok(subnet) => {
-                match subnet.submit_ingress_as(
+                match subnet.submit_ingress_as_with_sender_info(
                     self.0.sender,
                     self.0.canister_id,
                     self.0.method.clone(),
                     self.0.payload.clone(),
+                    self.0.sender_info.clone(),
                 ) {
                     Err(SubmitIngressError::HttpError(e)) => {
                         eprintln!("Failed to submit ingress message: {e}");
@@ -4359,12 +4972,13 @@ impl Operation for Query {
                             },
                         )
                     });
-                match subnet.query_as_with_delegation(
+                match subnet.query_as_with_delegation_and_sender_info(
                     self.0.sender,
                     self.0.canister_id,
                     self.0.method.clone(),
                     self.0.payload.clone(),
                     delegation,
+                    self.0.sender_info.clone(),
                 ) {
                     Ok(result) => {
                         OpOut::CanisterResult(wasm_result_to_canister_result(result, false))
@@ -4497,10 +5111,11 @@ pub enum CallRequestVersion {
     V2,
     V3,
     V4,
+    SubnetV4,
 }
 
 pub struct CallRequest {
-    pub effective_canister_id: CanisterId,
+    pub effective_principal_id: PrincipalId,
     pub bytes: Bytes,
     pub version: CallRequestVersion,
 }
@@ -4526,13 +5141,24 @@ impl Operation for CallRequest {
                 }
                 Err(_) => false,
             };
-        let subnet = route(
-            pic,
-            EffectivePrincipal::CanisterId(self.effective_canister_id),
-            is_provisional_create_canister,
-        );
+        let subnet = match self.version {
+            CallRequestVersion::SubnetV4 => route(
+                pic,
+                EffectivePrincipal::SubnetId(SubnetId::from(self.effective_principal_id)),
+                false,
+            )
+            .map_err(PocketIcError::SubnetRequestRoutingError),
+            _ => route(
+                pic,
+                EffectivePrincipal::CanisterId(CanisterId::unchecked_from_principal(
+                    self.effective_principal_id,
+                )),
+                is_provisional_create_canister,
+            )
+            .map_err(PocketIcError::CanisterRequestRoutingError),
+        };
         match subnet {
-            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
+            Err(e) => OpOut::Error(e),
             Ok(subnet) => {
                 // Make sure the latest state is certified for the ingress filter to work.
                 subnet.certify_latest_state();
@@ -4540,9 +5166,11 @@ impl Operation for CallRequest {
                 let node = &subnet.nodes[0];
                 let (s, mut r) = mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
                 let ingress_filter = subnet.ingress_filter.clone();
-
+                let mainnet_root_of_trust =
+                    IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
                 let ingress_validator = IngressValidatorBuilder::builder(
                     subnet.replica_logger.clone(),
+                    HttpHandlerMetrics::new(&MetricsRegistry::new()),
                     node.node_id,
                     subnet.get_subnet_id(),
                     subnet.registry_client.clone(),
@@ -4551,7 +5179,9 @@ impl Operation for CallRequest {
                     Arc::new(RwLock::new(PocketIngressPoolThrottler)),
                     s,
                 )
+                .with_malicious_flags(pic.malicious_flags.clone())
                 .with_time_source(subnet.time_source.clone())
+                .with_additional_root_of_trust(mainnet_root_of_trust)
                 .build();
 
                 // Task that waits for call service to submit the ingress message, and
@@ -4569,7 +5199,9 @@ impl Operation for CallRequest {
 
                 let svc = match self.version {
                     CallRequestVersion::V2 => call_async::new_service(ingress_validator),
-                    CallRequestVersion::V3 | CallRequestVersion::V4 => {
+                    CallRequestVersion::V3
+                    | CallRequestVersion::V4
+                    | CallRequestVersion::SubnetV4 => {
                         let subnet_id = subnet.get_subnet_id();
                         let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
                         let builder = delegation.map(|delegation| {
@@ -4596,25 +5228,32 @@ impl Operation for CallRequest {
                                 CallRequestVersion::V2 => unreachable!(),
                                 CallRequestVersion::V3 => call_sync::Version::V3,
                                 CallRequestVersion::V4 => call_sync::Version::V4,
+                                CallRequestVersion::SubnetV4 => call_sync::Version::SubnetV4,
                             },
                         )
                     }
                 };
 
-                let api_version = match self.version {
-                    CallRequestVersion::V2 => "v2",
-                    CallRequestVersion::V3 => "v3",
-                    CallRequestVersion::V4 => "v4",
+                let uri = match self.version {
+                    CallRequestVersion::SubnetV4 => {
+                        format!("/api/v4/subnet/{}/call", self.effective_principal_id)
+                    }
+                    _ => format!(
+                        "/api/{}/canister/{}/call",
+                        match self.version {
+                            CallRequestVersion::V2 => "v2",
+                            CallRequestVersion::V3 => "v3",
+                            CallRequestVersion::V4 => "v4",
+                            CallRequestVersion::SubnetV4 => unreachable!(),
+                        },
+                        self.effective_principal_id
+                    ),
                 };
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
                     .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
-                    .uri(format!(
-                        "/api/{}/canister/{}/call",
-                        api_version,
-                        PrincipalId(self.effective_canister_id.get().into())
-                    ))
+                    .uri(uri)
                     .body(self.bytes.clone().into())
                     .unwrap();
 
@@ -4644,12 +5283,12 @@ impl Operation for CallRequest {
         let mut hasher = Sha256::new();
         self.bytes.hash(&mut hasher);
         let hash = Digest(hasher.finish());
-        OpId(format!("call({},{})", self.effective_canister_id, hash,))
+        OpId(format!("call({},{})", self.effective_principal_id, hash,))
     }
 }
 
 pub struct QueryRequest {
-    pub effective_canister_id: CanisterId,
+    pub effective_principal_id: PrincipalId,
     pub bytes: Bytes,
     pub version: query::Version,
 }
@@ -4670,13 +5309,24 @@ impl BasicSigner<QueryResponseHash> for PocketNodeSigner {
 
 impl Operation for QueryRequest {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let subnet = route(
-            pic,
-            EffectivePrincipal::CanisterId(self.effective_canister_id),
-            false,
-        );
+        let subnet = match self.version {
+            query::Version::SubnetV3 => route(
+                pic,
+                EffectivePrincipal::SubnetId(SubnetId::from(self.effective_principal_id)),
+                false,
+            )
+            .map_err(PocketIcError::SubnetRequestRoutingError),
+            _ => route(
+                pic,
+                EffectivePrincipal::CanisterId(CanisterId::unchecked_from_principal(
+                    self.effective_principal_id,
+                )),
+                false,
+            )
+            .map_err(PocketIcError::CanisterRequestRoutingError),
+        };
         match subnet {
-            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
+            Err(e) => OpOut::Error(e),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
@@ -4692,31 +5342,44 @@ impl Operation for QueryRequest {
                 let node = &subnet.nodes[0];
                 subnet.certify_latest_state();
                 let query_handler = subnet.query_handler.lock().unwrap().clone();
+                let mainnet_root_of_trust =
+                    IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
                 let svc = QueryServiceBuilder::builder(
                     subnet.replica_logger.clone(),
+                    HttpHandlerMetrics::new(&MetricsRegistry::new()),
                     node.node_id,
                     Arc::new(PocketNodeSigner(node.node_signing_key.clone())),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     query_handler,
+                    subnet_id,
                     self.version,
                 )
+                .with_malicious_flags(pic.malicious_flags.clone())
                 .with_time_source(subnet.time_source.clone())
+                .with_additional_root_of_trust(mainnet_root_of_trust)
                 .build_service();
 
-                let version_str = match self.version {
-                    query::Version::V2 => "v2",
-                    query::Version::V3 => "v3",
+                let uri = match self.version {
+                    query::Version::SubnetV3 => {
+                        format!("/api/v3/subnet/{}/query", self.effective_principal_id)
+                    }
+                    _ => format!(
+                        "/api/{}/canister/{}/query",
+                        match self.version {
+                            query::Version::V2 => "v2",
+                            query::Version::V3 => "v3",
+                            query::Version::SubnetV3 => unreachable!(),
+                        },
+                        self.effective_principal_id
+                    ),
                 };
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
                     .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
-                    .uri(format!(
-                        "/api/{version_str}/canister/{}/query",
-                        PrincipalId(self.effective_canister_id.get().into())
-                    ))
+                    .uri(uri)
                     .body(self.bytes.clone().into())
                     .unwrap();
                 let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
@@ -4735,7 +5398,7 @@ impl Operation for QueryRequest {
         let mut hasher = Sha256::new();
         self.bytes.hash(&mut hasher);
         let hash = Digest(hasher.finish());
-        OpId(format!("query({},{})", self.effective_canister_id, hash,))
+        OpId(format!("query({},{})", self.effective_principal_id, hash,))
     }
 }
 
@@ -4743,7 +5406,7 @@ impl Operation for QueryRequest {
 pub struct CanisterReadStateRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
-    pub version: read_state::canister::Version,
+    pub version: read_state::Version,
 }
 
 impl Operation for CanisterReadStateRequest {
@@ -4774,7 +5437,9 @@ impl Operation for CanisterReadStateRequest {
                 let (_, delegation_rx) = watch::channel(builder);
                 subnet.certify_latest_state();
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
-                let svc = CanisterReadStateServiceBuilder::builder(
+                let mainnet_root_of_trust =
+                    IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
+                let svc = ReadStateServiceBuilder::builder(
                     subnet.replica_logger.clone(),
                     metrics,
                     subnet.state_manager.clone(),
@@ -4783,13 +5448,16 @@ impl Operation for CanisterReadStateRequest {
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     nns_subnet_id,
                     self.version,
+                    read_state::Target::Canister,
                 )
+                .with_malicious_flags(pic.malicious_flags.clone())
                 .with_time_source(subnet.time_source.clone())
+                .with_additional_root_of_trust(mainnet_root_of_trust)
                 .build_service();
 
                 let version_str = match self.version {
-                    read_state::canister::Version::V2 => "v2",
-                    read_state::canister::Version::V3 => "v3",
+                    read_state::Version::V2 => "v2",
+                    read_state::Version::V3 => "v3",
                 };
 
                 let request = axum::http::Request::builder()
@@ -4828,7 +5496,7 @@ impl Operation for CanisterReadStateRequest {
 pub struct SubnetReadStateRequest {
     pub subnet_id: SubnetId,
     pub bytes: Bytes,
-    pub version: read_state::subnet::Version,
+    pub version: read_state::Version,
 }
 
 impl Operation for SubnetReadStateRequest {
@@ -4837,6 +5505,12 @@ impl Operation for SubnetReadStateRequest {
             Err(e) => OpOut::Error(PocketIcError::SubnetRequestRoutingError(e)),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
+                let nns_subnet_id = pic
+                    .nns_subnet()
+                    .map(|subnet| subnet.get_subnet_id())
+                    .expect(
+                        "The NNS subnet should already exist if we are already executing requests",
+                    );
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
                 let builder = delegation.map(|delegation| {
                     NNSDelegationBuilder::try_new(
@@ -4848,25 +5522,28 @@ impl Operation for SubnetReadStateRequest {
                 });
                 let (_, delegation_rx) = watch::channel(builder);
                 subnet.certify_latest_state();
-                let nns_subnet_id = pic
-                    .nns_subnet()
-                    .map(|subnet| subnet.get_subnet_id())
-                    .expect(
-                        "The NNS subnet should already exist if we are already executing requests",
-                    );
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
-                let svc = SubnetReadStateServiceBuilder::builder(
+                let mainnet_root_of_trust =
+                    IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
+                let svc = ReadStateServiceBuilder::builder(
+                    subnet.replica_logger.clone(),
                     metrics,
-                    NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     subnet.state_manager.clone(),
+                    subnet.registry_client.clone(),
+                    Arc::new(StandaloneIngressSigVerifier),
+                    NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     nns_subnet_id,
                     self.version,
+                    read_state::Target::Subnet,
                 )
+                .with_malicious_flags(pic.malicious_flags.clone())
+                .with_time_source(subnet.time_source.clone())
+                .with_additional_root_of_trust(mainnet_root_of_trust)
                 .build_service();
 
                 let version_str = match self.version {
-                    read_state::subnet::Version::V2 => "v2",
-                    read_state::subnet::Version::V3 => "v3",
+                    read_state::Version::V2 => "v2",
+                    read_state::Version::V3 => "v3",
                 };
 
                 let request = axum::http::Request::builder()
@@ -4952,6 +5629,7 @@ pub struct CanisterCall {
     pub canister_id: CanisterId,
     pub method: String,
     pub payload: Vec<u8>,
+    pub sender_info: Option<SignedSenderInfo>,
 }
 
 impl TryFrom<RawCanisterCall> for CanisterCall {
@@ -4963,6 +5641,7 @@ impl TryFrom<RawCanisterCall> for CanisterCall {
             method,
             payload,
             effective_principal,
+            sender_info,
         }: RawCanisterCall,
     ) -> Result<Self, Self::Error> {
         let effective_principal = effective_principal.try_into()?;
@@ -4982,6 +5661,23 @@ impl TryFrom<RawCanisterCall> for CanisterCall {
                 });
             }
         };
+        let sender_info = if let Some(RawSenderInfo { info, signer }) = sender_info {
+            let signer = match CanisterId::try_from(signer) {
+                Ok(signer) => signer,
+                Err(_) => {
+                    return Err(ConversionError {
+                        message: "Invalid sender info signer".to_string(),
+                    });
+                }
+            };
+            Some(SignedSenderInfo {
+                info,
+                signer,
+                sig: vec![],
+            })
+        } else {
+            None
+        };
 
         Ok(CanisterCall {
             effective_principal,
@@ -4989,6 +5685,7 @@ impl TryFrom<RawCanisterCall> for CanisterCall {
             canister_id,
             method,
             payload,
+            sender_info,
         })
     }
 }
@@ -4997,10 +5694,25 @@ impl CanisterCall {
     fn id(&self) -> OpId {
         let mut hasher = Sha256::new();
         hasher.write(&self.payload);
-        let hash = Digest(hasher.finish());
+        let payload_hash = Digest(hasher.finish());
+        let mut hasher = Sha256::new();
+        if let Some(sender_info) = &self.sender_info {
+            let signer_bytes: &[u8] = sender_info.signer.as_ref();
+            // We prepend the length of the canister principal encoding
+            // so that the sender info serialization is unique.
+            hasher.write(&signer_bytes.len().to_le_bytes());
+            hasher.write(signer_bytes);
+            hasher.write(&sender_info.info);
+        }
+        let sender_info_hash = Digest(hasher.finish());
         OpId(format!(
-            "call({:?},{},{},{},{})",
-            self.effective_principal, self.sender, self.canister_id, self.method, hash
+            "call({:?},{},{},{},{},{})",
+            self.effective_principal,
+            self.sender,
+            self.canister_id,
+            self.method,
+            payload_hash,
+            sender_info_hash
         ))
     }
 }
@@ -5182,6 +5894,28 @@ impl Operation for GetSubnet {
 
     fn id(&self) -> OpId {
         OpId(format!("get_subnet({})", self.canister_id))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct DeleteSubnet {
+    pub subnet_id: SubnetId,
+}
+
+impl Operation for DeleteSubnet {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let default_effective_canister_id = pic.default_effective_canister_id;
+        match pic
+            .subnets
+            .delete_subnet(self.subnet_id, default_effective_canister_id)
+        {
+            Ok(()) => OpOut::NoOutput,
+            Err(e) => OpOut::Error(e),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!("delete_subnet({})", self.subnet_id))
     }
 }
 
@@ -5450,6 +6184,7 @@ mod tests {
                 false,
                 None,
                 false,
+                MaliciousFlags::default(),
             )
             .unwrap();
             let mut pic1 = PocketIc::try_new(
@@ -5471,6 +6206,7 @@ mod tests {
                 false,
                 None,
                 false,
+                MaliciousFlags::default(),
             )
             .unwrap();
             assert_ne!(pic0.get_state_label(), pic1.get_state_label());
