@@ -450,4 +450,82 @@ mod tests {
                 .any(|x| x % 2 != 0)
         );
     }
+
+    struct FakeArtifact {
+        hash: CryptoHash,
+        height: Height,
+    }
+
+    impl FakeArtifact {
+        fn new(hash: u8, height: u64) -> Self {
+            Self {
+                hash: CryptoHash(vec![hash]),
+                height: Height::from(height),
+            }
+        }
+    }
+
+    impl HasHash for FakeArtifact {
+        fn hash(&self) -> &CryptoHash {
+            &self.hash
+        }
+    }
+
+    impl HasHeight for FakeArtifact {
+        fn height(&self) -> Height {
+            self.height
+        }
+    }
+
+    #[test]
+    fn test_instants_insert_and_get() {
+        let mut instants = HeightIndexedInstants::<FakeArtifact>::default();
+        let now = Instant::now();
+
+        assert_eq!(instants.get(&FakeArtifact::new(1, 10)), None);
+
+        instants.insert(&FakeArtifact::new(1, 10), now);
+        assert_eq!(instants.get(&FakeArtifact::new(1, 10)), Some(&now));
+
+        // Entries are keyed by hash *and* height: neither a different hash at
+        // the same height nor the same hash at a different height matches.
+        assert_eq!(instants.get(&FakeArtifact::new(2, 10)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(1, 11)), None);
+    }
+
+    #[test]
+    fn test_instants_insert_does_not_overwrite() {
+        let mut instants = HeightIndexedInstants::<FakeArtifact>::default();
+        let earlier = Instant::now();
+        let later = earlier + std::time::Duration::from_secs(1);
+
+        // The first recorded instant wins; a repeated insert is a no-op.
+        instants.insert(&FakeArtifact::new(1, 10), earlier);
+        instants.insert(&FakeArtifact::new(1, 10), later);
+        assert_eq!(instants.get(&FakeArtifact::new(1, 10)), Some(&earlier));
+    }
+
+    #[test]
+    fn test_instants_clear_removes_strictly_below() {
+        let mut instants = HeightIndexedInstants::<FakeArtifact>::default();
+        let now = Instant::now();
+
+        instants.insert(&FakeArtifact::new(1, 9), now);
+        instants.insert(&FakeArtifact::new(2, 9), now);
+        instants.insert(&FakeArtifact::new(1, 10), now);
+        instants.insert(&FakeArtifact::new(1, 11), now);
+
+        instants.clear(Height::from(10));
+        assert_eq!(instants.get(&FakeArtifact::new(1, 9)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(2, 9)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(1, 10)), Some(&now));
+        assert_eq!(instants.get(&FakeArtifact::new(1, 11)), Some(&now));
+
+        // Clearing is idempotent and tolerates heights above everything.
+        instants.clear(Height::from(10));
+        assert_eq!(instants.get(&FakeArtifact::new(1, 10)), Some(&now));
+        instants.clear(Height::from(100));
+        assert_eq!(instants.get(&FakeArtifact::new(1, 10)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(1, 11)), None);
+    }
 }
