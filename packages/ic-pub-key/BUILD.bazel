@@ -17,10 +17,10 @@ rust_library(
     version = "0.3.0",
     deps = [
         "//packages/ic-ed25519",
-        "//packages/ic-management-canister-types",
         "//packages/ic-secp256k1",
         "//packages/ic-secp256r1",
         "@crate_index//:ic-cdk-management-canister",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-vetkeys",
     ],
 )

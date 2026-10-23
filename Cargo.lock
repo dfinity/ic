@@ -12610,7 +12610,7 @@ dependencies = [
  "hex",
  "ic-cdk-management-canister",
  "ic-ed25519 0.6.0",
- "ic-management-canister-types 0.11.0",
+ "ic-management-canister-types 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-secp256k1",
  "ic-secp256r1",
  "ic-vetkeys",
