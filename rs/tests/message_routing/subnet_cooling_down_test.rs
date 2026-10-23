@@ -243,6 +243,11 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
+    let logger = env.logger();
+    info!(
+        logger,
+        "Step 0: Setting up the IC and installing the NNS canisters"
+    );
     let subnet = |subnet_type| {
         Subnet::fast(subnet_type, SUBNET_SIZE)
             .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH))
@@ -267,6 +272,10 @@ pub fn setup(env: TestEnv) {
     NnsInstallationBuilder::new()
         .install(&nns_node, &env)
         .expect("failed to install NNS canisters");
+    info!(
+        logger,
+        "Step 0 done: the IC is up and the NNS canisters are installed"
+    );
 }
 
 pub fn test(env: TestEnv) {
@@ -522,6 +531,7 @@ fn cool_down(env: &TestEnv, context: &Context, runtime: &Runtime) {
 
     exec_next_step(StepType::CoolDownSourceSubnet);
     exec_next_step(StepType::CheckRegistryForCoolingDownFlag);
+    info!(logger, "Step 8 done: subnet M is labeled \"cooling down\"");
     runtime.block_on(check_ingress_and_queries_rejected(context));
 
     exec_next_step(StepType::CheckMergeReadiness);
