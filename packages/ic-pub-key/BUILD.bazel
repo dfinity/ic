@@ -14,7 +14,7 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     crate_features = FEATURES,
     crate_name = "ic_pub_key",
-    version = "0.3.0",
+    version = "0.4.0",
     deps = [
         "//packages/ic-ed25519",
         "//packages/ic-secp256k1",
