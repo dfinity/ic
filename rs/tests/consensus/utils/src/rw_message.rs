@@ -53,29 +53,39 @@ pub fn store_message_with_retries(
     })
 }
 
-/// Try to store the given message within the next 30 seconds, return true if successful
-pub fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
+/// Try to store the given message within the given timeout.
+pub fn store_msg_with_timeout(
+    log: &Logger,
+    url: &Url,
+    canister_id: Principal,
+    msg: &str,
+    timeout: Duration,
+) -> anyhow::Result<()> {
     block_on(async {
-        match create_agent(url.as_str()).await {
-            Ok(agent) => {
-                debug!(log, "Try to get canister reference");
-                let mcan = MessageCanister::from_canister_id(&agent, canister_id);
-                debug!(log, "Success, will try to write next");
-                matches!(
-                    tokio::time::timeout(
-                        Duration::from_secs(30),
-                        mcan.try_store_msg(msg.to_string()),
-                    )
-                    .await,
-                    Ok(Ok(_))
-                )
-            }
-            Err(e) => {
-                debug!(log, "Could not create agent: {:?}", e,);
-                false
-            }
+        let agent = match create_agent(url.as_str()).await {
+            Ok(agent) => agent,
+            Err(e) => bail!("Could not create agent: {e:?}"),
+        };
+        debug!(log, "Try to get canister reference");
+        let mcan = MessageCanister::from_canister_id(&agent, canister_id);
+        debug!(log, "Success, will try to write next");
+        match tokio::time::timeout(timeout, mcan.try_store_msg(msg.to_string())).await {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(e)) => bail!("Update call failed: {e}"),
+            Err(_) => bail!("Update call did not complete within {timeout:?}"),
         }
     })
+}
+
+/// Try to store the given message within the next 30 seconds, return true if successful
+pub fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
+    match store_msg_with_timeout(log, url, canister_id, msg, Duration::from_secs(30)) {
+        Ok(()) => true,
+        Err(e) => {
+            debug!(log, "Could not store message: {e}");
+            false
+        }
+    }
 }
 
 /// Try to store the given message. Retry for 300 seconds or until update was unsuccessful
