@@ -503,29 +503,33 @@ fn cool_down(env: &TestEnv, context: &Context, runtime: &Runtime) {
         logger,
         "Step 8: Handing subnet M ({}) over to the subnet merging tool", context.m_subnet.subnet_id,
     );
-    let merging = SubnetMerging::new(
+    let mut merging = SubnetMerging::new(
         logger.clone(),
         recovery_args,
         /*neuron_args=*/ None,
         merging_args,
     );
-
-    for (step_type, step) in merging {
+    let mut exec_next_step = |expected_step_type: StepType| {
+        let (step_type, step) = merging
+            .next()
+            .unwrap_or_else(|| panic!("expected step {expected_step_type:?}, got none"));
+        assert_eq!(step_type, expected_step_type);
         info!(logger, "Next step: {step_type:?}");
         info!(logger, "{}", step.descr());
         step.exec()
             .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
+    };
 
-        match step_type {
-            StepType::CheckRegistryForCoolingDownFlag => {
-                runtime.block_on(check_ingress_and_queries_rejected(context))
-            }
-            StepType::CheckMergeReadiness => {
-                info!(logger, "Step 10 done: subnet M is \"merge ready\"");
-                runtime.block_on(check_ut_loop_stalled(context))
-            }
-            StepType::CoolDownSourceSubnet => {}
-        }
+    exec_next_step(StepType::CoolDownSourceSubnet);
+    exec_next_step(StepType::CheckRegistryForCoolingDownFlag);
+    runtime.block_on(check_ingress_and_queries_rejected(context));
+
+    exec_next_step(StepType::CheckMergeReadiness);
+    info!(logger, "Step 10 done: subnet M is \"merge ready\"");
+    runtime.block_on(check_ut_loop_stalled(context));
+
+    if let Some((step_type, _)) = merging.next() {
+        panic!("unexpected step {step_type:?}");
     }
 
     info!(
