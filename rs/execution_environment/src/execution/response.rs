@@ -118,7 +118,7 @@ struct PausedResponseHelper {
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
     executed_wasm_instructions: NumInstructions,
-    failed_response_callback_log: CanisterLog,
+    response_callback_log: CanisterLog,
 }
 
 /// A helper that implements and keeps track of response execution steps.
@@ -156,11 +156,10 @@ struct ResponseHelper {
     executed_wasm_instructions: NumInstructions,
     /// The canister log records of the response callback.
     ///
-    /// They are persisted in `canister` before the cleanup callback is
-    /// executed (if the response callback failed) and replayed on the clean canister state when resuming the
-    /// cleanup callback: the indices of the canister log records of the
-    /// cleanup callback follow those of the response callback.
-    failed_response_callback_log: CanisterLog,
+    /// They are only used if the response callback fails: they are persisted
+    /// in `canister` before the cleanup callback is executed and replayed on
+    /// the clean canister state when resuming the cleanup callback.
+    response_callback_log: CanisterLog,
     applied_subnet_memory_reservation: NumBytes,
     deallocation_sender: DeallocationSender,
 }
@@ -230,7 +229,7 @@ impl ResponseHelper {
             initial_cycles_balance,
             response_sender,
             executed_wasm_instructions: NumInstructions::new(0),
-            failed_response_callback_log: CanisterLog::default_delta(),
+            response_callback_log: CanisterLog::default_delta(),
             applied_subnet_memory_reservation: NumBytes::new(0),
             deallocation_sender: deallocation_sender.clone(),
         };
@@ -397,7 +396,7 @@ impl ResponseHelper {
             response_sender: self.response_sender,
             executed_wasm_instructions: self.executed_wasm_instructions
                 + slice_executed_instructions,
-            failed_response_callback_log: self.failed_response_callback_log,
+            response_callback_log: self.response_callback_log,
         }
     }
 
@@ -441,7 +440,7 @@ impl ResponseHelper {
             initial_cycles_balance: clean_canister.system_state.balance(),
             response_sender: paused.response_sender,
             executed_wasm_instructions: paused.executed_wasm_instructions,
-            failed_response_callback_log: paused.failed_response_callback_log,
+            response_callback_log: paused.response_callback_log,
             applied_subnet_memory_reservation: NumBytes::new(0),
             deallocation_sender: deallocation_sender.clone(),
         };
@@ -452,7 +451,7 @@ impl ResponseHelper {
             .canister
             .system_state
             .log_memory_store
-            .append_delta_log(&mut helper.failed_response_callback_log.clone());
+            .append_delta_log(&mut helper.response_callback_log.clone());
 
         helper.apply_subnet_memory_reservation(round_limits);
 
@@ -518,13 +517,12 @@ impl ResponseHelper {
         // Canister logs are persisted even if the other changes are not.
         // If the response callback fails, its canister log must also be
         // replayed when resuming a paused cleanup callback.
-        let mut response_callback_log = canister_state_changes
+        self.response_callback_log = canister_state_changes
             .system_state_modifications
             .take_canister_log();
-        self.failed_response_callback_log = response_callback_log.clone();
         append_canister_log(
+            &mut self.response_callback_log.clone(),
             &mut self.canister.system_state,
-            &mut response_callback_log,
             round.hypervisor.metrics(),
         );
 

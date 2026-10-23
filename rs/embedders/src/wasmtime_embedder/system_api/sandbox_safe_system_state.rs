@@ -157,8 +157,8 @@ impl Default for SystemStateModifications {
 /// Appends the given canister log records produced by an execution to the
 /// canister log of the given system state, leaving `delta_log` empty.
 pub fn append_canister_log<Metrics: CanisterLogMetrics>(
-    system_state: &mut SystemState,
     delta_log: &mut CanisterLog,
+    system_state: &mut SystemState,
     metrics: &Metrics,
 ) {
     if !delta_log.is_empty() {
@@ -404,7 +404,7 @@ impl SystemStateModifications {
         system_state: &mut SystemState,
         metrics: &Metrics,
     ) {
-        append_canister_log(system_state, &mut self.canister_log, metrics);
+        append_canister_log(&mut self.canister_log, system_state, metrics);
     }
 
     /// Takes the canister log records produced by the execution, leaving the
