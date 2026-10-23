@@ -263,11 +263,7 @@ impl CanisterState {
 
     /// Returns true if the canister has a paused execution or paused install code.
     pub fn has_paused_execution_or_install_code(&self) -> bool {
-        use ExecutionTask::*;
-        matches!(
-            self.system_state.task_queue.paused_or_aborted_task(),
-            Some(PausedExecution { .. }) | Some(PausedInstallCode(_))
-        )
+        self.system_state.has_paused_execution_or_install_code()
     }
 
     /// Returns true if there is at least one message in the canister's output
@@ -284,6 +280,9 @@ impl CanisterState {
     /// credit. It is strictly about ensuring that canisters are retained in the
     /// subnet schedule for as long as they have long-running executions or heap
     /// delta or install code debits.
+    ///
+    /// A pending ingress induction cycles debit implies a paused execution (see
+    /// `SystemState::check_invariants()`) and hence needs no condition of its own.
     pub fn must_be_in_schedule(&self) -> bool {
         self.scheduler_state.heap_delta_debit.get() > 0
             || self.scheduler_state.install_code_debit.get() > 0
