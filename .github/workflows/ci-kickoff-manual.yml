@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       commit-sha:
-        description: 'The commit SHA to run the workflow on (must be the head commit of the PR)'
+        description: 'The head commit of the PR (CI Main runs on its merge into master)'
         required: true
         default: ''
       pr-number:
@@ -27,6 +27,7 @@ jobs:
       base-ref: ${{ steps.fetch.outputs.base_ref }}
       head-ref: ${{ steps.fetch.outputs.head_ref }}
       head-repo: ${{ steps.fetch.outputs.head_repo }}
+      merge-sha: ${{ steps.fetch.outputs.merge_sha }}
     steps:
       - name: Verify Commit Is PR Head and Fetch PR Refs
         id: fetch
@@ -77,15 +78,78 @@ jobs:
               return;
             }
 
+            // CI Main runs on GitHub's test merge of the PR into master, as it does
+            // for PRs from this repository (refs/pull/N/merge). Other base branches
+            // are refused, so the code the PR is merged with is always master's.
+            if (pr.base.ref !== 'master') {
+              core.setFailed(`PR #${prNumber} targets ${pr.base.ref}, but CI only runs on ` +
+                             'PRs from forks that target master');
+              return;
+            }
+
+            // GitHub computes the test merge in the background: mergeable is null
+            // until it is done.
+            let mergeable = pr.mergeable;
+            let mergeSha = pr.merge_commit_sha;
+            for (let attempt = 0; mergeable === null && attempt < 10; attempt++) {
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              const { data: current } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+              mergeable = current.mergeable;
+              mergeSha = current.merge_commit_sha;
+            }
+            if (mergeable === null) {
+              core.setFailed(`GitHub has not finished merging PR #${prNumber} into master ` +
+                             'for testing. Re-run in a minute.');
+              return;
+            }
+            if (!mergeable) {
+              core.setFailed(`PR #${prNumber} conflicts with master. Ask the contributor ` +
+                             'to rebase it on master.');
+              return;
+            }
+
+            // Pin the test merge by SHA: refs/pull/N/merge moves when the contributor
+            // pushes or master moves, and every job must test the same reviewed code.
+            // Its parents are the master commit it merges into and the PR head.
+            const { data: merge } = await github.rest.git.getCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: mergeSha
+            });
+            const parents = merge.parents.map(parent => parent.sha.toLowerCase());
+            if (parents.length !== 2 || parents[1] !== sha) {
+              core.setFailed(`The test merge ${mergeSha} of PR #${prNumber} does not merge ` +
+                             `${sha} (its parents are ${parents.join(', ')}). GitHub may ` +
+                             'still be updating it: re-run in a minute.');
+              return;
+            }
+            const { data: comparison } = await github.rest.repos.compareCommitsWithBasehead({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              basehead: `${parents[0]}...master`,
+              per_page: 1
+            });
+            if (comparison.status !== 'ahead' && comparison.status !== 'identical') {
+              core.setFailed(`The test merge ${mergeSha} of PR #${prNumber} merges into ` +
+                             `${parents[0]}, which is not on master`);
+              return;
+            }
+
             // Empty if the fork was deleted after the PR was opened. Jobs that
             // push to the head branch compare this against github.repository and
             // skip the push unless the branch lives in this repository.
             const headRepo = pr.head.repo ? pr.head.repo.full_name : '';
             core.info(`PR #${prNumber} base ref: ${pr.base.ref}, ` +
-                      `head ref: ${pr.head.ref}, head repo: ${headRepo}`);
+                      `head ref: ${pr.head.ref}, head repo: ${headRepo}, ` +
+                      `test merge: ${mergeSha}`);
             core.setOutput('base_ref', pr.base.ref);
             core.setOutput('head_ref', pr.head.ref);
             core.setOutput('head_repo', headRepo);
+            core.setOutput('merge_sha', mergeSha);
 
   ci-main:
     name: CI Main
@@ -93,7 +157,8 @@ jobs:
     uses: ./.github/workflows/ci-main.yml
     secrets: inherit
     with:
-      commit-sha: ${{ inputs.commit-sha }}
+      # The reviewed head merged into master. CI PR Only and the statuses use the head itself.
+      commit-sha: ${{ needs.verify-inputs-and-get-pr-refs.outputs.merge-sha }}
       release-build: 'false'
     permissions:
       actions: write
@@ -167,13 +232,15 @@ jobs:
         env:
           PR_NUMBER: ${{ inputs.pr-number }}
           COMMIT_SHA: ${{ inputs.commit-sha }}
+          MERGE_SHA: ${{ needs.verify-inputs-and-get-pr-refs.outputs.merge-sha }}
         with:
           script: |
             // Both inputs were validated by verify-inputs-and-get-pr-refs, which
-            // this job depends on.
+            // this job depends on and which looked up MERGE_SHA.
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}` +
                            `/actions/runs/${context.runId}`;
-            const message = `Run on ${process.env.COMMIT_SHA} URL: ${runUrl}\n\n`;
+            const message = `Run on ${process.env.COMMIT_SHA} (CI Main on its merge into ` +
+                            `master, ${process.env.MERGE_SHA}) URL: ${runUrl}\n\n`;
 
             await github.rest.issues.createComment({
               issue_number: Number(process.env.PR_NUMBER),
