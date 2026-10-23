@@ -609,6 +609,28 @@ async fn create_canister_requires_controllers() {
 }
 
 #[tokio::test]
+async fn create_canister_rejects_more_than_ten_controllers() {
+    let (pic, engine_subnet_id, _nns_subnet_id) = setup_with_cloud_engine().await;
+    let controllers = (0..11u8)
+        .map(|i| Principal::self_authenticating([i]))
+        .collect();
+    let err = call_create_canister(
+        &pic,
+        authorized(),
+        &CreateCanisterArgs {
+            subnet_id: engine_subnet_id,
+            controllers,
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        err.contains("Expected between 1 and 10 controllers, got 11"),
+        "unexpected error: {err}"
+    );
+}
+
+#[tokio::test]
 async fn create_canister_caller_must_be_authorized() {
     let (pic, engine_subnet_id, _nns_subnet_id) = setup_with_cloud_engine().await;
     let attacker = Principal::self_authenticating(b"attacker");

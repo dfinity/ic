@@ -401,18 +401,8 @@ async fn change_subnet_membership(payload: ChangeSubnetMembershipPayload) -> Res
 /// Creates an empty canister on a cloud engine subnet, controlled by
 /// `controllers` only.
 ///
-/// Only a canister on the NNS subnet may create a canister on a subnet other
-/// than its own. The authorized caller is not on the NNS subnet, so without
-/// this method it could not put a canister on an engine it created. Once the
-/// canister exists, its controllers install and configure it with ordinary
-/// management canister calls.
-///
-/// The target must be a `CloudEngine` subnet in the registry. The call to it
-/// is bounded-wait and carries no cycles, as every call into a cloud engine
-/// must; engines are on the free cost schedule, so creating a canister there
-/// costs nothing. A bounded-wait call can time out (`SysUnknown`) after the
-/// canister was created, in which case `controllers` control a canister this
-/// method did not return.
+/// The target must be a `CloudEngine` subnet in the registry. The caller
+/// has to be the authorized caller.
 #[update]
 async fn create_canister(args: CreateCanisterArgs) -> Result<NewCanister, String> {
     ensure_authorized()?;
