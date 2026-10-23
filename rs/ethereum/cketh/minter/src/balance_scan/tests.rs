@@ -4,13 +4,18 @@ use crate::state::automatic_deposits::{DepositRequest, ScanProgress};
 use crate::test_fixtures;
 use crate::test_fixtures::mock::MockTimeProvider;
 use crate::test_fixtures::stub_rpc_client;
-use evm_rpc_types::{Hex, MultiRpcResult};
+use evm_rpc_types::{
+    EthMainnetService, Hex, HttpOutcallError, LegacyRejectionCode, MultiRpcResult, RpcService,
+};
 use ic_canister_runtime::IcError;
 use icrc_ledger_types::icrc1::account::Account;
 use std::str::FromStr;
 use std::time::Duration;
 
 const TOKEN_A: Address = Address::new([0x22; 20]);
+const BLOCK_PI: RpcService = RpcService::EthMainnet(EthMainnetService::BlockPi);
+const PUBLIC_NODE: RpcService = RpcService::EthMainnet(EthMainnetService::PublicNode);
+const ANKR: RpcService = RpcService::EthMainnet(EthMainnetService::Ankr);
 
 fn account(owner: u64) -> Account {
     Account {
@@ -402,6 +407,66 @@ async fn should_yield_no_outcome_for_a_pair_whose_chunk_failed() {
     assert_eq!(pass.errors, ScanErrors { decode: 0, call: 1 });
 }
 
+#[tokio::test]
+async fn should_yield_no_outcome_when_providers_disagree_on_a_balance() {
+    let now = ts();
+    let latest = BlockNumber::new(1_000);
+    let (token, min) = MIN_DEPOSITS[0];
+    let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
+    seed_state(Some(latest), token, &[holder], now);
+
+    let targets = due_targets(now, latest);
+    let pass = scan_balances(
+        &targets,
+        latest,
+        &stub_rpc_client(vec![Ok(MultiRpcResult::Inconsistent(vec![
+            (BLOCK_PI, Ok(encoded_balances(&[Erc20Value::ZERO]))),
+            (PUBLIC_NODE, Ok(encoded_balances(&[min]))),
+        ]))]),
+    )
+    .await;
+
+    assert!(
+        pass.outcomes.is_empty(),
+        "a batch without provider agreement must yield no outcome"
+    );
+    assert_eq!(pass.errors, ScanErrors { decode: 0, call: 1 });
+}
+
+#[tokio::test]
+async fn should_yield_no_outcome_when_only_one_provider_answers() {
+    let now = ts();
+    let latest = BlockNumber::new(1_000);
+    let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
+    seed_state(Some(latest), MIN_DEPOSITS[0].0, &[holder], now);
+
+    let targets = due_targets(now, latest);
+    let pass = scan_balances(
+        &targets,
+        latest,
+        &stub_rpc_client(vec![Ok(MultiRpcResult::Inconsistent(vec![
+            (BLOCK_PI, Ok(encoded_balances(&[Erc20Value::ZERO]))),
+            (PUBLIC_NODE, Err(provider_unreachable())),
+            (ANKR, Err(provider_unreachable())),
+        ]))]),
+    )
+    .await;
+
+    assert!(
+        pass.outcomes.is_empty(),
+        "a single provider's answer must not be acted upon"
+    );
+    assert_eq!(pass.errors, ScanErrors { decode: 0, call: 1 });
+}
+
+fn provider_unreachable() -> evm_rpc_types::RpcError {
+    HttpOutcallError::IcError {
+        code: LegacyRejectionCode::SysTransient,
+        message: "timeout".to_string(),
+    }
+    .into()
+}
+
 fn due_targets(now: Timestamp, latest: BlockNumber) -> Vec<ScanTarget<Erc20Asset>> {
     read_state(|s| s.automatic_deposits.due_scan_targets(now, latest).erc20)
 }
@@ -463,8 +528,16 @@ fn seed_state(
 }
 
 fn ok_balances(balances: &[Erc20Value]) -> Result<MultiRpcResult<Hex>, IcError> {
-    let blob: Vec<u8> = balances.iter().flat_map(|b| b.to_be_bytes()).collect();
-    Ok(MultiRpcResult::Consistent(Ok(Hex::from(blob))))
+    Ok(MultiRpcResult::Consistent(Ok(encoded_balances(balances))))
+}
+
+fn encoded_balances(balances: &[Erc20Value]) -> Hex {
+    Hex::from(
+        balances
+            .iter()
+            .flat_map(|b| b.to_be_bytes())
+            .collect::<Vec<u8>>(),
+    )
 }
 
 fn live_entry(now: Timestamp, account: &Account, token: Address) -> ScanProgress {
