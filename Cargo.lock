@@ -9360,6 +9360,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk",
  "ic-management-canister-types 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-protobuf",
@@ -14540,8 +14541,11 @@ version = "0.9.0"
 dependencies = [
  "futures",
  "ic-base-types",
+ "ic-types",
  "prometheus-parse",
  "reqwest",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "tokio",
 ]
 
