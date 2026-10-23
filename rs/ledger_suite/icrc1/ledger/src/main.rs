@@ -540,7 +540,26 @@ fn icrc1_total_supply() -> Nat {
     Access::with_ledger(|ledger| ledger.balances().total_supply().into())
 }
 
-async fn execute_transfer(
+/// Starts archiving as a background task instead of awaiting it.
+///
+/// The ledger applies a transaction synchronously but can only archive by
+/// calling the archive canisters, so archiving has to await. Awaiting it before
+/// replying would make the reply depend on continuations that run *after* the
+/// transaction was committed: an await is a commit point, so a trap in one of
+/// them — the replica refusing a memory growth, for instance — cannot roll the
+/// transaction back, but it does turn the reply into a reject. Callers cannot
+/// tell such a reject apart from one where nothing happened, and clients that
+/// retry on reject (the ck minters) would mint a deposit twice.
+///
+/// Spawning puts archiving on its own chain of messages. The reply is produced
+/// in the same message that commits the transaction, and a failure while
+/// archiving can no longer contradict it — the blocks simply stay in the ledger
+/// until the next attempt.
+fn spawn_archiving() {
+    ic_cdk::futures::spawn(archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE));
+}
+
+fn execute_transfer(
     from_account: Account,
     to: Account,
     spender: Option<Account>,
@@ -559,11 +578,11 @@ async fn execute_transfer(
         created_at_time,
     )?;
 
-    // NB. we need to set the certified data before the first async call to make sure that the
+    // NB. we need to set the certified data before spawning the archiving to make sure that the
     // blockchain state agrees with the certificate while archiving is in progress.
     ic_cdk::api::certified_data_set(Access::with_ledger(Ledger::root_hash));
 
-    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    spawn_archiving();
     Ok(Nat::from(block_idx))
 }
 
@@ -687,7 +706,6 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
         arg.memo,
         arg.created_at_time,
     )
-    .await
     .map_err(convert_transfer_error)
     .map_err(|err| {
         let err: TransferError = match err.try_into() {
@@ -713,7 +731,6 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
         arg.memo,
         arg.created_at_time,
     )
-    .await
     .map_err(convert_transfer_error)
     .map_err(|err| {
         let err: TransferFromError = match err.try_into() {
@@ -894,11 +911,11 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, A
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     let block_idx = icrc2_approve_not_async(ic_cdk::api::msg_caller(), arg)?;
 
-    // NB. we need to set the certified data before the first async call to make sure that the
+    // NB. we need to set the certified data before spawning the archiving to make sure that the
     // blockchain state agrees with the certificate while archiving is in progress.
     ic_cdk::api::certified_data_set(Access::with_ledger(Ledger::root_hash));
 
-    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    spawn_archiving();
     Ok(Nat::from(block_idx))
 }
 
@@ -991,7 +1008,7 @@ fn icrc152_mint_not_async(
 async fn icrc152_mint(args: Icrc152MintArgs) -> Result<Nat, Icrc152MintError> {
     let block_idx = icrc152_mint_not_async(ic_cdk::api::msg_caller(), args)?;
     ic_cdk::api::certified_data_set(Access::with_ledger(Ledger::root_hash));
-    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    spawn_archiving();
     Ok(Nat::from(block_idx))
 }
 
@@ -1089,7 +1106,7 @@ fn icrc152_burn_not_async(
 async fn icrc152_burn(args: Icrc152BurnArgs) -> Result<Nat, Icrc152BurnError> {
     let block_idx = icrc152_burn_not_async(ic_cdk::api::msg_caller(), args)?;
     ic_cdk::api::certified_data_set(Access::with_ledger(Ledger::root_hash));
-    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    spawn_archiving();
     Ok(Nat::from(block_idx))
 }
 
