@@ -80,33 +80,38 @@ jobs:
 
             // CI Main runs on GitHub's test merge of the PR into master, as it does
             // for PRs from this repository (refs/pull/N/merge). Other base branches
-            // are refused, so the code the PR is merged with is always master's.
+            // are refused, so the PR is merged with a commit on master. GitHub
+            // updates the merge lazily, so that commit can be behind master's tip.
             if (pr.base.ref !== 'master') {
-              core.setFailed(`PR #${prNumber} targets ${pr.base.ref}, but CI only runs on ` +
-                             'PRs from forks that target master');
+              core.setFailed(`PR #${prNumber} targets ${pr.base.ref}, but this workflow only ` +
+                             'runs CI on PRs into master. Retarget it to master, then re-run.');
               return;
             }
 
             // GitHub computes the test merge in the background: mergeable is null
-            // until it is done.
-            let mergeable = pr.mergeable;
-            let mergeSha = pr.merge_commit_sha;
-            for (let attempt = 0; mergeable === null && attempt < 10; attempt++) {
+            // until it is done. Every re-fetch must still pass the checks above.
+            let current = pr;
+            for (let attempt = 0; current.mergeable === null && attempt < 10; attempt++) {
               await new Promise(resolve => setTimeout(resolve, 3000));
-              const { data: current } = await github.rest.pulls.get({
+              current = (await github.rest.pulls.get({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: prNumber
-              });
-              mergeable = current.mergeable;
-              mergeSha = current.merge_commit_sha;
+              })).data;
+              if (current.state !== 'open' || current.base.ref !== 'master' ||
+                  current.head.sha.toLowerCase() !== sha) {
+                core.setFailed(`PR #${prNumber} changed while waiting for its test merge ` +
+                               `(state ${current.state}, base ${current.base.ref}, ` +
+                               `head ${current.head.sha}). Review it again before re-running.`);
+                return;
+              }
             }
-            if (mergeable === null) {
+            if (current.mergeable === null) {
               core.setFailed(`GitHub has not finished merging PR #${prNumber} into master ` +
                              'for testing. Re-run in a minute.');
               return;
             }
-            if (!mergeable) {
+            if (!current.mergeable) {
               core.setFailed(`PR #${prNumber} conflicts with master. Ask the contributor ` +
                              'to rebase it on master.');
               return;
@@ -115,6 +120,7 @@ jobs:
             // Pin the test merge by SHA: refs/pull/N/merge moves when the contributor
             // pushes or master moves, and every job must test the same reviewed code.
             // Its parents are the master commit it merges into and the PR head.
+            const mergeSha = current.merge_commit_sha;
             const { data: merge } = await github.rest.git.getCommit({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -127,15 +133,17 @@ jobs:
                              'still be updating it: re-run in a minute.');
               return;
             }
+            // With master as the base, the comparison of a commit on master has no diff.
             const { data: comparison } = await github.rest.repos.compareCommitsWithBasehead({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              basehead: `${parents[0]}...master`,
+              basehead: `master...${parents[0]}`,
               per_page: 1
             });
-            if (comparison.status !== 'ahead' && comparison.status !== 'identical') {
+            if (comparison.status !== 'behind' && comparison.status !== 'identical') {
               core.setFailed(`The test merge ${mergeSha} of PR #${prNumber} merges into ` +
-                             `${parents[0]}, which is not on master`);
+                             `${parents[0]}, which is not on master. GitHub may still be ` +
+                             'updating it: re-run in a minute.');
               return;
             }
 
@@ -145,7 +153,8 @@ jobs:
             const headRepo = pr.head.repo ? pr.head.repo.full_name : '';
             core.info(`PR #${prNumber} base ref: ${pr.base.ref}, ` +
                       `head ref: ${pr.head.ref}, head repo: ${headRepo}, ` +
-                      `test merge: ${mergeSha}`);
+                      `test merge: ${mergeSha} into master commit ${parents[0]} ` +
+                      `(${comparison.behind_by} commits behind master)`);
             core.setOutput('base_ref', pr.base.ref);
             core.setOutput('head_ref', pr.head.ref);
             core.setOutput('head_repo', headRepo);
