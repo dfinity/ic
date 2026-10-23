@@ -393,16 +393,20 @@ fn update_maturity_modulation(
     maturity_modulation: &mut MaturityModulation,
     current_day: u64,
 ) {
-    if maturity_modulation.updated_at_days_since_epoch == Some(current_day) {
+    if maturity_modulation.updated_at_days_since_epoch == current_day {
         return;
     }
 
-    let previous = match (
-        maturity_modulation.current_value_permyriad,
-        maturity_modulation.updated_at_days_since_epoch,
-    ) {
-        (Some(p), Some(d)) => Some((p as i64, d)),
-        _ => None,
+    // `updated_at_days_since_epoch == 0` is the "never measured" sentinel; in that case there is
+    // no baseline to smooth from and `compute_maturity_modulation_permyriad` should jump straight
+    // to the target.
+    let previous = if maturity_modulation.updated_at_days_since_epoch == 0 {
+        None
+    } else {
+        Some((
+            maturity_modulation.current_value_permyriad as i64,
+            maturity_modulation.updated_at_days_since_epoch,
+        ))
     };
 
     match compute_maturity_modulation_permyriad(
@@ -411,8 +415,8 @@ fn update_maturity_modulation(
         previous,
     ) {
         Ok(new_permyriad) => {
-            maturity_modulation.current_value_permyriad = Some(new_permyriad as i32);
-            maturity_modulation.updated_at_days_since_epoch = Some(current_day);
+            maturity_modulation.current_value_permyriad = new_permyriad as i32;
+            maturity_modulation.updated_at_days_since_epoch = current_day;
         }
         Err(reason) => {
             // Reaches this branch only when the buffer has no rate at or before any day in the
@@ -450,7 +454,7 @@ impl RecurringAsyncTask for UpdateIcpXdrRateRelatedData {
             gov.heap_data
                 .maturity_modulation
                 .as_ref()
-                .and_then(|mm| mm.updated_at_days_since_epoch)
+                .map(|mm| mm.updated_at_days_since_epoch)
                 == Some(current_day)
         });
         if already_updated_today {
@@ -481,7 +485,7 @@ impl RecurringAsyncTask for UpdateIcpXdrRateRelatedData {
                     "{}UpdateIcpXdrRateRelatedData: maturity modulation {} permyriad \
                      (day={}, buffer_size={})",
                     LOG_PREFIX,
-                    maturity_modulation.current_value_permyriad.unwrap_or(0),
+                    maturity_modulation.current_value_permyriad,
                     current_day,
                     icp_price_history.icp_xdr_rates.len(),
                 );

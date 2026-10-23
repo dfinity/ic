@@ -166,7 +166,7 @@ pub fn get_tla_globals(p: &UnsafeSendPtr<Governance>) -> GlobalState {
         gov.heap_data
             .maturity_modulation
             .as_ref()
-            .and_then(|m| m.current_value_permyriad)
+            .map(|m| m.current_value_permyriad)
             .unwrap_or(0)
             .to_tla_value(),
     );

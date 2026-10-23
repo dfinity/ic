@@ -544,7 +544,7 @@ fn set_governance_for_test(
         Box::new(MockRandomness::new()),
     );
     governance.heap_data.maturity_modulation = Some(MaturityModulation {
-        current_value_permyriad: Some(maturity_modulation),
+        current_value_permyriad: maturity_modulation,
         ..Default::default()
     });
     for neuron in neurons {
