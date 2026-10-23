@@ -3,7 +3,10 @@ use ic_types::{
     consensus::*,
     crypto::{CryptoHash, CryptoHashOf},
 };
-use std::time::Instant;
+use std::{
+    collections::hash_map::Entry::{Occupied, Vacant},
+    time::Instant,
+};
 use std::{
     collections::{BTreeMap, HashMap},
     marker::PhantomData,
@@ -321,8 +324,13 @@ impl<T: HasHash + HasHeight> HeightIndexedInstants<T> {
         let hash = key.hash();
         let height = key.height();
         let bucket = self.instants.entry(height).or_default();
-        if !bucket.contains_key(&hash) {
-            bucket.insert(hash.clone(), value);
+        match bucket.entry(hash.clone()) {
+            Vacant(e) => {
+                e.insert(value);
+            }
+            Occupied(_) => {
+                // Do not update the value if the key already exists.
+            }
         }
     }
 
