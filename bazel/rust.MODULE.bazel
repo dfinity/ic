@@ -12,7 +12,7 @@ single_version_override(
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    versions = ["1.99.0"],
+    versions = ["1.99.1"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
@@ -746,7 +746,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-management-canister-types",
-    version = "^0.8.0",
+    version = "^0.11.0",
 )
 crate.spec(
     default_features = False,

@@ -742,7 +742,7 @@ ic-gateway = { git = "https://github.com/dfinity/ic-gateway", tag = "v0.6.12", f
     "acme",
 ] }
 ic-identity-hsm = { version = "0.49.1" }
-ic-management-canister-types = "0.8.0"
+ic-management-canister-types = "0.11.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.49.1" }
