@@ -294,7 +294,7 @@ impl SelectIndex for CryptoHashOf<EquivocationProof> {
 
 /// Stores instants for any object that has a hash and a height.
 /// We use [`CryptoHash`] and [`PhantomData<T>`] separately instead of
-/// [`CryptoHashOf<T>`] because some [`HasHash`] returns a type-erased
+/// [`CryptoHashOf<T>`] because [`HasHash`] returns a type-erased
 /// [`CryptoHash`]. The [`PhantomData<T>`] still ensures that we are
 /// always storing instants for the same type `T`.
 pub struct HeightIndexedInstants<T: HasHash + HasHeight> {
