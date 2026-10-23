@@ -503,6 +503,75 @@ impl CyclesAccountManager {
         .map(|_| cost)
     }
 
+    /// Adjusts the cycles prepaid for an execution that was aborted before it
+    /// finished, so that they match what prepaying the restarted execution would
+    /// require now.
+    ///
+    /// An aborted execution carries its prepayment over rather than prepaying again
+    /// when it is restarted, but the conditions that prepayment was computed under
+    /// can have changed in between: the subnet size, the cost schedule and the
+    /// reference subnet size all come from the registry at the version of the batch
+    /// whose round executes the message, and the Wasm execution mode and the
+    /// instruction limit can differ too. The refund of the unused instructions, on
+    /// the other hand, is computed under the conditions in effect when the restarted
+    /// execution finishes. Left unadjusted, an execution whose price rose would see
+    /// that refund reach its entire prepayment, where `refund_unused_execution_cycles`
+    /// caps it, and hence run for free; one whose price fell would be overcharged for
+    /// the instructions it never used.
+    ///
+    /// The shortfall is withdrawn respecting the freezing threshold, exactly as
+    /// prepaying the execution from scratch would. Both directions are applied
+    /// unconditionally rather than chosen by comparing the two amounts, for the
+    /// reason given in `adjust_prepayment_for_response_execution()`.
+    ///
+    /// Returns the adjusted prepayment, or a `CanisterOutOfCyclesError` if the
+    /// balance above the freezing threshold does not cover the shortfall, in which
+    /// case the caller fails the message as out of cycles. Unlike
+    /// `adjust_prepayment_for_response_execution()`, a failing adjustment refunds the
+    /// whole prepayment, leaving the canister charged nothing at all, just as a
+    /// failed prepayment from scratch would.
+    #[allow(clippy::too_many_arguments)]
+    pub fn adjust_prepaid_execution_cycles(
+        &self,
+        system_state: &mut SystemState,
+        prepaid_execution_cycles: CompoundCycles<Instructions>,
+        canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
+        canister_compute_allocation: ComputeAllocation,
+        num_instructions: NumInstructions,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+        reveal_top_up: bool,
+        execution_mode: WasmExecutionMode,
+    ) -> Result<CompoundCycles<Instructions>, CanisterOutOfCyclesError> {
+        let required = self.execution_cost(num_instructions, subnet_cycles_config, execution_mode);
+        let prepaid = prepaid_execution_cycles;
+        if let Err(err) = self.consume_with_threshold_impl(
+            system_state,
+            required - prepaid,
+            self.freeze_threshold_cycles(
+                system_state.freeze_threshold,
+                system_state.memory_allocation,
+                canister_current_memory_usage,
+                canister_current_message_memory_usage,
+                canister_compute_allocation,
+                subnet_cycles_config,
+                system_state.reserved_balance(),
+            ),
+            reveal_top_up,
+        ) {
+            // The failed withdrawal left the canister state unchanged, so the whole
+            // prepayment is still outstanding. Refunding an amount in full, i.e.
+            // passing it as both arguments, also takes it back out of the consumed
+            // cycles.
+            system_state.refund_cycles(prepaid, prepaid);
+            return Err(err);
+        }
+        // Refunded in full too, so the excess never counts as consumed either.
+        let excess = prepaid - required;
+        system_state.refund_cycles(excess, excess);
+        Ok(required)
+    }
+
     /// Checks whether the canister has enough cycles to prepay the execution of a
     /// message with the given maximum number of instructions while respecting the
     /// freezing threshold.
