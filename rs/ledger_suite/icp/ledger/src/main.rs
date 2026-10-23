@@ -14,6 +14,9 @@ use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::endpoints::{StandardRecord, convert_transfer_error};
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerData};
+use ic_ledger_canister_core::metrics::{
+    encode_archive_config_metrics, encode_dedup_config_metrics,
+};
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
@@ -1144,6 +1147,10 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         *MAX_MESSAGE_SIZE_BYTES.read().unwrap() as f64,
         "Maximum inter-canister message size in bytes.",
     )?;
+    if let Some(archive) = archive_guard.as_ref() {
+        encode_archive_config_metrics(w, archive, archive.node_max_memory_size_bytes)?;
+    }
+    encode_dedup_config_metrics(w, &*ledger)?;
     w.encode_gauge(
         "ledger_stable_memory_pages",
         ic_cdk::stable::stable_size() as f64,

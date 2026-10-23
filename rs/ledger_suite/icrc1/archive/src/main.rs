@@ -34,10 +34,10 @@ const WASM_PAGE_SIZE: u64 = 65536;
 const GIB: u64 = 1024 * 1024 * 1024;
 
 /// How much memory do we want to allocate for raw blocks.
-const DEFAULT_MEMORY_LIMIT: u64 = 3 * GIB;
+use ic_icrc1::archive_limits::ARCHIVE_MEMORY_LIMIT as DEFAULT_MEMORY_LIMIT;
 
 /// The maximum number of blocks to return in a single get_transactions request.
-const DEFAULT_MAX_TRANSACTIONS_PER_GET_TRANSACTION_RESPONSE: u64 = 2000;
+use ic_icrc1::archive_limits::DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE;
 
 /// The maximum number of Wasm pages that we allow to use for the stable storage.
 const NUM_WASM_PAGES: u64 = 4 * GIB / WASM_PAGE_SIZE;
@@ -108,7 +108,7 @@ impl Default for ArchiveConfig {
             max_memory_size_bytes: 0,
             block_index_offset: 0,
             ledger_id: Principal::management_canister(),
-            max_transactions_per_response: DEFAULT_MAX_TRANSACTIONS_PER_GET_TRANSACTION_RESPONSE,
+            max_transactions_per_response: DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE,
             token_type: wasm_token_type(),
         }
     }
@@ -165,8 +165,8 @@ fn init(
         let max_memory_size_bytes = max_memory_size_bytes
             .unwrap_or(DEFAULT_MEMORY_LIMIT)
             .min(DEFAULT_MEMORY_LIMIT);
-        let max_transactions_per_response = max_transactions_per_response
-            .unwrap_or(DEFAULT_MAX_TRANSACTIONS_PER_GET_TRANSACTION_RESPONSE);
+        let max_transactions_per_response =
+            max_transactions_per_response.unwrap_or(DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE);
         cell.borrow_mut()
             .set(ArchiveConfig {
                 max_memory_size_bytes,
@@ -422,6 +422,19 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
 
     w.gauge_vec("cycle_balance", "Cycle balance on this canister.")?
         .value(&[("canister", "icrc1-archive")], cycle_balance)?;
+
+    with_archive_opts(|opts| {
+        w.encode_gauge(
+            "archive_max_memory_size_bytes",
+            opts.max_memory_size_bytes as f64,
+            "Maximum number of bytes this archive can use to store encoded blocks.",
+        )?;
+        w.encode_gauge(
+            "archive_max_transactions_per_response",
+            opts.max_transactions_per_response as f64,
+            "Maximum number of transactions this archive returns per response.",
+        )
+    })?;
 
     w.encode_gauge(
         "archive_stored_blocks",
