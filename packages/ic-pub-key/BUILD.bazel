@@ -2,19 +2,23 @@ load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", 
 
 package(default_visibility = ["//visibility:public"])
 
+FEATURES = [
+    "secp256k1",
+    "secp256r1",
+    "ed25519",
+    "vetkeys",
+]
+
 rust_library(
     name = "ic-pub-key",
     srcs = glob(["src/**/*.rs"]),
-    crate_features = [
-        "secp256k1",
-        "ed25519",
-        "vetkeys",
-    ],
+    crate_features = FEATURES,
     crate_name = "ic_pub_key",
     version = "0.3.0",
     deps = [
         "//packages/ic-ed25519",
         "//packages/ic-secp256k1",
+        "//packages/ic-secp256r1",
         "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-vetkeys",
@@ -27,42 +31,26 @@ rust_library(
 rust_doc(
     name = "doc",
     crate = ":ic-pub-key",
-    rustdoc_flags = [
-        "--cfg=feature=\"secp256k1\"",
-        "--cfg=feature=\"ed25519\"",
-        "--cfg=feature=\"vetkeys\"",
-    ],
+    rustdoc_flags = ["--cfg=feature=\"%s\"" % feature for feature in FEATURES],
 )
 
 rust_doc_test(
     name = "doc_test",
     crate = ":ic-pub-key",
-    crate_features = [
-        "secp256k1",
-        "ed25519",
-        "vetkeys",
-    ],
+    crate_features = FEATURES,
     deps = [":ic-pub-key"],
 )
 
 rust_test(
     name = "unit_tests",
     crate = ":ic-pub-key",
-    crate_features = [
-        "secp256k1",
-        "ed25519",
-        "vetkeys",
-    ],
+    crate_features = FEATURES,
 )
 
 rust_test_suite(
     name = "integration_tests",
     srcs = glob(["tests/**/*.rs"]),
-    crate_features = [
-        "secp256k1",
-        "ed25519",
-        "vetkeys",
-    ],
+    crate_features = FEATURES,
     deps = [
         ":ic-pub-key",
         "@crate_index//:hex",
