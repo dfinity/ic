@@ -356,8 +356,6 @@ fn test_ecdsa_secp256k1_derivation_test_key1() {
     );
 }
 
-// The expected secp256r1 keys are what the replica's `derive_threshold_public_key`,
-// which answers `ecdsa_public_key`, returns for these master keys.
 #[cfg(feature = "secp256r1")]
 #[test]
 fn test_ecdsa_secp256r1_derivation_key1() {
