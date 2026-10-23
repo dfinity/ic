@@ -539,13 +539,13 @@ pub async fn write_certified_changes_to_local_store(
     local_store: &dyn LocalStore,
     from_version: RegistryVersion,
 ) -> Result<SuccessfulPoll, String> {
-    let (records, last_available_version, certified_time) = registry_canister
+    let (updates, last_available_version, certified_time) = registry_canister
         .get_certified_changes_since(from_version.get(), nns_pub_key)
         .await
         .map_err(|e| e.to_string())?;
 
     let mut changelog: BTreeMap<RegistryVersion, ChangelogEntry> = BTreeMap::new();
-    for record in records {
+    for record in updates.records {
         changelog
             .entry(record.version)
             .or_default()
@@ -553,6 +553,15 @@ pub async fn write_certified_changes_to_local_store(
                 key: record.key,
                 value: record.value,
             });
+    }
+
+    // Carry the registry canister's own timestamps into the local store, so that
+    // consensus sees the time a version was created rather than the time this node
+    // happened to learn of it. Versions the canister did not stamp keep 0.
+    for (version, changelog_entry) in changelog.iter_mut() {
+        if let Some(timestamp_nanoseconds) = updates.version_timestamps.get(version) {
+            changelog_entry.timestamp_nanoseconds = *timestamp_nanoseconds;
+        }
     }
 
     let last_stored_version = changelog
@@ -603,7 +612,7 @@ pub fn apply_switch_over_to_last_changelog_entry_impl(
 
     // remove all entries that will be adjusted
     let subnet_record_key = make_subnet_record_key(new_nns_subnet_id);
-    last.retain(|k| {
+    last.key_mutations.retain(|k| {
         k.key != ROOT_SUBNET_ID_KEY
             && k.key != make_subnet_list_record_key()
             && k.key != subnet_record_key
@@ -676,7 +685,7 @@ pub fn apply_switch_over_to_last_changelog_entry_impl(
         })
         .collect();
 
-    last.append(&mut routing_table_updates);
+    last.key_mutations.append(&mut routing_table_updates);
 }
 
 #[cfg(test)]
