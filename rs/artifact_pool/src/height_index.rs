@@ -495,6 +495,7 @@ mod tests {
         instants.insert(&FakeArtifact::new(10, 1), earlier);
         instants.insert(&FakeArtifact::new(10, 1), later);
         assert_eq!(instants.get(&FakeArtifact::new(10, 1)), Some(&earlier));
+        assert_eq!(instants.instants.len(), 1);
     }
 
     #[test]
