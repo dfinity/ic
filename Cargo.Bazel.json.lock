@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "f8c116ef7dba3121cef5cc09a85ae1ca0769a8354e96ab77373cb469e5bbd007",
+  "checksum": "3484295e891fa6ca4f70bac6f36766ca90b9547bc8736cabdd61ec14797f1296",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -17405,7 +17405,7 @@
             "target": "ic_identity_hsm"
           },
           {
-            "id": "ic-management-canister-types 0.8.0",
+            "id": "ic-management-canister-types 0.11.0",
             "target": "ic_management_canister_types"
           },
           {
@@ -27631,6 +27631,47 @@
         }
       ],
       "version": "0.49.1"
+    },
+    "ic-management-canister-types 0.11.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "candid 0.10.37",
+            "target": "candid"
+          },
+          {
+            "id": "serde 1.0.228",
+            "target": "serde"
+          },
+          {
+            "id": "serde_bytes 0.11.15",
+            "target": "serde_bytes"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "ic_management_canister_types",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "name": "ic-management-canister-types",
+      "package_url": "https://github.com/dfinity/ic",
+      "repository": {
+        "Http": {
+          "sha256": "b3e3162bdfbdbc6ca3b4bfa8145f9ba19cddaf3eb8d1af8dc7be6a39557b76c2",
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.11.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_management_canister_types",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.11.0"
     },
     "ic-management-canister-types 0.5.0": {
       "common_attrs": {
@@ -66458,7 +66499,7 @@
     "ic-doge-interface 0.3.0",
     "ic-gateway 0.0.0-git",
     "ic-identity-hsm 0.49.1",
-    "ic-management-canister-types 0.8.0",
+    "ic-management-canister-types 0.11.0",
     "ic-metrics-encoder 1.1.1",
     "ic-sha3 1.0.0",
     "ic-stable-structures 0.6.8",
