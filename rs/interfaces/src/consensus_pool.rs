@@ -14,7 +14,6 @@ use ic_types::{
         EquivocationProof, Finalization, FinalizationShare, HasHeight, HashedBlock, Notarization,
         NotarizationShare, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
     },
-    crypto::CryptoHashOf,
     time::Time,
 };
 use serde::{Deserialize, Serialize};
