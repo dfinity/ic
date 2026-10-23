@@ -50,12 +50,12 @@ use ic_types::{
         FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
     canister_http::{
-        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
-        CanisterHttpRequestContext, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
-        CanisterHttpResponseShare, Replication,
+        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CanisterHttpRequestContext,
+        CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseShare,
+        Replication,
     },
     consensus::Threshold,
-    messages::{CallbackId, NO_DEADLINE, Payload, RejectContext},
+    messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
     signature::BasicSigBatchEntry,
 };
@@ -221,7 +221,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 if delivered_ids.contains(callback_id) {
                     continue;
                 }
-                if context_timed_out(request, validation_context) {
+                if request.timeout_time() < validation_context.time {
                     // Because timeouts are very cheap to verify, they are
                     // not counted as responses (so that they are irrelevant
                     // for the CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK limit.
@@ -576,7 +576,7 @@ impl CanisterHttpPayloadBuilderImpl {
             )?;
 
             // Check that the request has actually timed out
-            if !context_timed_out(request, validation_context) {
+            if request.timeout_time() >= validation_context.time {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::NotTimedOut(
                     *timeout_id,
                 ));
@@ -970,7 +970,7 @@ impl CanisterHttpPayloadBuilderImpl {
 
             match error {
                 FlexibleCanisterHttpError::Timeout { .. } => {
-                    if !context_timed_out(context, validation_context) {
+                    if context.timeout_time() >= validation_context.time {
                         return invalid_artifact(InvalidCanisterHttpPayloadReason::NotTimedOut(
                             callback_id,
                         ));
@@ -1795,19 +1795,6 @@ fn delivered_context_timed_out(
         .time
         .saturating_duration_since(context.time)
         >= DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
-}
-
-/// Returns true if a context has timed out: after the protocol timeout or, for a
-/// bounded-wait call, once the caller's deadline has passed.
-fn context_timed_out(
-    context: &CanisterHttpRequestContext,
-    validation_context: &ValidationContext,
-) -> bool {
-    let mut timeout = context.time + CANISTER_HTTP_TIMEOUT_INTERVAL;
-    if context.request.deadline != NO_DEADLINE {
-        timeout = timeout.min(context.request.deadline.into());
-    }
-    timeout < validation_context.time
 }
 
 fn validation_failed(

@@ -15,7 +15,7 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    CanisterId, CountBytes, NumBytes, NumInstructions, Time,
+    CanisterId, CountBytes, NumBytes, NumInstructions,
     canister_http::{
         CanisterHttpHeader, CanisterHttpMethod, CanisterHttpPaymentReceipt, CanisterHttpReject,
         CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
@@ -23,7 +23,7 @@ use ic_types::{
         MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, Transform, validate_http_headers_and_body,
     },
     ingress::WasmResult,
-    messages::{NO_DEADLINE, Query, QuerySource},
+    messages::{Query, QuerySource},
 };
 use ic_utils::str::StrEllipsize;
 use std::{
@@ -155,6 +155,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 id: request_id,
                 context: request_context,
                 socks_proxy_addrs,
+                dispatch_time,
             } = canister_http_request;
 
             let mut budget = pricing_factory.new_tracker(&request_context);
@@ -162,12 +163,9 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
             let request_sender = request_context.request.sender;
             let reply_callback_id = request_context.request.sender_reply_callback;
-            // For bounded-wait calls, the time between the request's creation and the
-            // caller's deadline.
-            let time_until_deadline = (request_context.request.deadline != NO_DEADLINE).then(|| {
-                Time::from(request_context.request.deadline)
-                    .saturating_duration_since(request_context.time)
-            });
+            let time_until_timeout = request_context
+                .timeout_time()
+                .saturating_duration_since(dispatch_time);
             let CanisterHttpRequestContext {
                 url: request_url,
                 headers: request_headers,
@@ -194,7 +192,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     request_body.as_deref().map(Vec::as_slice),
                     socks_proxy_addrs,
                     &mut *budget,
-                    time_until_deadline,
+                    time_until_timeout,
                     charged_response_time,
                 )
                 .await?;
@@ -368,19 +366,18 @@ async fn execute_http_request(
     body: Option<&[u8]>,
     socks_proxy_addrs: Vec<String>,
     budget: &mut dyn BudgetTracker,
-    time_until_deadline: Option<Duration>,
+    time_until_timeout: Duration,
     charged_response_time: Option<Duration>,
 ) -> Result<(HttpsOutcallResponse, NumBytes, Duration), CanisterHttpReject> {
-    // The caller has already given up on the request, so don't start it.
-    if time_until_deadline == Some(Duration::ZERO) {
+    // The request has already timed out, so don't start it.
+    if time_until_timeout.is_zero() {
         return Err(deadline_exceeded());
     }
     let AdapterLimits {
         max_response_size,
         max_response_time,
     } = budget.get_adapter_limits();
-    let response_time_limit =
-        time_until_deadline.map_or(max_response_time, |time| time.min(max_response_time));
+    let response_time_limit = time_until_timeout.min(max_response_time);
 
     let proto_req = HttpsOutcallRequest {
         url,
@@ -414,9 +411,9 @@ async fn execute_http_request(
             reject_code: grpc_status_code_to_reject(grpc_status.code()),
             message: grpc_status.message().to_string(),
         }),
-        // A deadline below the protocol maximum that the caller didn't set is one
-        // the request's allowance imposed, so exceeding it means the request ran out
-        // of cycles to pay for more time rather than that the server was slow.
+        // A deadline below the protocol maximum that the request's timeout didn't set
+        // is one the request's allowance imposed, so exceeding it means the request ran
+        // out of cycles to pay for more time rather than that the server was slow.
         Err(_deadline)
             if response_time_limit == max_response_time
                 && max_response_time < MAX_RESPONSE_TIME =>
@@ -643,8 +640,8 @@ mod tests {
     use ic_types::{
         NumberOfNodes, RegistryVersion,
         canister_http::{
-            CANDID_OVERHEAD_RESERVE_BYTES, MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion,
-            RefundStatus, Replication, Transform,
+            CANDID_OVERHEAD_RESERVE_BYTES, CANISTER_HTTP_TIMEOUT_INTERVAL,
+            MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus, Replication, Transform,
         },
     };
     use ic_types::{
@@ -781,7 +778,7 @@ mod tests {
     async fn execute_mock_http_request(
         grpc_channel: Channel,
         budget: &mut dyn BudgetTracker,
-        time_until_deadline: Option<Duration>,
+        time_until_timeout: Duration,
     ) -> Result<(HttpsOutcallResponse, NumBytes, Duration), CanisterHttpReject> {
         execute_http_request(
             &mut HttpsOutcallsServiceClient::new(grpc_channel),
@@ -791,7 +788,7 @@ mod tests {
             None,
             Vec::new(),
             budget,
-            time_until_deadline,
+            time_until_timeout,
             None,
         )
         .await
@@ -805,9 +802,10 @@ mod tests {
             setup_adapter_mock(Err((Code::Unavailable, "adapter unavailable".to_string()))).await;
         let mut budget = RecordingTracker::with_deadline(MAX_RESPONSE_TIME);
 
-        let reject = execute_mock_http_request(grpc_channel, &mut budget, None)
-            .await
-            .expect_err("the adapter returns an error");
+        let reject =
+            execute_mock_http_request(grpc_channel, &mut budget, CANISTER_HTTP_TIMEOUT_INTERVAL)
+                .await
+                .expect_err("the adapter returns an error");
         assert_eq!(reject.reject_code, RejectCode::SysTransient);
         assert_eq!(reject.message, "adapter unavailable");
 
@@ -826,9 +824,10 @@ mod tests {
         assert!(deadline < MAX_RESPONSE_TIME);
         let mut budget = RecordingTracker::with_deadline(deadline);
 
-        let reject = execute_mock_http_request(grpc_channel, &mut budget, None)
-            .await
-            .expect_err("the adapter never responds");
+        let reject =
+            execute_mock_http_request(grpc_channel, &mut budget, CANISTER_HTTP_TIMEOUT_INTERVAL)
+                .await
+                .expect_err("the adapter never responds");
         assert_eq!(reject.reject_code, RejectCode::CanisterReject);
         assert_eq!(reject.message, "Insufficient cycles");
 
@@ -837,31 +836,31 @@ mod tests {
         assert_eq!(budget.network_usage, vec![(NumBytes::from(0), deadline)]);
     }
 
-    /// A deadline the caller set ends the call as an exceeded deadline, not a lack of
+    /// The request's own timeout ends the call as an exceeded deadline, not a lack of
     /// cycles, even if the allowance imposed a later deadline of its own.
     #[tokio::test]
-    async fn test_caller_deadline_is_charged_and_reported_as_deadline_exceeded() {
+    async fn test_request_timeout_is_charged_and_reported_as_deadline_exceeded() {
         let grpc_channel = setup_hanging_adapter_mock().await;
-        let deadline = Duration::from_millis(50);
+        let timeout = Duration::from_millis(50);
         let mut budget = RecordingTracker::with_deadline(MAX_RESPONSE_TIME / 2);
 
-        let reject = execute_mock_http_request(grpc_channel, &mut budget, Some(deadline))
+        let reject = execute_mock_http_request(grpc_channel, &mut budget, timeout)
             .await
             .expect_err("the adapter never responds");
         assert_eq!(reject.reject_code, RejectCode::SysTransient);
         assert_eq!(reject.message, "Deadline Exceeded");
-        assert_eq!(budget.network_usage, vec![(NumBytes::from(0), deadline)]);
+        assert_eq!(budget.network_usage, vec![(NumBytes::from(0), timeout)]);
     }
 
-    /// A request whose deadline has already passed is not sent, so nothing is charged.
+    /// A request that has already timed out is not sent, so nothing is charged.
     #[tokio::test]
-    async fn test_request_past_its_deadline_is_not_sent() {
+    async fn test_timed_out_request_is_not_sent() {
         let grpc_channel = setup_hanging_adapter_mock().await;
         let mut budget = RecordingTracker::with_deadline(MAX_RESPONSE_TIME);
 
-        let reject = execute_mock_http_request(grpc_channel, &mut budget, Some(Duration::ZERO))
+        let reject = execute_mock_http_request(grpc_channel, &mut budget, Duration::ZERO)
             .await
-            .expect_err("the deadline has passed");
+            .expect_err("the request has timed out");
         assert_eq!(reject.reject_code, RejectCode::SysTransient);
         assert_eq!(reject.message, "Deadline Exceeded");
         assert!(budget.network_usage.is_empty());
@@ -898,6 +897,7 @@ mod tests {
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
             },
             socks_proxy_addrs: vec![],
+            dispatch_time: UNIX_EPOCH,
         }
     }
 
@@ -1090,8 +1090,9 @@ mod tests {
         }
     }
 
-    /// The client stops waiting for an adapter that never responds once the request's
-    /// bounded-wait deadline has passed, long before its own limit.
+    /// The client stops waiting for an adapter that never responds at the request's
+    /// bounded-wait deadline, counting from when the request was dispatched rather
+    /// than created.
     #[tokio::test]
     async fn test_client_stops_at_request_deadline() {
         let mock_grpc_channel = setup_hanging_adapter_mock().await;
@@ -1105,14 +1106,14 @@ mod tests {
             no_op_logger(),
         );
 
-        // The deadline is 100ms after the request's creation.
+        // Created 10s before its deadline, but dispatched only 100ms before it.
         let mut request = build_mock_canister_http_request(420, None);
         Arc::make_mut(&mut request.context.request).deadline =
             CoarseTime::from_secs_since_unix_epoch(10);
-        request.context.time = UNIX_EPOCH + Duration::from_millis(9_900);
+        request.dispatch_time = UNIX_EPOCH + Duration::from_millis(9_900);
         assert_eq!(client.send(request), Ok(()));
 
-        let response = tokio::time::timeout(Duration::from_secs(10), async {
+        let response = tokio::time::timeout(Duration::from_secs(5), async {
             loop {
                 match client.try_receive() {
                     Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,

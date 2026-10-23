@@ -49,7 +49,7 @@ use std::{
     collections::BTreeMap,
     convert::TryInto,
     str::FromStr,
-    sync::{Arc, RwLock},
+    sync::{Arc, RwLock, Weak},
     time::Duration,
 };
 
@@ -2053,15 +2053,16 @@ fn best_effort_responses_valid_timeout() {
 }
 
 /// A pool of just one subnet, so that its `execute_round()` builds real payloads.
+/// The subnet holds the pool, so the pool holds the subnet weakly.
 #[derive(Default)]
-struct SingleSubnet(RwLock<Option<Arc<StateMachine>>>);
+struct SingleSubnet(RwLock<Weak<StateMachine>>);
 
 impl Subnets for SingleSubnet {
     fn insert(&self, state_machine: Arc<StateMachine>) {
-        *self.0.write().unwrap() = Some(state_machine);
+        *self.0.write().unwrap() = Arc::downgrade(&state_machine);
     }
     fn get(&self, subnet_id: SubnetId) -> Option<Arc<StateMachine>> {
-        let state_machine = self.0.read().unwrap().clone();
+        let state_machine = self.0.read().unwrap().upgrade();
         state_machine.filter(|state_machine| state_machine.get_subnet_id() == subnet_id)
     }
 }

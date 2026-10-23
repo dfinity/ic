@@ -269,6 +269,7 @@ impl CanisterHttpPoolManagerImpl {
                         id: *id,
                         context: context.clone(),
                         socks_proxy_addrs: socks_proxy_addrs.as_ref().clone(),
+                        dispatch_time: state.time(),
                     })
                 {
                     warn!(
@@ -2721,6 +2722,7 @@ pub mod test {
                         id: CallbackId::from(7),
                         context: request.clone(),
                         socks_proxy_addrs: vec![],
+                        dispatch_time: ic_types::time::UNIX_EPOCH,
                     }))
                     .times(1)
                     .return_const(Ok(()));
@@ -2788,6 +2790,71 @@ pub mod test {
 
                 // Now that there are shares in the pool, we should be able to
                 // call generate_change_set again without send being called.
+                pool_manager.generate_change_set(&canister_http_pool);
+            });
+        });
+    }
+
+    /// A request carries the time of the state it is dispatched from, so that the
+    /// client knows how much of the request's time is left.
+    #[test]
+    pub fn test_request_carries_dispatch_time() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                let request = test_request_context(
+                    Replication::FullyReplicated,
+                    PricingVersion::Legacy,
+                    None,
+                );
+                let dispatch_time = ic_types::Time::from_secs_since_unix_epoch(10).unwrap();
+                shim_mock
+                    .expect_send()
+                    .with(eq(CanisterHttpRequest {
+                        id: CallbackId::from(7),
+                        context: request.clone(),
+                        socks_proxy_addrs: vec![],
+                        dispatch_time,
+                    }))
+                    .times(1)
+                    .return_const(Ok(()));
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let mut state =
+                    state_with_pending_http_calls(BTreeMap::from([(CallbackId::from(7), request)]));
+                state.metadata.batch_time = dispatch_time;
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(Height::from(1), Arc::new(state)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+                let canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
                 pool_manager.generate_change_set(&canister_http_pool);
             });
         });
