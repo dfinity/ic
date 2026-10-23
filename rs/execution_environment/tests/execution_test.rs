@@ -9,20 +9,25 @@ use ic_config::{
 };
 use ic_crypto_tree_hash::{MixedHashTree, Path as LabeledTreePath, sparse_labeled_tree_from_paths};
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
+use ic_error_types::RejectCode;
 use ic_execution_environment::units::{GIB, MIB};
 use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInstallModeV2, CanisterMetadataRequest, CanisterMetadataResponse,
-    CanisterMetricsArgs, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, IC_00, InstallCodeArgsV2,
-    ListCanistersResponse, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload,
-    SignWithECDSAArgs, SubnetMetricsArgs, SubnetMetricsResponse, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs,
+    BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInstallModeV2,
+    CanisterMetadataRequest, CanisterMetadataResponse, CanisterMetricsArgs, CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs, DerivationPath,
+    EcdsaKeyId, EmptyBlob, HttpMethod, IC_00, InstallCodeArgsV2, ListCanistersResponse,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload, SignWithECDSAArgs,
+    SubnetMetricsArgs, SubnetMetricsResponse, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
 };
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_resource_limits::ResourceLimits;
+use ic_registry_routing_table::{RoutingTable, routing_table_insert_subnet};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::DEFAULT_QUEUE_CAPACITY;
 use ic_state_machine_tests::{
-    ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
+    ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, Subnets, UserError,
+    add_global_registry_records, add_initial_registry_records,
 };
 use ic_test_utilities_execution_environment::{get_reject, get_reply};
 use ic_test_utilities_metrics::{
@@ -32,13 +37,21 @@ use ic_test_utilities_types::ids::user_test_id;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::MessageId;
 use ic_types::{
-    CanisterId, CryptoHashOfPartialState, NumBytes, Time, ingress::WasmResult,
+    CanisterId, CryptoHashOfPartialState, NumBytes, SubnetId, Time, ingress::WasmResult,
     messages::NO_DEADLINE,
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, NominalCycles};
-use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
+use ic_universal_canister::{
+    UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, call_args, wasm,
+};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
-use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap,
+    convert::TryInto,
+    str::FromStr,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 /// One billion for better cycles readability.
 const B: u128 = 1e9 as u128;
@@ -2037,6 +2050,128 @@ fn best_effort_responses_valid_timeout() {
         Some(timeout_seconds),
         expected_deadline_seconds,
     );
+}
+
+/// A pool of just one subnet, so that its `execute_round()` builds real payloads.
+#[derive(Default)]
+struct SingleSubnet(RwLock<Option<Arc<StateMachine>>>);
+
+impl Subnets for SingleSubnet {
+    fn insert(&self, state_machine: Arc<StateMachine>) {
+        *self.0.write().unwrap() = Some(state_machine);
+    }
+    fn get(&self, subnet_id: SubnetId) -> Option<Arc<StateMachine>> {
+        let state_machine = self.0.read().unwrap().clone();
+        state_machine.filter(|state_machine| state_machine.get_subnet_id() == subnet_id)
+    }
+}
+
+/// Builds an application subnet whose `execute_round()` builds real payloads.
+fn application_subnet_with_payload_builder() -> Arc<StateMachine> {
+    let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .with_registry_data_provider(registry_data_provider.clone())
+        .build_with_subnets(Arc::new(SingleSubnet::default()));
+    let subnet_id = env.get_subnet_id();
+    let mut routing_table = RoutingTable::new();
+    routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
+    add_initial_registry_records(registry_data_provider.clone());
+    add_global_registry_records(
+        subnet_id,
+        routing_table,
+        vec![subnet_id],
+        BTreeMap::new(),
+        registry_data_provider,
+    );
+    env.reload_registry();
+    env
+}
+
+#[test]
+fn bounded_wait_http_requests_are_cancelled_at_deadline() {
+    const TIMEOUT_SECONDS: u32 = 5;
+
+    let env = application_subnet_with_payload_builder();
+    let canister = create_canister_with_cycles(
+        &env,
+        UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
+        None,
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let args = CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        max_response_bytes: Some(1_000),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: None,
+        is_replicated: None,
+        pricing_version: None,
+    };
+    // Makes `count` bounded-wait outcalls whose reject callbacks record the reject code.
+    let outcalls = |count: usize| {
+        (0..count)
+            .fold(wasm(), |payload, _| {
+                payload.call_simple_with_cycles_and_best_effort_response(
+                    IC_00,
+                    Method::HttpRequest,
+                    call_args()
+                        .other_side(args.encode())
+                        .on_reject(wasm().reject_code().int_to_blob().append_to_global_data()),
+                    Cycles::new(B),
+                    TIMEOUT_SECONDS,
+                )
+            })
+            .reply()
+            .build()
+    };
+    let reject_codes = || -> Vec<u32> {
+        let query = wasm().get_global_data().append_and_reply().build();
+        get_reply(env.query(canister, "query", query))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|code| u32::from_le_bytes(*code))
+            .collect()
+    };
+
+    // Fill the canister's queue to its own subnet with outcalls that never get a response.
+    env.execute_ingress(canister, "update", outcalls(DEFAULT_QUEUE_CAPACITY))
+        .unwrap();
+    env.tick();
+    let in_flight = env.canister_http_request_contexts();
+    assert_eq!(in_flight.len(), DEFAULT_QUEUE_CAPACITY);
+    env.execute_ingress(canister, "update", outcalls(1))
+        .unwrap_err()
+        .assert_contains(ErrorCode::CanisterCalledTrap, "call_perform failed");
+
+    // At the deadline all callbacks are rejected and the outcalls are timed out.
+    env.advance_time(Duration::from_secs(TIMEOUT_SECONDS as u64 + 1));
+    // Unlike `tick()`, this builds the payload that times the outcalls out.
+    env.execute_round();
+    assert_eq!(
+        reject_codes(),
+        vec![RejectCode::SysUnknown as u32; DEFAULT_QUEUE_CAPACITY]
+    );
+    assert!(env.canister_http_request_contexts().is_empty());
+
+    // The timeout rejects arrive late and are dropped, but their refunds are credited.
+    let refund: Cycles = in_flight
+        .values()
+        .map(|context| context.request.payment)
+        .sum();
+    let balance_before = env.cycle_balance(canister);
+    env.tick();
+    assert_eq!(env.cycle_balance(canister), balance_before + refund.get());
+    assert_eq!(reject_codes().len(), DEFAULT_QUEUE_CAPACITY);
+
+    // A new outcall goes through right away.
+    env.execute_ingress(canister, "update", outcalls(1))
+        .unwrap();
+    env.tick();
+    assert_eq!(env.canister_http_request_contexts().len(), 1);
 }
 
 #[test]

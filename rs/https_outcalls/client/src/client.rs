@@ -15,7 +15,7 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    CanisterId, CountBytes, NumBytes, NumInstructions,
+    CanisterId, CountBytes, NumBytes, NumInstructions, Time,
     canister_http::{
         CanisterHttpHeader, CanisterHttpMethod, CanisterHttpPaymentReceipt, CanisterHttpReject,
         CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
@@ -23,7 +23,7 @@ use ic_types::{
         MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, Transform, validate_http_headers_and_body,
     },
     ingress::WasmResult,
-    messages::{Query, QuerySource},
+    messages::{NO_DEADLINE, Query, QuerySource},
 };
 use ic_utils::str::StrEllipsize;
 use std::{
@@ -162,6 +162,12 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
             let request_sender = request_context.request.sender;
             let reply_callback_id = request_context.request.sender_reply_callback;
+            // For bounded-wait calls, the time between the request's creation and the
+            // caller's deadline.
+            let time_until_deadline = (request_context.request.deadline != NO_DEADLINE).then(|| {
+                Time::from(request_context.request.deadline)
+                    .saturating_duration_since(request_context.time)
+            });
             let CanisterHttpRequestContext {
                 url: request_url,
                 headers: request_headers,
@@ -188,6 +194,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     request_body.as_deref().map(Vec::as_slice),
                     socks_proxy_addrs,
                     &mut *budget,
+                    time_until_deadline,
                     charged_response_time,
                 )
                 .await?;
@@ -361,12 +368,19 @@ async fn execute_http_request(
     body: Option<&[u8]>,
     socks_proxy_addrs: Vec<String>,
     budget: &mut dyn BudgetTracker,
+    time_until_deadline: Option<Duration>,
     charged_response_time: Option<Duration>,
 ) -> Result<(HttpsOutcallResponse, NumBytes, Duration), CanisterHttpReject> {
+    // The caller has already given up on the request, so don't start it.
+    if time_until_deadline == Some(Duration::ZERO) {
+        return Err(deadline_exceeded());
+    }
     let AdapterLimits {
         max_response_size,
         max_response_time,
     } = budget.get_adapter_limits();
+    let response_time_limit =
+        time_until_deadline.map_or(max_response_time, |time| time.min(max_response_time));
 
     let proto_req = HttpsOutcallRequest {
         url,
@@ -391,7 +405,7 @@ async fn execute_http_request(
     };
 
     let (grpc_result, elapsed) =
-        timeout_with_capped_metric(max_response_time, adapter_client.https_outcall(proto_req))
+        timeout_with_capped_metric(response_time_limit, adapter_client.https_outcall(proto_req))
             .await;
 
     let adapter_result = match grpc_result {
@@ -400,17 +414,19 @@ async fn execute_http_request(
             reject_code: grpc_status_code_to_reject(grpc_status.code()),
             message: grpc_status.message().to_string(),
         }),
-        // A deadline below the protocol maximum is one the request's allowance
-        // imposed, so exceeding it means the request ran out of cycles to pay for
-        // more time rather than that the server was slow.
-        Err(_deadline) if max_response_time < MAX_RESPONSE_TIME => Err(CanisterHttpReject {
-            reject_code: RejectCode::CanisterReject,
-            message: "Insufficient cycles".to_string(),
-        }),
-        Err(_deadline) => Err(CanisterHttpReject {
-            reject_code: RejectCode::SysTransient,
-            message: "Deadline Exceeded".to_string(),
-        }),
+        // A deadline below the protocol maximum that the caller didn't set is one
+        // the request's allowance imposed, so exceeding it means the request ran out
+        // of cycles to pay for more time rather than that the server was slow.
+        Err(_deadline)
+            if response_time_limit == max_response_time
+                && max_response_time < MAX_RESPONSE_TIME =>
+        {
+            Err(CanisterHttpReject {
+                reject_code: RejectCode::CanisterReject,
+                message: "Insufficient cycles".to_string(),
+            })
+        }
+        Err(_deadline) => Err(deadline_exceeded()),
     };
 
     // Every attempt occupied the adapter for `elapsed`, whether or not it got as
@@ -582,6 +598,13 @@ async fn transform_adapter_response(
     }
 }
 
+fn deadline_exceeded() -> CanisterHttpReject {
+    CanisterHttpReject {
+        reject_code: RejectCode::SysTransient,
+        message: "Deadline Exceeded".to_string(),
+    }
+}
+
 pub fn grpc_status_code_to_reject(code: Code) -> RejectCode {
     match code {
         // TODO: Is unavailable really transient
@@ -625,8 +648,8 @@ mod tests {
         },
     };
     use ic_types::{
-        canister_http::CanisterHttpMethod, messages::CallbackId, time::UNIX_EPOCH,
-        time::current_time,
+        canister_http::CanisterHttpMethod, messages::CallbackId, time::CoarseTime,
+        time::UNIX_EPOCH, time::current_time,
     };
     use std::convert::TryFrom;
     use std::time::Duration;
@@ -758,6 +781,7 @@ mod tests {
     async fn execute_mock_http_request(
         grpc_channel: Channel,
         budget: &mut dyn BudgetTracker,
+        time_until_deadline: Option<Duration>,
     ) -> Result<(HttpsOutcallResponse, NumBytes, Duration), CanisterHttpReject> {
         execute_http_request(
             &mut HttpsOutcallsServiceClient::new(grpc_channel),
@@ -767,6 +791,7 @@ mod tests {
             None,
             Vec::new(),
             budget,
+            time_until_deadline,
             None,
         )
         .await
@@ -780,7 +805,7 @@ mod tests {
             setup_adapter_mock(Err((Code::Unavailable, "adapter unavailable".to_string()))).await;
         let mut budget = RecordingTracker::with_deadline(MAX_RESPONSE_TIME);
 
-        let reject = execute_mock_http_request(grpc_channel, &mut budget)
+        let reject = execute_mock_http_request(grpc_channel, &mut budget, None)
             .await
             .expect_err("the adapter returns an error");
         assert_eq!(reject.reject_code, RejectCode::SysTransient);
@@ -801,7 +826,7 @@ mod tests {
         assert!(deadline < MAX_RESPONSE_TIME);
         let mut budget = RecordingTracker::with_deadline(deadline);
 
-        let reject = execute_mock_http_request(grpc_channel, &mut budget)
+        let reject = execute_mock_http_request(grpc_channel, &mut budget, None)
             .await
             .expect_err("the adapter never responds");
         assert_eq!(reject.reject_code, RejectCode::CanisterReject);
@@ -810,6 +835,36 @@ mod tests {
         // The elapsed time is capped at the deadline, which is exactly what a
         // timed-out attempt used.
         assert_eq!(budget.network_usage, vec![(NumBytes::from(0), deadline)]);
+    }
+
+    /// A deadline the caller set ends the call as an exceeded deadline, not a lack of
+    /// cycles, even if the allowance imposed a later deadline of its own.
+    #[tokio::test]
+    async fn test_caller_deadline_is_charged_and_reported_as_deadline_exceeded() {
+        let grpc_channel = setup_hanging_adapter_mock().await;
+        let deadline = Duration::from_millis(50);
+        let mut budget = RecordingTracker::with_deadline(MAX_RESPONSE_TIME / 2);
+
+        let reject = execute_mock_http_request(grpc_channel, &mut budget, Some(deadline))
+            .await
+            .expect_err("the adapter never responds");
+        assert_eq!(reject.reject_code, RejectCode::SysTransient);
+        assert_eq!(reject.message, "Deadline Exceeded");
+        assert_eq!(budget.network_usage, vec![(NumBytes::from(0), deadline)]);
+    }
+
+    /// A request whose deadline has already passed is not sent, so nothing is charged.
+    #[tokio::test]
+    async fn test_request_past_its_deadline_is_not_sent() {
+        let grpc_channel = setup_hanging_adapter_mock().await;
+        let mut budget = RecordingTracker::with_deadline(MAX_RESPONSE_TIME);
+
+        let reject = execute_mock_http_request(grpc_channel, &mut budget, Some(Duration::ZERO))
+            .await
+            .expect_err("the deadline has passed");
+        assert_eq!(reject.reject_code, RejectCode::SysTransient);
+        assert_eq!(reject.message, "Deadline Exceeded");
+        assert!(budget.network_usage.is_empty());
     }
 
     fn build_mock_canister_http_request(
@@ -1033,6 +1088,48 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The client stops waiting for an adapter that never responds once the request's
+    /// bounded-wait deadline has passed, long before its own limit.
+    #[tokio::test]
+    async fn test_client_stops_at_request_deadline() {
+        let mock_grpc_channel = setup_hanging_adapter_mock().await;
+        let (svc, _handle) = setup_system_query_mock();
+        let mut client = CanisterHttpAdapterClientImpl::new(
+            tokio::runtime::Handle::current(),
+            mock_grpc_channel,
+            svc,
+            100,
+            MetricsRegistry::default(),
+            no_op_logger(),
+        );
+
+        // The deadline is 100ms after the request's creation.
+        let mut request = build_mock_canister_http_request(420, None);
+        Arc::make_mut(&mut request.context.request).deadline =
+            CoarseTime::from_secs_since_unix_epoch(10);
+        request.context.time = UNIX_EPOCH + Duration::from_millis(9_900);
+        assert_eq!(client.send(request), Ok(()));
+
+        let response = tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                match client.try_receive() {
+                    Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
+                    Ok((response, _payment_receipt)) => break response,
+                }
+            }
+        })
+        .await
+        .expect("the request should end at its deadline");
+        assert_eq!(
+            response,
+            build_mock_canister_http_response_reject(
+                420,
+                RejectCode::SysTransient,
+                "Deadline Exceeded".to_string()
+            )
+        );
     }
 
     /// Test case where transformed response exceeds consensus limit.
