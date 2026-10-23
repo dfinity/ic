@@ -203,10 +203,10 @@ impl SubnetMerging {
         Ok(subnet_record)
     }
 
-    fn dashboard_url(&self, dashboard: &str) -> String {
+    fn dashboard_url(&self) -> String {
         match self.recovery.registry_helper.latest_registry_version() {
             Ok(registry_version) => format!(
-                "https://grafana.mainnet.dfinity.network/d/{dashboard}?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}&var-registry_version={}",
+                "https://grafana.mainnet.dfinity.network/d/subnet-merging?var-ic=mercury&var-ic_subnet={}&var-registry_version={}",
                 self.params.source_subnet_id, registry_version,
             ),
             Err(err) => {
@@ -215,7 +215,7 @@ impl SubnetMerging {
                     "Failed to get the latest registry version: {}", err
                 );
                 format!(
-                    "https://grafana.mainnet.dfinity.network/d/{dashboard}?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}",
+                    "https://grafana.mainnet.dfinity.network/d/subnet-merging?var-ic=mercury&var-ic_subnet={}",
                     self.params.source_subnet_id,
                 )
             }
@@ -244,7 +244,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
         if step_type == StepType::CheckMergeReadiness {
             print_url_and_ask_for_confirmation(
                 &self.logger,
-                self.dashboard_url("subnet-merging"),
+                self.dashboard_url(),
                 "The tool evaluates the merge readiness condition itself, and waits until it \
                  holds. Please check the dashboard as well, to see whether it is safe to merge \
                  the subnet",

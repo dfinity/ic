@@ -8,16 +8,16 @@ use ic_recovery::{
 
 use std::path::PathBuf;
 
-/// The file the tool records a registry version at which the subnet that is
-/// merged away is labeled "cooling down" in, i.e. the `V` of the merge
+/// The file in which the tool records a registry version at which the subnet
+/// that is merged away is labeled "cooling down", i.e. the `V` of the merge
 /// readiness condition, together with the id of that subnet.
-const COOLING_DOWN_REGISTRY_VERSION_FILE: &str = "cooling_down_registry_version";
+const COOLING_DOWN_REGISTRY_VERSION_FILE: &str = "cooling_down_registry_version.txt";
 
 #[derive(Clone)]
 /// Describes the layout of the working directory of subnet merging:
 ///
 /// |-- root/
-/// |  |-- cooling_down_registry_version
+/// |  |-- cooling_down_registry_version.txt
 pub(crate) struct Layout {
     cooling_down_registry_version: PathBuf,
 }

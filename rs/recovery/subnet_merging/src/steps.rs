@@ -15,9 +15,6 @@ use std::{
 
 /// Retries `check` until it reports success (by returning a value, which is
 /// then returned) or `timeout` elapses.
-///
-/// What the steps below use it for is the registry catching up with a proposal
-/// that `ic-admin` just reported as executed.
 fn wait_for<T>(
     what: &str,
     timeout: Duration,
@@ -113,11 +110,7 @@ pub(crate) struct CheckMergeReadinessStep {
 impl Step for CheckMergeReadinessStep {
     fn descr(&self) -> String {
         format!(
-            "Wait until subnet {} is ready to be merged, i.e. until it has come to a complete \
-             rest: every subnet has observed that it is cooling down, no message is in flight to \
-             or from it, its ingress history holds nothing but `processing` entries, its subnet \
-             queues and call context manager are empty and its refund pool holds no pending \
-             anonymous refund.",
+            "Wait until subnet {} is ready to be merged.",
             self.source_subnet_id,
         )
     }

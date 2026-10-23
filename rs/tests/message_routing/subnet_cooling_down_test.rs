@@ -14,8 +14,7 @@ assert that a subnet merge populates the ingress history properly.
 The subnet that is cooled down, i.e. the one that would be merged away, is
 called `M`; a second Application subnet `T` holds the canisters at the other
 end of `M`'s cross-subnet calls, and is the subnet the tool is told to merge
-`M` into. The tool does not get as far as merging though: it stops once `M` is
-ready to be merged.
+`M` into.
 
 The tool submits the proposal labeling `M` as "cooling down" through
 `ic-admin`, with the test neuron.
@@ -63,15 +62,16 @@ Runbook::
    `install_code` calls that are executing). The remaining three terms are
    expected to hold and are only logged; `VIOLATED_CONDITIONS` says why.
 8. Hand over to the subnet merging tool, which runs one step at a time; the
-   checks of the steps below are made in between its steps, at the points the
-   step names give. The tool labels `M` as "cooling down" and records the
-   registry version `V` at which it reads the label back
-   (`CoolDownSourceSubnet`, `CheckRegistryForCoolingDownFlag`).
+   checks of steps 9 and 11 are made in between its steps, right after the
+   step each of them names. The following steps of the tool are executed:
+   `CoolDownSourceSubnet`, which labels `M` as "cooling down", and
+   `CheckRegistryForCoolingDownFlag`, which records the registry version `V`
+   at which it reads the label back.
 9. After `CheckRegistryForCoolingDownFlag`: wait until `M` rejects ingress
    messages, and then until it rejects query calls too.
-10. The tool waits until `M` is "merge ready" for `V`, i.e. until every term of
-   the condition of step 7 holds, at `V` rather than at the version of the
-   topology snapshot (`CheckMergeReadiness`).
+10. The following step of the tool is executed: `CheckMergeReadiness`, which
+   waits until `M` is "merge ready" for `V`, i.e. until every term of the
+   condition of step 7 holds.
 11. After `CheckMergeReadiness`: check that the two loops of step 2 are
    stalled. `UT`'s iteration counter does not advance, as read via a query to
    `T`. `UM`'s counter cannot be read, as `M` rejects query calls; instead,
@@ -183,7 +183,8 @@ const CONDITIONS_BACKOFF: Duration = Duration::from_secs(5);
 const INDUCTION_TIMEOUT: Duration = Duration::from_secs(60);
 const INDUCTION_BACKOFF: Duration = Duration::from_secs(1);
 
-/// The directory the merging tool works in, relative to the test environment.
+/// The directory the merging tool works in, relative to the base directory of
+/// the test environment.
 const MERGING_DIR: &str = "subnet_merging";
 
 /// Timeout for the subnet to become "merge ready". The binding terms are the
@@ -277,12 +278,8 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    // One runtime for the whole test, kept alive across all of its phases: the
-    // agents of the phase that sets the scenario up are used again by the
-    // checks made in between the steps of the merging tool.
-    //
     // The merging tool runs on this thread, which is deliberately not inside
-    // that runtime: every registry read and every metrics scrape of the tool
+    // this runtime: every registry read and every metrics scrape of the tool
     // blocks on a runtime of its own, which a thread that is driving one cannot
     // do.
     let runtime = Runtime::new().expect("failed to create a tokio runtime");
@@ -293,9 +290,6 @@ pub fn test(env: TestEnv) {
 
 /// Everything the checks made in between the steps of the merging tool need
 /// from the phase that set the scenario up.
-///
-/// Canister ids and agents rather than `UniversalCanister`s, which borrow the
-/// agent they were created with.
 struct Context {
     logger: Logger,
     m_subnet: SubnetSnapshot,
@@ -537,7 +531,7 @@ fn cool_down(env: &TestEnv, context: &Context, runtime: &Runtime) {
                 info!(logger, "Step 10 done: subnet M is \"merge ready\"");
                 runtime.block_on(check_stalled_loops(context))
             }
-            _ => {}
+            StepType::CoolDownSourceSubnet => {}
         }
     }
 
