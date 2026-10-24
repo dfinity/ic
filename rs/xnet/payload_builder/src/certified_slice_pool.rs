@@ -1,7 +1,7 @@
 //! A pool of incoming `CertifiedStreamSlices` used by `XNetPayloadBuilderImpl`
 //! to build `XNetPayloads` without the need for I/O on the critical path.
 
-use crate::{ExpectedIndices, max_message_index};
+use crate::{ExpectedIndices, PullIndices, max_message_index};
 use header::Header;
 use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{
@@ -1109,6 +1109,29 @@ fn to_stream_index(label: &Label) -> Result<StreamIndex, InvalidSlice> {
     StreamIndex::from_label(label.as_bytes()).ok_or(NotAStreamIndex)
 }
 
+/// Slice pool soft upper limit in bytes. Actual size may go over this limit, as
+/// we're polling multiple subnets in parallel and we don't want to discard
+/// slices that we've already pulled.
+pub const POOL_BYTE_SIZE_SOFT_CAP: usize = 128 << 20;
+
+/// Hard maximum slice size in bytes. We only pool up to 8 MB (two blocks' worth
+/// of payload) from any one stream.
+pub const POOLED_SLICE_BYTE_SIZE_MAX: usize = 8 << 20;
+
+/// Divisor applied to the space left in the pool to obtain the maximum size of
+/// a pooled slice, so that a few backlogged streams cannot take over the pool.
+/// Yields `POOLED_SLICE_BYTE_SIZE_MAX` while the pool is empty, less as it
+/// fills up.
+pub const POOLED_SLICE_BYTE_SIZE_DIVISOR: usize =
+    POOL_BYTE_SIZE_SOFT_CAP / POOLED_SLICE_BYTE_SIZE_MAX;
+
+/// Reduces `slice_byte_size` to account for overhead in the `XNetEndpoint`
+/// request, which only counts message bytes (measured: 350 bytes for
+/// certification plus base witness, 2% for large payloads).
+pub fn adjusted_byte_limit(slice_byte_size: usize) -> usize {
+    slice_byte_size.saturating_sub(350) * 98 / 100
+}
+
 /// A pool of `CertifiedStreamSlices` that provides support for taking out
 /// valid certified sub-slices of arbitrary size starting from arbitrary stream
 /// indices; and maintains cached stream positions, so an asynchronous process
@@ -1369,6 +1392,50 @@ impl CertifiedSlicePool {
     /// Returns the total estimated size of the slices in the pool.
     pub fn byte_size(&self) -> usize {
         self.slices.values().map(|slice| slice.count_bytes()).sum()
+    }
+
+    /// Computes the `PullIndices` for pulling a slice from `subnet_id`;
+    /// or `None` if there is no cached stream position for it.
+    pub fn pull_indices(&self, subnet_id: SubnetId) -> Option<PullIndices> {
+        // No cached stream position, no pooling / refill necessary.
+        let (Some(stream_position), messages_begin, msg_count, byte_size) =
+            self.slice_stats(subnet_id)
+        else {
+            return None;
+        };
+
+        // Maximum byte size of any one pooled slice, applied uniformly across slices:
+        // as the pool fills up, we aim to fill what is left of it with (more, but)
+        // smaller slices.
+        let slice_byte_size_max = POOL_BYTE_SIZE_SOFT_CAP.saturating_sub(self.byte_size())
+            / POOLED_SLICE_BYTE_SIZE_DIVISOR;
+
+        let (witness_begin, msg_begin, slice_byte_limit) = match messages_begin {
+            // Existing pooled stream, pull partial slice and append.
+            Some(messages_begin) if messages_begin == stream_position.message_index => (
+                stream_position.message_index,
+                stream_position.message_index + (msg_count as u64).into(),
+                slice_byte_size_max.saturating_sub(byte_size),
+            ),
+
+            // No pooled stream, or pooled stream does not begin at cached stream position, pull
+            // complete slice from cached stream position.
+            _ => (
+                stream_position.message_index,
+                stream_position.message_index,
+                slice_byte_size_max,
+            ),
+        };
+
+        // Pull regardless of how low `slice_byte_limit` is:
+        //  * A header-only suffix may usefully replace the pooled slice's.
+        //  * A complete slice will always include the first message, if any. We rely on
+        //    this to avoid stalling streams indefinitely behind large messages.
+        Some(PullIndices {
+            witness_begin,
+            msg_begin,
+            byte_limit: adjusted_byte_limit(slice_byte_limit),
+        })
     }
 
     /// Places the provided slice into the pool, after trimming off any prefix
