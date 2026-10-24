@@ -154,6 +154,19 @@ impl Default for SystemStateModifications {
     }
 }
 
+/// Appends the given canister log records produced by an execution to the
+/// canister log of the given system state, leaving `delta_log` empty.
+pub fn append_canister_log<Metrics: CanisterLogMetrics>(
+    delta_log: &mut CanisterLog,
+    system_state: &mut SystemState,
+    metrics: &Metrics,
+) {
+    if !delta_log.is_empty() {
+        metrics.observe_delta_log_size(delta_log.bytes_used());
+    }
+    system_state.log_memory_store.append_delta_log(delta_log);
+}
+
 impl SystemStateModifications {
     /// Checks that no cycles were created during the execution of this message
     /// (unless the canister is the cycles minting canister).
@@ -391,12 +404,16 @@ impl SystemStateModifications {
         system_state: &mut SystemState,
         metrics: &Metrics,
     ) {
-        if !self.canister_log.is_empty() {
-            metrics.observe_delta_log_size(self.canister_log.bytes_used());
-        }
-        system_state
-            .log_memory_store
-            .append_delta_log(&mut self.canister_log);
+        append_canister_log(&mut self.canister_log, system_state, metrics);
+    }
+
+    /// Takes the canister log records produced by the execution, leaving the
+    /// delta log empty.
+    ///
+    /// The caller is responsible for persisting the returned canister log
+    /// records (see `append_canister_log()`).
+    pub fn take_canister_log(&mut self) -> CanisterLog {
+        self.canister_log.take()
     }
 
     /// Like `apply_canister_log()`, but appends the canister log records to
