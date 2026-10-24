@@ -77,7 +77,8 @@ use crate::{
     },
     proposal::{
         MAX_LIST_PROPOSAL_RESULTS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, TreasuryAccount,
-        ValidGenericNervousSystemFunction, get_action_auxiliary,
+        ValidGenericNervousSystemFunction, check_snapshot_is_not_about_to_be_loaded,
+        get_action_auxiliary,
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
         validate_and_render_proposal, validate_and_render_set_topics_for_custom_proposals,
         validate_registered_dapp_canister, validate_snapshot_id_of_canister,
@@ -2905,6 +2906,15 @@ impl Governance {
                 .map_err(|err| {
                     GovernanceError::new_with_message(ErrorType::InvalidProposal, err)
                 })?;
+
+            // A LoadCanisterSnapshot proposal for the snapshot that would be replaced might
+            // have been made since this proposal was made. In that case, the load wins.
+            check_snapshot_is_not_about_to_be_loaded(
+                self.proto.proposals.values(),
+                replace_snapshot,
+                "replaced",
+            )
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::PreconditionFailed, err))?;
         }
 
         let request = TakeCanisterSnapshotRequest {

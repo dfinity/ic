@@ -10,6 +10,7 @@ use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockICRC1Ledger};
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_test_utilities_types::ids::canister_test_id;
 use lazy_static::lazy_static;
+use maplit::btreemap;
 use pretty_assertions::assert_eq;
 
 lazy_static! {
@@ -66,7 +67,15 @@ fn new_env_that_expects_no_calls() -> NativeEnvironment {
 }
 
 fn new_governance(env: NativeEnvironment) -> GovernanceStruct {
+    new_governance_with_proposals(env, BTreeMap::new())
+}
+
+fn new_governance_with_proposals(
+    env: NativeEnvironment,
+    proposals: BTreeMap<u64, ProposalData>,
+) -> GovernanceStruct {
     let governance_proto = Governance {
+        proposals,
         root_canister_id: Some(ROOT_CANISTER_ID.get()),
         ledger_canister_id: Some(LEDGER_CANISTER_ID.get()),
         swap_canister_id: Some(SWAP_CANISTER_ID.get()),
@@ -95,6 +104,7 @@ fn validate_take(take_canister_snapshot: &TakeCanisterSnapshot) -> Result<String
         take_canister_snapshot,
         &new_env(),
         *ROOT_CANISTER_ID,
+        std::iter::empty(),
     )
     .now_or_never()
     .unwrap()
@@ -360,6 +370,7 @@ fn test_take_canister_snapshot_fails_when_root_cannot_list_canisters() {
         },
         &new_env_that_expects_no_calls(),
         *ROOT_CANISTER_ID,
+        std::iter::empty(),
     )
     .now_or_never()
     .unwrap();
@@ -813,5 +824,174 @@ fn test_success_value_is_kept_in_proposal_listings() {
     assert_eq!(
         proposal_data.limited_for_get_proposal().success_value,
         success_value
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Snapshots that are about to be loaded must not be replaced
+// ---------------------------------------------------------------------------
+
+/// A proposal to load the given snapshot, in the given state.
+fn load_proposal(id: u64, snapshot_id: Vec<u8>, status: ProposalDecisionStatus) -> ProposalData {
+    let action = Action::LoadCanisterSnapshot(LoadCanisterSnapshot {
+        canister_id: Some(DAPP_CANISTER_ID.get()),
+        snapshot_id: Some(snapshot_id),
+    });
+    let yes = Tally {
+        yes: 1,
+        no: 0,
+        total: 1,
+        timestamp_seconds: 1,
+    };
+    let no = Tally {
+        yes: 0,
+        no: 1,
+        total: 1,
+        timestamp_seconds: 1,
+    };
+    let (
+        latest_tally,
+        decided_timestamp_seconds,
+        executed_timestamp_seconds,
+        failed_timestamp_seconds,
+    ) = match status {
+        ProposalDecisionStatus::Open => (None, 0, 0, 0),
+        ProposalDecisionStatus::Adopted => (Some(yes), 1, 0, 0),
+        ProposalDecisionStatus::Executed => (Some(yes), 1, 2, 0),
+        ProposalDecisionStatus::Failed => (Some(yes), 1, 0, 2),
+        ProposalDecisionStatus::Rejected => (Some(no), 1, 0, 0),
+        ProposalDecisionStatus::Unspecified => panic!(),
+    };
+    let proposal_data = ProposalData {
+        action: u64::from(&action),
+        id: Some(ProposalId { id }),
+        proposal: Some(Proposal {
+            action: Some(action),
+            ..Default::default()
+        }),
+        latest_tally,
+        decided_timestamp_seconds,
+        executed_timestamp_seconds,
+        failed_timestamp_seconds,
+        ..Default::default()
+    };
+    assert_eq!(proposal_data.status(), status);
+    proposal_data
+}
+
+fn validate_action_with_proposals(
+    action: Action,
+    proposals: BTreeMap<u64, ProposalData>,
+) -> Result<String, String> {
+    let governance = new_governance_with_proposals(new_env(), proposals);
+    validate_and_render_action(&Some(action), &governance, vec![])
+        .now_or_never()
+        .unwrap()
+        .map(|(rendering, _action_auxiliary)| rendering)
+}
+
+/// The actions that would replace (i.e. delete) the given snapshot.
+fn actions_that_replace(snapshot_id: Vec<u8>) -> Vec<Action> {
+    vec![
+        Action::TakeCanisterSnapshot(TakeCanisterSnapshot {
+            canister_id: Some(DAPP_CANISTER_ID.get()),
+            replace_snapshot: Some(snapshot_id.clone()),
+        }),
+        Action::UpgradeSnsControlledCanister(upgrade_with(Some(TakeSnapshotBeforeUpgrade {
+            replace_snapshot: Some(snapshot_id),
+        }))),
+    ]
+}
+
+#[test]
+fn test_replace_snapshot_is_refused_while_a_load_of_it_is_pending() {
+    let _enabled = crate::temporarily_enable_canister_snapshot_proposals();
+    let snapshot = snapshot_id(*DAPP_CANISTER_ID, 5);
+
+    for action in actions_that_replace(snapshot.clone()) {
+        for status in [
+            ProposalDecisionStatus::Open,
+            ProposalDecisionStatus::Adopted,
+        ] {
+            let result = validate_action_with_proposals(
+                action.clone(),
+                btreemap! { 7 => load_proposal(7, snapshot.clone(), status) },
+            );
+
+            assert_err_contains(
+                result,
+                &[
+                    &format!(
+                        "The snapshot `{}` ({}-5) cannot be replaced",
+                        hex::encode(&snapshot),
+                        *DAPP_CANISTER_ID,
+                    ),
+                    "because it would be loaded by proposal(s) 7, which have not been executed yet",
+                ],
+            );
+        }
+    }
+}
+
+#[test]
+fn test_replace_snapshot_is_allowed_once_the_load_is_no_longer_pending() {
+    let _enabled = crate::temporarily_enable_canister_snapshot_proposals();
+    let snapshot = snapshot_id(*DAPP_CANISTER_ID, 5);
+    let other_snapshot = snapshot_id(*DAPP_CANISTER_ID, 6);
+
+    for action in actions_that_replace(snapshot.clone()) {
+        for status in [
+            ProposalDecisionStatus::Executed,
+            ProposalDecisionStatus::Failed,
+            ProposalDecisionStatus::Rejected,
+        ] {
+            let result = validate_action_with_proposals(
+                action.clone(),
+                btreemap! { 7 => load_proposal(7, snapshot.clone(), status) },
+            );
+            assert!(result.is_ok(), "{action:?} {status:?}: {result:?}");
+        }
+
+        // A pending load of a different snapshot does not matter either.
+        let result = validate_action_with_proposals(
+            action.clone(),
+            btreemap! { 7 => load_proposal(7, other_snapshot.clone(), ProposalDecisionStatus::Open) },
+        );
+        assert!(result.is_ok(), "{action:?}: {result:?}");
+    }
+}
+
+#[test]
+fn test_pending_proposals_that_load_snapshot() {
+    let snapshot = snapshot_id(*DAPP_CANISTER_ID, 5);
+    let proposals = btreemap! {
+        1 => load_proposal(1, snapshot.clone(), ProposalDecisionStatus::Open),
+        2 => load_proposal(2, snapshot.clone(), ProposalDecisionStatus::Adopted),
+        3 => load_proposal(3, snapshot.clone(), ProposalDecisionStatus::Executed),
+        4 => load_proposal(4, snapshot.clone(), ProposalDecisionStatus::Failed),
+        5 => load_proposal(5, snapshot.clone(), ProposalDecisionStatus::Rejected),
+        6 => load_proposal(6, snapshot_id(*DAPP_CANISTER_ID, 6), ProposalDecisionStatus::Open),
+        // Not a load at all.
+        7 => ProposalData {
+            id: Some(ProposalId { id: 7 }),
+            proposal: Some(Proposal {
+                action: Some(take_action()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    };
+
+    assert_eq!(
+        pending_proposals_that_load_snapshot(proposals.values(), &snapshot),
+        vec![1, 2],
+    );
+    assert_eq!(
+        check_snapshot_is_not_about_to_be_loaded(
+            proposals.values(),
+            &snapshot_id(*DAPP_CANISTER_ID, 99),
+            "replaced"
+        ),
+        Ok(()),
     );
 }

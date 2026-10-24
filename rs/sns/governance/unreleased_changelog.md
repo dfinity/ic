@@ -22,6 +22,10 @@ on the process that this file is part of, see
   Root does not support snapshots yet), the proposal fails and the canister is not upgraded. The
   canister can later be restored to its pre-upgrade state with `LoadCanisterSnapshot`. Also only
   available as a preview for now.
+* A `TakeCanisterSnapshot` or `UpgradeSnsControlledCanister` proposal whose `replace_snapshot` is a
+  snapshot that a pending (open, or adopted but not yet executed) `LoadCanisterSnapshot` proposal
+  would load is refused, both when it is submitted and when it is executed. That way, a rollback
+  cannot lose its snapshot to a concurrent replacement.
 
 ## Changed
 

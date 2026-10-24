@@ -408,6 +408,13 @@ pub(crate) async fn validate_and_render_action(
             validate_and_render_manage_nervous_system_parameters(manage, current_parameters)
         }
         Action::UpgradeSnsControlledCanister(upgrade) => {
+            if let Some(TakeSnapshotBeforeUpgrade {
+                replace_snapshot: Some(replace_snapshot),
+            }) = &upgrade.take_canister_snapshot
+            {
+                check_snapshot_is_not_about_to_be_loaded(proposals, replace_snapshot, "replaced")
+                    .map_err(|err| format!("UpgradeSnsControlledCanister was invalid: {err}"))?;
+            }
             validate_and_render_upgrade_sns_controlled_canister(upgrade, env, root_canister_id)
                 .await
         }
@@ -512,6 +519,7 @@ pub(crate) async fn validate_and_render_action(
                 take_canister_snapshot,
                 env,
                 root_canister_id,
+                proposals,
             )
             .await
         }
@@ -1391,11 +1399,66 @@ fn render_snapshot_id(snapshot_id: &[u8]) -> String {
 const SNAPSHOT_CONTENTS_EXPLANATION: &str = "A snapshot holds a canister's Wasm module, \
     (heap and stable) memory, and chunk store, but not its settings, controllers, or cycles.";
 
+/// Returns the IDs of the proposals that would load the given snapshot, and that have not been
+/// executed yet (i.e. that are still open, or that have been adopted, but not executed yet).
+///
+/// (A snapshot ID embeds the ID of the canister, so this only finds loads into that canister.)
+pub(crate) fn pending_proposals_that_load_snapshot<'a>(
+    proposals: impl Iterator<Item = &'a ProposalData>,
+    snapshot_id: &[u8],
+) -> Vec<u64> {
+    proposals
+        .filter(|proposal_data| {
+            matches!(
+                proposal_data.status(),
+                ProposalDecisionStatus::Open | ProposalDecisionStatus::Adopted
+            )
+        })
+        .filter(|proposal_data| {
+            matches!(
+                proposal_data.proposal.as_ref().and_then(|proposal| proposal.action.as_ref()),
+                Some(Action::LoadCanisterSnapshot(LoadCanisterSnapshot {
+                    snapshot_id: Some(loaded_snapshot_id),
+                    ..
+                })) if loaded_snapshot_id.as_slice() == snapshot_id
+            )
+        })
+        .filter_map(|proposal_data| proposal_data.id.map(|id| id.id))
+        .collect()
+}
+
+/// Returns an error if a pending proposal would load the given snapshot, which is about to be
+/// removed (e.g. "replaced" or "deleted", as described by `removal`). This avoids a race, where
+/// the snapshot disappears before it can be loaded (e.g. to roll back an upgrade that went
+/// wrong): the load wins.
+pub(crate) fn check_snapshot_is_not_about_to_be_loaded<'a>(
+    proposals: impl Iterator<Item = &'a ProposalData>,
+    snapshot_id: &[u8],
+    removal: &str,
+) -> Result<(), String> {
+    let proposal_ids = pending_proposals_that_load_snapshot(proposals, snapshot_id);
+    if proposal_ids.is_empty() {
+        return Ok(());
+    }
+
+    Err(format!(
+        "The snapshot {} cannot be {removal}, because it would be loaded by proposal(s) {}, \
+         which have not been executed yet.",
+        render_snapshot_id(snapshot_id),
+        proposal_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+    ))
+}
+
 /// Validates and renders a proposal with action TakeCanisterSnapshot.
-async fn validate_and_render_take_canister_snapshot(
+async fn validate_and_render_take_canister_snapshot<'a>(
     take_canister_snapshot: &TakeCanisterSnapshot,
     env: &dyn Environment,
     root_canister_id: CanisterId,
+    proposals: impl Iterator<Item = &'a ProposalData>,
 ) -> Result<String, String> {
     let TakeCanisterSnapshot {
         canister_id,
@@ -1408,6 +1471,8 @@ async fn validate_and_render_take_canister_snapshot(
     let canister_id = validate_snapshot_target_canister_id(canister_id).map_err(invalid)?;
     if let Some(replace_snapshot) = replace_snapshot {
         validate_snapshot_id_of_canister("replace_snapshot", replace_snapshot, canister_id)
+            .map_err(invalid)?;
+        check_snapshot_is_not_about_to_be_loaded(proposals, replace_snapshot, "replaced")
             .map_err(invalid)?;
     }
     validate_registered_dapp_canister(env, root_canister_id, canister_id)

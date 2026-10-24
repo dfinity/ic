@@ -972,3 +972,144 @@ fn test_load_canister_snapshot_refuses_non_dapp_target() {
     );
     assert_eq!(method_names(&calls), vec!["list_sns_canisters"]);
 }
+
+// ---------------------------------------------------------------------------
+// Snapshots that are about to be loaded must not be replaced
+// ---------------------------------------------------------------------------
+
+/// A LoadCanisterSnapshot proposal that is still open (i.e. was made after the proposal under
+/// test was adopted).
+fn open_load_proposal(id: u64, snapshot_id: Vec<u8>) -> ProposalData {
+    let proposal_data = ProposalData {
+        id: Some(ProposalId { id }),
+        // Not decided yet.
+        ballots: btreemap! {},
+        ..ready_to_execute(load_action(*DAPP_CANISTER_ID, snapshot_id))
+    };
+    assert_eq!(proposal_data.status(), ProposalDecisionStatus::Open);
+    proposal_data
+}
+
+#[test]
+fn test_take_canister_snapshot_does_not_replace_snapshot_that_is_about_to_be_loaded() {
+    // Step 1: Prepare the world.
+    let (env, calls) = RecordingEnvironment::new(vec![
+        ("list_sns_canisters", list_sns_canisters_reply()),
+        ("take_canister_snapshot", take_canister_snapshot_reply_ok(8)),
+    ]);
+    let snapshot = snapshot_id(*DAPP_CANISTER_ID, 2);
+    let action = take_action(*DAPP_CANISTER_ID, Some(snapshot.clone()));
+    let mut governance = new_governance(
+        btreemap! {
+            PROPOSAL_ID => ready_to_execute(action),
+            2 => open_load_proposal(2, snapshot),
+        },
+        env,
+    );
+
+    // Step 2: Run the code under test.
+    let proposal_data = execute_proposal(&mut governance, PROPOSAL_ID);
+
+    // Step 3: Inspect results: the load wins.
+    assert_failed_with(
+        &proposal_data,
+        ErrorType::PreconditionFailed,
+        &["cannot be replaced", "would be loaded by proposal(s) 2"],
+    );
+    assert_eq!(proposal_data.success_value, None);
+    assert_eq!(method_names(&calls), vec!["list_sns_canisters"]);
+}
+
+#[test]
+fn test_upgrade_does_not_replace_snapshot_that_is_about_to_be_loaded() {
+    // Step 1: Prepare the world.
+    let (env, calls) = RecordingEnvironment::new(vec![
+        (
+            "get_sns_canisters_summary",
+            get_sns_canisters_summary_reply(),
+        ),
+        ("take_canister_snapshot", take_canister_snapshot_reply_ok(8)),
+        ("change_canister", Ok(Encode!().unwrap())),
+    ]);
+    let snapshot = snapshot_id(*DAPP_CANISTER_ID, 2);
+    let action = upgrade_action(Some(TakeSnapshotBeforeUpgrade {
+        replace_snapshot: Some(snapshot.clone()),
+    }));
+    let mut governance = new_governance(
+        btreemap! {
+            PROPOSAL_ID => ready_to_execute(action),
+            2 => open_load_proposal(2, snapshot),
+        },
+        env,
+    );
+
+    // Step 2: Run the code under test.
+    let proposal_data = execute_proposal(&mut governance, PROPOSAL_ID);
+
+    // Step 3: Inspect results: neither a snapshot, nor an upgrade.
+    assert_failed_with(
+        &proposal_data,
+        ErrorType::PreconditionFailed,
+        &[
+            "was not upgraded",
+            "cannot be replaced",
+            "would be loaded by proposal(s) 2",
+        ],
+    );
+    assert_eq!(proposal_data.success_value, None);
+    assert_eq!(method_names(&calls), vec!["get_sns_canisters_summary"]);
+}
+
+#[test]
+fn test_replace_snapshot_goes_ahead_once_the_load_has_settled() {
+    let snapshot = snapshot_id(*DAPP_CANISTER_ID, 2);
+    for (executed_timestamp_seconds, failed_timestamp_seconds) in [(2, 0), (0, 2)] {
+        // Step 1: Prepare the world: the load has been executed (or has failed).
+        let settled_load_proposal = ProposalData {
+            id: Some(ProposalId { id: 2 }),
+            decided_timestamp_seconds: 1,
+            executed_timestamp_seconds,
+            failed_timestamp_seconds,
+            latest_tally: Some(Tally {
+                yes: 1,
+                no: 0,
+                total: 1,
+                timestamp_seconds: 1,
+            }),
+            ..ready_to_execute(load_action(*DAPP_CANISTER_ID, snapshot.clone()))
+        };
+        let (env, calls) = RecordingEnvironment::new(vec![
+            (
+                "get_sns_canisters_summary",
+                get_sns_canisters_summary_reply(),
+            ),
+            ("take_canister_snapshot", take_canister_snapshot_reply_ok(8)),
+            ("change_canister", Ok(Encode!().unwrap())),
+        ]);
+        let action = upgrade_action(Some(TakeSnapshotBeforeUpgrade {
+            replace_snapshot: Some(snapshot.clone()),
+        }));
+        let mut governance = new_governance(
+            btreemap! {
+                PROPOSAL_ID => ready_to_execute(action),
+                2 => settled_load_proposal,
+            },
+            env,
+        );
+
+        // Step 2: Run the code under test.
+        let proposal_data = execute_proposal(&mut governance, PROPOSAL_ID);
+
+        // Step 3: Inspect results.
+        assert_eq!(
+            proposal_data.status(),
+            ProposalDecisionStatus::Executed,
+            "{proposal_data:#?}"
+        );
+        assert_eq!(proposal_data.success_value, expected_success_value(8));
+        assert_eq!(
+            arg_of(&calls, "take_canister_snapshot"),
+            expected_take_canister_snapshot_arg(Some(snapshot.clone())),
+        );
+    }
+}
