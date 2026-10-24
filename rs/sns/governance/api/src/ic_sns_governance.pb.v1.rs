@@ -429,6 +429,30 @@ pub mod upgrade_sns_controlled_canister {
         pub wasm_memory_persistence: Option<i32>,
     }
 }
+/// A proposal to take a snapshot of a dapp canister that is registered with the
+/// SNS. A snapshot holds the canister's Wasm module, (heap and stable) memory,
+/// and chunk store, but not its settings, controllers, or cycles.
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TakeCanisterSnapshot {
+    /// The dapp canister to take a snapshot of.
+    pub canister_id: Option<PrincipalId>,
+    /// If set, the existing snapshot (of the same canister) with this ID is
+    /// replaced by the new one.
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub replace_snapshot: Option<Vec<u8>>,
+}
+/// A proposal to load a snapshot into the dapp canister that it was taken from.
+/// This rolls the canister back to its code and memory at the time when the
+/// snapshot was taken. Everything that the canister did since then (e.g. data
+/// that it stored) is lost.
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct LoadCanisterSnapshot {
+    /// The dapp canister to restore.
+    pub canister_id: Option<PrincipalId>,
+    /// The ID of the snapshot to load. It must be a snapshot of canister_id.
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub snapshot_id: Option<Vec<u8>>,
+}
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -786,6 +810,14 @@ pub mod proposal {
         ///
         /// Id = 19.
         UpgradeExtension(super::UpgradeExtension),
+        /// Take a snapshot of a dapp canister.
+        ///
+        /// Id = 20.
+        TakeCanisterSnapshot(super::TakeCanisterSnapshot),
+        /// Load a snapshot into a dapp canister.
+        ///
+        /// Id = 21.
+        LoadCanisterSnapshot(super::LoadCanisterSnapshot),
     }
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -1102,6 +1134,27 @@ pub struct ProposalData {
     /// MAX_EXECUTION_REPLY_LEN_BYTES (5 KB).
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub execution_reply: Option<Vec<u8>>,
+    /// A value produced by executing this proposal. Not all proposal types
+    /// produce a value; for those that don't, this field is not set.
+    ///
+    /// For TakeCanisterSnapshot, this describes the snapshot that was taken.
+    pub success_value: Option<SuccessfulProposalExecutionValue>,
+}
+/// A value produced by successfully executing (part of) a proposal.
+#[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SuccessfulProposalExecutionValue {
+    TakeCanisterSnapshot(TakeCanisterSnapshotOk),
+}
+/// Describes a canister snapshot that was taken while executing a proposal.
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TakeCanisterSnapshotOk {
+    /// The ID of the new snapshot. This can be used in LoadCanisterSnapshot.
+    #[serde(with = "serde_bytes")]
+    pub snapshot_id: Vec<u8>,
+    /// When the snapshot was taken, in nanoseconds since the UNIX epoch.
+    pub taken_at_timestamp: u64,
+    /// The size of the snapshot, in bytes.
+    pub total_size: u64,
 }
 /// Nested message and enum types in `ProposalData`.
 pub mod proposal_data {

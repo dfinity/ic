@@ -98,6 +98,8 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     NativeAction::UpgradeSnsControlledCanister as u64,
                     NativeAction::RegisterDappCanisters as u64,
                     NativeAction::ManageDappCanisterSettings as u64,
+                    NativeAction::TakeCanisterSnapshot as u64,
+                    NativeAction::LoadCanisterSnapshot as u64,
                 ],
             },
             extension_operations: vec![],

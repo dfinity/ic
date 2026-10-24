@@ -9,6 +9,13 @@ on the process that this file is part of, see
 
 ## Added
 
+* New proposal types `TakeCanisterSnapshot` and `LoadCanisterSnapshot` (topic: Dapp canister
+  management), the SNS counterparts of the NNS proposals with the same names. They can only
+  target registered dapp canisters, and a snapshot ID must belong to the target canister. A
+  successful `TakeCanisterSnapshot` records the new snapshot in the new `ProposalData` field
+  `success_value`. For now, these proposals are only available as a preview (in builds with
+  `feature = "test"`).
+
 ## Changed
 
 ## Deprecated

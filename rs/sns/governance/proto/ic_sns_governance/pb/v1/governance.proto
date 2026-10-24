@@ -399,6 +399,30 @@ message UpgradeSnsControlledCanister {
   optional CanisterUpgradeOptions canister_upgrade_options = 6;
 }
 
+// A proposal to take a snapshot of a dapp canister that is registered with the
+// SNS. A snapshot holds the canister's Wasm module, (heap and stable) memory,
+// and chunk store, but not its settings, controllers, or cycles.
+message TakeCanisterSnapshot {
+  // The dapp canister to take a snapshot of.
+  ic_base_types.pb.v1.PrincipalId canister_id = 1;
+
+  // If set, the existing snapshot (of the same canister) with this ID is
+  // replaced by the new one.
+  optional bytes replace_snapshot = 2;
+}
+
+// A proposal to load a snapshot into the dapp canister that it was taken from.
+// This rolls the canister back to its code and memory at the time when the
+// snapshot was taken. Everything that the canister did since then (e.g. data
+// that it stored) is lost.
+message LoadCanisterSnapshot {
+  // The dapp canister to restore.
+  ic_base_types.pb.v1.PrincipalId canister_id = 1;
+
+  // The ID of the snapshot to load. It must be a snapshot of canister_id.
+  optional bytes snapshot_id = 2;
+}
+
 // A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 // target principal.
 message TransferSnsTreasuryFunds {
@@ -779,6 +803,16 @@ message Proposal {
     //
     // Id = 19.
     UpgradeExtension upgrade_extension = 23;
+
+    // Take a snapshot of a dapp canister.
+    //
+    // Id = 20.
+    TakeCanisterSnapshot take_canister_snapshot = 24;
+
+    // Load a snapshot into a dapp canister.
+    //
+    // Id = 21.
+    LoadCanisterSnapshot load_canister_snapshot = 25;
   }
 }
 
@@ -1128,6 +1162,31 @@ message ProposalData {
   // ExecuteGenericNervousSystemFunction call, truncated to at most
   // MAX_EXECUTION_REPLY_LEN_BYTES (5 KB).
   optional bytes execution_reply = 26;
+
+  // A value produced by executing this proposal. Not all proposal types
+  // produce a value; for those that don't, this field is not set.
+  //
+  // For TakeCanisterSnapshot, this describes the snapshot that was taken.
+  optional SuccessfulProposalExecutionValue success_value = 27;
+}
+
+// A value produced by successfully executing (part of) a proposal.
+message SuccessfulProposalExecutionValue {
+  oneof proposal_type {
+    TakeCanisterSnapshotOk take_canister_snapshot = 1;
+  }
+}
+
+// Describes a canister snapshot that was taken while executing a proposal.
+message TakeCanisterSnapshotOk {
+  // The ID of the new snapshot. This can be used in LoadCanisterSnapshot.
+  bytes snapshot_id = 1;
+
+  // When the snapshot was taken, in nanoseconds since the UNIX epoch.
+  uint64 taken_at_timestamp = 2;
+
+  // The size of the snapshot, in bytes.
+  uint64 total_size = 3;
 }
 
 message Valuation {

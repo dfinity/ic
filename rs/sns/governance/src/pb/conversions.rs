@@ -492,6 +492,42 @@ impl From<pb_api::UpgradeSnsControlledCanister> for pb::UpgradeSnsControlledCani
     }
 }
 
+impl From<pb::TakeCanisterSnapshot> for pb_api::TakeCanisterSnapshot {
+    fn from(item: pb::TakeCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            replace_snapshot: item.replace_snapshot,
+        }
+    }
+}
+
+impl From<pb_api::TakeCanisterSnapshot> for pb::TakeCanisterSnapshot {
+    fn from(item: pb_api::TakeCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            replace_snapshot: item.replace_snapshot,
+        }
+    }
+}
+
+impl From<pb::LoadCanisterSnapshot> for pb_api::LoadCanisterSnapshot {
+    fn from(item: pb::LoadCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            snapshot_id: item.snapshot_id,
+        }
+    }
+}
+
+impl From<pb_api::LoadCanisterSnapshot> for pb::LoadCanisterSnapshot {
+    fn from(item: pb_api::LoadCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            snapshot_id: item.snapshot_id,
+        }
+    }
+}
+
 impl From<pb::TransferSnsTreasuryFunds> for pb_api::TransferSnsTreasuryFunds {
     fn from(item: pb::TransferSnsTreasuryFunds) -> Self {
         Self {
@@ -1032,6 +1068,12 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::UpgradeExtension(v) => {
                 pb_api::proposal::Action::UpgradeExtension(v.into())
             }
+            pb::proposal::Action::TakeCanisterSnapshot(v) => {
+                pb_api::proposal::Action::TakeCanisterSnapshot(v.into())
+            }
+            pb::proposal::Action::LoadCanisterSnapshot(v) => {
+                pb_api::proposal::Action::LoadCanisterSnapshot(v.into())
+            }
         }
     }
 }
@@ -1094,6 +1136,12 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             }
             pb_api::proposal::Action::UpgradeExtension(v) => {
                 pb::proposal::Action::UpgradeExtension(v.into())
+            }
+            pb_api::proposal::Action::TakeCanisterSnapshot(v) => {
+                pb::proposal::Action::TakeCanisterSnapshot(v.into())
+            }
+            pb_api::proposal::Action::LoadCanisterSnapshot(v) => {
+                pb::proposal::Action::LoadCanisterSnapshot(v.into())
             }
         }
     }
@@ -1329,6 +1377,10 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
             topic: item.topic.and_then(topic_id_to_api),
             execution_reply: item.execution_reply,
+            success_value: item
+                .success_value
+                .and_then(|success_value| success_value.proposal_type)
+                .map(pb_api::SuccessfulProposalExecutionValue::from),
         }
     }
 }
@@ -1363,6 +1415,57 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
             topic: item.topic.map(|topic| i32::from(pb::Topic::from(topic))),
             execution_reply: item.execution_reply,
+            success_value: item
+                .success_value
+                .map(pb::SuccessfulProposalExecutionValue::from),
+        }
+    }
+}
+
+impl From<pb::successful_proposal_execution_value::ProposalType>
+    for pb_api::SuccessfulProposalExecutionValue
+{
+    fn from(item: pb::successful_proposal_execution_value::ProposalType) -> Self {
+        match item {
+            pb::successful_proposal_execution_value::ProposalType::TakeCanisterSnapshot(v) => {
+                pb_api::SuccessfulProposalExecutionValue::TakeCanisterSnapshot(v.into())
+            }
+        }
+    }
+}
+
+impl From<pb_api::SuccessfulProposalExecutionValue> for pb::SuccessfulProposalExecutionValue {
+    fn from(item: pb_api::SuccessfulProposalExecutionValue) -> Self {
+        let proposal_type = match item {
+            pb_api::SuccessfulProposalExecutionValue::TakeCanisterSnapshot(v) => {
+                pb::successful_proposal_execution_value::ProposalType::TakeCanisterSnapshot(
+                    v.into(),
+                )
+            }
+        };
+
+        Self {
+            proposal_type: Some(proposal_type),
+        }
+    }
+}
+
+impl From<pb::TakeCanisterSnapshotOk> for pb_api::TakeCanisterSnapshotOk {
+    fn from(item: pb::TakeCanisterSnapshotOk) -> Self {
+        Self {
+            snapshot_id: item.snapshot_id,
+            taken_at_timestamp: item.taken_at_timestamp,
+            total_size: item.total_size,
+        }
+    }
+}
+
+impl From<pb_api::TakeCanisterSnapshotOk> for pb::TakeCanisterSnapshotOk {
+    fn from(item: pb_api::TakeCanisterSnapshotOk) -> Self {
+        Self {
+            snapshot_id: item.snapshot_id,
+            taken_at_timestamp: item.taken_at_timestamp,
+            total_size: item.total_size,
         }
     }
 }

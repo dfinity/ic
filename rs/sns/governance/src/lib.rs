@@ -45,6 +45,33 @@ pub fn temporarily_disable_sns_extensions() -> Temporary {
     Temporary::new(&SNS_EXTENSIONS_ENABLED, false)
 }
 
+// Canister snapshot proposals are currently available only as a preview (i.e. in builds with
+// feature = "test"; see rs/nervous_system/feature_test.md). To make them generally available,
+// initialize this to true (and later, delete the flag).
+//
+// This covers the TakeCanisterSnapshot and LoadCanisterSnapshot proposal types, as well as the
+// take_canister_snapshot field of UpgradeSnsControlledCanister. While this is false, proposals
+// that use any of them are rejected when they are submitted.
+thread_local! {
+    static ENABLE_CANISTER_SNAPSHOT_PROPOSALS: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+}
+
+pub fn are_canister_snapshot_proposals_enabled() -> bool {
+    ENABLE_CANISTER_SNAPSHOT_PROPOSALS.get()
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_canister_snapshot_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, true)
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_canister_snapshot_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, false)
+}
+
 trait Len {
     fn len(&self) -> usize;
 }
