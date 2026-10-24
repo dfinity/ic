@@ -40,3 +40,7 @@ ic-state-machine-tests = { path = "../../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../../test_utilities/load_wasm" }
 num-traits = { workspace = true }
 serde_bytes = { workspace = true }
+
+[features]
+# Test-only variant with controllable replicated block responses.
+controllable = []

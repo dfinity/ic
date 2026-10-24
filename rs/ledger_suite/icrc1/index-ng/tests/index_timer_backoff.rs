@@ -1,5 +1,5 @@
 use crate::common::{default_archive_options, install_index_ng, install_ledger};
-use candid::{Nat, Principal};
+use candid::{Encode, Nat, Principal};
 use ic_agent::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::InitArg;
@@ -99,6 +99,7 @@ fn should_adapt_timer_interval_to_ledger_activity() {
             retrieve_blocks_from_ledger_interval_seconds: None,
             min_retrieve_blocks_from_ledger_interval_seconds: None,
             max_retrieve_blocks_from_ledger_interval_seconds: None,
+            allowed_poke_callers: None,
         },
     );
 
@@ -233,6 +234,7 @@ fn should_maintain_legacy_behavior_with_min_interval_equal_to_max() {
             retrieve_blocks_from_ledger_interval_seconds: None,
             min_retrieve_blocks_from_ledger_interval_seconds: Some(10),
             max_retrieve_blocks_from_ledger_interval_seconds: Some(10),
+            allowed_poke_callers: None,
         },
     );
 
@@ -279,4 +281,71 @@ fn should_maintain_legacy_behavior_with_min_interval_equal_to_max() {
         "After continuous transaction activity the timer should stay at 10 s, got {:?}",
         wait_time
     );
+}
+
+#[test]
+fn poke_indexes_a_real_transfer_without_changing_adaptive_backoff() {
+    let env = StateMachineBuilder::new().build();
+    let a1 = common::account(1, 0);
+    let a2 = common::account(2, 0);
+    let ledger = install_ledger(
+        &env,
+        vec![(a1, INITIAL_BALANCE)],
+        default_archive_options(),
+        None,
+        minter_identity().sender().unwrap(),
+    );
+    let index = install_index_ng(
+        &env,
+        InitArg {
+            ledger_id: ledger.into(),
+            #[allow(deprecated)]
+            retrieve_blocks_from_ledger_interval_seconds: None,
+            min_retrieve_blocks_from_ledger_interval_seconds: Some(1),
+            max_retrieve_blocks_from_ledger_interval_seconds: Some(10),
+            allowed_poke_callers: Some(None),
+        },
+    );
+    let start = env.time();
+    // First poll indexes the mint at t=1. Empty polls at t=2 and t=4
+    // increase the interval to four seconds, leaving the next deadline at t=8.
+    let mut normal_deadline = start + ONE_SECOND;
+    for expected_wait in [1, 2, 4] {
+        env.set_time(normal_deadline);
+        common::run_rounds_until(&env, || {
+            get_last_wait_time(&env, index) == Duration::from_secs(expected_wait)
+                && common::status(&env, index).num_blocks_synced == Nat::from(1_u64)
+        });
+        normal_deadline = env.time() + Duration::from_secs(expected_wait);
+    }
+    env.advance_time(ONE_SECOND);
+    send_tx(&env, ledger, a1, a2);
+    assert_eq!(
+        common::status(&env, index).num_blocks_synced,
+        Nat::from(1_u64)
+    );
+    env.send_ingress(
+        PrincipalId::new_anonymous(),
+        index,
+        "poke",
+        Encode!().unwrap(),
+    );
+    common::run_rounds_until(&env, || {
+        common::status(&env, index).num_blocks_synced == Nat::from(2_u64)
+    });
+    assert!(env.time() < normal_deadline);
+    assert_eq!(
+        common::status(&env, index).num_blocks_synced,
+        Nat::from(2_u64)
+    );
+    assert_eq!(get_last_wait_time(&env, index), Duration::from_secs(4));
+    env.set_time(normal_deadline - Duration::from_millis(1));
+    for _ in 0..10 {
+        env.tick();
+    }
+    assert_eq!(get_last_wait_time(&env, index), Duration::from_secs(4));
+    env.set_time(normal_deadline);
+    common::run_rounds_until(&env, || {
+        get_last_wait_time(&env, index) == Duration::from_secs(8)
+    });
 }
