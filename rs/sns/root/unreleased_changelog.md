@@ -9,6 +9,12 @@ on the process that this file is part of, see
 
 ## Added
 
+* New methods `take_canister_snapshot` and `load_canister_snapshot`. Like
+  `change_canister`, they can only be called by SNS Governance, which uses them
+  to execute the (new) `TakeCanisterSnapshot` and `LoadCanisterSnapshot`
+  proposals, and to take a snapshot of a dapp canister right before upgrading it,
+  when an `UpgradeSnsControlledCanister` proposal asks for that.
+
 ## Changed
 
 ## Deprecated
