@@ -446,7 +446,7 @@ message TaskQueue {
   repeated ExecutionTask queue = 3;
 }
 
-// Next ID: 71
+// Next ID: 73
 message CanisterStateBits {
   reserved 1, 2, 3, 5, 6, 9, 10, 14, 16, 17, 24, 30, 35, 42, 43, 44, 47, 48, 49, 52, 53, 66;
 
@@ -468,6 +468,7 @@ message CanisterStateBits {
   uint64 http_outcalls_executed = 61;
   uint64 heartbeats_and_global_timers_executed = 62;
   uint64 instructions_executed = 63;
+  repeated CanisterToCanisterMetrics connection_metrics = 72;
   bytes certified_data = 20;
   uint64 interrupted_during_execution = 21;
   // Total cycles consumed by the canister, as a gauge: increased on prepayment
@@ -549,4 +550,10 @@ message CanisterStateBits {
   SnapshotVisibility snapshot_visibility = 64;
   // Status visibility for the canister.
   StatusVisibility status_visibility = 69;
+}
+
+message CanisterToCanisterMetrics {
+  types.v1.CanisterId sender_canister_id = 1;
+  uint64 timestamp_nanos = 2;
+  uint64 count = 3;
 }

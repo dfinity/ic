@@ -672,7 +672,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
-/// Next ID: 71
+/// Next ID: 73
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "4")]
@@ -700,6 +700,8 @@ pub struct CanisterStateBits {
     pub heartbeats_and_global_timers_executed: u64,
     #[prost(uint64, tag = "63")]
     pub instructions_executed: u64,
+    #[prost(message, repeated, tag = "72")]
+    pub connection_metrics: ::prost::alloc::vec::Vec<CanisterToCanisterMetrics>,
     #[prost(bytes = "vec", tag = "20")]
     pub certified_data: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "21")]
@@ -833,6 +835,15 @@ pub mod canister_state_bits {
         #[prost(message, tag = "13")]
         Stopped(super::CanisterStatusStopped),
     }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CanisterToCanisterMetrics {
+    #[prost(message, optional, tag = "1")]
+    pub sender_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    #[prost(uint64, tag = "2")]
+    pub timestamp_nanos: u64,
+    #[prost(uint64, tag = "3")]
+    pub count: u64,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
