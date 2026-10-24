@@ -179,6 +179,7 @@ impl UnsignedTransaction {
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct ConstructionPayloadsRequestMetadata {
     /// The memo to use for a ledger transfer.
+    /// Must not be longer than `MAX_MEMO_LENGTH_BYTES` bytes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memo: Option<Vec<u8>>,
 
