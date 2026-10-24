@@ -24,7 +24,7 @@ use ic_types::{
     },
 };
 use prometheus::{IntCounter, IntGauge, labels, opts};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashSet, btree_map::Entry};
 
 struct PerTypeMetrics {
     max_height: IntGauge,
@@ -257,17 +257,20 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
     type Mutations = Mutations;
 
     fn insert(&mut self, msg: UnvalidatedArtifact<CertificationMessage>) {
+        let height = msg.message.height();
         let hash = CertificationMessageHash::from(&msg.message);
 
-        if match hash {
-            CertificationMessageHash::Certification(_) => self
-                .unvalidated_cert_index
-                .insert(msg.message.height(), &hash),
-            CertificationMessageHash::CertificationShare(_) => self
-                .unvalidated_share_index
-                .insert(msg.message.height(), &hash),
-        } {
-            self.unvalidated.insert(hash, msg.message);
+        // Don't overwrite existing artifacts.
+        if let Entry::Vacant(entry) = self.unvalidated.entry(hash.clone()) {
+            match hash {
+                CertificationMessageHash::Certification(_) => {
+                    self.unvalidated_cert_index.insert(height, hash);
+                }
+                CertificationMessageHash::CertificationShare(_) => {
+                    self.unvalidated_share_index.insert(height, hash);
+                }
+            }
+            entry.insert(msg.message);
         }
     }
 
@@ -613,6 +616,32 @@ mod tests {
                 .unwrap();
             assert_eq!(cert_from_pool, msg_to_cert(cert_msg.clone()));
         })
+    }
+
+    #[test]
+    fn test_certification_pool_insert_duplicate_is_ignored() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let mut pool = CertificationPoolImpl::new(
+                node_test_id(0),
+                pool_config,
+                no_op_logger(),
+                MetricsRegistry::new(),
+            );
+            let height = Height::from(1);
+            let share = fake_share(height.get(), 0);
+            pool.insert(to_unvalidated(share.clone()));
+            pool.insert(to_unvalidated(share));
+
+            let cert = fake_cert(height.get());
+            pool.insert(to_unvalidated(cert.clone()));
+            pool.insert(to_unvalidated(cert));
+
+            assert_eq!(pool.unvalidated.len(), 2);
+            assert_eq!(pool.unvalidated_share_index.size(), 1);
+            assert_eq!(pool.unvalidated_cert_index.size(), 1);
+            assert_eq!(pool.unvalidated_shares_at_height(height).count(), 1);
+            assert_eq!(pool.unvalidated_certifications_at_height(height).count(), 1);
+        });
     }
 
     #[test]
