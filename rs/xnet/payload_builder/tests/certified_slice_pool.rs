@@ -1851,6 +1851,35 @@ fn pool_schedule_pending_pulls() {
     });
 }
 
+/// Tests that a header advances the peer's recorded header iff there is none, or
+/// it is ahead of it in any of `begin`, `end` or `signals_end`.
+#[test]
+fn pool_advances_recorded_peer_header() {
+    with_test_replica_logger(|log| {
+        let mut pool = CertifiedSlicePool::new(&MetricsRegistry::new(), log);
+        let header = |begin: u64, end: u64, signals_end: u64| {
+            StreamHeaderBuilder::new()
+                .begin(begin.into())
+                .end(end.into())
+                .signals_end(signals_end.into())
+                .build()
+        };
+
+        assert!(pool.advances_recorded_peer_header(SRC_SUBNET, &header(0, 0, 0)));
+
+        pool.record_peer_header(SRC_SUBNET, &header(2, 5, 3));
+        // Equal, or behind in every index.
+        assert!(!pool.advances_recorded_peer_header(SRC_SUBNET, &header(2, 5, 3)));
+        assert!(!pool.advances_recorded_peer_header(SRC_SUBNET, &header(1, 4, 2)));
+        // Ahead in any one index.
+        assert!(pool.advances_recorded_peer_header(SRC_SUBNET, &header(3, 5, 3)));
+        assert!(pool.advances_recorded_peer_header(SRC_SUBNET, &header(2, 6, 3)));
+        assert!(pool.advances_recorded_peer_header(SRC_SUBNET, &header(2, 5, 4)));
+        // Ahead in one index, behind in others.
+        assert!(pool.advances_recorded_peer_header(SRC_SUBNET, &header(1, 6, 2)));
+    });
+}
+
 /// Tests that a peer's header is recorded on every incoming slice, whether or
 /// not the slice is pooled; and that it never regresses.
 #[test_strategy::proptest(ProptestConfig::with_cases(10))]
