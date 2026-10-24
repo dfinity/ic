@@ -9444,6 +9444,7 @@ dependencies = [
  "ic-metrics",
  "ic-nns-constants",
  "ic-query-stats",
+ "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
  "ic-registry-resource-limits",
  "ic-registry-routing-table",
