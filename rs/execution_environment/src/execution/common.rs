@@ -340,6 +340,24 @@ pub(crate) fn validate_message(
     Ok(())
 }
 
+/// Returns the Wasm method a call to `method_name` executes in replicated
+/// mode: a query or composite query if the canister exports one with that
+/// name, and an update otherwise.
+pub(crate) fn replicated_call_method(canister: &CanisterState, method_name: &str) -> WasmMethod {
+    // Note that Wasm validation guarantees that a name cannot be
+    // exported multiple times as different types. So the order of
+    // checks here matters only for performance, not correctness.
+    let method = WasmMethod::Query(method_name.to_string());
+    if canister.exports_method(&method) {
+        return method;
+    }
+    let method = WasmMethod::CompositeQuery(method_name.to_string());
+    if canister.exports_method(&method) {
+        return method;
+    }
+    WasmMethod::Update(method_name.to_string())
+}
+
 /// Validates a call executed in replicated mode: the canister must be running
 /// and export the called method which must not be a composite query (composite
 /// queries cannot be called in replicated mode).
