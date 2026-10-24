@@ -494,8 +494,8 @@ impl AsErrorHelp for HypervisorError {
                 doc_link: doc_ref("slice-overrun"),
             },
             Self::MemoryAccessLimitExceeded(_) => ErrorHelp::UserError {
-                suggestion: "Try optimizing the use of stable memory so that individual \
-                messages don't need to access as much stable memory."
+                suggestion: "Try optimizing the use of memory so that individual \
+                messages don't need to access as much heap or stable memory."
                     .to_string(),
                 doc_link: doc_ref("memory-access-limit-exceeded"),
             },
