@@ -24,6 +24,7 @@ use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::ReplicaLogger;
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{ReplicatedState, canister_state::execution_state::CustomSectionType};
 use ic_types::{
     CanisterId, PrincipalId, SubnetId, UserId,
@@ -616,14 +617,29 @@ fn can_read_canister_metadata(
                 None => return Ok(()),
             };
 
-            // Only the controller can request this custom section.
+            // Controllers and subnet admins of the canister's cloud engine can
+            // request private custom sections, matching `canister_metadata`.
+            let cloud_engine = state
+                .metadata
+                .network_topology
+                .subnets()
+                .get(&state.metadata.own_subnet_id)
+                .filter(|subnet| subnet.subnet_type == SubnetType::CloudEngine);
+            let is_cloud_engine_admin =
+                cloud_engine.is_some_and(|subnet| subnet.subnet_admins.contains(&user.get()));
             if custom_section.visibility() == CustomSectionType::Private
                 && !canister.system_state.controllers.contains(&user.get())
+                && !is_cloud_engine_admin
             {
+                let subnet_admins = if cloud_engine.is_some() {
+                    " or subnet admins of its cloud engine"
+                } else {
+                    ""
+                };
                 return Err(HttpError {
                     status: StatusCode::FORBIDDEN,
                     message: format!(
-                        "Custom section {custom_section_name:.100} can only be requested by the controllers of the canister."
+                        "Custom section {custom_section_name:.100} can only be requested by the controllers of the canister{subnet_admins}."
                     ),
                 });
             }
@@ -644,8 +660,10 @@ mod test {
     use hyper::StatusCode;
     use ic_crypto_tree_hash::{Digest, Label, LabeledTree, MatchPatternPath, MixedHashTree, Path};
     use ic_metrics::MetricsRegistry;
-    use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{CanisterQueues, RefundPool, ReplicatedState, SystemMetadata};
+    use ic_replicated_state::{
+        CanisterQueues, RefundPool, ReplicatedState, SubnetTopology, SystemMetadata,
+        metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
+    };
     use ic_test_utilities_consensus::fake::Fake;
     use ic_test_utilities_state::insert_dummy_canister;
     use ic_test_utilities_types::ids::{
@@ -854,6 +872,78 @@ mod test {
             can_read_canister_metadata(&non_controller, &canister_id, "unknown-name", &state),
             Ok(())
         );
+    }
+
+    #[rstest]
+    fn subnet_admin_can_read_private_metadata_only_on_own_cloud_engine(
+        #[values(
+            SubnetType::Application,
+            SubnetType::System,
+            SubnetType::VerifiedApplication,
+            SubnetType::CloudEngine
+        )]
+        subnet_type: SubnetType,
+        #[values(APP_SUBNET_ID, NNS_SUBNET_ID)] admin_subnet_id: SubnetId,
+    ) {
+        let canister_id = canister_test_id(100);
+        let controller = user_test_id(24);
+        let admin = user_test_id(20);
+        let stranger = user_test_id(21);
+        let mut state = ReplicatedState::new(APP_SUBNET_ID, subnet_type);
+        insert_dummy_canister(&mut state, canister_id, controller.get());
+
+        // Missing subnet topology must not grant admin access.
+        assert_eq!(
+            can_read_canister_metadata(&admin, &canister_id, "candid", &state)
+                .unwrap_err()
+                .status,
+            StatusCode::FORBIDDEN
+        );
+
+        state.metadata.modify_network_topology(|topology| {
+            topology.subnets_mut().insert(
+                admin_subnet_id,
+                SubnetTopology {
+                    subnet_type,
+                    subnet_admins: [admin.get()].into(),
+                    ..Default::default()
+                },
+            );
+        });
+
+        let admin_result = can_read_canister_metadata(&admin, &canister_id, "candid", &state);
+        if subnet_type == SubnetType::CloudEngine && admin_subnet_id == APP_SUBNET_ID {
+            assert_eq!(admin_result, Ok(()));
+        } else {
+            assert_eq!(admin_result.unwrap_err().status, StatusCode::FORBIDDEN);
+        }
+
+        assert_eq!(
+            can_read_canister_metadata(&controller, &canister_id, "candid", &state),
+            Ok(())
+        );
+        let expected_message = if subnet_type == SubnetType::CloudEngine
+            && admin_subnet_id == APP_SUBNET_ID
+        {
+            "Custom section candid can only be requested by the controllers of the canister or subnet admins of its cloud engine."
+        } else {
+            "Custom section candid can only be requested by the controllers of the canister."
+        };
+        assert_eq!(
+            can_read_canister_metadata(&stranger, &canister_id, "candid", &state),
+            Err(HttpError {
+                status: StatusCode::FORBIDDEN,
+                message: expected_message.to_string(),
+            })
+        );
+        for user in [admin, stranger] {
+            for section in ["dummy", "unknown-name"] {
+                assert_eq!(
+                    can_read_canister_metadata(&user, &canister_id, section, &state),
+                    Ok(())
+                );
+            }
+        }
     }
 
     // --- verify_paths tests ---
