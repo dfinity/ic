@@ -2756,6 +2756,33 @@ impl Governance {
         let wasm = Wasm::try_from(&upgrade)
             .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
 
+        // If requested, take a snapshot first. If that does not work, do not upgrade.
+        if let Some(upgrade_sns_controlled_canister::TakeSnapshotBeforeUpgrade {
+            replace_snapshot,
+        }) = upgrade.take_canister_snapshot
+        {
+            let snapshot = self
+                .take_canister_snapshot_via_root(target_canister_id, replace_snapshot)
+                .await
+                .map_err(|err| {
+                    GovernanceError::new_with_message(
+                        err.error_type(),
+                        format!(
+                            "Canister {target_canister_id} was not upgraded, because taking a \
+                             snapshot of it beforehand failed: {}",
+                            err.error_message,
+                        ),
+                    )
+                })?;
+
+            // Record the snapshot right away, i.e. before attempting the upgrade, so that it
+            // is known even if the upgrade fails.
+            self.set_proposal_success_value(
+                proposal_id,
+                successful_proposal_execution_value::ProposalType::TakeCanisterSnapshot(snapshot),
+            );
+        }
+
         self.upgrade_non_root_canister(
             target_canister_id,
             wasm,

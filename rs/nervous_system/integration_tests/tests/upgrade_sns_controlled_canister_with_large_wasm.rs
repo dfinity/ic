@@ -197,6 +197,7 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
         mode,
         chunked_canister_wasm,
         canister_upgrade_options: _,
+        take_canister_snapshot,
     }) = action
     else {
         panic!("unexpected proposal action {action:?}");
@@ -205,6 +206,7 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
     assert_eq!(new_canister_wasm, Vec::<u8>::new()); // Deprecated field, no longer in use.
     assert_eq!(canister_upgrade_arg, None);
     assert_eq!(mode, Some(CanisterInstallMode::Upgrade as i32));
+    assert_eq!(take_canister_snapshot, None);
     let store_canister_id = assert_matches!(chunked_canister_wasm, Some(ChunkedCanisterWasm {
         wasm_module_hash: observed_wasm_module_hash,
         store_canister_id: Some(store_canister_id),

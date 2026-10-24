@@ -1900,6 +1900,7 @@ impl UpgradeSnsControlledCanister {
             mode: self.mode,
             chunked_canister_wasm: self.chunked_canister_wasm.clone(),
             canister_upgrade_options: self.canister_upgrade_options,
+            take_canister_snapshot: self.take_canister_snapshot.clone(),
         }
     }
 
@@ -1912,6 +1913,7 @@ impl UpgradeSnsControlledCanister {
             new_canister_wasm: Vec::new(),
             chunked_canister_wasm: self.chunked_canister_wasm.clone(),
             canister_upgrade_options: self.canister_upgrade_options,
+            take_canister_snapshot: self.take_canister_snapshot.clone(),
         }
     }
 }

@@ -412,6 +412,12 @@ pub struct UpgradeSnsControlledCanister {
     pub chunked_canister_wasm: Option<ChunkedCanisterWasm>,
     /// Options that only apply when mode is upgrade.
     pub canister_upgrade_options: Option<upgrade_sns_controlled_canister::CanisterUpgradeOptions>,
+    /// If set, a snapshot of the target canister is taken right before the new
+    /// code is installed. If taking the snapshot fails, the proposal fails, and
+    /// the canister is not upgraded. The ID of the new snapshot is recorded in
+    /// ProposalData.success_value, so that the canister can later be restored to
+    /// its pre-upgrade state by a LoadCanisterSnapshot proposal.
+    pub take_canister_snapshot: Option<upgrade_sns_controlled_canister::TakeSnapshotBeforeUpgrade>,
 }
 /// Nested message and enum types in `UpgradeSnsControlledCanister`.
 pub mod upgrade_sns_controlled_canister {
@@ -427,6 +433,16 @@ pub mod upgrade_sns_controlled_canister {
         /// (otherwise, the Management canister will block the upgrade). If keep is
         /// used here, then the new WASM must also have the same custom section.
         pub wasm_memory_persistence: Option<i32>,
+    }
+    #[derive(
+        Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Eq, Hash,
+    )]
+    pub struct TakeSnapshotBeforeUpgrade {
+        /// The ID of an existing snapshot of the target canister that is to be
+        /// replaced by the new snapshot. This is needed once the target canister has
+        /// reached the maximum number of snapshots allowed per canister.
+        #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+        pub replace_snapshot: Option<Vec<u8>>,
     }
 }
 /// A proposal to take a snapshot of a dapp canister that is registered with the
@@ -1137,7 +1153,10 @@ pub struct ProposalData {
     /// A value produced by executing this proposal. Not all proposal types
     /// produce a value; for those that don't, this field is not set.
     ///
-    /// For TakeCanisterSnapshot, this describes the snapshot that was taken.
+    /// For TakeCanisterSnapshot, and for UpgradeSnsControlledCanister with
+    /// take_canister_snapshot set, this describes the snapshot that was taken. In
+    /// the latter case, it is set as soon as the snapshot has been taken (i.e.
+    /// before the upgrade itself), so it is also set when the upgrade then fails.
     pub success_value: Option<SuccessfulProposalExecutionValue>,
 }
 /// A value produced by successfully executing (part of) a proposal.

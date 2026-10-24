@@ -1,4 +1,5 @@
-//! Tests for executing TakeCanisterSnapshot and LoadCanisterSnapshot proposals.
+//! Tests for executing TakeCanisterSnapshot and LoadCanisterSnapshot proposals, and
+//! UpgradeSnsControlledCanister proposals with take_canister_snapshot set.
 
 use super::*;
 use crate::{
@@ -7,7 +8,11 @@ use crate::{
         TEST_INDEX_CANISTER_ID, TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID,
         TEST_SWAP_CANISTER_ID, basic_governance_proto, execute_proposal,
     },
-    pb::sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse},
+    pb::{
+        sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse},
+        v1::upgrade_sns_controlled_canister::TakeSnapshotBeforeUpgrade,
+    },
+    sns_upgrade::{CanisterSummary, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse},
     types::test_helpers::NativeEnvironment,
 };
 use async_trait::async_trait;
@@ -106,6 +111,31 @@ fn snapshot_id(canister_id: CanisterId, local_id: u64) -> Vec<u8> {
     SnapshotId::from((canister_id, local_id)).to_vec()
 }
 
+fn summary(canister_id: CanisterId) -> CanisterSummary {
+    CanisterSummary {
+        canister_id: Some(canister_id.get()),
+        status: None,
+    }
+}
+
+/// What Root's get_sns_canisters_summary replies (used by the UpgradeSnsControlledCanister path).
+fn get_sns_canisters_summary_reply() -> CanisterCallResult {
+    Ok(Encode!(&GetSnsCanistersSummaryResponse {
+        root: Some(summary(*TEST_ROOT_CANISTER_ID)),
+        governance: Some(summary(*TEST_GOVERNANCE_CANISTER_ID)),
+        ledger: Some(summary(*TEST_LEDGER_CANISTER_ID)),
+        swap: Some(summary(*TEST_SWAP_CANISTER_ID)),
+        dapps: vec![summary(*DAPP_CANISTER_ID), summary(*OTHER_DAPP_CANISTER_ID)],
+        archives: TEST_ARCHIVES_CANISTER_IDS
+            .iter()
+            .copied()
+            .map(summary)
+            .collect(),
+        index: Some(summary(*TEST_INDEX_CANISTER_ID)),
+    })
+    .unwrap())
+}
+
 /// What Root's list_sns_canisters replies (used by the snapshot proposals).
 fn list_sns_canisters_reply() -> CanisterCallResult {
     Ok(Encode!(&ListSnsCanistersResponse {
@@ -198,7 +228,7 @@ fn new_governance(
     )
 }
 
-fn upgrade_action() -> Action {
+fn upgrade_action(take_canister_snapshot: Option<TakeSnapshotBeforeUpgrade>) -> Action {
     Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister {
         canister_id: Some(DAPP_CANISTER_ID.get()),
         new_canister_wasm: NEW_WASM.clone(),
@@ -206,7 +236,21 @@ fn upgrade_action() -> Action {
         mode: Some(CanisterInstallModeProto::Upgrade.into()),
         chunked_canister_wasm: None,
         canister_upgrade_options: None,
+        take_canister_snapshot,
     })
+}
+
+fn expected_change_canister_arg() -> Vec<u8> {
+    let mode = CanisterInstallModeV2::Upgrade(None);
+    let request = ChangeCanisterRequest::new(
+        true, // stop_before_installing
+        mode,
+        *DAPP_CANISTER_ID,
+    )
+    .with_arg(Encode!().unwrap())
+    .with_mode(mode)
+    .with_wasm(NEW_WASM.clone());
+    Encode!(&request).unwrap()
 }
 
 fn expected_take_canister_snapshot_arg(replace_snapshot: Option<Vec<u8>>) -> Vec<u8> {
@@ -259,6 +303,361 @@ fn assert_failed_with(proposal_data: &ProposalData, error_type: ErrorType, subst
             failure_reason.error_message
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// UpgradeSnsControlledCanister with take_canister_snapshot
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_upgrade_with_snapshot_takes_snapshot_then_upgrades() {
+    // Step 1: Prepare the world.
+    let (env, calls) = RecordingEnvironment::new(vec![
+        (
+            "get_sns_canisters_summary",
+            get_sns_canisters_summary_reply(),
+        ),
+        ("take_canister_snapshot", take_canister_snapshot_reply_ok(3)),
+        ("change_canister", Ok(Encode!().unwrap())),
+    ]);
+    let action = upgrade_action(Some(TakeSnapshotBeforeUpgrade {
+        replace_snapshot: None,
+    }));
+    let mut governance = new_governance(btreemap! { PROPOSAL_ID => ready_to_execute(action) }, env);
+
+    // Step 2: Run the code under test.
+    let proposal_data = execute_proposal(&mut governance, PROPOSAL_ID);
+
+    // Step 3: Inspect results.
+    assert_eq!(
+        proposal_data.status(),
+        ProposalDecisionStatus::Executed,
+        "{proposal_data:#?}"
+    );
+    assert_eq!(proposal_data.success_value, expected_success_value(3));
+
+    // The snapshot is taken before the upgrade, both via Root.
+    assert_eq!(
+        method_names(&calls),
+        vec![
+            "get_sns_canisters_summary",
+            "take_canister_snapshot",
+            "change_canister",
+        ],
+    );
+    assert_eq!(
+        arg_of(&calls, "get_sns_canisters_summary"),
+        Encode!(&GetSnsCanistersSummaryRequest {
+            update_canister_list: Some(true)
+        })
+        .unwrap(),
+    );
+    assert_eq!(
+        arg_of(&calls, "take_canister_snapshot"),
+        expected_take_canister_snapshot_arg(None),
+    );
+    // The upgrade itself is exactly the same as without a snapshot.
+    assert_eq!(
+        arg_of(&calls, "change_canister"),
+        expected_change_canister_arg()
+    );
+}
+
+/// The snapshot is recorded before change_canister is called: even if change_canister then
+/// fails, the proposal's success_value says which snapshot was taken (so that the DAO knows
+/// what to load).
+#[test]
+fn test_upgrade_with_snapshot_records_snapshot_before_change_canister() {
+    // Step 1: Prepare the world.
+    let (env, calls) = RecordingEnvironment::new(vec![
+        (
+            "get_sns_canisters_summary",
+            get_sns_canisters_summary_reply(),
+        ),
+        ("take_canister_snapshot", take_canister_snapshot_reply_ok(4)),
+        (
+            "change_canister",
+            Err((Some(5), "Root is having a bad day.".to_string())),
+        ),
+    ]);
+    let action = upgrade_action(Some(TakeSnapshotBeforeUpgrade {
+        replace_snapshot: None,
+    }));
+    let mut governance = new_governance(btreemap! { PROPOSAL_ID => ready_to_execute(action) }, env);
+
+    // Step 2: Run the code under test.
+    let proposal_data = execute_proposal(&mut governance, PROPOSAL_ID);
+
+    // Step 3: Inspect results.
+    assert_failed_with(
+        &proposal_data,
+        ErrorType::External,
+        &["Root is having a bad day."],
+    );
+    assert_eq!(proposal_data.success_value, expected_success_value(4));
+    assert_eq!(
+        method_names(&calls),
+        vec![
+            "get_sns_canisters_summary",
+            "take_canister_snapshot",
+            "change_canister",
+        ],
+    );
+}
+
+#[test]
+fn test_upgrade_with_snapshot_does_not_upgrade_when_snapshot_fails() {
+    // Step 1: Prepare the world. Root replies to take_canister_snapshot with an error, the
+    // way it does when the canister already has the maximum number of snapshots.
+    let (env, calls) = RecordingEnvironment::new(vec![
+        (
+            "get_sns_canisters_summary",
+            get_sns_canisters_summary_reply(),
+        ),
+        (
+            "take_canister_snapshot",
+            Ok(Encode!(&TakeCanisterSnapshotResponse::Err(
+                TakeCanisterSnapshotError {
+                    code: Some(5),
+                    description: "Canister has reached the maximum number of snapshots allowed."
+                        .to_string(),
+                }
+            ))
+            .unwrap()),
+        ),
+        ("change_canister", Ok(Encode!().unwrap())),
+    ]);
+    let action = upgrade_action(Some(TakeSnapshotBeforeUpgrade {
+        replace_snapshot: None,
+    }));
+    let mut governance = new_governance(btreemap! { PROPOSAL_ID => ready_to_execute(action) }, env);
+
+    // Step 2: Run the code under test.
+    let proposal_data = execute_proposal(&mut governance, PROPOSAL_ID);
+
+    // Step 3: Inspect results.
+    assert_failed_with(
+        &proposal_data,
+        ErrorType::External,
+        &[
+            &format!(
+                "Canister {} was not upgraded, because taking a snapshot of it beforehand failed",
+                *DAPP_CANISTER_ID
+            ),
+            "(error code Some(5))",
+            "Canister has reached the maximum number of snapshots allowed.",
+        ],
+    );
+    assert_eq!(proposal_data.success_value, None);
+    // Most importantly, change_canister was NOT called.
+    assert_eq!(
+        method_names(&calls),
+        vec!["get_sns_canisters_summary", "take_canister_snapshot"],
+    );
+}
+
+/// An old Root does not have take_canister_snapshot. In that case, the upgrade must not
+/// happen (rather than happen without a snapshot).
+#[test]
+fn test_upgrade_with_snapshot_fails_closed_when_root_lacks_take_canister_snapshot() {
+    // Step 1: Prepare the world. There is no scripted reply for take_canister_snapshot, so
+    // RecordingEnvironment rejects it like the replica would ("has no update method").
+    let (env, calls) = RecordingEnvironment::new(vec![
+        (
+            "get_sns_canisters_summary",
+            get_sns_canisters_summary_reply(),
+        ),
+        ("change_canister", Ok(Encode!().unwrap())),
+    ]);
+    let action = upgrade_action(Some(TakeSnapshotBeforeUpgrade {
+        replace_snapshot: None,
+    }));
+    let mut governance = new_governance(btreemap! { PROPOSAL_ID => ready_to_execute(action) }, env);
+
+    // Step 2: Run the code under test.
+    let proposal_data = execute_proposal(&mut governance, PROPOSAL_ID);
+
+    // Step 3: Inspect results.
+    assert_failed_with(
+        &proposal_data,
+        ErrorType::External,
+        &[
+            "was not upgraded",
+            "Root.take_canister_snapshot failed",
+            "has no update method 'take_canister_snapshot'",
+        ],
+    );
+    assert_eq!(proposal_data.success_value, None);
+    assert_eq!(
+        method_names(&calls),
+        vec!["get_sns_canisters_summary", "take_canister_snapshot"],
+    );
+}
+
+#[test]
+fn test_upgrade_with_snapshot_fails_closed_when_root_reply_is_garbage() {
+    let (env, calls) = RecordingEnvironment::new(vec![
+        (
+            "get_sns_canisters_summary",
+            get_sns_canisters_summary_reply(),
+        ),
+        ("take_canister_snapshot", Ok(Encode!().unwrap())),
+        ("change_canister", Ok(Encode!().unwrap())),
+    ]);
+    let action = upgrade_action(Some(TakeSnapshotBeforeUpgrade {
+        replace_snapshot: None,
+    }));
+    let mut governance = new_governance(btreemap! { PROPOSAL_ID => ready_to_execute(action) }, env);
+
+    let proposal_data = execute_proposal(&mut governance, PROPOSAL_ID);
+
+    assert_failed_with(
+        &proposal_data,
+        ErrorType::External,
+        &[
+            "was not upgraded",
+            "Could not decode the reply from Root.take_canister_snapshot",
+        ],
+    );
+    assert_eq!(
+        method_names(&calls),
+        vec!["get_sns_canisters_summary", "take_canister_snapshot"],
+    );
+}
+
+#[test]
+fn test_upgrade_with_snapshot_passes_replace_snapshot_through() {
+    // Step 1: Prepare the world.
+    let replace_snapshot = snapshot_id(*DAPP_CANISTER_ID, 1);
+    let (env, calls) = RecordingEnvironment::new(vec![
+        (
+            "get_sns_canisters_summary",
+            get_sns_canisters_summary_reply(),
+        ),
+        (
+            "take_canister_snapshot",
+            take_canister_snapshot_reply_ok(11),
+        ),
+        ("change_canister", Ok(Encode!().unwrap())),
+    ]);
+    let action = upgrade_action(Some(TakeSnapshotBeforeUpgrade {
+        replace_snapshot: Some(replace_snapshot.clone()),
+    }));
+    let mut governance = new_governance(btreemap! { PROPOSAL_ID => ready_to_execute(action) }, env);
+
+    // Step 2: Run the code under test.
+    let proposal_data = execute_proposal(&mut governance, PROPOSAL_ID);
+
+    // Step 3: Inspect results.
+    assert_eq!(
+        proposal_data.status(),
+        ProposalDecisionStatus::Executed,
+        "{proposal_data:#?}"
+    );
+    assert_eq!(proposal_data.success_value, expected_success_value(11));
+    assert_eq!(
+        arg_of(&calls, "take_canister_snapshot"),
+        expected_take_canister_snapshot_arg(Some(replace_snapshot)),
+    );
+}
+
+/// Validation already prevents this, but execution checks again, right before acting.
+#[test]
+fn test_upgrade_with_snapshot_refuses_replace_snapshot_of_other_canister() {
+    let (env, calls) = RecordingEnvironment::new(vec![
+        (
+            "get_sns_canisters_summary",
+            get_sns_canisters_summary_reply(),
+        ),
+        (
+            "take_canister_snapshot",
+            take_canister_snapshot_reply_ok(11),
+        ),
+        ("change_canister", Ok(Encode!().unwrap())),
+    ]);
+    let action = upgrade_action(Some(TakeSnapshotBeforeUpgrade {
+        replace_snapshot: Some(snapshot_id(*OTHER_DAPP_CANISTER_ID, 1)),
+    }));
+    let mut governance = new_governance(btreemap! { PROPOSAL_ID => ready_to_execute(action) }, env);
+
+    let proposal_data = execute_proposal(&mut governance, PROPOSAL_ID);
+
+    assert_failed_with(
+        &proposal_data,
+        ErrorType::InvalidProposal,
+        &["was not upgraded", "not of the target canister"],
+    );
+    assert_eq!(method_names(&calls), vec!["get_sns_canisters_summary"]);
+}
+
+/// Without take_canister_snapshot, the upgrade works exactly as before: no snapshot calls, the
+/// same change_canister call, and no success_value.
+#[test]
+fn test_upgrade_without_snapshot_is_unchanged() {
+    // Step 1: Prepare the world. Even though Root could take a snapshot, it must not be asked.
+    let (env, calls) = RecordingEnvironment::new(vec![
+        (
+            "get_sns_canisters_summary",
+            get_sns_canisters_summary_reply(),
+        ),
+        ("take_canister_snapshot", take_canister_snapshot_reply_ok(3)),
+        ("change_canister", Ok(Encode!().unwrap())),
+    ]);
+    let action = upgrade_action(None);
+    let mut governance = new_governance(btreemap! { PROPOSAL_ID => ready_to_execute(action) }, env);
+
+    // Step 2: Run the code under test.
+    let proposal_data = execute_proposal(&mut governance, PROPOSAL_ID);
+
+    // Step 3: Inspect results.
+    assert_eq!(
+        proposal_data.status(),
+        ProposalDecisionStatus::Executed,
+        "{proposal_data:#?}"
+    );
+    assert_eq!(proposal_data.success_value, None);
+    assert_eq!(
+        method_names(&calls),
+        vec!["get_sns_canisters_summary", "change_canister"],
+    );
+    assert_eq!(
+        arg_of(&calls, "change_canister"),
+        expected_change_canister_arg()
+    );
+}
+
+/// The snapshot is only taken after the existing checks pass, e.g. not for core canisters.
+#[test]
+fn test_upgrade_with_snapshot_of_non_dapp_takes_no_snapshot() {
+    let (env, calls) = RecordingEnvironment::new(vec![
+        (
+            "get_sns_canisters_summary",
+            get_sns_canisters_summary_reply(),
+        ),
+        ("take_canister_snapshot", take_canister_snapshot_reply_ok(3)),
+        ("change_canister", Ok(Encode!().unwrap())),
+    ]);
+    let action = Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister {
+        canister_id: Some(TEST_LEDGER_CANISTER_ID.get()),
+        new_canister_wasm: NEW_WASM.clone(),
+        canister_upgrade_arg: None,
+        mode: Some(CanisterInstallModeProto::Upgrade.into()),
+        chunked_canister_wasm: None,
+        canister_upgrade_options: None,
+        take_canister_snapshot: Some(TakeSnapshotBeforeUpgrade {
+            replace_snapshot: None,
+        }),
+    });
+    let mut governance = new_governance(btreemap! { PROPOSAL_ID => ready_to_execute(action) }, env);
+
+    let proposal_data = execute_proposal(&mut governance, PROPOSAL_ID);
+
+    assert_failed_with(
+        &proposal_data,
+        ErrorType::InvalidCommand,
+        &["can only upgrade dapp canisters"],
+    );
+    assert_eq!(method_names(&calls), vec!["get_sns_canisters_summary"]);
 }
 
 // ---------------------------------------------------------------------------
@@ -400,7 +799,7 @@ fn test_take_canister_snapshot_waits_for_other_upgrades() {
             total: 1,
             timestamp_seconds: 1,
         }),
-        ..ready_to_execute(upgrade_action())
+        ..ready_to_execute(upgrade_action(None))
     };
     assert_eq!(
         other_upgrade_proposal.status(),

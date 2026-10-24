@@ -522,6 +522,14 @@ pub struct UpgradeSnsControlledCanister {
     #[prost(message, optional, tag = "6")]
     pub canister_upgrade_options:
         ::core::option::Option<upgrade_sns_controlled_canister::CanisterUpgradeOptions>,
+    /// If set, a snapshot of the target canister is taken right before the new
+    /// code is installed. If taking the snapshot fails, the proposal fails, and
+    /// the canister is not upgraded. The ID of the new snapshot is recorded in
+    /// ProposalData.success_value, so that the canister can later be restored to
+    /// its pre-upgrade state by a LoadCanisterSnapshot proposal.
+    #[prost(message, optional, tag = "7")]
+    pub take_canister_snapshot:
+        ::core::option::Option<upgrade_sns_controlled_canister::TakeSnapshotBeforeUpgrade>,
 }
 /// Nested message and enum types in `UpgradeSnsControlledCanister`.
 pub mod upgrade_sns_controlled_canister {
@@ -553,6 +561,23 @@ pub mod upgrade_sns_controlled_canister {
             tag = "2"
         )]
         pub wasm_memory_persistence: ::core::option::Option<i32>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Message,
+    )]
+    pub struct TakeSnapshotBeforeUpgrade {
+        /// The ID of an existing snapshot of the target canister that is to be
+        /// replaced by the new snapshot. This is needed once the target canister has
+        /// reached the maximum number of snapshots allowed per canister.
+        #[prost(bytes = "vec", optional, tag = "1")]
+        pub replace_snapshot: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     }
 }
 /// A proposal to take a snapshot of a dapp canister that is registered with the
@@ -1657,7 +1682,10 @@ pub struct ProposalData {
     /// A value produced by executing this proposal. Not all proposal types
     /// produce a value; for those that don't, this field is not set.
     ///
-    /// For TakeCanisterSnapshot, this describes the snapshot that was taken.
+    /// For TakeCanisterSnapshot, and for UpgradeSnsControlledCanister with
+    /// take_canister_snapshot set, this describes the snapshot that was taken. In
+    /// the latter case, it is set as soon as the snapshot has been taken (i.e.
+    /// before the upgrade itself), so it is also set when the upgrade then fails.
     #[prost(message, optional, tag = "27")]
     pub success_value: ::core::option::Option<SuccessfulProposalExecutionValue>,
     /// In general, this holds data retrieved at proposal submission/creation time and used later

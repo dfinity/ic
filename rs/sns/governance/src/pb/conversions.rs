@@ -429,6 +429,9 @@ impl From<pb::UpgradeSnsControlledCanister> for pb_api::UpgradeSnsControlledCani
             canister_upgrade_options: item
                 .canister_upgrade_options
                 .map(pb_api::upgrade_sns_controlled_canister::CanisterUpgradeOptions::from),
+            take_canister_snapshot: item
+                .take_canister_snapshot
+                .map(pb_api::upgrade_sns_controlled_canister::TakeSnapshotBeforeUpgrade::from),
         }
     }
 }
@@ -488,6 +491,29 @@ impl From<pb_api::UpgradeSnsControlledCanister> for pb::UpgradeSnsControlledCani
             canister_upgrade_options: item
                 .canister_upgrade_options
                 .map(pb::upgrade_sns_controlled_canister::CanisterUpgradeOptions::from),
+            take_canister_snapshot: item
+                .take_canister_snapshot
+                .map(pb::upgrade_sns_controlled_canister::TakeSnapshotBeforeUpgrade::from),
+        }
+    }
+}
+
+impl From<pb::upgrade_sns_controlled_canister::TakeSnapshotBeforeUpgrade>
+    for pb_api::upgrade_sns_controlled_canister::TakeSnapshotBeforeUpgrade
+{
+    fn from(item: pb::upgrade_sns_controlled_canister::TakeSnapshotBeforeUpgrade) -> Self {
+        Self {
+            replace_snapshot: item.replace_snapshot,
+        }
+    }
+}
+
+impl From<pb_api::upgrade_sns_controlled_canister::TakeSnapshotBeforeUpgrade>
+    for pb::upgrade_sns_controlled_canister::TakeSnapshotBeforeUpgrade
+{
+    fn from(item: pb_api::upgrade_sns_controlled_canister::TakeSnapshotBeforeUpgrade) -> Self {
+        Self {
+            replace_snapshot: item.replace_snapshot,
         }
     }
 }

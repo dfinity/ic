@@ -7,6 +7,7 @@ use crate::{
 };
 use futures::FutureExt;
 use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockICRC1Ledger};
+use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_test_utilities_types::ids::canister_test_id;
 use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
@@ -115,6 +116,30 @@ fn validate_action(action: Action, env: NativeEnvironment) -> Result<String, Str
         .now_or_never()
         .unwrap()
         .map(|(rendering, _action_auxiliary)| rendering)
+}
+
+fn upgrade_with(
+    take_canister_snapshot: Option<TakeSnapshotBeforeUpgrade>,
+) -> UpgradeSnsControlledCanister {
+    UpgradeSnsControlledCanister {
+        canister_id: Some(DAPP_CANISTER_ID.get()),
+        new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+        canister_upgrade_arg: None,
+        mode: Some(CanisterInstallModeProto::Upgrade.into()),
+        chunked_canister_wasm: None,
+        canister_upgrade_options: None,
+        take_canister_snapshot,
+    }
+}
+
+fn validate_upgrade(upgrade: &UpgradeSnsControlledCanister) -> Result<String, String> {
+    validate_and_render_upgrade_sns_controlled_canister(
+        upgrade,
+        &new_env_that_expects_no_calls(),
+        *ROOT_CANISTER_ID,
+    )
+    .now_or_never()
+    .unwrap()
 }
 
 #[track_caller]
@@ -478,6 +503,104 @@ fn test_load_canister_snapshot_rejects_non_dapp_canisters() {
 }
 
 // ---------------------------------------------------------------------------
+// UpgradeSnsControlledCanister.take_canister_snapshot
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_upgrade_with_take_canister_snapshot_renders() {
+    let _enabled = crate::temporarily_enable_canister_snapshot_proposals();
+
+    let without_snapshot = validate_upgrade(&upgrade_with(None)).unwrap();
+    let with_snapshot = validate_upgrade(&upgrade_with(Some(TakeSnapshotBeforeUpgrade {
+        replace_snapshot: None,
+    })))
+    .unwrap();
+
+    assert_eq!(
+        with_snapshot,
+        format!(
+            "{without_snapshot}\n\
+             \n\
+             ## Snapshot before upgrade\n\
+             \n\
+             A snapshot of the canister will be taken right before the new code is installed. \
+             If taking the snapshot fails, the canister will not be upgraded. The ID of the new \
+             snapshot will be recorded in this proposal's success_value; it can be used in a \
+             LoadCanisterSnapshot proposal to restore the canister to its pre-upgrade state."
+        ),
+    );
+}
+
+#[test]
+fn test_upgrade_with_take_canister_snapshot_and_replace_snapshot_renders() {
+    let _enabled = crate::temporarily_enable_canister_snapshot_proposals();
+    let replace_snapshot = snapshot_id(*DAPP_CANISTER_ID, 9);
+
+    let rendering = validate_upgrade(&upgrade_with(Some(TakeSnapshotBeforeUpgrade {
+        replace_snapshot: Some(replace_snapshot.clone()),
+    })))
+    .unwrap();
+
+    assert!(
+        rendering.ends_with(&format!(
+            "pre-upgrade state.\n\nThe new snapshot replaces the existing snapshot `{}` ({}-9).",
+            hex::encode(&replace_snapshot),
+            *DAPP_CANISTER_ID,
+        )),
+        "{rendering}"
+    );
+}
+
+#[test]
+fn test_upgrade_without_take_canister_snapshot_renders_as_before() {
+    // The flag does not matter when take_canister_snapshot is not set.
+    for enabled in [true, false] {
+        let _flag = if enabled {
+            crate::temporarily_enable_canister_snapshot_proposals()
+        } else {
+            crate::temporarily_disable_canister_snapshot_proposals()
+        };
+
+        let rendering = validate_upgrade(&upgrade_with(None)).unwrap();
+
+        assert!(!rendering.contains("napshot"), "{rendering}");
+        assert!(rendering.ends_with("No upgrade argument."), "{rendering}");
+    }
+}
+
+#[test]
+fn test_upgrade_rejects_replace_snapshot_of_other_canister() {
+    let _enabled = crate::temporarily_enable_canister_snapshot_proposals();
+
+    let result = validate_upgrade(&upgrade_with(Some(TakeSnapshotBeforeUpgrade {
+        replace_snapshot: Some(snapshot_id(*OTHER_DAPP_CANISTER_ID, 9)),
+    })));
+
+    assert_err_contains(
+        result,
+        &[
+            "UpgradeSnsControlledCanister was invalid",
+            "take_canister_snapshot.replace_snapshot",
+            &format!("is a snapshot of canister {}", *OTHER_DAPP_CANISTER_ID),
+        ],
+    );
+}
+
+#[test]
+fn test_upgrade_rejects_malformed_replace_snapshot() {
+    let _enabled = crate::temporarily_enable_canister_snapshot_proposals();
+
+    let result = validate_upgrade(&upgrade_with(Some(TakeSnapshotBeforeUpgrade {
+        replace_snapshot: Some(vec![1, 2, 3]),
+    })));
+
+    assert_err_contains(
+        result,
+        &["take_canister_snapshot.replace_snapshot is not a valid snapshot ID"],
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Feature flag
 // ---------------------------------------------------------------------------
 
@@ -505,6 +628,12 @@ fn test_canister_snapshot_proposals_are_rejected_when_disabled() {
             new_env_that_expects_no_calls(),
         ),
         &["Canister snapshot proposals are not yet enabled"],
+    );
+    assert_err_contains(
+        validate_upgrade(&upgrade_with(Some(TakeSnapshotBeforeUpgrade {
+            replace_snapshot: None,
+        }))),
+        &["take_canister_snapshot cannot be used: Canister snapshot proposals are not yet enabled"],
     );
 }
 
@@ -636,6 +765,24 @@ fn test_canister_snapshot_actions_are_not_limited_in_proposal_listings() {
     for action in [take_action(), load_action()] {
         assert_eq!(action.limited_for_get_proposal(), action);
         assert_eq!(action.limited_for_list_proposals(), action);
+    }
+
+    // take_canister_snapshot survives the limiting of UpgradeSnsControlledCanister.
+    let upgrade = upgrade_with(Some(TakeSnapshotBeforeUpgrade {
+        replace_snapshot: Some(snapshot_id(*DAPP_CANISTER_ID, 9)),
+    }));
+    let action = Action::UpgradeSnsControlledCanister(upgrade.clone());
+    for limited in [
+        action.limited_for_get_proposal(),
+        action.limited_for_list_proposals(),
+    ] {
+        let Action::UpgradeSnsControlledCanister(limited) = limited else {
+            panic!("{limited:?}");
+        };
+        assert_eq!(
+            limited.take_canister_snapshot,
+            upgrade.take_canister_snapshot
+        );
     }
 }
 

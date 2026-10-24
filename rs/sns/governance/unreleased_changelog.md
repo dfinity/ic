@@ -15,6 +15,13 @@ on the process that this file is part of, see
   successful `TakeCanisterSnapshot` records the new snapshot in the new `ProposalData` field
   `success_value`. For now, these proposals are only available as a preview (in builds with
   `feature = "test"`).
+* New optional field `take_canister_snapshot` in `UpgradeSnsControlledCanister`. When set,
+  Governance first has Root take a snapshot of the target canister, records it in
+  `success_value`, and only then upgrades the canister. If the snapshot cannot be taken (e.g. the
+  canister already has the maximum number of snapshots, and no `replace_snapshot` was given, or
+  Root does not support snapshots yet), the proposal fails and the canister is not upgraded. The
+  canister can later be restored to its pre-upgrade state with `LoadCanisterSnapshot`. Also only
+  available as a preview for now.
 
 ## Changed
 
