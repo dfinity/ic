@@ -3943,7 +3943,6 @@ dependencies = [
  "num-bigint-dig 0.9.1",
  "num-traits",
  "object 0.37.3",
- "once_cell",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry-prometheus",
