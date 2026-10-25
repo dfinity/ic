@@ -1,11 +1,12 @@
-use byteorder::ReadBytesExt;
 use std::cmp::Ordering;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 
 /// A helper to read information from stable memory and write to a writer, using
 /// a buffer. Expects the input to be length-prefix encoded.
 pub fn read(input: &mut impl Read, output: impl Write) -> std::io::Result<u32> {
-    let prefix = input.read_u32::<byteorder::LittleEndian>()?;
+    let mut prefix = [0_u8; 4];
+    input.read_exact(&mut prefix)?;
+    let prefix = u32::from_le_bytes(prefix);
     let mut piped_bytes = 0_u32;
     let trimmed = input.take(prefix as u64);
     let mut buffered_trimmed_reader = BufReader::new(trimmed);
