@@ -14,6 +14,7 @@ use crate::{
     CanisterManager,
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
+    receiver_is_on_subnet,
 };
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
@@ -415,6 +416,19 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
         let state_reader = Arc::clone(&self.state_reader);
         let (tx, rx) = oneshot::channel();
         let canister_id = query.receiver;
+        let latest_state = state_reader.get_latest_state();
+        if !receiver_is_on_subnet(latest_state.get_ref(), canister_id) {
+            let time = latest_state.get_ref().metadata.batch_time;
+            return Box::pin(async move {
+                Ok(Ok((
+                    Err(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {canister_id} not found"),
+                    )),
+                    time,
+                )))
+            });
+        }
         let latest_certified_height_pre_schedule = state_reader.latest_certified_height();
         let http_query_handler_metrics = Arc::clone(&self.metrics);
         let enable_query_stats_tracking = self.enable_query_stats_tracking;

@@ -236,6 +236,18 @@ impl QuerySchedulerCore {
             self.scheduled.push_back(canister_id);
         }
 
+        // Keep execution statistics only while this canister has work in flight.
+        if !canister.has_queries() && canister.active_threads == 0 {
+            debug_assert!(!canister.has_been_scheduled);
+            self.canisters.remove(&canister_id);
+            if self.canisters.len() <= self.canisters.capacity() / 4 {
+                self.canisters.shrink_to(self.canisters.len() * 2);
+            }
+            if self.scheduled.len() <= self.scheduled.capacity() / 4 {
+                self.scheduled.shrink_to(self.scheduled.len() * 2);
+            }
+        }
+
         #[cfg(debug_assertions)]
         self.verify_invariants();
     }
@@ -375,5 +387,55 @@ mod tests {
         let core = scheduler.core.lock().unwrap();
         assert_eq!(2, core.metrics.queue_length.get_sample_count());
         assert_eq!(1 + 2, core.metrics.queue_length.get_sample_sum() as usize);
+    }
+
+    #[test]
+    fn completed_canisters_are_removed() {
+        let metrics_registry = MetricsRegistry::new();
+        let scheduler =
+            QuerySchedulerInternal::new(2, Duration::from_millis(100), &metrics_registry);
+
+        for id in 0..1000 {
+            scheduler.push(
+                canister_test_id(id),
+                Query(Box::new(|| DEFAULT_QUERY_DURATION)),
+            );
+        }
+        assert_eq!(scheduler.core.lock().unwrap().canisters.len(), 1000);
+
+        for _ in 0..1000 {
+            let (id, _) = scheduler.try_pop().unwrap();
+            scheduler.notify_finished_execution(id, DEFAULT_QUERY_DURATION, vec![]);
+        }
+
+        let core = scheduler.core.lock().unwrap();
+        assert!(core.canisters.is_empty());
+        assert_eq!(core.canisters.capacity(), 0);
+        assert!(core.scheduled.is_empty());
+        assert_eq!(core.scheduled.capacity(), 0);
+    }
+
+    #[test]
+    fn canister_is_kept_until_all_active_batches_finish() {
+        let metrics_registry = MetricsRegistry::new();
+        let scheduler = QuerySchedulerInternal::new(2, Duration::from_millis(5), &metrics_registry);
+        let id = canister_test_id(1);
+        for _ in 0..2 {
+            scheduler.push(id, Query(Box::new(|| DEFAULT_QUERY_DURATION)));
+        }
+
+        let first = scheduler.try_pop().unwrap();
+        let second = scheduler.try_pop().unwrap();
+        assert_eq!(first.0, id);
+        assert_eq!(second.0, id);
+        scheduler.notify_finished_execution(id, DEFAULT_QUERY_DURATION, vec![]);
+        assert!(scheduler.core.lock().unwrap().canisters.contains_key(&id));
+        scheduler.notify_finished_execution(id, DEFAULT_QUERY_DURATION, vec![]);
+        assert!(!scheduler.core.lock().unwrap().canisters.contains_key(&id));
+
+        scheduler.push(id, Query(Box::new(|| DEFAULT_QUERY_DURATION)));
+        assert_eq!(scheduler.try_pop().unwrap().0, id);
+        scheduler.notify_finished_execution(id, DEFAULT_QUERY_DURATION, vec![]);
+        assert!(!scheduler.core.lock().unwrap().canisters.contains_key(&id));
     }
 }
