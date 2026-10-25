@@ -1,10 +1,13 @@
 use candid::Encode;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
-use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, LogVisibilityV2};
+use ic_management_canister_types_private::{
+    BoundedVec, CanisterSettingsArgsBuilder, LogVisibilityV2,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{CanisterId, PrincipalId};
 use ic_types_cycles::Cycles;
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use regex_lite::RegexBuilder;
 
 const B: u128 = 1_000 * 1_000 * 1_000;
@@ -191,9 +194,83 @@ _wasm_backtrace_canister::stable_oob::outer
     )
 }
 
-mod visibility {
-    use ic_management_canister_types_private::BoundedVec;
+#[test]
+fn backtrace_visibility_after_paused_execution() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_controllers(vec![CONTROLLER])
+        .with_log_visibility(LogVisibilityV2::AllowedViewers(BoundedVec::new(vec![])))
+        .build();
+    let canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            Some(settings.clone()),
+            Cycles::new(1_000_000 * B),
+        )
+        .unwrap();
 
+    // The application subnet executes at most 2B instructions per slice.
+    let payload = wasm()
+        .instruction_counter_is_at_least(3_000_000_000)
+        .trap()
+        .build();
+    let err = env
+        .execute_ingress_as(OTHER1, canister_id, "update", payload.clone())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(
+        !err.description().contains("Canister Backtrace:"),
+        "Unexpected backtrace in error: {err}"
+    );
+
+    // The universal canister has no function names, so its error has no
+    // backtrace even for a controller. Use a named Wasm function to verify
+    // that the same visibility setting exposes a backtrace after a pause.
+    let named_wasm = wat::parse_str(
+        r#"(module
+            (import "ic0" "performance_counter" (func $performance_counter (param i32) (result i64)))
+            (import "ic0" "trap" (func $trap (param i32 i32)))
+            (memory 1)
+            (func $update (export "canister_update update")
+                (loop $wait
+                    (br_if $wait
+                        (i64.lt_u
+                            (call $performance_counter (i32.const 0))
+                            (i64.const 3000000000))))
+                (call $trap (i32.const 0) (i32.const 0))))"#,
+    )
+    .unwrap();
+    let named_canister_id = env
+        .install_canister_with_cycles(
+            named_wasm,
+            vec![],
+            Some(settings),
+            Cycles::new(1_000_000 * B),
+        )
+        .unwrap();
+    let err = env
+        .execute_ingress_as(OTHER1, named_canister_id, "update", vec![])
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(
+        !err.description().contains("Canister Backtrace:"),
+        "Unexpected backtrace in error: {err}"
+    );
+
+    let err = env
+        .execute_ingress_as(CONTROLLER, named_canister_id, "update", vec![])
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(
+        err.description().contains("Canister Backtrace:"),
+        "Missing backtrace in controller error: {err}"
+    );
+}
+
+mod visibility {
     use super::*;
 
     // Check that the backtrace is seen or not seen by the caller. It should

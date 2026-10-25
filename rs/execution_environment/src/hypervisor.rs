@@ -7,7 +7,10 @@ use ic_cycles_account_manager::{
 use ic_embedders::{
     CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
     WasmtimeEmbedder,
-    wasm_executor::{CreatedExecutionState, WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
+    wasm_executor::{
+        CreatedExecutionState, PausedWasmExecution, WasmExecutionResult, WasmExecutor,
+        WasmExecutorImpl,
+    },
     wasm_utils::decoding::decoded_wasm_size,
     wasmtime_embedder::system_api::{
         ApiType, ExecutionParameters, sandbox_safe_system_state::SandboxSafeSystemState,
@@ -40,6 +43,51 @@ use crate::execution_environment::{CompilationCostHandling, RoundLimits, as_roun
 use crate::metrics::CallTreeMetrics;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use more_asserts::assert_ge;
+
+fn remove_backtrace(err: &mut HypervisorError) {
+    match err {
+        HypervisorError::Trapped { backtrace, .. }
+        | HypervisorError::CalledTrap { backtrace, .. } => *backtrace = None,
+        HypervisorError::Cleanup {
+            callback_err,
+            cleanup_err,
+        } => {
+            remove_backtrace(callback_err);
+            remove_backtrace(cleanup_err);
+        }
+        _ => {}
+    }
+}
+
+fn remove_backtrace_from_execution_result(result: WasmExecutionResult) -> WasmExecutionResult {
+    match result {
+        WasmExecutionResult::Finished(slice, mut output, changes) => {
+            if let Err(err) = &mut output.wasm_result {
+                remove_backtrace(err);
+            }
+            WasmExecutionResult::Finished(slice, output, changes)
+        }
+        WasmExecutionResult::Paused(slice, paused_execution) => WasmExecutionResult::Paused(
+            slice,
+            Box::new(BacktraceFilteringPausedWasmExecution { paused_execution }),
+        ),
+    }
+}
+
+#[derive(Debug)]
+struct BacktraceFilteringPausedWasmExecution {
+    paused_execution: Box<dyn PausedWasmExecution>,
+}
+
+impl PausedWasmExecution for BacktraceFilteringPausedWasmExecution {
+    fn resume(self: Box<Self>, execution_state: &ExecutionState) -> WasmExecutionResult {
+        remove_backtrace_from_execution_result(self.paused_execution.resume(execution_state))
+    }
+
+    fn abort(self: Box<Self>) {
+        self.paused_execution.abort();
+    }
+}
 
 #[doc(hidden)] // pub for usage in tests
 pub struct HypervisorMetrics {
@@ -587,7 +635,7 @@ impl Hypervisor {
             execution_state.wasm_execution_mode.is_wasm64(),
             subnet_cycles_config,
         );
-        let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(
+        let (compilation_result, execution_result) = Arc::clone(&self.wasm_executor).execute(
             WasmExecutionInput {
                 api_type,
                 sandbox_safe_system_state: static_system_state,
@@ -608,38 +656,20 @@ impl Hypervisor {
             );
         }
 
-        // If the caller does not have permission to view this canister's logs,
-        // then it shouldn't get a backtrace either. So in that case we remove
-        // the backtrace from the error.
-        fn remove_backtrace(err: &mut HypervisorError) {
-            match err {
-                HypervisorError::Trapped { backtrace, .. }
-                | HypervisorError::CalledTrap { backtrace, .. } => *backtrace = None,
-                HypervisorError::Cleanup {
-                    callback_err,
-                    cleanup_err,
-                } => {
-                    remove_backtrace(callback_err);
-                    remove_backtrace(cleanup_err);
-                }
-                _ => {}
-            }
+        // Apply the caller's log visibility permission to errors even when
+        // execution pauses and finishes in a later slice.
+        if caller.is_some_and(|caller| {
+            check_log_visibility_permission(
+                &caller,
+                &system_state.log_visibility,
+                &system_state.controllers,
+            )
+            .is_err()
+        }) {
+            remove_backtrace_from_execution_result(execution_result)
+        } else {
+            execution_result
         }
-        if let WasmExecutionResult::Finished(_, result, _) = &mut execution_result {
-            // If execution fails, remove the backtrace when the caller is not allowed to see logs.
-            if let (Some(caller), Err(err)) = (caller, &mut result.wasm_result)
-                && check_log_visibility_permission(
-                    &caller,
-                    &system_state.log_visibility,
-                    &system_state.controllers,
-                )
-                .is_err()
-            {
-                remove_backtrace(err);
-            }
-        }
-
-        execution_result
     }
 
     pub(crate) fn clear_compilation_cache_for_testing(&self) {
