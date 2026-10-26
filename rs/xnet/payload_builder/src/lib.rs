@@ -13,7 +13,8 @@ mod xnet_client_tests;
 pub use crate::proximity::{GenRangeFn, ProximityMap};
 
 use crate::certified_slice_pool::{
-    CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes, decode_slice_header,
+    CertifiedSlicePool, CertifiedSliceResult, POOLED_SLICE_BYTE_SIZE_MAX,
+    certified_slice_count_bytes, decode_slice_header,
 };
 use async_trait::async_trait;
 use http_body_util::BodyExt;
@@ -408,7 +409,7 @@ impl XNetPayloadBuilderImpl {
             proximity_map,
             log.clone(),
         ));
-        let refill_task_handle = PoolRefillTask::start(
+        let refill_task_handle = PullTask::start(
             Arc::clone(&slice_pool),
             Arc::clone(&endpoint_resolver),
             Arc::clone(&xnet_client),
@@ -1683,102 +1684,29 @@ fn from_state_manager_error(e: StateManagerError) -> XNetPayloadValidationError 
     }
 }
 
-/// Slice pool soft upper limit in bytes. Actual size may go over this limit, as
-/// we're polling multiple subnets in parallel and we don't want to discard
-/// slices that we've already pulled.
-pub const POOL_BYTE_SIZE_SOFT_CAP: usize = 128 << 20;
-
-/// Hard maximum slice size in bytes. We only pool up to 8 MB (two blocks' worth
-/// of payload) from any one stream.
-pub const POOLED_SLICE_BYTE_SIZE_MAX: usize = 8 << 20;
-
-/// Divisor applied to the space left in the pool to obtain the maximum size of
-/// a pooled slice, so that a few backlogged streams cannot take over the pool.
-/// Yields `POOLED_SLICE_BYTE_SIZE_MAX` while the pool is empty, less as it
-/// fills up.
-pub const POOLED_SLICE_BYTE_SIZE_DIVISOR: usize =
-    POOL_BYTE_SIZE_SOFT_CAP / POOLED_SLICE_BYTE_SIZE_MAX;
-
 /// Conservative minimum slice size in bytes. We stop trying to add slices to
 /// the payload once we're this close to the payload size limit.
 pub const SLICE_BYTE_SIZE_MIN: usize = 1 << 10;
 
-/// This struct stores stream indices and byte limit used for refilling
-/// stream slices of a subnet in a certified slice pool.
-pub struct RefillStreamSliceIndices {
+/// Describes the slice to be pulled from a subnet: messages from `msg_begin`,
+/// with a witness from `witness_begin`, of at most `byte_limit` bytes.
+pub struct PullIndices {
     pub witness_begin: StreamIndex,
     pub msg_begin: StreamIndex,
     pub byte_limit: usize,
 }
 
-/// Reduces `slice_byte_size` to account for overhead in the `XNetEndpoint`
-/// request, which only counts message bytes (measured: 350 bytes for
-/// certification plus base witness, 2% for large payloads).
-pub fn adjusted_byte_limit(slice_byte_size: usize) -> usize {
-    slice_byte_size.saturating_sub(350) * 98 / 100
-}
-
-/// Computes `RefillStreamSliceIndices` for every subnet with a cached stream
+/// Computes `PullIndices` for every subnet with a cached stream
 /// position in `pool`, except `own_subnet_id`.
 pub fn refill_stream_slice_indices(
     pool: &CertifiedSlicePool,
     own_subnet_id: SubnetId,
-) -> Vec<(SubnetId, RefillStreamSliceIndices)> {
+) -> Vec<(SubnetId, PullIndices)> {
     pool.peers()
         // Skip our own subnet, the loopback stream is routed separately.
         .filter(|&&subnet_id| subnet_id != own_subnet_id)
-        .filter_map(|&subnet_id| Some((subnet_id, pull_indices(pool, subnet_id)?)))
+        .filter_map(|&subnet_id| Some((subnet_id, pool.pull_indices(subnet_id)?)))
         .collect()
-}
-
-/// Computes the `RefillStreamSliceIndices` for pulling a slice from `subnet_id`
-/// into `pool`; or `None` if `pool` has no cached stream position for it.
-//
-// TODO(DSM-148): Once pulls are advert-driven, make this a `CertifiedSlicePool`
-// method; and move the pool sizing constants and `adjusted_byte_limit()` with
-// it.
-pub fn pull_indices(
-    pool: &CertifiedSlicePool,
-    subnet_id: SubnetId,
-) -> Option<RefillStreamSliceIndices> {
-    // No cached stream position, no pooling / refill necessary.
-    let (Some(stream_position), messages_begin, msg_count, byte_size) = pool.slice_stats(subnet_id)
-    else {
-        return None;
-    };
-
-    // Maximum byte size of any one pooled slice, applied uniformly across slices:
-    // as the pool fills up, we aim to fill what is left of it with (more, but)
-    // smaller slices.
-    let slice_byte_size_max =
-        POOL_BYTE_SIZE_SOFT_CAP.saturating_sub(pool.byte_size()) / POOLED_SLICE_BYTE_SIZE_DIVISOR;
-
-    let (witness_begin, msg_begin, slice_byte_limit) = match messages_begin {
-        // Existing pooled stream, pull partial slice and append.
-        Some(messages_begin) if messages_begin == stream_position.message_index => (
-            stream_position.message_index,
-            stream_position.message_index + (msg_count as u64).into(),
-            slice_byte_size_max.saturating_sub(byte_size),
-        ),
-
-        // No pooled stream, or pooled stream does not begin at cached stream position, pull
-        // complete slice from cached stream position.
-        _ => (
-            stream_position.message_index,
-            stream_position.message_index,
-            slice_byte_size_max,
-        ),
-    };
-
-    // Pull regardless of how low `slice_byte_limit` is:
-    //  * A header-only suffix may usefully replace the pooled slice's.
-    //  * A complete slice will always include the first message, if any. We rely on
-    //    this to avoid stalling streams indefinitely behind large messages.
-    Some(RefillStreamSliceIndices {
-        witness_begin,
-        msg_begin,
-        byte_limit: adjusted_byte_limit(slice_byte_limit),
-    })
 }
 
 /// Expected number of copies of an advert that each node of the destination
@@ -1788,7 +1716,7 @@ const ADVERTS_PER_NODE: usize = 3;
 
 /// Advertises our streams to their respective destination subnets.
 ///
-/// The counterpart of `PoolRefillTask`, for sending adverts. On every new
+/// The counterpart of `PullTask`, for sending adverts. On every new
 /// certified height, advertises our stream for each subnet that may not have
 /// seen all of it, to a few of that subnet's nodes, picked at random.
 struct AdvertTask {
@@ -2022,9 +1950,9 @@ impl AdvertError {
     }
 }
 
-/// An async task that refills the slice pool.
-pub struct PoolRefillTask {
-    /// The slice pool that this task is refilling.
+/// An async task that pulls stream slices into the slice pool.
+pub struct PullTask {
+    /// The slice pool that this task populates.
     pool: Arc<Mutex<CertifiedSlicePool>>,
 
     endpoint_resolver: Arc<XNetEndpointResolver>,
@@ -2043,7 +1971,7 @@ pub struct PoolRefillTask {
     log: ReplicaLogger,
 }
 
-impl PoolRefillTask {
+impl PullTask {
     /// Starts an async task that fills the slice pool in the background.
     pub fn start(
         pool: Arc<Mutex<CertifiedSlicePool>>,
@@ -2108,7 +2036,7 @@ impl PoolRefillTask {
     async fn pull(
         self: &Arc<Self>,
         subnet_id: SubnetId,
-        indices: RefillStreamSliceIndices,
+        indices: PullIndices,
         registry_version: RegistryVersion,
     ) -> Result<bool, ()> {
         // `XNetEndpoint` URL of a node on `subnet_id`.
@@ -2226,7 +2154,7 @@ fn pass_log_sampling() -> bool {
     thread_rng().gen_bool(LOG_PASS_THROUGH_RATE)
 }
 
-/// A handle for a `PoolRefillTask` to be used for triggering pool refills and
+/// A handle for a `PullTask` to be used for triggering pool refills and
 /// terminating the task (by dropping the handle).
 pub struct RefillTaskHandle(pub Mutex<mpsc::Sender<RegistryVersion>>);
 
@@ -2620,9 +2548,9 @@ impl XNetClientError {
 pub mod testing {
     pub use super::{
         EndpointLocator, GenRangeFn, LABEL_STATUS, METRIC_BUILD_PAYLOAD_DURATION,
-        METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE, POOLED_SLICE_BYTE_SIZE_MAX,
-        PoolRefillTask, ProximityMap, RefillTaskHandle, STATUS_SUCCESS, XNetClient,
-        XNetClientError, XNetEndpointResolver, XNetPayloadBuilderMetrics,
+        METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE, ProximityMap, PullTask, RefillTaskHandle,
+        STATUS_SUCCESS, XNetClient, XNetClientError, XNetEndpointResolver,
+        XNetPayloadBuilderMetrics,
     };
 
     use super::*;
