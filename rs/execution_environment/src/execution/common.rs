@@ -46,6 +46,7 @@ use ic_types::time::CoarseTime;
 use ic_types::{NumInstructions, PrincipalId, SnapshotId, Time, UserId};
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use lazy_static::lazy_static;
+use num_traits::SaturatingSub;
 use prometheus::IntCounter;
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -903,7 +904,9 @@ pub fn get_call_context(
 }
 
 pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutionOutput) {
-    round_limits.instructions -= as_round_instructions(slice.executed_instructions);
+    round_limits.instructions = round_limits
+        .instructions
+        .saturating_sub(&as_round_instructions(slice.executed_instructions));
 }
 
 /// Tries to apply the given canister changes to the given system state and

@@ -47,6 +47,7 @@ use ic_types::{
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
+use num_traits::SaturatingSub;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::str::FromStr;
@@ -223,7 +224,7 @@ impl SchedulerImpl {
                 .is_some_and(|canister| canister.has_paused_install_code());
 
             let round_instructions_executed =
-                as_num_instructions(instructions_before - round_limits.instructions);
+                as_num_instructions(instructions_before.saturating_sub(&round_limits.instructions));
 
             let messages = match execute_subnet_message_result_type {
                 ExecuteSubnetMessageResultType::Finished => NumMessages::new(1),
@@ -334,7 +335,7 @@ impl SchedulerImpl {
             round_limits,
         );
         let round_instructions_executed =
-            as_num_instructions(instructions_before - round_limits.instructions);
+            as_num_instructions(instructions_before.saturating_sub(&round_limits.instructions));
         let messages = match execute_subnet_message_result_type {
             ExecuteSubnetMessageResultType::Finished => NumMessages::new(1),
             ExecuteSubnetMessageResultType::Processing => NumMessages::new(0),
@@ -547,7 +548,8 @@ impl SchedulerImpl {
                 state.resource_limits(),
                 &measurement_scope,
             );
-            let instructions_consumed = instructions_before - round_limits.instructions;
+            let instructions_consumed =
+                instructions_before.saturating_sub(&round_limits.instructions);
             drop(execution_timer);
 
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
@@ -740,7 +742,9 @@ impl SchedulerImpl {
                 .extend(result.canisters_with_zero_instruction_executions);
             ingress_results.append(&mut result.ingress_results);
             let instructions_executed = as_num_instructions(
-                round_limits_per_thread.instructions - result.round_limits.instructions,
+                round_limits_per_thread
+                    .instructions
+                    .saturating_sub(&result.round_limits.instructions),
             );
             max_instructions_executed_per_thread =
                 max_instructions_executed_per_thread.max(instructions_executed);
@@ -771,7 +775,9 @@ impl SchedulerImpl {
 
         // Reduce the instruction limit by the maximum number of instructions executed
         // by any thread.
-        round_limits.instructions -= as_round_instructions(max_instructions_executed_per_thread);
+        round_limits.instructions = round_limits
+            .instructions
+            .saturating_sub(&as_round_instructions(max_instructions_executed_per_thread));
         // Deduct all created callbacks from the available callbacks limit. This is a
         // pessimistic estimate, as it ignores any closed callbacks.
         round_limits.subnet_available_callbacks -= callbacks_created;
@@ -1719,7 +1725,7 @@ fn execute_canisters_on_thread(
             );
             ingress_results.extend(ingress_status);
             let round_instructions_executed =
-                as_num_instructions(instructions_before - round_limits.instructions);
+                as_num_instructions(instructions_before.saturating_sub(&round_limits.instructions));
 
             // A message was executed iff a non-zero number of instructions was consumed.
             // A paused execution outputs `instructions_used == None` and it also counts as
