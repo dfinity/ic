@@ -121,7 +121,7 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
     }
 
     /// Get a consensus message by its hash
-    pub fn get_by_hash(&self, hash: &CryptoHash) -> Option<&T> {
+    fn get_by_hash(&self, hash: &CryptoHash) -> Option<&T> {
         self.artifacts.get(hash)
     }
 
