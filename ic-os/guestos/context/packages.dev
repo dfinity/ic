@@ -2,7 +2,6 @@
 
 # editor for convenience
 vim
-nano
 
 # packages requested by networking
 tcpdump

@@ -47,6 +47,9 @@ usbutils
 xfsprogs
 zstd
 
+# Editor for manual interventions on the node
+nano
+
 # Required for API boundary nodes to enable IPv4 HTTP outcalls
 dante-server
 
