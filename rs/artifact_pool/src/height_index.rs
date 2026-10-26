@@ -6,11 +6,11 @@ use ic_types::{
 use std::collections::{BTreeMap, btree_map::Entry};
 use std::time::Instant;
 
-pub struct HeightIndex<T: Eq> {
+pub struct HeightIndex<T> {
     buckets: BTreeMap<Height, Vec<T>>,
 }
 
-impl<T: Eq> Default for HeightIndex<T> {
+impl<T> Default for HeightIndex<T> {
     fn default() -> Self {
         Self {
             buckets: BTreeMap::new(),
@@ -20,7 +20,7 @@ impl<T: Eq> Default for HeightIndex<T> {
 
 /// Provides a thin wrapper around a sorted map of buckets and provides
 /// height-indexed access to the buckets.
-impl<T: Eq + Clone> HeightIndex<T> {
+impl<T> HeightIndex<T> {
     pub fn new() -> HeightIndex<T> {
         HeightIndex::default()
     }
