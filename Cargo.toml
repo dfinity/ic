@@ -1000,7 +1000,7 @@ wasm-smith = { version = "0.254.0", default-features = false, features = [
 ] }
 wasmparser = "0.254.0"
 wasmprinter = "0.254.0"
-wasmtime = { version = "48.0.1", default-features = false, features = [
+wasmtime = { version = "48.0.7", default-features = false, features = [
     "cranelift",
     "gc",
     "gc-null",
