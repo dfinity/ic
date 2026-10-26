@@ -749,9 +749,9 @@ impl XNetAdvertHandler for XNetAdvertHandlerImpl {
             })?;
         debug_assert_eq!(slice.header(), &claimed, "Inconsistent slice decoding");
 
-        // Record every verified header: the recorded header shows how far the peer has
-        // garbage collected its messages, which is what tells us whether we still owe
-        // it an advert.
+        // Record every verified header: even a `NothingNew` one may advance the peer's
+        // `begin`, acknowledging our signals and changing whether we still owe it an
+        // advert.
         self.slice_pool
             .lock()
             .unwrap()
