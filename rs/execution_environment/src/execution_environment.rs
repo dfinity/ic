@@ -94,7 +94,7 @@ use ic_types_cycles::{
 };
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
 use ic_wasm_types::WasmHash;
-use num_traits::SaturatingAdd;
+use num_traits::{SaturatingAdd, SaturatingSub};
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
@@ -306,6 +306,12 @@ impl RoundLimits {
     pub fn instructions_reached(&self) -> bool {
         self.instructions <= RoundInstructions::from(0)
     }
+
+    /// Deducts the given number of instructions from the remaining round
+    /// instructions, saturating at the minimum value to avoid an overflow.
+    pub fn deduct_instructions(&mut self, instructions: RoundInstructions) {
+        self.instructions = self.instructions.saturating_sub(&instructions);
+    }
 }
 
 /// Accumulates instructions used and cycles consumed for those instructions while executing
@@ -394,7 +400,7 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
                 err
             );
         }
-        round_limits.instructions -= as_round_instructions(self.instructions_used);
+        round_limits.deduct_instructions(as_round_instructions(self.instructions_used));
     }
 }
 
@@ -1160,7 +1166,7 @@ impl ExecutionEnvironment {
                     // instructions.
                     let res =
                         list_canisters(&state, msg.sender(), payload).map(|(res, instructions)| {
-                            round_limits.instructions -= as_round_instructions(instructions);
+                            round_limits.deduct_instructions(as_round_instructions(instructions));
                             (res, None)
                         });
                     ExecuteSubnetMessageResult::Finished {

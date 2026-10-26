@@ -587,11 +587,11 @@ impl SchedulerImpl {
                 current_round,
             );
 
-            round_limits.instructions -= as_round_instructions(
+            round_limits.deduct_instructions(as_round_instructions(
                 self.config
                     .instruction_overhead_per_canister_for_finalization
                     * state.num_canisters() as u64,
-            );
+            ));
             scheduler_round_limits.update_canister_round_limits(&round_limits);
             debug_assert_le!(
                 scheduler_round_limits.subnet_available_callbacks,
@@ -775,9 +775,8 @@ impl SchedulerImpl {
 
         // Reduce the instruction limit by the maximum number of instructions executed
         // by any thread.
-        round_limits.instructions = round_limits
-            .instructions
-            .saturating_sub(&as_round_instructions(max_instructions_executed_per_thread));
+        round_limits
+            .deduct_instructions(as_round_instructions(max_instructions_executed_per_thread));
         // Deduct all created callbacks from the available callbacks limit. This is a
         // pessimistic estimate, as it ignores any closed callbacks.
         round_limits.subnet_available_callbacks -= callbacks_created;
@@ -1768,8 +1767,9 @@ fn execute_canisters_on_thread(
             total_slices_executed += slices;
             if slices.get() > 0 {
                 // A slice was actually executed, count the execution overhead toward the round limit.
-                round_limits.instructions -=
-                    as_round_instructions(config.instruction_overhead_per_execution);
+                round_limits.deduct_instructions(as_round_instructions(
+                    config.instruction_overhead_per_execution,
+                ));
             }
 
             canister_arc = new_canister;
@@ -1811,8 +1811,9 @@ fn execute_canisters_on_thread(
         canisters.push(canister_arc);
         // Skip per-canister overhead for canisters with not enough cycles.
         if total_instructions_used > 0.into() {
-            round_limits.instructions -=
-                as_round_instructions(config.instruction_overhead_per_canister);
+            round_limits.deduct_instructions(as_round_instructions(
+                config.instruction_overhead_per_canister,
+            ));
         }
     }
 
