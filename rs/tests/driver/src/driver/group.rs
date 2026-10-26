@@ -584,9 +584,45 @@ impl Plan<Box<dyn Task>> {
     }
 }
 
+/// Serializes a list of regexes as their pattern strings.
+mod regex_vec {
+    use regex::Regex;
+    use serde::{
+        Deserializer, Serializer,
+        de::{Error, SeqAccess, Visitor},
+    };
+    use std::{borrow::Cow, fmt};
+
+    pub fn serialize<S: Serializer>(value: &[Regex], serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(value.iter().map(Regex::as_str))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Regex>, D::Error> {
+        struct RegexVecVisitor;
+
+        impl<'de> Visitor<'de> for RegexVecVisitor {
+            type Value = Vec<Regex>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("valid sequence")
+            }
+
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                let mut regexes = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+                while let Some(pattern) = seq.next_element::<Cow<str>>()? {
+                    regexes.push(Regex::new(&pattern).map_err(A::Error::custom)?);
+                }
+                Ok(regexes)
+            }
+        }
+
+        deserializer.deserialize_seq(RegexVecVisitor)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CliArguments {
-    #[serde(with = "serde_regex")]
+    #[serde(with = "regex_vec")]
     pub exclude_logs: Vec<Regex>,
 }
 

@@ -14,7 +14,6 @@ rust_library(
         "@crate_index//:regex",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
-        "@crate_index//:serde_regex",
         "@crate_index//:serde_yaml",
     ],
 )
@@ -34,7 +33,6 @@ rust_test(
         "@crate_index//:regex",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
-        "@crate_index//:serde_regex",
         "@crate_index//:serde_yaml",
     ],
 )

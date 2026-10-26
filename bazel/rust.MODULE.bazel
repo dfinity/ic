@@ -1476,10 +1476,6 @@ crate.spec(
     version = "^1.0.107",
 )
 crate.spec(
-    package = "serde_regex",
-    version = "^1.1.0",
-)
-crate.spec(
     package = "serde_with",
     version = "^3.21.0",
 )

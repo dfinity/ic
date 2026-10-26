@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "d7023d0da8ee7ee36803e8fac37765cd17385283ddf2d1e54b38f32854461158",
+  "checksum": "555ea2368d7001dc1e756c36ce7600646640855f5386021794a571ac5936a9c8",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18097,10 +18097,6 @@
           {
             "id": "serde_json 1.0.145",
             "target": "serde_json"
-          },
-          {
-            "id": "serde_regex 1.1.0",
-            "target": "serde_regex"
           },
           {
             "id": "serde_with 3.21.0",
@@ -50479,45 +50475,6 @@
       ],
       "version": "0.14.0"
     },
-    "serde_regex 1.1.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "regex 1.13.1",
-            "target": "regex"
-          },
-          {
-            "id": "serde 1.0.228",
-            "target": "serde"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "serde_regex",
-      "license": "MIT/Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "serde_regex",
-      "package_url": "https://github.com/tailhook/serde-regex",
-      "repository": {
-        "Http": {
-          "sha256": "a8136f1a4ea815d7eac4101cfd0b16dc0cb5e1fe1b8609dfd728058656b7badf",
-          "url": "https://static.crates.io/crates/serde_regex/1.1.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "serde_regex",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "1.1.0"
-    },
     "serde_repr 0.1.19": {
       "common_attrs": {
         "deps": [
@@ -67111,7 +67068,6 @@
     "serde_bytes 0.11.15",
     "serde_cbor 0.11.2",
     "serde_json 1.0.145",
-    "serde_regex 1.1.0",
     "serde_with 3.21.0",
     "serde_yaml 0.9.34+deprecated",
     "sev 7.1.0",
