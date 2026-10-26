@@ -10,6 +10,7 @@ documentation.workspace = true
 clap = { workspace = true }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types/" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-protobuf = { path = "../../protobuf" }
 ic-recovery = { path = "../" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
@@ -19,6 +20,7 @@ ic-types = { path = "../../types/types" }
 prometheus-parse = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }

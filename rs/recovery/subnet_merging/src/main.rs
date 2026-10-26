@@ -37,7 +37,7 @@ struct MergeArgs {
 
     /// Flag to make the tool non interactive. No input from the user is requested.
     #[clap(long)]
-    pub skip_prompts: bool,
+    skip_prompts: bool,
 
     #[clap(flatten)]
     subnet_merging_args: SubnetMergingArgs,

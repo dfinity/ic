@@ -28,9 +28,13 @@
 //!    every subnet a single quorum of the replicas satisfies all of these terms
 //!    at once, as opposed to each term holding on a possibly different quorum.
 
-use crate::metrics_helper::{self, Labels, MetricsByReplica, ReplicaMetrics, ScrapeError};
+use crate::{
+    metrics_helper::{self, Labels, MetricsByReplica, ReplicaMetrics, ScrapeError},
+    utils::wait_for,
+};
 
 use ic_base_types::{NodeId, RegistryVersion, SubnetId};
+use ic_interfaces_registry::RegistryClient;
 use ic_recovery::{
     error::{RecoveryError, RecoveryResult},
     registry_helper::RegistryHelper,
@@ -44,13 +48,7 @@ use ic_types::consensus::get_faults_tolerated;
 use slog::{Logger, info, warn};
 use strum_macros::EnumIter;
 
-use std::{
-    collections::BTreeMap,
-    fmt,
-    net::IpAddr,
-    thread::sleep,
-    time::{Duration, Instant},
-};
+use std::{collections::BTreeMap, fmt, net::IpAddr, time::Duration};
 
 /// The nodes of every subnet the conditions below range over.
 pub type SubnetNodeIps = BTreeMap<SubnetId, Vec<IpAddr>>;
@@ -167,23 +165,29 @@ async fn fetch_readiness_metrics(
     if let Some((&subnet_id, _)) = subnets.iter().find(|(_, node_ips)| node_ips.is_empty()) {
         return Err(ReadinessError::NoNodes(subnet_id));
     }
+    const SOURCE_SUBNET_METRICS: &[&str] = &[
+        METRIC_REGISTRY_VERSION,
+        METRIC_STREAM_MESSAGES,
+        METRIC_INGRESS_HISTORY_BY_STATE,
+        METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
+        METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
+        METRIC_SUBNET_CALL_CONTEXTS,
+        METRIC_PENDING_REFUNDS,
+    ];
+    const OTHER_SUBNET_METRICS: &[&str] = &[METRIC_REGISTRY_VERSION, METRIC_STREAM_MESSAGES];
+    let groups = subnets.iter().map(|(&subnet_id, node_ips)| {
+        let metrics = if subnet_id == source_subnet_id {
+            SOURCE_SUBNET_METRICS
+        } else {
+            OTHER_SUBNET_METRICS
+        };
+        (subnet_id, node_ips.as_slice(), metrics)
+    });
     let mut result = BTreeMap::new();
     let mut scrape_failures = Vec::new();
-    for (&subnet_id, node_ips) in subnets {
-        let metrics: &[&str] = if subnet_id == source_subnet_id {
-            &[
-                METRIC_REGISTRY_VERSION,
-                METRIC_STREAM_MESSAGES,
-                METRIC_INGRESS_HISTORY_BY_STATE,
-                METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
-                METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
-                METRIC_SUBNET_CALL_CONTEXTS,
-                METRIC_PENDING_REFUNDS,
-            ]
-        } else {
-            &[METRIC_REGISTRY_VERSION, METRIC_STREAM_MESSAGES]
-        };
-        let (metrics, failures) = metrics_helper::fetch_available_metrics(node_ips, metrics).await;
+    for (subnet_id, (metrics, failures)) in
+        metrics_helper::fetch_available_metrics_by_group(groups).await
+    {
         result.insert(subnet_id, metrics);
         scrape_failures.extend(failures.map(|err| (subnet_id, err)));
     }
@@ -358,8 +362,8 @@ fn evaluate(
     ]
 }
 
-/// Waits until every term of the readiness condition holds, logging the ones
-/// that do not after every round, along with the nodes that could not be
+/// Waits until every term of the readiness condition holds, logging which
+/// terms hold after every round, along with the nodes that could not be
 /// scraped. A round in which the condition cannot be evaluated (e.g. because
 /// the registry cannot be read) counts as not ready.
 pub fn await_merge_readiness(
@@ -370,83 +374,57 @@ pub fn await_merge_readiness(
     poll_interval: Duration,
     logger: &Logger,
 ) -> RecoveryResult<()> {
-    let deadline = Instant::now() + timeout;
-    loop {
-        let terms = subnet_node_ips(registry_helper).and_then(|subnets| {
-            block_on(evaluate_merge_readiness(
+    wait_for(
+        &format!("subnet {source_subnet_id} is ready to be merged"),
+        timeout,
+        poll_interval,
+        logger,
+        || {
+            // The replicas to scrape are those of the latest topology, not of
+            // `V`: nodes may have been replaced and subnets created since `V`.
+            let latest_version = registry_helper.latest_registry_version()?;
+            let subnets = subnet_node_ips(&*registry_helper.registry_client(), latest_version)?;
+            let Readiness {
+                terms,
+                scrape_failures,
+            } = block_on(evaluate_merge_readiness(
                 &subnets,
                 source_subnet_id,
                 registry_version,
             ))
-            .map_err(|err| RecoveryError::UnexpectedError(err.to_string()))
-        });
-        let not_ready = match terms {
-            Ok(Readiness {
-                terms,
-                scrape_failures,
-            }) => {
-                for (subnet_id, err) in &scrape_failures {
-                    warn!(logger, "Subnet {subnet_id}: {err}");
-                }
-                let unsatisfied: Vec<&Term> = terms.iter().filter(|term| !term.satisfied).collect();
+            .map_err(|err| RecoveryError::UnexpectedError(err.to_string()))?;
 
-                if unsatisfied.is_empty() {
-                    info!(
-                        logger,
-                        "Subnet {source_subnet_id} is ready to be merged; every term holds:"
-                    );
-                    for term in &terms {
-                        info!(logger, "  [x] {}", term.description);
-                    }
-                    return Ok(());
-                }
-
-                info!(
-                    logger,
-                    "Subnet {source_subnet_id} is not ready to be merged yet, {} of {} terms do \
-                     not hold:",
-                    unsatisfied.len(),
-                    terms.len(),
-                );
-                for term in &terms {
-                    let mark = if term.satisfied { "x" } else { " " };
-                    info!(logger, "  [{mark}] {}", term.description);
-                }
-                format!(
-                    "the terms that do not hold: {}",
-                    unsatisfied
-                        .iter()
-                        .map(|term| term.description.clone())
-                        .collect::<Vec<_>>()
-                        .join("; "),
-                )
+            for (subnet_id, err) in &scrape_failures {
+                warn!(logger, "Subnet {subnet_id}: {err}");
             }
-            Err(err) => {
-                warn!(
-                    logger,
-                    "Failed to evaluate whether subnet {source_subnet_id} is ready to be merged: \
-                     {err}"
-                );
-                format!("the readiness condition could not be evaluated: {err}")
+            let unsatisfied = terms.iter().filter(|term| !term.satisfied).count();
+            info!(
+                logger,
+                "Subnet {source_subnet_id}: {} of {} terms of the merge readiness condition hold:",
+                terms.len() - unsatisfied,
+                terms.len(),
+            );
+            for term in &terms {
+                let mark = if term.satisfied { "x" } else { " " };
+                info!(logger, "  [{mark}] {}", term.description);
             }
-        };
 
-        if Instant::now() >= deadline {
-            return Err(RecoveryError::UnexpectedError(format!(
-                "Subnet {source_subnet_id} did not become ready to be merged within {timeout:?}; \
-                 {not_ready}"
-            )));
-        }
-        sleep(poll_interval);
-    }
+            if unsatisfied > 0 {
+                return Err(RecoveryError::UnexpectedError(format!(
+                    "{unsatisfied} of {} terms do not hold",
+                    terms.len()
+                )));
+            }
+            Ok(())
+        },
+    )
 }
 
-/// The nodes of every subnet in the registry, all read at the same registry
-/// version: the registry is polled once, for the latest version, and every
-/// read after that is a local one at that version.
-pub fn subnet_node_ips(registry_helper: &RegistryHelper) -> RecoveryResult<SubnetNodeIps> {
-    let registry_version = registry_helper.latest_registry_version()?;
-    let registry_client = registry_helper.registry_client();
+/// The nodes of every subnet in the registry at `registry_version`.
+fn subnet_node_ips(
+    registry_client: &dyn RegistryClient,
+    registry_version: RegistryVersion,
+) -> RecoveryResult<SubnetNodeIps> {
     let registry_error = |what: String| {
         move |err| {
             RecoveryError::RegistryError(format!(
@@ -472,7 +450,7 @@ pub fn subnet_node_ips(registry_helper: &RegistryHelper) -> RecoveryResult<Subne
                 .ok_or_else(|| missing(format!("nodes of subnet {subnet_id}")))?;
             let node_ips = node_ids
                 .into_iter()
-                .map(|node_id| node_ip(registry_helper, node_id, registry_version))
+                .map(|node_id| node_ip(registry_client, node_id, registry_version))
                 .collect::<RecoveryResult<_>>()?;
             Ok((subnet_id, node_ips))
         })
@@ -481,12 +459,11 @@ pub fn subnet_node_ips(registry_helper: &RegistryHelper) -> RecoveryResult<Subne
 
 /// The IP address of `node_id` as of `registry_version`.
 fn node_ip(
-    registry_helper: &RegistryHelper,
+    registry_client: &dyn RegistryClient,
     node_id: NodeId,
     registry_version: RegistryVersion,
 ) -> RecoveryResult<IpAddr> {
-    let node_record = registry_helper
-        .registry_client()
+    let node_record = registry_client
         .get_node_record(node_id, registry_version)
         .map_err(|err| {
             RecoveryError::RegistryError(format!(

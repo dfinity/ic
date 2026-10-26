@@ -1,4 +1,4 @@
-use crate::{layout::Layout, readiness};
+use crate::{layout::Layout, readiness, utils::wait_for};
 
 use ic_base_types::SubnetId;
 use ic_recovery::{
@@ -6,47 +6,14 @@ use ic_recovery::{
     registry_helper::RegistryHelper,
     steps::Step,
 };
-use slog::{Logger, info, warn};
+use slog::{Logger, info};
 
-use std::{
-    thread::sleep,
-    time::{Duration, Instant},
-};
-
-/// Retries `check` until it reports success (by returning a value, which is
-/// then returned) or `timeout` elapses.
-fn wait_for<T>(
-    what: &str,
-    timeout: Duration,
-    poll_interval: Duration,
-    logger: &Logger,
-    check: impl Fn() -> RecoveryResult<Option<T>>,
-) -> RecoveryResult<T> {
-    let deadline = Instant::now() + timeout;
-    loop {
-        match check() {
-            Ok(Some(value)) => return Ok(value),
-            Ok(None) => info!(logger, "Waiting until {what}"),
-            Err(err) => warn!(logger, "Waiting until {what}, last attempt failed: {err}"),
-        }
-
-        if Instant::now() >= deadline {
-            return Err(RecoveryError::UnexpectedError(format!(
-                "Gave up waiting until {what} after {timeout:?}"
-            )));
-        }
-        sleep(poll_interval);
-    }
-}
+use std::time::Duration;
 
 /// Waits until the record of the subnet that is being merged away is labeled
-/// "cooling down" and persists the registry version `V` it was read at, which
-/// is what the merge readiness condition is evaluated against.
-///
-/// `V` need not be the version that labeled the subnet so, just one at which it
-/// is labeled so: all the readiness condition needs of `V` is that a subnet that
-/// has reached it treats the subnet as cooling down, which holds for every
-/// version from the labeling one onwards.
+/// "cooling down" and persists the registry version `V` it was read at (not
+/// necessarily the version that set the label), which is what the merge
+/// readiness condition is evaluated against.
 pub(crate) struct CheckCoolingDownStep {
     pub(crate) source_subnet_id: SubnetId,
     pub(crate) registry_helper: RegistryHelper,
@@ -59,8 +26,8 @@ pub(crate) struct CheckCoolingDownStep {
 impl Step for CheckCoolingDownStep {
     fn descr(&self) -> String {
         format!(
-            "Read the registry to check that subnet {} is labeled \"cooling down\", and record \
-             the registry version it is labeled so at.",
+            "Wait until the registry labels subnet {} as \"cooling down\", and record the \
+             registry version at which the label was read.",
             self.source_subnet_id,
         )
     }
@@ -81,7 +48,13 @@ impl Step for CheckCoolingDownStep {
                          {registry_version}"
                     )));
                 };
-                Ok(subnet_record.cooling_down.then_some(registry_version))
+                if !subnet_record.cooling_down {
+                    return Err(RecoveryError::RegistryError(format!(
+                        "Subnet {source_subnet_id} is not labeled \"cooling down\" at registry \
+                         version {registry_version} yet"
+                    )));
+                }
+                Ok(registry_version)
             },
         )?;
 

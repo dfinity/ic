@@ -2,6 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/interfaces/registry",
     "//rs/protobuf",
     "//rs/recovery",
     "//rs/recovery/subnet_tools",
@@ -14,6 +15,7 @@ DEPENDENCIES = [
     "@crate_index//:prometheus-parse",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
+    "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:strum",
     "@crate_index//:tokio",

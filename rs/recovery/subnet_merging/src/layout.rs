@@ -3,21 +3,28 @@ use ic_recovery::{
     Recovery,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::{read_file, write_file},
-    util::subnet_id_from_str,
 };
+use serde::{Deserialize, Serialize};
 
 use std::path::PathBuf;
 
 /// The file in which the tool records a registry version at which the subnet
 /// that is merged away is labeled "cooling down", i.e. the `V` of the merge
 /// readiness condition, together with the id of that subnet.
-const COOLING_DOWN_REGISTRY_VERSION_FILE: &str = "cooling_down_registry_version.txt";
+const COOLING_DOWN_REGISTRY_VERSION_FILE: &str = "cooling_down_registry_version.json";
+
+/// The contents of `COOLING_DOWN_REGISTRY_VERSION_FILE`.
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
+struct CoolingDownRegistryVersion {
+    source_subnet_id: SubnetId,
+    registry_version: u64,
+}
 
 #[derive(Clone)]
 /// Describes the layout of the working directory of subnet merging:
 ///
 /// |-- root/
-/// |  |-- cooling_down_registry_version.txt
+/// |  |-- cooling_down_registry_version.json
 pub(crate) struct Layout {
     cooling_down_registry_version: PathBuf,
 }
@@ -65,28 +72,26 @@ impl Layout {
 }
 
 fn encode_cooling_down_registry_version(source_subnet_id: SubnetId, version: u64) -> String {
-    format!("{source_subnet_id} {version}")
+    serde_json::to_string_pretty(&CoolingDownRegistryVersion {
+        source_subnet_id,
+        registry_version: version,
+    })
+    .expect("Failed to serialize the cooling down registry version")
 }
 
 fn decode_cooling_down_registry_version(
     contents: &str,
     source_subnet_id: SubnetId,
 ) -> Result<u64, String> {
-    let Some((subnet_id, version)) = contents.trim().split_once(' ') else {
+    let recorded: CoolingDownRegistryVersion =
+        serde_json::from_str(contents).map_err(|err| err.to_string())?;
+    if recorded.source_subnet_id != source_subnet_id {
         return Err(format!(
-            "expected a subnet id and a registry version, got {contents:?}"
-        ));
-    };
-    let subnet_id = subnet_id_from_str(subnet_id).map_err(|err| err.to_string())?;
-    if subnet_id != source_subnet_id {
-        return Err(format!(
-            "the registry version was recorded for subnet {subnet_id}, not for subnet \
-             {source_subnet_id}"
+            "the registry version was recorded for subnet {}, not for subnet {source_subnet_id}",
+            recorded.source_subnet_id
         ));
     }
-    version
-        .parse()
-        .map_err(|err| format!("failed to parse the registry version {version:?}: {err}"))
+    Ok(recorded.registry_version)
 }
 
 #[cfg(test)]
@@ -116,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn cooling_down_registry_version_without_subnet_id_is_rejected() {
+    fn malformed_cooling_down_registry_version_is_rejected() {
         assert!(decode_cooling_down_registry_version("42", subnet_id(1)).is_err());
     }
 }

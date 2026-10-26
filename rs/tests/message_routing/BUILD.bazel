@@ -143,7 +143,7 @@ system_test_nns(
     name = "subnet_cooling_down_test",
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 1 System + 2 Application subnets of 4 nodes each = 12 IC Node VMs * 6 vCPUs.
     tags = [
-        "long_test",  # since the subnet only quiesces once its long-running `install_code` calls are done and the ingress history is pruned.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     test_timeout = "eternal",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {

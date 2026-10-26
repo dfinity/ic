@@ -33,12 +33,12 @@ Runbook::
 3. Wait until both loops have completed a few iterations, i.e. messages are
    actually flowing between `M` and `T` in both directions.
 4. Install the universal canisters of the steps below (`U1`, `U3`, `U5` and `U6`
-   on `M`, `U4` and `U7` on `T`) and create five empty canisters `U2a` .. `U2e`
+   on `M`, `U4` and `U7` on `T`) and create two empty canisters `U2a` and `U2b`
    on `M`, controlled by `U1`.
-5. Execute an update call on `U1` that makes five calls to the management
+5. Execute an update call on `U1` that makes two calls to the management
    canister's `install_code` method, one per `U2x`, in mode `install`, with the
    universal canister module and an `arg` that makes `canister_init` burn
-   `INIT_INSTRUCTIONS` instructions. Wait until all five requests have left
+   `INIT_INSTRUCTIONS` instructions. Wait until both requests have left
    `U1`'s output queue, i.e. until they are enqueued in `M`'s subnet input
    queues or already executing.
 6. Start three endless loops, each of which calls the management canister's
@@ -131,7 +131,9 @@ const MIN_LOOP_ITERATIONS: u64 = 3;
 const B: u64 = 1_000_000_000;
 
 /// The names of the canisters `U1` installs code on.
-const INSTALL_CODE_TARGETS: [&str; 5] = ["U2a", "U2b", "U2c", "U2d", "U2e"];
+/// Two of them, so that while one executes (holding a call context), the other
+/// waits in the subnet input queues.
+const INSTALL_CODE_TARGETS: [&str; 2] = ["U2a", "U2b"];
 
 /// Instructions the `canister_init` of every canister installed by `U1` burns,
 /// i.e. how long each of `U1`'s `install_code` calls runs. The point is to make
@@ -186,10 +188,10 @@ const MERGING_DIR: &str = "subnet_merging";
 /// of terminal statuses once the entries of the ingress messages submitted
 /// before the subnet started cooling down are pruned, i.e. at their (up to
 /// `MAX_INGRESS_TTL` = 5 minutes away) expiry times.
-const MERGE_READY_TIMEOUT: Duration = Duration::from_secs(2400);
+const MERGE_READY_TIMEOUT: Duration = Duration::from_secs(1200);
 /// Timeout for the registry to reflect a proposal that `ic-admin` reported as
 /// executed.
-const REGISTRY_TIMEOUT: Duration = Duration::from_secs(300);
+const REGISTRY_TIMEOUT: Duration = Duration::from_secs(120);
 /// How long the merging tool waits between two evaluations of a condition it
 /// waits for. Longer than a driver retry because every evaluation scrapes the
 /// metrics of all subnets.
@@ -201,8 +203,8 @@ const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 /// Timeouts of the test itself: draining the `install_code` calls dominates,
 /// the rest of the scenario takes a couple of minutes. The overall timeout
 /// additionally covers the setup (booting the IC and installing the NNS).
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(3000);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(3600);
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(1800);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(2400);
 
 /// The conditions this scenario violates, i.e. the ones step 7 checks. This
 /// includes `CommonQuorum`, since the replicas do not satisfy the individual
@@ -279,11 +281,9 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    // The merging tool is synchronous, but internally creates a tokio runtime
-    // and blocks on it (`ic_recovery::util::block_on`) for every registry read
-    // and metrics scrape. Tokio panics if this happens inside another runtime,
-    // so the tool must run on this thread outside of any runtime; only the
-    // asynchronous parts of the test itself are run with `runtime.block_on`.
+    // The agents of `Context` are reused by all asynchronous checks, so these
+    // run on a single runtime. The steps of the merging tool create runtimes of
+    // their own, so they run outside of it.
     let runtime = Runtime::new().expect("failed to create a tokio runtime");
 
     let context = runtime.block_on(prepare(&env));
@@ -420,7 +420,7 @@ async fn prepare(env: &TestEnv) -> Context {
     }
     info!(logger, "Step 4 done: all canisters installed");
 
-    // Step 5: Have `U1` install code on the five canisters it controls.
+    // Step 5: Have `U1` install code on the canisters it controls.
     info!(
         logger,
         "Step 5: Executing the update call on U1 making the {} `install_code` calls",
@@ -506,6 +506,7 @@ fn cool_down(env: &TestEnv, context: &Context, runtime: &Runtime) {
         registry_timeout_secs: REGISTRY_TIMEOUT.as_secs(),
         poll_interval_secs: POLL_INTERVAL.as_secs(),
         next_step: None,
+        skip: None,
     };
 
     info!(

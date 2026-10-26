@@ -5,7 +5,7 @@ use crate::{
 };
 
 use clap::Parser;
-use ic_base_types::SubnetId;
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
     NeuronArgs, Recovery, RecoveryArgs,
@@ -22,7 +22,7 @@ use slog::{Logger, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 
-use std::{iter::Peekable, time::Duration};
+use std::{collections::BTreeSet, iter::Peekable, time::Duration};
 
 const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
@@ -40,8 +40,12 @@ const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     clap::ValueEnum,
 )]
 pub enum StepType {
+    /// Submit a proposal to label the source subnet as "cooling down".
     CoolDownSourceSubnet,
+    /// Wait until the registry labels the source subnet as "cooling down", and
+    /// record the registry version at which the label was read.
     CheckRegistryForCoolingDownFlag,
+    /// Wait until the source subnet is ready to be merged.
     CheckMergeReadiness,
 }
 
@@ -63,13 +67,16 @@ pub struct SubnetMergingArgs {
     #[clap(long, default_value = "2400")]
     pub merge_ready_timeout_secs: u64,
 
-    /// How long to wait for the registry to reflect a proposal that `ic-admin`
-    /// reported as executed, in seconds.
-    #[clap(long, default_value = "300")]
+    /// How long to wait, in seconds, for the proposal labeling the source
+    /// subnet as "cooling down" to be adopted, executed and visible in the
+    /// registry. On a timeout, the step can be resumed with `--resume`.
+    #[clap(long, default_value = "3600")]
     pub registry_timeout_secs: u64,
 
-    /// How long to wait between two evaluations of a condition this tool waits
-    /// for, in seconds. Must be positive.
+    /// How long to wait, in seconds, between two attempts of a step that waits:
+    /// between two registry reads while waiting for the "cooling down" label,
+    /// and between two readiness rounds (each reading the registry and scraping
+    /// every replica). Must be positive.
     #[clap(long, default_value = "10", value_parser = clap::value_parser!(u64).range(1..))]
     pub poll_interval_secs: u64,
 
@@ -77,6 +84,10 @@ pub struct SubnetMergingArgs {
     #[clap(long = "resume")]
     #[clap(value_enum)]
     pub next_step: Option<StepType>,
+
+    /// Which steps to skip
+    #[clap(long)]
+    pub skip: Option<Vec<StepType>>,
 }
 
 pub struct SubnetMerging {
@@ -125,10 +136,12 @@ impl SubnetMerging {
 
     /// Checks whether the subnets satisfy the following preconditions:
     /// 1) They are two different subnets;
-    /// 2) Both are `Application` (or `VerifiedApplication`) subnets, of the
-    ///    same subnet type;
+    /// 2) Both are `Application` (or `VerifiedApplication`) subnets;
     /// 3) Neither holds any chain keys;
-    /// 4) Neither is halted nor scheduled to halt at its next CUP.
+    /// 4) Neither is halted nor scheduled to halt at its next CUP;
+    /// 5) The destination subnet is not cooling down;
+    /// 6) Both have the same subnet type, cycles cost schedule, subnet admins
+    ///    and SEV setting.
     fn check_subnets_preconditions(
         recovery: &Recovery,
         source_subnet_id: SubnetId,
@@ -140,19 +153,63 @@ impl SubnetMerging {
             )));
         }
 
-        let source_subnet_type =
-            Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id)?.subnet_type();
-        let destination_subnet_type =
-            Self::get_and_pre_validate_subnet_record(recovery, destination_subnet_id)?
-                .subnet_type();
+        let source = Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id)?;
+        let destination =
+            Self::get_and_pre_validate_subnet_record(recovery, destination_subnet_id)?;
 
-        if source_subnet_type != destination_subnet_type {
+        if destination.cooling_down {
             return Err(RecoveryError::ValidationFailed(format!(
-                "Both subnets should have the same subnet type, but subnet {source_subnet_id} has \
-                 type {source_subnet_type:?} and subnet {destination_subnet_id} has type \
-                 {destination_subnet_type:?}"
+                "Subnet {destination_subnet_id}: the destination subnet should not be cooling down"
             )));
         }
+
+        let require_same = |what: &str, source_value: String, destination_value: String| {
+            if source_value != destination_value {
+                return Err(RecoveryError::ValidationFailed(format!(
+                    "Both subnets should have the same {what}, but subnet {source_subnet_id} has \
+                     {source_value} and subnet {destination_subnet_id} has {destination_value}"
+                )));
+            }
+            Ok(())
+        };
+        let subnet_admins = |record: &SubnetRecord| {
+            let admins: BTreeSet<_> = record
+                .subnet_admins
+                .iter()
+                .map(|admin| match PrincipalId::try_from(admin.raw.as_slice()) {
+                    Ok(principal) => principal.to_string(),
+                    Err(_) => format!("{:?}", admin.raw),
+                })
+                .collect();
+            format!("{admins:?}")
+        };
+        let sev_enabled = |record: &SubnetRecord| {
+            record
+                .features
+                .and_then(|features| features.sev_enabled)
+                .unwrap_or(false)
+        };
+
+        require_same(
+            "subnet type",
+            format!("{:?}", source.subnet_type()),
+            format!("{:?}", destination.subnet_type()),
+        )?;
+        require_same(
+            "cycles cost schedule",
+            format!("{:?}", source.canister_cycles_cost_schedule()),
+            format!("{:?}", destination.canister_cycles_cost_schedule()),
+        )?;
+        require_same(
+            "subnet admins",
+            subnet_admins(&source),
+            subnet_admins(&destination),
+        )?;
+        require_same(
+            "SEV setting",
+            format!("sev_enabled = {}", sev_enabled(&source)),
+            format!("sev_enabled = {}", sev_enabled(&destination)),
+        )?;
 
         Ok(())
     }
@@ -242,19 +299,24 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
         &self.logger
     }
 
+    fn get_skipped_steps(&self) -> Vec<StepType> {
+        self.params.skip.clone().unwrap_or_default()
+    }
+
     fn interactive(&self) -> bool {
         !self.recovery_args.skip_prompts
     }
 
     fn read_step_params(&mut self, step_type: StepType) {
-        if step_type == StepType::CheckMergeReadiness {
-            print_url_and_ask_for_confirmation(
+        match step_type {
+            StepType::CheckMergeReadiness => print_url_and_ask_for_confirmation(
                 &self.logger,
                 self.dashboard_url(),
                 "The tool evaluates the merge readiness condition itself, and waits until it \
                  holds. Please check the dashboard as well, to see whether it is safe to merge \
                  the subnet",
-            );
+            ),
+            StepType::CoolDownSourceSubnet | StepType::CheckRegistryForCoolingDownFlag => {}
         }
     }
 
