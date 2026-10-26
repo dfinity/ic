@@ -26,7 +26,7 @@ impl<T> HeightIndex<T> {
     }
 
     /// Inserts `value` at `height`. Does not check for duplicates, this
-    /// reponsibility is left to the caller.
+    /// responsibility is left to the caller.
     pub fn insert(&mut self, height: Height, value: T) {
         self.buckets.entry(height).or_default().push(value);
     }
