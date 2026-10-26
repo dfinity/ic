@@ -94,14 +94,13 @@ mod receiver_tests {
                 format!("Canister {missing} not found"),
             ))
         );
+        let anonymous = CanisterId::unchecked_from_principal(PrincipalId::new_anonymous());
         assert_eq!(
-            receiver_exists(
-                &state,
-                CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
-            )
-            .unwrap_err()
-            .code(),
-            ErrorCode::CanisterNotFound
+            receiver_exists(&state, anonymous),
+            Err(UserError::new(
+                ErrorCode::CanisterNotFound,
+                format!("Canister {anonymous} not found"),
+            ))
         );
     }
 }
