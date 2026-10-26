@@ -39,12 +39,11 @@ use ic_xnet_payload_builder::certified_slice_pool::{
     CertifiedSlicePool, POOL_BYTE_SIZE_SOFT_CAP, POOLED_SLICE_BYTE_SIZE_DIVISOR,
     POOLED_SLICE_BYTE_SIZE_MAX, UnpackedStreamSlice, adjusted_byte_limit,
 };
-use ic_xnet_payload_builder::testing::*;
-use ic_xnet_payload_builder::{
-    ExpectedIndices, LABEL_POOLED, LABEL_REMOTE, LABEL_SCHEDULED, LABEL_STATUS, MAX_SIGNALS,
-    METRIC_PULL_ATTEMPT_COUNT, METRIC_SHADOW_PULLS, XNetPayloadBuilderImpl,
-    refill_stream_slice_indices,
+use ic_xnet_payload_builder::exchange::{
+    LABEL_POOLED, LABEL_REMOTE, LABEL_SCHEDULED, METRIC_PULL_ATTEMPT_COUNT, METRIC_SHADOW_PULLS,
 };
+use ic_xnet_payload_builder::testing::*;
+use ic_xnet_payload_builder::{ExpectedIndices, LABEL_STATUS, MAX_SIGNALS, XNetPayloadBuilderImpl};
 use maplit::btreemap;
 use mockall::predicate::{always, eq};
 use proptest::prelude::*;
@@ -1045,7 +1044,10 @@ fn refill_stream_slice_indices_byte_limits_empty_pool() {
                 .collect(),
         );
 
-        let byte_limits = refill_stream_slice_indices(&pool.lock().unwrap(), OWN_SUBNET)
+        let byte_limits = pool
+            .lock()
+            .unwrap()
+            .refill_stream_slice_indices(OWN_SUBNET)
             .into_iter()
             .map(|(_, indices)| indices.byte_limit)
             .collect::<Vec<_>>();
@@ -1093,7 +1095,10 @@ fn refill_stream_slice_indices_byte_limits_non_empty_pool() {
         );
         let pooled_byte_size = pool.lock().unwrap().byte_size();
 
-        let byte_limits = refill_stream_slice_indices(&pool.lock().unwrap(), OWN_SUBNET)
+        let byte_limits = pool
+            .lock()
+            .unwrap()
+            .refill_stream_slice_indices(OWN_SUBNET)
             .into_iter()
             .map(|(_, indices)| indices.byte_limit)
             .collect::<Vec<_>>();
@@ -1180,7 +1185,7 @@ fn refill_pool_empty(
             xnet_client,
             Arc::clone(&store),
             runtime.handle().clone(),
-            Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
+            &metrics_registry,
             log,
         );
         refill_handle.trigger_refill(registry.get_latest_version());
@@ -1334,7 +1339,7 @@ fn refill_pool_append(
             xnet_client,
             Arc::clone(&store),
             runtime.handle().clone(),
-            Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
+            &metrics_registry,
             log.clone(),
         );
         refill_handle.trigger_refill(registry.get_latest_version());
@@ -1453,7 +1458,7 @@ fn refill_pool_put_invalid_slice(
             xnet_client,
             Arc::clone(&store),
             runtime.handle().clone(),
-            Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
+            &metrics_registry,
             log,
         );
         refill_handle.trigger_refill(registry.get_latest_version());
@@ -1589,7 +1594,7 @@ fn refill_pool_append_invalid_slice(
             xnet_client,
             Arc::clone(&store),
             runtime.handle().clone(),
-            Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
+            &metrics_registry,
             log.clone(),
         );
         refill_handle.trigger_refill(registry.get_latest_version());
