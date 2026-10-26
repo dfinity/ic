@@ -159,17 +159,15 @@ where
         if range.min > range.max {
             return Box::new(std::iter::empty());
         }
-        let heights = CryptoHashOf::<T>::select_index(&self.indexes)
+        let heights = self
+            .select_index::<CryptoHashOf<T>>()
             .range((
                 std::ops::Bound::Included(range.min),
                 std::ops::Bound::Included(range.max),
             ))
-            .map(|(h, _)| h);
+            .flat_map(|(_height, hashes)| hashes.into_iter());
 
-        // returning the iterator directly isn't trusted due to the use of `self` in the
-        // closure
-        let vec: Vec<T> = heights.flat_map(|h| self.get_by_height(*h)).collect();
-        Box::new(vec.into_iter())
+        Box::new(self.get_by_hashes(heights).into_iter())
     }
 
     fn get_only_by_height(&self, h: Height) -> Result<T, OnlyError> {
