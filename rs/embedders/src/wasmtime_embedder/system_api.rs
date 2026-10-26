@@ -3468,9 +3468,13 @@ impl SystemApi for SystemApiImpl {
 
                 // A Wasm memory limit of 0 means unlimited.
                 if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
+                    let wasm_execution_mode = WasmExecutionMode::from_is_wasm64(
+                        self.sandbox_safe_system_state.is_wasm64_execution,
+                    );
                     return Err(HypervisorError::WasmMemoryLimitExceeded {
                         bytes: wasm_memory_usage,
                         limit: wasm_memory_limit,
+                        max_wasm_memory_size: wasm_execution_mode.max_wasm_memory_size(),
                     });
                 }
             }
