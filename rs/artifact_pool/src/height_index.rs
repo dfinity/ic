@@ -34,15 +34,13 @@ impl<T: Eq> HeightIndex<T> {
         self.buckets.entry(height).or_default().push(value);
     }
 
-    pub fn remove_all(&mut self, height: Height) -> impl Iterator<Item = T> {
-        self.buckets.remove(&height).into_iter().flatten()
-    }
-
-    pub fn remove_all_below(&mut self, height: Height) -> impl Iterator<Item = T> {
+    pub fn remove_all_below(&mut self, height: Height) -> impl Iterator<Item = (Height, T)> {
         let above_height = self.buckets.split_off(&height);
         let below_height = std::mem::replace(&mut self.buckets, above_height);
 
-        below_height.into_values().flatten()
+        below_height
+            .into_iter()
+            .flat_map(|(height, values)| values.into_iter().map(move |value| (height, value)))
     }
 
     /// Removes `value` from `height`. Returns `true` if `value` was removed,
