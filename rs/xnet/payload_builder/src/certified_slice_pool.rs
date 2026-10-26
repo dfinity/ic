@@ -1,7 +1,8 @@
 //! A pool of incoming `CertifiedStreamSlices` used by `XNetPayloadBuilderImpl`
 //! to build `XNetPayloads` without the need for I/O on the critical path.
 
-use crate::{ExpectedIndices, PullIndices, max_message_index};
+use crate::exchange::PullIndices;
+use crate::{ExpectedIndices, max_message_index};
 use header::Header;
 use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{
@@ -1392,6 +1393,19 @@ impl CertifiedSlicePool {
     /// Returns the total estimated size of the slices in the pool.
     pub fn byte_size(&self) -> usize {
         self.slices.values().map(|slice| slice.count_bytes()).sum()
+    }
+
+    /// Computes `PullIndices` for every subnet with a cached stream position,
+    /// except `own_subnet_id`.
+    pub fn refill_stream_slice_indices(
+        &self,
+        own_subnet_id: SubnetId,
+    ) -> Vec<(SubnetId, PullIndices)> {
+        self.peers()
+            // Skip our own subnet, the loopback stream is routed separately.
+            .filter(|&&subnet_id| subnet_id != own_subnet_id)
+            .filter_map(|&subnet_id| Some((subnet_id, self.pull_indices(subnet_id)?)))
+            .collect()
     }
 
     /// Computes the `PullIndices` for pulling a slice from `subnet_id`;
