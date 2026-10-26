@@ -79,9 +79,12 @@ impl<T: Eq> HeightIndex<T> {
         self.buckets.values().map(Vec::len).sum()
     }
 
-    /// Returns all heights of the index, in sorted order.
-    pub fn heights(&self) -> impl Iterator<Item = Height> {
-        self.buckets.keys().copied()
+    pub fn min_height(&self) -> Option<Height> {
+        self.buckets.keys().next().copied()
+    }
+
+    pub fn max_height(&self) -> Option<Height> {
+        self.buckets.keys().next_back().copied()
     }
 
     pub fn range<R>(&self, range: R) -> impl Iterator<Item = (&Height, &Vec<T>)>
@@ -338,7 +341,7 @@ mod tests {
 
         assert_eq!(
             vec![fifteen, sixty_six, one_hundred],
-            index.heights().collect::<Vec<_>>()
+            index.buckets.keys().copied().collect::<Vec<_>>()
         );
 
         let expected_values = vec![&12, &13, &17, &44];
