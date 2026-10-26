@@ -15654,6 +15654,7 @@ dependencies = [
  "hyper-util",
  "ic-base-types",
  "ic-canonical-state",
+ "ic-canonical-state-tree-hash",
  "ic-config",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",

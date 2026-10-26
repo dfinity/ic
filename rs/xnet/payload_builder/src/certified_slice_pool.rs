@@ -80,7 +80,7 @@ impl CertifiedSlicePoolMetrics {
             ),
             put_count: metrics_registry.int_counter_vec(
                 METRIC_PUT_COUNT,
-                "Count of valid XNet slice pool puts and appends, by status. Errors are instrumented separately, as failed pull attempts.",
+                "Count of valid XNet slice pool puts (of pulled slices or adverts) and appends, by status. Errors are instrumented separately, as failed pull attempts or advert outcomes.",
                 &[LABEL_STATUS]
             ),
             lagging_put_and_append_count: metrics_registry.int_counter(
@@ -1461,7 +1461,8 @@ impl CertifiedSlicePool {
     /// only taken to insert the slice.
     ///
     /// Returns whether the slice was pooled, i.e. had anything left after trimming
-    /// and was more useful than the pooled slice. Returns `Err(InvalidPayload)` or
+    /// and was more useful than the pooled slice. Returns `Err(DecodeFailed)` if
+    /// `slice` could not be deserialized. Returns `Err(InvalidPayload)` or
     /// `Err(WitnessPruningFailed)` if `slice` is malformed. Returns
     /// `Err(DecodeStreamError)` if the slice could not be decoded or its
     /// certification was invalid.
@@ -1571,7 +1572,7 @@ impl CertifiedSlicePool {
             self.metrics.lagging_put_and_append_count.inc();
         }
 
-        // Record every pulled header, whether or not we end up pooling it.
+        // Record every header, whether or not we end up pooling it.
         self.record_peer_header(subnet_id, header);
 
         // Trim off everything before the cached stream position.

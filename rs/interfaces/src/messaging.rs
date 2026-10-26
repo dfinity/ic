@@ -148,7 +148,8 @@ pub enum XNetAdvertOutcome {
     Duplicate,
 
     /// Advertised content goes beyond the peer's _recorded header_: something this
-    /// node has not seen before. Enqueues a fetch.
+    /// node has not seen before. Enqueues a fetch; and is pooled right away, unless
+    /// a slice with messages is already pooled.
     Actionable,
 }
 

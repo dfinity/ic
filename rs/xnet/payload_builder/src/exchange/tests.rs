@@ -99,6 +99,16 @@ fn own_stream_for_advert_tests() -> Stream {
     })
 }
 
+/// Our stream position in `REMOTE_SUBNET`'s stream across the advert tests,
+/// consistent with `own_stream_for_advert_tests()`.
+fn stream_position_for_advert_tests() -> ExpectedIndices {
+    ExpectedIndices {
+        message_index: OWN_SIGNALS_END.into(),
+        signal_index: OWN_MESSAGES_BEGIN.into(),
+        ..Default::default()
+    }
+}
+
 /// `REMOTE_SUBNET`'s stream to us, as advertised in the advert tests, having
 /// both new messages and new signals.
 fn peer_stream_for_advert_tests() -> Stream {
@@ -357,6 +367,9 @@ async fn handle_advert_nothing_new() {
                 Ok(own_header.clone())
             });
         let mut fixture = AdvertHandlerFixture::new(store, log);
+        fixture.pool.lock().unwrap().garbage_collect(btreemap! {
+            REMOTE_SUBNET => stream_position_for_advert_tests()
+        });
 
         for _ in 0..2 {
             assert_matches!(
@@ -373,8 +386,111 @@ async fn handle_advert_nothing_new() {
                 fixture.handler.certified_header(REMOTE_SUBNET)
             );
         }
-        // Nothing to pull.
+        // Nothing to pull; and nothing pooled, as the stream position covers it all.
         assert!(fixture.take_pull_requests().is_empty());
+        assert_matches!(
+            fixture.pool.lock().unwrap().slice_stats(REMOTE_SUBNET),
+            (_, None, 0, 0)
+        );
+    });
+}
+
+/// A verified advert is pooled as long as no messages from its subnet are: here
+/// for its new signals, while a pull is still requested for its new messages.
+#[tokio::test]
+async fn handle_advert_pools_advert() {
+    with_test_replica_logger(|log| {
+        let advertised = peer_stream_for_advert_tests();
+        let mut fixture = AdvertHandlerFixture::new(store_expecting_decodes(&advertised, 1), log);
+        let stream_position = stream_position_for_advert_tests();
+        fixture.pool.lock().unwrap().garbage_collect(btreemap! {
+            REMOTE_SUBNET => stream_position.clone()
+        });
+
+        assert_matches!(
+            fixture.handle_advert(make_advert(&advertised)),
+            Ok(XNetAdvertOutcome::Actionable)
+        );
+
+        // Header is recorded.
+        assert_eq!(
+            Some(Arc::new(advertised.header())),
+            fixture.recorded_peer_header()
+        );
+        // And a pull scheduled.
+        assert_eq!(vec![REMOTE_SUBNET], fixture.take_pull_requests());
+
+        // Header is also pooled.
+        let (pooled, _) = fixture
+            .pool
+            .lock()
+            .unwrap()
+            .take_slice(REMOTE_SUBNET, Some(&stream_position), None, None)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            advertised.header(),
+            decode_slice_header(&pooled.payload).unwrap()
+        );
+    });
+}
+
+/// A verified advert does not displace a pooled slice holding messages: its
+/// header is recorded and a pull requested instead.
+#[tokio::test]
+async fn handle_advert_keeps_pooled_messages() {
+    with_test_replica_logger(|log| {
+        let advertised = peer_stream_for_advert_tests();
+        // Expect one verification to pool a slice during setup, one for the advert.
+        let mut fixture =
+            AdvertHandlerFixture::new(store_expecting_decodes(&advertised, 2), log.clone());
+        fixture.pool.lock().unwrap().garbage_collect(btreemap! {
+            REMOTE_SUBNET => stream_position_for_advert_tests()
+        });
+
+        // Pooled, earlier version of the advertised stream, with one message and no
+        // signal.
+        let earlier = generate_stream(&StreamConfig {
+            message_begin: OWN_SIGNALS_END,
+            message_end: OWN_SIGNALS_END + 1,
+            signal_end: OWN_MESSAGES_BEGIN,
+        });
+        let slice = make_certified_slice_for(
+            REMOTE_SUBNET,
+            LOCAL_SUBNET,
+            &earlier,
+            earlier.messages_begin(),
+            earlier.messages_end(),
+        );
+        assert!(
+            CertifiedSlicePool::put(
+                &fixture.pool,
+                REMOTE_SUBNET,
+                slice,
+                fixture.handler.certified_stream_store.as_ref(),
+                REGISTRY_VERSION,
+                &log,
+            )
+            .unwrap()
+        );
+
+        assert_matches!(
+            fixture.handle_advert(make_advert(&advertised)),
+            Ok(XNetAdvertOutcome::Actionable)
+        );
+
+        // The pooled message stays.
+        assert_matches!(
+            fixture.pool.lock().unwrap().slice_stats(REMOTE_SUBNET),
+            (_, Some(_), 1, _)
+        );
+        // But the advertised header is recorded.
+        assert_eq!(
+            Some(Arc::new(advertised.header())),
+            fixture.recorded_peer_header()
+        );
+        // And a pull was requested.
+        assert_eq!(vec![REMOTE_SUBNET], fixture.take_pull_requests());
     });
 }
 
