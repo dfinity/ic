@@ -93,9 +93,11 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
         purged
     }
 
-    fn get_by_hashes<S: ConsensusMessageHashable>(&self, hashes: Vec<&CryptoHashOf<S>>) -> Vec<S> {
+    fn get_by_hashes<'a, S: ConsensusMessageHashable + 'a>(
+        &self,
+        hashes: impl Iterator<Item = &'a CryptoHashOf<S>>,
+    ) -> Vec<S> {
         hashes
-            .iter()
             .map(|hash| {
                 let artifact_opt = self.get_by_hash(hash.get_ref());
                 match artifact_opt {
@@ -110,8 +112,8 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
     }
 
     /// Get a consensus message by its hash
-    pub fn get_by_hash(&self, hash: &CryptoHash) -> Option<T> {
-        self.artifacts.get(hash).cloned()
+    pub fn get_by_hash(&self, hash: &CryptoHash) -> Option<&T> {
+        self.artifacts.get(hash)
     }
 
     /// Get a consensus message by its hash
@@ -132,14 +134,13 @@ where
     CryptoHashOf<T>: SelectIndex,
 {
     fn get_all(&self) -> Box<dyn Iterator<Item = T>> {
-        Box::new(
-            self.get_by_hashes(self.select_index().get_all().collect())
-                .into_iter(),
-        )
+        let hashes = self.select_index().get_all();
+
+        Box::new(self.get_by_hashes(hashes).into_iter())
     }
 
     fn get_by_height(&self, h: Height) -> Box<dyn Iterator<Item = T>> {
-        let hashes = self.select_index().lookup(h).collect();
+        let hashes = self.select_index().lookup(h);
 
         Box::new(self.get_by_hashes(hashes).into_iter())
     }
@@ -173,11 +174,13 @@ where
     }
 
     fn get_only_by_height(&self, h: Height) -> Result<T, OnlyError> {
-        let mut to_vec: Vec<T> = self.get_by_height(h).collect();
-        match to_vec.len() {
-            0 => Err(OnlyError::NoneAvailable),
-            1 => Ok(to_vec.remove(0)),
-            _ => Err(OnlyError::MultipleValues),
+        let mut iter = self.get_by_height(h);
+        match iter.next() {
+            None => Err(OnlyError::NoneAvailable),
+            Some(value) => match iter.next() {
+                None => Ok(value),
+                Some(_) => Err(OnlyError::MultipleValues),
+            },
         }
     }
 
@@ -211,6 +214,7 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> PoolSection<T>
 
     fn get(&self, msg_id: &ConsensusMessageId) -> Option<ConsensusMessage> {
         self.get_by_hash(msg_id.hash.digest())
+            .cloned()
             .map(|x| x.into_inner())
     }
 
