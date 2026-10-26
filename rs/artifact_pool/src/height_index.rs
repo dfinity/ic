@@ -93,7 +93,7 @@ impl<T: Eq> HeightIndex<T> {
     {
         self.buckets
             .range(range)
-            .flat_map(|(_height, values)| values.iter())
+            .flat_map(|(_height, values)| values)
     }
 }
 
