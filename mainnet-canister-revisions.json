@@ -64,8 +64,8 @@
     "tag": "release/2026-05-27"
   },
   "engine-controller": {
-    "rev": "e9963e1c5852e407327d04fcccfc1fd8ad50d948",
-    "sha256": "120dce8e153bd9118a3a1eabc9378f8041b81ce563bc97f95d96514e43861aee"
+    "rev": "3e645182ac06c7b761040615db4e3d44a8349351",
+    "sha256": "aed8c658290498a45d7cd6894fd3a4dacd7f89444ec9eb857d9e8774c24ff2f5"
   },
   "genesis-token": {
     "rev": "00054dfbe14b9dba1e1b516839c66aadda04a78b",
