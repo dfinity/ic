@@ -1664,7 +1664,7 @@ crate.spec(
 crate.spec(
     features = ["full"],
     package = "tokio",
-    version = "^1.54.0",
+    version = "^1.54.1",
 )
 crate.spec(
     package = "tokio-io-timeout",
