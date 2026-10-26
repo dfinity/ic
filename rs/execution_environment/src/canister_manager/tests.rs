@@ -7399,12 +7399,6 @@ fn can_rename_canister() {
     );
     assert_matches!(wasm_result, WasmResult::Reply(r) if r == EmptyBlob.encode());
 
-    // Route the renamed ID to this subnet before sending ingress to it.
-    env1.reroute_canister_range(new_canister_id..=new_canister_id, env2.get_subnet_id());
-    env2.reload_registry();
-    env1.tick();
-    env2.tick();
-
     // Verify that the right canisters are present and can be run, and that version/canister history etc are as expected.
     let verify_rename_happened = |old_canister_id,
                                   new_canister_id,
@@ -7502,11 +7496,6 @@ fn can_rename_canister() {
         true,
     );
     assert_matches!(wasm_result, WasmResult::Reply(r) if r == EmptyBlob.encode());
-
-    env1.reroute_canister_range(third_canister_id..=third_canister_id, env2.get_subnet_id());
-    env2.reload_registry();
-    env1.tick();
-    env2.tick();
 
     // Trying to rename the canister again results in an error
     // with `RejectCode::DestinationInvalid`. This reject code

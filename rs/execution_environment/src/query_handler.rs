@@ -14,7 +14,7 @@ use crate::{
     CanisterManager,
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
-    receiver_is_on_subnet,
+    receiver_exists,
 };
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
@@ -417,7 +417,7 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
         let (tx, rx) = oneshot::channel();
         let canister_id = query.receiver;
         let latest_state = state_reader.get_latest_state();
-        if !receiver_is_on_subnet(latest_state.get_ref(), canister_id) {
+        if !receiver_exists(latest_state.get_ref(), canister_id) {
             let time = latest_state.get_ref().metadata.batch_time;
             return Box::pin(async move {
                 Ok(Ok((

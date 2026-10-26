@@ -60,53 +60,26 @@ pub use scheduler::{
 use std::{path::Path, sync::Arc};
 use tokio::sync::mpsc::Sender;
 
-/// Whether a non-replicated request can be handled by this subnet.
-fn receiver_is_on_subnet(state: &ReplicatedState, receiver: CanisterId) -> bool {
-    receiver == CanisterId::ic_00()
-        || state
-            .routing_table()
-            .lookup_entry(receiver)
-            .is_some_and(|(_, subnet_id)| subnet_id == state.metadata.own_subnet_id)
+/// Whether the receiver of a non-replicated request exists on this subnet.
+fn receiver_exists(state: &ReplicatedState, receiver: CanisterId) -> bool {
+    receiver == CanisterId::ic_00() || state.canister_state(&receiver).is_some()
 }
 
 #[cfg(test)]
 mod receiver_tests {
     use super::*;
-    use ic_registry_routing_table::CanisterIdRange;
-    use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
+    use ic_test_utilities_state::get_running_canister;
     use ic_types_test_utils::ids::subnet_test_id;
 
     #[test]
-    fn only_management_and_own_subnet_ranges_are_accepted() {
-        let own_subnet = subnet_test_id(1);
-        let other_subnet = subnet_test_id(2);
-        let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
-        let topology = Arc::make_mut(&mut state.metadata.network_topology);
-        let routing_table = topology.routing_table_mut();
-        routing_table
-            .insert(
-                CanisterIdRange {
-                    start: CanisterId::from_u64(10),
-                    end: CanisterId::from_u64(19),
-                },
-                own_subnet,
-            )
-            .unwrap();
-        routing_table
-            .insert(
-                CanisterIdRange {
-                    start: CanisterId::from_u64(20),
-                    end: CanisterId::from_u64(29),
-                },
-                other_subnet,
-            )
-            .unwrap();
+    fn only_management_and_existing_canisters_are_accepted() {
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        state.put_canister_state(get_running_canister(CanisterId::from_u64(15)));
 
-        assert!(receiver_is_on_subnet(&state, CanisterId::ic_00()));
-        assert!(receiver_is_on_subnet(&state, CanisterId::from_u64(15)));
-        assert!(!receiver_is_on_subnet(&state, CanisterId::from_u64(25)));
-        assert!(!receiver_is_on_subnet(&state, CanisterId::from_u64(100)));
-        assert!(!receiver_is_on_subnet(
+        assert!(receiver_exists(&state, CanisterId::ic_00()));
+        assert!(receiver_exists(&state, CanisterId::from_u64(15)));
+        assert!(!receiver_exists(&state, CanisterId::from_u64(16)));
+        assert!(!receiver_exists(
             &state,
             CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
         ));

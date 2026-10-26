@@ -1,5 +1,5 @@
 use crate::query_handler::QueryScheduler;
-use crate::{ExecutionEnvironment, metrics::IngressFilterMetrics, receiver_is_on_subnet};
+use crate::{ExecutionEnvironment, metrics::IngressFilterMetrics, receiver_exists};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressFilterError, IngressFilterInput, IngressFilterResponse,
@@ -55,7 +55,7 @@ impl Service<IngressFilterInput> for IngressFilterServiceImpl {
         let state_reader = Arc::clone(&self.state_reader);
         let (tx, rx) = oneshot::channel();
         let canister_id = raw_ingress.content().canister_id();
-        if !receiver_is_on_subnet(state_reader.get_latest_state().get_ref(), canister_id) {
+        if !receiver_exists(state_reader.get_latest_state().get_ref(), canister_id) {
             return Box::pin(async move {
                 Ok(Ok(Err(UserError::new(
                     ErrorCode::CanisterNotFound,
