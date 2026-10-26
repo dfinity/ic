@@ -72,7 +72,7 @@ gh api repos/dfinity/ic/commits/$RC_COMMIT/check-runs \
              or .name == "CI Main / Build IC"
              or .name == "CI Main / Upload external artifacts"
         )
-        | "\(.name) | \(.status) | \(.conclusion)"'
+        | "\(.check_suite.id) | \(.name) | \(.status) | \(.conclusion) | \(.details_url)"'
 ```
 Each of these checks usually appears twice: once from the merge-queue run, where
 `Build IC` and `Upload external artifacts` are `skipped`, and once from the
