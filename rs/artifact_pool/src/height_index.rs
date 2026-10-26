@@ -89,11 +89,13 @@ impl<T: Eq + Clone> HeightIndex<T> {
         self.buckets.keys().next_back().copied()
     }
 
-    pub fn range<R>(&self, range: R) -> impl Iterator<Item = (&Height, &Vec<T>)>
+    pub fn get_by_range<R>(&self, range: R) -> impl Iterator<Item = &T>
     where
         R: std::ops::RangeBounds<Height>,
     {
-        self.buckets.range(range)
+        self.buckets
+            .range(range)
+            .flat_map(|(_height, values)| values.iter())
     }
 }
 

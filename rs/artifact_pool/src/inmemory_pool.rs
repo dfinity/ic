@@ -159,15 +159,11 @@ where
         if range.min > range.max {
             return Box::new(std::iter::empty());
         }
-        let heights = self
+        let hashes = self
             .select_index::<CryptoHashOf<T>>()
-            .range((
-                std::ops::Bound::Included(range.min),
-                std::ops::Bound::Included(range.max),
-            ))
-            .flat_map(|(_height, hashes)| hashes.into_iter());
+            .get_by_range(range.min..=range.max);
 
-        Box::new(self.get_by_hashes(heights).into_iter())
+        Box::new(self.get_by_hashes(hashes).into_iter())
     }
 
     fn get_only_by_height(&self, h: Height) -> Result<T, OnlyError> {
