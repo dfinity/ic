@@ -238,7 +238,7 @@ impl XNetPayloadBuilderImpl {
     /// Creates a new `XNetPayloadBuilderImpl` for a node on `subnet_id`, using
     /// the given `StateManager`, `CertifiedStreamStore` and `RegistryClient`.
     ///
-    /// Also starts the refill task; and the advert task, advertising on every
+    /// Also starts the pull task; and the advert task, advertising on every
     /// certified height received from `max_certified_height_rx`.
     ///
     /// # Panics
@@ -287,6 +287,7 @@ impl XNetPayloadBuilderImpl {
             Arc::clone(&xnet_client),
             Arc::clone(&certified_stream_store),
             Arc::clone(&state_manager),
+            Arc::clone(&registry),
             runtime_handle.clone(),
             metrics_registry,
             log.clone(),
@@ -313,7 +314,7 @@ impl XNetPayloadBuilderImpl {
     }
 
     /// Same as `new` except that this constructor uses the provided `slice_pool`;
-    /// and starts no refill or advert tasks.
+    /// and starts no pull or advert tasks.
     pub fn new_from_components(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
@@ -981,10 +982,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                 }
             };
 
-        // We don't care if the send succeeded or not. If it didn't, the refill task is
-        // just behind.
-        self.pull_task_handle
-            .trigger_refill(validation_context.registry_version);
+        self.pull_task_handle.trigger_refill();
 
         payload
     }
@@ -1084,8 +1082,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
             }
         }
         // And trigger a pool refill.
-        self.pull_task_handle
-            .trigger_refill(validation_context.registry_version);
+        self.pull_task_handle.trigger_refill();
 
         self.metrics
             .observe_validate_duration(VALIDATION_STATUS_VALID, since);
