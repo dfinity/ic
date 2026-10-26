@@ -9,6 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
+* New `create_canister` update method that creates an empty canister on a
+  cloud engine subnet, controlled by the given `controllers` only.
+
 * `create_engine` takes an optional `resource_limits` (`maximum_state_size`,
   `maximum_state_delta`), forwarded to the new subnet's `CreateSubnetPayload`.
   Omitted, the subnet keeps the protocol defaults as before.

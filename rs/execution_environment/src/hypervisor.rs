@@ -23,12 +23,12 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{binary_buckets_with_zero, decimal_buckets_with_zero, linear_buckets};
 use ic_replicated_state::{
     ExecutionState, Memory, NetworkTopology, NumWasmPages, ReplicatedState, SystemState,
-    canister_state::{execution_state::WasmExecutionMode, num_bytes_try_from},
+    canister_state::num_bytes_try_from,
 };
 use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
-    CanisterId, DiskBytes, MAX_WASM_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES, NumBytes,
-    NumInstructions, PrincipalId, SubnetId, Time, messages::RequestMetadata, methods::FuncRef,
+    CanisterId, DiskBytes, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
+    messages::RequestMetadata, methods::FuncRef,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
@@ -313,10 +313,7 @@ impl Hypervisor {
         execution_state: &ExecutionState,
         declared_wasm_memory_size: Option<NumWasmPages>,
     ) -> HypervisorResult<()> {
-        let max_wasm_memory_size = match execution_state.wasm_execution_mode {
-            WasmExecutionMode::Wasm32 => NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
-            WasmExecutionMode::Wasm64 => NumBytes::new(MAX_WASM64_MEMORY_IN_BYTES),
-        };
+        let max_wasm_memory_size = execution_state.wasm_execution_mode.max_wasm_memory_size();
         let wasm_memory_size = execution_state.wasm_memory_usage();
         if wasm_memory_size > max_wasm_memory_size {
             return Err(HypervisorError::InvalidWasmMemory {

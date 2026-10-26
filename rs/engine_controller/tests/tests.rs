@@ -8,7 +8,8 @@ use candid::{Decode, Encode, Principal};
 use canister_test::Project;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_engine_controller::{
-    CreateEngineArgs, DeleteEngineArgs, EngineControllerInitArgs, EngineResourceLimits, NewSubnet,
+    CreateCanisterArgs, CreateEngineArgs, DeleteEngineArgs, EngineControllerInitArgs,
+    EngineResourceLimits, NewCanister, NewSubnet,
 };
 use ic_management_canister_types::CanisterSettings;
 use ic_nns_constants::{ENGINE_CONTROLLER_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
@@ -28,6 +29,9 @@ use ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Co
 use ic_registry_transport::{deserialize_get_value_response, serialize_get_value_request};
 use ic_test_utilities_types::ids::test_replica_version;
 use pocket_ic::PocketIcBuilder;
+use pocket_ic::common::rest::{
+    CanisterCyclesCostSchedule, ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig, SubnetSpec,
+};
 use pocket_ic::nonblocking::PocketIc;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -478,6 +482,164 @@ async fn delete_engine_caller_must_be_authorized() {
         attacker,
         &DeleteEngineArgs {
             subnet_id: Principal::management_canister(),
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(err.contains("not authorized"), "unexpected error: {err}");
+}
+
+/// Boots PocketIC with an NNS subnet and one cloud engine, with the registry
+/// canister describing both, and installs the engine controller. Returns the
+/// engine's subnet id and the NNS subnet id.
+async fn setup_with_cloud_engine() -> (PocketIc, Principal, Principal) {
+    let config = ExtendedSubnetConfigSet {
+        nns: Some(SubnetSpec::default()),
+        cloud_engine: vec![
+            SubnetSpec::default().with_cost_schedule(CanisterCyclesCostSchedule::Free),
+        ],
+        ..Default::default()
+    };
+    let pic = PocketIcBuilder::new_with_config(config)
+        .with_icp_features(IcpFeatures {
+            registry: Some(IcpFeaturesConfig::DefaultConfig),
+            ..Default::default()
+        })
+        .build_async()
+        .await;
+    let topology = pic.topology().await;
+    let engine_subnet_id = topology.get_cloud_engines()[0];
+    let nns_subnet_id = topology.get_nns().expect("pocket-ic has no NNS subnet");
+
+    let engine_controller_wasm =
+        Project::cargo_bin_maybe_from_env("engine-controller-canister", &[]);
+    install_at(
+        &pic,
+        ENGINE_CONTROLLER_CANISTER_ID,
+        engine_controller_wasm.bytes(),
+        Encode!(&None::<EngineControllerInitArgs>).unwrap(),
+        ROOT_CANISTER_ID.into(),
+    )
+    .await;
+
+    (pic, engine_subnet_id, nns_subnet_id)
+}
+
+async fn call_create_canister(
+    pic: &PocketIc,
+    sender: Principal,
+    args: &CreateCanisterArgs,
+) -> Result<NewCanister, String> {
+    let raw = pic
+        .update_call(
+            ENGINE_CONTROLLER_CANISTER_ID.get().0,
+            sender,
+            "create_canister",
+            Encode!(args).unwrap(),
+        )
+        .await
+        .expect("ingress call should succeed");
+    Decode!(&raw, Result<NewCanister, String>).unwrap()
+}
+
+#[tokio::test]
+async fn create_canister_on_cloud_engine() {
+    let (pic, engine_subnet_id, _nns_subnet_id) = setup_with_cloud_engine().await;
+    let controller = Principal::self_authenticating(b"engine-manager");
+
+    let new_canister = call_create_canister(
+        &pic,
+        authorized(),
+        &CreateCanisterArgs {
+            subnet_id: engine_subnet_id,
+            controllers: vec![controller],
+        },
+    )
+    .await
+    .expect("create_canister should succeed");
+
+    let topology = pic.topology().await;
+    assert_eq!(
+        topology.get_subnet(new_canister.canister_id),
+        Some(engine_subnet_id),
+        "the canister must be created on the cloud engine"
+    );
+    assert_eq!(
+        pic.get_controllers(new_canister.canister_id).await,
+        vec![controller]
+    );
+}
+
+#[tokio::test]
+async fn create_canister_rejects_a_subnet_that_is_not_a_cloud_engine() {
+    let (pic, _engine_subnet_id, nns_subnet_id) = setup_with_cloud_engine().await;
+    let err = call_create_canister(
+        &pic,
+        authorized(),
+        &CreateCanisterArgs {
+            subnet_id: nns_subnet_id,
+            controllers: vec![authorized()],
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        err.contains("is not a cloud engine"),
+        "unexpected error: {err}"
+    );
+}
+
+#[tokio::test]
+async fn create_canister_requires_controllers() {
+    let (pic, engine_subnet_id, _nns_subnet_id) = setup_with_cloud_engine().await;
+    let err = call_create_canister(
+        &pic,
+        authorized(),
+        &CreateCanisterArgs {
+            subnet_id: engine_subnet_id,
+            controllers: vec![],
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        err.contains("Expected between 1 and 10 controllers"),
+        "unexpected error: {err}"
+    );
+}
+
+#[tokio::test]
+async fn create_canister_rejects_more_than_ten_controllers() {
+    let (pic, engine_subnet_id, _nns_subnet_id) = setup_with_cloud_engine().await;
+    let controllers = (0..11_u8)
+        .map(|i| Principal::self_authenticating([i]))
+        .collect();
+    let err = call_create_canister(
+        &pic,
+        authorized(),
+        &CreateCanisterArgs {
+            subnet_id: engine_subnet_id,
+            controllers,
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        err.contains("Expected between 1 and 10 controllers, got 11"),
+        "unexpected error: {err}"
+    );
+}
+
+#[tokio::test]
+async fn create_canister_caller_must_be_authorized() {
+    let (pic, engine_subnet_id, _nns_subnet_id) = setup_with_cloud_engine().await;
+    let attacker = Principal::self_authenticating(b"attacker");
+    let err = call_create_canister(
+        &pic,
+        attacker,
+        &CreateCanisterArgs {
+            subnet_id: engine_subnet_id,
+            controllers: vec![attacker],
         },
     )
     .await
