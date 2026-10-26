@@ -62,8 +62,18 @@ pub fn push_response(
             Ok(())
         }
         BitcoinAdapterResponseWrapper::SendTransactionResponse(_) => {
-            // Retrieve the associated request from the call context manager.
+            // Ensure the response belongs to a pending `send_transaction` request.
             let callback_id = CallbackId::from(response.callback_id);
+            if !state
+                .metadata
+                .subnet_call_context_manager
+                .bitcoin_send_transaction_internal_contexts
+                .contains_key(&callback_id)
+            {
+                return Err(StateError::BitcoinNonMatchingResponse {
+                    callback_id: callback_id.get(),
+                });
+            }
             // The response to a `send_transaction` call is always the empty blob.
             let payload = Payload::Data(EmptyBlob.encode());
 
@@ -75,8 +85,18 @@ pub fn push_response(
             Ok(())
         }
         BitcoinAdapterResponseWrapper::GetSuccessorsReject(reject) => {
-            // Retrieve the associated request from the call context manager.
+            // Ensure the response belongs to a pending `get_successors` request.
             let callback_id = CallbackId::from(response.callback_id);
+            if !state
+                .metadata
+                .subnet_call_context_manager
+                .bitcoin_get_successors_contexts
+                .contains_key(&callback_id)
+            {
+                return Err(StateError::BitcoinNonMatchingResponse {
+                    callback_id: callback_id.get(),
+                });
+            }
             let reject_payload =
                 Payload::Reject(RejectContext::new(reject.reject_code, reject.message));
 
@@ -88,8 +108,18 @@ pub fn push_response(
             Ok(())
         }
         BitcoinAdapterResponseWrapper::SendTransactionReject(reject) => {
-            // Retrieve the associated request from the call context manager.
+            // Ensure the response belongs to a pending `send_transaction` request.
             let callback_id = CallbackId::from(response.callback_id);
+            if !state
+                .metadata
+                .subnet_call_context_manager
+                .bitcoin_send_transaction_internal_contexts
+                .contains_key(&callback_id)
+            {
+                return Err(StateError::BitcoinNonMatchingResponse {
+                    callback_id: callback_id.get(),
+                });
+            }
             let reject_payload =
                 Payload::Reject(RejectContext::new(reject.reject_code, reject.message));
 
