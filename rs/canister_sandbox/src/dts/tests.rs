@@ -27,10 +27,15 @@ fn dts_state_updates() {
     assert_eq!(state.instructions_executed, 2000);
     assert_eq!(state.total_instructions_left(), 500);
     assert!(state.is_last_slice());
+    // This slice reports `-500` for its instruction counter, as if a system
+    // API call had charged more than the 500 instructions left in the total
+    // budget. `instructions_executed` is capped at `total_instruction_limit`
+    // (2500) instead of overshooting to 3000, so `total_instructions_left()`
+    // bottoms out at 0 instead of going negative.
     state.update(-500);
     assert_eq!(state.slice_instruction_limit, 0);
-    assert_eq!(state.instructions_executed, 3000);
-    assert_eq!(state.total_instructions_left(), -500);
+    assert_eq!(state.instructions_executed, 2500);
+    assert_eq!(state.total_instructions_left(), 0);
     assert!(state.is_last_slice());
 }
 
@@ -55,10 +60,16 @@ fn dts_state_updates_saturating() {
     assert_eq!(state.instructions_executed, 0);
     assert_eq!(state.total_instructions_left(), 2500);
     assert!(!state.is_last_slice());
+    // `instruction_counter` being `i64::MIN` models a system API call that
+    // charged a huge fee before failing with an out-of-instructions error.
+    // `newly_executed` saturates during the subtraction, but is then capped
+    // at the 2500 instructions left in the total budget instead of leaking
+    // out as `i64::MAX`, so `instructions_executed` / `total_instructions_left`
+    // stay consistent with the total instruction budget.
     state.update(i64::MIN);
     assert_eq!(state.slice_instruction_limit, 0);
-    assert_eq!(state.instructions_executed, i64::MAX);
-    assert_eq!(state.total_instructions_left(), 2500 - i64::MAX);
+    assert_eq!(state.instructions_executed, 2500);
+    assert_eq!(state.total_instructions_left(), 0);
     assert!(state.is_last_slice());
 }
 
@@ -139,6 +150,53 @@ fn early_exit_if_slice_does_not_any_instructions_left() {
 }
 
 #[test]
+fn charge_past_message_budget_fails_instead_of_pausing() {
+    let dts = super::DeterministicTimeSlicing::new(2500, 2500, 1000);
+
+    // The first slice uses its full limit, leaving 1500 instructions for the
+    // message. A later system API charge can take the next slice's counter
+    // below zero even when the charge itself passes the API's bounds checks.
+    assert_eq!(
+        dts.try_pause(0).unwrap().executed_instructions,
+        NumInstructions::from(1000)
+    );
+    dts.resume();
+
+    // This slice charges 1600 instructions, 100 more than the message has
+    // left. Without the cap in State::newly_executed, DTS incorrectly reports
+    // a paused slice, even though the message has exhausted its budget.
+    assert_eq!(
+        dts.try_pause(-600),
+        Err(HypervisorError::InstructionLimitExceeded(
+            NumInstructions::from(2500)
+        ))
+    );
+}
+
+#[test]
+fn exhausting_message_budget_within_maximum_slice_limit_fails_with_instruction_limit_exceeded() {
+    let dts = super::DeterministicTimeSlicing::new(2500, 2500, 1000);
+
+    // The first slice overruns its limit by 800 instructions, leaving 700
+    // instructions for the message and 200 instructions for the next slice.
+    assert_eq!(
+        dts.try_pause(-800).unwrap().executed_instructions,
+        NumInstructions::from(1800)
+    );
+    dts.resume();
+
+    // This slice executes the remaining 700 instructions of the message,
+    // exceeding the current slice limit of 200 but staying below the maximum
+    // slice limit of 1000. Execution fails because the message budget is exhausted.
+    assert_eq!(
+        dts.try_pause(-500),
+        Err(HypervisorError::InstructionLimitExceeded(
+            NumInstructions::from(2500)
+        ))
+    );
+}
+
+#[test]
 fn invalid_instructions() {
     let (tx, rx): (Sender<PausedExecution>, Receiver<PausedExecution>) = mpsc::channel();
     let dts = DeterministicTimeSlicingHandler::new(2500, 2500, 1000, move |_slice, paused| {
@@ -157,14 +215,17 @@ fn invalid_instructions() {
     // Slice 2: executes 0 instructions before calling `out_of_instructions()`.
     let new_instructions = dts.out_of_instructions(i64::MAX).unwrap();
     assert_eq!(1000, new_instructions);
-    // Slice 3: executes more than i64::MAX instructions before calling `out_of_instructions()`.
+    // Slice 3: charges more than i64::MAX instructions before calling
+    // `out_of_instructions()`, as if a system API call charged a huge fee
+    // before failing. `newly_executed` is capped at the 1500 instructions
+    // left in the total budget (2500 - 1000 executed so far), which exhausts
+    // the total budget.
     let error = dts.out_of_instructions(i64::MIN);
     assert_eq!(
         error,
-        Err(HypervisorError::SliceOverrun {
-            instructions: NumInstructions::from(9223372036854775807),
-            limit: NumInstructions::from(1000)
-        })
+        Err(HypervisorError::InstructionLimitExceeded(
+            NumInstructions::from(2500)
+        ))
     );
     drop(dts);
     control_thread.join().unwrap();
