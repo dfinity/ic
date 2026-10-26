@@ -194,11 +194,11 @@ impl CertificationPoolImpl {
         let shares = self
             .unvalidated_share_index
             .remove_all_below(height)
-            .map(CertificationMessageHash::CertificationShare);
+            .map(|(_height, hash)| CertificationMessageHash::CertificationShare(hash));
         let certs = self
             .unvalidated_cert_index
             .remove_all_below(height)
-            .map(CertificationMessageHash::Certification);
+            .map(|(_height, hash)| CertificationMessageHash::Certification(hash));
 
         // remove from unvalidated pool
         for id in shares.chain(certs) {

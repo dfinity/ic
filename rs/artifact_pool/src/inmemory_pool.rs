@@ -53,18 +53,13 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
 
         macro_rules! purge {
             ($artifact_name:ident, $artifact_type:ident) => {
-                if let Some(range) = self.$artifact_name().height_range() {
-                    for h in range.min.get()..height.get() {
-                        let height = Height::from(h);
-                        for hash in self.indexes.$artifact_name.remove_all(height) {
-                            self.artifacts.remove(hash.get_ref());
-                            purged.push(ConsensusMessageId {
-                                hash: ConsensusMessageHash::$artifact_type(hash),
-                                height,
-                            });
-                        }
-                    }
-                };
+                for (height, hash) in self.indexes.$artifact_name.remove_all_below(height) {
+                    self.artifacts.remove(hash.get_ref());
+                    purged.push(ConsensusMessageId {
+                        hash: ConsensusMessageHash::$artifact_type(hash),
+                        height,
+                    });
+                }
             };
         }
 

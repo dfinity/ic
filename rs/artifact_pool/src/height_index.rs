@@ -36,15 +36,13 @@ impl<T: Eq + Clone> HeightIndex<T> {
         false
     }
 
-    pub fn remove_all(&mut self, height: Height) -> impl Iterator<Item = T> {
-        self.buckets.remove(&height).into_iter().flatten()
-    }
-
-    pub fn remove_all_below(&mut self, height: Height) -> impl Iterator<Item = T> {
+    pub fn remove_all_below(&mut self, height: Height) -> impl Iterator<Item = (Height, T)> {
         let above_height = self.buckets.split_off(&height);
         let below_height = std::mem::replace(&mut self.buckets, above_height);
 
-        below_height.into_values().flatten()
+        below_height
+            .into_iter()
+            .flat_map(|(height, values)| values.into_iter().map(move |value| (height, value)))
     }
 
     /// Removes `value` from `height`. Returns `true` if `value` was removed,
@@ -318,7 +316,7 @@ impl<T: Eq + Ord + Clone> HeightIndexedInstants<T> {
     }
 
     pub fn clear(&mut self, h: Height) {
-        for hash in self.index.remove_all_below(h) {
+        for (_height, hash) in self.index.remove_all_below(h) {
             self.instants.remove(&hash);
         }
     }
