@@ -146,9 +146,8 @@ where
     }
 
     fn height_range(&self) -> Option<HeightRange> {
-        let mut heights = CryptoHashOf::<T>::select_index(&self.indexes).heights();
-        let min = heights.next()?;
-        let max = heights.last().unwrap_or(min);
+        let min = self.select_index::<CryptoHashOf<T>>().min_height()?;
+        let max = self.select_index::<CryptoHashOf<T>>().max_height()?;
         Some(HeightRange::new(min, max))
     }
 

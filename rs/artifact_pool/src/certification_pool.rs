@@ -209,15 +209,15 @@ impl CertificationPoolImpl {
     fn update_metrics(&self) {
         // Unvalidated section
         if let (Some(min_cert), Some(max_cert)) = (
-            self.unvalidated_cert_index.heights().next(),
-            self.unvalidated_cert_index.heights().last(),
+            self.unvalidated_cert_index.min_height(),
+            self.unvalidated_cert_index.max_height(),
         ) {
             self.unvalidated_pool_metrics
                 .set_certification_range(HeightRange::new(min_cert, max_cert));
         }
         if let (Some(min_share), Some(max_share)) = (
-            self.unvalidated_share_index.heights().next(),
-            self.unvalidated_share_index.heights().last(),
+            self.unvalidated_share_index.min_height(),
+            self.unvalidated_share_index.max_height(),
         ) {
             self.unvalidated_pool_metrics
                 .set_certification_share_range(HeightRange::new(min_share, max_share));
@@ -247,6 +247,21 @@ impl CertificationPoolImpl {
             .certification_share
             .count
             .set(self.validated.certification_shares().size() as i64);
+    }
+
+    #[cfg(test)]
+    fn all_heights_with_artifacts(&self) -> Vec<Height> {
+        let mut heights: Vec<Height> = self
+            .validated_shares()
+            .map(|share| share.height)
+            .chain(
+                self.validated_certifications()
+                    .map(|certification| certification.height),
+            )
+            .collect();
+        heights.sort_unstable();
+        heights.dedup();
+        heights
     }
 }
 
@@ -411,22 +426,6 @@ impl CertificationPool for CertificationPoolImpl {
             };
             cert
         }))
-    }
-
-    fn all_heights_with_artifacts(&self) -> Vec<Height> {
-        let mut heights: Vec<Height> = self
-            .unvalidated_share_index
-            .heights()
-            .chain(self.unvalidated_cert_index.heights())
-            .chain(self.validated_shares().map(|share| share.height))
-            .chain(
-                self.validated_certifications()
-                    .map(|certification| certification.height),
-            )
-            .collect();
-        heights.sort_unstable();
-        heights.dedup();
-        heights
     }
 
     fn certified_heights(&self) -> HashSet<Height> {
