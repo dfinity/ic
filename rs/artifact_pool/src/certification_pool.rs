@@ -252,8 +252,10 @@ impl CertificationPoolImpl {
     #[cfg(test)]
     fn all_heights_with_artifacts(&self) -> Vec<Height> {
         let mut heights: Vec<Height> = self
-            .validated_shares()
-            .map(|share| share.height)
+            .unvalidated
+            .iter()
+            .map(|(_hash, msg)| msg.height())
+            .chain(self.validated_shares().map(|share| share.height))
             .chain(
                 self.validated_certifications()
                     .map(|certification| certification.height),
