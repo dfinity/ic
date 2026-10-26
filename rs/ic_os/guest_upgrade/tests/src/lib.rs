@@ -1,8 +1,8 @@
 #![cfg(test)]
 
 use anyhow::{bail, ensure};
-use attestation::SevAttestationPackage;
 use attestation::attestation_package::SevRootCertificateVerification;
+use attestation::{LAUNCH_MEASUREMENT_LEN, SevAttestationPackage};
 use config_types::{
     GuestOSConfig, GuestOSUpgradeConfig, GuestVMType, ICOSSettings,
     TrustedExecutionEnvironmentConfig,
@@ -47,10 +47,10 @@ const REPLICA_VERSION: &str = "replica_version_1";
 const LUKS_HEADER_SIZE_BYTES: usize = 16 * 1024 * 1024;
 const SERVER_SUCCESS_TIMEOUT: Duration = Duration::from_secs(60);
 /// We register the following two measurements in the mock registry.
-const DEFAULT_CLIENT_MEASUREMENT: [u8; 48] = [42; 48];
-const DEFAULT_SERVER_MEASUREMENT: [u8; 48] = [52; 48];
+const DEFAULT_CLIENT_MEASUREMENT: [u8; LAUNCH_MEASUREMENT_LEN] = [42; LAUNCH_MEASUREMENT_LEN];
+const DEFAULT_SERVER_MEASUREMENT: [u8; LAUNCH_MEASUREMENT_LEN] = [52; LAUNCH_MEASUREMENT_LEN];
 /// A measurement that is not registered in the mock registry.
-const UNREGISTERED_MEASUREMENT: [u8; 48] = [99; 48];
+const UNREGISTERED_MEASUREMENT: [u8; LAUNCH_MEASUREMENT_LEN] = [99; LAUNCH_MEASUREMENT_LEN];
 /// Custom data that does not match the expected value.
 const BOGUS_CUSTOM_DATA: [u8; 64] = [255; 64];
 /// Expected chip ID of the machine.
@@ -69,9 +69,9 @@ fn default_launch_tcb_as_u64() -> u64 {
 #[derive(Debug, Clone)]
 struct TestConfig {
     /// Client measurement for SEV attestation
-    client_measurement: [u8; 48],
+    client_measurement: [u8; LAUNCH_MEASUREMENT_LEN],
     /// Server measurement for SEV attestation
-    server_measurement: [u8; 48],
+    server_measurement: [u8; LAUNCH_MEASUREMENT_LEN],
     /// Server chip ID (should be same as client for success)
     server_chip_id: [u8; 64],
     /// Client chip ID
