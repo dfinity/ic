@@ -416,7 +416,7 @@ mod tests {
     }
 
     #[test]
-    fn canister_is_kept_until_all_active_batches_finish() {
+    fn canister_is_kept_until_all_executing_queries_finish() {
         let metrics_registry = MetricsRegistry::new();
         let scheduler = QuerySchedulerInternal::new(2, Duration::from_millis(5), &metrics_registry);
         let id = canister_test_id(1);

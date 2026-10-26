@@ -34,6 +34,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::WasmExecutor;
+use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     IngressFilterService, IngressHistoryReader, QueryExecutionService, Scheduler,
     TransformExecutionService,
@@ -60,9 +61,16 @@ pub use scheduler::{
 use std::{path::Path, sync::Arc};
 use tokio::sync::mpsc::Sender;
 
-/// Whether the receiver of a non-replicated request exists on this subnet.
-fn receiver_exists(state: &ReplicatedState, receiver: CanisterId) -> bool {
-    receiver == CanisterId::ic_00() || state.canister_state(&receiver).is_some()
+/// Checks that the receiver of a non-replicated request exists on this subnet.
+fn receiver_exists(state: &ReplicatedState, receiver: CanisterId) -> Result<(), UserError> {
+    if receiver == CanisterId::ic_00() || state.canister_state(&receiver).is_some() {
+        Ok(())
+    } else {
+        Err(UserError::new(
+            ErrorCode::CanisterNotFound,
+            format!("Canister {receiver} not found"),
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -76,13 +84,25 @@ mod receiver_tests {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(get_running_canister(CanisterId::from_u64(15)));
 
-        assert!(receiver_exists(&state, CanisterId::ic_00()));
-        assert!(receiver_exists(&state, CanisterId::from_u64(15)));
-        assert!(!receiver_exists(&state, CanisterId::from_u64(16)));
-        assert!(!receiver_exists(
-            &state,
-            CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
-        ));
+        assert_eq!(receiver_exists(&state, CanisterId::ic_00()), Ok(()));
+        assert_eq!(receiver_exists(&state, CanisterId::from_u64(15)), Ok(()));
+        let missing = CanisterId::from_u64(16);
+        assert_eq!(
+            receiver_exists(&state, missing),
+            Err(UserError::new(
+                ErrorCode::CanisterNotFound,
+                format!("Canister {missing} not found"),
+            ))
+        );
+        assert_eq!(
+            receiver_exists(
+                &state,
+                CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
+            )
+            .unwrap_err()
+            .code(),
+            ErrorCode::CanisterNotFound
+        );
     }
 }
 
