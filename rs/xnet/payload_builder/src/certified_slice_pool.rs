@@ -27,8 +27,8 @@ use ic_types::{
 use messages::Messages;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge};
 use std::cmp::{Ordering, Reverse};
+use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{From, TryFrom, TryInto};
 use std::sync::{Arc, Mutex};
 
@@ -1144,8 +1144,7 @@ pub fn adjusted_byte_limit(slice_byte_size: usize) -> usize {
 ///
 /// Also maintains a collection of "recorded headers", the furthest-advanced
 /// certified header seen from each peer subnet, for deciding whether to post
-/// adverts and for classifying incoming ones; and the schedule of peers to pull
-/// from.
+/// adverts, classifying incoming ones and deciding what is left to pull.
 pub struct CertifiedSlicePool {
     /// The actual slice pool contents.
     slices: BTreeMap<SubnetId, UnpackedStreamSlice>,
@@ -1164,9 +1163,6 @@ pub struct CertifiedSlicePool {
     /// `begin`) and of what it has on offer (its `end` and `signals_end`).
     peer_headers: BTreeMap<SubnetId, Arc<StreamHeader>>,
 
-    /// Ordered queue of peers to pull from.
-    schedule: PullSchedule,
-
     metrics: CertifiedSlicePoolMetrics,
 
     log: ReplicaLogger,
@@ -1180,7 +1176,6 @@ impl CertifiedSlicePool {
             slices: Default::default(),
             stream_positions: Default::default(),
             peer_headers: Default::default(),
-            schedule: Default::default(),
             metrics: CertifiedSlicePoolMetrics::new(metrics_registry),
             log,
         }
@@ -1719,61 +1714,24 @@ impl CertifiedSlicePool {
         })
     }
 
-    /// Schedules a pull from `subnet_id`, unless one is already scheduled.
-    pub fn schedule_pull(&mut self, subnet_id: SubnetId) {
-        self.schedule.push(subnet_id);
-    }
-
-    /// Removes `subnet_id` from the schedule. Returns whether it was scheduled.
-    pub fn unschedule_pull(&mut self, subnet_id: SubnetId) -> bool {
-        self.schedule.remove(subnet_id)
-    }
-
-    /// Schedules a pull from every peer whose recorded header offers something that
-    /// neither the cached stream position nor the pooled slice cover (see
-    /// `classify_advert()`), given `own_streams` (to check for reject signals that
-    /// would be garbage collected).
-    pub fn schedule_pending_pulls(&mut self, own_streams: &StreamMap) {
-        let pending: Vec<_> = self
-            .peer_headers
+    /// Returns every peer whose recorded header offers something that neither the
+    /// cached stream position nor the pooled slice cover (see `classify_advert()`),
+    /// given `own_streams` (to check for reject signals that would be garbage
+    /// collected).
+    pub fn subnets_with_something_to_pull(&self, own_streams: &StreamMap) -> Vec<SubnetId> {
+        self.peer_headers
             .iter()
             .filter(|&(&subnet_id, header)| {
                 self.classify_advert(subnet_id, header, own_streams.get(&subnet_id))
                     == XNetAdvertOutcome::Duplicate
             })
             .map(|(&subnet_id, _)| subnet_id)
-            .collect();
-        for subnet_id in pending {
-            self.schedule.push(subnet_id);
-        }
+            .collect()
     }
 
     /// Observes the total size of all pooled slices.
     pub fn observe_pool_size_bytes(&self) {
         self.metrics.pool_size_bytes.set(self.byte_size() as i64);
-    }
-}
-
-/// Subnets to pull from, in the order they were scheduled, without duplicates.
-#[derive(Default)]
-struct PullSchedule {
-    queue: VecDeque<SubnetId>,
-    scheduled: BTreeSet<SubnetId>,
-}
-
-impl PullSchedule {
-    fn push(&mut self, subnet_id: SubnetId) {
-        if self.scheduled.insert(subnet_id) {
-            self.queue.push_back(subnet_id);
-        }
-    }
-
-    fn remove(&mut self, subnet_id: SubnetId) -> bool {
-        if !self.scheduled.remove(&subnet_id) {
-            return false;
-        }
-        self.queue.retain(|&scheduled| scheduled != subnet_id);
-        true
     }
 }
 

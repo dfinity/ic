@@ -185,7 +185,7 @@ use ic_types::{
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_xnet_payload_builder::{
     XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, certified_slice_pool::CertifiedSlicePool,
-    exchange::RefillTaskHandle, testing::XNetPayloadBuilderTesting,
+    exchange::PullTaskHandle, testing::XNetPayloadBuilderTesting,
 };
 
 use maplit::btreemap;
@@ -1784,11 +1784,8 @@ impl StateMachineBuilder {
         // Register this new `StateMachine` in the *shared* pool of `StateMachine`s.
         subnets.insert(sm.clone());
 
-        // Create a dummny refill task handle to be used in `XNetPayloadBuilderImpl`.
-        // It is fine that we do not pop any messages from the (bounded) channel
-        // since errors are ignored in `RefillTaskHandle::trigger_refill()`.
-        let (refill_trigger, _refill_receiver) = mpsc::channel(1);
-        let refill_task_handle = RefillTaskHandle(Mutex::new(refill_trigger));
+        // No pull task: `PocketXNetImpl::refill()` refills the pool.
+        let pull_task_handle = PullTaskHandle::disconnected();
 
         // Instantiate a `XNetPayloadBuilderImpl`.
         let certified_stream_store: Arc<dyn CertifiedStreamStore> = sm.state_manager.clone();
@@ -1803,7 +1800,7 @@ impl StateMachineBuilder {
                 sm.state_manager.clone(),
                 sm.registry_client.clone(),
                 certified_slice_pool.clone(),
-                refill_task_handle,
+                pull_task_handle,
                 metrics,
                 sm.replica_logger.clone(),
             )

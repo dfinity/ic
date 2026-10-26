@@ -109,52 +109,97 @@ fn peer_stream_for_advert_tests() -> Stream {
     })
 }
 
-/// Builds an `XNetAdvertHandlerImpl` around `certified_stream_store`, with a
-/// registry that only knows `REMOTE_SUBNET` and a pool that records headers.
-fn advert_handler_and_pool(
-    certified_stream_store: MockCertifiedStreamStore,
-    log: ReplicaLogger,
-) -> (XNetAdvertHandlerImpl, Arc<Mutex<CertifiedSlicePool>>) {
-    advert_handler_and_pool_for(
-        btreemap! { REMOTE_SUBNET => own_stream_for_advert_tests() },
-        certified_stream_store,
-        log,
-    )
+/// An `XNetAdvertHandlerImpl` under test, with the pool it shares and the
+/// receiving end of the pull requests it sends.
+struct AdvertHandlerFixture {
+    handler: Arc<XNetAdvertHandlerImpl>,
+    pool: Arc<Mutex<CertifiedSlicePool>>,
+    pull_requests: mpsc::Receiver<SubnetId>,
 }
 
-/// Like `advert_handler_and_pool()`, but with the given outgoing streams.
-fn advert_handler_and_pool_for(
-    streams: StreamMap,
-    certified_stream_store: MockCertifiedStreamStore,
-    log: ReplicaLogger,
-) -> (XNetAdvertHandlerImpl, Arc<Mutex<CertifiedSlicePool>>) {
-    let state_manager = Arc::new(FakeStateManager::new());
-    put_replicated_state_for_testing(state_manager.as_ref(), streams);
-    // `FakeStateManager` only reports a height as certified once a certification
-    // for it has been delivered.
-    state_manager.deliver_state_certification(Certification {
-        height: CERTIFIED_HEIGHT,
-        height_witness: Witness::new_for_testing(Digest([0; 32])),
-        signed: Signed {
-            content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
-            signature: ThresholdSignature::fake(),
-        },
-    });
-    let registry = get_registry_for_test(&[REMOTE_SUBNET]);
+impl AdvertHandlerFixture {
+    /// Builds an `XNetAdvertHandlerImpl` around `certified_stream_store`, with a
+    /// registry that only knows `REMOTE_SUBNET` and a pool that records headers.
+    fn new(certified_stream_store: MockCertifiedStreamStore, log: ReplicaLogger) -> Self {
+        Self::with_streams(
+            btreemap! { REMOTE_SUBNET => own_stream_for_advert_tests() },
+            certified_stream_store,
+            log,
+        )
+    }
 
-    let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-        &MetricsRegistry::new(),
-        log.clone(),
-    )));
-    let advert_handler = XNetAdvertHandlerImpl::new(
-        state_manager as Arc<_>,
-        Arc::new(certified_stream_store) as Arc<_>,
-        registry as Arc<_>,
-        Arc::clone(&pool),
-        log,
-    );
+    /// Like `new()`, but with the given outgoing streams.
+    fn with_streams(
+        streams: StreamMap,
+        certified_stream_store: MockCertifiedStreamStore,
+        log: ReplicaLogger,
+    ) -> Self {
+        let state_manager = Arc::new(FakeStateManager::new());
+        put_replicated_state_for_testing(state_manager.as_ref(), streams);
+        // `FakeStateManager` only reports a height as certified once a certification
+        // for it has been delivered.
+        state_manager.deliver_state_certification(Certification {
+            height: CERTIFIED_HEIGHT,
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
+            signed: Signed {
+                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
+                    vec![],
+                ))),
+                signature: ThresholdSignature::fake(),
+            },
+        });
+        let registry = get_registry_for_test(&[REMOTE_SUBNET]);
 
-    (advert_handler, pool)
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            &MetricsRegistry::new(),
+            log.clone(),
+        )));
+        let (pull_task, _, pull_requests) = PullTaskHandle::new();
+        let handler = Arc::new(XNetAdvertHandlerImpl::new(
+            state_manager as Arc<_>,
+            Arc::new(certified_stream_store) as Arc<_>,
+            registry as Arc<_>,
+            Arc::clone(&pool),
+            pull_task,
+            log,
+        ));
+
+        Self {
+            handler,
+            pool,
+            pull_requests,
+        }
+    }
+
+    /// Handles `advert`, as posted by `REMOTE_SUBNET`.
+    fn handle_advert(
+        &self,
+        advert: CertifiedStreamSlice,
+    ) -> Result<XNetAdvertOutcome, XNetAdvertError> {
+        self.handler.handle_advert(REMOTE_SUBNET, advert)
+    }
+
+    /// Records `header` as `REMOTE_SUBNET`'s.
+    fn record_peer_header(&self, header: &StreamHeader) {
+        self.pool
+            .lock()
+            .unwrap()
+            .record_peer_header(REMOTE_SUBNET, header);
+    }
+
+    /// The recorded header for `REMOTE_SUBNET`, if any.
+    fn recorded_peer_header(&self) -> Option<Arc<StreamHeader>> {
+        self.pool
+            .lock()
+            .unwrap()
+            .peer_header(REMOTE_SUBNET)
+            .cloned()
+    }
+
+    /// Takes the pull requests sent since the last call.
+    fn take_pull_requests(&mut self) -> Vec<SubnetId> {
+        std::iter::from_fn(|| self.pull_requests.try_recv().ok()).collect()
+    }
 }
 
 /// A mock store expecting exactly `count` verifying decodes of an advert
@@ -170,43 +215,31 @@ fn store_expecting_decodes(advertised: &Stream, count: usize) -> MockCertifiedSt
     store
 }
 
-/// The recorded header for `REMOTE_SUBNET`, if any.
-fn recorded_peer_header(pool: &Mutex<CertifiedSlicePool>) -> Option<Arc<StreamHeader>> {
-    pool.lock().unwrap().peer_header(REMOTE_SUBNET).cloned()
-}
-
-/// Unschedules the pull from `REMOTE_SUBNET`. Returns whether it was scheduled.
-fn unschedule_pull(pool: &Mutex<CertifiedSlicePool>) -> bool {
-    pool.lock().unwrap().unschedule_pull(REMOTE_SUBNET)
-}
-
 /// An advert offering messages we have not inducted is actionable: its header is
-/// recorded and a pull scheduled.
+/// recorded and a pull requested.
 #[tokio::test]
 async fn handle_advert_actionable() {
     with_test_replica_logger(|log| {
         let advertised = peer_stream_for_advert_tests();
         let header = advertised.header();
-        let (advert_handler, pool) =
-            advert_handler_and_pool(store_expecting_decodes(&advertised, 1), log);
+        let mut fixture = AdvertHandlerFixture::new(store_expecting_decodes(&advertised, 1), log);
 
         assert_matches!(
-            advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+            fixture.handle_advert(make_advert(&advertised)),
             Ok(XNetAdvertOutcome::Actionable)
         );
-        assert_eq!(Some(Arc::new(header)), recorded_peer_header(&pool));
-        assert!(unschedule_pull(&pool));
+        assert_eq!(Some(Arc::new(header)), fixture.recorded_peer_header());
+        assert_eq!(vec![REMOTE_SUBNET], fixture.take_pull_requests());
 
         // Redundant copies of the same advert are classified as duplicates
-        // and not verified again; but they reschedule one pull.
+        // and not verified again; but each requests a pull.
         for _ in 0..2 {
             assert_matches!(
-                advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+                fixture.handle_advert(make_advert(&advertised)),
                 Ok(XNetAdvertOutcome::Duplicate)
             );
         }
-        assert!(unschedule_pull(&pool));
-        assert!(!unschedule_pull(&pool));
+        assert_eq!(vec![REMOTE_SUBNET; 2], fixture.take_pull_requests());
     });
 }
 
@@ -216,11 +249,10 @@ async fn handle_advert_actionable() {
 async fn handle_advert_in_payload() {
     with_test_replica_logger(|log| {
         let advertised = peer_stream_for_advert_tests();
-        let (advert_handler, pool) =
-            advert_handler_and_pool(store_expecting_decodes(&advertised, 0), log);
+        let mut fixture = AdvertHandlerFixture::new(store_expecting_decodes(&advertised, 0), log);
 
         // A past payload already covers all of it.
-        pool.lock().unwrap().garbage_collect(btreemap! {
+        fixture.pool.lock().unwrap().garbage_collect(btreemap! {
             REMOTE_SUBNET => ExpectedIndices {
                 message_index: advertised.messages_end(),
                 signal_index: advertised.signals_end(),
@@ -229,12 +261,12 @@ async fn handle_advert_in_payload() {
         });
 
         assert_matches!(
-            advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+            fixture.handle_advert(make_advert(&advertised)),
             Ok(XNetAdvertOutcome::InPayload)
         );
-        // The advertised header was not (verified and) recorded; nor a pull scheduled.
-        assert_eq!(None, recorded_peer_header(&pool));
-        assert!(!unschedule_pull(&pool));
+        // The advertised header was not (verified and) recorded; nor a pull requested.
+        assert_eq!(None, fixture.recorded_peer_header());
+        assert!(fixture.take_pull_requests().is_empty());
     });
 }
 
@@ -251,8 +283,7 @@ async fn handle_advert_new_signals() {
             signal_end: OWN_MESSAGES_BEGIN + 2,
         });
         let header = advertised.header();
-        let (advert_handler, pool) =
-            advert_handler_and_pool(store_expecting_decodes(&advertised, 1), log);
+        let mut fixture = AdvertHandlerFixture::new(store_expecting_decodes(&advertised, 1), log);
 
         // A recorded header covering everything except the new signals.
         let recorded = generate_stream(&StreamConfig {
@@ -260,39 +291,34 @@ async fn handle_advert_new_signals() {
             message_end: OWN_SIGNALS_END,
             signal_end: OWN_MESSAGES_BEGIN,
         });
-        pool.lock()
-            .unwrap()
-            .record_peer_header(REMOTE_SUBNET, &recorded.header());
+        fixture.record_peer_header(&recorded.header());
 
         assert_matches!(
-            advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+            fixture.handle_advert(make_advert(&advertised)),
             Ok(XNetAdvertOutcome::Actionable)
         );
-        assert_eq!(Some(Arc::new(header)), recorded_peer_header(&pool));
-        assert!(unschedule_pull(&pool));
+        assert_eq!(Some(Arc::new(header)), fixture.recorded_peer_header());
+        assert_eq!(vec![REMOTE_SUBNET], fixture.take_pull_requests());
     });
 }
 
 /// An advert whose content we have already recorded is classified as a
-/// duplicate without being verified; and a pull is scheduled, in case the
+/// duplicate without being verified; and a pull is requested, in case the
 /// earlier one failed.
 #[tokio::test]
 async fn handle_advert_duplicate_content() {
     with_test_replica_logger(|log| {
         let advertised = peer_stream_for_advert_tests();
         let header = advertised.header();
-        let (advert_handler, pool) =
-            advert_handler_and_pool(store_expecting_decodes(&advertised, 0), log);
+        let mut fixture = AdvertHandlerFixture::new(store_expecting_decodes(&advertised, 0), log);
 
-        pool.lock()
-            .unwrap()
-            .record_peer_header(REMOTE_SUBNET, &header);
+        fixture.record_peer_header(&header);
 
         assert_matches!(
-            advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+            fixture.handle_advert(make_advert(&advertised)),
             Ok(XNetAdvertOutcome::Duplicate)
         );
-        assert!(unschedule_pull(&pool));
+        assert_eq!(vec![REMOTE_SUBNET], fixture.take_pull_requests());
     });
 }
 
@@ -330,25 +356,25 @@ async fn handle_advert_nothing_new() {
                 assert_eq!(msg_limit, Some(0));
                 Ok(own_header.clone())
             });
-        let (advert_handler, pool) = advert_handler_and_pool(store, log);
+        let mut fixture = AdvertHandlerFixture::new(store, log);
 
         for _ in 0..2 {
             assert_matches!(
-                advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+                fixture.handle_advert(make_advert(&advertised)),
                 Ok(XNetAdvertOutcome::NothingNew)
             );
             // Recorded from the first copy.
             assert_eq!(
                 Some(Arc::new(advertised.header())),
-                recorded_peer_header(&pool)
+                fixture.recorded_peer_header()
             );
             assert_eq!(
                 Some(expected_reply.clone()),
-                advert_handler.certified_header(REMOTE_SUBNET)
+                fixture.handler.certified_header(REMOTE_SUBNET)
             );
         }
         // Nothing to pull.
-        assert!(!unschedule_pull(&pool));
+        assert!(fixture.take_pull_requests().is_empty());
     });
 }
 
@@ -378,25 +404,24 @@ async fn handle_advert_collecting_reject_signal() {
         };
 
         // A `begin` at the reject signal leaves it uncollected.
-        let (advert_handler, _pool) = advert_handler_and_pool_for(
+        let fixture = AdvertHandlerFixture::with_streams(
             btreemap! { REMOTE_SUBNET => own_stream.clone() },
             store_expecting_decodes(&advertised(REJECT_SIGNAL), 1),
             log.clone(),
         );
         assert_matches!(
-            advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised(REJECT_SIGNAL))),
+            fixture.handle_advert(make_advert(&advertised(REJECT_SIGNAL))),
             Ok(XNetAdvertOutcome::NothingNew)
         );
 
         // One past it collects it, so there is something to fetch after all.
-        let (advert_handler, _pool) = advert_handler_and_pool_for(
+        let fixture = AdvertHandlerFixture::with_streams(
             btreemap! { REMOTE_SUBNET => own_stream },
             store_expecting_decodes(&advertised(REJECT_SIGNAL + 1), 1),
             log,
         );
         assert_matches!(
-            advert_handler
-                .handle_advert(REMOTE_SUBNET, make_advert(&advertised(REJECT_SIGNAL + 1))),
+            fixture.handle_advert(make_advert(&advertised(REJECT_SIGNAL + 1))),
             Ok(XNetAdvertOutcome::Actionable)
         );
     });
@@ -409,7 +434,7 @@ async fn handle_advert_decode_error() {
     with_test_replica_logger(|log| {
         // No expectations: verifying an advert we cannot even decode would panic.
         let store = MockCertifiedStreamStore::new();
-        let (advert_handler, pool) = advert_handler_and_pool(store, log);
+        let fixture = AdvertHandlerFixture::new(store, log);
 
         let advert = CertifiedStreamSlice {
             payload: b"garbage".to_vec(),
@@ -417,10 +442,10 @@ async fn handle_advert_decode_error() {
         };
 
         assert_matches!(
-            advert_handler.handle_advert(REMOTE_SUBNET, advert),
+            fixture.handle_advert(advert),
             Err(XNetAdvertError::DecodeError(_))
         );
-        assert_eq!(None, recorded_peer_header(&pool));
+        assert_eq!(None, fixture.recorded_peer_header());
     });
 }
 
@@ -435,15 +460,29 @@ async fn handle_advert_invalid_signature() {
             .expect_decode_certified_stream_slice()
             .times(1)
             .return_once(|_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
-        let (advert_handler, pool) = advert_handler_and_pool(store, log);
+        let mut fixture = AdvertHandlerFixture::new(store, log);
 
         assert_matches!(
-            advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+            fixture.handle_advert(make_advert(&advertised)),
             Err(XNetAdvertError::InvalidSignature)
         );
-        assert_eq!(None, recorded_peer_header(&pool));
-        assert!(!unschedule_pull(&pool));
+        assert_eq!(None, fixture.recorded_peer_header());
+        assert!(fixture.take_pull_requests().is_empty());
     });
+}
+
+/// A subnet is scheduled at most once, however many pulls from it are requested.
+#[test]
+fn pull_schedule_push_and_remove() {
+    let mut schedule = PullSchedule::default();
+    schedule.push(SUBNET_1);
+    schedule.push(SUBNET_2);
+    schedule.push(SUBNET_1);
+    assert_eq!(VecDeque::from([SUBNET_1, SUBNET_2]), schedule.queue);
+
+    assert!(schedule.remove(SUBNET_1));
+    assert!(!schedule.remove(SUBNET_1));
+    assert_eq!(VecDeque::from([SUBNET_2]), schedule.queue);
 }
 
 /// A `XNetClient` that replies to every advert with the same canned response,
@@ -514,17 +553,17 @@ fn endpoint_resolver(metrics: &MetricsRegistry, log: ReplicaLogger) -> XNetEndpo
     XNetEndpointResolver::new(registry, LOCAL_NODE, LOCAL_SUBNET, proximity_map, log)
 }
 
-/// An `AdvertTask` posting through `xnet_client`, with `advert_handler` deciding
-/// what to advertise and handling the replies; and using the registry from
-/// `get_node_selection_registry_for_test()`.
+/// An `AdvertTask` posting through `xnet_client`, with `fixture`'s handler
+/// deciding what to advertise and handling the replies; and using the registry
+/// from `get_node_selection_registry_for_test()`.
 fn advert_task(
     xnet_client: Arc<dyn XNetClient>,
-    advert_handler: XNetAdvertHandlerImpl,
+    fixture: &AdvertHandlerFixture,
     metrics: &MetricsRegistry,
     log: ReplicaLogger,
 ) -> AdvertTask {
     AdvertTask::new(
-        Arc::new(advert_handler),
+        Arc::clone(&fixture.handler),
         Arc::new(endpoint_resolver(metrics, log.clone())),
         xnet_client,
         metrics,
@@ -576,10 +615,9 @@ async fn advertise_to_without_reply() {
         let metrics = MetricsRegistry::new();
         let xnet_client = Arc::new(FakeAdvertClient::new(Ok(None), &metrics));
 
-        let (advert_handler, pool) =
-            advert_handler_and_pool(MockCertifiedStreamStore::new(), log.clone());
+        let fixture = AdvertHandlerFixture::new(MockCertifiedStreamStore::new(), log.clone());
 
-        advert_task(xnet_client.clone(), advert_handler, &metrics, log)
+        advert_task(xnet_client.clone(), &fixture, &metrics, log)
             .advertise_to(REMOTE_SUBNET, REMOTE_NODE_2_OPERATOR_1, own_advert())
             .await;
 
@@ -587,7 +625,7 @@ async fn advertise_to_without_reply() {
             vec![(REMOTE_NODE_2_OPERATOR_1, own_advert())],
             xnet_client.posted()
         );
-        assert_eq!(None, recorded_peer_header(&pool));
+        assert_eq!(None, fixture.recorded_peer_header());
         assert_one_advert_sent(&metrics, STATUS_SUCCESS);
     })
     .await;
@@ -611,17 +649,17 @@ async fn advertise_to_records_the_reply() {
         ));
 
         // Expect to have to verify the reply.
-        let (advert_handler, pool) =
-            advert_handler_and_pool(store_expecting_decodes(&remote_stream, 1), log.clone());
+        let fixture =
+            AdvertHandlerFixture::new(store_expecting_decodes(&remote_stream, 1), log.clone());
 
-        advert_task(xnet_client.clone(), advert_handler, &metrics, log)
+        advert_task(xnet_client.clone(), &fixture, &metrics, log)
             .advertise_to(REMOTE_SUBNET, REMOTE_NODE_1_OPERATOR_1, own_advert())
             .await;
 
         assert_eq!(1, xnet_client.posted().len());
         assert_eq!(
             Some(Arc::new(remote_stream.header())),
-            recorded_peer_header(&pool)
+            fixture.recorded_peer_header()
         );
         // Reply is actionable because it has signals for all our messages.
         assert_one_advert_sent(&metrics, "actionable");
@@ -650,14 +688,14 @@ async fn advertise_to_invalid_reply() {
             .expect_decode_certified_stream_slice()
             .times(1)
             .return_once(|_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
-        let (advert_handler, pool) = advert_handler_and_pool(store, log.clone());
+        let fixture = AdvertHandlerFixture::new(store, log.clone());
 
-        advert_task(xnet_client.clone(), advert_handler, &metrics, log)
+        advert_task(xnet_client.clone(), &fixture, &metrics, log)
             .advertise_to(REMOTE_SUBNET, REMOTE_NODE_1_OPERATOR_1, own_advert())
             .await;
 
         assert_eq!(1, xnet_client.posted().len());
-        assert_eq!(None, recorded_peer_header(&pool));
+        assert_eq!(None, fixture.recorded_peer_header());
         assert_one_advert_sent(&metrics, "invalid_signature");
     })
     .await;
@@ -670,10 +708,9 @@ async fn advertise_to_post_failure() {
         let metrics = MetricsRegistry::new();
         let xnet_client = Arc::new(FakeAdvertClient::new(Err(()), &metrics));
 
-        let (advert_handler, _pool) =
-            advert_handler_and_pool(MockCertifiedStreamStore::new(), log.clone());
+        let fixture = AdvertHandlerFixture::new(MockCertifiedStreamStore::new(), log.clone());
 
-        advert_task(xnet_client.clone(), advert_handler, &metrics, log)
+        advert_task(xnet_client.clone(), &fixture, &metrics, log)
             .advertise_to(REMOTE_SUBNET, REMOTE_NODE_1_OPERATOR_1, own_advert())
             .await;
 
@@ -690,10 +727,9 @@ async fn advertise_to_unknown_node() {
         let metrics = MetricsRegistry::new();
         let xnet_client = Arc::new(FakeAdvertClient::new(Ok(None), &metrics));
 
-        let (advert_handler, _pool) =
-            advert_handler_and_pool(MockCertifiedStreamStore::new(), log.clone());
+        let fixture = AdvertHandlerFixture::new(MockCertifiedStreamStore::new(), log.clone());
 
-        advert_task(xnet_client.clone(), advert_handler, &metrics, log)
+        advert_task(xnet_client.clone(), &fixture, &metrics, log)
             .advertise_to(REMOTE_SUBNET, NODE_42, own_advert())
             .await;
 
@@ -741,7 +777,7 @@ fn subnets_owed_adverts() {
             .get_ref()
             .metadata
             .own_subnet_id;
-        let (advert_handler, pool) = advert_handler_and_pool_for(
+        let fixture = AdvertHandlerFixture::with_streams(
             btreemap! {
                 own_subnet_id => stream(2, 0),
                 SUBNET_1 => stream(2, 0),
@@ -754,7 +790,7 @@ fn subnets_owed_adverts() {
             log,
         );
         {
-            let mut pool = pool.lock().unwrap();
+            let mut pool = fixture.pool.lock().unwrap();
             // Has seen our signals.
             pool.record_peer_header(SUBNET_2, &peer_header(5));
             // Has not.
@@ -764,7 +800,7 @@ fn subnets_owed_adverts() {
         // `SUBNET_1` for its messages, `SUBNET_3` and `SUBNET_4` for our signals.
         assert_eq!(
             vec![SUBNET_1, SUBNET_3, SUBNET_4],
-            advert_handler.subnets_owed_adverts()
+            fixture.handler.subnets_owed_adverts()
         );
     });
 }
@@ -779,9 +815,9 @@ fn adverts_owed_without_stream() {
             .returning(|subnet_id, _, _, _, _| {
                 Err(EncodeStreamError::NoStreamForSubnet(subnet_id))
             });
-        let (advert_handler, _pool) = advert_handler_and_pool(store, log);
+        let fixture = AdvertHandlerFixture::new(store, log);
 
-        assert!(advert_handler.adverts_owed().is_empty());
+        assert!(fixture.handler.adverts_owed().is_empty());
     });
 }
 
@@ -831,7 +867,7 @@ fn adverts_to_send() {
     with_test_replica_logger(|log| {
         let metrics = MetricsRegistry::new();
         // `SUBNET_5` is unknown to the registry.
-        let (advert_handler, _pool) = advert_handler_and_pool_for(
+        let fixture = AdvertHandlerFixture::with_streams(
             btreemap! {
                 REMOTE_SUBNET => own_stream_for_advert_tests(),
                 SUBNET_5 => own_stream_for_advert_tests(),
@@ -841,7 +877,7 @@ fn adverts_to_send() {
         );
         let task = advert_task(
             Arc::new(FakeAdvertClient::new(Ok(None), &metrics)),
-            advert_handler,
+            &fixture,
             &metrics,
             log,
         );
@@ -875,13 +911,13 @@ async fn advertises_on_newly_certified_height() {
     with_test_replica_logger(|log| async {
         let metrics = MetricsRegistry::new();
         let xnet_client = Arc::new(FakeAdvertClient::new(Ok(None), &metrics));
-        let (advert_handler, _pool) = advert_handler_and_pool(
+        let fixture = AdvertHandlerFixture::new(
             with_own_header(MockCertifiedStreamStore::new()),
             log.clone(),
         );
 
         let (height_tx, height_rx) = watch::channel(Height::new(0));
-        advert_task(xnet_client.clone(), advert_handler, &metrics, log)
+        advert_task(xnet_client.clone(), &fixture, &metrics, log)
             .start(height_rx, &tokio::runtime::Handle::current());
         height_tx.send(CERTIFIED_HEIGHT).unwrap();
 
