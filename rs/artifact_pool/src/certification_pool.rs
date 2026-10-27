@@ -567,6 +567,19 @@ mod tests {
         }
     }
 
+    /// Checks the invariant that the size of the unvalidated pool matches the
+    /// size of its height index.
+    fn assert_pool_and_index_sizes_match(pool: &CertificationPoolImpl) {
+        assert_eq!(
+            pool.unvalidated_share_index.size(),
+            pool.unvalidated_shares.len()
+        );
+        assert_eq!(
+            pool.unvalidated_cert_index.size(),
+            pool.unvalidated_certs.len()
+        );
+    }
+
     #[test]
     fn test_certifications_should_be_added_only_once() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -751,15 +764,7 @@ mod tests {
                     .count(),
                 0
             );
-            // INVARIANT: The size of the unvalidated pool must match the size of its height index
-            assert_eq!(
-                pool.unvalidated_share_index.size(),
-                pool.unvalidated_shares.len()
-            );
-            assert_eq!(
-                pool.unvalidated_cert_index.size(),
-                pool.unvalidated_certs.len()
-            )
+            assert_pool_and_index_sizes_match(&pool);
         });
     }
 
@@ -832,15 +837,7 @@ mod tests {
                     .count(),
                 0
             );
-            // INVARIANT: The size of the unvalidated pool must match the size of its height index
-            assert_eq!(
-                pool.unvalidated_share_index.size(),
-                pool.unvalidated_shares.len()
-            );
-            assert_eq!(
-                pool.unvalidated_cert_index.size(),
-                pool.unvalidated_certs.len()
-            )
+            assert_pool_and_index_sizes_match(&pool);
         });
     }
 
@@ -879,15 +876,7 @@ mod tests {
                     .count(),
                 1
             );
-            // INVARIANT: The size of the unvalidated pool must match the size of its height index
-            assert_eq!(
-                pool.unvalidated_share_index.size(),
-                pool.unvalidated_shares.len()
-            );
-            assert_eq!(
-                pool.unvalidated_cert_index.size(),
-                pool.unvalidated_certs.len()
-            )
+            assert_pool_and_index_sizes_match(&pool);
         });
     }
 
@@ -916,15 +905,7 @@ mod tests {
                     .count(),
                 1
             );
-            // INVARIANT: The size of the unvalidated pool must match the size of its height index
-            assert_eq!(
-                pool.unvalidated_share_index.size(),
-                pool.unvalidated_shares.len()
-            );
-            assert_eq!(
-                pool.unvalidated_cert_index.size(),
-                pool.unvalidated_certs.len()
-            );
+            assert_pool_and_index_sizes_match(&pool);
 
             // Removing an id that is not in the pool is a no-op.
             pool.remove(&msg_to_id(&fake_share(6, 1)));
@@ -971,15 +952,7 @@ mod tests {
 
             let result = pool.apply(vec![]);
             assert!(!result.poll_immediately);
-            // INVARIANT: The size of the unvalidated pool must match the size of its height index
-            assert_eq!(
-                pool.unvalidated_share_index.size(),
-                pool.unvalidated_shares.len()
-            );
-            assert_eq!(
-                pool.unvalidated_cert_index.size(),
-                pool.unvalidated_certs.len()
-            )
+            assert_pool_and_index_sizes_match(&pool);
         });
     }
 
