@@ -552,8 +552,10 @@ fn method_name_edge_cases(env: TestEnv) {
                                 .call_and_wait()
                                 .await
                                 .unwrap_err();
+                            // The update call is rejected by the ingress filter
+                            // since the canister does not export the method.
                             assert!(
-                                matches!(err, AgentError::CertifiedReject { .. }),
+                                matches!(err, AgentError::UncertifiedReject { .. }),
                                 "update: {} ({}) got error: {}",
                                 short_method_name,
                                 method_name.len(),
@@ -597,9 +599,10 @@ fn method_name_edge_cases(env: TestEnv) {
                         err
                     );
                 } else {
-                    // When bypassing the API BN, the replica responds with a reject.
+                    // When bypassing the API BN, the replica responds with a reject
+                    // from the ingress filter since the canister does not export the method.
                     assert!(
-                        matches!(err, AgentError::CertifiedReject { .. }),
+                        matches!(err, AgentError::UncertifiedReject { .. }),
                         "direct replica update for 'x' * 2**20: got error {}",
                         err
                     );
