@@ -9,7 +9,7 @@ use std::time::Instant;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{Block, TipOfChainRes};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock, RwLockWriteGuard};
 use tokio::time::Duration;
 use tracing::{debug, error, info, trace};
 
@@ -47,10 +47,15 @@ where
     B: BlocksAccess,
 {
     pub blockchain: RwLock<Blocks>,
+    /// Serializes `sync_blocks` calls, which lock `blockchain` only while
+    /// they access the store.
+    sync_lock: Mutex<()>,
     blocks_access: Option<Arc<B>>,
     store_max_blocks: Option<u64>,
     verification_info: Option<VerificationInfo>,
     rosetta_metrics: RosettaMetrics,
+    /// How many blocks a sync fetches before it stores them. Tests lower it.
+    database_write_blocks_batch_size: u64,
 }
 
 impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
@@ -105,10 +110,12 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
 
         Ok(Self {
             blockchain: RwLock::new(blocks),
+            sync_lock: Mutex::new(()),
             blocks_access,
             store_max_blocks,
             verification_info,
             rosetta_metrics,
+            database_write_blocks_batch_size: DATABASE_WRITE_BLOCKS_BATCH_SIZE,
         })
     }
 
@@ -260,6 +267,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         stopped: Arc<AtomicBool>,
         up_to_block_included: Option<BlockIndex>,
     ) -> Result<(), Error> {
+        let _sync_guard = self.sync_lock.lock().await;
         let tip = self
             .query_verified_tip()
             .await
@@ -272,9 +280,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         }
         self.rosetta_metrics.set_target_height(tip.index);
 
-        let mut blockchain = self.blockchain.write().await;
-
-        let latest_hb_opt = blockchain.get_latest_hashed_block();
+        let latest_hb_opt = self.blockchain.read().await.get_latest_hashed_block();
         let (last_block_hash, next_block_index) = match latest_hb_opt {
             Ok(hb) => (Some(hb.hash), hb.index + 1),
             Err(_) => (None, 0),
@@ -308,17 +314,17 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
 
         let tip_index = tip.index;
 
-        self.sync_range_of_blocks(
-            Range {
-                start: next_block_index,
-                end: up_to_block_included + 1,
-            },
-            last_block_hash,
-            stopped,
-            tip,
-            &mut blockchain,
-        )
-        .await?;
+        let mut blockchain = self
+            .sync_range_of_blocks(
+                Range {
+                    start: next_block_index,
+                    end: up_to_block_included + 1,
+                },
+                last_block_hash,
+                stopped,
+                tip,
+            )
+            .await?;
 
         blockchain.make_rosetta_blocks_if_enabled(tip_index)?;
 
@@ -332,17 +338,21 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             .map_err(|_| Error::InternalError("Failed to prune store".to_string()))
     }
 
+    /// Fetches the blocks in `range` from the ledger and stores them.
+    ///
+    /// Locks the blockchain only to store blocks, not while fetching them,
+    /// and returns the write guard under which the last blocks were stored
+    /// and verified.
     async fn sync_range_of_blocks(
         &self,
         range: Range<BlockIndex>,
         first_block_parent_hash: Option<HashOf<EncodedBlock>>,
         stopped: Arc<AtomicBool>,
         tip: BlockWithIndex,
-        blockchain: &mut Blocks,
-    ) -> Result<(), Error> {
+    ) -> Result<RwLockWriteGuard<'_, Blocks>, Error> {
         let t_total = Instant::now();
         if range.is_empty() {
-            return Ok(());
+            return Ok(self.blockchain.write().await);
         }
         let progress_bar = if range.end - range.start >= PRINT_SYNC_PROGRESS_THRESHOLD {
             info!(
@@ -440,15 +450,19 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 i += 1;
             }
             self.rosetta_metrics.set_synced_height(i - 1);
-            if (i - range.start).is_multiple_of(DATABASE_WRITE_BLOCKS_BATCH_SIZE) {
+            if (i - range.start).is_multiple_of(self.database_write_blocks_batch_size) {
                 if let Some(bar) = &progress_bar {
                     bar.set_message("store blocks");
                     bar.set_position(bar.position() - block_batch.len() as u64)
                 };
-                blockchain.push_batch(block_batch, progress_bar.as_ref())?;
+                self.blockchain
+                    .write()
+                    .await
+                    .push_batch(block_batch, progress_bar.as_ref())?;
                 block_batch = Vec::new();
             }
         }
+        let mut blockchain = self.blockchain.write().await;
         blockchain.push_batch(block_batch, progress_bar.as_ref())?;
         if let Some(bar) = &progress_bar {
             bar.finish();
@@ -456,7 +470,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         info!("Synced took {} seconds", t_total.elapsed().as_secs_f64());
         blockchain.set_hashed_block_to_verified(&(range.end - 1))?;
         self.rosetta_metrics.set_verified_height(range.end - 1);
-        Ok(())
+        Ok(blockchain)
     }
 }
 
@@ -466,6 +480,7 @@ mod test {
     use std::ops::Range;
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
+    use std::time::Duration;
 
     use async_trait::async_trait;
     use ic_ledger_core::Tokens;
@@ -476,6 +491,7 @@ mod test {
     use icp_ledger::{
         AccountIdentifier, Block, BlockIndex, DEFAULT_TRANSFER_FEE, Memo, TipOfChainRes,
     };
+    use tokio::sync::{Notify, Semaphore};
 
     use crate::blocks::RosettaDbConfig;
     use crate::blocks_access::BlocksAccess;
@@ -519,11 +535,62 @@ mod test {
         }
     }
 
+    /// Serves blocks like `RangeOfBlocks`, but at most `max_blocks_per_fetch`
+    /// at a time, and `multi_query_blocks` notifies `fetching` and then waits
+    /// for a `release` permit before it returns them.
+    struct GatedRangeOfBlocks {
+        blocks: RangeOfBlocks,
+        max_blocks_per_fetch: u64,
+        fetching: Notify,
+        release: Semaphore,
+    }
+
+    impl GatedRangeOfBlocks {
+        pub fn new(blocks: Vec<EncodedBlock>, max_blocks_per_fetch: u64) -> Self {
+            Self {
+                blocks: RangeOfBlocks::new(blocks),
+                max_blocks_per_fetch,
+                fetching: Notify::new(),
+                release: Semaphore::new(0),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl BlocksAccess for GatedRangeOfBlocks {
+        async fn query_raw_block(
+            &self,
+            height: BlockIndex,
+        ) -> Result<Option<EncodedBlock>, String> {
+            self.blocks.query_raw_block(height).await
+        }
+
+        async fn query_tip(&self) -> Result<TipOfChainRes, String> {
+            self.blocks.query_tip().await
+        }
+
+        async fn multi_query_blocks(
+            self: Arc<Self>,
+            range: Range<BlockIndex>,
+        ) -> Result<Vec<EncodedBlock>, String> {
+            self.fetching.notify_one();
+            self.release.acquire().await.unwrap().forget();
+            let end = range.end.min(range.start + self.max_blocks_per_fetch);
+            Ok(self.blocks.blocks[range.start as usize..end as usize].to_vec())
+        }
+    }
+
     async fn new_ledger_blocks_synchronizer(
         blocks: Vec<EncodedBlock>,
     ) -> LedgerBlocksSynchronizer<RangeOfBlocks> {
+        new_ledger_blocks_synchronizer_with(Arc::new(RangeOfBlocks::new(blocks))).await
+    }
+
+    async fn new_ledger_blocks_synchronizer_with<B: BlocksAccess>(
+        blocks_access: Arc<B>,
+    ) -> LedgerBlocksSynchronizer<B> {
         LedgerBlocksSynchronizer::new(
-            Some(Arc::new(RangeOfBlocks::new(blocks))),
+            Some(blocks_access),
             /* store_location = */ None,
             /* store_max_blocks = */ None,
             /* verification_info = */ None,
@@ -531,6 +598,18 @@ mod test {
         )
         .await
         .unwrap()
+    }
+
+    async fn assert_synced<B: BlocksAccess>(
+        blocks_sync: &LedgerBlocksSynchronizer<B>,
+        blocks: &[EncodedBlock],
+    ) {
+        let actual_blocks = blocks_sync.read_blocks().await;
+        for (idx, eb) in blocks.iter().enumerate() {
+            let hb = actual_blocks.get_hashed_block(&(idx as u64)).unwrap();
+            assert!(actual_blocks.is_verified_by_idx(&(idx as u64)).unwrap());
+            assert_eq!(Block::block_hash(eb), Block::block_hash(&hb.block));
+        }
     }
 
     fn dummy_block(parent_hash: Option<HashOf<EncodedBlock>>) -> EncodedBlock {
@@ -644,5 +723,130 @@ mod test {
                 Block::block_hash(&hashed_blocks.block)
             );
         }
+    }
+
+    #[tokio::test]
+    async fn reading_blocks_does_not_wait_for_fetches() {
+        let blocks = dummy_blocks(3);
+        let blocks_access = Arc::new(GatedRangeOfBlocks::new(blocks.clone(), 1));
+        let blocks_sync = new_ledger_blocks_synchronizer_with(blocks_access.clone()).await;
+
+        let (synced, ()) = tokio::join!(
+            blocks_sync.sync_blocks(Arc::new(AtomicBool::new(false)), None),
+            async {
+                for _ in &blocks {
+                    blocks_access.fetching.notified().await;
+                    let store = blocks_sync
+                        .blockchain
+                        .try_read()
+                        .expect("reading blocks waited for a fetch");
+                    // A sync of fewer blocks than it stores at once stores
+                    // them all at the end.
+                    assert!(store.get_latest_hashed_block().is_err());
+                    drop(store);
+                    blocks_access.release.add_permits(1);
+                }
+            },
+        );
+        synced.unwrap();
+        assert_synced(&blocks_sync, &blocks).await;
+    }
+
+    #[tokio::test]
+    async fn sync_stores_blocks_in_batches_and_verifies_them_at_the_end() {
+        let blocks = dummy_blocks(5);
+        let blocks_access = Arc::new(GatedRangeOfBlocks::new(blocks.clone(), 1));
+        let mut blocks_sync = new_ledger_blocks_synchronizer_with(blocks_access.clone()).await;
+        blocks_sync.database_write_blocks_batch_size = 2;
+
+        let (synced, ()) = tokio::join!(
+            blocks_sync.sync_blocks(Arc::new(AtomicBool::new(false)), None),
+            async {
+                // Let the sync fetch blocks 0 and 1, which it stores before it
+                // fetches block 2.
+                for _ in 0..2 {
+                    blocks_access.fetching.notified().await;
+                    blocks_access.release.add_permits(1);
+                }
+                blocks_access.fetching.notified().await;
+                {
+                    let store = blocks_sync.blockchain.try_read().unwrap();
+                    assert_eq!(store.get_latest_hashed_block().unwrap().index, 1);
+                    assert!(store.get_latest_verified_hashed_block().is_err());
+                }
+                blocks_access.release.add_permits(3);
+            },
+        );
+        synced.unwrap();
+        assert_synced(&blocks_sync, &blocks).await;
+    }
+
+    #[tokio::test]
+    async fn sync_without_new_blocks_does_not_wait_for_readers() {
+        let blocks = dummy_blocks(2);
+        let blocks_sync = new_ledger_blocks_synchronizer(blocks.clone()).await;
+        let stopped = Arc::new(AtomicBool::new(false));
+        blocks_sync
+            .sync_blocks(stopped.clone(), None)
+            .await
+            .unwrap();
+
+        let reader = blocks_sync.read_blocks().await;
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            blocks_sync.sync_blocks(stopped, None),
+        )
+        .await
+        .expect("a sync without new blocks waited for a reader")
+        .unwrap();
+        drop(reader);
+        assert_synced(&blocks_sync, &blocks).await;
+    }
+
+    #[tokio::test]
+    async fn concurrent_syncs_store_each_block_once() {
+        let blocks = dummy_blocks(2);
+        let blocks_access = Arc::new(GatedRangeOfBlocks::new(blocks.clone(), 2));
+        let blocks_sync = new_ledger_blocks_synchronizer_with(blocks_access.clone()).await;
+        let stopped = Arc::new(AtomicBool::new(false));
+
+        let (first, second, ()) = tokio::join!(
+            blocks_sync.sync_blocks(stopped.clone(), None),
+            blocks_sync.sync_blocks(stopped.clone(), None),
+            async {
+                // Let both syncs run until they wait, then let them both fetch.
+                tokio::task::yield_now().await;
+                blocks_access.release.add_permits(2);
+            },
+        );
+        first.unwrap();
+        second.unwrap();
+        assert_synced(&blocks_sync, &blocks).await;
+    }
+
+    #[tokio::test]
+    async fn sync_dropped_while_fetching_does_not_block_the_next_one() {
+        let blocks = dummy_blocks(2);
+        let blocks_access = Arc::new(GatedRangeOfBlocks::new(blocks.clone(), 2));
+        let blocks_sync = new_ledger_blocks_synchronizer_with(blocks_access.clone()).await;
+        let stopped = Arc::new(AtomicBool::new(false));
+
+        // Drop a sync while it fetches blocks, like the watchdog aborting the
+        // sync task.
+        tokio::select! {
+            _ = blocks_sync.sync_blocks(stopped.clone(), None) => {
+                panic!("the sync finished without fetching blocks")
+            }
+            _ = blocks_access.fetching.notified() => {}
+        }
+        blocks_access.release.add_permits(1);
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            blocks_sync.sync_blocks(stopped, None),
+        )
+        .await
+        .expect("a sync waited for a dropped sync")
+        .unwrap();
+        assert_synced(&blocks_sync, &blocks).await;
     }
 }
