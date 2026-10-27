@@ -214,7 +214,7 @@ pub struct ConnectionMetrics {
 /// was sent to that canister.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct LruConnectionMetrics {
-    /// Cheap clone with `Arc`, cloned in `fn increment`
+    /// Cheaply cloneable, underlying `BTreeMap` potentially cloned in `increment()`.
     metrics_per_receiver: Arc<BTreeMap<CanisterId, ConnectionMetrics>>,
 }
 
