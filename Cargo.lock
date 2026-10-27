@@ -14543,6 +14543,7 @@ dependencies = [
  "clap",
  "futures",
  "ic-base-types",
+ "ic-cup-explorer",
  "ic-interfaces-registry",
  "ic-protobuf",
  "ic-recovery",

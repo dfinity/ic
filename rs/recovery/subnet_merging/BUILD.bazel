@@ -2,6 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/cup_explorer",
     "//rs/interfaces/registry",
     "//rs/protobuf",
     "//rs/recovery",
