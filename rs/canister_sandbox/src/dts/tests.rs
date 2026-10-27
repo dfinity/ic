@@ -32,6 +32,7 @@ fn dts_state_updates() {
     // budget. `instructions_executed` is capped at `total_instruction_limit`
     // (2500) instead of overshooting to 3000, so `total_instructions_left()`
     // bottoms out at 0 instead of going negative.
+    assert_eq!(state.newly_executed(-500), 500);
     state.update(-500);
     assert_eq!(state.slice_instruction_limit, 0);
     assert_eq!(state.instructions_executed, 2500);
@@ -66,6 +67,7 @@ fn dts_state_updates_saturating() {
     // at the 2500 instructions left in the total budget instead of leaking
     // out as `i64::MAX`, so `instructions_executed` / `total_instructions_left`
     // stay consistent with the total instruction budget.
+    assert_eq!(state.newly_executed(i64::MIN), 2500);
     state.update(i64::MIN);
     assert_eq!(state.slice_instruction_limit, 0);
     assert_eq!(state.instructions_executed, 2500);
@@ -160,11 +162,23 @@ fn charge_past_message_budget_fails_instead_of_pausing() {
         dts.try_pause(0).unwrap().executed_instructions,
         NumInstructions::from(1000)
     );
+    {
+        let state = dts.state.lock().unwrap();
+        assert_eq!(state.instructions_executed, 1000);
+        assert_eq!(state.total_instructions_left(), 1500);
+        assert_eq!(state.slice_instruction_limit, 1000);
+    }
     dts.resume();
 
     // This slice charges 1600 instructions, 100 more than the message has
     // left. Without the cap in State::newly_executed, DTS incorrectly reports
     // a paused slice, even though the message has exhausted its budget.
+    {
+        let mut state = dts.state.lock().unwrap();
+        assert_eq!(state.slice_instruction_limit.saturating_sub(-600), 1600);
+        assert_eq!(state.newly_executed(-600), 1500);
+        assert_eq!(state.next_slice_instruction_limit(-600), 0);
+    }
     assert_eq!(
         dts.try_pause(-600),
         Err(HypervisorError::InstructionLimitExceeded(
@@ -183,11 +197,23 @@ fn exhausting_message_budget_within_maximum_slice_limit_fails_with_instruction_l
         dts.try_pause(-800).unwrap().executed_instructions,
         NumInstructions::from(1800)
     );
+    {
+        let state = dts.state.lock().unwrap();
+        assert_eq!(state.instructions_executed, 1800);
+        assert_eq!(state.total_instructions_left(), 700);
+        assert_eq!(state.slice_instruction_limit, 200);
+    }
     dts.resume();
 
     // This slice executes the remaining 700 instructions of the message,
     // exceeding the current slice limit of 200 but staying below the maximum
     // slice limit of 1000. Execution fails because the message budget is exhausted.
+    {
+        let mut state = dts.state.lock().unwrap();
+        assert_eq!(state.newly_executed(-500), 700);
+        assert!(state.newly_executed(-500) < state.max_slice_instruction_limit);
+        assert_eq!(state.next_slice_instruction_limit(-500), 0);
+    }
     assert_eq!(
         dts.try_pause(-500),
         Err(HypervisorError::InstructionLimitExceeded(
@@ -220,6 +246,12 @@ fn invalid_instructions() {
     // before failing. `newly_executed` is capped at the 1500 instructions
     // left in the total budget (2500 - 1000 executed so far), which exhausts
     // the total budget.
+    {
+        let state = dts.dts.state.lock().unwrap();
+        assert_eq!(state.instructions_executed, 1000);
+        assert_eq!(state.total_instructions_left(), 1500);
+        assert_eq!(state.newly_executed(i64::MIN), 1500);
+    }
     let error = dts.out_of_instructions(i64::MIN);
     assert_eq!(
         error,
