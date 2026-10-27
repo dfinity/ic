@@ -1995,8 +1995,11 @@ mod tests {
                 .unwrap();
             let payload_without_remote = match block.payload.as_ref() {
                 BlockPayload::Data(data) => {
-                    let dkg_without_remote =
-                        DkgDataPayload::new(data.dkg.start_height, data.dkg.messages.clone());
+                    let dkg_without_remote = DkgDataPayload::new(
+                        data.dkg.start_height,
+                        data.dkg.messages.clone(),
+                        vec![],
+                    );
                     BlockPayload::Data(DataPayload {
                         batch: data.batch.clone(),
                         dkg: dkg_without_remote,
@@ -2104,11 +2107,7 @@ mod tests {
 
                 let payload = BlockPayload::Data(DataPayload {
                     batch: ic_types::batch::BatchPayload::default(),
-                    dkg: DkgDataPayload::new_with_remote_dkg_transcripts(
-                        last_summary_block.height,
-                        vec![],
-                        remote_transcripts,
-                    ),
+                    dkg: DkgDataPayload::new(last_summary_block.height, vec![], remote_transcripts),
                     idkg: Default::default(),
                 });
 

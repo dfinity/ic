@@ -204,6 +204,7 @@ async fn create_engine(
                 node_ids,
                 subnet_admins: vec![],
                 replica_version_id: "".to_string(),
+                resource_limits: None,
             },
             sender,
         )

@@ -7,7 +7,8 @@ use crate::canister_manager::types::{
 use crate::canister_settings::CanisterSettings;
 use crate::execution::call_or_task::execute_call_or_task;
 use crate::execution::common::{
-    CanisterAccess, canister_info, list_canisters, validate_sender_on_subnet,
+    CanisterAccess, canister_info, finish_call_with_error, list_canisters, replicated_call_method,
+    validate_replicated_call, validate_sender_on_subnet,
 };
 use crate::execution::inspect_message;
 use crate::execution::response::execute_response;
@@ -35,11 +36,11 @@ use ic_limits::MAX_PAIRED_PRE_SIGNATURES;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterMetadataRequest, CanisterMetricsArgs, CanisterStatusType, ClearChunkStoreArgs,
-    CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
-    EmptyBlob, FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, IC_00,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    CanisterMetadataRequest, CanisterMetricsArgs, ClearChunkStoreArgs, CreateCanisterArgs,
+    DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EmptyBlob,
+    FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, IC_00, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
+    Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
     ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
     ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
@@ -2543,22 +2544,25 @@ impl ExecutionEnvironment {
             }
         };
 
-        let method = {
-            // Note that Wasm validation guarantees that a name cannot be
-            // exported multiple times as different types. So the order of
-            // checks here matters only for performance, not correctness.
-            let method = WasmMethod::Query(req.method_name().to_string());
-            if canister.exports_method(&method) {
-                method
-            } else {
-                let method = WasmMethod::CompositeQuery(req.method_name().to_string());
-                if canister.exports_method(&method) {
-                    method
-                } else {
-                    WasmMethod::Update(req.method_name().to_string())
-                }
-            }
-        };
+        let method = replicated_call_method(&canister, req.method_name());
+
+        // Fail early, without charging any execution cycles, if the call is
+        // invalid (canister not running, non-existent or composite query method).
+        // Invalid resumed aborted executions (`prepaid_execution_cycles` is
+        // `Some`) will be handled by the regular execution path.
+        if prepaid_execution_cycles.is_none()
+            && let Err(user_error) = validate_replicated_call(&canister, &method)
+        {
+            return finish_call_with_error(
+                user_error,
+                canister,
+                CanisterCallOrTask::Update(req),
+                NumInstructions::from(0),
+                time,
+                self.own_subnet_type,
+                &self.log,
+            );
+        }
 
         match &method {
             WasmMethod::Query(_) | WasmMethod::CompositeQuery(_) => {
@@ -3416,14 +3420,13 @@ impl ExecutionEnvironment {
         }
         let metrics = &state.metadata.subnet_metrics;
         // The same stored aggregate the certified state tree at
-        // `/subnet/<subnet_id>/metrics` reads at certification version `V29`, so
-        // the two cannot drift (from `V30` on, the tree reads its monotonic
-        // counterpart instead). It is refreshed on every `commit_and_certify`
+        // `/subnet/<subnet_id>/metrics` reads from certification version `V30` on,
+        // so the two cannot drift. It is refreshed on every `commit_and_certify`
         // (`rs/state_manager/src/lib.rs`), so a call executing in round N reads the
         // end-of-round-(N-1) value -- the same one-round lag as `num_canisters`
         // below. Reading it rather than recomputing the total is also what keeps a
         // canister deleted earlier in this same round from being counted twice.
-        let consumed_cycles_total = metrics.consumed_cycles_total_including_canisters();
+        let consumed_cycles_total = metrics.consumed_cycles_total_including_canisters_monotonic();
         let res = SubnetMetricsResponse {
             // The height of the block in whose execution this call is processed.
             // `ExecutionRound` is numerically the finalized consensus block
@@ -3609,30 +3612,10 @@ impl ExecutionEnvironment {
 
         let canister_state = canister(ingress.canister_id())?;
 
-        match canister_state.status() {
-            CanisterStatusType::Running => {}
-            CanisterStatusType::Stopping => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterStopping,
-                    format!("Canister {} is stopping", ingress.canister_id()),
-                ));
-            }
-            CanisterStatusType::Stopped => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterStopped,
-                    format!("Canister {} is stopped", ingress.canister_id()),
-                ));
-            }
-        }
-
-        // Composite queries are not allowed to be called in replicated mode.
-        let method = WasmMethod::CompositeQuery(ingress.method_name().to_string());
-        if canister_state.exports_method(&method) {
-            return Err(UserError::new(
-                ErrorCode::CompositeQueryCalledInReplicatedMode,
-                "Composite query cannot be called in replicated mode",
-            ));
-        }
+        // Reject calls that would fail anyway when executed (canister not running,
+        // non-existent or composite query method) before running inspect message.
+        let method = replicated_call_method(canister_state, &ingress.method_name());
+        validate_replicated_call(canister_state, &method)?;
 
         // An inspect message is expected to finish quickly, so DTS is not
         // supported for it.
@@ -4238,6 +4221,23 @@ impl ExecutionEnvironment {
             match Self::decode_input_and_take_canister(&msg, &mut state, &self.config) {
                 Ok(result) => result,
                 Err(err) => {
+                    // If we already have a call ID, then we are re-executing an aborted
+                    // install that now failed: drop its call and refund its prepayment.
+                    if let Some(call_id) = call_id {
+                        let call = state
+                            .metadata
+                            .subnet_call_context_manager
+                            .remove_install_code_call(call_id);
+                        if let Some(call) = call
+                            && let Some(prepaid_execution_cycles) = prepaid_execution_cycles
+                            && let Some(canister) =
+                                state.canister_state_make_mut(&call.effective_canister_id)
+                        {
+                            canister
+                                .system_state
+                                .refund_cycles(prepaid_execution_cycles, prepaid_execution_cycles);
+                        }
+                    }
                     let refund = msg.take_cycles();
                     return self.finish_subnet_message_execution(
                         state,
