@@ -47,8 +47,9 @@ usbutils
 xfsprogs
 zstd
 
-# Editor for manual interventions on the node
+# Editors for manual interventions on the node (vim-tiny provides vi)
 nano
+vim-tiny
 
 # Required for API boundary nodes to enable IPv4 HTTP outcalls
 dante-server
