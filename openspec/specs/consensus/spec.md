@@ -156,6 +156,12 @@ Blocks contain DKG payloads (summary or data) and optionally batch payloads.
 - **WHEN** the consensus status is `Halting`
 - **THEN** a data payload is created with an empty batch payload and empty DKG dealings
 - **AND** no IDKG data is included
+- **AND** the block maker builds this payload with `DataPayload::new_empty`, the same definition the validator checks against, so the two cannot diverge
+
+#### Scenario: Validating data blocks while halting or halted
+- **WHEN** a data block proposal is validated while the consensus status is `Halting` or `Halted`
+- **THEN** its payload must equal `DataPayload::new_empty` for the last summary block's height, or the proposal is invalid with `UnexpectedPayloadWhileHalting`
+- **AND** a data block at the next DKG start height is invalid with `DkgDealingAtStartHeight`, since that height requires a summary block
 
 #### Scenario: No block during halted
 - **WHEN** the consensus status is `Halted`
