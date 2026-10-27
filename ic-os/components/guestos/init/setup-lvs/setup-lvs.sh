@@ -35,8 +35,8 @@ function retry() {
 # wait until it has. lvcreate activates a new volume with udev scanning
 # disabled and leaves it to udev to scan the volume once lvcreate closes it
 # after wiping its start. If udev isn't watching the volume yet when that
-# happens, it misses the close and the volume's systemd device unit never
-# becomes active.
+# happens, it misses the close and the volume's systemd device unit doesn't
+# become active.
 function rescan_lv() {
     udevadm trigger --settle --action=change "/dev/store/$1"
 }
