@@ -319,6 +319,10 @@ PocketIC supports integration testing for Bitcoin and Dogecoin features.
 - **WHEN** a test uses PocketIC with Dogecoin integration
 - **THEN** the Dogecoin canister functionality can be tested locally
 
+#### Scenario: Adapter request timeout
+- **WHEN** a PocketIC instance is created with bitcoind or dogecoind addresses, so its in-process bitcoin and dogecoin adapters are reachable
+- **THEN** the payload builder gives every adapter request a 1 s `adapter_timeout`, instead of the replica's 50 ms default, since the adapters share the server's tokio runtime with all instances and can miss a 50 ms deadline on a loaded machine
+
 ---
 
 ### Requirement: Subnet Blockmaker Configuration
