@@ -55,8 +55,10 @@ The XNet endpoint serves certified stream slices over HTTPS to other subnets for
 - **AND** the body is fully read, within `ADVERT_BODY_TIMEOUT` (1 second), before one of the endpoint's few request permits is taken, so a caller cannot starve other callers by holding a permit open without sending its announced body
 - **AND** a body that does not arrive within that timeout is rejected with `408 Request Timeout`
 - **AND** otherwise the body is decoded and passed to the `XNetAdvertHandler` implemented by `XNetAdvertHandlerImpl`, which shares the `CertifiedSlicePool` with `XNetPayloadBuilderImpl` (exposed via its `advert_handler()` accessor)
-- **AND** an advert that brings nothing new is answered with our own certified header, so the sender can observe that we have consumed its stream
-- **AND** an actionable advert is classified and counted, but for now simply dropped, since there is no schedule yet to enqueue it on
+- **AND** an advert that brings nothing new (`NothingNew`) is answered with our own certified header, so the sender can observe that we have consumed its stream
+- **AND** the advert's header is decoded and classified without verification first; its threshold signature is verified only before recording the header or acting on it, so a `NothingNew` advert that does not advance the recorded peer header is answered without verification
+- **AND** every verified header is recorded as the peer's header; an `Actionable` advert, or a `Duplicate` of a previously recorded header, additionally requests a pull from that subnet on `PullTask`'s schedule
+- **AND** for now the pull task still sweeps every peer each round; the schedule only feeds `xnet_builder_shadow_pulls_total`, which records for each completed pull whether advert-driven pulling would have scheduled it and whether it pooled anything
 
 #### Scenario: Send an advert
 - **WHEN** a new height is certified
