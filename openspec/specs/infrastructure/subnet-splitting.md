@@ -274,9 +274,17 @@ The tool maintains a well-defined directory layout for all artifacts produced du
 
 #### Scenario: Merge readiness terms
 - **WHEN** `evaluate_merge_readiness` is called for subnet `S` and registry version `V`
-- **THEN** it scrapes every replica's Prometheus metrics endpoint and evaluates one `Term` per `Condition`: every replica of every subnet observed a registry version `>= V`; no replica of another subnet still reports stream messages inbound from `S`; no replica of `S` reports outgoing stream messages to any remote subnet (including its own loopback stream); no replica of `S` reports ingress history entries other than in the `processing` state; no replica of `S` reports non-zero subnet input or output queue messages, subnet call contexts, or pending refunds
-- **AND** the registry-version term holds the minimum observed value across all replicas; every other term holds the maximum, so a single lagging or non-quiesced replica is enough to fail that term
+- **THEN** it scrapes every replica's Prometheus metrics endpoint and evaluates one `Term` per `Condition`: the replica observed a registry version `>= V`; no replica of another subnet still reports stream messages inbound from `S`; no replica of `S` reports outgoing stream messages to any remote subnet (including its own loopback stream); no replica of `S` reports ingress history entries other than in the `processing` state; no replica of `S` reports non-zero subnet input or output queue messages, subnet call contexts, or pending refunds
+- **AND** each term holds when a quorum of `n - f` of a subnet's `n` replicas satisfies it, where `f = get_faults_tolerated(n)`, so up to `f` lagging, faulty or unreachable replicas per subnet are tolerated
+- **AND** a ninth `CommonQuorum` term requires the same quorum of replicas within each subnet to satisfy all applicable conditions together: on `S`, the registry version and every source condition; on every other subnet, the registry version and empty streams to `S`. Independent per-term quorums alone could each pass on different replicas while no honest replica satisfies them all
+- **AND** readiness holds only when every returned term is satisfied; the eight individual terms keep their per-term quorum results for diagnostics
 
-#### Scenario: Scrape failure fails the whole evaluation
-- **WHEN** any node of any subnet in scope -- the cooling-down one included -- cannot be scraped, including an unsuccessful HTTP status
-- **THEN** `evaluate_merge_readiness` returns a `ReadinessError` rather than evaluating the terms on partial data, since most terms compare against zero and missing data would otherwise appear to satisfy them
+#### Scenario: Unscraped replicas and missing series
+- **WHEN** some replicas cannot be scraped, including an unsuccessful HTTP status
+- **THEN** `evaluate_merge_readiness` still evaluates the terms and returns `Readiness { terms, scrape_failures }`, with each failure listed by subnet
+- **AND** an unscraped replica satisfies no term, so missing data never counts toward a quorum
+- **AND** a series that a scraped replica does not report counts as empty for the terms requiring no positive value, but as not having reached `V` for the registry-version term
+
+#### Scenario: Unknown or empty subnets are rejected before scraping
+- **WHEN** the source subnet is missing from the given subnets, or any subnet has no nodes
+- **THEN** `evaluate_merge_readiness` returns `ReadinessError::UnknownSubnet` or `ReadinessError::NoNodes` respectively, before scraping anything
