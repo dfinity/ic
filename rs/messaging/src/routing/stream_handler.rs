@@ -938,8 +938,7 @@ impl StreamHandlerImpl {
                 self.observe_inducted_message_status(msg_type, LABEL_VALUE_SENDER_SUBNET_MISMATCH);
                 self.metrics.critical_error_sender_subnet_mismatch.inc();
                 stream.push_accept_signal();
-                // Cycles are lost (but only accounted for as such if not at an engine
-                // boundary).
+                // Cycles are only accounted for as lost if not at an engine boundary.
                 if !is_at_engine_boundary {
                     state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
                         rep.refund,
