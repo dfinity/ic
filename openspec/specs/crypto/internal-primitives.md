@@ -197,7 +197,7 @@ Path: `rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1/`
 #### Scenario: secp256r1 ECDSA keys are derived offline
 - **WHEN** `derive_ecdsa_key` is called for an `EcdsaKeyId` with curve `Secp256r1` and one of the names `key_1`, `test_key_1`, `pocketic_key_1`, `pocketic_test_key_1`, or `dfx_test_key`
 - **THEN** the canister's public key (and chain code) is derived from the corresponding secp256r1 master key, following the same code paths as secp256k1, when the default-on `secp256r1` feature is enabled
-- **AND** curves or key names without a hardcoded master key still return `AlgorithmNotSupported`
+- **AND** an unknown key name returns `UnknownKeyIdentifier`, and a curve whose feature is disabled returns `AlgorithmNotSupported`
 - **AND** `ic-secp256r1` provides these master keys via `PublicKey::mainnet_key` and `PublicKey::pocketic_key`, and derives a canister's key from them via `PublicKey::derive_mainnet_key` and `PublicKey::derive_pocketic_key`
 
 ### Requirement: RSA PKCS#1 v1.5 Signature Verification (ic-crypto-internal-basic-sig-rsa-pkcs1)
