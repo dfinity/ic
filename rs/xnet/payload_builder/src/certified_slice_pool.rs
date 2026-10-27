@@ -47,7 +47,7 @@ pub type CertifiedSliceResult<T> = Result<T, CertifiedSliceError>;
 struct CertifiedSlicePoolMetrics {
     pool_size_bytes: IntGauge,
     put_count: IntCounterVec,
-    lagging_put_count: IntCounter,
+    lagging_put_and_append_count: IntCounter,
     take_count: IntCounterVec,
     take_messages: Histogram,
     take_gced_messages: Histogram,
@@ -57,7 +57,7 @@ struct CertifiedSlicePoolMetrics {
 
 pub const METRIC_POOL_SIZE_BYTES: &str = "xnet_pool_size_bytes";
 pub const METRIC_PUT_COUNT: &str = "xnet_pool_put_count";
-pub const METRIC_LAGGING_PUT_COUNT: &str = "xnet_pool_lagging_put_count";
+pub const METRIC_LAGGING_PUT_AND_APPEND_COUNT: &str = "xnet_pool_lagging_put_and_append_count";
 pub const METRIC_TAKE_COUNT: &str = "xnet_pool_take_count";
 pub const METRIC_TAKE_MESSAGES: &str = "xnet_pool_take_messages";
 pub const METRIC_TAKE_SIZE_BYTES: &str = "xnet_pool_take_size_bytes";
@@ -83,8 +83,8 @@ impl CertifiedSlicePoolMetrics {
                 "Count of valid XNet slice pool puts and appends, by status. Errors are instrumented separately, as failed pull attempts.",
                 &[LABEL_STATUS]
             ),
-            lagging_put_count: metrics_registry.int_counter(
-                METRIC_LAGGING_PUT_COUNT,
+            lagging_put_and_append_count: metrics_registry.int_counter(
+                METRIC_LAGGING_PUT_AND_APPEND_COUNT,
                 "Count of XNet slice pool puts and appends whose stream header is behind the recorded one, i.e. of slices pulled from a lagging node.",
             ),
             take_count: metrics_registry.int_counter_vec(
@@ -1561,18 +1561,18 @@ impl CertifiedSlicePool {
         subnet_id: SubnetId,
         mut unpacked: UnpackedStreamSlice,
     ) -> CertifiedSliceResult<(bool, Option<UnpackedStreamSlice>)> {
-        // Record every pulled header, whether or not we end up pooling it.
-        let header = unpacked.payload.header.decoded();
-        self.record_peer_header(subnet_id, header);
-
         // Count headers behind the recorded one, i.e. pulled from a lagging node.
+        let header = unpacked.payload.header.decoded();
         if self
             .peer_headers
             .get(&subnet_id)
             .is_some_and(|recorded| header_advances(recorded, header))
         {
-            self.metrics.lagging_put_count.inc();
+            self.metrics.lagging_put_and_append_count.inc();
         }
+
+        // Record every pulled header, whether or not we end up pooling it.
+        self.record_peer_header(subnet_id, header);
 
         // Trim off everything before the cached stream position.
         let stream_position = self.stream_positions.get(&subnet_id);

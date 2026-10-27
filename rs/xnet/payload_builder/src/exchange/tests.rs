@@ -621,7 +621,8 @@ async fn pull_task_start_and_end_pulls() {
         for subnet_id in [REMOTE_SUBNET, SUBNET_2, SUBNET_3] {
             schedule.push(subnet_id);
         }
-        // The test body never yields, so the pull never runs.
+        // Spawns a pull that never runs, because the test runs on a single-threaded
+        // runtime and the test body never awaits.
         task.start_pulls(&mut schedule, &mut in_flight);
         assert_eq!(
             vec![REMOTE_SUBNET],

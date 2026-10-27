@@ -37,7 +37,7 @@ use ic_types::time::UNIX_EPOCH;
 use ic_types::xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue, StreamSlice};
 use ic_types::{CountBytes, Height, NodeId, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{
-    CertifiedSlicePool, METRIC_LAGGING_PUT_COUNT, POOL_BYTE_SIZE_SOFT_CAP,
+    CertifiedSlicePool, METRIC_LAGGING_PUT_AND_APPEND_COUNT, POOL_BYTE_SIZE_SOFT_CAP,
     POOLED_SLICE_BYTE_SIZE_DIVISOR, POOLED_SLICE_BYTE_SIZE_MAX, UnpackedStreamSlice,
     adjusted_byte_limit,
 };
@@ -1221,7 +1221,7 @@ fn pull_into_empty_pool(
         // Pulled from an up-to-date node.
         assert_eq!(
             Some(0),
-            fetch_int_counter(&metrics_registry, METRIC_LAGGING_PUT_COUNT)
+            fetch_int_counter(&metrics_registry, METRIC_LAGGING_PUT_AND_APPEND_COUNT)
         );
 
         assert_opt_slices_eq(

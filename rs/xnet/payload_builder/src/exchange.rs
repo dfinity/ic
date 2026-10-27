@@ -1174,7 +1174,7 @@ impl PullSchedule {
         self.queue.pop_front()
     }
 
-    /// Removes `subnet_id` from the schedule.
+    /// Removes `subnet_id` from the schedule, whether queued or in flight.
     fn remove(&mut self, subnet_id: SubnetId) {
         if self.scheduled.remove(&subnet_id) {
             self.queue.retain(|&scheduled| scheduled != subnet_id);
@@ -1394,8 +1394,9 @@ impl PullTask {
 
     /// Ends a pull from `subnet_id`: requeues the subnet if the pull pooled
     /// anything and there is still something to pull (e.g. after an advert that
-    /// arrived meanwhile); else unschedules it. Requeuing after a pull that pooled
-    /// nothing (e.g. because the pooled slice is at its byte limit) might spin.
+    /// arrived meanwhile); else unschedules it, leaving it to the next pull request
+    /// or refill trigger. Requeuing after a pull that pooled nothing (e.g. because
+    /// the pooled slice is at its byte limit) might spin.
     fn end_pull(&self, schedule: &mut PullSchedule, subnet_id: SubnetId, pooled: bool) {
         schedule.remove(subnet_id);
         if pooled

@@ -26,9 +26,9 @@ use ic_types::xnet::{
 use ic_types::{CountBytes, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{
     CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER, CertifiedSliceError, CertifiedSlicePool,
-    CertifiedSliceResult, InvalidAppend, InvalidSlice, LABEL_STATUS, METRIC_LAGGING_PUT_COUNT,
-    STATUS_LESS_USEFUL, STATUS_NONE, STATUS_SUCCESS, UnpackedStreamSlice,
-    certified_slice_count_bytes, testing,
+    CertifiedSliceResult, InvalidAppend, InvalidSlice, LABEL_STATUS,
+    METRIC_LAGGING_PUT_AND_APPEND_COUNT, STATUS_LESS_USEFUL, STATUS_NONE, STATUS_SUCCESS,
+    UnpackedStreamSlice, certified_slice_count_bytes, testing,
 };
 use ic_xnet_payload_builder::{ExpectedIndices, MAX_SIGNALS, STREAM_INDEX_MAX, max_message_index};
 use maplit::btreemap;
@@ -1941,7 +1941,7 @@ fn pool_peer_header(
         assert_eq!(Some(newer_header.clone()), peer_header(&pool, SRC_SUBNET));
         assert_eq!(
             Some(1),
-            fetch_int_counter(&fixture.metrics, METRIC_LAGGING_PUT_COUNT)
+            fetch_int_counter(&fixture.metrics, METRIC_LAGGING_PUT_AND_APPEND_COUNT)
         );
 
         // Neither does an identical one.
