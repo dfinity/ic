@@ -120,7 +120,7 @@ pub enum ReplayError {
     StateDivergence(Height),
     /// Can't proceed because an upgrade was detected.
     UpgradeDetected(ReplayOutput),
-    /// Can't proceed because artifact validation failed after the given height.
+    /// Can't proceed because artifact validation failed at or after the given height.
     ValidationIncomplete(Height, Vec<InvalidArtifact>),
     /// Can't proceed because CUP verification failed at the given height.
     CUPVerificationFailed(Height),
@@ -703,7 +703,7 @@ impl Player {
         let (height, hash_raw) = {
             let height = self.state_manager.latest_state_height();
             self.wait_for_state(height);
-            if let Ok(hash_raw) = self.state_manager.get_state_hash_at(height) {
+            if let Some(hash_raw) = self.get_state_hash(height) {
                 (height, hash_raw)
             } else if self.consensus_pool.is_some() {
                 // The latest state exists in memory only, so it has no hash. Report the
@@ -724,8 +724,7 @@ impl Player {
                          is no persisted state to report",
                     );
                 let hash_raw = self
-                    .state_manager
-                    .get_state_hash_at(height)
+                    .get_state_hash(height)
                     .expect("Failed to get the hash of the highest checkpoint");
                 (height, hash_raw)
             }
@@ -974,7 +973,7 @@ impl Player {
         let combined_sig = CombinedThresholdSigOf::from(CombinedThresholdSig(vec![]));
         Certification {
             height: *height,
-            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 content: CertificationContent { hash: hash.clone() },
                 signature: ThresholdSignature {
@@ -1091,6 +1090,8 @@ impl Player {
             .unwrap()
             .new_key_manager(&PoolReader::new(self.consensus_pool.as_ref().unwrap()));
         let mut invalid_artifacts = Vec::new();
+        // The files of the artifacts that weren't validated yet.
+        let mut observed_files = HashMap::new();
         // We start with the specified height and restore heights until we run out of
         // heights on the backup spool or bump into a newer replica version.
         loop {
@@ -1103,6 +1104,7 @@ impl Player {
                 self.validator.as_ref().unwrap(),
                 &mut dkg_manager,
                 &mut invalid_artifacts,
+                &mut observed_files,
             );
 
             // We don't want to replay heights strictly above the next CUP.
@@ -1141,6 +1143,18 @@ impl Player {
                 // Since the pool cache assumes we always have at most one CUP inside the pool,
                 // we should deliver all batches before inserting a new CUP into the pool.
                 Err(backup::ExitPoint::CUPHeightWasFinalized(cup_height)) => {
+                    // If we did not manage to deliver up to the CUP height, abort: we can't
+                    // validate the CUP without the state hash
+                    if last_batch_height < cup_height {
+                        println!(
+                            "Only the batches up to height {last_batch_height} could be delivered \
+                            although the CUP at height {cup_height} was reported as finalized"
+                        );
+                        return Err(ReplayError::ValidationIncomplete(
+                            last_batch_height.increment(),
+                            invalid_artifacts,
+                        ));
+                    }
                     info!(
                         self.log,
                         "Loading the CUP at height {cup_height} from the disk, \
@@ -1175,12 +1189,10 @@ impl Player {
                     );
                     println!("Updated the registry.");
                 }
-                Err(backup::ExitPoint::ValidationIncomplete(last_validated_height)) => {
-                    println!(
-                        "Validation of artifacts at height {last_validated_height:?} is not complete"
-                    );
+                Err(backup::ExitPoint::ValidationIncomplete(failed_height)) => {
+                    println!("Validation of artifacts at height {failed_height:?} is not complete");
                     return Err(ReplayError::ValidationIncomplete(
-                        last_validated_height,
+                        failed_height,
                         invalid_artifacts,
                     ));
                 }
@@ -1757,7 +1769,7 @@ fn setup_registry(
 }
 
 /// Returns the state hash for the given height once it is computed. For non-checkpoints heights
-/// [`None`] is returned.
+/// [`None`] is returned, including height 0, which is never a checkpoint.
 ///
 /// Panicks when a permanent error other than `StateNotFullyCertified` is returned.
 fn get_state_hash<T>(
@@ -1765,6 +1777,12 @@ fn get_state_hash<T>(
     log: &ReplicaLogger,
     height: Height,
 ) -> Option<CryptoHashOfState> {
+    // Without any state the state manager reports height 0 as not committed yet forever, so
+    // polling for it would never end.
+    if height == Height::from(0) {
+        return None;
+    }
+
     info!(log, "Polling the state manager for height: {height}.");
 
     loop {
@@ -1976,6 +1994,30 @@ mod tests {
         let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
 
         assert!(state_hash.is_some());
+    }
+
+    #[test]
+    fn get_state_hash_returns_none_for_a_not_fully_certified_state_test() {
+        let mut state_manager = MockStateManager::new();
+        state_manager.expect_get_state_hash_at().return_once(|_| {
+            Err(StateHashError::Permanent(
+                PermanentStateHashError::StateNotFullyCertified(Height::new(1)),
+            ))
+        });
+
+        let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
+
+        assert_eq!(state_hash, None);
+    }
+
+    #[test]
+    fn get_state_hash_returns_none_for_height_0_test() {
+        // Without expectations the mock panics if the state manager is consulted at all.
+        let state_manager = MockStateManager::new();
+
+        let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(0));
+
+        assert_eq!(state_hash, None);
     }
 
     #[test]

@@ -115,6 +115,11 @@ RUN systemctl disable \
     fstrim.service \
     fstrim.timer
 
+# During shutdown, lvm2's blk-availability.service unmounts the LVM-backed /var/lib/ic/{backup,crypto,data}
+# mounts before ic-replica.service and ic-crypto-csp.service have stopped.
+# Mask it so systemd handles the teardown instead.
+RUN systemctl mask blk-availability.service
+
 # ------ GUESTOS WORK --------------------------------------------
 
 # Divert symbolic link for dynamically generated nftables

@@ -52,7 +52,14 @@ runtime's daemon isn't reachable it prints which command it tried.
   files in the checkout work inside the container, e.g.
   `CONTAINER_RUNTIME=docker ./ci/container/container-run.sh ./path/to/script.sh`.
   Linked git worktrees work too: run the script from the worktree directory.
-- The image is pulled from `ghcr.io` on first use (large, one-time).
+- The image is pulled from `ghcr.io` on first use (large, one-time) by the
+  digest committed in `ci/container/ic-dev.digest`. If `ci/container/Dockerfile`,
+  `init.sh` or `files/*` differ from what `ci/container/TAG` was built from
+  (you edited them, or the autobuild's commit hasn't landed on your branch yet)
+  the script refuses to run. `CONTAINER_RUN_ALLOW_UNPINNED=1` lets it run
+  anyway: it reuses a local `ghcr.io/dfinity/ic-dev:<computed tag>` image if one
+  exists (not verified against any pin) and otherwise builds one from the
+  checkout, which is slow.
 - Anything the command writes into the checkout (or `~/.cache`) persists on the
   host, since those are bind-mounted. Each checkout gets its own bazel output
   base; the install base and repository cache are shared.

@@ -1,7 +1,9 @@
 use ic_canister_sandbox_backend_lib::replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
 use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
-use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
+use ic_cycles_account_manager::{
+    CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
+};
 use ic_embedders::{
     CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
     WasmtimeEmbedder,
@@ -21,12 +23,12 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{binary_buckets_with_zero, decimal_buckets_with_zero, linear_buckets};
 use ic_replicated_state::{
     ExecutionState, Memory, NetworkTopology, NumWasmPages, ReplicatedState, SystemState,
-    canister_state::{execution_state::WasmExecutionMode, num_bytes_try_from},
+    canister_state::num_bytes_try_from,
 };
 use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
-    CanisterId, DiskBytes, MAX_WASM_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES, NumBytes,
-    NumInstructions, SubnetId, Time, messages::RequestMetadata, methods::FuncRef,
+    CanisterId, DiskBytes, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
+    messages::RequestMetadata, methods::FuncRef,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
@@ -311,10 +313,7 @@ impl Hypervisor {
         execution_state: &ExecutionState,
         declared_wasm_memory_size: Option<NumWasmPages>,
     ) -> HypervisorResult<()> {
-        let max_wasm_memory_size = match execution_state.wasm_execution_mode {
-            WasmExecutionMode::Wasm32 => NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
-            WasmExecutionMode::Wasm64 => NumBytes::new(MAX_WASM64_MEMORY_IN_BYTES),
-        };
+        let max_wasm_memory_size = execution_state.wasm_execution_mode.max_wasm_memory_size();
         let wasm_memory_size = execution_state.wasm_memory_usage();
         if wasm_memory_size > max_wasm_memory_size {
             return Err(HypervisorError::InvalidWasmMemory {
@@ -448,7 +447,9 @@ impl Hypervisor {
     }
 
     /// Wrapper around the standalone `execute`.
-    /// NOTE: this is public to enable integration testing.
+    ///
+    /// Only used for non-replicated executions without DTS: (composite) queries
+    /// including their callbacks and `canister_inspect_message`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn execute(
         &self,
@@ -484,6 +485,11 @@ impl Hypervisor {
                 | ApiType::CompositeRejectCallback { .. }
                 | ApiType::CompositeCleanup { .. }
         );
+        // Default to the anonymous principal for `(start)` (only API with no caller).
+        // This is safe because the caller only determines whether an error for
+        // insufficient cycles to reserve storage cycles reveals the number of
+        // missing cycles, but no storage cycles are reserved here (see below).
+        let caller = api_type.caller().unwrap_or_else(PrincipalId::new_anonymous);
         let execution_result = self.execute_dts(
             api_type,
             &execution_state,
@@ -512,6 +518,13 @@ impl Hypervisor {
             &mut system_state,
             &mut output,
             round_limits,
+            &self.cycles_account_manager,
+            subnet_cycles_config,
+            // Effectively disable storage reservation: this function only executes
+            // non-replicated messages whose state changes are discarded, so the
+            // Wasm executor does not reserve storage cycles and neither do we here.
+            &ResourceSaturation::default(),
+            caller,
             time,
             &network_topology,
             self.own_subnet_id,

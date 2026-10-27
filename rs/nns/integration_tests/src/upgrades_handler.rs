@@ -14,6 +14,7 @@ use ic_nns_test_utils::{
     itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     registry::get_value,
 };
+use ic_protobuf::registry::replica_version::SEV_SNP_MEASUREMENT_LENGTH;
 use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
     ReplicaVersionRecord,
@@ -29,9 +30,8 @@ use registry_canister::mutations::{
 lazy_static! {
     static ref GUEST_LAUNCH_MEASUREMENTS: GuestLaunchMeasurements = GuestLaunchMeasurements {
         guest_launch_measurements: vec![GuestLaunchMeasurement {
-            // An SEV-SNP measurement is exactly 48 bytes long. The value itself
-            // does not matter here.
-            measurement: vec![0x42; 48],
+            // The value itself does not matter here.
+            measurement: vec![0x42; SEV_SNP_MEASUREMENT_LENGTH],
             metadata: Some(GuestLaunchMeasurementMetadata {
                 kernel_cmdline: Some("foo=bar".to_string()),
                 vcpu_type: None,
@@ -181,14 +181,14 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
             ),
             (
                 retire_version_payload(vec![version_to_elect_and_unelect1, &default_version]),
-                Some("Using a version that isn't elected"),
+                Some("Using a replica version that isn't elected"),
             ),
             (
                 update_versions_payload(
                     Some(version_to_elect.into()),
                     vec![version_to_elect_and_unelect1, unassigned_nodes_version],
                 ),
-                Some("Using a version that isn't elected"),
+                Some("Using a replica version that isn't elected"),
             ),
             (
                 ReviseElectedGuestosVersionsPayload {
@@ -216,10 +216,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                 },
                 Some("guest_launch_measurements are invalid"),
             ),
-            (
-                elect_version_payload(""),
-                Some("Elected an empty version ID"),
-            ),
+            (elect_version_payload(""), Some("must not be empty")),
             (
                 update_versions_payload(
                     Some(version_to_elect.into()),

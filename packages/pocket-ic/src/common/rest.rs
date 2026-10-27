@@ -420,7 +420,7 @@ pub struct BlobId(
 
 impl std::fmt::Display for BlobId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "BlobId{{{}}}", hex::encode(self.0.clone()))
+        write!(f, "BlobId{{{}}}", hex::encode(&self.0))
     }
 }
 

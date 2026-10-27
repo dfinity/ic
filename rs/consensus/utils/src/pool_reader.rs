@@ -71,12 +71,7 @@ impl<'a> PoolReader<'a> {
 
     /// Get the range of ancestor blocks of `block` specified (inclusively) by
     /// `min` and `max`. This assumes the correctness of the state of the pool.
-    pub fn get_range(
-        &self,
-        block: Block,
-        min: Height,
-        max: Height,
-    ) -> impl Iterator<Item = Block> + '_ {
+    pub fn get_range(&self, block: Block, min: Height, max: Height) -> impl Iterator<Item = Block> {
         self.chain_iterator(block)
             .skip_while(move |block| block.height > max)
             .take_while(move |block| block.height >= min)

@@ -56,6 +56,8 @@ ALL_TARGETS_BLOBS = [
     "*.bzl",
     "bazel/*",
     "ci/container/TAG",
+    "ci/container/ic-build.digest",
+    "ci/container/ic-dev.digest",
     "mainnet-*-revisions.json",
 ]
 
@@ -235,7 +237,7 @@ def check():
     * can be read and parsed.
     * each pattern matches at least one file tracked by git.
     * each pattern has at least one explicit target.
-    * each target is valid and when queried results in at least one target after excluding all excluded targets.
+    * each target is valid and when queried results in at least one test target after excluding all excluded targets.
     Otherwise print all errors to stderr and exit erroneously with 1.
     """
     try:
@@ -265,7 +267,7 @@ def check():
 
         for target in explicit_targets_for_pattern:
             excluded_tags_regex = "|".join(EXCLUDED_TAGS)
-            query = f'({target}) except attr(tags, "{excluded_tags_regex}", //...)'
+            query = f'kind(".*_test|test_suite", ({target}) except attr(tags, "{excluded_tags_regex}", //...))'
             result = subprocess.run(["bazel", "query", query], capture_output=True, text=True)
             if result.returncode != 0:
                 indented_error_msg = f"{indentation}" + f"\n{indentation}".join(result.stderr.strip().splitlines())

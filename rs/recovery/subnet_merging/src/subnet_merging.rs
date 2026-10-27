@@ -14,7 +14,7 @@ use crate::{
 };
 
 use clap::Parser;
-use ic_base_types::SubnetId;
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
     CUPS_DIR, NeuronArgs, Recovery, RecoveryArgs,
@@ -37,7 +37,9 @@ use slog::{Logger, info, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 
-use std::{iter::Peekable, net::IpAddr, path::PathBuf, time::Duration};
+use std::{
+    collections::BTreeSet, fmt::Debug, iter::Peekable, net::IpAddr, path::PathBuf, time::Duration,
+};
 
 const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
@@ -55,28 +57,64 @@ const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     clap::ValueEnum,
 )]
 pub enum StepType {
+    /// Submit a proposal to label the source subnet as "cooling down".
     CoolDownSourceSubnet,
+    /// Wait until the registry labels the source subnet as "cooling down", and
+    /// record the registry version at which the label was read.
     CheckRegistryForCoolingDownFlag,
+    /// Wait until the source subnet is ready to be merged.
     CheckMergeReadiness,
+    /// Submit a proposal to halt the source subnet at its next CUP.
     HaltSourceSubnetAtCupHeight,
+    /// Submit a proposal to halt the destination subnet at its next CUP.
     HaltDestinationSubnetAtCupHeight,
+    /// Wait until the node of the source subnet the state is downloaded from
+    /// holds the CUP the subnet halts at.
     WaitForHaltingCupOnSourceSubnet,
+    /// Wait until the node of the destination subnet the state is downloaded
+    /// from holds the CUP the subnet halts at.
     WaitForHaltingCupOnDestinationSubnet,
+    /// Stop the replica of the node of the source subnet the state is
+    /// downloaded from.
     StopSourceReplica,
+    /// Stop the replica of the node of the destination subnet the state is
+    /// downloaded from.
     StopDestinationReplica,
+    /// Download the state the source subnet halted at.
     DownloadStateFromSourceSubnet,
+    /// Download the state the destination subnet halted at.
     DownloadStateFromDestinationSubnet,
+    /// Validate the state downloaded from the source subnet against the CUP it
+    /// halted at.
     ValidateSourceSubnetCup,
+    /// Validate the state downloaded from the destination subnet against the
+    /// CUP it halted at.
     ValidateDestinationSubnetCup,
+    /// Assemble the merged state from the two downloaded states.
     MergeStates,
+    /// Submit a proposal to route the canister ID ranges of the source subnet
+    /// to the destination subnet.
     MergeSubnets,
+    /// Wait until the registry routes the canister ID ranges of the source
+    /// subnet to the destination subnet, and record the registry version at
+    /// which this was read.
     CheckRegistryForRoutingTableEntry,
+    /// Submit a proposal for a recovery CUP of the destination subnet at the
+    /// merged state.
     ProposeCupForDestinationSubnet,
+    /// Upload the merged state to a node of the destination subnet and restart
+    /// its replica.
     UploadStateToDestinationSubnet,
+    /// Wait until that node reports the recovery CUP.
     WaitForCUPOnDestinationSubnet,
+    /// Submit a proposal to unhalt the destination subnet.
     UnhaltDestinationSubnet,
+    /// Wait until every subnet other than the source subnet has reached the
+    /// registry version recorded by `CheckRegistryForRoutingTableEntry`.
     CheckRegistryVersionOnAllSubnets,
+    /// Submit a proposal to delete the source subnet.
     DeleteSourceSubnet,
+    /// Delete the working directory of the tool.
     Cleanup,
 }
 
@@ -118,7 +156,7 @@ pub struct SubnetMergingArgs {
     pub upload_node_destination: Option<IpAddr>,
 
     /// How long to wait for the subnet that is cooling down to become ready to
-    /// be merged, in seconds.
+    /// be merged, and for every other subnet to observe the merge, in seconds.
     #[clap(long, default_value = "2400")]
     pub merge_ready_timeout_secs: u64,
 
@@ -126,20 +164,27 @@ pub struct SubnetMergingArgs {
     #[clap(long, default_value = "900")]
     pub halt_timeout_secs: u64,
 
-    /// How long to wait for the registry to reflect a proposal that `ic-admin`
-    /// reported as executed, in seconds.
-    #[clap(long, default_value = "300")]
+    /// How long to wait, in seconds, for the proposals labeling the source
+    /// subnet as "cooling down" and merging it into the destination subnet to
+    /// be adopted, executed and visible in the registry.
+    #[clap(long, default_value = "3600")]
     pub registry_timeout_secs: u64,
 
-    /// How long to wait between two evaluations of a condition this tool waits
-    /// for, in seconds.
-    #[clap(long, default_value = "10")]
+    /// How long to wait, in seconds, between two attempts of a step that waits:
+    /// e.g. between two registry reads while waiting for a proposal to take
+    /// effect, and between two readiness rounds (each reading the registry and
+    /// scraping every replica). Must be positive.
+    #[clap(long, default_value = "10", value_parser = clap::value_parser!(u64).range(1..))]
     pub poll_interval_secs: u64,
 
     /// If present the tool will start execution for the provided step, skipping the initial ones.
     #[clap(long = "resume")]
     #[clap(value_enum)]
     pub next_step: Option<StepType>,
+
+    /// Which steps to skip
+    #[clap(long)]
+    pub skip: Option<Vec<StepType>>,
 }
 
 pub struct SubnetMerging {
@@ -172,6 +217,7 @@ impl SubnetMerging {
             &recovery,
             subnet_merging_args.source_subnet_id,
             subnet_merging_args.destination_subnet_id,
+            subnet_merging_args.next_step,
         )
         .expect("Subnets should satisfy all the preconditions");
 
@@ -192,21 +238,20 @@ impl SubnetMerging {
     }
 
     /// Checks whether the subnets satisfy the following preconditions:
-    ///
-    /// Both subnets:
-    /// 1) Are `Application` (or `VerifiedApplication`) subnets;
-    /// 2) Are not Chain key subnets;
-    /// 3) Are not halted: this tool halts them itself, at their next CUP;
-    /// 4) Have the same subnet type, as the merged state inherits the
-    ///    destination subnet's.
-    ///
-    /// And they are two different subnets. Unlike subnet splitting, the
-    /// destination subnet is a subnet in operation: it keeps serving its own
-    /// canisters across the merge, and it may or may not be empty.
+    /// 1) They are two different subnets;
+    /// 2) Both are `Application` (or `VerifiedApplication`) subnets;
+    /// 3) Neither holds any chain keys;
+    /// 4) Neither is halted nor scheduled to halt at its next CUP, unless the
+    ///    tool is resumed past `HaltSourceSubnetAtCupHeight`, i.e. after it
+    ///    started halting them itself;
+    /// 5) The destination subnet is not cooling down;
+    /// 6) Both have the same subnet type, cycles cost schedule, subnet admins
+    ///    and SEV setting.
     fn check_subnets_preconditions(
         recovery: &Recovery,
         source_subnet_id: SubnetId,
         destination_subnet_id: SubnetId,
+        next_step: Option<StepType>,
     ) -> RecoveryResult<()> {
         if source_subnet_id == destination_subnet_id {
             return Err(RecoveryError::ValidationFailed(format!(
@@ -214,14 +259,127 @@ impl SubnetMerging {
             )));
         }
 
-        let source_subnet_record =
-            Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id, None)?;
-
-        let _ = Self::get_and_pre_validate_subnet_record(
+        let check_not_halted = next_step.is_none_or(|next_step| {
+            next_step as usize <= StepType::HaltSourceSubnetAtCupHeight as usize
+        });
+        let source =
+            Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id, check_not_halted)?;
+        let destination = Self::get_and_pre_validate_subnet_record(
             recovery,
             destination_subnet_id,
-            Some(source_subnet_record),
+            check_not_halted,
         )?;
+
+        Self::ensure_compatible_subnet_records(
+            source_subnet_id,
+            &source,
+            destination_subnet_id,
+            &destination,
+        )
+    }
+
+    /// Checks whether the records of the two (individually valid) subnets are
+    /// compatible, i.e. the preconditions 5) and 6) above.
+    fn ensure_compatible_subnet_records(
+        source_subnet_id: SubnetId,
+        source: &SubnetRecord,
+        destination_subnet_id: SubnetId,
+        destination: &SubnetRecord,
+    ) -> RecoveryResult<()> {
+        // Destructured exhaustively, so that a field added to `SubnetRecord`
+        // fails to compile until it is decided whether it needs a check here.
+        let SubnetRecord {
+            // Checked below.
+            subnet_type: _,
+            canister_cycles_cost_schedule: _,
+            subnet_admins: _,
+            features: _, // Only `sev_enabled`.
+            cooling_down: _,
+            // Checked for each subnet on its own, by
+            // `get_and_pre_validate_subnet_record`.
+            is_halted: _,
+            halt_at_cup_height: _,
+            chain_key_config: _,
+            // Capacity, left to the merge step.
+            max_number_of_canisters: _,
+            resource_limits: _,
+            // Settings of each subnet on its own: the merged subnet keeps those
+            // of the destination subnet.
+            membership: _,
+            max_ingress_bytes_per_message: _,
+            unit_delay_millis: _,
+            initial_notary_delay_millis: _,
+            replica_version_id: _,
+            recalled_replica_version_ids: _,
+            dkg_interval_length: _,
+            dkg_dealings_per_block: _,
+            start_as_nns: _,
+            max_ingress_messages_per_block: _,
+            max_ingress_bytes_per_block: _,
+            max_block_payload_size: _,
+            ssh_readonly_access: _,
+            ssh_backup_access: _,
+        } = source;
+
+        if destination.cooling_down {
+            return Err(RecoveryError::ValidationFailed(format!(
+                "Subnet {destination_subnet_id}: the destination subnet should not be cooling down"
+            )));
+        }
+
+        let mismatch = |what: &str, source_value: &dyn Debug, destination_value: &dyn Debug| {
+            Err(RecoveryError::ValidationFailed(format!(
+                "Both subnets should have the same {what}, but subnet {source_subnet_id} has \
+                 {source_value:?} and subnet {destination_subnet_id} has {destination_value:?}"
+            )))
+        };
+        let subnet_admins = |subnet_id: SubnetId, record: &SubnetRecord| {
+            record
+                .subnet_admins
+                .iter()
+                .map(|admin| {
+                    PrincipalId::try_from(admin.raw.as_slice()).map_err(|err| {
+                        RecoveryError::ValidationFailed(format!(
+                            "Subnet {subnet_id}: invalid subnet admin {:?}: {err}",
+                            admin.raw
+                        ))
+                    })
+                })
+                .collect::<RecoveryResult<BTreeSet<_>>>()
+        };
+        let sev_enabled = |record: &SubnetRecord| {
+            record
+                .features
+                .and_then(|features| features.sev_enabled)
+                .unwrap_or(false)
+        };
+
+        let (source_type, destination_type) = (source.subnet_type(), destination.subnet_type());
+        if source_type != destination_type {
+            return mismatch("subnet type", &source_type, &destination_type);
+        }
+        let (source_schedule, destination_schedule) = (
+            source.canister_cycles_cost_schedule(),
+            destination.canister_cycles_cost_schedule(),
+        );
+        if source_schedule != destination_schedule {
+            return mismatch(
+                "cycles cost schedule",
+                &source_schedule,
+                &destination_schedule,
+            );
+        }
+        let (source_admins, destination_admins) = (
+            subnet_admins(source_subnet_id, source)?,
+            subnet_admins(destination_subnet_id, destination)?,
+        );
+        if source_admins != destination_admins {
+            return mismatch("subnet admins", &source_admins, &destination_admins);
+        }
+        let (source_sev, destination_sev) = (sev_enabled(source), sev_enabled(destination));
+        if source_sev != destination_sev {
+            return mismatch("SEV setting (sev_enabled)", &source_sev, &destination_sev);
+        }
 
         Ok(())
     }
@@ -229,7 +387,7 @@ impl SubnetMerging {
     fn get_and_pre_validate_subnet_record(
         recovery: &Recovery,
         subnet_id: SubnetId,
-        other_subnet_record: Option<SubnetRecord>,
+        check_not_halted: bool,
     ) -> RecoveryResult<SubnetRecord> {
         let validation_error = |error_message| {
             Err(RecoveryError::ValidationFailed(format!(
@@ -247,7 +405,7 @@ impl SubnetMerging {
             .as_ref()
             .is_some_and(|chain_key_config| !chain_key_config.key_configs.is_empty())
         {
-            return validation_error("Subnet should not be a Chain key subnet".to_string());
+            return validation_error("Subnet should not hold any chain keys".to_string());
         }
 
         let subnet_type = subnet_record
@@ -261,21 +419,9 @@ impl SubnetMerging {
             ));
         }
 
-        if subnet_record.is_halted {
+        if check_not_halted && (subnet_record.is_halted || subnet_record.halt_at_cup_height) {
             return validation_error(String::from(
-                "Subnet should not be halted: subnet merging halts both subnets itself, at the \
-                 CUP whose state it merges",
-            ));
-        }
-
-        if let Some(other_subnet_record) = other_subnet_record
-            && subnet_record.subnet_type() != other_subnet_record.subnet_type()
-        {
-            return validation_error(format!(
-                "Both subnets should have the same subnet type. \
-                 Expected subnet type = {:?}, actual subnet type = {:?}",
-                other_subnet_record.subnet_type(),
-                subnet_record.subnet_type(),
+                "Subnet should neither be halted nor scheduled to halt at its next CUP",
             ));
         }
 
@@ -453,20 +599,21 @@ impl SubnetMerging {
         }
     }
 
-    fn dashboard_url(&self, dashboard: &str) -> String {
-        match self.recovery.registry_helper.latest_registry_version() {
+    /// The URL of the dashboard evaluating the merge readiness condition, for
+    /// the given registry version, recorded by an earlier step.
+    fn dashboard_url(&self, registry_version: RecoveryResult<u64>) -> String {
+        let source_subnet_id = self.params.source_subnet_id;
+        match registry_version {
             Ok(registry_version) => format!(
-                "https://grafana.mainnet.dfinity.network/d/{dashboard}?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}&var-registry_version={}",
-                self.params.source_subnet_id, registry_version,
+                "https://grafana.mainnet.dfinity.network/d/subnet-merging?var-ic=mercury&var-ic_subnet={source_subnet_id}&var-registry_version={registry_version}",
             ),
             Err(err) => {
                 warn!(
                     self.logger,
-                    "Failed to get the latest registry version: {}", err
+                    "Failed to read the registry version recorded by an earlier step: {}", err
                 );
                 format!(
-                    "https://grafana.mainnet.dfinity.network/d/{dashboard}?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}",
-                    self.params.source_subnet_id,
+                    "https://grafana.mainnet.dfinity.network/d/subnet-merging?var-ic=mercury&var-ic_subnet={source_subnet_id}",
                 )
             }
         }
@@ -484,6 +631,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
 
     fn get_logger(&self) -> &Logger {
         &self.logger
+    }
+
+    fn get_skipped_steps(&self) -> Vec<StepType> {
+        self.params.skip.clone().unwrap_or_default()
     }
 
     fn interactive(&self) -> bool {
@@ -504,15 +655,16 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 }
             }
 
-            StepType::CheckMergeReadiness => {
-                print_url_and_ask_for_confirmation(
-                    &self.logger,
-                    self.dashboard_url("subnet-merging"),
-                    "The tool evaluates the merge readiness condition itself, and waits until it \
-                     holds. Please check the dashboard as well, to see whether it is safe to \
-                     merge the subnet",
-                );
-            }
+            StepType::CheckMergeReadiness => print_url_and_ask_for_confirmation(
+                &self.logger,
+                self.dashboard_url(
+                    self.layout
+                        .read_cooling_down_registry_version(self.params.source_subnet_id),
+                ),
+                "The tool evaluates the merge readiness condition itself, and waits until it \
+                 holds. Please check the dashboard as well, to see whether it is safe to merge \
+                 the subnet",
+            ),
 
             StepType::DownloadStateFromSourceSubnet => {
                 if self.params.download_node_source.is_none() {
@@ -537,7 +689,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 }
             }
 
-            #[allow(clippy::collapsible_match)]
             StepType::UploadStateToDestinationSubnet => {
                 if self.params.upload_node_destination.is_none() {
                     self.params.upload_node_destination = read_optional(
@@ -547,16 +698,17 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 }
             }
 
-            StepType::DeleteSourceSubnet => {
-                print_url_and_ask_for_confirmation(
-                    &self.logger,
-                    self.dashboard_url("subnet-merging"),
-                    "Please check the dashboard to see if it is safe to delete the subnet that \
-                     was merged away",
-                );
-            }
+            StepType::DeleteSourceSubnet => print_url_and_ask_for_confirmation(
+                &self.logger,
+                self.dashboard_url(
+                    self.layout
+                        .read_merge_registry_version(self.params.source_subnet_id),
+                ),
+                "Please check the dashboard to see if it is safe to delete the subnet that was \
+                 merged away",
+            ),
 
-            _ => (),
+            _ => {}
         }
     }
 

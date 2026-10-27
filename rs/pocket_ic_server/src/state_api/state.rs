@@ -853,9 +853,14 @@ impl ApiState {
                 args.push("--domain-custom-provider-poll-interval".to_string());
                 args.push("1s".to_string());
                 args.push("--ic-unsafe-root-key-fetch".to_string());
+                // hickory >= 0.26.2 fails lookups on (false) DNSSEC-bogus
+                // answers, see hickory-dns#3963.
+                // TODO: remove this once we upgrade to a hickory-dns that includes
+                // https://github.com/hickory-dns/hickory-dns/pull/4062.
+                args.push("--dns-dnssec-disabled".to_string());
                 let cli = Cli::parse_from(args);
 
-                let resolver = Resolver::default();
+                let resolver = Resolver::new((&cli.dns).into()).unwrap();
 
                 let http_client_opts: ClientOptions = (&cli.http_client).into();
                 let http_client = Arc::new(

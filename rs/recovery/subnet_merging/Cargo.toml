@@ -12,6 +12,7 @@ clap = { workspace = true }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types/" }
 ic-cup-explorer = { path = "../../cup_explorer" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-protobuf = { path = "../../protobuf" }
 ic-recovery = { path = "../" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }

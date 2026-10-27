@@ -1,6 +1,7 @@
+use bytes::Bytes;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
 use ic_error_types::RejectCode;
-use ic_protobuf::types::v1 as pb;
+use ic_protobuf::{proxy::ProtoProxy, types::v1 as pb};
 use ic_test_utilities_consensus::{
     fake::{Fake, FakeContentSigner},
     make_genesis,
@@ -9,15 +10,15 @@ use ic_types::{
     CountBytes, Height, NodeId, NodeIndex, NumBytes, RegistryVersion,
     artifact::ConsensusMessageId,
     batch::{
-        BatchPayload, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
-        FlexibleCanisterHttpResponses, IngressPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
-        iterator_to_bytes, slice_to_messages,
+        BatchPayload, CanisterHttpOutOfCycles, FlexibleCanisterHttpError,
+        FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses, IngressPayload,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE, iterator_to_bytes, slice_to_messages,
     },
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpReject, CanisterHttpResponse,
-        CanisterHttpResponseContent, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
-        CanisterHttpResponseReceipt, CanisterHttpResponseSignature,
-        CanisterHttpResponseWithConsensus,
+        CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
+        CanisterHttpResponseProof, CanisterHttpResponseReceipt, CanisterHttpResponseShare,
+        CanisterHttpResponseSignature, CanisterHttpResponseWithConsensus,
     },
     consensus::{
         Block, BlockPayload, BlockProposal, ConsensusMessage, ConsensusMessageHash, DataPayload,
@@ -43,14 +44,24 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use ic_types_cycles::Cycles;
-use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_0, node_test_id, test_replica_version};
+use ic_types_test_utils::ids::{
+    NODE_1, NODE_2, NODE_3, SUBNET_0, node_test_id, test_replica_version,
+};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
 };
 
-use crate::fetch_stripped_artifact::types::{
-    StrippedMessage, StrippedMessageId, stripped::StrippedIDkgDealings,
+use crate::fetch_stripped_artifact::{
+    canister_http::MIN_STRIPPED_CONTENT_BYTES,
+    types::{
+        StrippedMessage, StrippedMessageId,
+        rpc::{
+            GetCanisterHttpResponseInBlockResponse, GetIDkgDealingInBlockResponse,
+            GetIngressMessageInBlockResponse,
+        },
+        stripped::{StrippedCanisterHttpResponses, StrippedIDkgDealings},
+    },
 };
 
 use super::types::{
@@ -65,8 +76,36 @@ impl StrippedMessage {
             StrippedMessage::IDkgDealing(id, node_index, _) => {
                 StrippedMessageId::IDkgDealing(id.clone(), *node_index)
             }
+            StrippedMessage::CanisterHttpResponse(content_hash, _) => {
+                StrippedMessageId::CanisterHttpResponse(content_hash.clone())
+            }
         }
     }
+}
+
+/// What a peer answers when asked for the given stripped message.
+pub(crate) fn rpc_response(stripped_message: StrippedMessage) -> axum::response::Response<Bytes> {
+    axum::response::Response::builder()
+        .body(Bytes::from(match stripped_message {
+            StrippedMessage::Ingress(_, ingress_message) => {
+                pb::GetIngressMessageInBlockResponse::proxy_encode(
+                    GetIngressMessageInBlockResponse {
+                        serialized_ingress_message: ingress_message.binary().clone(),
+                    },
+                )
+            }
+            StrippedMessage::IDkgDealing(_, _, dealing) => {
+                pb::GetIDkgDealingInBlockResponse::proxy_encode(GetIDkgDealingInBlockResponse {
+                    signed_dealing: dealing,
+                })
+            }
+            StrippedMessage::CanisterHttpResponse(_, response) => {
+                pb::GetCanisterHttpResponseInBlockResponse::proxy_encode(
+                    GetCanisterHttpResponseInBlockResponse { response },
+                )
+            }
+        }))
+        .unwrap()
 }
 
 pub(crate) fn fake_ingress_message(method_name: &str) -> StrippedMessage {
@@ -185,31 +224,26 @@ pub(crate) fn fake_block_proposal(
 pub(crate) fn fake_stripped_block_proposal_with_messages(
     stripped_messages: Vec<StrippedMessageId>,
 ) -> StrippedBlockProposal {
-    let ingress_messages = stripped_messages
-        .iter()
-        .filter_map(|msg_id| {
-            if let StrippedMessageId::Ingress(ingress_id) = msg_id {
-                Some(ingress_id.clone())
-            } else {
-                None
+    let mut ingress_messages = Vec::new();
+    let mut stripped_dealings = Vec::new();
+    let mut stripped_responses = Vec::new();
+    for msg_id in stripped_messages {
+        match msg_id {
+            StrippedMessageId::Ingress(ingress_id) => ingress_messages.push(ingress_id),
+            StrippedMessageId::IDkgDealing(dealing_id, node_index) => {
+                stripped_dealings.push((node_index, dealing_id))
             }
-        })
-        .collect::<Vec<_>>();
-    let stripped_dealings = stripped_messages
-        .iter()
-        .filter_map(|msg_id| {
-            if let StrippedMessageId::IDkgDealing(dealing_id, node_index) = msg_id {
-                Some((*node_index, dealing_id.clone()))
-            } else {
-                None
+            StrippedMessageId::CanisterHttpResponse(content_hash) => {
+                stripped_responses.push(content_hash)
             }
-        })
-        .collect::<Vec<_>>();
+        }
+    }
     StrippedBlockProposal {
         pruned_block_proposal_proto: pb::BlockProposal::default(),
         stripped_ingress_payload: StrippedIngressPayload { ingress_messages },
         unstripped_consensus_message_id: fake_consensus_message_id(),
         stripped_idkg_dealings: StrippedIDkgDealings { stripped_dealings },
+        stripped_canister_http_responses: StrippedCanisterHttpResponses { stripped_responses },
     }
 }
 
@@ -288,6 +322,12 @@ pub(crate) fn fake_idkg_payload_with_dealing(
     fake_idkg_payload_with_dealings(vec![(dealing, node_index)])
 }
 
+/// A stripped canister http response, the response to the given callback id.
+pub(crate) fn fake_canister_http_stripped_message(callback_id: u64) -> StrippedMessage {
+    let response = fake_canister_http_response(callback_id, 1024);
+    StrippedMessage::CanisterHttpResponse(ic_types::crypto::crypto_hash(&response), response)
+}
+
 /// A canister http response for the given callback id, with a body of the given size.
 pub(crate) fn fake_canister_http_response(
     callback_id: u64,
@@ -299,13 +339,24 @@ pub(crate) fn fake_canister_http_response(
     }
 }
 
-/// A canister http reject response for the given callback id.
+/// A canister http reject response for the given callback id, just big enough to
+/// be stripped.
 pub(crate) fn fake_canister_http_reject(callback_id: u64) -> CanisterHttpResponse {
+    fake_canister_http_reject_of_size(callback_id, MIN_STRIPPED_CONTENT_BYTES + 1)
+}
+
+/// A canister http reject response for the given callback id, whose content
+/// counts the given number of bytes.
+pub(crate) fn fake_canister_http_reject_of_size(
+    callback_id: u64,
+    content_size: usize,
+) -> CanisterHttpResponse {
+    let message_len = content_size - CanisterHttpReject::count_bytes_from_parts(0);
     CanisterHttpResponse {
         id: CallbackId::new(callback_id),
         content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
             reject_code: RejectCode::SysTransient,
-            message: String::from("rejected"),
+            message: "x".repeat(message_len),
         }),
     }
 }
@@ -351,6 +402,23 @@ pub(crate) fn fake_canister_http_response_message(
     }
 }
 
+/// The receipt that the given replica signed for the given response.
+fn fake_canister_http_share(
+    response: &CanisterHttpResponse,
+    signer: NodeId,
+) -> CanisterHttpResponseShare {
+    Signed {
+        content: CanisterHttpResponseReceipt {
+            metadata: fake_canister_http_metadata(response),
+            payment_receipt: CanisterHttpPaymentReceipt::default(),
+        },
+        signature: BasicSignature {
+            signature: BasicSigOf::new(BasicSig(vec![1; 32])),
+            signer,
+        },
+    }
+}
+
 fn fake_flexible_responses_with_proof(
     responses: &[(CanisterHttpResponse, NodeId)],
 ) -> Vec<FlexibleCanisterHttpResponseWithProof> {
@@ -358,16 +426,7 @@ fn fake_flexible_responses_with_proof(
         .iter()
         .map(|(response, signer)| FlexibleCanisterHttpResponseWithProof {
             response: response.clone(),
-            proof: Signed {
-                content: CanisterHttpResponseReceipt {
-                    metadata: fake_canister_http_metadata(response),
-                    payment_receipt: CanisterHttpPaymentReceipt::default(),
-                },
-                signature: BasicSignature {
-                    signature: BasicSigOf::new(BasicSig(vec![1; 32])),
-                    signer: *signer,
-                },
-            },
+            proof: fake_canister_http_share(response, *signer),
         })
         .collect()
 }
@@ -461,6 +520,107 @@ pub(crate) fn fake_canister_http_payload(
     assert_no_messages_dropped(&bytes, expected_count);
 
     bytes
+}
+
+/// A canister http payload with one of every kind of message, together with the
+/// response contents that a receiver has to come up with to reassemble it once all
+/// of them have been stripped.
+///
+/// Most kinds of message deliver no response, carrying receipts at most, but they
+/// have to come through stripping and reassembling the payload byte for byte all
+/// the same.
+pub(crate) fn fake_canister_http_payload_with_every_kind() -> (Vec<u8>, Vec<CanisterHttpResponse>) {
+    use pb::canister_http_response_message::MessageType;
+
+    let non_replicated = fake_canister_http_response(1, 1024);
+    let fully_replicated = fake_canister_http_response(2, 1024);
+    let flexible_1 = fake_canister_http_response(3, 1024);
+    let flexible_2 = fake_canister_http_response(3, 2048);
+    let reject = fake_canister_http_reject(4);
+    let plain_reject = fake_canister_http_reject(6);
+
+    // The receipt of a response that the payload does not deliver.
+    let receipt = |callback_id, body_size, signer| {
+        fake_canister_http_share(&fake_canister_http_response(callback_id, body_size), signer)
+    };
+    let message = |message_type| pb::CanisterHttpResponseMessage {
+        message_type: Some(message_type),
+    };
+
+    let payload = fake_canister_http_payload(vec![
+        fake_canister_http_response_message(&non_replicated, &[NODE_1]),
+        fake_canister_http_response_message(&fully_replicated, &[NODE_1, NODE_2]),
+        message(MessageType::FlexibleResponses(
+            pb::FlexibleCanisterHttpResponses::from(FlexibleCanisterHttpResponses {
+                callback_id: CallbackId::new(3),
+                responses: fake_flexible_responses_with_proof(&[
+                    (flexible_1.clone(), NODE_1),
+                    (flexible_2.clone(), NODE_2),
+                ]),
+                extra_shares: vec![receipt(3, 4096, NODE_3)],
+                initial_spent: Cycles::new(0),
+            }),
+        )),
+        message(MessageType::FlexibleError(
+            pb::FlexibleCanisterHttpError::from(FlexibleCanisterHttpError::TooManyRejects {
+                callback_id: CallbackId::new(4),
+                reject_responses: fake_flexible_responses_with_proof(&[(reject.clone(), NODE_1)]),
+                extra_shares: vec![receipt(4, 1024, NODE_2)],
+                initial_spent: Cycles::new(0),
+            }),
+        )),
+        fake_canister_http_timeout_message(5),
+        fake_canister_http_response_message(&plain_reject, &[NODE_1, NODE_2]),
+        message(MessageType::DivergenceResponse(
+            pb::CanisterHttpResponseDivergence::from(CanisterHttpResponseDivergence {
+                shares: vec![receipt(7, 1024, NODE_1), receipt(7, 2048, NODE_2)],
+            }),
+        )),
+        message(MessageType::OutOfCycles(pb::CanisterHttpOutOfCycles::from(
+            CanisterHttpOutOfCycles {
+                callback_id: CallbackId::new(8),
+                shares: vec![receipt(8, 1024, NODE_1)],
+                min_cost: Cycles::new(2_000),
+                unspent_allowance: Cycles::new(1_000),
+            },
+        ))),
+        message(MessageType::AsyncReceipt(pb::CanisterHttpShare::from(
+            receipt(9, 1024, NODE_1),
+        ))),
+        message(MessageType::FlexibleError(
+            pb::FlexibleCanisterHttpError::from(FlexibleCanisterHttpError::Timeout {
+                callback_id: CallbackId::new(10),
+            }),
+        )),
+        message(MessageType::FlexibleError(
+            pb::FlexibleCanisterHttpError::from(FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id: CallbackId::new(11),
+                all_seen_shares: vec![receipt(11, 1024, NODE_1)],
+                total_requests: 3,
+                min_responses: 2,
+            }),
+        )),
+        message(MessageType::FlexibleError(
+            pb::FlexibleCanisterHttpError::from(FlexibleCanisterHttpError::OutOfCycles {
+                callback_id: CallbackId::new(12),
+                all_seen_shares: vec![receipt(12, 1024, NODE_1)],
+                min_cost: Cycles::new(2_000),
+                unspent_allowance: Cycles::new(1_000),
+            }),
+        )),
+    ]);
+
+    (
+        payload,
+        vec![
+            non_replicated,
+            fully_replicated,
+            flexible_1,
+            flexible_2,
+            reject,
+            plain_reject,
+        ],
+    )
 }
 
 /// Fails unless `payload` carries all `expected_count` messages, i.e. unless every

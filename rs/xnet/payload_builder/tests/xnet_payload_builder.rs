@@ -5,6 +5,7 @@ use ic_interfaces::messaging::{XNetPayloadBuilder, XNetPayloadValidationError};
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
+use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -35,14 +36,15 @@ use ic_types::batch::{ValidationContext, XNetPayload};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue, StreamSlice};
 use ic_types::{CountBytes, Height, NodeId, RegistryVersion, SubnetId};
-use ic_xnet_payload_builder::certified_slice_pool::{CertifiedSlicePool, UnpackedStreamSlice};
-use ic_xnet_payload_builder::testing::*;
-use ic_xnet_payload_builder::{
-    ExpectedIndices, LABEL_POOLED, LABEL_REMOTE, LABEL_SCHEDULED, LABEL_STATUS, MAX_SIGNALS,
-    METRIC_PULL_ATTEMPT_COUNT, METRIC_SHADOW_PULLS, POOL_BYTE_SIZE_SOFT_CAP,
-    POOLED_SLICE_BYTE_SIZE_DIVISOR, XNetPayloadBuilderImpl, adjusted_byte_limit,
-    refill_stream_slice_indices,
+use ic_xnet_payload_builder::certified_slice_pool::{
+    CertifiedSlicePool, POOL_BYTE_SIZE_SOFT_CAP, POOLED_SLICE_BYTE_SIZE_DIVISOR,
+    POOLED_SLICE_BYTE_SIZE_MAX, UnpackedStreamSlice, adjusted_byte_limit,
 };
+use ic_xnet_payload_builder::exchange::{
+    LABEL_POOLED, LABEL_REMOTE, LABEL_SCHEDULED, METRIC_PULL_ATTEMPT_COUNT, METRIC_SHADOW_PULLS,
+};
+use ic_xnet_payload_builder::testing::*;
+use ic_xnet_payload_builder::{ExpectedIndices, LABEL_STATUS, MAX_SIGNALS, XNetPayloadBuilderImpl};
 use maplit::btreemap;
 use mockall::predicate::{always, eq};
 use proptest::prelude::*;
@@ -52,7 +54,6 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
-use tokio::sync::mpsc;
 use tokio::time::Duration;
 
 mod common;
@@ -79,15 +80,13 @@ impl XNetPayloadBuilderFixture {
         let registry = get_registry_for_test();
         let certified_slice_pool =
             Arc::new(Mutex::new(CertifiedSlicePool::new(&fixture.metrics, log)));
-        let (refill_trigger, _refill_receiver) = mpsc::channel(100);
-        let refill_task_handle = RefillTaskHandle(Mutex::new(refill_trigger));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&fixture.metrics));
         let xnet_payload_builder = XNetPayloadBuilderImpl::new_from_components(
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             registry,
             certified_slice_pool.clone(),
-            refill_task_handle,
+            PullTaskHandle::disconnected(),
             metrics,
             fixture.log,
         )
@@ -265,6 +264,16 @@ fn get_registry_for_test() -> Arc<dyn RegistryClient> {
     let registry = Arc::new(FakeRegistryClient::new(Arc::new(data_provider)));
     registry.update_to_latest_version();
     registry
+}
+
+/// A `StateManager` with no certified state, so a `PullTask` sees no streams of
+/// ours.
+fn state_manager_without_certified_state() -> Arc<MockStateManager> {
+    let mut state_manager = MockStateManager::new();
+    state_manager
+        .expect_get_latest_certified_state()
+        .returning(|| None);
+    Arc::new(state_manager)
 }
 
 /// Creates an incoming `CertifiedStreamSlice` containing `msg_count` messages
@@ -1043,7 +1052,10 @@ fn refill_stream_slice_indices_byte_limits_empty_pool() {
                 .collect(),
         );
 
-        let byte_limits = refill_stream_slice_indices(&pool.lock().unwrap(), OWN_SUBNET)
+        let byte_limits = pool
+            .lock()
+            .unwrap()
+            .refill_stream_slice_indices(OWN_SUBNET)
             .into_iter()
             .map(|(_, indices)| indices.byte_limit)
             .collect::<Vec<_>>();
@@ -1091,7 +1103,10 @@ fn refill_stream_slice_indices_byte_limits_non_empty_pool() {
         );
         let pooled_byte_size = pool.lock().unwrap().byte_size();
 
-        let byte_limits = refill_stream_slice_indices(&pool.lock().unwrap(), OWN_SUBNET)
+        let byte_limits = pool
+            .lock()
+            .unwrap()
+            .refill_stream_slice_indices(OWN_SUBNET)
             .into_iter()
             .map(|(_, indices)| indices.byte_limit)
             .collect::<Vec<_>>();
@@ -1172,22 +1187,26 @@ fn refill_pool_empty(
             ],
         });
 
-        let refill_handle = PoolRefillTask::start(
+        let refill_handle = PullTask::start(
             Arc::clone(&pool),
             endpoint_resolver,
             xnet_client,
             Arc::clone(&store),
+            state_manager_without_certified_state(),
             runtime.handle().clone(),
-            Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
+            &metrics_registry,
             log,
         );
         refill_handle.trigger_refill(registry.get_latest_version());
 
         runtime.block_on(async {
             let mut count: u64 = 0;
-            // Keep polling until a slice is present in the pool and the pull was recorded.
+            // Keep polling until the pull was recorded, which happens after `put()` returned.
             loop {
-                if let (_, Some(_), _, _) = pool.lock().unwrap().slice_stats(REMOTE_SUBNET) {
+                if fetch_int_counter_vec(&metrics_registry, METRIC_SHADOW_PULLS)
+                    .values()
+                    .any(|&v| v > 0)
+                {
                     break;
                 }
                 count += 1;
@@ -1210,7 +1229,6 @@ fn refill_pool_empty(
             )]),
             fetch_int_counter_vec(&metrics_registry, METRIC_SHADOW_PULLS)
         );
-        assert!(!pool.lock().unwrap().unschedule_pull(REMOTE_SUBNET));
 
         assert_opt_slices_eq(
             Some(certified_slice),
@@ -1323,23 +1341,26 @@ fn refill_pool_append(
             ],
         });
 
-        let refill_handle = PoolRefillTask::start(
+        let refill_handle = PullTask::start(
             Arc::clone(&pool),
             endpoint_resolver,
             xnet_client,
             Arc::clone(&store),
+            state_manager_without_certified_state(),
             runtime.handle().clone(),
-            Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
+            &metrics_registry,
             log.clone(),
         );
         refill_handle.trigger_refill(registry.get_latest_version());
 
         runtime.block_on(async {
             let mut count: u64 = 0;
-            // Keep polling until the pooled slice has `expected_msg_count` messages.
+            // Keep polling until the pull was recorded, which happens after `append()` returned.
             loop {
-                let (_, _, msg_count, _) = pool.lock().unwrap().slice_stats(REMOTE_SUBNET);
-                if msg_count == expected_msg_count {
+                if fetch_int_counter_vec(&metrics_registry, METRIC_SHADOW_PULLS)
+                    .values()
+                    .any(|&v| v > 0)
+                {
                     break;
                 }
                 count += 1;
@@ -1350,13 +1371,13 @@ fn refill_pool_append(
             }
         });
 
-        // Not scheduled, but pooled.
+        // Scheduled, as the pooled prefix's header offers more messages; and pooled.
         let remote = REMOTE_SUBNET.to_string();
         assert_eq!(
             metric_vec(&[(
                 &[
                     (LABEL_REMOTE, remote.as_str()),
-                    (LABEL_SCHEDULED, "false"),
+                    (LABEL_SCHEDULED, "true"),
                     (LABEL_POOLED, "true")
                 ],
                 1
@@ -1440,13 +1461,14 @@ fn refill_pool_put_invalid_slice(
             ],
         });
 
-        let refill_handle = PoolRefillTask::start(
+        let refill_handle = PullTask::start(
             Arc::clone(&pool),
             endpoint_resolver,
             xnet_client,
             Arc::clone(&store),
+            state_manager_without_certified_state(),
             runtime.handle().clone(),
-            Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
+            &metrics_registry,
             log,
         );
         refill_handle.trigger_refill(registry.get_latest_version());
@@ -1576,13 +1598,14 @@ fn refill_pool_append_invalid_slice(
             ],
         });
 
-        let refill_handle = PoolRefillTask::start(
+        let refill_handle = PullTask::start(
             Arc::clone(&pool),
             endpoint_resolver,
             xnet_client,
             Arc::clone(&store),
+            state_manager_without_certified_state(),
             runtime.handle().clone(),
-            Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
+            &metrics_registry,
             log.clone(),
         );
         refill_handle.trigger_refill(registry.get_latest_version());

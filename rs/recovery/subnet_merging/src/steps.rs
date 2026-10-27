@@ -2,7 +2,7 @@ use crate::{
     layout::{CUP_FILE_NAME, Layout},
     readiness,
     target_subnet::TargetSubnet,
-    utils::{MergedStateParams, first_registry_version_where, get_subnet_record_at_version},
+    utils::{MergedStateParams, get_subnet_record_at_version, wait_for},
 };
 
 use ic_base_types::SubnetId;
@@ -15,8 +15,6 @@ use ic_recovery::{
     steps::Step,
     util::block_on,
 };
-use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
-use ic_registry_routing_table::RoutingTable;
 use ic_subnet_tools::{
     agent_helper::AgentHelper,
     state_tool_helper,
@@ -27,51 +25,15 @@ use ic_types::{
     Height,
     consensus::{CatchUpContent, CatchUpPackage, HasHeight},
 };
-use slog::{Logger, info, warn};
+use slog::{Logger, info};
 use url::Url;
 
-use std::{
-    net::IpAddr,
-    path::PathBuf,
-    thread::sleep,
-    time::{Duration, Instant},
-};
+use std::{net::IpAddr, path::PathBuf, thread::sleep, time::Duration};
 
-/// Retries `check` until it reports success, `timeout` elapses, or it fails
-/// with an error that is not worth retrying.
-///
-/// What the steps below use it for is the registry catching up with a proposal
-/// that `ic-admin` just reported as executed: the local store is polled on
-/// every read, but the mutation may not have made it into the registry canister
-/// the poll reads from yet.
-fn wait_for(
-    what: &str,
-    timeout: Duration,
-    poll_interval: Duration,
-    logger: &Logger,
-    check: impl Fn() -> RecoveryResult<bool>,
-) -> RecoveryResult<()> {
-    let deadline = Instant::now() + timeout;
-    loop {
-        match check() {
-            Ok(true) => return Ok(()),
-            Ok(false) => info!(logger, "Waiting until {what}"),
-            Err(err) => warn!(logger, "Waiting until {what}, last attempt failed: {err}"),
-        }
-
-        if Instant::now() >= deadline {
-            return Err(RecoveryError::UnexpectedError(format!(
-                "Gave up waiting until {what} after {timeout:?}"
-            )));
-        }
-        sleep(poll_interval);
-    }
-}
-
-/// Reads the record of the subnet that is being merged away, checks that it is
-/// labeled "cooling down" and determines (and persists) the registry version
-/// `V` at which it was labeled so, which is what the merge readiness condition
-/// is evaluated against.
+/// Waits until the record of the subnet that is being merged away is labeled
+/// "cooling down" and persists the registry version `V` it was read at (not
+/// necessarily the version that set the label), which is what the merge
+/// readiness condition is evaluated against.
 pub(crate) struct CheckCoolingDownStep {
     pub(crate) source_subnet_id: SubnetId,
     pub(crate) registry_helper: RegistryHelper,
@@ -84,15 +46,15 @@ pub(crate) struct CheckCoolingDownStep {
 impl Step for CheckCoolingDownStep {
     fn descr(&self) -> String {
         format!(
-            "Read the registry to check that subnet {} is labeled \"cooling down\", and determine \
-             the registry version it was labeled so at.",
+            "Wait until the registry labels subnet {} as \"cooling down\", and record the \
+             registry version at which the label was read.",
             self.source_subnet_id,
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
         let source_subnet_id = self.source_subnet_id;
-        wait_for(
+        let cooling_down_version = wait_for(
             &format!("subnet {source_subnet_id} is labeled \"cooling down\""),
             self.timeout,
             self.poll_interval,
@@ -106,32 +68,29 @@ impl Step for CheckCoolingDownStep {
                          {registry_version}"
                     )));
                 };
-                Ok(subnet_record.cooling_down)
+                if !subnet_record.cooling_down {
+                    return Err(RecoveryError::RegistryError(format!(
+                        "Subnet {source_subnet_id} is not labeled \"cooling down\" at registry \
+                         version {registry_version} yet"
+                    )));
+                }
+                Ok(registry_version)
             },
         )?;
 
-        let registry_helper = self.registry_helper.clone();
-        let cooling_down_version =
-            first_registry_version_where(&self.registry_helper, |version| {
-                Ok(
-                    get_subnet_record_at_version(&registry_helper, source_subnet_id, version)?
-                        .is_some_and(|record| record.cooling_down),
-                )
-            })?;
-
         info!(
             self.logger,
-            "Subnet {source_subnet_id} has been labeled \"cooling down\" since registry version \
+            "Subnet {source_subnet_id} is labeled \"cooling down\" at registry version \
              {cooling_down_version}",
         );
 
         self.layout
-            .write_cooling_down_registry_version(cooling_down_version.get())
+            .write_cooling_down_registry_version(source_subnet_id, cooling_down_version.get())
     }
 }
 
-/// Waits until the merge readiness condition of the `Subnet merging` dashboard
-/// holds for the subnet that is cooling down.
+/// Waits until the merge readiness condition holds for the subnet that is
+/// cooling down.
 pub(crate) struct CheckMergeReadinessStep {
     pub(crate) source_subnet_id: SubnetId,
     pub(crate) registry_helper: RegistryHelper,
@@ -144,17 +103,15 @@ pub(crate) struct CheckMergeReadinessStep {
 impl Step for CheckMergeReadinessStep {
     fn descr(&self) -> String {
         format!(
-            "Wait until subnet {} is ready to be merged, i.e. until it has come to a complete \
-             rest: every subnet has observed that it is cooling down, no message is in flight to \
-             or from it, its ingress history holds nothing but `processing` entries, its subnet \
-             queues and call context manager are empty and its refund pool holds no pending \
-             anonymous refund.",
+            "Wait until subnet {} is ready to be merged.",
             self.source_subnet_id,
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let registry_version = self.layout.read_cooling_down_registry_version()?;
+        let registry_version = self
+            .layout
+            .read_cooling_down_registry_version(self.source_subnet_id)?;
 
         readiness::await_merge_readiness(
             &self.registry_helper,
@@ -204,34 +161,28 @@ impl Step for WaitForHaltingCupStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let deadline = Instant::now() + self.timeout;
-        loop {
-            match self.check() {
-                Ok(Some(height)) => {
-                    info!(
-                        self.logger,
-                        "Subnet {} halted at height {height}", self.subnet_id
-                    );
-                    return Ok(());
-                }
-                Ok(None) => {}
-                // A node that is not answering yet, or a CUP that cannot be
-                // pulled off it yet, is the normal state of affairs while the
-                // subnet is still running towards its halting CUP.
-                Err(err) => warn!(
-                    self.logger,
-                    "Subnet {} has not halted yet: {err}", self.subnet_id
-                ),
-            }
-
-            if Instant::now() >= deadline {
-                return Err(RecoveryError::UnexpectedError(format!(
-                    "Subnet {} did not reach the CUP it halts at within {:?}",
-                    self.subnet_id, self.timeout,
-                )));
-            }
-            sleep(self.poll_interval);
-        }
+        // A node that is not answering yet, or a CUP that cannot be pulled off
+        // it yet, is the normal state of affairs while the subnet is still
+        // running towards its halting CUP, so every error is retried.
+        let height = wait_for(
+            &format!("subnet {} reaches the CUP it halts at", self.subnet_id),
+            self.timeout,
+            self.poll_interval,
+            &self.logger,
+            || {
+                self.check()?.ok_or_else(|| {
+                    RecoveryError::UnexpectedError(format!(
+                        "node {} does not hold the CUP subnet {} halts at yet",
+                        self.node_ip, self.subnet_id,
+                    ))
+                })
+            },
+        )?;
+        info!(
+            self.logger,
+            "Subnet {} halted at height {height}", self.subnet_id
+        );
+        Ok(())
     }
 }
 
@@ -535,9 +486,10 @@ impl Step for MergeStatesStep {
     }
 }
 
-/// Reads the routing table, checks that the canister ID ranges of the subnet
-/// that was merged away are hosted by the destination subnet now, and
-/// determines (and persists) the registry version the merge was applied at.
+/// Waits until the routing table no longer assigns any canister ID range to the
+/// subnet that was merged away, and persists the registry version `W` it was
+/// read at (not necessarily the version that rerouted the ranges), which is
+/// what every other subnet has to reach before that subnet may be deleted.
 pub(crate) struct CheckRoutingTableStep {
     pub(crate) source_subnet_id: SubnetId,
     pub(crate) destination_subnet_id: SubnetId,
@@ -551,15 +503,15 @@ pub(crate) struct CheckRoutingTableStep {
 impl Step for CheckRoutingTableStep {
     fn descr(&self) -> String {
         format!(
-            "Read the routing table to check that subnet {} hosts no canister id range anymore \
-             and that subnet {} hosts them now.",
-            self.source_subnet_id, self.destination_subnet_id,
+            "Wait until the routing table assigns no canister id range to subnet {} anymore, and \
+             record the registry version at which this was read.",
+            self.source_subnet_id,
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
         let source_subnet_id = self.source_subnet_id;
-        wait_for(
+        let (merge_registry_version, routing_table) = wait_for(
             &format!("subnet {source_subnet_id} hosts no canister id range anymore"),
             self.timeout,
             self.poll_interval,
@@ -571,54 +523,27 @@ impl Step for CheckRoutingTableStep {
                         "No routing table at registry version {registry_version}"
                     )));
                 };
-                Ok(source_subnet_is_empty(&routing_table, source_subnet_id))
+                if !routing_table.ranges(source_subnet_id).is_empty() {
+                    return Err(RecoveryError::RegistryError(format!(
+                        "Subnet {source_subnet_id} still hosts canister id ranges at registry \
+                         version {registry_version}"
+                    )));
+                }
+                Ok((registry_version, routing_table))
             },
         )?;
 
-        let (registry_version, routing_table) = self.registry_helper.get_routing_table()?;
-        let Some(routing_table) = routing_table else {
-            return Err(RecoveryError::RegistryError(format!(
-                "No routing table at registry version {registry_version}"
-            )));
-        };
         info!(
             self.logger,
-            "Canister id ranges of subnet {} at registry version {registry_version}: {:#?}",
+            "Subnet {source_subnet_id} hosts no canister id range anymore at registry version \
+             {merge_registry_version}; subnet {} hosts: {:#?}",
             self.destination_subnet_id,
             routing_table.ranges(self.destination_subnet_id),
         );
 
-        let registry_client = self.registry_helper.registry_client();
-        let merge_registry_version =
-            first_registry_version_where(&self.registry_helper, |version| {
-                let routing_table = registry_client
-                    .get_routing_table(version)
-                    .map_err(|err| {
-                        RecoveryError::RegistryError(format!(
-                            "Failed to get the routing table at registry version {version}: {err}"
-                        ))
-                    })?
-                    .ok_or_else(|| {
-                        RecoveryError::RegistryError(format!(
-                            "No routing table at registry version {version}"
-                        ))
-                    })?;
-                Ok(source_subnet_is_empty(&routing_table, source_subnet_id))
-            })?;
-
-        info!(
-            self.logger,
-            "Subnet {source_subnet_id} has been merged away as of registry version \
-             {merge_registry_version}",
-        );
-
         self.layout
-            .write_merge_registry_version(merge_registry_version.get())
+            .write_merge_registry_version(source_subnet_id, merge_registry_version.get())
     }
-}
-
-fn source_subnet_is_empty(routing_table: &RoutingTable, source_subnet_id: SubnetId) -> bool {
-    routing_table.ranges(source_subnet_id).is_empty()
 }
 
 /// Waits until every subnet other than the one that was merged away routes the
@@ -644,7 +569,9 @@ impl Step for CheckRegistryVersionOnAllSubnetsStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let registry_version = self.layout.read_merge_registry_version()?;
+        let registry_version = self
+            .layout
+            .read_merge_registry_version(self.source_subnet_id)?;
 
         readiness::await_registry_version_on_all_subnets(
             &self.registry_helper,

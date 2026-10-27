@@ -4667,11 +4667,151 @@ fn executing_non_existing_method_does_not_consume_cycles() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = "(module)";
     let canister_id = test.canister_from_wat(wat).unwrap();
+    let balance_before = test.canister_state(canister_id).system_state.balance();
     let err = test.ingress(canister_id, "foo", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterMethodNotFound, err.code());
     assert_eq!(
         DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + wat_compilation_cost(wat),
         test.executed_instructions()
+    );
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
+}
+
+#[test]
+fn executing_method_of_canister_without_wasm_module_does_not_consume_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    test.uninstall_code(canister_id).unwrap();
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
+    assert_eq!(ErrorCode::CanisterWasmModuleNotFound, err.code());
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
+}
+
+/// Canister A calls the given method of canister B transferring some cycles.
+/// The given function `f` is applied after the call has been inducted into
+/// the input queue of canister B and before canister B executes it.
+/// Asserts that the call is rejected with the given reject code, all the
+/// transferred cycles are refunded to canister A, and no cycles are charged
+/// to canister B.
+fn inter_canister_call_is_rejected_free_of_charge<F>(
+    method_name: &str,
+    f: F,
+    expected_reject_code: RejectCode,
+) where
+    F: FnOnce(&mut ExecutionTest, CanisterId),
+{
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+    let transferred_cycles = Cycles::new(1_000_000_000);
+
+    // Canister A calls canister B and replies with the reject code
+    // and the refunded cycles in the reject callback.
+    let a = wasm()
+        .call_with_cycles(
+            b_id,
+            method_name,
+            call_args().other_side(wasm().reply().build()).on_reject(
+                wasm()
+                    .reject_code()
+                    .int_to_blob()
+                    .reply_data_append()
+                    .msg_cycles_refunded128()
+                    .reply_data_append()
+                    .reply(),
+            ),
+            transferred_cycles,
+        )
+        .build();
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    f(&mut test, b_id);
+
+    // Canister B executes the call without being charged any cycles.
+    let b_balance_before = test.canister_state(b_id).system_state.balance();
+    test.execute_message(b_id);
+    let b_balance_after = test.canister_state(b_id).system_state.balance();
+    assert_eq!(b_balance_before, b_balance_after);
+
+    // Canister A gets the reject with a refund of all transferred cycles.
+    test.induct_messages();
+    test.execute_message(a_id);
+    let ingress_status = test.ingress_status(&ingress_id);
+    let reply = match check_ingress_status(ingress_status).unwrap() {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(err) => unreachable!("Unexpected reject: {err}"),
+    };
+    let (reject_code, refunded_cycles) = reply.split_at(4);
+    assert_eq!(
+        reject_code,
+        (expected_reject_code as u32).to_le_bytes(),
+        "Unexpected reject code"
+    );
+    assert_eq!(
+        Cycles::new(u128::from_le_bytes(refunded_cycles.try_into().unwrap())),
+        transferred_cycles
+    );
+}
+
+#[test]
+fn inter_canister_call_to_non_existing_method_does_not_consume_cycles() {
+    inter_canister_call_is_rejected_free_of_charge("foo", |_, _| {}, RejectCode::CanisterError);
+}
+
+#[test]
+fn inter_canister_call_to_canister_without_wasm_module_does_not_consume_cycles() {
+    inter_canister_call_is_rejected_free_of_charge(
+        "update",
+        |test, b_id| {
+            test.uninstall_code(b_id).unwrap();
+        },
+        RejectCode::CanisterError,
+    );
+}
+
+#[test]
+fn inter_canister_call_to_stopping_canister_does_not_consume_cycles() {
+    inter_canister_call_is_rejected_free_of_charge(
+        "update",
+        |test, b_id| {
+            test.stop_canister(b_id);
+            assert_eq!(
+                CanisterStatusType::Stopping,
+                test.canister_state(b_id).system_state.status()
+            );
+        },
+        RejectCode::CanisterError,
+    );
+}
+
+#[test]
+fn inter_canister_call_to_stopped_canister_does_not_consume_cycles() {
+    inter_canister_call_is_rejected_free_of_charge(
+        "update",
+        |test, b_id| {
+            test.stop_canister(b_id);
+            test.process_stopping_canisters();
+            assert_eq!(
+                CanisterStatusType::Stopped,
+                test.canister_state(b_id).system_state.status()
+            );
+        },
+        RejectCode::CanisterError,
+    );
+}
+
+#[test]
+fn inter_canister_call_to_composite_query_does_not_consume_cycles() {
+    inter_canister_call_is_rejected_free_of_charge(
+        "composite_query",
+        |_, _| {},
+        RejectCode::CanisterError,
     );
 }
 
@@ -5155,12 +5295,16 @@ fn cannot_execute_update_on_stopping_canister() {
         test.canister_state(canister_id).system_state.status(),
         CanisterStatusType::Stopping
     );
+    let balance_before = test.canister_state(canister_id).system_state.balance();
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopping, err.code());
     assert_eq!(
         format!("Canister {canister_id} is not running"),
         err.description()
     );
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
 }
 
 #[test]
@@ -5173,12 +5317,61 @@ fn cannot_execute_update_on_stopped_canister() {
         CanisterStatusType::Stopped,
         test.canister_state(canister_id).system_state.status()
     );
+    let balance_before = test.canister_state(canister_id).system_state.balance();
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopped, err.code());
     assert_eq!(
         format!("Canister {canister_id} is not running"),
         err.description()
     );
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
+}
+
+#[test]
+fn cannot_execute_non_existing_method_on_stopping_canister() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    test.stop_canister(canister_id);
+    assert_matches!(
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Stopping
+    );
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let err = test.ingress(canister_id, "foo", vec![]).unwrap_err();
+    // The canister status error takes precedence over the missing method error.
+    assert_eq!(ErrorCode::CanisterStopping, err.code());
+    assert_eq!(
+        format!("Canister {canister_id} is not running"),
+        err.description()
+    );
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
+}
+
+#[test]
+fn cannot_execute_non_existing_method_on_stopped_canister() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        CanisterStatusType::Stopped,
+        test.canister_state(canister_id).system_state.status()
+    );
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let err = test.ingress(canister_id, "foo", vec![]).unwrap_err();
+    // The canister status error takes precedence over the missing method error.
+    assert_eq!(ErrorCode::CanisterStopped, err.code());
+    assert_eq!(
+        format!("Canister {canister_id} is not running"),
+        err.description()
+    );
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
 }
 
 #[test]
@@ -5190,12 +5383,16 @@ fn cannot_execute_query_on_stopping_canister() {
         test.canister_state(canister_id).system_state.status(),
         CanisterStatusType::Stopping
     );
+    let balance_before = test.canister_state(canister_id).system_state.balance();
     let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopping, err.code());
     assert_eq!(
         format!("Canister {canister_id} is not running"),
         err.description()
     );
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
 }
 
 #[test]
@@ -5208,12 +5405,16 @@ fn cannot_execute_query_on_stopped_canister() {
         CanisterStatusType::Stopped,
         test.canister_state(canister_id).system_state.status()
     );
+    let balance_before = test.canister_state(canister_id).system_state.balance();
     let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopped, err.code());
     assert_eq!(
         format!("Canister {canister_id} is not running"),
         err.description()
     );
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
 }
 
 #[test]
@@ -9204,6 +9405,86 @@ fn wasm_memory_limit_is_enforced_with_static_memory_in_init() {
     // The canister init is expected to fail.
     let err = test.install_canister(canister_id, wasm).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}
+
+/// Checks that the `WasmMemoryLimitExceeded` error reports the maximum Wasm
+/// memory size of the canister's Wasm execution mode (4GiB for Wasm32 and
+/// 6GiB for Wasm64), both when the limit is exceeded by `memory.grow` during
+/// execution and when it is already exceeded at the start of an update call.
+fn wasm_memory_limit_error_reports_max_wasm_memory_size(is_wasm64: bool) {
+    let mut test = ExecutionTestBuilder::new().build();
+    let (memory_type, grow_delta) = if is_wasm64 {
+        ("i64", "(i64.const 10)")
+    } else {
+        ("", "(i32.const 10)")
+    };
+    let wat = format!(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update grow")
+                (drop (memory.grow {grow_delta}))
+                (call $msg_reply)
+            )
+            (func (export "canister_update noop")
+                (call $msg_reply)
+            )
+            (memory {memory_type} 1)
+        )"#
+    );
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    assert_eq!(
+        test.execution_state(canister_id)
+            .wasm_execution_mode
+            .is_wasm64(),
+        is_wasm64
+    );
+
+    let expected_max_wasm_memory_size = if is_wasm64 {
+        ic_types::MAX_WASM64_MEMORY_IN_BYTES
+    } else {
+        ic_types::MAX_WASM_MEMORY_IN_BYTES
+    };
+    let expected_text = format!(
+        "If the canister reaches its maximum Wasm memory size of {expected_max_wasm_memory_size} bytes"
+    );
+
+    // Growing the memory by 10 pages exceeds a limit of usage + 5 pages, so
+    // the error is raised by `memory.grow` during execution.
+    set_wasm_memory_limit(
+        &mut test,
+        canister_id,
+        NumBytes::new(5 * WASM_PAGE_SIZE as u64),
+    );
+    let err = test.ingress(canister_id, "grow", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+    assert!(
+        err.description().contains(&expected_text),
+        "unexpected error description: {}",
+        err.description()
+    );
+
+    // The memory already exceeds a limit of 1 byte, so the error is raised at
+    // the start of the update call.
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1))
+        .unwrap();
+    let err = test.ingress(canister_id, "noop", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+    assert!(
+        err.description().contains(&expected_text),
+        "unexpected error description: {}",
+        err.description()
+    );
+}
+
+#[test]
+fn wasm_memory_limit_error_reports_max_wasm_memory_size_for_wasm32() {
+    wasm_memory_limit_error_reports_max_wasm_memory_size(false);
+}
+
+#[test]
+fn wasm_memory_limit_error_reports_max_wasm_memory_size_for_wasm64() {
+    wasm_memory_limit_error_reports_max_wasm_memory_size(true);
 }
 
 #[test]

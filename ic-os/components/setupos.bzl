@@ -22,6 +22,7 @@ component_files = {
     Label("//ic-os/components/setupos:install-guestos.sh"): "/opt/ic/bin/install-guestos.sh",
     Label("//ic-os/components/setupos:check-hardware.sh"): "/opt/ic/bin/check-hardware.sh",
     Label("//ic-os/components/setupos:install-hostos.sh"): "/opt/ic/bin/install-hostos.sh",
+    Label("//ic-os/components/setupos:mount-usb.sh"): "/opt/ic/bin/mount-usb.sh",
     Label("//ic-os/components/setupos:check-network.sh"): "/opt/ic/bin/check-network.sh",
     Label("//ic-os/components/setupos:check-ntp.sh"): "/opt/ic/bin/check-ntp.sh",
     Label("//ic-os/components/setupos:setupos.sh"): "/opt/ic/bin/setupos.sh",

@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/cup_explorer",
+    "//rs/interfaces/registry",
     "//rs/protobuf",
     "//rs/recovery",
     "//rs/recovery/subnet_tools",
@@ -25,6 +26,11 @@ DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
+DEPENDENCIES_MACROS = [
+    # Keep sorted.
+    "@crate_index//:strum_macros",
+]
+
 rust_library(
     name = "subnet_merging",
     srcs = glob(
@@ -32,7 +38,7 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     crate_name = "ic_subnet_merging",
-    proc_macro_deps = ["@crate_index//:strum_macros"],
+    proc_macro_deps = DEPENDENCIES_MACROS,
     version = "0.1.0",
     visibility = ["//rs:system-tests-pkg"],
     deps = DEPENDENCIES,
@@ -52,6 +58,7 @@ rust_binary(
 rust_test(
     name = "subnet_merging_test",
     crate = ":subnet_merging",
+    proc_macro_deps = DEPENDENCIES_MACROS,
     deps = DEPENDENCIES + [
         # Keep sorted.
         "//rs/test_utilities/tmpdir",

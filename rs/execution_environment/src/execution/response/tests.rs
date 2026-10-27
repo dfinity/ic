@@ -4,6 +4,7 @@ use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::MessageMemoryUsage;
+use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::canister_state::NextExecution;
@@ -12,6 +13,8 @@ use ic_replicated_state::testing::SystemStateTesting;
 use ic_test_utilities_execution_environment::{
     ExecutionResponse, ExecutionTest, ExecutionTestBuilder, check_ingress_status,
 };
+use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::messages::ResponseBuilder;
 use ic_types::NumInstructions;
@@ -25,6 +28,7 @@ use ic_types::{ComputeAllocation, MemoryAllocation};
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_lt};
+use slog::Level;
 
 #[test]
 fn execute_response_when_stopping_status() {
@@ -858,6 +862,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
                 .on_reject(wasm().reject_message().reject())
                 .on_reply(
                     wasm()
+                        .debug_print(b"callback")
                         .stable_grow(1280)
                         .stable64_fill(0, 0, 1000)
                         .instruction_counter_is_at_least(1_000_000)
@@ -934,6 +939,8 @@ fn dts_out_of_subnet_memory_in_response_callback() {
         available_memory_before_finishing_callback,
         test.subnet_available_memory().get_execution_memory()
     );
+    // The canister log of the failed response callback is persisted.
+    assert_eq!(test.canister_log_contents(a_id), vec![b"callback".to_vec()]);
 }
 
 #[test]
@@ -1744,6 +1751,89 @@ fn dts_response_concurrent_cycles_change_fails() {
             + (max_execution_cost
                 - (test.canister_execution_cost(a_id) - initial_execution_cost).real())
     );
+}
+
+#[test]
+fn dts_response_concurrent_cycles_change_persists_canister_log() {
+    // Test steps:
+    // 1. Canister A calls canister B.
+    // 2. Canister B replies to canister A.
+    // 3. The response callback of canister A logs a message and runs in
+    //    multiple slices.
+    // 4. While canister A is paused, we emulate a postponed charge
+    //    of the entire cycles balance of canister A.
+    // 5. The response callback resumes and burns more cycles than refunded
+    //    to canister A for the response transmission.
+    // 6. The response callback fails because there are not enough cycles
+    //    in the canister balance to cover both burning and cycles debit.
+    // 7. The canister log of the failed response callback is persisted.
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm().message_payload().append_and_reply().build();
+
+    let a = wasm()
+        .inter_update(
+            b_id,
+            call_args().other_side(b).on_reply(
+                wasm()
+                    .debug_print(b"callback")
+                    .instruction_counter_is_at_least(1_000_000)
+                    .cycles_burn128(Cycles::new(100_000_000_000)),
+            ),
+        )
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Execute one slice of the response callback.
+    test.execute_slice(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    // Emulate a postponed charge.
+    let cycles_debit = test.canister_state(a_id).system_state.balance();
+    test.canister_state_mut(a_id)
+        .system_state
+        .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
+
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert!(
+        err.description()
+            .contains(&format!("Canister {a_id} is out of cycles"))
+    );
+
+    // No cycles are burned by the failed response callback...
+    assert!(
+        test.canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::BurnedCycles)
+            .is_none()
+    );
+
+    // ...but its canister log is persisted.
+    assert_eq!(test.canister_log_contents(a_id), vec![b"callback".to_vec()]);
 }
 
 #[test]
@@ -3420,4 +3510,151 @@ fn test_ic0_msg_deadline_best_effort_responses() {
         result,
         Ok(WasmResult::Reply(no_deadline.to_le_bytes().into()))
     );
+}
+
+/// The outcome of `execute_callbacks_and_get_logs`.
+struct CallbacksExecution {
+    /// The replica logs.
+    logs: LogEntriesAssert,
+    /// The ID of the canister executing the callbacks.
+    canister_id: CanisterId,
+    /// The instructions executed in the last slice of the callbacks.
+    last_slice_instructions: NumInstructions,
+    /// The instructions executed in all slices of the callbacks.
+    total_instructions: NumInstructions,
+}
+
+/// Canister A calls canister B with the given callbacks and executes the
+/// response callback (in as many slices as needed) with a slice instruction
+/// limit of 1M.
+fn execute_callbacks_and_get_logs(
+    callbacks: ic_universal_canister::CallArgs,
+) -> CallbacksExecution {
+    let logger = InMemoryReplicaLogger::new();
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .with_replica_logger(ReplicaLogger::from(&logger))
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        .inter_update(b_id, callbacks.other_side(wasm().reply()))
+        .build();
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B.
+    test.execute_message(a_id);
+    test.induct_messages();
+
+    // Canister B replies.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Execute the response callback until it finishes and keep track of the
+    // instructions executed in every slice.
+    let instructions_before = test.canister_executed_instructions(a_id);
+    let mut last_slice_instructions;
+    loop {
+        let slice_instructions_before = test.canister_executed_instructions(a_id);
+        test.execute_slice(a_id);
+        last_slice_instructions =
+            test.canister_executed_instructions(a_id) - slice_instructions_before;
+        if test.canister_state(a_id).next_execution() != NextExecution::ContinueLong {
+            break;
+        }
+    }
+    let total_instructions = test.canister_executed_instructions(a_id) - instructions_before;
+    assert_matches!(
+        test.ingress_state(&ingress_id),
+        IngressState::Completed(_) | IngressState::Failed(_)
+    );
+
+    drop(test);
+    let logs = logger.drain_logs();
+    CallbacksExecution {
+        logs: LogEntriesAssert::assert_that(logs),
+        canister_id: a_id,
+        last_slice_instructions,
+        total_instructions,
+    }
+}
+
+const DTS_FINISHED_RESPONSE_LOG: &str = "[DTS] Finished response callback";
+const DTS_FINISHED_CLEANUP_LOG: &str = "[DTS] Finished cleanup callback";
+
+#[test]
+fn dts_finished_log_not_emitted_for_short_response_callback() {
+    let execution = execute_callbacks_and_get_logs(call_args().on_reply(wasm().reply()));
+    execution
+        .logs
+        .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_RESPONSE_LOG)
+        .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_CLEANUP_LOG);
+}
+
+#[test]
+fn dts_finished_log_emitted_for_long_response_callback() {
+    let execution = execute_callbacks_and_get_logs(
+        call_args().on_reply(wasm().instruction_counter_is_at_least(1_000_000)),
+    );
+    execution
+        .logs
+        // Check the log prefix separately: the exact message check below
+        // would not catch an additional log with different instruction counts.
+        .has_only_one_message_containing(&Level::Info, DTS_FINISHED_RESPONSE_LOG)
+        .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_CLEANUP_LOG)
+        // In particular, the total must not include the instructions reserved
+        // for the cleanup callback.
+        .has_only_one_message_containing(
+            &Level::Info,
+            &format!(
+                "{DTS_FINISHED_RESPONSE_LOG} {} of canister {} after {} / {} instructions.",
+                CallbackId::from(1),
+                execution.canister_id,
+                execution.last_slice_instructions.display(),
+                execution.total_instructions.display(),
+            ),
+        );
+}
+
+#[test]
+fn dts_finished_log_not_emitted_for_short_cleanup_callback() {
+    let execution = execute_callbacks_and_get_logs(
+        call_args()
+            .on_reply(wasm().trap())
+            .on_cleanup(wasm().build()),
+    );
+    execution
+        .logs
+        .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_RESPONSE_LOG)
+        .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_CLEANUP_LOG);
+}
+
+#[test]
+fn dts_finished_log_emitted_for_long_cleanup_callback() {
+    let execution = execute_callbacks_and_get_logs(
+        call_args()
+            .on_reply(wasm().trap())
+            .on_cleanup(wasm().instruction_counter_is_at_least(1_000_000)),
+    );
+    execution
+        .logs
+        .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_RESPONSE_LOG)
+        // Check the log prefix separately: the exact message check below
+        // would not catch an additional log with different instruction counts.
+        .has_only_one_message_containing(&Level::Info, DTS_FINISHED_CLEANUP_LOG)
+        // The total covers both the response callback and the cleanup callback.
+        .has_only_one_message_containing(
+            &Level::Info,
+            &format!(
+                "{DTS_FINISHED_CLEANUP_LOG} {:?} of canister {} after {} / {} instructions.",
+                CallbackId::from(1),
+                execution.canister_id,
+                execution.last_slice_instructions.display(),
+                execution.total_instructions.display(),
+            ),
+        );
 }
