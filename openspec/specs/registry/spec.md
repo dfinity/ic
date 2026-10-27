@@ -523,9 +523,26 @@ The `ic-engine-controller` canister submits `UpdateSubnetPayload` mutations on b
 
 #### Scenario: Allowed fields
 - **WHEN** the engine controller submits an `UpdateSubnetPayload`
-- **THEN** only `subnet_admins`, `is_halted`, and `cooling_down` may be set
-- **AND** the mutation is rejected if any other field of `UpdateSubnetPayload` is set
+- **THEN** only `subnet_admins`, `is_halted`, `cooling_down`, and the state limits in `resource_limits` (`maximum_state_size`, `maximum_state_delta`) may be set
+- **AND** the mutation is rejected if any other field of `UpdateSubnetPayload` is set, including the query limits `maximum_query_instructions` and `maximum_query_walltime_seconds`
 - **AND** the target subnet must be of type `CloudEngine`
+
+#### Scenario: Engine controller state-limit updates keep unset limits
+- **WHEN** the engine controller sets only some of the state limits in `resource_limits`
+- **THEN** the registry keeps the current value of every limit the payload leaves unset (as ic-admin does client-side with `ResourceLimits::inherit_from`), so an engine controller update never resets limits it may not manage, such as query limits set by a proposal
+- **AND** governance updates keep replacing `resource_limits` as a whole
+
+#### Scenario: State limits at engine creation
+- **WHEN** the engine controller's `create_engine` is called with the optional `resource_limits` (`EngineResourceLimits`: `maximum_state_size`, `maximum_state_delta`)
+- **THEN** the limits are forwarded to the new subnet's `CreateSubnetPayload`
+- **AND** when omitted, the subnet keeps the protocol defaults
+
+#### Scenario: Engine controller creates canisters on a cloud engine
+- **WHEN** the authorized caller calls the engine controller's `create_canister { subnet_id; controllers }`
+- **THEN** the engine controller, which runs on the NNS subnet and so may create canisters on other subnets, creates an empty canister on `subnet_id` and returns its `canister_id`
+- **AND** `controllers` must hold 1 to 10 principals and become the canister's only controllers; the engine controller is not a controller unless listed
+- **AND** a target that is not a `CloudEngine` subnet in the registry is refused before any call is made
+- **AND** the call is addressed to the subnet id, bounded-wait, and carries no cycles; if it times out (`SysUnknown`), the canister may still have been created
 
 #### Scenario: Cool down a CloudEngine subnet
 - **WHEN** the engine controller sets `cooling_down` on a `CloudEngine` subnet
