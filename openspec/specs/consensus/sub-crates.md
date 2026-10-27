@@ -55,8 +55,14 @@ Unvalidated certifications and shares received from peers must be cryptographica
 #### Scenario: Valid full certification is accepted
 - **WHEN** an unvalidated Certification is received for a height
 - **AND** the height witness is valid for the certified hash
+- **AND** the signer is the active high-threshold NI-DKG ID at that height
 - **AND** the combined threshold signature is valid for the subnet at the registry version
 - **THEN** the Certification is moved to the validated pool
+- **AND** `Certification::height_witness` is mandatory, not optional
+
+#### Scenario: Certification signed by an unexpected DKG ID is rejected
+- **WHEN** an unvalidated Certification's signer is not the active high-threshold NI-DKG ID for its height (e.g. a low-threshold ID, or a different DKG ID)
+- **THEN** the Certification is marked invalid with "Unexpected signer ... (expected: ...)"
 
 #### Scenario: Invalid certification signature is rejected
 - **WHEN** an unvalidated Certification is received for a height
