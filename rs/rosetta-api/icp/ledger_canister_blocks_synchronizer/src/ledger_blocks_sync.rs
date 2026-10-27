@@ -450,7 +450,11 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 i += 1;
             }
             self.rosetta_metrics.set_synced_height(i - 1);
-            if (i - range.start).is_multiple_of(self.database_write_blocks_batch_size) {
+            // The last blocks are stored below, under the same write lock as
+            // their verification.
+            if i < range.end
+                && (i - range.start).is_multiple_of(self.database_write_blocks_batch_size)
+            {
                 if let Some(bar) = &progress_bar {
                     bar.set_message("store blocks");
                     bar.set_position(bar.position() - block_batch.len() as u64)
@@ -775,6 +779,45 @@ mod test {
                     assert!(store.get_latest_verified_hashed_block().is_err());
                 }
                 blocks_access.release.add_permits(3);
+            },
+        );
+        synced.unwrap();
+        assert_synced(&blocks_sync, &blocks).await;
+    }
+
+    #[tokio::test]
+    async fn sync_verifies_its_last_blocks_when_it_stores_them() {
+        // The last batch ends at the tip.
+        let blocks = dummy_blocks(4);
+        let blocks_access = Arc::new(GatedRangeOfBlocks::new(blocks.clone(), 1));
+        let mut blocks_sync = new_ledger_blocks_synchronizer_with(blocks_access.clone()).await;
+        blocks_sync.database_write_blocks_batch_size = 2;
+
+        let (synced, ()) = tokio::join!(
+            blocks_sync.sync_blocks(Arc::new(AtomicBool::new(false)), None),
+            async {
+                for _ in 0..3 {
+                    blocks_access.fetching.notified().await;
+                    blocks_access.release.add_permits(1);
+                }
+                blocks_access.fetching.notified().await;
+                // Let the sync fetch the last block while a reader holds the
+                // read lock, so that it waits for the write lock to store the
+                // block. Then read right after it stores the block, which is
+                // also where the sync could be cancelled.
+                let reader = blocks_sync.blockchain.try_read().unwrap();
+                blocks_access.release.add_permits(1);
+                while blocks_sync.blockchain.try_read().is_ok() {
+                    tokio::task::yield_now().await;
+                }
+                drop(reader);
+                let store = blocks_sync.blockchain.read().await;
+                let latest = store.get_latest_hashed_block().unwrap();
+                assert!(
+                    store.is_verified_by_idx(&latest.index).unwrap(),
+                    "the sync stored block {} without verifying it",
+                    latest.index
+                );
             },
         );
         synced.unwrap();
