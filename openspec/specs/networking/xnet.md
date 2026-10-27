@@ -108,6 +108,11 @@ The XNet payload builder constructs and validates cross-subnet message payloads 
 - **AND** TLS mutual authentication is used
 - **AND** the response is decoded from protobuf `CertifiedStreamSlice`
 
+#### Scenario: Stream slices carry only the signed certification content
+- **WHEN** the state manager encodes a `CertifiedStreamSlice`
+- **THEN** its certification is a `SignedCertificationContent` (the certified hash and its threshold signature) without the certification's `height` and `height_witness`, which the signature does not cover and the receiving subnet never uses
+- **AND** the receiving subnet verifies the slice by checking the threshold signature on that content and that the recomputed digest of the slice's Merkle proof matches the certified hash
+
 #### Scenario: Payload validation
 - **WHEN** a proposed XNet payload is validated
 - **THEN** all included stream slices are verified against expected begin indices
