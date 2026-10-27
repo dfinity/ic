@@ -73,6 +73,11 @@ Canonical state encoding evolves through numbered certification versions with st
 - **THEN** it uses `CURRENT_CERTIFICATION_VERSION` as its default encoding version
 - **AND** it supports encoding for versions up to `CURRENT_CERTIFICATION_VERSION + 1`
 
+#### Scenario: Subnet metrics certify the monotonic consumed cycles total
+- **WHEN** the certification version is `V30` or later (`CURRENT_CERTIFICATION_VERSION` is `V30`)
+- **THEN** `/subnet/<subnet_id>/metrics` in the certified state tree reports `SubnetMetrics::consumed_cycles_total_including_canisters_monotonic`, which does not count outstanding prepayments (e.g. for responses of in-flight calls) as consumed, so the reported total never decreases when a prepayment is refunded
+- **AND** the `subnet_metrics` management canister endpoint reports the same monotonic total, so it agrees with the certified state tree and with the `replicated_state_consumed_cycles_since_replica_started` gauge
+
 #### Scenario: Unsupported version panic
 - **WHEN** a replica is asked to encode canonical state using a version greater than `CURRENT_CERTIFICATION_VERSION + 1`
 - **THEN** it panics to prevent undefined behavior
