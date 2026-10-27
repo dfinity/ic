@@ -126,6 +126,7 @@ Before any mutation is applied, the registry validates that the resulting state 
 - **WHEN** the registry state is validated
 - **THEN** all referenced replica versions exist in the blessed versions list
 - **AND** each `ReplicaVersionRecord`'s own `replica_version_id` field must equal the version ID encoded in its registry key, or the invariant check panics
+- **AND** `replica_version_id` is a mandatory field of `ReplicaVersionRecord`; the one-time post-upgrade backfill of records predating it has already run and its code has been removed
 
 #### Scenario: API boundary node invariants
 - **WHEN** the registry state is validated
