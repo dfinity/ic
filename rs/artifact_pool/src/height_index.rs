@@ -364,16 +364,16 @@ mod tests {
             &expected
         );
 
-        index.retain(twelve, |x| x != &1);
+        index.retain(twelve, |x| *x != 1);
 
-        expected.retain(|x| x != &1);
+        expected.retain(|x| *x != 1);
         assert_eq!(
             &index.lookup(twelve).cloned().collect::<Vec<i32>>(),
             &expected
         );
         assert_eq!(index.buckets.len(), 4);
 
-        index.retain(twelve, |x| x != &2);
+        index.retain(twelve, |x| *x != 2);
         assert_eq!(index.buckets.len(), 3);
     }
 
@@ -419,7 +419,7 @@ mod tests {
         assert_eq!(index.size(), 2);
 
         // `retain` removes all copies at once.
-        index.retain(height, |x| x != &1);
+        index.retain(height, |x| *x != 1);
         assert!(index.buckets.is_empty());
     }
 
@@ -433,8 +433,8 @@ mod tests {
             index.insert(height, i);
         }
 
-        assert!(!index.retain(height, |&x| x < max));
-        assert!(index.retain(height, |&x| x % 2 == 0));
+        assert!(!index.retain(height, |x| *x < max));
+        assert!(index.retain(height, |x| *x % 2 == 0));
 
         assert!(
             !index
