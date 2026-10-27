@@ -114,6 +114,13 @@ The execution of calls and tasks follows a common flow.
 - **THEN** the canister must be in `Running` state (not `Stopping` or `Stopped`)
 - **AND** the canister must have a Wasm module installed
 - **AND** the Wasm module must export the requested method
+- **AND** a call must not target a composite query, which cannot run in replicated mode (`CompositeQueryCalledInReplicatedMode`)
+
+#### Scenario: Invalid calls are rejected before any cycles are charged
+- **WHEN** `execute_canister_input` receives an ingress message or inter-canister request
+- **THEN** `validate_replicated_call` checks it before any execution cycles are prepaid, in this order: the canister is running (`CanisterStopping`/`CanisterStopped`); it has a Wasm module that exports the called method (`CanisterWasmModuleNotFound`/`CanisterMethodNotFound`); the method is not a composite query (`CompositeQueryCalledInReplicatedMode`)
+- **AND** a call that fails these checks is rejected without charging the canister the base execution fee, leaving its cycles balance unchanged
+- **AND** a resumed aborted execution, whose execution cycles were already prepaid, skips this early check but is still validated by `CallOrTaskHelper::new`, which applies the same checks with the same errors
 
 ### Requirement: Inspect Message
 
@@ -146,6 +153,12 @@ Ingress messages are filtered before entering the execution pipeline.
 - **THEN** the ingress filter service checks the message against the latest certified state
 - **AND** for management canister messages, method-level permissions are checked
 - **AND** for canister messages, `canister_inspect_message` is executed if available
+
+#### Scenario: Ingress filter applies execution's call validation
+- **WHEN** `should_accept_ingress_message` checks an ingress message to a canister
+- **THEN** it first runs `validate_replicated_call`, the same validation applied before executing a call, and only then runs `canister_inspect_message`
+- **AND** an ingress message to a method the canister does not export is rejected synchronously with `CanisterMethodNotFound`, rather than being inducted, charged the induction fee, and failing at execution
+- **AND** messages to a canister without a Wasm module, or to a stopping or stopped canister, are rejected with `CanisterWasmModuleNotFound`, `CanisterStopping`, or `CanisterStopped`, the latter two described as "Canister X is not running"
 
 #### Scenario: Certified state unavailable
 - **WHEN** the ingress filter cannot obtain certified state
