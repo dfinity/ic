@@ -2,6 +2,7 @@ use crate::mutations::do_create_subnet::CreateSubnetPayload;
 use crate::mutations::node_management::common::make_add_node_registry_mutations;
 use crate::mutations::node_management::do_add_node::connection_endpoint_from_string;
 use crate::registry::Registry;
+use attestation::LAUNCH_MEASUREMENT_LEN;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_test_utils::registry::{
     TEST_ID, create_subnet_threshold_signing_pubkey_and_cup_mutations,
@@ -47,8 +48,8 @@ lazy_static! {
     /// the SEV subnet and standard engine replica version invariants).
     pub static ref GUEST_LAUNCH_MEASUREMENTS: GuestLaunchMeasurements = GuestLaunchMeasurements {
         guest_launch_measurements: vec![GuestLaunchMeasurement {
-            // An SEV-SNP measurement is exactly 48 bytes long. The value itself does not matter here.
-            measurement: vec![0x42; 48],
+            // The value itself does not matter here.
+            measurement: vec![0x42; LAUNCH_MEASUREMENT_LEN],
             metadata: None,
         }],
     };

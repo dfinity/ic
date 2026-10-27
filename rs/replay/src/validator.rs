@@ -224,7 +224,11 @@ impl ReplayValidator {
                 .unwrap_or_else(|| self.registry.get_latest_version());
 
         self.verifier
-            .validate(self.replica_cfg.subnet_id, certification, registry_version)
+            .validate(
+                self.replica_cfg.subnet_id,
+                &certification.signed,
+                registry_version,
+            )
             .map_err(|e| format!("{e:?}"))
     }
 

@@ -220,7 +220,6 @@ pub(crate) mod test {
         BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponseComplete,
     };
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
-    use ic_crypto_tree_hash::{Digest, Witness};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_interfaces::consensus::PayloadWithSizeEstimate;
     use ic_interfaces_mocks::messaging::MockXNetPayloadBuilder;
@@ -244,9 +243,7 @@ pub(crate) mod test {
         batch::{IngressPayload, SelfValidatingPayload, XNetPayload},
         canister_http::CanisterHttpResponseWithConsensus,
         consensus::{
-            BlockPayload, DataPayload,
-            certification::{Certification, CertificationContent},
-            dkg::DkgDataPayload,
+            BlockPayload, DataPayload, certification::CertificationContent, dkg::DkgDataPayload,
         },
         crypto::{CryptoHash, Signed, crypto_hash},
         ingress::IngressSets,
@@ -313,22 +310,17 @@ pub(crate) mod test {
     /// Builds a `CertifiedStreamSlice` from the supplied `payload` and
     /// `merkle_proof` bytes, without a valid certification.
     fn make_certified_stream_slice(
-        height: u64,
         payload: Vec<u8>,
         merkle_proof: Vec<u8>,
     ) -> CertifiedStreamSlice {
         CertifiedStreamSlice {
             payload,
             merkle_proof,
-            certification: Certification {
-                height: Height::from(height),
-                height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
-                signed: Signed {
-                    signature: ThresholdSignature::fake(),
-                    content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                        vec![],
-                    ))),
-                },
+            certification: Signed {
+                signature: ThresholdSignature::fake(),
+                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
+                    vec![],
+                ))),
             },
         }
     }
@@ -392,7 +384,7 @@ pub(crate) mod test {
             .map(|x| {
                 (
                     subnet_test_id(x),
-                    make_certified_stream_slice(1, vec![], vec![]),
+                    make_certified_stream_slice(vec![], vec![]),
                 )
             })
             .collect();

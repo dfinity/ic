@@ -192,7 +192,7 @@ pub fn default_read_certified_state(
     let mht = hash_tree.witness::<MixedHashTree>(&partial_tree).unwrap();
     let cert = Certification {
         height,
-        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: Signed {
             signature: ThresholdSignature {
                 signer: NiDkgId {

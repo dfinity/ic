@@ -1665,7 +1665,7 @@ pub struct EquivocationProof {
     #[prost(bytes = "vec", tag = "8")]
     pub signature2: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SubnetStreamSlice {
     #[prost(message, optional, tag = "1")]
     pub subnet_id: ::core::option::Option<SubnetId>,

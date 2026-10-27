@@ -17,14 +17,12 @@ use ic_types::consensus::{BlockPayload, DataPayload, HasHash};
 use ic_types::{
     Height, Time,
     artifact::{CertificationMessageId, ConsensusMessageId},
-    batch::BatchPayload,
     consensus::{
         BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ConsensusMessageHash,
         ConsensusMessageHashable, EquivocationProof, Finalization, FinalizationShare, HasHeight,
         Notarization, NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape,
         RandomTapeShare,
         certification::{Certification, CertificationMessage, CertificationShare},
-        dkg::DkgDataPayload,
     },
     crypto::CryptoHashable,
 };
@@ -430,11 +428,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                                 block.payload.get_hash().clone(),
                                 block.payload.payload_type(),
                                 Box::new(move || {
-                                    BlockPayload::Data(DataPayload {
-                                        batch: BatchPayload::default(),
-                                        dkg: DkgDataPayload::new_empty(start_height),
-                                        idkg: None,
-                                    })
+                                    BlockPayload::Data(DataPayload::new_empty(start_height))
                                 }),
                             );
                             artifact.msg = proposal.into_message();

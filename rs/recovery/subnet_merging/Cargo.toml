@@ -9,6 +9,9 @@ documentation.workspace = true
 [dependencies]
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types/" }
+ic-types = { path = "../../types/types" }
 prometheus-parse = { workspace = true }
 reqwest = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 tokio = { workspace = true }

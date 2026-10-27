@@ -30,8 +30,8 @@ use std::{
 };
 
 use axum::{
-    Router, body::Body, body::HttpBody, extract::Request, extract::State, middleware::Next,
-    middleware::from_fn_with_state,
+    Router, body::Body, body::HttpBody, extract::MatchedPath, extract::Request, extract::State,
+    middleware::Next, middleware::from_fn_with_state,
 };
 use futures::StreamExt;
 use ic_base_types::NodeId;
@@ -56,7 +56,9 @@ use tokio_util::{sync::CancellationToken, time::DelayQueue};
 use crate::{
     Shutdown, SubnetTopology,
     connection_handle::ConnectionHandle,
-    metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
+    metrics::{
+        CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL, LABEL_UNMATCHED_PATH,
+    },
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::start_stream_acceptor};
 
@@ -615,17 +617,21 @@ async fn collect_metrics(
     request: Request<Body>,
     next: Next,
 ) -> axum::response::Response {
+    let path = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map_or(LABEL_UNMATCHED_PATH, |matched_path| matched_path.as_str());
     state
         .request_handle_bytes_received_total
-        .with_label_values(&[request.uri().path()])
+        .with_label_values(&[path])
         .inc_by(request.body().size_hint().lower());
     let _timer = state
         .request_handle_duration_seconds
-        .with_label_values(&[request.uri().path()])
+        .with_label_values(&[path])
         .start_timer();
     let out_counter = state
         .request_handle_bytes_sent_total
-        .with_label_values(&[request.uri().path()]);
+        .with_label_values(&[path]);
     let response = next.run(request).await;
     out_counter.inc_by(response.body().size_hint().lower());
     response

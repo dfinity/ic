@@ -17,7 +17,6 @@ use ic_types::consensus::dkg::DkgSummary;
 use ic_types::{
     Height, Time,
     artifact::{CertificationMessageId, ConsensusMessageId, IDkgMessageId},
-    batch::BatchPayload,
     consensus::{
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
         ConsensusMessageHash, ConsensusMessageHashable, DataPayload, EquivocationProof,
@@ -27,7 +26,6 @@ use ic_types::{
         certification::{
             Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
         },
-        dkg::DkgDataPayload,
         idkg::{
             EcdsaSigShare, IDkgArtifactId, IDkgArtifactIdData, IDkgArtifactIdDataOf, IDkgMessage,
             IDkgMessageType, IDkgPrefix, IDkgPrefixOf, IterationPattern, SchnorrSigShare, SigShare,
@@ -1038,11 +1036,7 @@ impl PoolArtifact for ConsensusMessage {
                         dkg: DkgSummary::default(),
                         idkg: None,
                     }),
-                    PayloadType::Data => BlockPayload::Data(DataPayload {
-                        batch: BatchPayload::default(),
-                        dkg: DkgDataPayload::new_empty(start_height),
-                        idkg: None,
-                    }),
+                    PayloadType::Data => BlockPayload::Data(DataPayload::new_empty(start_height)),
                 }),
             );
             value.msg = proposal.into_message();

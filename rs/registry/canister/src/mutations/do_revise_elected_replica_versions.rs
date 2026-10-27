@@ -54,7 +54,7 @@ impl Registry {
                     mutation_type: registry_mutation::Type::Insert as i32,
                     key: make_replica_version_key(&version).as_bytes().to_vec(),
                     value: ReplicaVersionRecord {
-                        replica_version_id: Some(version),
+                        replica_version_id: version,
                         release_package_sha256_hex: payload
                             .release_package_sha256_hex
                             .unwrap_or_else(|| {
@@ -177,6 +177,7 @@ impl ReviseElectedGuestosVersionsPayload {
 mod tests {
     use super::*;
 
+    use attestation::LAUNCH_MEASUREMENT_LEN;
     use ic_protobuf::registry::replica_version::v1::{
         GuestLaunchMeasurement, GuestLaunchMeasurementMetadata,
     };
@@ -190,9 +191,8 @@ mod tests {
     lazy_static! {
         static ref GUEST_LAUNCH_MEASUREMENTS: GuestLaunchMeasurements = GuestLaunchMeasurements {
             guest_launch_measurements: vec![GuestLaunchMeasurement {
-                // An SEV-SNP measurement is exactly 48 bytes long. The value
-                // itself does not matter here.
-                measurement: vec![0x42; 48],
+                // The value itself does not matter here.
+                measurement: vec![0x42; LAUNCH_MEASUREMENT_LEN],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("foo=bar".to_string()),
                     vcpu_type: None,

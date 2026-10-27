@@ -33,7 +33,11 @@ impl Step for RetireElectedVersions {
         let mut versions_to_unelect = self
             .versions
             .iter()
-            .filter(|version| replica_versions.iter().any(|(k, _)| k == version.as_ref()))
+            .filter(|version| {
+                replica_versions
+                    .iter()
+                    .any(|v| v.replica_version_id == version.as_ref())
+            })
             .cloned()
             .collect_vec();
 
@@ -57,17 +61,15 @@ impl Step for RetireElectedVersions {
         versions_to_unelect.retain(|r| {
             let record = replica_versions
                 .iter()
-                .find_map(|(key, rec)| {
-                    if key == r.as_ref() {
-                        return Some(rec);
-                    }
-                    None
-                })
+                .find(|rec| rec.replica_version_id == r.as_ref())
                 .unwrap_or_else(|| {
                     panic!(
                         "Elected replica version with key {} not found in records: {}",
                         r,
-                        replica_versions.iter().map(|(k, _)| k).join(", ")
+                        replica_versions
+                            .iter()
+                            .map(|v| &v.replica_version_id)
+                            .join(", ")
                     )
                 });
 

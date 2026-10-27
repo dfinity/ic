@@ -21,7 +21,6 @@ use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_test_utilities_types::messages::ResponseBuilder;
-use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::messages::{CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{ComputeAllocation, NumInstructions};
@@ -263,7 +262,6 @@ fn correct_charging_source_canister_for_a_request() {
             &default_network_topology(),
             subnet_test_id(1),
             false,
-            &NoOpMetrics {},
             &no_op_logger(),
         )
         .unwrap();
@@ -482,7 +480,6 @@ fn call_increases_cycles_consumed_metric() {
             &default_network_topology(),
             subnet_test_id(1),
             false,
-            &NoOpMetrics {},
             &no_op_logger(),
         )
         .unwrap();
@@ -574,7 +571,6 @@ fn test_inter_canister_call(
             topo,
             subnet_id,
             false,
-            &NoOpMetrics {},
             &no_op_logger(),
         )
         .unwrap();
@@ -851,10 +847,4 @@ fn wrong_method_name_subnet_message() {
         arg.encode(),
         "IC0536: Management canister has no method 'start'".to_string(),
     );
-}
-
-struct NoOpMetrics {}
-impl CanisterLogMetrics for NoOpMetrics {
-    // No-op.
-    fn observe_delta_log_size(&self, _size: usize) {}
 }

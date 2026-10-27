@@ -2790,7 +2790,7 @@ fn can_reject_all_ingress_messages() {
     )
     .unwrap();
     let err = test
-        .should_accept_ingress_message(canister, "", vec![])
+        .should_accept_ingress_message(canister, "update", vec![])
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterRejectedMessage, err.code());
 
@@ -2830,7 +2830,7 @@ fn trap_instead_of_accepting_message() {
     )
     .unwrap();
     let err = test
-        .should_accept_ingress_message(canister, "", vec![])
+        .should_accept_ingress_message(canister, "update", vec![])
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
 }
@@ -2858,7 +2858,7 @@ fn inspect_method_name() {
         .should_accept_ingress_message(canister, "update", vec![])
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
-    test.should_accept_ingress_message(canister, "", vec![])
+    test.should_accept_ingress_message(canister, "query", vec![])
         .unwrap();
 }
 
@@ -2887,7 +2887,7 @@ fn inspect_caller() {
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     test.set_user_id(user_test_id(1));
-    test.should_accept_ingress_message(canister, "", vec![])
+    test.should_accept_ingress_message(canister, "query", vec![])
         .unwrap();
 }
 
@@ -2932,7 +2932,7 @@ fn cannot_accept_message_twice() {
     )
     .unwrap();
     let err = test
-        .should_accept_ingress_message(canister, "", vec![])
+        .should_accept_ingress_message(canister, "update", vec![])
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
 }
@@ -2945,7 +2945,7 @@ fn message_to_canister_with_not_enough_balance_is_rejected() {
         .system_state
         .set_balance(Cycles::new(1_000));
     let err = test
-        .should_accept_ingress_message(canister, "", vec![])
+        .should_accept_ingress_message(canister, "update", vec![])
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
 }
@@ -2956,7 +2956,7 @@ fn message_to_stopping_canister_is_rejected() {
     let canister = test.universal_canister().unwrap();
     test.stop_canister(canister);
     let err = test
-        .should_accept_ingress_message(canister, "", vec![])
+        .should_accept_ingress_message(canister, "update", vec![])
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterStopping, err.code());
 }
@@ -2968,7 +2968,7 @@ fn message_to_stopped_canister_is_rejected() {
     test.stop_canister(canister);
     test.process_stopping_canisters();
     let err = test
-        .should_accept_ingress_message(canister, "", vec![])
+        .should_accept_ingress_message(canister, "update", vec![])
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterStopped, err.code());
 }
@@ -2991,10 +2991,30 @@ fn should_accept_ingress_filters_correctly_on_method_type() {
 }
 
 #[test]
+fn should_accept_ingress_rejects_non_existing_method() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister().unwrap();
+    let err = test
+        .should_accept_ingress_message(canister, "non_existing_method", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterMethodNotFound, err.code());
+}
+
+#[test]
+fn should_accept_ingress_rejects_canister_without_wasm_module() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.create_canister(Cycles::new(1_000_000_000_000));
+    let err = test
+        .should_accept_ingress_message(canister, "update", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterWasmModuleNotFound, err.code());
+}
+
+#[test]
 fn message_to_canister_with_enough_balance_is_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.universal_canister().unwrap();
-    let result = test.should_accept_ingress_message(canister, "", vec![]);
+    let result = test.should_accept_ingress_message(canister, "update", vec![]);
     assert_eq!(Ok(()), result);
 }
 

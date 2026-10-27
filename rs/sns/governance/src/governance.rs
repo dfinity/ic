@@ -1952,7 +1952,7 @@ impl Governance {
     }
 
     /// Returns the proposal IDs for all proposals that have reward status ReadyToSettle
-    fn ready_to_be_settled_proposal_ids(&self) -> impl Iterator<Item = ProposalId> + '_ {
+    fn ready_to_be_settled_proposal_ids(&self) -> impl Iterator<Item = ProposalId> {
         let now = self.env.now();
         self.proto
             .proposals

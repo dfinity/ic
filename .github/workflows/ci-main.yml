@@ -43,7 +43,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:0b6a915e614105c632a0c7a0f6e530ed506decfbd0316b297b28e9c555c532a2
+      image: ghcr.io/dfinity/ic-build@sha256:6184a4beddca0e898c9e2113b2dd78f0391caefef7c13090c56ae1ab7b1ec399
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
@@ -64,6 +64,8 @@ jobs:
             fuzzers:
               - ".github/workflows/ci-main.yml"
               - "ci/container/TAG"
+              - "ci/container/ic-build.digest"
+              - "ci/container/ic-dev.digest"
               - "bin/fuzzing/*.sh"
               - "**/BUILD.bazel"
               - "**/*.bzl"
@@ -95,6 +97,8 @@ jobs:
     steps:
       - name: Infer build config
         id: config
+        env:
+          RELEASE_BUILD_INPUT: ${{ inputs.release-build }}
         run: |
           set -euo pipefail
 
@@ -119,7 +123,8 @@ jobs:
               fi
           done
 
-          if [[ "${is_protected_branch:-}" == "true" ]]; then
+          # Only on push: a workflow_dispatch, for one, runs on whichever ref its dispatcher picks.
+          if [[ "${is_protected_branch:-}" == "true" && "$CI_EVENT_NAME" == "push" ]]; then
               # if we are on a "protected" branch, targeting an rc branch or master we
               # upload all artifacts and run a release build (with versioning)
               release_build="true"
@@ -155,8 +160,11 @@ jobs:
           fi
 
           # if release build was set, override whatever was determined above
-          if [[ '${{ inputs.release-build }}' != '' ]]; then
-              release_build=${{ inputs.release-build }}
+          if [[ "$RELEASE_BUILD_INPUT" == "true" || "$RELEASE_BUILD_INPUT" == "false" ]]; then
+              release_build="$RELEASE_BUILD_INPUT"
+          elif [[ -n "$RELEASE_BUILD_INPUT" ]]; then
+              echo "::error title=Invalid input::release-build must be 'true', 'false' or empty."
+              exit 1
           fi
 
           if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' == 'true' ]]; then
@@ -192,7 +200,7 @@ jobs:
     name: Bazel Test All
     needs: [config]
     environment:
-      # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case on protected branches.
+      # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case for pushes to protected branches and for release-testing.yml.
       # It also requires the AWS and CF secrets which are only available in the `upload-artifacts` environment.
       # This environment is also only active on protected branches. That's why we require the `upload-artifacts` environment
       # when `release-build == 'true'` but not otherwise.
@@ -210,6 +218,8 @@ jobs:
       - name: Infer Bazel Args
         id: infer-bazel-args
         shell: bash
+        env:
+          RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
         run: |
           # Determine bazel_args based on event type or branch name
           bazel_args=( --config=flaky_retry ) # auto retry eg systests
@@ -221,7 +231,7 @@ jobs:
               bazel_args+=( --keep_going )
           fi
 
-          if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
+          if [[ "$RELEASE_BUILD" == 'true' ]]; then
             # make sure the version is stamped in
             bazel_args+=( --config=stamped )
           fi
@@ -231,22 +241,27 @@ jobs:
       - name: Infer Bazel Targets
         timeout-minutes: 30
         shell: bash
+        env:
+          SKIP_LONG_TESTS: ${{ needs.config.outputs.skip_long_tests }}
+          SKIP_BUF_CHECKS: ${{ needs.config.outputs.skip_buf_checks }}
+          SKIP_SYSTEM_TESTS: ${{ needs.config.outputs.skip_system_tests }}
+          DIFF_ONLY: ${{ needs.config.outputs.diff-only }}
         run: |
           set -euo pipefail
 
           # Local system-tests will run on the Remote Execution Cluster @ Namespace
           # via the .github/workflows/ci-rbe-evaluation.yml job so skip them in this job:
           targets_args=(--exclude_tags=local_system_test)
-          if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
+          if [[ "$SKIP_LONG_TESTS" == 'true' ]]; then
             targets_args+=("--skip_long_tests")
           fi
-          if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
+          if [[ "$SKIP_BUF_CHECKS" == 'true' ]]; then
             targets_args+=("--exclude_tags=buf")
           fi
-          if [[ '${{ needs.config.outputs.skip_system_tests }}' == 'true' ]]; then
+          if [[ "$SKIP_SYSTEM_TESTS" == 'true' ]]; then
             targets_args+=("--exclude_tags=system_test")
           fi
-          if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
+          if [[ "$DIFF_ONLY" == 'true' ]]; then
             targets_args+=(
               '--base=${{ github.event.pull_request.base.sha }}'
               '--head=${{ github.event.pull_request.head.sha }}'
@@ -643,6 +658,8 @@ jobs:
           echo "::notice::Node Name: ${NODE_NAME}"
       - name: Run Build IC
         uses: ./.github/actions/bazel
+        env:
+          RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
         with:
           execlogs-artifact-name: execlogs-build-ic
           run: |
@@ -652,7 +669,11 @@ jobs:
 
             # Always build all IC-OS images, canisters and binaries: this is the
             # no-cache side of the build-determinism comparison. Only release builds are stamped.
-            ci/container/build-ic.sh -i -c -b ${{ case(needs.config.outputs.release-build == 'true', '', '--no-release') }}
+            build_args=(-i -c -b)
+            if [[ "$RELEASE_BUILD" != 'true' ]]; then
+              build_args+=(--no-release)
+            fi
+            ci/container/build-ic.sh "${build_args[@]}"
 
   build-determinism:
     name: Build Determinism
@@ -742,6 +763,8 @@ jobs:
               - "**/*.lock"
               - "ci/scripts/rust-lint.sh"
               - "ci/container/TAG"
+              - "ci/container/ic-build.digest"
+              - "ci/container/ic-dev.digest"
               - ".github/**"
       - name: Run Cargo ${{ matrix.name }} Linux
         if: |
@@ -817,6 +840,11 @@ jobs:
           if command -v podman &>/dev/null && [ -x /usr/local/bin/crun ]; then
             echo 'PODMAN_RUN_USR_ARGS=(--runtime /usr/local/bin/crun)' >>~/.container-run.conf
           fi
+      - name: Check image pins
+        # Not behind the path filter: the pins are rewritten together by
+        # container-autobuild.yml, and a hand edit or a merge that keeps an
+        # older pin makes container-run.sh and CI run different images.
+        run: ./ci/container/check-image-pins.sh
       - name: Filter Relevant Files
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter

@@ -56,18 +56,13 @@ use ic_types::{
     Height, NumBytes, PrincipalId, RegistryVersion, Time, UserId,
     batch::{BatchPayload, IngressPayload, ValidationContext},
     consensus::{certification::*, dkg::DkgSummary, *},
-    crypto::Signed,
     ingress::{IngressState, IngressStatus},
-    signature::*,
     time::UNIX_EPOCH,
 };
 use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
-
-type SignedCertificationContent =
-    Signed<CertificationContent, ThresholdSignature<CertificationContent>>;
 
 /// Size of the signed ingress messages
 const INGRESS_MESSAGE_SIZE: usize = 1024;
@@ -229,7 +224,7 @@ fn setup_ingress_state(now: Time, state_manager: &mut StateManagerImpl) {
     let hash = &to_certify[0].hash;
     state_manager.deliver_state_certification(Certification {
         height: Height::new(CERTIFIED_HEIGHT),
-        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: SignedCertificationContent::fake(CertificationContent::new(hash.clone())),
     });
 }

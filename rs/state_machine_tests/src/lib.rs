@@ -156,7 +156,7 @@ use ic_types::{
     },
     consensus::{
         block_maker::SubnetRecords,
-        certification::{Certification, CertificationContent},
+        certification::{Certification, CertificationContent, SignedCertificationContent},
     },
     crypto::{
         AlgorithmId, CombinedThresholdSig, CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
@@ -184,9 +184,8 @@ use ic_types::{
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_xnet_payload_builder::{
-    RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics,
-    certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,
-    testing::XNetPayloadBuilderTesting,
+    XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, certified_slice_pool::CertifiedSlicePool,
+    exchange::PullTaskHandle, testing::XNetPayloadBuilderTesting,
 };
 
 use maplit::btreemap;
@@ -233,7 +232,7 @@ impl Verifier for FakeVerifier {
     fn validate(
         &self,
         _: SubnetId,
-        _: &Certification,
+        _: &SignedCertificationContent,
         _: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
         Ok(())
@@ -352,16 +351,15 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
         .unwrap();
 
     // replica version record
-    let replica_version = test_replica_version();
     let replica_version_record = ReplicaVersionRecord {
-        replica_version_id: Some(replica_version.to_string()),
+        replica_version_id: test_replica_version().to_string(),
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
         guest_launch_measurements: None,
     };
     registry_data_provider
         .add(
-            &make_replica_version_key(replica_version),
+            &make_replica_version_key(&replica_version_record.replica_version_id),
             registry_version,
             Some(replica_version_record),
         )
@@ -839,8 +837,11 @@ impl PocketXNetImpl {
     }
 
     fn refill(&self, registry_version: RegistryVersion, log: ReplicaLogger) {
-        let refill_stream_slice_indices =
-            refill_stream_slice_indices(&self.pool.lock().unwrap(), self.own_subnet_id);
+        let refill_stream_slice_indices = self
+            .pool
+            .lock()
+            .unwrap()
+            .refill_stream_slice_indices(self.own_subnet_id);
 
         for (subnet_id, indices) in refill_stream_slice_indices {
             // When restoring a PocketIC instance from its state,
@@ -1783,11 +1784,8 @@ impl StateMachineBuilder {
         // Register this new `StateMachine` in the *shared* pool of `StateMachine`s.
         subnets.insert(sm.clone());
 
-        // Create a dummny refill task handle to be used in `XNetPayloadBuilderImpl`.
-        // It is fine that we do not pop any messages from the (bounded) channel
-        // since errors are ignored in `RefillTaskHandle::trigger_refill()`.
-        let (refill_trigger, _refill_receiver) = mpsc::channel(1);
-        let refill_task_handle = RefillTaskHandle(Mutex::new(refill_trigger));
+        // No pull task: `PocketXNetImpl::refill()` refills the pool.
+        let pull_task_handle = PullTaskHandle::disconnected();
 
         // Instantiate a `XNetPayloadBuilderImpl`.
         let certified_stream_store: Arc<dyn CertifiedStreamStore> = sm.state_manager.clone();
@@ -1802,7 +1800,7 @@ impl StateMachineBuilder {
                 sm.state_manager.clone(),
                 sm.registry_client.clone(),
                 certified_slice_pool.clone(),
-                refill_task_handle,
+                pull_task_handle,
                 metrics,
                 sm.replica_logger.clone(),
             )
@@ -1837,7 +1835,10 @@ impl StateMachineBuilder {
             bitcoin_clients.doge_testnet_client,
             sm.subnet_id,
             sm.registry_client.clone(),
-            BitcoinPayloadBuilderConfig::default(),
+            // Tolerate slow responses from the adapters on loaded test machines.
+            BitcoinPayloadBuilderConfig {
+                adapter_timeout: Duration::from_secs(1),
+            },
             sm.replica_logger.clone(),
         ));
 
@@ -5540,7 +5541,7 @@ fn certify_hash(
         CombinedThresholdSigOf::from(CombinedThresholdSig(signature.as_ref().to_vec()));
     Certification {
         height: *height,
-        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: Signed {
             content: CertificationContent { hash: hash.clone() },
             signature: ThresholdSignature {
@@ -5549,7 +5550,7 @@ fn certify_hash(
                     dealer_subnet: subnet_id,
                     target_subnet: NiDkgTargetSubnet::Local,
                     start_block_height: *height,
-                    dkg_tag: NiDkgTag::LowThreshold,
+                    dkg_tag: NiDkgTag::HighThreshold,
                 },
             },
         },

@@ -97,7 +97,7 @@ impl<const NUM_BUCKETS: usize> Histogram<NUM_BUCKETS> {
 
     /// Returns an iterator over the histogram buckets as tuples containing the bucket upper bound
     /// (inclusive), and the count of observed values within the bucket.
-    pub fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = (f64, f64)> {
         self.bucket_upper_bounds
             .iter()
             .enumerate()

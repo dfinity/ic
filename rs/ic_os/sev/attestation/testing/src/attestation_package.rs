@@ -1,9 +1,9 @@
 use crate::attestation_report::{AttestationReportBuilder, FakeAttestationReportSigner};
-use attestation::SevCertificateChain;
 use attestation::attestation_package::{
     ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
 use attestation::custom_data::EncodeSevCustomData;
+use attestation::{LAUNCH_MEASUREMENT_LEN, SevCertificateChain};
 use sev::firmware::guest::GuestPolicy;
 use std::fmt::Debug;
 
@@ -16,7 +16,7 @@ use std::fmt::Debug;
 /// ```
 /// let parsed_attestation_package = ParsedSevAttestationPackageBuilder::new()
 ///     .with_custom_data(&SomeCustomData { ... })
-///     .with_measurement([21u8; 48])
+///     .with_measurement([21u8; LAUNCH_MEASUREMENT_LEN])
 ///     .with_chip_id([33u8; 64])
 ///     .build();
 /// // Or if an SevAttestationPackage is needed:
@@ -51,7 +51,7 @@ impl ParsedSevAttestationPackageBuilder {
         self
     }
 
-    pub fn with_measurement(mut self, measurement: [u8; 48]) -> Self {
+    pub fn with_measurement(mut self, measurement: [u8; LAUNCH_MEASUREMENT_LEN]) -> Self {
         self.attestation_report_builder = self
             .attestation_report_builder
             .with_measurement(measurement);
@@ -108,7 +108,7 @@ mod tests {
         let sev_attestation_package: SevAttestationPackage =
             ParsedSevAttestationPackageBuilder::new()
                 .with_custom_data(&custom_data)
-                .with_measurement([21_u8; 48])
+                .with_measurement([21_u8; LAUNCH_MEASUREMENT_LEN])
                 .with_chip_id([33_u8; 64])
                 .build()
                 .into();
@@ -117,7 +117,7 @@ mod tests {
             sev_attestation_package,
             SevRootCertificateVerification::TestOnlySkipVerification,
         )
-        .verify_measurement(&[[21_u8; 48]])
+        .verify_measurement(&[[21_u8; LAUNCH_MEASUREMENT_LEN]])
         .verify_chip_id(&[[33_u8; 64]])
         .verify_custom_data(&custom_data)
         .expect("Attestation package is invalid");

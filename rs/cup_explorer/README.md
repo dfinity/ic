@@ -66,7 +66,7 @@ bazel run rs/cup_explorer:cup_explorer_bin -- extract-master-public-keys --cup-p
 
 - `--cup-path`: Path to a local CUP protobuf file (required). The latest CUP of a subnet can be downloaded using `explore --download-path`.
 
-The public keys are printed hex-encoded, in the encoding of the mainnet master public keys that are hardcoded for [`ic-pub-key`](../../packages/ic-pub-key) (in `ic-secp256k1`, `ic-ed25519` and `ic-vetkeys`):
+The public keys are printed hex-encoded, in the encoding of the mainnet master public keys that are hardcoded for [`ic-pub-key`](../../packages/ic-pub-key) (in `ic-secp256k1`, `ic-secp256r1`, `ic-ed25519` and `ic-vetkeys`):
 - ECDSA and BIP340 Schnorr keys as compressed SEC1 points (33 bytes),
 - Ed25519 keys as compressed Edwards points (32 bytes),
 - vetKD keys as compressed BLS12-381 G2 points (96 bytes).

@@ -220,7 +220,7 @@ impl IDkgPayload {
     /// results yet.
     pub fn iter_transcript_configs_in_creation(
         &self,
-    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> + '_ {
+    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> {
         let xnet_reshares_transcripts = self.ongoing_xnet_reshares.values().map(AsRef::as_ref);
         let key_transcripts = self
             .key_transcripts
@@ -238,7 +238,7 @@ impl IDkgPayload {
     /// results yet.
     pub fn iter_pre_sig_transcript_configs_in_creation(
         &self,
-    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> + '_ {
+    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> {
         self.pre_signatures_in_creation
             .values()
             .flat_map(|pre_sig| pre_sig.iter_transcript_configs_in_creation())
@@ -247,14 +247,14 @@ impl IDkgPayload {
     /// Return an iterator of the ongoing xnet reshare transcripts on the source side.
     pub fn iter_xnet_transcripts_source_subnet(
         &self,
-    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> + '_ {
+    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> {
         self.ongoing_xnet_reshares.values().map(AsRef::as_ref)
     }
 
     /// Return an iterator of the ongoing xnet reshare transcripts on the target side.
     pub fn iter_xnet_transcripts_target_subnet(
         &self,
-    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> + '_ {
+    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> {
         self.key_transcripts.values().filter_map(|key_transcript| {
             if let KeyTranscriptCreation::XnetReshareOfUnmaskedParams((_, params)) =
                 &key_transcript.next_in_creation
@@ -267,10 +267,10 @@ impl IDkgPayload {
     }
 
     /// Return an iterator of all ids of pre-signatures for the given key in the payload.
-    pub fn iter_pre_signature_ids<'a>(
-        &'a self,
-        key_id: &'a IDkgMasterPublicKeyId,
-    ) -> impl Iterator<Item = PreSigId> + 'a {
+    pub fn iter_pre_signature_ids(
+        &self,
+        key_id: &IDkgMasterPublicKeyId,
+    ) -> impl Iterator<Item = PreSigId> {
         let available_pre_signature_ids = self
             .available_pre_signatures
             .iter()
@@ -380,7 +380,7 @@ impl IDkgPayload {
 
     /// Returns the initial DKG dealings being used to bootstrap the target subnet,
     /// if we are in the process of initial key creation.
-    pub fn initial_dkg_dealings(&self) -> impl Iterator<Item = &InitialIDkgDealings> + '_ {
+    pub fn initial_dkg_dealings(&self) -> impl Iterator<Item = &InitialIDkgDealings> {
         self.key_transcripts.values().filter_map(|key_transcript| {
             if let KeyTranscriptCreation::XnetReshareOfUnmaskedParams((initial_dealings, _)) =
                 &key_transcript.next_in_creation

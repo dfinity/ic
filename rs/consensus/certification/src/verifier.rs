@@ -3,7 +3,7 @@ use ic_interfaces::{
     certification::{Verifier, VerifierError},
     validation::ValidationResult,
 };
-use ic_types::{RegistryVersion, SubnetId, consensus::certification::Certification};
+use ic_types::{RegistryVersion, SubnetId, consensus::certification::SignedCertificationContent};
 use std::sync::Arc;
 
 /// VerifierImpl implements the verification of state hash certifications.
@@ -22,14 +22,14 @@ impl Verifier for VerifierImpl {
     fn validate(
         &self,
         subnet_id: SubnetId,
-        certification: &Certification,
+        certification: &SignedCertificationContent,
         registry_version: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
         // Check whether certification is cryptographically verifiable using the
         self.crypto
             .verify_combined_threshold_sig_by_public_key(
-                &certification.signed.signature.signature,
-                &certification.signed.content,
+                &certification.signature.signature,
+                &certification.content,
                 subnet_id,
                 registry_version,
             )
@@ -69,7 +69,7 @@ mod tests {
         signature.signer = signer;
         Certification {
             height,
-            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 signature,
                 content: CertificationContent::new(hash),
@@ -88,7 +88,7 @@ mod tests {
         let verifier = VerifierImpl::new(Arc::new(crypto));
 
         assert_matches!(
-            verifier.validate(subnet_id, &certification, registry_version),
+            verifier.validate(subnet_id, &certification.signed, registry_version),
             Ok(_)
         );
     }

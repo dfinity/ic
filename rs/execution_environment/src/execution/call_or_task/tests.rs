@@ -345,6 +345,7 @@ fn dts_update_concurrent_cycles_change_fails() {
     let pages_to_grow = 1;
     let bytes_to_grow = pages_to_grow * WASM_PAGE_SIZE_IN_BYTES;
     let a = wasm()
+        .debug_print(b"update")
         .instruction_counter_is_at_least(1_000_000)
         .stable64_grow(pages_to_grow as u64)
         .reply()
@@ -441,6 +442,57 @@ fn dts_update_concurrent_cycles_change_fails() {
             - (test.canister_execution_cost(canister_id) - initial_execution_cost).real()
             - cycles_debit,
     );
+
+    // The canister log of the failed execution is persisted
+    // (in addition to the canister log of the successful setup execution).
+    assert_eq!(
+        test.canister_log_contents(canister_id),
+        vec![b"update".to_vec(), b"update".to_vec()]
+    );
+}
+
+#[test]
+fn dts_update_concurrent_subnet_available_memory_change_persists_canister_log() {
+    // Test steps:
+    // 1. The canister starts running the update method that logs a message.
+    // 2. While the canister is paused, the subnet available memory drops to zero.
+    // 3. The update method resumes and grows stable memory.
+    // 4. The update method fails because there is not enough subnet available memory.
+    // 5. The canister log of the failed execution is persisted.
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .debug_print(b"update")
+        .instruction_counter_is_at_least(1_000_000)
+        .stable64_grow(1)
+        .reply()
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(canister_id, "update", payload);
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    test.set_available_execution_memory(0);
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueLong {
+        test.execute_slice(canister_id);
+    }
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfMemory);
+
+    // The canister log of the failed execution is persisted.
+    assert_eq!(
+        test.canister_log_contents(canister_id),
+        vec![b"update".to_vec()]
+    );
 }
 
 #[test]
@@ -464,6 +516,7 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
     let cycles_to_burn = Cycles::new(1000);
 
     let payload = wasm()
+        .debug_print(b"query")
         .instruction_counter_is_at_least(1_000_000)
         .cycles_burn128(cycles_to_burn)
         .build();
@@ -530,6 +583,12 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
         initial_cycles
             - (test.canister_execution_cost(canister_id) - initial_execution_cost).real()
             - cycles_debit,
+    );
+
+    // The canister log of the failed execution is persisted.
+    assert_eq!(
+        test.canister_log_contents(canister_id),
+        vec![b"query".to_vec()]
     );
 }
 

@@ -1,3 +1,4 @@
+use attestation::LAUNCH_MEASUREMENT_LEN;
 use attestation::attestation_report::tcb_version_from_u64;
 use sev::error::UserApiError;
 use sev::firmware::host::TcbVersion;
@@ -8,7 +9,7 @@ pub use attestation_testing::attestation_report::{
     AttestationReportBuilder, DEFAULT_GENERATION, FakeAttestationReportSigner,
 };
 
-fn default_derived_key(measurement: [u8; 48], tcb_version: u64) -> [u8; 32] {
+fn default_derived_key(measurement: [u8; LAUNCH_MEASUREMENT_LEN], tcb_version: u64) -> [u8; 32] {
     let mut derived_key = [0_u8; 32];
     derived_key[..24].copy_from_slice(&measurement[..24]);
     derived_key[24..].copy_from_slice(&tcb_version.to_le_bytes());
@@ -20,7 +21,7 @@ pub struct MockSevGuestFirmwareBuilder {
     custom_data_override: Option<[u8; 64]>,
     /// If not set, the derived key will be derived from the measurement bytes and requested TCB.
     derived_key: Option<[u8; 32]>,
-    measurement: [u8; 48],
+    measurement: [u8; LAUNCH_MEASUREMENT_LEN],
     chip_id: [u8; 64],
     reported_tcb: TcbVersion,
     launch_tcb: TcbVersion,
@@ -34,7 +35,7 @@ impl Default for MockSevGuestFirmwareBuilder {
         Self {
             derived_key: None,
             custom_data_override: None,
-            measurement: [0_u8; 48],
+            measurement: [0_u8; LAUNCH_MEASUREMENT_LEN],
             chip_id: [0_u8; 64],
             reported_tcb: TcbVersion::default(),
             launch_tcb: TcbVersion::default(),
@@ -64,7 +65,7 @@ impl MockSevGuestFirmwareBuilder {
         self
     }
 
-    pub fn with_measurement(mut self, measurement: [u8; 48]) -> Self {
+    pub fn with_measurement(mut self, measurement: [u8; LAUNCH_MEASUREMENT_LEN]) -> Self {
         self.measurement = measurement;
         self
     }

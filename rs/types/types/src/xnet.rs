@@ -1,6 +1,6 @@
 //! Types used by the Xnet component.
 use crate::ProxyDecodeError;
-use crate::{consensus::certification::Certification, messages::StreamMessage};
+use crate::{consensus::certification::SignedCertificationContent, messages::StreamMessage};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::state::queues::v1 as pb_queues;
@@ -391,7 +391,7 @@ pub struct CertifiedStreamSlice {
     pub merkle_proof: Vec<u8>,
 
     /// The certification of the root hash.
-    pub certification: Certification,
+    pub certification: SignedCertificationContent,
 }
 
 pub mod testing {

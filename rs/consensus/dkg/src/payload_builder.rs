@@ -169,7 +169,7 @@ fn create_data_payload(
         );
     }
 
-    Ok(DkgDataPayload::new_with_remote_dkg_transcripts(
+    Ok(DkgDataPayload::new(
         last_summary_block.height,
         new_validated_dealings,
         remote_dkg_transcripts,

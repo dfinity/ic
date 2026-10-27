@@ -581,7 +581,7 @@ impl PageMap {
     }
 
     /// Returns the iterator over host pages managed by this `PageMap`.
-    pub fn host_pages_iter(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> + '_ {
+    pub fn host_pages_iter(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> {
         (0..self.num_host_pages()).map(move |i| {
             let idx = PageIndex::from(i as u64);
             (idx, self.get_page(idx))
@@ -589,7 +589,7 @@ impl PageMap {
     }
 
     /// Returns the iterator over delta pages in this `PageMap`
-    pub fn delta_pages_iter(&self) -> impl Iterator<Item = (&PageIndex, &PageBytes)> + '_ {
+    pub fn delta_pages_iter(&self) -> impl Iterator<Item = (&PageIndex, &PageBytes)> {
         self.page_delta
             .iter()
             .map(|(index, page)| (index, page.contents()))

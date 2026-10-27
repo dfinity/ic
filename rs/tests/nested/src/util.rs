@@ -125,7 +125,7 @@ pub fn get_elected_guestos_versions(topology: &TopologySnapshot) -> Vec<String> 
         .replica_version_records()
         .unwrap()
         .into_iter()
-        .map(|(k, _)| k)
+        .map(|v| v.replica_version_id)
         .collect()
 }
 
