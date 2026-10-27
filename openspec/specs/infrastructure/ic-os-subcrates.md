@@ -682,6 +682,17 @@ The GuestOS kernel command line (`BOOT_ARGS_A/B` and `BOOT_ARGS_TEE_A/B` in `gue
 
 ---
 
+### Requirement: Authenticated Time Synchronization
+
+GuestOS, HostOS, and SetupOS share one `chrony.conf` (`ic-os/components/misc/chrony/chrony.conf`) that synchronizes time only from NTS-authenticated sources.
+
+#### Scenario: Only NTS sources are selected
+- **WHEN** chrony selects a time source on any IC-OS image
+- **THEN** it chooses only among the configured NTS servers (`server <host> nts iburst`), since `authselectmode require` makes unauthenticated sources unselectable
+- **AND** no plain NTP pool is configured as a fallback; a plain server added to the file shows as `noselect` and is never used
+
+---
+
 ### Requirement: Manual GuestOS Recovery (manual_guestos_recovery)
 
 The `manual_guestos_recovery` crate provides an interactive TUI for performing manual GuestOS recovery operations.
