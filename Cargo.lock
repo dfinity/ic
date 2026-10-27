@@ -14540,14 +14540,25 @@ dependencies = [
 name = "ic-subnet-merging"
 version = "0.9.0"
 dependencies = [
+ "clap",
  "futures",
  "ic-base-types",
+ "ic-interfaces-registry",
+ "ic-protobuf",
+ "ic-recovery",
+ "ic-registry-client-helpers",
+ "ic-registry-subnet-type",
+ "ic-subnet-tools",
  "ic-types",
  "prometheus-parse",
  "reqwest",
+ "serde",
+ "serde_json",
+ "slog",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tokio",
+ "url",
 ]
 
 [[package]]
@@ -17721,6 +17732,7 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-management-canister-types 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ic-recovery",
  "ic-registry-subnet-type",
  "ic-subnet-merging",
  "ic-system-test-driver",
