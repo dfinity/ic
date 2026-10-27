@@ -31,6 +31,16 @@ function retry() {
     return 1
 }
 
+# Make udev process a "change" event for a newly created logical volume and
+# wait until it has. lvcreate activates a new volume with udev scanning
+# disabled and leaves it to udev to scan the volume once lvcreate closes it
+# after wiping its start. If udev isn't watching the volume yet when that
+# happens, it misses the close and the volume's systemd device unit never
+# becomes active.
+function rescan_lv() {
+    udevadm trigger --settle --action=change "/dev/store/$1"
+}
+
 pvs /dev/mapper/store-crypt >/dev/null 2>&1 || (
     echo "Volume group 'store' does not exist yet (first boot?), creating it."
     retry vgcreate --force store /dev/mapper/store-crypt
@@ -42,6 +52,7 @@ lvs /dev/store/shared-crypto >/dev/null 2>&1 || (
     echo "Logical volume 'shared-crypto' does not exist yet (first boot?), creating it."
     LV_SIZE_MB=1024
     retry lvcreate --yes -L "$LV_SIZE_MB"M -n shared-crypto store
+    rescan_lv shared-crypto
 )
 
 # Set up state data store if it does not exist yet.
@@ -51,6 +62,7 @@ lvs /dev/store/shared-data >/dev/null 2>&1 || (
     TOTAL_SIZE_MB=$(($(blockdev --getsz /dev/mapper/store-crypt) * 512 / 1024 / 1024))
     LV_SIZE_MB=$(("$TOTAL_SIZE_MB" / 4))
     retry lvcreate --yes -L "$LV_SIZE_MB"M -n shared-data store
+    rescan_lv shared-data
 )
 
 # Set up backup data store if it does not exist yet.
@@ -64,6 +76,7 @@ lvs /dev/store/shared-backup >/dev/null 2>&1 || (
         LV_SIZE_MB="${LV_SIZE_LIMIT_MB}"
     fi
     retry lvcreate --yes -L "$LV_SIZE_MB"M -n shared-backup store
+    rescan_lv shared-backup
 )
 
 # Set up swap space if it does not exist yet.
@@ -77,4 +90,5 @@ lvs /dev/store/shared-swap >/dev/null 2>&1 || (
         LV_SIZE_MB="${LV_SIZE_LIMIT_MB}"
     fi
     retry lvcreate --yes -L "$LV_SIZE_MB"M -n shared-swap store
+    rescan_lv shared-swap
 )
