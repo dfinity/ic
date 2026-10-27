@@ -190,6 +190,16 @@ Path: `rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1/`
 
 ---
 
+### Requirement: Offline Canister Public Key Derivation (ic-pub-key, ic-secp256r1)
+
+`ic-pub-key` derives canister threshold public keys offline from master public keys hardcoded in `ic-secp256k1`, `ic-secp256r1`, `ic-ed25519`, and `ic-vetkeys`, as an offline equivalent of the `ecdsa_public_key`, `schnorr_public_key`, and `vetkd_public_key` management canister methods.
+
+#### Scenario: secp256r1 ECDSA keys are derived offline
+- **WHEN** `derive_ecdsa_key` is called for an `EcdsaKeyId` with curve `Secp256r1` and one of the names `key_1`, `test_key_1`, `pocketic_key_1`, `pocketic_test_key_1`, or `dfx_test_key`
+- **THEN** the canister's public key (and chain code) is derived from the corresponding secp256r1 master key, following the same code paths as secp256k1, when the default-on `secp256r1` feature is enabled
+- **AND** curves or key names without a hardcoded master key still return `AlgorithmNotSupported`
+- **AND** `ic-secp256r1` provides these master keys via `PublicKey::mainnet_key` and `PublicKey::pocketic_key`, and derives a canister's key from them via `PublicKey::derive_mainnet_key` and `PublicKey::derive_pocketic_key`
+
 ### Requirement: RSA PKCS#1 v1.5 Signature Verification (ic-crypto-internal-basic-sig-rsa-pkcs1)
 
 The `ic-crypto-internal-basic-sig-rsa-pkcs1` crate provides RSA public key parsing and PKCS#1 v1.5 signature verification (SHA-256), as specified in RFC 8017.
