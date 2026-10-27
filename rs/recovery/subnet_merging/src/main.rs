@@ -75,7 +75,6 @@ fn subnet_merging(
         "Don't forget to announce at the forum the upcoming series of proposals to merge the \
          subnet"
     );
-    // TODO: Point to a template for the forum announcement once one exists.
 
     if !recovery_args.skip_prompts {
         cli::wait_for_confirmation(&logger);

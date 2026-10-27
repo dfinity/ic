@@ -22,7 +22,7 @@ use slog::{Logger, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 
-use std::{collections::BTreeSet, iter::Peekable, time::Duration};
+use std::{collections::BTreeSet, fmt::Debug, iter::Peekable, time::Duration};
 
 const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
@@ -69,7 +69,7 @@ pub struct SubnetMergingArgs {
 
     /// How long to wait, in seconds, for the proposal labeling the source
     /// subnet as "cooling down" to be adopted, executed and visible in the
-    /// registry. On a timeout, the step can be resumed with `--resume`.
+    /// registry.
     #[clap(long, default_value = "3600")]
     pub registry_timeout_secs: u64,
 
@@ -157,31 +157,82 @@ impl SubnetMerging {
         let destination =
             Self::get_and_pre_validate_subnet_record(recovery, destination_subnet_id)?;
 
+        Self::ensure_compatible_subnet_records(
+            source_subnet_id,
+            &source,
+            destination_subnet_id,
+            &destination,
+        )
+    }
+
+    /// Checks whether the records of the two (individually valid) subnets are
+    /// compatible, i.e. the preconditions 5) and 6) above.
+    fn ensure_compatible_subnet_records(
+        source_subnet_id: SubnetId,
+        source: &SubnetRecord,
+        destination_subnet_id: SubnetId,
+        destination: &SubnetRecord,
+    ) -> RecoveryResult<()> {
+        // Destructured exhaustively, so that a field added to `SubnetRecord`
+        // fails to compile until it is decided whether it needs a check here.
+        let SubnetRecord {
+            // Checked below.
+            subnet_type: _,
+            canister_cycles_cost_schedule: _,
+            subnet_admins: _,
+            features: _, // Only `sev_enabled`.
+            cooling_down: _,
+            // Checked for each subnet on its own, by
+            // `get_and_pre_validate_subnet_record`.
+            is_halted: _,
+            halt_at_cup_height: _,
+            chain_key_config: _,
+            // Capacity, left to the merge step.
+            max_number_of_canisters: _,
+            resource_limits: _,
+            // Settings of each subnet on its own: the merged subnet keeps those
+            // of the destination subnet.
+            membership: _,
+            max_ingress_bytes_per_message: _,
+            unit_delay_millis: _,
+            initial_notary_delay_millis: _,
+            replica_version_id: _,
+            recalled_replica_version_ids: _,
+            dkg_interval_length: _,
+            dkg_dealings_per_block: _,
+            start_as_nns: _,
+            max_ingress_messages_per_block: _,
+            max_ingress_bytes_per_block: _,
+            max_block_payload_size: _,
+            ssh_readonly_access: _,
+            ssh_backup_access: _,
+        } = source;
+
         if destination.cooling_down {
             return Err(RecoveryError::ValidationFailed(format!(
                 "Subnet {destination_subnet_id}: the destination subnet should not be cooling down"
             )));
         }
 
-        let require_same = |what: &str, source_value: String, destination_value: String| {
-            if source_value != destination_value {
-                return Err(RecoveryError::ValidationFailed(format!(
-                    "Both subnets should have the same {what}, but subnet {source_subnet_id} has \
-                     {source_value} and subnet {destination_subnet_id} has {destination_value}"
-                )));
-            }
-            Ok(())
+        let mismatch = |what: &str, source_value: &dyn Debug, destination_value: &dyn Debug| {
+            Err(RecoveryError::ValidationFailed(format!(
+                "Both subnets should have the same {what}, but subnet {source_subnet_id} has \
+                 {source_value:?} and subnet {destination_subnet_id} has {destination_value:?}"
+            )))
         };
-        let subnet_admins = |record: &SubnetRecord| {
-            let admins: BTreeSet<_> = record
+        let subnet_admins = |subnet_id: SubnetId, record: &SubnetRecord| {
+            record
                 .subnet_admins
                 .iter()
-                .map(|admin| match PrincipalId::try_from(admin.raw.as_slice()) {
-                    Ok(principal) => principal.to_string(),
-                    Err(_) => format!("{:?}", admin.raw),
+                .map(|admin| {
+                    PrincipalId::try_from(admin.raw.as_slice()).map_err(|err| {
+                        RecoveryError::ValidationFailed(format!(
+                            "Subnet {subnet_id}: invalid subnet admin {:?}: {err}",
+                            admin.raw
+                        ))
+                    })
                 })
-                .collect();
-            format!("{admins:?}")
+                .collect::<RecoveryResult<BTreeSet<_>>>()
         };
         let sev_enabled = |record: &SubnetRecord| {
             record
@@ -190,26 +241,32 @@ impl SubnetMerging {
                 .unwrap_or(false)
         };
 
-        require_same(
-            "subnet type",
-            format!("{:?}", source.subnet_type()),
-            format!("{:?}", destination.subnet_type()),
-        )?;
-        require_same(
-            "cycles cost schedule",
-            format!("{:?}", source.canister_cycles_cost_schedule()),
-            format!("{:?}", destination.canister_cycles_cost_schedule()),
-        )?;
-        require_same(
-            "subnet admins",
-            subnet_admins(&source),
-            subnet_admins(&destination),
-        )?;
-        require_same(
-            "SEV setting",
-            format!("sev_enabled = {}", sev_enabled(&source)),
-            format!("sev_enabled = {}", sev_enabled(&destination)),
-        )?;
+        let (source_type, destination_type) = (source.subnet_type(), destination.subnet_type());
+        if source_type != destination_type {
+            return mismatch("subnet type", &source_type, &destination_type);
+        }
+        let (source_schedule, destination_schedule) = (
+            source.canister_cycles_cost_schedule(),
+            destination.canister_cycles_cost_schedule(),
+        );
+        if source_schedule != destination_schedule {
+            return mismatch(
+                "cycles cost schedule",
+                &source_schedule,
+                &destination_schedule,
+            );
+        }
+        let (source_admins, destination_admins) = (
+            subnet_admins(source_subnet_id, source)?,
+            subnet_admins(destination_subnet_id, destination)?,
+        );
+        if source_admins != destination_admins {
+            return mismatch("subnet admins", &source_admins, &destination_admins);
+        }
+        let (source_sev, destination_sev) = (sev_enabled(source), sev_enabled(destination));
+        if source_sev != destination_sev {
+            return mismatch("SEV setting (sev_enabled)", &source_sev, &destination_sev);
+        }
 
         Ok(())
     }
@@ -309,6 +366,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
 
     fn read_step_params(&mut self, step_type: StepType) {
         match step_type {
+            StepType::CoolDownSourceSubnet | StepType::CheckRegistryForCoolingDownFlag => {}
             StepType::CheckMergeReadiness => print_url_and_ask_for_confirmation(
                 &self.logger,
                 self.dashboard_url(),
@@ -316,7 +374,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                  holds. Please check the dashboard as well, to see whether it is safe to merge \
                  the subnet",
             ),
-            StepType::CoolDownSourceSubnet | StepType::CheckRegistryForCoolingDownFlag => {}
         }
     }
 

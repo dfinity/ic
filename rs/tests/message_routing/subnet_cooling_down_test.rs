@@ -188,7 +188,7 @@ const MERGING_DIR: &str = "subnet_merging";
 /// of terminal statuses once the entries of the ingress messages submitted
 /// before the subnet started cooling down are pruned, i.e. at their (up to
 /// `MAX_INGRESS_TTL` = 5 minutes away) expiry times.
-const MERGE_READY_TIMEOUT: Duration = Duration::from_secs(1200);
+const MERGE_READY_TIMEOUT: Duration = Duration::from_secs(900);
 /// Timeout for the registry to reflect a proposal that `ic-admin` reported as
 /// executed.
 const REGISTRY_TIMEOUT: Duration = Duration::from_secs(120);
@@ -200,11 +200,12 @@ const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// How long `UT`'s loop is observed to be stalled (step 11).
 const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 
-/// Timeouts of the test itself: draining the `install_code` calls dominates,
-/// the rest of the scenario takes a couple of minutes. The overall timeout
-/// additionally covers the setup (booting the IC and installing the NNS).
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(1800);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(2400);
+/// Timeouts of the test itself, above the sum of the timeouts of its steps
+/// (dominated by `MERGE_READY_TIMEOUT`), so that a stuck step fails with its
+/// own error. The overall timeout additionally covers the setup (booting the IC
+/// and installing the NNS).
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(1500);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(2100);
 
 /// The conditions this scenario violates, i.e. the ones step 7 checks. This
 /// includes `CommonQuorum`, since the replicas do not satisfy the individual
@@ -281,40 +282,17 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    // The agents of `Context` are reused by all asynchronous checks, so these
-    // run on a single runtime. The steps of the merging tool create runtimes of
-    // their own, so they run outside of it.
+    // The agents are reused by all asynchronous checks, so these run on a
+    // single runtime. The steps of the merging tool create runtimes of their
+    // own, so they run outside of it.
     let runtime = Runtime::new().expect("failed to create a tokio runtime");
-
-    let context = runtime.block_on(prepare(&env));
-    cool_down(&env, &context, &runtime);
-}
-
-/// Everything the checks made in between the steps of the merging tool need
-/// from the phase that set the scenario up.
-struct Context {
-    logger: Logger,
-    m_subnet: SubnetSnapshot,
-    t_subnet: SubnetSnapshot,
-    m_agent: Agent,
-    t_agent: Agent,
-    /// The two canisters calling each other in a loop across subnets, `UM` on
-    /// `M` and `UT` on `T`.
-    um: Principal,
-    ut: Principal,
-}
-
-/// Steps 1 to 7: set the scenario up and check that `M` violates the
-/// individual conditions for merging it away.
-async fn prepare(env: &TestEnv) -> Context {
-    let logger = env.logger();
-    let topology = env.topology_snapshot();
 
     // The two Application subnets: `M` is the one that is set up to be cooled
     // down and merged away, `T` is the one `M` exchanges messages with in a
     // loop and that holds the canisters at the other end of the cross-subnet
     // endless loops of step 6.
-    let app_subnets: Vec<_> = topology
+    let app_subnets: Vec<_> = env
+        .topology_snapshot()
         .subnets()
         .filter(|subnet| subnet.subnet_type() == SubnetType::Application)
         .collect();
@@ -325,10 +303,42 @@ async fn prepare(env: &TestEnv) -> Context {
     );
     let m_subnet = app_subnets[0].clone();
     let t_subnet = app_subnets[1].clone();
+    let agent = |subnet: &SubnetSnapshot| {
+        let node = subnet.nodes().next().unwrap();
+        runtime.block_on(assert_create_agent(node.get_public_url().as_str()))
+    };
+    let m_agent = agent(&m_subnet);
+    let t_agent = agent(&t_subnet);
+
+    let context = runtime.block_on(prepare(&env, m_subnet, t_subnet, &m_agent, &t_agent));
+    cool_down(&env, &context, &runtime);
+}
+
+/// Everything the checks made in between the steps of the merging tool need
+/// from the phase that set the scenario up.
+struct Context<'a> {
+    logger: Logger,
+    m_subnet: SubnetSnapshot,
+    t_subnet: SubnetSnapshot,
+    /// The two canisters calling each other in a loop across subnets, `UM` on
+    /// `M` and `UT` on `T`.
+    um: UniversalCanister<'a>,
+    ut: UniversalCanister<'a>,
+}
+
+/// Steps 1 to 7: set the scenario up and check that `M` violates the
+/// individual conditions for merging it away.
+async fn prepare<'a>(
+    env: &TestEnv,
+    m_subnet: SubnetSnapshot,
+    t_subnet: SubnetSnapshot,
+    m_agent: &'a Agent,
+    t_agent: &'a Agent,
+) -> Context<'a> {
+    let logger = env.logger();
+    let topology = env.topology_snapshot();
     let m_node = m_subnet.nodes().next().unwrap();
     let t_node = t_subnet.nodes().next().unwrap();
-    let m_agent = assert_create_agent(m_node.get_public_url().as_str()).await;
-    let t_agent = assert_create_agent(t_node.get_public_url().as_str()).await;
     info!(
         logger,
         "Subnets under test:\n  M={}\n  T={}\n  NNS={}",
@@ -339,10 +349,10 @@ async fn prepare(env: &TestEnv) -> Context {
 
     // Step 1: Install a universal canister on each of `M` and `T`.
     info!(logger, "Step 1: Installing universal canisters UM and UT");
-    let um = UniversalCanister::new_with_retries(&m_agent, m_node.effective_canister_id(), &logger)
-        .await;
-    let ut = UniversalCanister::new_with_retries(&t_agent, t_node.effective_canister_id(), &logger)
-        .await;
+    let um =
+        UniversalCanister::new_with_retries(m_agent, m_node.effective_canister_id(), &logger).await;
+    let ut =
+        UniversalCanister::new_with_retries(t_agent, t_node.effective_canister_id(), &logger).await;
     info!(
         logger,
         "Step 1 done: UM={}, UT={}",
@@ -395,12 +405,12 @@ async fn prepare(env: &TestEnv) -> Context {
     );
     let m_id = m_node.effective_canister_id();
     let t_id = t_node.effective_canister_id();
-    let u1 = UniversalCanister::new_with_retries(&m_agent, m_id, &logger).await;
-    let u3 = UniversalCanister::new_with_retries(&m_agent, m_id, &logger).await;
-    let u4 = UniversalCanister::new_with_retries(&t_agent, t_id, &logger).await;
-    let u5 = UniversalCanister::new_with_retries(&m_agent, m_id, &logger).await;
-    let u6 = UniversalCanister::new_with_retries(&m_agent, m_id, &logger).await;
-    let u7 = UniversalCanister::new_with_retries(&t_agent, t_id, &logger).await;
+    let u1 = UniversalCanister::new_with_retries(m_agent, m_id, &logger).await;
+    let u3 = UniversalCanister::new_with_retries(m_agent, m_id, &logger).await;
+    let u4 = UniversalCanister::new_with_retries(t_agent, t_id, &logger).await;
+    let u5 = UniversalCanister::new_with_retries(m_agent, m_id, &logger).await;
+    let u6 = UniversalCanister::new_with_retries(m_agent, m_id, &logger).await;
+    let u7 = UniversalCanister::new_with_retries(t_agent, t_id, &logger).await;
     info!(
         logger,
         "Step 4: U1={}, U3={}, U5={}, U6={} on M; U4={}, U7={} on T",
@@ -413,8 +423,8 @@ async fn prepare(env: &TestEnv) -> Context {
     );
     let mut targets = Vec::new();
     for name in INSTALL_CODE_TARGETS {
-        let target = create_canister(&m_agent, m_id).await;
-        set_controller(&target, &u1.canister_id(), &m_agent).await;
+        let target = create_canister(m_agent, m_id).await;
+        set_controller(&target, &u1.canister_id(), m_agent).await;
         info!(logger, "Step 4: {name}={target} on M, controlled by U1");
         targets.push(target);
     }
@@ -466,12 +476,10 @@ async fn prepare(env: &TestEnv) -> Context {
 
     Context {
         logger,
-        um: um.canister_id(),
-        ut: ut.canister_id(),
+        um,
+        ut,
         m_subnet,
         t_subnet,
-        m_agent,
-        t_agent,
     }
 }
 
@@ -481,7 +489,7 @@ async fn prepare(env: &TestEnv) -> Context {
 /// Plain synchronous code, like `rs/tests/consensus/subnet_splitting_test.rs`:
 /// the tool's steps block on runtimes of their own, and the asynchronous checks
 /// of this test are driven through `runtime`, which this thread is not inside.
-fn cool_down(env: &TestEnv, context: &Context, runtime: &Runtime) {
+fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     let logger = &context.logger;
     let topology = env.topology_snapshot();
 
@@ -557,9 +565,9 @@ fn cool_down(env: &TestEnv, context: &Context, runtime: &Runtime) {
 /// rejects ingress messages based on its latest state, but query calls based on
 /// its latest certified state, which may still be one before the label took
 /// effect.
-async fn check_ingress_and_queries_rejected(context: &Context) {
+async fn check_ingress_and_queries_rejected(context: &Context<'_>) {
     let logger = &context.logger;
-    let um = UniversalCanister::from_canister_id(&context.m_agent, context.um);
+    let um = &context.um;
 
     info!(
         logger,
@@ -622,16 +630,16 @@ async fn check_ingress_and_queries_rejected(context: &Context) {
 /// Step 11: check that `UT`'s call loop of step 2 is stalled, i.e. that its
 /// iteration counter, read via a query to `T`, does not advance. `UM`'s counter
 /// cannot be read, as `M` rejects query calls.
-async fn check_ut_loop_stalled(context: &Context) {
+async fn check_ut_loop_stalled(context: &Context<'_>) {
     let logger = &context.logger;
     info!(
         logger,
         "Step 11: Checking that UT's call loop is stalled over {STALL_OBSERVATION_PERIOD:?}"
     );
-    let ut = UniversalCanister::from_canister_id(&context.t_agent, context.ut);
-    let ut_before = global_counter(&ut).await.unwrap();
+    let ut = &context.ut;
+    let ut_before = global_counter(ut).await.unwrap();
     tokio::time::sleep(STALL_OBSERVATION_PERIOD).await;
-    let ut_after = global_counter(&ut).await.unwrap();
+    let ut_after = global_counter(ut).await.unwrap();
     assert_eq!(
         ut_before, ut_after,
         "UT's call loop advanced from iteration {ut_before} to {ut_after} while subnet M was \
