@@ -108,6 +108,11 @@ Paused executions can be aborted when necessary.
 - **AND** the prepaid cycles for execution are returned
 - **AND** the message will be re-executed from scratch in a subsequent round
 
+#### Scenario: Failed re-execution of an aborted install_code cleans up
+- **WHEN** an aborted `install_code` or `install_chunked_code` is re-executed and the re-execution fails while decoding its input, so `execute_install_code` responds to the call immediately
+- **THEN** the call's `InstallCodeCall` is removed from the `SubnetCallContextManager`, as on every other path on which an install finishes
+- **AND** the execution cycles prepaid for the install are refunded to the target canister in full, since the re-execution executed no instructions and work done before an abort is not charged
+
 ### Requirement: DTS for Multi-Stage Operations
 
 Operations like install and upgrade have multiple stages that each may be sliced.

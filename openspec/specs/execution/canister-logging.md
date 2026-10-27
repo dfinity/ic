@@ -17,6 +17,11 @@ Canisters produce logs during execution via the `ic0.debug_print` System API.
 - **THEN** the log messages are persisted in the canister's system state
 - **AND** logs survive across rounds but may be truncated based on memory limits
 
+#### Scenario: Logs persist when the execution's state changes are not applied
+- **WHEN** a Wasm execution completes but its remaining system state changes are not applied: reserving subnet available memory or storage cycles fails in `apply_canister_state_changes()`, a "concurrent cycle change" check fails (update calls, tasks, replicated queries, response callbacks, `install_code`), or `apply_changes()` fails for a replicated query
+- **THEN** the execution's log records are still persisted, as they already were for traps: callers apply them explicitly via `SystemStateModifications::apply_canister_log()` before these failure checks and before taking the rollback snapshot, and `apply_changes()` no longer applies the canister log itself
+- **AND** applying the delta log always removes its records (also when `log_memory_limit` is zero), so a repeated application neither appends the records twice nor counts their size again
+
 #### Scenario: Log memory limit
 - **WHEN** the canister's log memory usage reaches its `log_memory_limit`
 - **THEN** oldest log entries are discarded to make room for new ones
