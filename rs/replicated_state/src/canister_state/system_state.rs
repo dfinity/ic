@@ -214,18 +214,19 @@ pub struct ConnectionMetrics {
 /// was sent to that canister.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct LruConnectionMetrics {
-    metrics_per_receiver: BTreeMap<CanisterId, ConnectionMetrics>,
+    /// Cheap clone with `Arc`, cloned in `fn increment`
+    metrics_per_receiver: Arc<BTreeMap<CanisterId, ConnectionMetrics>>,
 }
 
 impl LruConnectionMetrics {
     /// Creates the metrics from the given map, evicting entries if it holds more than
     /// `MAX_CONNECTION_METRICS_ENTRIES` of them.
-    pub fn new(metrics_per_receiver: BTreeMap<CanisterId, ConnectionMetrics>) -> Self {
-        let mut lru = Self {
-            metrics_per_receiver,
-        };
-        lru.evict();
-        lru
+    pub fn new(mut metrics_per_receiver: BTreeMap<CanisterId, ConnectionMetrics>) -> Self {
+        Self::evict(&mut metrics_per_receiver);
+
+        Self {
+            metrics_per_receiver: Arc::new(metrics_per_receiver),
+        }
     }
 
     pub fn get(&self) -> &BTreeMap<CanisterId, ConnectionMetrics> {
@@ -234,34 +235,34 @@ impl LruConnectionMetrics {
 
     /// Increments the message count for `receiver` and updates its last access timestamp.
     pub fn increment(&mut self, receiver: CanisterId, access_timestamp: Time) {
-        let metrics_entry = self
-            .metrics_per_receiver
-            .entry(receiver)
-            .or_insert_with(|| ConnectionMetrics {
-                last_access_timestamp: access_timestamp,
-                count: 0,
-            });
+        let metrics_per_receiver = Arc::make_mut(&mut self.metrics_per_receiver);
+        let metrics_entry =
+            metrics_per_receiver
+                .entry(receiver)
+                .or_insert_with(|| ConnectionMetrics {
+                    last_access_timestamp: access_timestamp,
+                    count: 0,
+                });
         metrics_entry.last_access_timestamp = access_timestamp;
         metrics_entry.count += 1;
 
-        self.evict();
+        Self::evict(metrics_per_receiver);
     }
 
     /// Evicts entries until at most `MAX_CONNECTION_METRICS_ENTRIES` remain by:
     /// 1. `last_access_timestamp`: least recently accessed entries are evicted first.
     /// 2. `count`: among equally old entries, the one with the fewest messages is evicted first.
     /// 3. receiver: deterministic final tie-breaker.
-    fn evict(&mut self) {
-        while self.metrics_per_receiver.len() > MAX_CONNECTION_METRICS_ENTRIES
-            && let Some(receiver) = self
-                .metrics_per_receiver
+    fn evict(metrics_per_receiver: &mut BTreeMap<CanisterId, ConnectionMetrics>) {
+        while metrics_per_receiver.len() > MAX_CONNECTION_METRICS_ENTRIES
+            && let Some(receiver) = metrics_per_receiver
                 .iter()
                 .min_by_key(|(receiver, metrics)| {
                     (metrics.last_access_timestamp, metrics.count, **receiver)
                 })
                 .map(|(receiver, _)| *receiver)
         {
-            self.metrics_per_receiver.remove(&receiver);
+            metrics_per_receiver.remove(&receiver);
         }
     }
 }
