@@ -294,7 +294,10 @@ pub mod test {
     use super::*;
     use ic_interfaces::consensus_pool::ValidatedArtifact;
     use ic_test_utilities_consensus::{fake::*, make_genesis};
-    use ic_types::consensus::dkg::DkgSummary;
+    use ic_test_utilities_types::ids::node_test_id;
+    use ic_types::{
+        ReplicaVersion, consensus::dkg::DkgSummary, crypto::Signed, signature::MultiSignatureShare,
+    };
 
     fn make_summary(genesis_height: Height) -> DkgSummary {
         let mut summary = DkgSummary::fake();
@@ -314,6 +317,85 @@ pub mod test {
             msg: ConsensusMessage::RandomBeacon(beacon),
             timestamp: ic_types::time::UNIX_EPOCH,
         }
+    }
+
+    fn fake_notarization_share(height: u64, signer: u64) -> NotarizationShare {
+        Signed {
+            content: NotarizationContent::new(
+                Height::from(height),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+                ReplicaVersion::try_from("1.0").unwrap(),
+            ),
+            signature: MultiSignatureShare::fake(node_test_id(signer)),
+        }
+    }
+
+    fn make_share_artifact(share: NotarizationShare) -> ValidatedArtifact<ConsensusMessage> {
+        ValidatedArtifact {
+            msg: ConsensusMessage::NotarizationShare(share),
+            timestamp: ic_types::time::UNIX_EPOCH,
+        }
+    }
+
+    #[test]
+    fn test_get_only_by_height() {
+        let mut pool = InMemoryPoolSection::<ValidatedArtifact<ConsensusMessage>>::new();
+        let height = Height::from(1);
+        assert!(matches!(
+            pool.notarization_share().get_only_by_height(height),
+            Err(OnlyError::NoneAvailable)
+        ));
+
+        let share = fake_notarization_share(1, 1);
+        pool.insert(make_share_artifact(share.clone()));
+        assert_eq!(
+            pool.notarization_share()
+                .get_only_by_height(height)
+                .unwrap(),
+            share
+        );
+        assert!(matches!(
+            pool.notarization_share()
+                .get_only_by_height(Height::from(2)),
+            Err(OnlyError::NoneAvailable)
+        ));
+
+        pool.insert(make_share_artifact(fake_notarization_share(1, 2)));
+        assert!(matches!(
+            pool.notarization_share().get_only_by_height(height),
+            Err(OnlyError::MultipleValues)
+        ));
+    }
+
+    #[test]
+    fn test_purge_type_below() {
+        let mut pool = InMemoryPoolSection::<ValidatedArtifact<ConsensusMessage>>::new();
+        let beacon = fake_random_beacon(Height::from(1));
+        let beacon_id = beacon.get_id();
+        pool.insert(make_artifact(beacon));
+
+        let shares = (1..=3)
+            .map(|i| fake_notarization_share(i, i))
+            .collect::<Vec<_>>();
+        for share in &shares {
+            pool.insert(make_share_artifact(share.clone()));
+        }
+
+        let mut ops = PoolSectionOps::new();
+        ops.purge_type_below(PurgeableArtifactType::NotarizationShare, Height::from(3));
+        let purged = pool.mutate(ops);
+
+        // Only the notarization shares strictly below height 3 are purged, and
+        // their ids carry the height each share was stored at.
+        assert_eq!(
+            HashSet::from_iter(purged),
+            HashSet::from([shares[0].get_id(), shares[1].get_id()])
+        );
+        assert!(pool.contains(&beacon_id));
+        assert_eq!(pool.notarization_share().get_all().count(), 1);
+        let range = pool.notarization_share().height_range().unwrap();
+        assert_eq!(range.min, Height::from(3));
+        assert_eq!(range.max, Height::from(3));
     }
 
     #[test]

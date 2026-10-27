@@ -845,6 +845,104 @@ mod tests {
     }
 
     #[test]
+    fn test_certification_pool_remove_all_below_is_exclusive() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let mut pool = CertificationPoolImpl::new(
+                node_test_id(0),
+                pool_config,
+                no_op_logger(),
+                MetricsRegistry::new(),
+            );
+            for height in [9, 10] {
+                pool.insert(to_unvalidated(fake_share(height, 0)));
+                pool.insert(to_unvalidated(fake_cert(height)));
+            }
+
+            pool.apply(vec![ChangeAction::RemoveAllBelow(Height::from(10))]);
+
+            // Unvalidated artifacts at exactly the given height stay.
+            assert_eq!(
+                pool.unvalidated_shares_at_height(Height::from(9)).count(),
+                0
+            );
+            assert_eq!(
+                pool.unvalidated_certifications_at_height(Height::from(9))
+                    .count(),
+                0
+            );
+            assert_eq!(
+                pool.unvalidated_shares_at_height(Height::from(10)).count(),
+                1
+            );
+            assert_eq!(
+                pool.unvalidated_certifications_at_height(Height::from(10))
+                    .count(),
+                1
+            );
+            // INVARIANT: The size of the unvalidated pool must match the size of its height index
+            assert_eq!(
+                pool.unvalidated_share_index.size(),
+                pool.unvalidated_shares.len()
+            );
+            assert_eq!(
+                pool.unvalidated_cert_index.size(),
+                pool.unvalidated_certs.len()
+            )
+        });
+    }
+
+    #[test]
+    fn test_certification_pool_insert_is_idempotent() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let mut pool = CertificationPoolImpl::new(
+                node_test_id(0),
+                pool_config,
+                no_op_logger(),
+                MetricsRegistry::new(),
+            );
+            let share_msg = fake_share(5, 0);
+            let cert_msg = fake_cert(5);
+            pool.insert(to_unvalidated(share_msg.clone()));
+            pool.insert(to_unvalidated(share_msg.clone()));
+            pool.insert(to_unvalidated(cert_msg.clone()));
+            pool.insert(to_unvalidated(cert_msg.clone()));
+
+            assert_eq!(
+                pool.unvalidated_shares_at_height(Height::from(5)).count(),
+                1
+            );
+            assert_eq!(
+                pool.unvalidated_certifications_at_height(Height::from(5))
+                    .count(),
+                1
+            );
+            // INVARIANT: The size of the unvalidated pool must match the size of its height index
+            assert_eq!(
+                pool.unvalidated_share_index.size(),
+                pool.unvalidated_shares.len()
+            );
+            assert_eq!(
+                pool.unvalidated_cert_index.size(),
+                pool.unvalidated_certs.len()
+            );
+
+            // Removing an id that is not in the pool is a no-op.
+            pool.remove(&msg_to_id(&fake_share(6, 1)));
+            pool.remove(&msg_to_id(&fake_cert(6)));
+            assert_eq!(pool.unvalidated_shares.len(), 1);
+            assert_eq!(pool.unvalidated_certs.len(), 1);
+
+            // Removing once removes the single stored copy.
+            pool.remove(&msg_to_id(&share_msg));
+            pool.remove(&msg_to_id(&cert_msg));
+            assert!(pool.unvalidated_shares.is_empty());
+            assert!(pool.unvalidated_certs.is_empty());
+            assert_eq!(pool.unvalidated_share_index.size(), 0);
+            assert_eq!(pool.unvalidated_cert_index.size(), 0);
+        });
+    }
+
+    #[test]
     fn test_certification_pool_handle_invalid() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut pool = CertificationPoolImpl::new(
