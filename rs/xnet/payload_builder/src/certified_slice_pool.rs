@@ -85,7 +85,7 @@ impl CertifiedSlicePoolMetrics {
             ),
             lagging_put_and_append_count: metrics_registry.int_counter(
                 METRIC_LAGGING_PUT_AND_APPEND_COUNT,
-                "Count of XNet slice pool puts and appends whose stream header is behind the recorded one, i.e. of slices pulled from a lagging node.",
+                "Count of XNet slice pool puts and appends whose stream header is behind the recorded one, i.e. of slices pulled from or advertised by a lagging node.",
             ),
             take_count: metrics_registry.int_counter_vec(
                 METRIC_TAKE_COUNT,
