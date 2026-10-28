@@ -121,6 +121,10 @@ impl BackupHelper {
         create_if_not_exists(self.root_dir.join(format!("work_dir/{}", self.subnet_id)))
     }
 
+    fn trash_dir(&self) -> PathBuf {
+        create_if_not_exists(self.root_dir.join("trash"))
+    }
+
     fn cold_storage_artifacts_dir(&self) -> PathBuf {
         create_if_not_exists(
             self.cold_storage_dir
@@ -147,10 +151,6 @@ impl BackupHelper {
             self.cold_storage_dir
                 .join(format!("{}/trash", self.subnet_id)),
         )
-    }
-
-    fn trash_dir(&self) -> PathBuf {
-        create_if_not_exists(self.root_dir.join("trash"))
     }
 
     fn username(&self) -> String {
