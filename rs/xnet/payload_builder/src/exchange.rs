@@ -1213,6 +1213,8 @@ impl InFlightPulls {
         let subnet_id = self
             .subnets
             .remove(&id)
+            // `spawn()` records the subnet before returning, and both methods take
+            // `&mut self`, so the entry exists even if the task completed instantly.
             .expect("Every pull is spawned with its subnet");
         Some((subnet_id, pooled))
     }
@@ -1223,7 +1225,8 @@ const PULL_REQUESTS_CAPACITY: usize = 1024;
 
 /// A handle for a `PullTask`, used for triggering pool refills and requesting
 /// pulls. The task terminates once all its handles are dropped and its pulls
-/// have ended.
+/// (including any rescheduled partial pulls) have ended; or if the runtime is
+/// dropped during replica exit, aborting all tasks.
 #[derive(Clone)]
 pub struct PullTaskHandle {
     refill_trigger: mpsc::Sender<()>,
