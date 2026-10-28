@@ -16176,6 +16176,7 @@ dependencies = [
  "icrc-ledger-types",
  "num-traits",
  "pocket-ic",
+ "reqwest",
  "rosetta-core",
  "serde",
  "tempfile",
