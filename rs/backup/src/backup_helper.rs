@@ -456,10 +456,17 @@ impl BackupHelper {
         match self.maybe_cold_store_states() {
             Ok(false) => info!(self.log, "No need to move any states to the cold storage"),
             Ok(true) => info!(self.log, "Moved some states to the cold storage"),
-            Err(err) => warn!(
-                self.log,
-                "Failed moving some states to the cold storage: {}", err
-            ),
+            Err(err) => {
+                warn!(
+                    self.log,
+                    "Failed moving some states to the cold storage: {}", err
+                );
+                self.notification_client.report_failure_slack(
+                    "Failed moving some states to the cold storage!".to_string(),
+                );
+
+                return;
+            }
         }
 
         match self.apply_cold_storage_retention_policy() {
