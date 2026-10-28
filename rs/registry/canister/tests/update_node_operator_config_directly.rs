@@ -2,7 +2,8 @@ use dfn_candid::candid;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR,
-    TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
+    TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL, TEST_USER1_PRINCIPAL,
+    TEST_USER2_PRINCIPAL,
 };
 use ic_nns_test_utils::{
     itest_helpers::{set_up_registry_canister, state_machine_test_on_nns_subnet},
@@ -22,10 +23,20 @@ use registry_canister::{
 #[test]
 fn node_provider_is_updated_on_receiving_the_request() {
     state_machine_test_on_nns_subnet(|runtime| async move {
+        // The node operator under test, owned by node provider TEST_NEURON_2_OWNER_PRINCIPAL.
         let node_operator_key = make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL);
         let node_operator_record = NodeOperatorRecord {
             node_operator_principal_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
             node_provider_principal_id: (*TEST_NEURON_2_OWNER_PRINCIPAL).to_vec(),
+            ..Default::default()
+        };
+
+        // Another node operator, owned by node provider TEST_NEURON_3_OWNER_PRINCIPAL. This is
+        // what makes TEST_NEURON_3_OWNER_PRINCIPAL a node provider known to the registry.
+        let other_node_operator_key = make_node_operator_record_key(*TEST_USER1_PRINCIPAL);
+        let other_node_operator_record = NodeOperatorRecord {
+            node_operator_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
+            node_provider_principal_id: (*TEST_NEURON_3_OWNER_PRINCIPAL).to_vec(),
             ..Default::default()
         };
 
@@ -34,11 +45,18 @@ fn node_provider_is_updated_on_receiving_the_request() {
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
-                    mutations: vec![RegistryMutation {
-                        mutation_type: registry_mutation::Type::Insert as i32,
-                        key: node_operator_key.as_bytes().to_vec(),
-                        value: node_operator_record.encode_to_vec(),
-                    }],
+                    mutations: vec![
+                        RegistryMutation {
+                            mutation_type: registry_mutation::Type::Insert as i32,
+                            key: node_operator_key.as_bytes().to_vec(),
+                            value: node_operator_record.encode_to_vec(),
+                        },
+                        RegistryMutation {
+                            mutation_type: registry_mutation::Type::Insert as i32,
+                            key: other_node_operator_key.as_bytes().to_vec(),
+                            value: other_node_operator_record.encode_to_vec(),
+                        },
+                    ],
                     preconditions: vec![],
                 })
                 .build(),
@@ -60,7 +78,7 @@ fn node_provider_is_updated_on_receiving_the_request() {
             .await;
         assert!(response.is_err());
 
-        // Anonymous call fails
+        // Call from a principal other than the current node provider fails
         let response: Result<(), String> = registry
             .update_from_sender(
                 "update_node_operator_config_directly",
@@ -71,7 +89,34 @@ fn node_provider_is_updated_on_receiving_the_request() {
             .await;
         assert!(response.is_err());
 
-        // Call from correct caller succeeds
+        // Call from the correct caller, but to a principal that is not the node provider of any
+        // node operator record, fails
+        let payload_with_unknown_node_provider = UpdateNodeOperatorConfigDirectlyPayload {
+            node_operator_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+            node_provider_id: Some(*TEST_USER2_PRINCIPAL),
+        };
+        let response: Result<(), String> = registry
+            .update_from_sender(
+                "update_node_operator_config_directly",
+                candid,
+                (payload_with_unknown_node_provider,),
+                &Sender::from_keypair(&TEST_NEURON_2_OWNER_KEYPAIR),
+            )
+            .await;
+        assert!(response.is_err());
+
+        // Ensure the node operator's NP is unchanged
+        let node_operator_record = get_value_or_panic::<NodeOperatorRecord>(
+            &registry,
+            make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL).as_bytes(),
+        )
+        .await;
+        assert_eq!(
+            node_operator_record.node_provider_principal_id,
+            TEST_NEURON_2_OWNER_PRINCIPAL.to_vec()
+        );
+
+        // Call from correct caller to a known node provider succeeds
         let response: Result<(), String> = registry
             .update_from_sender(
                 "update_node_operator_config_directly",

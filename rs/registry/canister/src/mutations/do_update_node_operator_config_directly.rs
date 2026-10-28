@@ -1,3 +1,4 @@
+use crate::common::key_family::get_key_family_iter;
 use crate::{common::LOG_PREFIX, registry::Registry};
 use std::convert::TryFrom;
 use std::time::SystemTime;
@@ -9,7 +10,7 @@ use serde::Serialize;
 
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_registry_keys::make_node_operator_record_key;
+use ic_registry_keys::{NODE_OPERATOR_RECORD_KEY_PREFIX, make_node_operator_record_key};
 use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 
 use ic_nervous_system_time_helpers::now_system_time;
@@ -18,6 +19,11 @@ use prost::Message;
 impl Registry {
     /// Update an existing Node Operator's config without going through the proposal process.
     /// Only the current NP specified in a record can make changes to that record's NP field.
+    ///
+    /// The new NP must already be the NP of some node operator record. NP principals enter the
+    /// registry only through NNS proposals (`AddNodeOperator` and `UpdateNodeOperatorConfig`), so
+    /// this method can move a node operator between NPs the NNS has approved, but cannot
+    /// introduce a new NP.
     pub fn do_update_node_operator_config_directly(
         &mut self,
         payload: UpdateNodeOperatorConfigDirectlyPayload,
@@ -80,9 +86,24 @@ impl Registry {
             ));
         }
 
+        // 5. Check that the new Node Provider is already the Node Provider of some node operator
+        //    record. Such principals only enter the registry through NNS proposals, so this keeps
+        //    the direct path from introducing a Node Provider the NNS never approved. This also
+        //    matters for node rewards, which attribute each node's daily performance to the Node
+        //    Provider of its node operator: a Node Provider must not be able to move that
+        //    attribution to a principal of its own choosing without the NNS.
+        if !self.is_node_provider_of_some_node_operator(node_provider_id) {
+            return Err(format!(
+                "Node Provider {node_provider_id} is not the node provider of any node operator \
+                 record. A node operator can only be reassigned directly to a principal that is \
+                 already a node provider in the registry. To assign it to a new node provider, \
+                 submit an UpdateNodeOperatorConfig proposal instead."
+            ));
+        }
+
         node_operator_record.node_provider_principal_id = node_provider_id.to_vec();
 
-        // 5. Set and execute the mutation
+        // 6. Set and execute the mutation
         let mutations = vec![RegistryMutation {
             mutation_type: registry_mutation::Type::Update as i32,
             key: node_operator_record_key,
@@ -97,6 +118,17 @@ impl Registry {
         }
 
         Ok(())
+    }
+
+    /// Whether `principal` is the Node Provider of at least one node operator record at the
+    /// latest registry version.
+    fn is_node_provider_of_some_node_operator(&self, principal: PrincipalId) -> bool {
+        let principal = principal.to_vec();
+        get_key_family_iter::<NodeOperatorRecord>(self, NODE_OPERATOR_RECORD_KEY_PREFIX).any(
+            |(_node_operator_id, node_operator)| {
+                node_operator.node_provider_principal_id == principal
+            },
+        )
     }
 }
 
@@ -123,16 +155,13 @@ mod tests {
     use crate::mutations::node_management::common::get_node_operator_record;
     use maplit::btreemap;
 
-    #[test]
-    fn test_update_node_operator_config_directly_happy_path() {
-        let mut registry = invariant_compliant_registry(0);
-
-        let now = now_system_time();
-
-        let node_operator_id = PrincipalId::new_user_test_id(1_000);
-        let node_provider_id = PrincipalId::new_user_test_id(10_000);
-
-        // Make a proposal to upgrade all unassigned nodes to a new version
+    /// Adds a node operator record with the given principals, the way an `AddNodeOperator`
+    /// proposal would.
+    fn add_node_operator(
+        registry: &mut Registry,
+        node_operator_id: PrincipalId,
+        node_provider_id: PrincipalId,
+    ) {
         let payload = AddNodeOperatorPayload {
             node_operator_principal_id: Some(node_operator_id),
             node_provider_principal_id: Some(node_provider_id),
@@ -144,8 +173,33 @@ mod tests {
         };
 
         registry.do_add_node_operator(payload);
+    }
 
+    fn node_provider_of(registry: &Registry, node_operator_id: PrincipalId) -> PrincipalId {
+        PrincipalId::try_from(
+            get_node_operator_record(registry, node_operator_id)
+                .unwrap()
+                .node_provider_principal_id,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn test_update_node_operator_config_directly_happy_path() {
+        let mut registry = invariant_compliant_registry(0);
+
+        let now = now_system_time();
+
+        let node_operator_id = PrincipalId::new_user_test_id(1_000);
+        let node_provider_id = PrincipalId::new_user_test_id(10_000);
+        add_node_operator(&mut registry, node_operator_id, node_provider_id);
+
+        // The new node provider is already the node provider of another node operator, i.e. the
+        // NNS has approved it before.
         let new_np_id = PrincipalId::new_user_test_id(10_001);
+        let other_node_operator_id = PrincipalId::new_user_test_id(1_001);
+        add_node_operator(&mut registry, other_node_operator_id, new_np_id);
+
         let request = UpdateNodeOperatorConfigDirectlyPayload {
             node_operator_id: Some(node_operator_id),
             node_provider_id: Some(new_np_id),
@@ -158,14 +212,81 @@ mod tests {
             .do_update_node_operator_config_directly_(request, caller, now)
             .unwrap();
 
+        assert_eq!(node_provider_of(&registry, node_operator_id), new_np_id);
+        // The other node operator is untouched.
         assert_eq!(
-            PrincipalId::try_from(
-                get_node_operator_record(&registry, node_operator_id)
-                    .unwrap()
-                    .node_provider_principal_id
-            )
-            .unwrap(),
+            node_provider_of(&registry, other_node_operator_id),
             new_np_id
+        );
+    }
+
+    #[test]
+    fn test_update_node_operator_config_directly_rejects_unknown_node_provider() {
+        let mut registry = invariant_compliant_registry(0);
+
+        let now = now_system_time();
+
+        let node_operator_id = PrincipalId::new_user_test_id(1_000);
+        let node_provider_id = PrincipalId::new_user_test_id(10_000);
+        add_node_operator(&mut registry, node_operator_id, node_provider_id);
+
+        // No node operator record names this principal as its node provider.
+        let unknown_np_id = PrincipalId::new_user_test_id(10_001);
+
+        let request = UpdateNodeOperatorConfigDirectlyPayload {
+            node_operator_id: Some(node_operator_id),
+            node_provider_id: Some(unknown_np_id),
+        };
+
+        // Even the current node provider cannot hand the node operator to an unknown principal.
+        let caller = node_provider_id;
+        let available_before = registry.get_available_node_provider_op_capacity(caller, now);
+
+        let error = registry
+            .do_update_node_operator_config_directly_(request, caller, now)
+            .unwrap_err();
+
+        assert!(
+            error.contains("not the node provider of any node operator"),
+            "unexpected error: {error}"
+        );
+        assert!(error.contains(&unknown_np_id.to_string()), "{error}");
+
+        // The record is unchanged, and the rejected call did not use up rate limit capacity.
+        assert_eq!(
+            node_provider_of(&registry, node_operator_id),
+            node_provider_id
+        );
+        assert_eq!(
+            registry.get_available_node_provider_op_capacity(caller, now),
+            available_before
+        );
+    }
+
+    #[test]
+    fn test_update_node_operator_config_directly_accepts_current_node_provider() {
+        let mut registry = invariant_compliant_registry(0);
+
+        let now = now_system_time();
+
+        let node_operator_id = PrincipalId::new_user_test_id(1_000);
+        let node_provider_id = PrincipalId::new_user_test_id(10_000);
+        add_node_operator(&mut registry, node_operator_id, node_provider_id);
+
+        // Reassigning to the node provider the record already has is a no-op that must still be
+        // accepted: that principal is known through this very record.
+        let request = UpdateNodeOperatorConfigDirectlyPayload {
+            node_operator_id: Some(node_operator_id),
+            node_provider_id: Some(node_provider_id),
+        };
+
+        registry
+            .do_update_node_operator_config_directly_(request, node_provider_id, now)
+            .unwrap();
+
+        assert_eq!(
+            node_provider_of(&registry, node_operator_id),
+            node_provider_id
         );
     }
 
@@ -177,19 +298,7 @@ mod tests {
 
         let node_operator_id = PrincipalId::new_user_test_id(1_000);
         let node_provider_id = PrincipalId::new_user_test_id(10_000);
-
-        // Make a proposal to upgrade all unassigned nodes to a new version
-        let payload = AddNodeOperatorPayload {
-            node_operator_principal_id: Some(node_operator_id),
-            node_provider_principal_id: Some(node_provider_id),
-            node_allowance: 1,
-            dc_id: "DC1".to_string(),
-            rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
-            ipv6: Some("bar".to_string()),
-            max_rewardable_nodes: Some(btreemap! { "type1.2".to_string() => 1 }),
-        };
-
-        registry.do_add_node_operator(payload);
+        add_node_operator(&mut registry, node_operator_id, node_provider_id);
 
         let request = UpdateNodeOperatorConfigDirectlyPayload {
             node_operator_id: Some(node_operator_id),
@@ -217,19 +326,7 @@ mod tests {
 
         let node_operator_id = PrincipalId::new_user_test_id(1_000);
         let node_provider_id = PrincipalId::new_user_test_id(10_000);
-
-        // Make a proposal to upgrade all unassigned nodes to a new version
-        let payload = AddNodeOperatorPayload {
-            node_operator_principal_id: Some(node_operator_id),
-            node_provider_principal_id: Some(node_provider_id),
-            node_allowance: 1,
-            dc_id: "DC1".to_string(),
-            rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
-            ipv6: Some("bar".to_string()),
-            max_rewardable_nodes: Some(btreemap! { "type1.2".to_string() => 1 }),
-        };
-
-        registry.do_add_node_operator(payload);
+        add_node_operator(&mut registry, node_operator_id, node_provider_id);
 
         let request = UpdateNodeOperatorConfigDirectlyPayload {
             node_operator_id: Some(node_operator_id),
