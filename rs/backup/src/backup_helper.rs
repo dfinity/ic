@@ -461,7 +461,7 @@ impl BackupHelper {
                     self.log,
                     "Failed moving some states to the cold storage: {}", err
                 );
-                self.notification_client.report_failure_slack(
+                self.notification_client.report_warning_slack(
                     "Failed moving some states to the cold storage!".to_string(),
                 );
 
