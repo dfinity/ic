@@ -382,10 +382,12 @@ pub async fn search_transactions(
             Error::request_processing_error(&format!("Max block has to be a valid u64: {err}"))
         })?;
 
+    // Cap the limit to MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST to bound the number of blocks fetched in a single request.
     let limit: u64 = request
         .limit
         .unwrap_or(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST as i64)
         .try_into()
+        .map(|limit: u64| limit.min(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST))
         .map_err(|err| {
             Error::request_processing_error(&format!("Limit has to be a valid u64: {err}"))
         })?;
@@ -1370,6 +1372,100 @@ mod test {
                 },
             )
             .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_search_transactions_caps_limit() {
+        use crate::common::storage::types::{IcrcBlock, IcrcTransaction};
+
+        let storage_client = StorageClient::new_in_memory().await.unwrap();
+        let num_blocks = MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST + 1;
+        let to = Account {
+            owner: Principal::anonymous(),
+            subaccount: None,
+        };
+        let blocks = (0..num_blocks)
+            .map(|index| {
+                RosettaBlock::from_icrc_ledger_block(
+                    IcrcBlock {
+                        parent_hash: None,
+                        transaction: IcrcTransaction {
+                            operation: IcrcOperation::Mint {
+                                to,
+                                amount: Nat::from(1_u64),
+                                fee: None,
+                            },
+                            created_at_time: Some(index),
+                            memo: None,
+                        },
+                        effective_fee: None,
+                        timestamp: index,
+                        fee_collector: None,
+                        fee_collector_block_index: None,
+                        btype: None,
+                    },
+                    index,
+                )
+            })
+            .collect::<Vec<_>>();
+        storage_client.store_blocks(blocks).await.unwrap();
+
+        // A limit above the maximum is capped to the maximum
+        let result = search_transactions(
+            &storage_client,
+            SearchTransactionsRequest {
+                limit: Some(i64::MAX),
+                ..Default::default()
+            },
+            "ICP".to_string(),
+            8,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            result.transactions.len() as u64,
+            MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST
+        );
+        assert_eq!(
+            result.total_count as u64,
+            MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST
+        );
+        assert_eq!(
+            result.next_offset,
+            Some(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST as i64)
+        );
+
+        // The remaining transactions can be fetched using the returned offset
+        let result = search_transactions(
+            &storage_client,
+            SearchTransactionsRequest {
+                limit: Some(i64::MAX),
+                offset: result.next_offset,
+                ..Default::default()
+            },
+            "ICP".to_string(),
+            8,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.transactions.len(), 1);
+        assert_eq!(result.transactions[0].block_identifier.index, 0);
+        assert_eq!(result.next_offset, None);
+
+        // A negative limit is still rejected
+        assert!(
+            search_transactions(
+                &storage_client,
+                SearchTransactionsRequest {
+                    limit: Some(-1),
+                    ..Default::default()
+                },
+                "ICP".to_string(),
+                8,
+            )
+            .await
+            .is_err()
+        );
     }
 
     #[tokio::test]
