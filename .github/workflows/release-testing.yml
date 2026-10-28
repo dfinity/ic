@@ -56,7 +56,7 @@ jobs:
               --test_tag_filters=system_test_large,-local_system_test \
               //rs/tests/... \
               --keep_going
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
 
   ci-main:
     name: CI Main
@@ -121,7 +121,7 @@ jobs:
               //rs/tests/dre:guest_os_qualification_farm_colocate \
               --test_env=OLD_VERSION=${{ matrix.version }} \
               --keep_going --test_timeout=7200
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
 
   repro-check:
     name: Repro check for ${{ github.sha }}
