@@ -1,5 +1,6 @@
 use crate::{
     notification_client::NotificationClient,
+    retention_policy::{ColdStoredState, RetentionPolicy},
     util::{block_on, sleep_secs},
 };
 use anyhow::{Context, anyhow, bail};
@@ -13,7 +14,7 @@ use ic_types::{ReplicaVersion, SubnetId};
 use rand::{seq::SliceRandom, thread_rng};
 use slog::{Logger, debug, error, info, warn};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     ffi::OsStr,
     fs::{DirEntry, File, create_dir_all, read_dir, remove_dir_all},
     io::Write,
@@ -47,6 +48,7 @@ pub(crate) struct BackupHelper {
     pub(crate) cold_disk_resource_threshold_percentage: u32,
     pub(crate) cold_storage_dir: PathBuf,
     pub(crate) versions_hot: usize,
+    pub(crate) cold_storage_retention_policy: Option<RetentionPolicy>,
     pub(crate) max_logs_age_to_keep: Option<Duration>,
     pub(crate) artifacts_guard: Mutex<bool>,
     pub(crate) logs_dir: Arc<Mutex<PathBuf>>,
@@ -129,6 +131,13 @@ impl BackupHelper {
         create_if_not_exists(
             self.cold_storage_dir
                 .join(format!("{}/states", self.subnet_id)),
+        )
+    }
+
+    fn cold_storage_trash_dir(&self) -> PathBuf {
+        create_if_not_exists(
+            self.cold_storage_dir
+                .join(format!("{}/trash", self.subnet_id)),
         )
     }
 
@@ -443,6 +452,38 @@ impl BackupHelper {
                 self.log,
                 "Failed moving some states to the cold storage: {}", err
             ),
+        }
+
+        match self.apply_cold_storage_retention_policy() {
+            Ok(heights_to_delete) => {
+                if let (Some(first), Some(last)) =
+                    (heights_to_delete.first(), heights_to_delete.last())
+                {
+                    let dry_run = self
+                        .cold_storage_retention_policy
+                        .as_ref()
+                        .is_some_and(|policy| policy.dry_run);
+                    let deleted = if dry_run {
+                        "Would have deleted"
+                    } else {
+                        "Deleted"
+                    };
+                    self.notification_client.message_slack(format!(
+                        "🧹 {deleted} {} states with heights between {first} and {last} from the \
+                        cold storage",
+                        heights_to_delete.len()
+                    ));
+                }
+            }
+            Err(err) => {
+                warn!(
+                    self.log,
+                    "Failed applying the cold storage retention policy: {}", err
+                );
+                self.notification_client.report_warning_slack(format!(
+                    "Failed applying the cold storage retention policy: {err}"
+                ));
+            }
         }
     }
 
@@ -966,6 +1007,50 @@ impl BackupHelper {
             >= 1
     }
 
+    /// Deletes the states from the cold storage which are not retained by the retention policy of
+    /// the subnet. Returns the heights of the deleted states, or of the states which would have
+    /// been deleted if the policy is a dry run.
+    fn apply_cold_storage_retention_policy(&self) -> Result<BTreeSet<u64>, String> {
+        let Some(policy) = &self.cold_storage_retention_policy else {
+            return Ok(BTreeSet::new());
+        };
+        if !self.do_cold_storage {
+            return Ok(BTreeSet::new());
+        }
+
+        let states_dir = self.cold_storage_states_dir();
+        let states = collect_cold_stored_states(&self.log, &states_dir)?;
+        let heights_to_delete = policy.heights_to_delete(&states);
+        info!(
+            self.log,
+            "{}: {} {} out of {} states from the cold storage: {:?}",
+            policy,
+            if policy.dry_run {
+                "would delete"
+            } else {
+                "deleting"
+            },
+            heights_to_delete.len(),
+            states.len(),
+            heights_to_delete
+        );
+        if policy.dry_run || heights_to_delete.is_empty() {
+            return Ok(heights_to_delete);
+        }
+
+        // Move the states to a trash directory on the same disk first, so that a partially
+        // deleted state never looks like a complete one.
+        let trash_dir = self.cold_storage_trash_dir();
+        for height in &heights_to_delete {
+            let dir_name = height.to_string();
+            std::fs::rename(states_dir.join(&dir_name), trash_dir.join(&dir_name))
+                .map_err(|err| format!("Error moving state {height} to the trash: {err:?}"))?;
+        }
+        remove_dir_all(trash_dir).map_err(|err| format!("Error deleting trash dir: {err:?}"))?;
+
+        Ok(heights_to_delete)
+    }
+
     fn cold_storage_newest_state_timestamp(&self) -> anyhow::Result<DateTime<Utc>> {
         let last_height = last_dir_height(&self.cold_storage_states_dir(), 10);
 
@@ -998,7 +1083,7 @@ fn into_replica_version(log: &Logger, spool_dir: &DirEntry) -> Option<ReplicaVer
     Some(replica_version)
 }
 
-fn collect_only_dirs(path: &PathBuf) -> Result<Vec<DirEntry>, String> {
+fn collect_only_dirs(path: &Path) -> Result<Vec<DirEntry>, String> {
     Ok(read_dir(path)
         .map_err(|e| format!("Error reading directory {path:?}: {e}"))?
         .flatten()
@@ -1100,6 +1185,42 @@ pub(crate) fn retrieve_replica_version_last_replayed(
     current_replica_version
 }
 
+/// Lists the states in the given cold storage directory, sorted by height. Entries whose name is
+/// not a height are skipped.
+pub(crate) fn collect_cold_stored_states(
+    log: &Logger,
+    states_dir: &Path,
+) -> Result<Vec<ColdStoredState>, String> {
+    let mut states = Vec::new();
+    for entry in collect_only_dirs(states_dir)? {
+        let dir_name = entry.file_name();
+        let Some(height) = dir_name.to_str().and_then(|dir_name| {
+            dir_name
+                .parse::<u64>()
+                .ok()
+                .filter(|height| height.to_string() == dir_name)
+        }) else {
+            warn!(log, "Skipping {:?}: not a state directory", entry.path());
+            continue;
+        };
+        let timestamp = match state_dir_timestamp(&entry.path()) {
+            Ok(timestamp) => Some(timestamp),
+            Err(err) => {
+                warn!(
+                    log,
+                    "Failed to read the timestamp of {:?}, the state will be kept: {:#}",
+                    entry.path(),
+                    err
+                );
+                None
+            }
+        };
+        states.push(ColdStoredState { height, timestamp });
+    }
+    states.sort_by_key(|state| state.height);
+    Ok(states)
+}
+
 fn state_dir_timestamp(dir: &Path) -> anyhow::Result<DateTime<Utc>> {
     let path = dir.join(TIMESTAMP_FILE_NAME);
     let timestamp_str =
@@ -1110,7 +1231,7 @@ fn state_dir_timestamp(dir: &Path) -> anyhow::Result<DateTime<Utc>> {
     Ok(timestamp.into())
 }
 
-fn write_timestamp(dir: &Path, timestamp: DateTime<Utc>) -> anyhow::Result<()> {
+pub(crate) fn write_timestamp(dir: &Path, timestamp: DateTime<Utc>) -> anyhow::Result<()> {
     let timestamp_str = format!("{}\n", timestamp.to_rfc2822());
     let mut file =
         File::create(dir.join(TIMESTAMP_FILE_NAME)).context("Error creating timestamp file")?;
@@ -1132,6 +1253,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+    use crate::retention_policy::RetentionRule;
 
     const FAKE_SUBNET_ID: &str = "gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe";
 
@@ -1350,6 +1472,98 @@ mod tests {
     }
 
     #[test]
+    fn apply_cold_storage_retention_policy_test() {
+        let dir = tmpdir("test_dir");
+        let mut backup_helper = fake_backup_helper(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+        );
+        backup_helper.cold_storage_retention_policy = Some(fake_retention_policy());
+        create_cold_stored_states(&backup_helper, 0..=100);
+        let states_dir = backup_helper.cold_storage_states_dir();
+        // A state without a timestamp, and a directory which is not a state.
+        create_dir_all(states_dir.join("1000")).unwrap();
+        create_dir_all(states_dir.join("lost+found")).unwrap();
+
+        let deleted_heights = backup_helper
+            .apply_cold_storage_retention_policy()
+            .expect("should execute successfully");
+
+        assert_eq!(
+            deleted_heights,
+            (1..=78).chain(80..=88).chain(90..=98).collect()
+        );
+        assert_eq!(
+            collect_and_sort_dir_entries(&states_dir),
+            vec!["0", "100", "1000", "79", "89", "99", "lost+found"]
+        );
+        assert!(
+            !backup_helper
+                .cold_storage_dir
+                .join(FAKE_SUBNET_ID)
+                .join("trash")
+                .exists()
+        );
+    }
+
+    #[test]
+    fn apply_cold_storage_retention_policy_dry_run_test() {
+        let dir = tmpdir("test_dir");
+        let mut backup_helper = fake_backup_helper(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+        );
+        backup_helper.cold_storage_retention_policy = Some(RetentionPolicy {
+            dry_run: true,
+            ..fake_retention_policy()
+        });
+        create_cold_stored_states(&backup_helper, 0..=100);
+
+        let heights_to_delete = backup_helper
+            .apply_cold_storage_retention_policy()
+            .expect("should execute successfully");
+
+        assert_eq!(
+            heights_to_delete,
+            (1..=78).chain(80..=88).chain(90..=98).collect()
+        );
+        assert_eq!(
+            collect_and_sort_dir_entries(&backup_helper.cold_storage_states_dir()).len(),
+            101
+        );
+    }
+
+    #[rstest]
+    #[case::no_retention_policy(None, true)]
+    #[case::cold_storage_disabled(Some(fake_retention_policy()), false)]
+    fn apply_cold_storage_retention_policy_does_not_delete_test(
+        #[case] cold_storage_retention_policy: Option<RetentionPolicy>,
+        #[case] do_cold_storage: bool,
+    ) {
+        let dir = tmpdir("test_dir");
+        let mut backup_helper = fake_backup_helper(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+        );
+        backup_helper.cold_storage_retention_policy = cold_storage_retention_policy;
+        backup_helper.do_cold_storage = do_cold_storage;
+        create_cold_stored_states(&backup_helper, 0..=100);
+
+        let deleted_heights = backup_helper
+            .apply_cold_storage_retention_policy()
+            .expect("should execute successfully");
+
+        assert!(deleted_heights.is_empty());
+        assert_eq!(
+            collect_and_sort_dir_entries(&backup_helper.cold_storage_states_dir()).len(),
+            101
+        );
+    }
+
+    #[test]
     fn test_purge_old_logs_works() {
         let dir = tmpdir("test_dir");
         let backup_helper = fake_backup_helper(
@@ -1417,6 +1631,29 @@ mod tests {
 
     // Utility functions below
 
+    /// Keeps one state every 10 days, for 30 days.
+    fn fake_retention_policy() -> RetentionPolicy {
+        RetentionPolicy {
+            rules: vec![RetentionRule {
+                period_days: 10,
+                time_to_live_days: 30,
+            }],
+            dry_run: false,
+        }
+    }
+
+    /// Creates a cold stored state for each day, archived at that number of days after the Unix
+    /// epoch, at a height equal to the number of days.
+    fn create_cold_stored_states(backup_helper: &BackupHelper, days: impl Iterator<Item = u64>) {
+        for day in days {
+            let dir = backup_helper
+                .cold_storage_states_dir()
+                .join(day.to_string());
+            create_dir_all(&dir).unwrap();
+            write_timestamp(&dir, DateTime::UNIX_EPOCH + chrono::Days::new(day)).unwrap();
+        }
+    }
+
     fn create_artifacts_dir_with_heights(replica_version_dir: &Path, heights: Vec<u64>) {
         for height in heights {
             let shard = 100 * (height / 100);
@@ -1469,6 +1706,7 @@ mod tests {
             cold_disk_resource_threshold_percentage: 95,
             cold_storage_dir: temp_dir.join("cold_storage"),
             versions_hot,
+            cold_storage_retention_policy: None,
             artifacts_guard: Mutex::new(true),
             daily_replays,
             do_cold_storage: true,

@@ -1,3 +1,4 @@
+use crate::retention_policy::RetentionPolicy;
 use ic_config::{ConfigSource, ConfigValidate};
 use ic_types::{ReplicaVersion, SubnetId};
 use serde::{Deserialize, Serialize};
@@ -17,6 +18,8 @@ pub struct SubnetConfig {
     pub replay_period_secs: u64,
     pub thread_id: u32,
     pub disable_cold_storage: bool,
+    /// Which states to delete from the cold storage. Nothing is deleted if `None`.
+    pub cold_storage_retention_policy: Option<RetentionPolicy>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -65,6 +68,16 @@ impl ConfigValidate for Config {
         // we accept no subnets in the config at the initial stage only
         if self.subnets.is_empty() && self.slack_token != "<INSERT SLACK TOKEN>" {
             return Err("No subnet configured for backup!".to_string());
+        }
+        for subnet in &self.subnets {
+            if let Some(policy) = &subnet.cold_storage_retention_policy {
+                policy.validate().map_err(|err| {
+                    format!(
+                        "Invalid cold storage retention policy for subnet {}: {err}",
+                        subnet.subnet_id
+                    )
+                })?;
+            }
         }
         Ok(self)
     }

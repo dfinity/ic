@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{BTreeSet, HashSet},
     fs,
     io::BufRead,
     path::PathBuf,
@@ -19,10 +19,13 @@ use slog::{Logger, error, info, o};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    backup_helper::{BackupHelper, retrieve_replica_version_last_replayed},
+    backup_helper::{
+        BackupHelper, collect_cold_stored_states, retrieve_replica_version_last_replayed,
+    },
     cmd::BackupArgs,
     config::{ColdStorage, Config, SubnetConfig},
     notification_client::NotificationClient,
+    retention_policy::{RetentionPolicy, RetentionRule},
     util::sleep_secs,
 };
 
@@ -139,6 +142,7 @@ impl BackupManager {
                     .cold_disk_resource_threshold_percentage,
                 cold_storage_dir: cold_storage_dir.clone(),
                 versions_hot,
+                cold_storage_retention_policy: subnet_config.cold_storage_retention_policy,
                 artifacts_guard: Mutex::new(true),
                 daily_replays,
                 do_cold_storage: !subnet_config.disable_cold_storage,
@@ -169,6 +173,52 @@ impl BackupManager {
         let replica_version = retrieve_replica_version_last_replayed(&log, spool_dir, state_dir)
             .expect("Proper replica version is expected");
         println!("{replica_version}")
+    }
+
+    /// Prints which cold stored states of the subnet a retention policy with the given rules would
+    /// delete, without deleting anything. Returns the heights of these states.
+    pub fn simulate_retention_policy(
+        log: Logger,
+        config_file: PathBuf,
+        subnet_id: SubnetId,
+        rules: Vec<RetentionRule>,
+    ) -> BTreeSet<u64> {
+        let config = Config::load_config(config_file).expect("Config file can't be loaded");
+        let cold_storage = config.cold_storage.expect("Cold storage is not configured");
+        let policy = RetentionPolicy {
+            rules,
+            dry_run: true,
+        };
+        policy.validate().expect("Invalid retention policy");
+
+        let states_dir = cold_storage
+            .cold_storage_dir
+            .join(format!("{subnet_id}/states"));
+        let states = collect_cold_stored_states(&log, &states_dir)
+            .expect("Cold stored states can't be listed");
+        let heights_to_delete = policy.heights_to_delete(&states);
+
+        println!("{policy}");
+        for state in &states {
+            let timestamp = state
+                .timestamp
+                .map_or("no timestamp".to_string(), |timestamp| {
+                    timestamp.format("%Y-%m-%d %H:%M:%S UTC").to_string()
+                });
+            let action = if heights_to_delete.contains(&state.height) {
+                "delete"
+            } else {
+                "keep"
+            };
+            println!("{:>15}  {timestamp:<23}  {action}", state.height);
+        }
+        println!(
+            "{} states would be kept and {} deleted",
+            states.len() - heights_to_delete.len(),
+            heights_to_delete.len()
+        );
+
+        heights_to_delete
     }
 
     pub fn upgrade(log: Logger, config_file: PathBuf) {
@@ -258,6 +308,7 @@ impl BackupManager {
                 replay_period_secs,
                 thread_id,
                 disable_cold_storage: false,
+                cold_storage_retention_policy: None,
             })
         }
 
@@ -496,10 +547,13 @@ fn cold_store(m: Arc<BackupManager>) {
 mod tests {
     use std::{fs::File, io::Write};
 
+    use chrono::{DateTime, Days};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_tmpdir::tmpdir;
+    use url::Url;
 
     use super::*;
+    use crate::backup_helper::write_timestamp;
 
     const FAKE_SUBNET_ID: &str = "drqnc-7tqyt-atxvj-gc6rp-lly5u-i6kqv-37nvv-uncaw-7vpwn-rx33x-aqe";
     const FAKE_INITIAL_REPLICA_VERSION: &str = "26";
@@ -566,6 +620,7 @@ mod tests {
                 replay_period_secs: FAKE_REPLAY_PERIOD_MINS * 60,
                 thread_id: 1,
                 disable_cold_storage: false,
+                cold_storage_retention_policy: None,
             }],
             cold_storage: Some(ColdStorage {
                 cold_storage_dir: fake_cold_storage_path,
@@ -578,5 +633,51 @@ mod tests {
         let config = Config::load_config(fake_config_path).unwrap();
 
         assert_eq!(config, expected_config);
+    }
+
+    #[test]
+    fn simulate_retention_policy_does_not_delete_anything_test() {
+        let dir = tmpdir("test_dir");
+        let fake_config_path = dir.as_ref().join("fake_config.json");
+        let fake_ssh_private_key_path = dir.as_ref().join("fake_ssh_private_key");
+        let fake_cold_storage_path = dir.as_ref().join("fake_cold_storage");
+        File::create(&fake_ssh_private_key_path).unwrap();
+
+        Config {
+            nns_url: Some(Url::parse("https://fake_nns_url.example").unwrap()),
+            ssh_private_key: fake_ssh_private_key_path,
+            slack_token: "<INSERT SLACK TOKEN>".to_string(),
+            cold_storage: Some(ColdStorage {
+                cold_storage_dir: fake_cold_storage_path.clone(),
+                versions_hot: FAKE_VERSIONS_HOT,
+            }),
+            ..Default::default()
+        }
+        .save_config(fake_config_path.clone())
+        .unwrap();
+
+        let states_dir = fake_cold_storage_path.join(FAKE_SUBNET_ID).join("states");
+        for day in 0..=100 {
+            let state_dir = states_dir.join(day.to_string());
+            fs::create_dir_all(&state_dir).unwrap();
+            write_timestamp(&state_dir, DateTime::UNIX_EPOCH + Days::new(day)).unwrap();
+        }
+
+        let heights_to_delete = BackupManager::simulate_retention_policy(
+            no_op_logger().inner_logger.root,
+            fake_config_path,
+            SubnetId::from(PrincipalId::from_str(FAKE_SUBNET_ID).unwrap()),
+            // Keep one state every 10 days, for 10 days.
+            vec![RetentionRule {
+                period_days: 10,
+                time_to_live_days: 10,
+            }],
+        );
+
+        assert_eq!(heights_to_delete, (1..=98).collect());
+        // The simulation must not delete anything.
+        for day in 0..=100 {
+            assert!(states_dir.join(day.to_string()).exists());
+        }
     }
 }
