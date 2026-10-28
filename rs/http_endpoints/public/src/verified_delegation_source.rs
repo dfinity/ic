@@ -48,7 +48,7 @@ impl VerifiedDelegationSource {
                 warn!(
                     every_n_seconds => LOG_EVERY_N_SECONDS,
                     self.log,
-                    "Failed to verify the NNS delegation (endpoint: {}): {err:?}",
+                    "Failed to verify the NNS delegation (endpoint: {}): {err}",
                     self.endpoint_type
                 );
                 self.metrics
