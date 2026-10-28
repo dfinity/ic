@@ -72,11 +72,9 @@ pub trait MutablePool<T: IdentifiableArtifact> {
     fn apply(&mut self, mutations: Self::Mutations) -> ArtifactTransmits<T>;
 }
 
-/// ValidatedPoolReader trait is the generic interface used by P2P to look up
-/// artifacts in the validated portion of an artifact pool without resulting in any
-/// transmits, e.g. to serve them to peers that request them or to fill in stripped
-/// block proposals.
-/// Every pool that P2P looks up artifacts in needs to implement this trait.
+/// ValidatedPoolReader trait is the generic interface used by P2P to interact
+/// with the validated portion of an artifact pool without resulting in any transmits.
+/// Every pool needs to implement this trait.
 pub trait ValidatedPoolReader<T: IdentifiableArtifact> {
     /// Get a validated artifact by its identifier
     ///
@@ -88,8 +86,6 @@ pub trait ValidatedPoolReader<T: IdentifiableArtifact> {
 
 /// InitialBroadcastSource trait is the interface used by the artifact manager to
 /// learn which artifacts of a pool to broadcast when it starts.
-/// Every pool that the artifact manager broadcasts artifacts from on start needs to
-/// implement this trait.
 pub trait InitialBroadcastSource<T: IdentifiableArtifact> {
     /// Returns all artifacts that need to be broadcasted.
     /// This is used only whenever a node is restarted.
