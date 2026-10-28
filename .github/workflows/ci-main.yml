@@ -601,16 +601,23 @@ jobs:
           echo bundledir="$bundledir" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials
+        id: aws-credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-session-name: "GitHub-Actions_ic_upload-artifacts"
           role-to-assume: ${{ vars.AWS_ASSUME_ROLE }}
           aws-region: eu-central-1
+          # Only for the Upload artifacts step, as in bazel-test-all.
+          output-env-credentials: false
+          output-credentials: true
 
       - name: Upload artifacts
         id: upload-artifacts
         uses: ./.github/actions/upload-artifacts
         env:
+          AWS_ACCESS_KEY_ID: ${{ steps.aws-credentials.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.aws-credentials.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.aws-credentials.outputs.aws-session-token }}
           CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
           CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
