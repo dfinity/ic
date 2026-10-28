@@ -1058,7 +1058,7 @@ impl BackupHelper {
             states.len(),
             heights_to_delete
         );
-        if policy.dry_run || heights_to_delete.is_empty() {
+        if policy.dry_run {
             return Ok(heights_to_delete);
         }
 
@@ -1578,6 +1578,8 @@ mod tests {
             ..fake_retention_policy()
         });
         create_cold_stored_states(&backup_helper, 0..=100);
+        let trashed_state_dir = backup_helper.cold_storage_trash_dir().join("42");
+        create_dir_all(&trashed_state_dir).unwrap();
 
         let heights_to_delete = backup_helper
             .apply_cold_storage_retention_policy()
@@ -1591,6 +1593,30 @@ mod tests {
             collect_and_sort_dir_entries(&backup_helper.cold_storage_states_dir()).len(),
             101
         );
+
+        // Dry-run does not empty an existing state in the trash.
+        assert!(trashed_state_dir.exists());
+    }
+
+    #[test]
+    fn apply_cold_storage_retention_policy_empties_trash_test() {
+        let dir = tmpdir("test_dir");
+        let mut backup_helper = fake_backup_helper(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+        );
+        backup_helper.cold_storage_retention_policy = Some(fake_retention_policy());
+        // A state left in the trash by an interrupted run, while no state is to be deleted.
+        let trash_dir = backup_helper.cold_storage_trash_dir();
+        create_dir_all(trash_dir.join("42")).unwrap();
+
+        let heights_to_delete = backup_helper
+            .apply_cold_storage_retention_policy()
+            .expect("should execute successfully");
+
+        assert!(heights_to_delete.is_empty());
+        assert!(!trash_dir.exists());
     }
 
     #[rstest]
