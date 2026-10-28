@@ -27,8 +27,10 @@ pub const SYNC_CALL_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT: &str = "subscription_ti
 pub const SYNC_CALL_EARLY_RESPONSE_CERTIFICATION_TIMEOUT: &str = "certification_timeout";
 pub const SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE: &str =
     "message_already_in_certified_state";
+pub const SYNC_CALL_EARLY_RESPONSE_DELEGATION_UNVERIFIED: &str = "delegation_unverified";
 pub const SYNC_CALL_STATUS_IS_NOT_LEAF: &str = "not_leaf";
 pub const SYNC_CALL_STATUS_IS_INVALID_UTF8: &str = "is_invalid_utf8";
+pub const SYNC_CALL_STATUS_DELEGATION_UNVERIFIED: &str = "delegation_unverified";
 pub const CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS: &str =
     "http_handler_sync_call_unknown_certificate_status";
 

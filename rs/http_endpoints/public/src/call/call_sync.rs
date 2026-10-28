@@ -10,11 +10,12 @@ use crate::{
     metrics::{
         CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS, HttpHandlerMetrics,
         SYNC_CALL_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
+        SYNC_CALL_EARLY_RESPONSE_DELEGATION_UNVERIFIED,
         SYNC_CALL_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
         SYNC_CALL_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
         SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE,
-        SYNC_CALL_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT, SYNC_CALL_STATUS_IS_INVALID_UTF8,
-        SYNC_CALL_STATUS_IS_NOT_LEAF,
+        SYNC_CALL_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT, SYNC_CALL_STATUS_DELEGATION_UNVERIFIED,
+        SYNC_CALL_STATUS_IS_INVALID_UTF8, SYNC_CALL_STATUS_IS_NOT_LEAF,
     },
     verified_delegation_source::VerifiedDelegationSource,
 };
@@ -32,7 +33,9 @@ use ic_crypto_tree_hash::{
 use ic_error_types::UserError;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn};
-use ic_nns_delegation_manager::{CanisterRangesCheck, CanisterRangesFilter, NNSDelegationReader};
+use ic_nns_delegation_manager::{
+    CanisterRangesCheck, CanisterRangesFilter, DelegationVerificationError, NNSDelegationReader,
+};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     CanisterId, Height, PrincipalId, SubnetId,
@@ -260,6 +263,11 @@ async fn call_sync(
         | MessageCertificateLookup::CertifiedStateUnavailable => (),
         // The message was already submitted, so we must report `Accepted` instead of an error.
         MessageCertificateLookup::DelegationUnverified(err) => {
+            metrics
+                .sync_call_early_response_trigger_total
+                .with_label_values(&[SYNC_CALL_EARLY_RESPONSE_DELEGATION_UNVERIFIED])
+                .inc();
+
             return SyncCallResponse::Accepted(delegation_unverified_reason(&err));
         }
     }
@@ -377,6 +385,11 @@ async fn call_sync(
             SyncCallResponse::Accepted("Certified state is not available. Please try /read_state.")
         }
         MessageCertificateLookup::DelegationUnverified(err) => {
+            metrics
+                .sync_call_certificate_status_total
+                .with_label_values(&[SYNC_CALL_STATUS_DELEGATION_UNVERIFIED])
+                .inc();
+
             SyncCallResponse::Accepted(delegation_unverified_reason(&err))
         }
     }
