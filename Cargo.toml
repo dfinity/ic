@@ -180,6 +180,7 @@ members = [
     "rs/ic_os/guest_upgrade/server",
     "rs/ic_os/guest_upgrade/shared",
     "rs/ic_os/guest_upgrade/tests",
+    "rs/ic_os/infogetty",
     "rs/ic_os/linux_kernel_command_line",
     "rs/ic_os/os_tools/fstrim_tool",
     "rs/ic_os/metrics/custom_metrics",
@@ -668,6 +669,7 @@ crc32fast = "^1.2.0"
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = "0.5.15"
 crossbeam-utils = "0.8.21"
+crossterm = "0.29.0"
 csv = "^1.1"
 curve25519-dalek = { version = "4.1.3", features = [
     "group",
@@ -796,6 +798,7 @@ minicbor = { version = "0.22.0", features = ["alloc", "derive"] }
 mockall = "0.15.0"
 mockito = { version = "1.6.1", default-features = false }
 more-asserts = "0.3.1"
+netdev = "0.46.3"
 nftables = "0.4"
 nix = { version = "0.31.3", features = [
     "fs",
@@ -891,6 +894,11 @@ rust_decimal = { version = "^1.42", default-features = false, features = [
 rust_decimal_macros = "^1.40"
 rustc-demangle = { version = "0.1.16" }
 rustc-hash = "^1.1.0"
+rustix = { version = "1.1.4", default-features = false, features = [
+    "event",
+    "fs",
+    "process",
+] }
 rustls = { version = "0.23.46", default-features = false, features = [
     "aws_lc_rs",
     "std",
@@ -918,6 +926,7 @@ sev = { version = "7.1", default-features = false, features = [
 ] }
 sha2 = "0.10.9"
 sha3 = "0.10.8"
+signal-hook = "0.3.6"
 signature = "2.2.0"
 simple_asn1 = "0.6.2"
 slog = { version = "2.7.0", features = [
