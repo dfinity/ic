@@ -35,16 +35,16 @@ impl VerifiedDelegationSource {
         }
     }
 
-    /// Wrapper around `NNSDelegationReader::get_delegation` to convert errors, log, and record
-    /// metrics.
+    /// Wrapper around `NNSDelegationReader::get_delegation` to log and record metrics on
+    /// verification failures.
     pub(crate) fn get_delegation(
         &self,
         canister_ranges_check: CanisterRangesCheck,
         certified_state: &ReplicatedState,
-    ) -> Result<Option<CertificateDelegation>, HttpError> {
+    ) -> Result<Option<CertificateDelegation>, DelegationVerificationError> {
         self.nns_delegation_reader
             .get_delegation(canister_ranges_check, certified_state)
-            .map_err(|err| {
+            .inspect_err(|err| {
                 warn!(
                     every_n_seconds => LOG_EVERY_N_SECONDS,
                     self.log,
@@ -52,14 +52,16 @@ impl VerifiedDelegationSource {
                     self.endpoint_type
                 );
                 self.metrics
-                    .observe_delegation_verification_failure(self.endpoint_type, &err);
-
-                delegation_verification_failure_error(err)
+                    .observe_delegation_verification_failure(self.endpoint_type, err);
             })
     }
 }
 
-fn delegation_verification_failure_error(err: DelegationVerificationError) -> HttpError {
+/// The `503 Service Unavailable` error to reply with when the NNS delegation fails verification,
+/// suggesting that the client retry once the replica has fetched a new delegation.
+pub(crate) fn delegation_verification_failure_error(
+    err: &DelegationVerificationError,
+) -> HttpError {
     let status = StatusCode::SERVICE_UNAVAILABLE;
     let message = match err {
         DelegationVerificationError::Inconsistent => {

@@ -2103,12 +2103,14 @@ fn test_query_validated_sender_info_size_metric(
 }
 
 // ---------------------------------------------------------------------------
-// NNS delegation vs. certified state: the `call` and `read_state` endpoints must
-// reply with `503 SERVICE_UNAVAILABLE` instead of serving a certificate whose NNS
-// delegation does not match the certified state which the certificate is built
-// from, as the client could not verify the certificate. The two drift apart e.g.
-// around subnet splits and canister migrations, until the replica fetches a new
-// delegation from the NNS.
+// NNS delegation vs. certified state: the `call` and `read_state` endpoints must not
+// serve a certificate whose NNS delegation does not match the certified state which
+// the certificate is built from, as the client could not verify the certificate.
+// Instead, the `read_state` endpoints reply with `503 SERVICE_UNAVAILABLE`, while the
+// sync call endpoints, for which the message was already submitted, reply with
+// `202 ACCEPTED` so that the client polls the status of the message. The two drift
+// apart e.g. around subnet splits and canister migrations, until the replica fetches
+// a new delegation from the NNS.
 // ---------------------------------------------------------------------------
 
 /// What changes about the subnet under test, so that the NNS delegation and the
@@ -2254,10 +2256,10 @@ fn test_read_state_endpoint_becomes_unavailable_when_delegation_drifts_from_stat
 }
 
 /// The sync call endpoints serve the certificate of a message while the NNS delegation
-/// matches the certified state, but reply with `503 SERVICE_UNAVAILABLE` once the two
-/// drift apart in a way which the endpoint verifies.
+/// matches the certified state, but reply with `202 ACCEPTED` once the two drift apart in a
+/// way which the endpoint verifies.
 #[rstest]
-fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state(
+fn test_sync_call_endpoint_replies_accepted_when_delegation_drifts_from_state(
     #[values(
         UpdateEndpoint::Canister(Call::V3),
         UpdateEndpoint::Canister(Call::V4),
@@ -2324,11 +2326,11 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
                     response.text().await
                 );
             }
-            // The same request now fails, because the delegation no longer matches.
+            // The certificate is no longer served, because the delegation no longer matches.
             _ => {
-                assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
+                assert_eq!(StatusCode::ACCEPTED, response.status());
                 assert_eq!(
-                    "This replica's delegation is inconsistent with its state. Please try again.",
+                    "This replica's delegation is inconsistent with its certified state. Please try /read_state.",
                     response.text().await.unwrap(),
                 );
             }
@@ -2337,19 +2339,18 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
 }
 
 /// The sync call endpoints verify the NNS delegation only when they serve a certificate,
-/// i.e. when the certified state contains the status of the message. Until it does, a
-/// delegation which does not match the certified state neither prevents the message from
-/// being submitted nor makes the endpoint reply with `503 SERVICE_UNAVAILABLE`.
+/// i.e. when the certified state contains the status of the message. A delegation which does
+/// not match the certified state does not prevent the message from being submitted, and once
+/// the message's status is certified, the endpoint replies with `202 ACCEPTED` instead of
+/// serving the certificate.
 #[rstest]
 #[case::status_not_certified(
     false,
-    StatusCode::ACCEPTED,
     "Certified state does not contain request status. Please try /read_state."
 )]
 #[case::status_certified(
     true,
-    StatusCode::SERVICE_UNAVAILABLE,
-    "This replica's delegation is inconsistent with its state. Please try again."
+    "This replica's delegation is inconsistent with its certified state. Please try /read_state."
 )]
 fn test_sync_call_endpoint_verifies_delegation_only_when_serving_certificate(
     #[values(
@@ -2359,7 +2360,6 @@ fn test_sync_call_endpoint_verifies_delegation_only_when_serving_certificate(
     )]
     endpoint: UpdateEndpoint,
     #[case] is_status_certified: bool,
-    #[case] expected_status: StatusCode,
     #[case] expected_text: &str,
 ) {
     let rt = Runtime::new().unwrap();
@@ -2417,7 +2417,7 @@ fn test_sync_call_endpoint_verifies_delegation_only_when_serving_certificate(
         wait_for_status_healthy(&addr).await.unwrap();
 
         let response = endpoint.call(addr, message).await;
-        assert_eq!(expected_status, response.status());
+        assert_eq!(StatusCode::ACCEPTED, response.status());
         assert_eq!(expected_text, response.text().await.unwrap());
     });
 }

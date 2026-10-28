@@ -258,8 +258,9 @@ async fn call_sync(
         }
         MessageCertificateLookup::StatusUnknown { .. }
         | MessageCertificateLookup::CertifiedStateUnavailable => (),
+        // The message was already submitted, so we must report `Accepted` instead of an error.
         MessageCertificateLookup::DelegationUnverified(err) => {
-            return SyncCallResponse::HttpError(err);
+            return SyncCallResponse::Accepted(delegation_unverified_reason(&err));
         }
     }
 
@@ -375,7 +376,22 @@ async fn call_sync(
         MessageCertificateLookup::CertifiedStateUnavailable => {
             SyncCallResponse::Accepted("Certified state is not available. Please try /read_state.")
         }
-        MessageCertificateLookup::DelegationUnverified(err) => SyncCallResponse::HttpError(err),
+        MessageCertificateLookup::DelegationUnverified(err) => {
+            SyncCallResponse::Accepted(delegation_unverified_reason(&err))
+        }
+    }
+}
+
+/// The reason for replying `202 Accepted` instead of the certificate of a message whose status is
+/// in the certified state, because the NNS delegation could not be verified against the latter.
+fn delegation_unverified_reason(err: &DelegationVerificationError) -> &'static str {
+    match err {
+        DelegationVerificationError::Inconsistent => {
+            "This replica's delegation is inconsistent with its certified state. Please try /read_state."
+        }
+        DelegationVerificationError::Validation(_) => {
+            "This replica has an invalid delegation. Please try /read_state."
+        }
     }
 }
 
@@ -417,8 +433,9 @@ enum MessageCertificateLookup {
     /// The certificate could not be read from the latest certified state because there is no
     /// certified state yet.
     CertifiedStateUnavailable,
-    /// The NNS delegation could not be verified to be consistent with the certified state.
-    DelegationUnverified(HttpError),
+    /// The latest certified state contains the status of the message, but the NNS delegation could
+    /// not be verified to be consistent with it.
+    DelegationUnverified(DelegationVerificationError),
 }
 
 /// Reads the certificate for the given message from the latest certified state, looks up the

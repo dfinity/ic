@@ -4,7 +4,7 @@ use crate::{
     HttpError, ReplicaHealthStatus,
     common::{Cbor, WithTimeout, build_validator, into_cbor, validation_error_to_http_error},
     metrics::HttpHandlerMetrics,
-    verified_delegation_source::VerifiedDelegationSource,
+    verified_delegation_source::{VerifiedDelegationSource, delegation_verification_failure_error},
 };
 use axum::{
     Router,
@@ -306,7 +306,7 @@ pub(crate) async fn read_state(
         {
             Ok(delegation) => delegation,
             Err(err) => {
-                return err.into_response();
+                return delegation_verification_failure_error(&err).into_response();
             }
         };
 
