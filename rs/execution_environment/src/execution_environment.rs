@@ -5104,38 +5104,54 @@ pub struct ExecuteCanisterResult {
     pub description: Option<String>,
 }
 
-/// Executes the given input message or task.
-/// This is a helper for `execute_canister()`.
-fn execute_canister_input(
-    input: CanisterMessageOrTask,
-    prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
+/// The next thing a canister is about to execute: a task from its task queue or, when there is
+/// none, a message from its input queues.
+enum NextInput {
+    Task(ExecutionTask),
+    Message(CanisterMessage),
+}
+
+/// Updates the replicated canister metrics with the next input it is about to execute.
+fn observe_input_metrics(
+    canister: &mut CanisterState,
+    next_input: &NextInput,
     exec_env: &ExecutionEnvironment,
-    mut canister: CanisterState,
-    instruction_limits: InstructionLimits,
-    max_instructions_per_query_message: NumInstructions,
-    network_topology: Arc<NetworkTopology>,
-    time: Time,
-    round_limits: &mut RoundLimits,
-    resource_limits: ResourceLimits,
-    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-) -> ExecuteCanisterResult {
-    let info = input.to_string();
-    let load_metrics = &mut canister
+    network_topology: &NetworkTopology,
+) {
+    let load_metrics = canister
         .system_state
         .canister_metrics_mut()
         .load_metrics_mut();
-    match &input {
-        CanisterMessageOrTask::Message(CanisterMessage::Ingress(_)) => {
+
+    match next_input {
+        NextInput::Task(ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer) => {
+            load_metrics.observe_heartbeat_or_global_timer();
+        }
+        // Not counted as load.
+        NextInput::Task(ExecutionTask::OnLowWasmMemory) => {}
+        // Paused and aborted executions resume an input whose metrics were already observed when
+        // it was first executed: don't double count it.
+        NextInput::Task(
+            ExecutionTask::PausedExecution { .. } | ExecutionTask::AbortedExecution { .. },
+        ) => {}
+        // Install code is executed as a subnet message and never reaches this path.
+        NextInput::Task(
+            ExecutionTask::PausedInstallCode(..) | ExecutionTask::AbortedInstallCode { .. },
+        ) => {}
+        NextInput::Message(CanisterMessage::Ingress(_)) => {
             load_metrics.observe_ingress_message();
         }
-        CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
+        NextInput::Message(CanisterMessage::Request(request)) => {
+            if request.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES {
+                exec_env.metrics.oversize_intra_subnet_messages.inc();
+            }
             if network_topology.route(request.sender.get()) == Some(exec_env.own_subnet_id) {
                 load_metrics.observe_local_subnet_message();
             } else {
                 load_metrics.observe_remote_subnet_message();
             }
         }
-        CanisterMessageOrTask::Message(CanisterMessage::Response {
+        NextInput::Message(CanisterMessage::Response {
             response,
             callback: _,
         }) => {
@@ -5145,11 +5161,25 @@ fn execute_canister_input(
                 load_metrics.observe_remote_subnet_message();
             }
         }
-        CanisterMessageOrTask::Task(CanisterTask::GlobalTimer | CanisterTask::Heartbeat) => {
-            load_metrics.observe_heartbeat_or_global_timer();
-        }
-        CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory) => {}
     }
+}
+
+/// Executes the given input message or task.
+/// This is a helper for `execute_canister()`.
+fn execute_canister_input(
+    input: CanisterMessageOrTask,
+    prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
+    exec_env: &ExecutionEnvironment,
+    canister: CanisterState,
+    instruction_limits: InstructionLimits,
+    max_instructions_per_query_message: NumInstructions,
+    network_topology: Arc<NetworkTopology>,
+    time: Time,
+    round_limits: &mut RoundLimits,
+    resource_limits: ResourceLimits,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+) -> ExecuteCanisterResult {
+    let info = input.to_string();
     let result = exec_env.execute_canister_input(
         canister,
         instruction_limits,
@@ -5200,8 +5230,16 @@ pub fn execute_canister(
     }
 
     let mut canister = Arc::unwrap_or_clone(canister);
-    let (input, prepaid_execution_cycles) = match canister.system_state.task_queue.pop_front() {
-        Some(task) => match task {
+    let next_input = match canister.system_state.task_queue.pop_front() {
+        Some(task) => NextInput::Task(task),
+        // If there was no task and no input, the match above would have returned early, so this
+        // unwrap is safe.
+        None => NextInput::Message(canister.pop_input().unwrap()),
+    };
+    observe_input_metrics(&mut canister, &next_input, exec_env, &network_topology);
+
+    let (input, prepaid_execution_cycles) = match next_input {
+        NextInput::Task(task) => match task {
             ExecutionTask::PausedExecution { id, .. } => {
                 let paused = exec_env.take_paused_execution(id).unwrap();
                 let round_counters = RoundCounters {
@@ -5266,15 +5304,7 @@ pub fn execute_canister(
                 unreachable!("The guard at the beginning filters these cases out")
             }
         },
-        None => {
-            let message = canister.pop_input().unwrap();
-            if let CanisterMessage::Request(req) = &message
-                && req.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
-            {
-                exec_env.metrics.oversize_intra_subnet_messages.inc();
-            }
-            (CanisterMessageOrTask::Message(message), None)
-        }
+        NextInput::Message(message) => (CanisterMessageOrTask::Message(message), None),
     };
     execute_canister_input(
         input,
