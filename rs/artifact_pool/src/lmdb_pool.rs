@@ -811,11 +811,13 @@ where
     }
 
     fn get_only_by_height(&self, h: Height) -> Result<Message, OnlyError> {
-        let mut as_vec: Vec<Message> = self.get_by_height(h).collect();
-        match as_vec.len() {
-            0 => Err(OnlyError::NoneAvailable),
-            1 => Ok(as_vec.remove(0)),
-            _ => Err(OnlyError::MultipleValues),
+        let mut iter = self.get_by_height(h);
+        match iter.next() {
+            None => Err(OnlyError::NoneAvailable),
+            Some(value) => match iter.next() {
+                None => Ok(value),
+                Some(_) => Err(OnlyError::MultipleValues),
+            },
         }
     }
 
@@ -837,11 +839,9 @@ where
     }
 
     fn get_highest(&self) -> Result<Message, OnlyError> {
-        let mut as_vec: Vec<Message> = self.get_highest_iter().collect();
-        match as_vec.len() {
-            0 => Err(OnlyError::NoneAvailable),
-            1 => Ok(as_vec.remove(0)),
-            _ => Err(OnlyError::MultipleValues),
+        match <dyn HeightIndexedPool<Message>>::max_height(self) {
+            Some(height) => self.get_only_by_height(height),
+            None => Err(OnlyError::NoneAvailable),
         }
     }
 
