@@ -43,7 +43,10 @@ use ic_protobuf::registry::crypto::v1::{
 };
 use ic_read_state_response_parser::parse_subnet_read_state_response;
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{
+    ReplicatedState,
+    metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
+};
 use ic_test_utilities_metrics::{HistogramStats, MetricVec, fetch_histogram_vec_stats, metric_vec};
 use ic_test_utilities_types::ids::{NODE_1, canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{
@@ -2174,6 +2177,17 @@ fn drift_delegation_from_certified_state(
     }
 }
 
+/// Removes the subnet under test from the network topology of the certified state, so that the
+/// NNS delegation cannot be verified against it at all (as opposed to being found inconsistent
+/// with it).
+fn forget_subnet_in_certified_state(latest_state: &Mutex<Labeled<Arc<ReplicatedState>>>) {
+    modify_latest_state(latest_state, |state| {
+        state.metadata.modify_network_topology(|topology| {
+            topology.subnets_mut().remove(&subnet_test_id(1));
+        });
+    });
+}
+
 /// The `read_state` endpoints answer a request while the NNS delegation matches the certified
 /// state, but reply with `503 SERVICE_UNAVAILABLE` once the two drift apart in a way which the
 /// endpoint verifies.
@@ -2419,5 +2433,101 @@ fn test_sync_call_endpoint_verifies_delegation_only_when_serving_certificate(
         let response = endpoint.call(addr, message).await;
         assert_eq!(StatusCode::ACCEPTED, response.status());
         assert_eq!(expected_text, response.text().await.unwrap());
+    });
+}
+
+/// The `read_state` endpoints reply with `503 SERVICE_UNAVAILABLE` when the NNS delegation
+/// cannot be verified against the certified state at all, here because the latter does not know
+/// the subnet under test.
+#[rstest]
+fn test_read_state_endpoint_becomes_unavailable_when_delegation_cannot_be_verified(
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
+    #[values(read_state::Target::Canister, read_state::Target::Subnet)] target: read_state::Target,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let (state_manager, latest_state) = basic_state_manager_mock();
+    forget_subnet_in_certified_state(&latest_state);
+
+    let _handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_state_manager(state_manager)
+        .with_delegation_from_nns(DelegatedSubnet::default().nns_delegation())
+        .run();
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+
+        let paths = vec![Path::from(Label::from("time"))];
+        let response = match target {
+            read_state::Target::Canister => {
+                ReadState::new(paths, canister_test_id(0).get(), version)
+            }
+            read_state::Target::Subnet => {
+                ReadState::new_subnet(paths, subnet_test_id(1).get(), version)
+            }
+        }
+        .read_state(addr)
+        .await;
+
+        assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
+        assert_eq!(
+            "This replica has an invalid delegation. Please try again.",
+            response.text().await.unwrap(),
+        );
+    });
+}
+
+/// The sync call endpoints reply with `202 ACCEPTED` instead of serving the certificate of a
+/// message when the NNS delegation cannot be verified against the certified state at all, here
+/// because the latter does not know the subnet under test.
+#[rstest]
+fn test_sync_call_endpoint_replies_accepted_when_delegation_cannot_be_verified(
+    #[values(
+        UpdateEndpoint::Canister(Call::V3),
+        UpdateEndpoint::Canister(Call::V4),
+        UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
+    )]
+    endpoint: UpdateEndpoint,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    // The message already completed, so the endpoint would serve its certificate right away.
+    let (state_manager, latest_state) = basic_state_manager_mock();
+    let message = endpoint.default_ingress_message();
+    complete_message_in_latest_state(&latest_state, &message);
+    forget_subnet_in_certified_state(&latest_state);
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_state_manager(state_manager)
+        .with_delegation_from_nns(DelegatedSubnet::default().nns_delegation())
+        .run();
+
+    // Mock ingress filter to always accept the message.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(Ok(())))
+        }
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+
+        let response = endpoint.call(addr, message).await;
+        assert_eq!(StatusCode::ACCEPTED, response.status());
+        assert_eq!(
+            "This replica has an invalid delegation. Please try /read_state.",
+            response.text().await.unwrap(),
+        );
     });
 }
