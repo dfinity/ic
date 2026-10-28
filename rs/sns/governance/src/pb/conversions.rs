@@ -492,6 +492,24 @@ impl From<pb_api::UpgradeSnsControlledCanister> for pb::UpgradeSnsControlledCani
     }
 }
 
+impl From<pb::LoadCanisterSnapshot> for pb_api::LoadCanisterSnapshot {
+    fn from(item: pb::LoadCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            snapshot_id: item.snapshot_id,
+        }
+    }
+}
+
+impl From<pb_api::LoadCanisterSnapshot> for pb::LoadCanisterSnapshot {
+    fn from(item: pb_api::LoadCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            snapshot_id: item.snapshot_id,
+        }
+    }
+}
+
 impl From<pb::TransferSnsTreasuryFunds> for pb_api::TransferSnsTreasuryFunds {
     fn from(item: pb::TransferSnsTreasuryFunds) -> Self {
         Self {
@@ -1032,6 +1050,9 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::UpgradeExtension(v) => {
                 pb_api::proposal::Action::UpgradeExtension(v.into())
             }
+            pb::proposal::Action::LoadCanisterSnapshot(v) => {
+                pb_api::proposal::Action::LoadCanisterSnapshot(v.into())
+            }
         }
     }
 }
@@ -1094,6 +1115,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             }
             pb_api::proposal::Action::UpgradeExtension(v) => {
                 pb::proposal::Action::UpgradeExtension(v.into())
+            }
+            pb_api::proposal::Action::LoadCanisterSnapshot(v) => {
+                pb::proposal::Action::LoadCanisterSnapshot(v.into())
             }
         }
     }
