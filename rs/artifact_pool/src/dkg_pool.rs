@@ -5,8 +5,8 @@ use crate::{
 use ic_interfaces::{
     dkg::{ChangeAction, DkgPool, Mutations},
     p2p::consensus::{
-        ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
-        ValidatedPoolReader,
+        ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, InitialBroadcastSource, MutablePool,
+        UnvalidatedArtifact, ValidatedPoolReader,
     },
 };
 use ic_logger::{ReplicaLogger, warn};
@@ -139,7 +139,9 @@ impl ValidatedPoolReader<dkg::Message> for DkgPoolImpl {
     fn get(&self, id: &DkgMessageId) -> Option<dkg::Message> {
         self.validated.get(id).cloned()
     }
+}
 
+impl InitialBroadcastSource<dkg::Message> for DkgPoolImpl {
     fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = dkg::Message> + '_> {
         // NiDKG artifacts are not persisted.
         Box::new(std::iter::empty())
