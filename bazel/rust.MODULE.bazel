@@ -12,7 +12,7 @@ single_version_override(
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    versions = ["1.99.0"],
+    versions = ["1.99.1"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
@@ -257,7 +257,7 @@ crate.spec(
 )
 crate.spec(
     package = "bytes",
-    version = "^1.11.1",
+    version = "^1.12.1",
 )
 crate.spec(
     package = "canbench-rs",
@@ -495,11 +495,11 @@ crate.spec(
 )
 crate.spec(
     package = "futures",
-    version = "^0.3.31",
+    version = "^0.3.33",
 )
 crate.spec(
     package = "futures-util",
-    version = "^0.3.31",
+    version = "^0.3.33",
 )
 crate.spec(
     features = [
@@ -602,7 +602,7 @@ crate.spec(
 )
 crate.spec(
     package = "http",
-    version = "^1.3.1",
+    version = "^1.5.0",
 )
 crate.spec(
     package = "http-body",
@@ -610,7 +610,7 @@ crate.spec(
 )
 crate.spec(
     package = "http-body-util",
-    version = "^0.1.3",
+    version = "^0.1.5",
 )
 crate.spec(
     package = "hmac",
@@ -750,7 +750,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-management-canister-types",
-    version = "^0.8.0",
+    version = "^0.11.0",
 )
 crate.spec(
     default_features = False,
@@ -1186,19 +1186,15 @@ crate.spec(
 )
 crate.spec(
     package = "prost",
-    version = "^0.14.3",
+    version = "^0.14.4",
 )
 crate.spec(
     package = "prost-build",
-    version = "^0.14.3",
+    version = "^0.14.4",
 )
 crate.spec(
     package = "protobuf",
     version = "^3.7.2",
-)
-crate.spec(
-    package = "publicsuffix",
-    version = "^2.2.3",
 )
 crate.spec(
     package = "quickcheck",
@@ -1218,11 +1214,11 @@ crate.spec(
         "rustls-aws-lc-rs",
     ],
     package = "quinn",
-    version = "^0.11.11",
+    version = "^0.11.12",
 )
 crate.spec(
     package = "quinn-udp",
-    version = "^0.5.5",
+    version = "^0.5.16",
 )
 crate.spec(
     package = "quote",
@@ -1276,7 +1272,7 @@ crate.spec(
         "zeroize",
     ],
     package = "rcgen",
-    version = "^0.13.1",
+    version = "^0.13.2",
 )
 crate.spec(
     package = "rgb",
@@ -1396,7 +1392,7 @@ crate.spec(
         "tls12",
     ],
     package = "rustls",
-    version = "^0.23.45",
+    version = "^0.23.46",
 )
 crate.spec(
     package = "rustls-pemfile",
@@ -1571,7 +1567,7 @@ crate.spec(
         "all",
     ],
     package = "socket2",
-    version = "^0.5.7",
+    version = "^0.5.10",
 )
 crate.spec(
     features = [
@@ -1644,7 +1640,7 @@ crate.spec(
 )
 crate.spec(
     package = "tempfile",
-    version = "3.20",
+    version = "3.27",
 )
 crate.spec(
     package = "test-strategy",
@@ -1685,7 +1681,7 @@ crate.spec(
 crate.spec(
     features = ["full"],
     package = "tokio",
-    version = "^1.42.0",
+    version = "^1.54.1",
 )
 crate.spec(
     package = "tokio-io-timeout",
@@ -1693,7 +1689,7 @@ crate.spec(
 )
 crate.spec(
     package = "tokio-metrics",
-    version = "^0.4.0",
+    version = "^0.4.9",
 )
 crate.spec(
     default_features = False,
@@ -1734,7 +1730,7 @@ crate.spec(
         "rt",
     ],
     package = "tokio-util",
-    version = "^0.7.13",
+    version = "^0.7.20",
 )
 crate.spec(
     package = "toml",
@@ -1755,7 +1751,7 @@ crate.spec(
 crate.spec(
     features = ["full"],
     package = "tower",
-    version = "^0.5.2",
+    version = "^0.5.3",
 )
 crate.spec(
     features = [
@@ -1819,12 +1815,8 @@ crate.spec(
     version = "^0.3.20",
 )
 crate.spec(
-    package = "trust-dns-resolver",
-    version = "^0.22.0",
-)
-crate.spec(
     package = "turmoil",
-    version = "^0.6.4",
+    version = "^0.6.6",
 )
 crate.spec(
     features = [
@@ -1898,7 +1890,7 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^48.0.1",
+    version = "^48.0.7",
 )
 crate.spec(
     package = "wast",
@@ -1950,7 +1942,7 @@ crate.spec(
 )
 crate.spec(
     package = "zstd",
-    version = "^0.13.2",
+    version = "^0.13.3",
 )
 
 # Crate annotations

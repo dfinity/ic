@@ -78,11 +78,11 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrip
         &self,
         id: &<MaybeStrippedConsensusMessage as IdentifiableArtifact>::Id,
     ) -> Option<MaybeStrippedConsensusMessage> {
-        self.consensus_pool
-            .read()
-            .unwrap()
-            .get(id.as_ref())
-            .map(Strippable::strip)
+        // The pool hands out a block proposal with its payload already loaded.
+        let message = self.consensus_pool.read().unwrap().get(id.as_ref());
+        // Stripping a block can take milliseconds, so it is done once the lock on the
+        // pool is released.
+        message.map(Strippable::strip)
     }
 
     fn get_all_for_initial_broadcast(
@@ -108,7 +108,7 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>>
     }
 
     fn refresh_period(&self) -> Duration {
-        Duration::from_secs(3)
+        self.bouncer_factory.refresh_period()
     }
 }
 
@@ -1187,12 +1187,18 @@ mod tests {
         }
     }
 
+    /// How often the assemblers in these tests refresh their bouncers.
+    const BOUNCER_REFRESH_PERIOD: Duration = Duration::from_secs(1);
+
     /// A bouncer factory whose bouncers want every block proposal.
     fn wanting_bouncer_factory() -> MockBouncerFactory<ConsensusMessage> {
         let mut bouncer_factory = MockBouncerFactory::default();
         bouncer_factory
             .expect_new_bouncer()
             .returning(|_| Box::new(|_| BouncerValue::Wants));
+        bouncer_factory
+            .expect_refresh_period()
+            .return_const(BOUNCER_REFRESH_PERIOD);
         bouncer_factory
     }
 
@@ -1582,6 +1588,9 @@ mod tests {
                     }
                 })
             });
+        mock_bouncer_factory
+            .expect_refresh_period()
+            .return_const(BOUNCER_REFRESH_PERIOD);
 
         // The missing ingress is never in the local pool, and there are no peers to fetch it
         // from, so the fetch of the missing stripped message would otherwise stay pending forever.
@@ -1612,13 +1621,31 @@ mod tests {
         // Wait until the assembler has downloaded the stripped proposal
         started.notified().await;
 
-        // The proposal is no longer wanted. Advancing past the bouncer refresh period delivers
-        // the new `Unwanted` value, which must abort the assembly instead of waiting forever for
-        // the missing ingress.
+        // The proposal is no longer wanted. Advancing by the bouncer refresh period delivers the
+        // new `Unwanted` value, which must abort the assembly instead of waiting forever for the
+        // missing ingress.
         wants.store(false, Ordering::SeqCst);
-        tokio::time::advance(Duration::from_secs(4)).await;
+        tokio::time::advance(BOUNCER_REFRESH_PERIOD).await;
 
         assert_eq!(handle.await.unwrap(), AssembleResult::Unwanted);
+    }
+
+    /// Stripped consensus messages are bounced like the consensus messages they were stripped
+    /// from, so their bouncer is refreshed just as often.
+    #[test]
+    fn bouncer_factory_wrapper_uses_the_wrapped_refresh_period() {
+        let refresh_period = Duration::from_millis(1234);
+        let mut bouncer_factory = MockBouncerFactory::<ConsensusMessage>::default();
+        bouncer_factory
+            .expect_refresh_period()
+            .times(1)
+            .return_const(refresh_period);
+        let wrapper: BouncerFactoryWrapper<MockValidatedPoolReader<ConsensusMessage>> =
+            BouncerFactoryWrapper {
+                bouncer_factory: Arc::new(bouncer_factory),
+            };
+
+        assert_eq!(wrapper.refresh_period(), refresh_period);
     }
 
     #[test]

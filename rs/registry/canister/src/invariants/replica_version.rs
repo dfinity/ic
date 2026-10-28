@@ -97,9 +97,10 @@ pub(crate) fn check_replica_version_invariants(
         }
 
         // Enforce that the stored version always matches the key
-        if let Some(replica_version_id) = replica_version_id {
-            assert_eq!(replica_version_id, version);
-        }
+        assert_eq!(
+            replica_version_id, version,
+            "The registry key and internal `replica_version_id` must be consistent."
+        );
     }
 
     Ok(())
@@ -204,6 +205,7 @@ mod tests {
     };
 
     use super::*;
+    use attestation::LAUNCH_MEASUREMENT_LEN;
     use canister_test::PrincipalId;
     use ic_protobuf::registry::replica_version::v1::{
         GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
@@ -225,8 +227,9 @@ mod tests {
             .into_iter()
             .map(|v| {
                 insert(
-                    make_replica_version_key(v).as_bytes(),
+                    make_replica_version_key(&v).as_bytes(),
                     ReplicaVersionRecord {
+                        replica_version_id: v,
                         // Versions referenced by the StandardEngineReplicaVersionRecord
                         // must have launch measurements.
                         guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
@@ -539,21 +542,20 @@ mod tests {
     fn panic_when_retiring_unassigned_nodes_version() {
         let mut registry = invariant_compliant_registry(0);
 
-        let replica_version_id = "unassigned_version".to_string();
         let replica_version = ReplicaVersionRecord {
-            replica_version_id: Some(replica_version_id.clone()),
+            replica_version_id: "unassigned_version".to_string(),
             release_package_sha256_hex: "".to_string(),
             release_package_urls: vec![],
             guest_launch_measurements: None,
         };
         let unassigned_nodes_config = UnassignedNodesConfigRecord {
             ssh_readonly_access: vec![],
-            replica_version: replica_version_id.clone(),
+            replica_version: replica_version.replica_version_id.clone(),
         };
 
         let init = vec![
             insert(
-                make_replica_version_key(&replica_version_id).as_bytes(),
+                make_replica_version_key(&replica_version.replica_version_id).as_bytes(),
                 replica_version.encode_to_vec(),
             ),
             insert(
@@ -564,7 +566,7 @@ mod tests {
         registry.maybe_apply_mutation_internal(init);
 
         let mutation = vec![delete(
-            make_replica_version_key(replica_version_id).as_bytes(),
+            make_replica_version_key(&replica_version.replica_version_id).as_bytes(),
         )];
         registry.check_global_state_invariants(&mutation);
     }
@@ -608,12 +610,12 @@ mod tests {
         let replica_version = test_replica_version().to_string();
         let key = make_replica_version_key(&replica_version);
         let value = ReplicaVersionRecord {
-            replica_version_id: Some(replica_version),
+            replica_version_id: replica_version,
             release_package_sha256_hex: hash.into(),
             release_package_urls: urls,
             guest_launch_measurements: Some(GuestLaunchMeasurements {
                 guest_launch_measurements: vec![GuestLaunchMeasurement {
-                    measurement: vec![0x42; 48],
+                    measurement: vec![0x42; LAUNCH_MEASUREMENT_LEN],
                     metadata: Some(GuestLaunchMeasurementMetadata {
                         kernel_cmdline: Some("foo=bar".to_string()),
                         vcpu_type: None,
@@ -659,7 +661,7 @@ mod tests {
         let replica_version = test_replica_version().to_string();
         let key = make_replica_version_key(&replica_version);
         let value = ReplicaVersionRecord {
-            replica_version_id: Some(replica_version),
+            replica_version_id: replica_version,
             release_package_sha256_hex: MOCK_HASH.into(),
             release_package_urls: vec![MOCK_URL.into()],
             guest_launch_measurements: Some(GuestLaunchMeasurements {
@@ -680,5 +682,23 @@ mod tests {
     #[test]
     fn set_hash_and_url() {
         check_replica_version(MOCK_HASH, vec![MOCK_URL.into()]);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "The registry key and internal `replica_version_id` must be consistent."
+    )]
+    fn panic_with_inner_version_mismatch() {
+        let registry = invariant_compliant_registry(0);
+
+        let key = make_replica_version_key("will-explode");
+        let value = ReplicaVersionRecord {
+            replica_version_id: "because-does-not-match".to_string(),
+            ..Default::default()
+        }
+        .encode_to_vec();
+
+        let mutation = vec![upsert(key.as_bytes(), value)];
+        registry.check_global_state_invariants(&mutation);
     }
 }

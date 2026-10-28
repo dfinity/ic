@@ -195,7 +195,8 @@ async fn metrics_endpoint(
             req.headers()
                 .get(PROMETHEUS_TIMEOUT_HEADER)
                 .and_then(|h| h.to_str().ok())
-                .and_then(|h| Some(Duration::from_secs_f64(h.parse().ok()?)))
+                .and_then(|h| h.parse::<f64>().ok())
+                .and_then(|h| Duration::try_from_secs_f64(h).ok())
                 .map(|h| { h.mul_f64(PROMETHEUS_TIMEOUT_FRACTION) })
                 .unwrap_or(DEFAULT_ADAPTER_COLLECTION_TIMEOUT),
         )

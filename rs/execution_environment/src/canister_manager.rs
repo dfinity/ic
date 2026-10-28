@@ -1809,7 +1809,7 @@ impl CanisterManager {
                 subnet_cycles_config,
             )?;
         consumed_cycles.add(cost, instructions);
-        round_limits.instructions -= as_round_instructions(instructions);
+        round_limits.deduct_instructions(as_round_instructions(instructions));
         Ok(())
     }
 
@@ -1894,7 +1894,7 @@ impl CanisterManager {
                 reveal_top_up,
             )
             .map_err(CanisterManagerError::NotEnoughCycles)?;
-        round_limits.instructions -= as_round_instructions(instructions_to_charge_on_success);
+        round_limits.deduct_instructions(as_round_instructions(instructions_to_charge_on_success));
 
         // Check that the canister is not frozen due to its new memory usage, memory
         // allocation, and compute allocation (no cycles are withdrawn by this check).

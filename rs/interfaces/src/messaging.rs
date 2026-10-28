@@ -107,8 +107,8 @@ pub trait XNetPayloadBuilder: Send + Sync {
 /// Interface for handling XNet adverts: certified stream headers pushed by a
 /// source subnet to advertise that it holds something we may not have seen.
 pub trait XNetAdvertHandler: Send + Sync {
-    /// Handles an advert claiming to come from `source_subnet`, verifying it
-    /// before acting on new content or replying to it.
+    /// Handles an advert from a node of `source_subnet`, verifying it before
+    /// acting on new content or recording its header.
     fn handle_advert(
         &self,
         source_subnet: SubnetId,

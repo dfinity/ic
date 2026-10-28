@@ -378,7 +378,7 @@ impl State {
             })
     }
 
-    pub fn supported_ck_erc20_tokens(&self) -> impl Iterator<Item = CkErc20Token> + '_ {
+    pub fn supported_ck_erc20_tokens(&self) -> impl Iterator<Item = CkErc20Token> {
         self.ckerc20_tokens
             .iter()
             .map(|(ledger_id, erc20_address, symbol)| CkErc20Token {

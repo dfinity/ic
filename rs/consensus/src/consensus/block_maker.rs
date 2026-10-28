@@ -30,7 +30,7 @@ use ic_types::{
         Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
         HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
         block_maker::SubnetRecords,
-        dkg::{DkgDataPayload, DkgPayload, SubnetSplittingStatus},
+        dkg::{DkgPayload, SubnetSplittingStatus},
         hashed,
     },
     replica_config::ReplicaConfig,
@@ -373,7 +373,7 @@ impl BlockMaker {
                     })
                 }
                 DkgPayload::Data(dkg) => {
-                    let (batch_payload, dkg, idkg_data) = match status::get_status(
+                    let data_payload = match status::get_status(
                         height,
                         last_summary_block,
                         self.registry_client.as_ref(),
@@ -387,11 +387,7 @@ impl BlockMaker {
                             return None;
                         }
                         // Use empty payload and empty DKG dealings if the replica is halting.
-                        Status::Halting => (
-                            BatchPayload::default(),
-                            DkgDataPayload::new_empty(dkg.start_height),
-                            /*idkg_data=*/ None,
-                        ),
+                        Status::Halting => DataPayload::new_empty(last_summary_block.height),
                         Status::Running => {
                             let batch_payload = self.build_batch_payload(
                                 pool,
@@ -420,22 +416,22 @@ impl BlockMaker {
                             })
                             .ok()?;
 
-                            (batch_payload, dkg, idkg_data)
+                            DataPayload {
+                                batch: batch_payload,
+                                dkg,
+                                idkg: idkg_data,
+                            }
                         }
                     };
 
                     self.metrics.report_byte_estimate_metrics(
-                        batch_payload.xnet.size_bytes(),
-                        (batch_payload.ingress.total_messages_size_estimate()
-                            + batch_payload.ingress.total_ids_size_estimate())
+                        data_payload.batch.xnet.size_bytes(),
+                        (data_payload.batch.ingress.total_messages_size_estimate()
+                            + data_payload.batch.ingress.total_ids_size_estimate())
                         .get() as usize,
                     );
 
-                    BlockPayload::Data(DataPayload {
-                        batch: batch_payload,
-                        dkg,
-                        idkg: idkg_data,
-                    })
+                    BlockPayload::Data(data_payload)
                 }
             },
         );
