@@ -51,6 +51,7 @@ pub(crate) struct BackupHelper {
     pub(crate) cold_storage_retention_policy: Option<RetentionPolicy>,
     pub(crate) max_logs_age_to_keep: Option<Duration>,
     pub(crate) artifacts_guard: Mutex<bool>,
+    pub(crate) cold_storage_guard: Mutex<bool>,
     pub(crate) logs_dir: Arc<Mutex<PathBuf>>,
     pub(crate) daily_replays: usize,
     pub(crate) do_cold_storage: bool,
@@ -131,6 +132,13 @@ impl BackupHelper {
         create_if_not_exists(
             self.cold_storage_dir
                 .join(format!("{}/states", self.subnet_id)),
+        )
+    }
+
+    fn cold_storage_staging_dir(&self) -> PathBuf {
+        create_if_not_exists(
+            self.cold_storage_dir
+                .join(format!("{}/staging", self.subnet_id)),
         )
     }
 
@@ -925,6 +933,10 @@ impl BackupHelper {
     }
 
     fn cold_store_states(&self, max_height: u64) -> Result<(), String> {
+        let _guard = self
+            .cold_storage_guard
+            .lock()
+            .expect("cold storage mutex lock failed");
         info!(
             self.log,
             "Moving states with height up to: {:?} from the archive to the cold storage",
@@ -944,11 +956,23 @@ impl BackupHelper {
         for dir in old_state_dirs.values() {
             if self.should_cold_store(dir) {
                 info!(self.log, "Will copy to cold storage: {:?}", dir);
+                // Copy the state to a staging directory first, and only move it to the states
+                // directory once it is complete.
+                let staging_dir = self.cold_storage_staging_dir();
                 let mut cmd = Command::new("rsync");
                 cmd.arg("-a");
-                cmd.arg(dir).arg(self.cold_storage_states_dir());
+                cmd.arg(dir).arg(&staging_dir);
                 debug!(self.log, "Will execute: {:?}", cmd);
                 exec_cmd(&mut cmd).map_err(|err| format!("Error copying states: {err:?}"))?;
+
+                let dir_name = dir
+                    .file_name()
+                    .ok_or_else(|| format!("Invalid state directory: {dir:?}"))?;
+                std::fs::rename(
+                    staging_dir.join(dir_name),
+                    self.cold_storage_states_dir().join(dir_name),
+                )
+                .map_err(|err| format!("Error moving {dir:?} out of staging: {err:?}"))?;
             }
         }
 
@@ -1381,6 +1405,7 @@ mod tests {
         assert_eq!(cold_storage_dirs.len(), 2);
         assert!(cold_storage_dirs.contains(&"0".to_string()));
         assert!(cold_storage_dirs.contains(&"20".to_string()));
+        assert!(collect_and_sort_dir_entries(&backup_helper.cold_storage_staging_dir()).is_empty());
 
         let archives_dirs = collect_and_sort_dir_entries(&backup_helper.archive_dir());
 
@@ -1388,6 +1413,39 @@ mod tests {
         assert_eq!(archives_dirs.len(), 2);
         assert!(archives_dirs.contains(&"40".to_string()));
         assert!(archives_dirs.contains(&"50".to_string()));
+    }
+
+    #[test]
+    fn cold_store_states_completes_failed_copy_test() {
+        let dir = tmpdir("test_dir");
+        let backup_helper = fake_backup_helper(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+        );
+        let archived_state_dir = backup_helper.archive_dir().join("10");
+        create_dir_all(archived_state_dir.join("ic_state")).unwrap();
+        File::create(archived_state_dir.join("ic_state/state_file")).unwrap();
+        write_timestamp(&archived_state_dir, DateTime::UNIX_EPOCH).unwrap();
+        // A previous copy failed after copying the timestamp, but before copying the state.
+        let staged_state_dir = backup_helper.cold_storage_staging_dir().join("10");
+        create_dir_all(&staged_state_dir).unwrap();
+        write_timestamp(&staged_state_dir, DateTime::UNIX_EPOCH).unwrap();
+        let states_dir = backup_helper.cold_storage_states_dir();
+
+        // The incomplete copy is not a cold stored state.
+        assert!(
+            collect_cold_stored_states(&backup_helper.log, &states_dir)
+                .unwrap()
+                .is_empty()
+        );
+
+        backup_helper
+            .cold_store_states(10)
+            .expect("should execute successfully");
+
+        assert!(states_dir.join("10/ic_state/state_file").exists());
+        assert!(collect_and_sort_dir_entries(&backup_helper.cold_storage_staging_dir()).is_empty());
     }
 
     #[test]
@@ -1708,6 +1766,7 @@ mod tests {
             versions_hot,
             cold_storage_retention_policy: None,
             artifacts_guard: Mutex::new(true),
+            cold_storage_guard: Mutex::new(true),
             daily_replays,
             do_cold_storage: true,
             thread_id: 1,

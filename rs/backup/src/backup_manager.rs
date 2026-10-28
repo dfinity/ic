@@ -144,6 +144,7 @@ impl BackupManager {
                 versions_hot,
                 cold_storage_retention_policy: subnet_config.cold_storage_retention_policy,
                 artifacts_guard: Mutex::new(true),
+                cold_storage_guard: Mutex::new(true),
                 daily_replays,
                 do_cold_storage: !subnet_config.disable_cold_storage,
                 thread_id: subnet_config.thread_id,
