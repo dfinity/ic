@@ -108,6 +108,7 @@ pub async fn start_rosetta(
     let mut rosetta_client = RosettaClient::from_str_url(&format!("http://localhost:{port}"))
         .expect("Unable to create the RosettaClient");
     rosetta_client.http_client = reqwest::Client::builder()
+        // actix closes idle connections after ~5 s; a pooled connection reused at that moment gets IncompleteMessage, so don't pool. See:
         // https://github.com/hyperium/hyper/issues/2136#issuecomment-861826148
         .pool_max_idle_per_host(0)
         .build()
