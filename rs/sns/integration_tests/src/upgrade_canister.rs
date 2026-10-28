@@ -138,6 +138,7 @@ fn test_upgrade_canister_proposal_is_successful() {
                 mode: None,
                 chunked_canister_wasm: None,
                 canister_upgrade_options: None,
+                take_canister_snapshot: None,
             },
         )),
         ..Default::default()
@@ -266,6 +267,7 @@ fn test_upgrade_canister_proposal_reinstall() {
                     mode: Some(CanisterInstallModeProto::Reinstall.into()),
                     chunked_canister_wasm: None,
                     canister_upgrade_options: None,
+                    take_canister_snapshot: None,
                 },
             )),
             ..Default::default()
@@ -421,6 +423,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
                     mode: Some(CanisterInstallModeProto::Upgrade.into()),
                     chunked_canister_wasm: None,
                     canister_upgrade_options: None,
+                    take_canister_snapshot: None,
                 },
             )),
             ..Default::default()
@@ -526,6 +529,7 @@ fn test_upgrade_canister_proposal_too_large() {
                 mode: None,
                 chunked_canister_wasm: None,
                 canister_upgrade_options: None,
+                take_canister_snapshot: None,
             },
         )),
         ..Default::default()
@@ -649,6 +653,7 @@ fn test_upgrade_after_state_shrink() {
                     mode: Some(CanisterInstallModeProto::Upgrade.into()),
                     chunked_canister_wasm: None,
                     canister_upgrade_options: None,
+                    take_canister_snapshot: None,
                 },
             )),
             ..Default::default()

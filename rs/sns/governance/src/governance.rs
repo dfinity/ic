@@ -46,7 +46,8 @@ use crate::{
             MintTokensResponse, NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId,
             NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
             ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-            RegisterExtension, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
+            RegisterExtension, RewardEvent, SetTopicsForCustomProposals,
+            SuccessfulProposalExecutionValue, TakeCanisterSnapshotOk, Tally, Topic,
             TransferSnsTreasuryFunds, TreasuryMetrics, UpgradeSnsControlledCanister, Vote,
             VotingPowerMetrics, WaitForQuietState,
             claim_swap_neurons_response::SwapNeuron,
@@ -69,6 +70,7 @@ use crate::{
             neuron::{DissolveState, Followees, RewardEventParticipation, TopicFollowees},
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
+            successful_proposal_execution_value,
             transfer_sns_treasury_funds::TransferFrom,
             upgrade_journal_entry, upgrade_sns_controlled_canister, valuation,
         },
@@ -114,6 +116,7 @@ use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::{
     change_canister::ChangeCanisterRequest,
     load_canister_snapshot::{LoadCanisterSnapshotRequest, LoadCanisterSnapshotResponse},
+    take_canister_snapshot::{TakeCanisterSnapshotRequest, TakeCanisterSnapshotResponse},
 };
 use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
@@ -2727,6 +2730,37 @@ impl Governance {
         let wasm = Wasm::try_from(&upgrade)
             .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
 
+        // If requested, take a snapshot first. If that does not work, do not upgrade.
+        if let Some(upgrade_sns_controlled_canister::TakeSnapshotBeforeUpgrade {
+            replace_snapshot,
+        }) = upgrade.take_canister_snapshot
+        {
+            let snapshot = self
+                .take_canister_snapshot(target_canister_id, replace_snapshot)
+                .await
+                .map_err(|err| {
+                    GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!(
+                            "Canister {target_canister_id} was not upgraded, because taking a \
+                             snapshot of it beforehand failed: {err}"
+                        ),
+                    )
+                })?;
+
+            // Record the snapshot right away, i.e. before attempting the upgrade, so that it is
+            // known even if the upgrade fails.
+            if let Some(proposal_data) = self.proto.proposals.get_mut(&proposal_id) {
+                proposal_data.success_value = Some(SuccessfulProposalExecutionValue {
+                    proposal_type: Some(
+                        successful_proposal_execution_value::ProposalType::TakeCanisterSnapshot(
+                            snapshot,
+                        ),
+                    ),
+                });
+            }
+        }
+
         self.upgrade_non_root_canister(
             target_canister_id,
             wasm,
@@ -2737,6 +2771,48 @@ impl Governance {
             canister_upgrade_options,
         )
         .await
+    }
+
+    /// Calls SNS Root's take_canister_snapshot, and returns the new snapshot.
+    ///
+    /// This fails if Root does not have such a method (e.g. because it has not been upgraded
+    /// yet), or if taking the snapshot fails.
+    async fn take_canister_snapshot(
+        &self,
+        canister_id: CanisterId,
+        replace_snapshot: Option<Vec<u8>>,
+    ) -> Result<TakeCanisterSnapshotOk, String> {
+        let request = Encode!(&TakeCanisterSnapshotRequest {
+            canister_id: canister_id.get(),
+            replace_snapshot,
+        })
+        .map_err(|err| format!("Could not encode TakeCanisterSnapshotRequest: {err:?}"))?;
+        let reply = self
+            .env
+            .call_canister(
+                self.proto.root_canister_id_or_panic(),
+                "take_canister_snapshot",
+                request,
+            )
+            .await
+            .map_err(|err| {
+                format!("Canister method call Root.take_canister_snapshot failed: {err:?}")
+            })?;
+
+        match Decode!(&reply, TakeCanisterSnapshotResponse) {
+            Ok(TakeCanisterSnapshotResponse::Ok(ok)) => Ok(TakeCanisterSnapshotOk {
+                snapshot_id: ok.id,
+                taken_at_timestamp: ok.taken_at_timestamp,
+                total_size: ok.total_size,
+            }),
+            Ok(TakeCanisterSnapshotResponse::Err(err)) => Err(format!(
+                "Root.take_canister_snapshot failed (error code {:?}): {}",
+                err.code, err.description,
+            )),
+            Err(err) => Err(format!(
+                "Could not decode the reply from Root.take_canister_snapshot: {err:?}"
+            )),
+        }
     }
 
     /// Executes a LoadCanisterSnapshot proposal by calling SNS Root.
@@ -3763,8 +3839,10 @@ impl Governance {
             action_auxiliary,
             topic: Some(i32::from(proposal_topic)),
 
-            // A new proposal has not been executed yet, so there is no reply.
+            // A new proposal has not been executed yet, so there is no reply (or other value
+            // produced by executing it).
             execution_reply: None,
+            success_value: None,
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -6870,6 +6948,9 @@ mod execute_generic_nervous_system_function_tests;
 
 #[cfg(test)]
 mod load_canister_snapshot_tests;
+
+#[cfg(test)]
+mod upgrade_with_snapshot_tests;
 
 #[cfg(feature = "canbench-rs")]
 mod benches;

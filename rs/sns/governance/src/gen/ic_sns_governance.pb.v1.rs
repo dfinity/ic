@@ -522,6 +522,14 @@ pub struct UpgradeSnsControlledCanister {
     #[prost(message, optional, tag = "6")]
     pub canister_upgrade_options:
         ::core::option::Option<upgrade_sns_controlled_canister::CanisterUpgradeOptions>,
+    /// If set, a snapshot of the target canister is taken right before the new
+    /// code is installed. If taking the snapshot fails, the proposal fails, and
+    /// the canister is not upgraded. The ID of the new snapshot is recorded in
+    /// ProposalData.success_value, so that the canister can later be restored to
+    /// its pre-upgrade state by a LoadCanisterSnapshot proposal.
+    #[prost(message, optional, tag = "7")]
+    pub take_canister_snapshot:
+        ::core::option::Option<upgrade_sns_controlled_canister::TakeSnapshotBeforeUpgrade>,
 }
 /// Nested message and enum types in `UpgradeSnsControlledCanister`.
 pub mod upgrade_sns_controlled_canister {
@@ -553,6 +561,23 @@ pub mod upgrade_sns_controlled_canister {
             tag = "2"
         )]
         pub wasm_memory_persistence: ::core::option::Option<i32>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Message,
+    )]
+    pub struct TakeSnapshotBeforeUpgrade {
+        /// The ID of an existing snapshot of the target canister that is to be
+        /// replaced by the new snapshot. This is needed once the target canister has
+        /// reached the maximum number of snapshots allowed per canister.
+        #[prost(bytes = "vec", optional, tag = "1")]
+        pub replace_snapshot: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     }
 }
 /// A proposal to load a snapshot into the dapp canister that it was taken from.
@@ -1627,6 +1652,15 @@ pub struct ProposalData {
     /// MAX_EXECUTION_REPLY_LEN_BYTES (5 KB).
     #[prost(bytes = "vec", optional, tag = "26")]
     pub execution_reply: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// A value produced by executing this proposal. Not all proposal types
+    /// produce a value; for those that don't, this field is not set.
+    ///
+    /// For UpgradeSnsControlledCanister with take_canister_snapshot set, this
+    /// describes the snapshot that was taken. It is set as soon as the snapshot
+    /// has been taken (i.e. before the upgrade itself), so it is also set when the
+    /// upgrade then fails.
+    #[prost(message, optional, tag = "27")]
+    pub success_value: ::core::option::Option<SuccessfulProposalExecutionValue>,
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
     #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22, 23, 24")]
@@ -1698,6 +1732,63 @@ pub mod proposal_data {
         #[prost(message, tag = "24")]
         AdvanceSnsTargetVersion(AdvanceSnsTargetVersionActionAuxiliary),
     }
+}
+/// A value produced by successfully executing (part of) a proposal.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
+)]
+pub struct SuccessfulProposalExecutionValue {
+    #[prost(
+        oneof = "successful_proposal_execution_value::ProposalType",
+        tags = "1"
+    )]
+    pub proposal_type: ::core::option::Option<successful_proposal_execution_value::ProposalType>,
+}
+/// Nested message and enum types in `SuccessfulProposalExecutionValue`.
+pub mod successful_proposal_execution_value {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Oneof,
+    )]
+    pub enum ProposalType {
+        #[prost(message, tag = "1")]
+        TakeCanisterSnapshot(super::TakeCanisterSnapshotOk),
+    }
+}
+/// Describes a canister snapshot that was taken while executing a proposal.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
+)]
+pub struct TakeCanisterSnapshotOk {
+    /// The ID of the new snapshot. This can be used in LoadCanisterSnapshot.
+    #[prost(bytes = "vec", tag = "1")]
+    pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
+    /// When the snapshot was taken, in nanoseconds since the UNIX epoch.
+    #[prost(uint64, tag = "2")]
+    pub taken_at_timestamp: u64,
+    /// The size of the snapshot, in bytes.
+    #[prost(uint64, tag = "3")]
+    pub total_size: u64,
 }
 #[derive(
     candid::CandidType,

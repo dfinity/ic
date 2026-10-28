@@ -31,7 +31,7 @@ use crate::{
             MintSnsTokensActionAuxiliary, TransferSnsTreasuryFundsActionAuxiliary,
         },
         transfer_sns_treasury_funds::TransferFrom,
-        upgrade_sns_controlled_canister::CanisterUpgradeOptions,
+        upgrade_sns_controlled_canister::{CanisterUpgradeOptions, TakeSnapshotBeforeUpgrade},
     },
     sns_upgrade::{UpgradeSnsParams, get_proposal_id_that_added_wasm, get_upgrade_params},
     treasury::assess_treasury_balance,
@@ -1100,6 +1100,7 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
         canister_upgrade_arg,
         mode,
         canister_upgrade_options,
+        take_canister_snapshot,
         // The WASM-related fields are extracted separately.
         chunked_canister_wasm: _,
         new_canister_wasm: _,
@@ -1145,6 +1146,22 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
             }
         },
     };
+
+    // Inspect take_canister_snapshot.
+    if let Some(TakeSnapshotBeforeUpgrade { replace_snapshot }) = take_canister_snapshot {
+        if !crate::are_canister_snapshot_proposals_enabled() {
+            defects.push("take_canister_snapshot is not yet enabled.".to_string());
+        }
+        if let (Some(replace_snapshot), Some(canister_id)) = (replace_snapshot, canister_id)
+            && let Err(err) = validate_snapshot_id_of_canister(
+                "take_canister_snapshot.replace_snapshot",
+                replace_snapshot,
+                canister_id,
+            )
+        {
+            defects.push(err);
+        }
+    }
 
     // Inspect wasm.
     let wasm_info = match Wasm::try_from(upgrade) {
@@ -1196,6 +1213,25 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
         .unwrap_or_else(|| "No upgrade argument.".to_string());
 
     let upgrade_options_section = render_canister_upgrade_options_section(canister_upgrade_options);
+    let take_canister_snapshot_section = match take_canister_snapshot {
+        None => "".to_string(),
+        Some(TakeSnapshotBeforeUpgrade { replace_snapshot }) => {
+            let replace_snapshot = replace_snapshot
+                .as_ref()
+                .map(|replace_snapshot| {
+                    format!(
+                        " It replaces the existing snapshot `{}`.",
+                        hex::encode(replace_snapshot)
+                    )
+                })
+                .unwrap_or_default();
+            format!(
+                "\n\n## Snapshot before upgrade\n\n\
+                 A snapshot of the canister will be taken right before the new code is \
+                 installed. If that fails, the canister will not be upgraded.{replace_snapshot}"
+            )
+        }
+    };
 
     Ok(format!(
         r"# Proposal to Upgrade an SNS Controlled Canister
@@ -1210,7 +1246,7 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
 
 ## Argument info
 
-{args_info}",
+{args_info}{take_canister_snapshot_section}",
     ))
 }
 
@@ -2671,6 +2707,7 @@ impl ProposalData {
             action_auxiliary,
             topic,
             execution_reply: _,
+            success_value,
         } = self;
 
         let limited_ballots: BTreeMap<_, _> = ballots
@@ -2701,6 +2738,7 @@ impl ProposalData {
             minimum_yes_proportion_of_exercised: *minimum_yes_proportion_of_exercised,
             action_auxiliary: action_auxiliary.clone(),
             topic: *topic,
+            success_value: success_value.clone(),
 
             // The following fields are truncated:
             payload_text_rendering: None,
@@ -2963,6 +3001,9 @@ mod set_topics_for_custom_proposals;
 mod load_canister_snapshot_tests;
 
 #[cfg(test)]
+mod upgrade_with_snapshot_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
@@ -3220,6 +3261,7 @@ mod tests {
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
             canister_upgrade_options: None,
+            take_canister_snapshot: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
         let text = validate_and_render_upgrade_sns_controlled_canister(
@@ -3265,6 +3307,7 @@ No upgrade argument."#
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
+            take_canister_snapshot: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
 
@@ -3313,6 +3356,7 @@ No upgrade argument."#
                 chunk_hashes_list: vec![vec![1, 1, 1], vec![2, 2, 2], vec![3, 3, 3]],
             }),
             canister_upgrade_options: None,
+            take_canister_snapshot: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
         let text = validate_and_render_upgrade_sns_controlled_canister(
@@ -3361,6 +3405,7 @@ No upgrade argument."#
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
             canister_upgrade_options: None,
+            take_canister_snapshot: None,
         };
 
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
@@ -3398,6 +3443,7 @@ No upgrade argument."#
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
             canister_upgrade_options: None,
+            take_canister_snapshot: None,
         };
 
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
@@ -3437,6 +3483,7 @@ No upgrade argument."#
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
             canister_upgrade_options: None,
+            take_canister_snapshot: None,
         };
 
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
@@ -3472,6 +3519,7 @@ No upgrade argument."#
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
             canister_upgrade_options: None,
+            take_canister_snapshot: None,
         };
 
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
@@ -3502,6 +3550,7 @@ No upgrade argument."#
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
             canister_upgrade_options: None,
+            take_canister_snapshot: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
         let text = validate_and_render_upgrade_sns_controlled_canister(
@@ -3540,6 +3589,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             mode: Some(100), // 100 is not a valid mode
             chunked_canister_wasm: None,
             canister_upgrade_options: None,
+            take_canister_snapshot: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
         let text = validate_and_render_upgrade_sns_controlled_canister(
@@ -3560,6 +3610,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
             canister_upgrade_options: None,
+            take_canister_snapshot: None,
         };
         let result = validate_and_render_upgrade_sns_controlled_canister(
             &upgrade,
@@ -5100,6 +5151,7 @@ Version {
             action_auxiliary: None,
             topic: Some(Topic::Governance as i32),
             execution_reply: None,
+            success_value: None,
         };
     }
 
@@ -5668,6 +5720,7 @@ Payload rendering here"#
                         mode: Some(1),
                         chunked_canister_wasm: None,
                         canister_upgrade_options: None,
+                        take_canister_snapshot: None,
                     },
                 )),
                 ..Default::default()
@@ -5690,6 +5743,7 @@ Payload rendering here"#
                             mode: Some(1),
                             chunked_canister_wasm: None,
                             canister_upgrade_options: None,
+                            take_canister_snapshot: None,
                         },
                     )),
                     ..Default::default()
