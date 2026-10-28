@@ -1,4 +1,3 @@
-#![allow(clippy::disallowed_types)]
 //! Tests for the RosettaRequestHandler.
 
 use crate::{
@@ -23,16 +22,19 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
     time::{Duration, Instant},
 };
+#[allow(clippy::disallowed_types)]
 use tokio::sync::RwLock;
 
 /// A minimal mock ledger for testing the request handler.
 /// Only implements enough to test `network_status` and the endpoints that read blocks.
+#[allow(clippy::disallowed_types)]
 struct MockLedger {
     blockchain: RwLock<Blocks>,
     canister_id: CanisterId,
     governance_canister_id: CanisterId,
 }
 
+#[allow(clippy::disallowed_types)]
 impl MockLedger {
     fn new() -> Self {
         Self {
