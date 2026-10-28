@@ -129,6 +129,8 @@ pub enum NativeAction {
     ExecuteExtensionOperation = 18,
     /// UpgradeExtension Action.
     UpgradeExtension = 19,
+    /// LoadCanisterSnapshot Action.
+    LoadCanisterSnapshot = 20,
 }
 
 /// Helper functions for working with native actions.
@@ -157,6 +159,7 @@ pub mod native_action_ids {
             NervousSystemFunction::register_extension(),
             NervousSystemFunction::execute_extension_operation(),
             NervousSystemFunction::upgrade_extension(),
+            NervousSystemFunction::load_canister_snapshot(),
         ]
     }
 }
@@ -1357,6 +1360,18 @@ impl NervousSystemFunction {
             function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
         }
     }
+
+    fn load_canister_snapshot() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: NativeAction::LoadCanisterSnapshot as u64,
+            name: "Load canister snapshot".to_string(),
+            description: Some(
+                "Proposal to restore a dapp canister's code and memory from one of its snapshots."
+                    .to_string(),
+            ),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
 }
 
 impl From<Action> for NervousSystemFunction {
@@ -1409,6 +1424,7 @@ impl From<Action> for NervousSystemFunction {
             Action::SetTopicsForCustomProposals(_) => {
                 NervousSystemFunction::set_topics_for_custom_proposals()
             }
+            Action::LoadCanisterSnapshot(_) => NervousSystemFunction::load_canister_snapshot(),
         }
     }
 }
@@ -1753,6 +1769,9 @@ impl Action {
         match self {
             // Due to possible need of an emergency upgrade of the dapp
             Action::UpgradeSnsControlledCanister(_) => true,
+            // Due to possible need of an emergency rollback of the dapp (e.g.
+            // after an upgrade that went wrong)
+            Action::LoadCanisterSnapshot(_) => true,
             // Due to possible need of an emergency upgrade of the SNS
             Action::UpgradeSnsToNextVersion(_) => true,
             // Due to possible need of emergency functions defined as
@@ -1998,6 +2017,7 @@ impl From<&Action> for u64 {
             Action::SetTopicsForCustomProposals(_) => {
                 NativeAction::SetTopicsForCustomProposals as u64
             }
+            Action::LoadCanisterSnapshot(_) => NativeAction::LoadCanisterSnapshot as u64,
         }
     }
 }
