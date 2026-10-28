@@ -29,8 +29,12 @@ jobs:
           ZH2_DLL01_INI_SECRET: "${{ secrets.ZH2_DLL01_INI_SECRET }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
         run: |
+          # Owner-only files from the start: the umask only applies to newly created files, hence the rm.
+          umask 077
+          rm -f zh2-dll01-ini-secret zh2-file-share-key
           echo "$ZH2_DLL01_INI_SECRET" > zh2-dll01-ini-secret
-          echo "$ZH2_FILE_SHARE_KEY" > zh2-file-share-key && chmod 400 zh2-file-share-key
+          echo "$ZH2_FILE_SHARE_KEY" > zh2-file-share-key
+          chmod 400 zh2-dll01-ini-secret zh2-file-share-key
 
           # The runner masks the secret only as a whole and line by line, not the BMC password on its own.
           python3 -I - zh2-dll01-ini-secret <<'EOF'
