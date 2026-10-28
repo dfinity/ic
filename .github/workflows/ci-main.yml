@@ -288,7 +288,7 @@ jobs:
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         with:
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
           execlogs-artifact-name: execlogs-bazel-build
           invocation-names: build
           run: |
@@ -301,18 +301,25 @@ jobs:
             eval "bazel build $bazel_args --target_pattern_file=$build_targets"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        id: aws-credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         if: needs.config.outputs.release-build == 'true'
         with:
           role-session-name: "GitHub-Actions_ic_upload-artifacts"
           role-to-assume: ${{ vars.AWS_ASSUME_ROLE }}
           aws-region: eu-central-1
+          # Only for the Upload artifacts step: the BEP files of Run Tests record the job's environment.
+          output-env-credentials: false
+          output-credentials: true
 
       - name: Upload artifacts
         id: upload-artifacts
         uses: ./.github/actions/upload-artifacts
         if: needs.config.outputs.release-build == 'true'
         env:
+          AWS_ACCESS_KEY_ID: ${{ steps.aws-credentials.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.aws-credentials.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.aws-credentials.outputs.aws-session-token }}
           CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
           CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
@@ -341,7 +348,7 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/bazel
         with:
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
           execlogs-artifact-name: execlogs-bazel-test
           invocation-names: test
           run: |
@@ -594,7 +601,7 @@ jobs:
           echo bundledir="$bundledir" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-session-name: "GitHub-Actions_ic_upload-artifacts"
           role-to-assume: ${{ vars.AWS_ASSUME_ROLE }}

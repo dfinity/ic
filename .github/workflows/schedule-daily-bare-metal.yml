@@ -22,13 +22,35 @@ jobs:
       - &checkout
         name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Write the bare metal secrets to files
+        # Not in the environment of the next step, whose BEP files record it.
+        shell: bash
+        env:
+          ZH2_DLL01_INI_SECRET: "${{ secrets.ZH2_DLL01_INI_SECRET }}"
+          ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
+        run: |
+          echo "$ZH2_DLL01_INI_SECRET" > file1
+          echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
+
+          # The runner masks the secret only as a whole and line by line, not the BMC password on its own.
+          python3 -I - file1 <<'EOF'
+          import configparser, sys
+          config = configparser.ConfigParser()
+          try:
+              config.read(sys.argv[1])
+              # The raw password, and the interpolated one that deploy.py reads.
+              passwords = {config.get("host", "password", raw=True), config.get("host", "password")}
+          except Exception:
+              # Not the exception itself: its message can contain parts of the INI.
+              print("::error::Cannot read the [host] password from ZH2_DLL01_INI_SECRET.")
+              sys.exit(1)
+          for password in passwords:
+              print("::add-mask::" + password.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
+          EOF
       - name: Run Bazel Launch Bare Metal
         uses: ./.github/actions/bazel
         with:
           run: |
-            echo "$ZH2_DLL01_INI_SECRET" > file1
-            echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
-
             launch_bare_metal() {
 
               # shellcheck disable=SC2046,SC2086
@@ -59,7 +81,4 @@ jobs:
             bazel test //rs/tests/nested:sev_recovery_farm --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
 
             bazel clean
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-        env:
-          ZH2_DLL01_INI_SECRET: "${{ secrets.ZH2_DLL01_INI_SECRET }}"
-          ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
+          GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
