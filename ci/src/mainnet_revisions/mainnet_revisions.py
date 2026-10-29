@@ -6,13 +6,14 @@ import logging
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import tempfile
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from enum import Enum
-from typing import List
+from typing import List, NamedTuple, Tuple
 
 MAINNET_ICOS_REVISIONS_FILE = "mainnet-icos-revisions.json"
 nns_subnet_id = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
@@ -21,19 +22,55 @@ PUBLIC_DASHBOARD_API = "https://ic-api.internetcomputer.org"
 SAVED_VERSIONS_CANISTERS_FILE = "mainnet-canister-revisions.json"
 CDN_BASE_URL = "https://download.dfinity.systems"
 
-# Every version recorded here is NNS-elected and therefore built by the
-# release-testing pipeline, whose CI Main run attests everything the build uploaded
-# to the CDN. fetch-attested-sums.sh verifies a CDN SHA256SUMS file against that
-# attestation, pinned to this pipeline and to the exact commit. The pipeline is
-# pinned on the certificate's Build Config URI, not on the signer: the attestation
-# is minted inside the reusable ci-main.yml, so ci-main.yml is the signer whatever
-# the calling pipeline.
-ATTESTATION_BUILD_WORKFLOW = "dfinity/ic/.github/workflows/release-testing.yml"
-# The pipeline pin fixes which workflow ran, not from which ref it ran
-# (release-testing.yml can be dispatched on arbitrary branches): only accept
-# attestations minted from release-qualification branches.
-ATTESTATION_SOURCE_REF_REGEX = r"refs/heads/(rc--|hotfix-)[^/]+"
+
+class AttestationPolicy(NamedTuple):
+    """
+    Which CI runs may have minted the attestation of a CDN SHA256SUMS file.
+
+    The CI Main run of a release build attests everything the build uploaded to the
+    CDN. fetch-attested-sums.sh verifies a CDN SHA256SUMS file against that
+    attestation, pinned to the exact commit and to a policy. The pipeline is pinned
+    on the certificate's Build Config URI, not on the signer: the attestation is
+    minted inside the reusable ci-main.yml, so ci-main.yml is the signer whatever
+    the calling pipeline. The pipeline pin fixes which workflow ran, not from which
+    ref it ran (these workflows can be dispatched on arbitrary branches), hence the
+    source ref regex.
+    """
+
+    build_workflow: str
+    source_ref_regex: str
+
+
+# Release-qualification builds of rc--*/hotfix-* branches.
+RELEASE_TESTING_POLICY = AttestationPolicy(
+    "dfinity/ic/.github/workflows/release-testing.yml", r"refs/heads/(rc--|hotfix-)[^/]+"
+)
+# Release builds of master commits (ci-kickoff.yml also runs for other refs).
+MASTER_POLICY = AttestationPolicy("dfinity/ic/.github/workflows/ci-kickoff.yml", r"refs/heads/master")
+# Every version recorded in mainnet-icos-revisions.json is NNS-elected and therefore
+# built by the release-testing pipeline.
+ICOS_ATTESTATION_POLICIES = (RELEASE_TESTING_POLICY,)
+# NNS canisters are released from master commits (see the upgrade-governance-backend
+# skill); a hotfix is pushed as a hotfix-* branch and rebuilt by release-testing.
+NNS_CANISTER_ATTESTATION_POLICIES = (MASTER_POLICY, RELEASE_TESTING_POLICY)
 FETCH_ATTESTED_SUMS_SCRIPT = pathlib.Path(__file__).resolve().parents[2] / "scripts" / "fetch-attested-sums.sh"
+
+SYNC_CANISTERS_TOOL = "//rs/nervous_system/tools/sync-with-released-nervous-system-wasms"
+# Test variants of NNS canisters that sync-with-released-nervous-system-wasms pins to
+# the rev of the production canister on mainnet, with the sha256 of whatever the CDN
+# serves (they are not installed on mainnet, so no module hash can be read from
+# chain). verify_cdn_test_canister_pins() checks every new pin against the build's
+# attested SHA256SUMS before it is recorded.
+#   key -> (CDN file name, key of the production canister, its CDN file name)
+# The file names must match the canisters(filenames = ...) rule in MODULE.bazel.
+CDN_TEST_CANISTERS = {
+    "governance-canister_test": ("governance-canister_test.wasm.gz", "governance", "governance-canister.wasm.gz"),
+}
+# Test variants built by dfinity/nns-dapp and pinned from its GitHub releases. No
+# independent anchor exists for them yet (nns-dapp does not attest its release
+# assets), so they are recorded unverified. Tracked as part (b) of security finding
+# F-008.
+UNANCHORED_TEST_CANISTERS = ("nns_dapp_test", "sns_aggregator_test")
 
 # Release binaries (published on the CDN under `.../binaries/x86_64-linux/` as
 # `<name>.gz`) whose sha256 we record for every mainnet revision. They are exposed
@@ -495,14 +532,152 @@ def update_mainnet_icos_revisions_file(repo_root: pathlib.Path, logger: logging.
 
 
 def update_mainnet_revisions_canisters_file(repo_root: pathlib.Path, logger: logging.Logger):
-    cmd = [
-        "bazel",
-        "run",
-    ]
-    cmd.append("//rs/nervous_system/tools/sync-with-released-nervous-system-wasms")
+    """
+    Update mainnet-canister-revisions.json to what is deployed on mainnet.
 
-    logger.info("Running command: %s", " ".join(cmd))
-    subprocess.check_call(cmd, cwd=repo_root)
+    sync-with-released-nervous-system-wasms writes its result to a scratch file, and
+    the repository file is only replaced (atomically) once that result passed
+    verification. A failure -- of the tool or of the verification -- therefore
+    leaves the working tree untouched, so a retry of this script starts afresh
+    instead of tripping over (or, in dry-run mode, comparing against) an unverified
+    result.
+    """
+    path = repo_root / SAVED_VERSIONS_CANISTERS_FILE
+    before = json.loads(path.read_text(encoding="utf-8"))
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        proposed = pathlib.Path(tmp_dir).resolve() / SAVED_VERSIONS_CANISTERS_FILE
+        cmd = ["bazel", "run", SYNC_CANISTERS_TOOL, "--", "--output", str(proposed)]
+        logger.info("Running command: %s", " ".join(cmd))
+        subprocess.check_call(cmd, cwd=repo_root)
+        after = json.loads(proposed.read_text(encoding="utf-8"))
+
+    check_test_canisters_classified(after)
+    verify_cdn_test_canister_pins(before, after)
+    write_file_atomically(path, dump_canisters_json(after))
+
+
+def dump_canisters_json(canisters: dict) -> str:
+    """
+    Serialize like sync-with-released-nervous-system-wasms (serde_json's pretty
+    printer): two-space indent, no trailing newline, keys in their given order.
+    """
+    return json.dumps(canisters, indent=2, ensure_ascii=False)
+
+
+def write_file_atomically(path: pathlib.Path, contents: str):
+    """Replace `path` with `contents` such that it is never observed half-written."""
+    tmp = path.with_name(f"{path.name}.tmp-{os.getpid()}")
+    try:
+        with open(tmp, "x", encoding="utf-8") as f:
+            f.write(contents)
+            f.flush()
+            os.fsync(f.fileno())
+        if path.exists():
+            shutil.copymode(path, tmp)
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def check_test_canisters_classified(canisters: dict):
+    """
+    Every test canister must be either verified or explicitly known to be unanchored.
+
+    sync-with-released-nervous-system-wasms hashes the CDN download of every NNS
+    canister whose name ends in "_test": a new one that is not listed in
+    CDN_TEST_CANISTERS would be recorded without verification.
+    """
+    unclassified = [
+        key
+        for key in canisters
+        if key.endswith("_test") and key not in CDN_TEST_CANISTERS and key not in UNANCHORED_TEST_CANISTERS
+    ]
+    if unclassified:
+        raise Exception(
+            f"Test canister(s) {', '.join(unclassified)} in {SAVED_VERSIONS_CANISTERS_FILE} are neither verified "
+            "(CDN_TEST_CANISTERS) nor known to be unanchored (UNANCHORED_TEST_CANISTERS)"
+        )
+
+
+def verify_cdn_test_canister_pins(before: dict, after: dict):
+    """
+    Refuse to record a CDN_TEST_CANISTERS pin that is not backed by the build's attestation.
+
+    `before` is the recorded canister map, `after` the one produced by
+    sync-with-released-nervous-system-wasms, whose sha256 for a test canister is the
+    hash of whatever the CDN served (trust-on-first-use). For every test canister
+    whose pin changed, the sha256 must equal the entry in the attested
+    ic/<rev>/canisters/SHA256SUMS, and so must the production canister's sha256
+    (the module hash certified by mainnet) -- which ties the attested build to the
+    module that is actually deployed at that rev. Unchanged pins are not
+    re-verified: pins recorded before the attestation rollout could not be.
+
+    Raises if a pin cannot be verified. Only when the rev's commit is not public
+    yet (an undisclosed security patch) is the previous pin kept in `after`, with a
+    warning: the tool keeps proposing the new rev, so the pin is verified and
+    updated automatically once the commit is disclosed and rebuilt on a hotfix-*
+    branch.
+    """
+    logger = logging.getLogger("logger")
+    for key, (filename, prod_key, prod_filename) in CDN_TEST_CANISTERS.items():
+        new, prod, old = after.get(key), after.get(prod_key), before.get(key)
+        if new is None or prod is None:
+            raise Exception(f"{SAVED_VERSIONS_CANISTERS_FILE} must contain {key} and {prod_key}")
+        rev = new.get("rev")
+        check_commit_id(rev, f"{key} rev")
+        check_sha256(new.get("sha256"), f"{key} sha256")
+        check_commit_id(prod.get("rev"), f"{prod_key} rev")
+        check_sha256(prod.get("sha256"), f"{prod_key} sha256")
+
+        if new == old:
+            continue
+        if old is not None and old.get("rev") == rev:
+            raise Exception(
+                f"The CDN now serves different bytes for ic/{rev}/canisters/{filename} "
+                f"(sha256 {new['sha256']} instead of the pinned {old.get('sha256')}). "
+                "Released artifacts are immutable, so suspect tampering with the CDN."
+            )
+        if prod["rev"] != rev:
+            # The two revs are read one after the other: an upgrade in between splits them.
+            raise Exception(
+                f"{key} is at rev {rev} but {prod_key} at rev {prod['rev']}: was {prod_key} "
+                "upgraded while this ran? Retry."
+            )
+
+        try:
+            sums = fetch_attested_sha256sums(rev, "canisters", NNS_CANISTER_ATTESTATION_POLICIES)
+        except subprocess.CalledProcessError:
+            if commit_is_public(rev):
+                raise Exception(
+                    f"No build-provenance attestation verifies ic/{rev}/canisters/SHA256SUMS. "
+                    f"Refusing to record the CDN-served sha256 of {filename} for the public commit {rev}. "
+                    "Builds from before #11569 (2026-09-14) cannot be verified: if mainnet runs such a "
+                    f"build (e.g. after a rollback), record {key} in a human-reviewed PR instead."
+                )
+            if old is None:
+                raise Exception(
+                    f"Cannot verify {key} at the non-public commit {rev} and there is no previous pin to keep"
+                )
+            logger.warning(
+                "Commit %s is not public (undisclosed security patch?): keeping the previous %s pin "
+                "(rev %s) until the commit is disclosed and its build attested.",
+                rev,
+                key,
+                old.get("rev"),
+            )
+            after[key] = old
+            continue
+
+        recorded = {filename: new["sha256"], prod_filename: prod["sha256"]}
+        mismatches = [
+            f"{name} has sha256 {sha256} but the attested SHA256SUMS lists {sums.get(name)}"
+            for name, sha256 in recorded.items()
+            if sums.get(name) != sha256
+        ]
+        if mismatches:
+            raise Exception(f"ic/{rev}/canisters does not match its build attestation: " + "; ".join(mismatches))
+        logger.info("Verified %s at rev %s against the build attestation.", key, rev)
 
 
 def download_bytes(url: str) -> bytes:
@@ -527,30 +702,40 @@ def download_sha256sums(url: str) -> dict:
     return parse_sha256sums(download_bytes(url).decode())
 
 
-def fetch_attested_sha256sums(version: str, subdir: str) -> dict:
+def fetch_attested_sha256sums(
+    version: str, subdir: str, policies: Tuple[AttestationPolicy, ...] = ICOS_ATTESTATION_POLICIES
+) -> dict:
     """
     Verified {filename: hex sha256} for the CDN directory ic/<version>/<subdir>.
 
     Downloads the directory's SHA256SUMS and verifies it against the
-    build-provenance attestation minted by the release-testing.yml pipeline
-    for exactly this commit, via ci/scripts/fetch-attested-sums.sh.
-    Raises CalledProcessError when no such attestation exists or the file does not
-    match it; nothing is parsed before verification succeeds.
+    build-provenance attestation minted for exactly this commit by a pipeline
+    run that satisfies one of `policies` (tried in order), via
+    ci/scripts/fetch-attested-sums.sh. Raises CalledProcessError when no such
+    attestation exists or the file does not match it; nothing is parsed before
+    verification succeeds.
     """
-    with tempfile.NamedTemporaryFile() as tmp_file:
-        subprocess.run(
-            [
-                str(FETCH_ATTESTED_SUMS_SCRIPT),
-                version,
-                subdir,
-                ATTESTATION_BUILD_WORKFLOW,
-                ATTESTATION_SOURCE_REF_REGEX,
-                tmp_file.name,
-            ],
-            check=True,
-        )
-        with open(tmp_file.name, "r", encoding="utf-8") as f:
-            return parse_sha256sums(f.read())
+    error = None
+    for policy in policies:
+        with tempfile.NamedTemporaryFile() as tmp_file:
+            try:
+                subprocess.run(
+                    [
+                        str(FETCH_ATTESTED_SUMS_SCRIPT),
+                        version,
+                        subdir,
+                        policy.build_workflow,
+                        policy.source_ref_regex,
+                        tmp_file.name,
+                    ],
+                    check=True,
+                )
+            except subprocess.CalledProcessError as e:
+                error = e
+                continue
+            with open(tmp_file.name, "r", encoding="utf-8") as f:
+                return parse_sha256sums(f.read())
+    raise error
 
 
 def commit_is_public(version: str) -> bool:
