@@ -288,3 +288,16 @@ The tool maintains a well-defined directory layout for all artifacts produced du
 #### Scenario: Unknown or empty subnets are rejected before scraping
 - **WHEN** the source subnet is missing from the given subnets, or any subnet has no nodes
 - **THEN** `evaluate_merge_readiness` returns `ReadinessError::UnknownSubnet` or `ReadinessError::NoNodes` respectively, before scraping anything
+
+#### Scenario: Subnet merging tool preconditions
+- **WHEN** `subnet-merging-tool merge --source-subnet-id <M> --destination-subnet-id <T> --dir <DIR>` starts
+- **THEN** before running any step it checks that `M` and `T` are distinct `Application` or `VerifiedApplication` subnets of the same type, cycles cost schedule, subnet admins and SEV setting, that neither holds chain keys or is halted or scheduled to halt at its next CUP, and that `T` is not cooling down, and it aborts otherwise
+- **AND** the tool reuses the `ic-recovery` step framework: steps can be skipped (`--skip`) or resumed from (`--resume`), prompts disabled with `--skip-prompts`, and state is kept in the working directory
+
+#### Scenario: Subnet merging tool cools the source subnet down
+- **WHEN** the tool runs its current steps
+- **THEN** `CoolDownSourceSubnet` submits an `ic-admin` proposal that labels `M` as cooling down and changes nothing else about it
+- **AND** `CheckRegistryForCoolingDownFlag` polls the registry (every `--poll-interval-secs`, default 10, for up to `--registry-timeout-secs`, default 3600) until `M`'s record has `cooling_down` set, and persists the registry version `V` it read the label at together with `M`'s ID in the working directory; `V` need not be the version that set the label, and a resumed run rejects a recorded version belonging to a different source subnet
+- **AND** `CheckMergeReadiness` repeatedly evaluates `evaluate_merge_readiness` for `M` at `V` (for up to `--merge-ready-timeout-secs`, default 2400), scraping the replicas of the latest registry topology, read once per round, and logging scrape failures and each term's status; a round whose evaluation fails counts as not ready, and the step fails on timeout
+- **AND** unless prompts are skipped, it first prints a link to the `subnet-merging` Grafana dashboard for `M` at `V`, which evaluates the same condition
+- **AND** the tool stops after the readiness check, keeping its working directory; halting the subnets, merging their states, the `MergeSubnets` proposal, recovering `T` and deleting `M` are not implemented yet
