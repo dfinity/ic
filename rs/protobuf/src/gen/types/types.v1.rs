@@ -1312,8 +1312,6 @@ pub struct DkgMessageId {
 pub struct UpgradeAuthorizationShareId {
     #[prost(bytes = "vec", tag = "1")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "2")]
-    pub height: u64,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ConsensusMessageId {
@@ -1899,8 +1897,6 @@ pub mod upgrade_permit_action {
 pub struct UpgradePermitRequest {
     #[prost(message, optional, tag = "1")]
     pub requestor: ::core::option::Option<NodeId>,
-    #[prost(uint64, tag = "2")]
-    pub request_height: u64,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RequestUpgradePermit {

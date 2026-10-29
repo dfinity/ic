@@ -262,7 +262,6 @@ fn test_upgrade_actions_applied_to_state() {
         .messages(BatchMessages {
             upgrade_actions: vec![UpgradePermitAction::RequestPermit(UpgradePermitRequest {
                 requestor,
-                request_height: Height::from(1),
             })],
             ..BatchMessages::default()
         })

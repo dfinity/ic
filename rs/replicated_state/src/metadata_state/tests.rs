@@ -3595,19 +3595,13 @@ fn upgrade_state_members(nodes: &[u64]) -> BTreeSet<NodeId> {
     nodes.iter().map(|&i| node_test_id(i)).collect()
 }
 
-fn upgrade_request_action(requestor: NodeId, request_height: Height) -> UpgradePermitAction {
-    UpgradePermitAction::RequestPermit(UpgradePermitRequest {
-        requestor,
-        request_height,
-    })
+fn upgrade_request_action(requestor: NodeId) -> UpgradePermitAction {
+    UpgradePermitAction::RequestPermit(UpgradePermitRequest { requestor })
 }
 
-fn upgrade_authorize_action(requestor: NodeId, request_height: Height) -> UpgradePermitAction {
+fn upgrade_authorize_action(requestor: NodeId) -> UpgradePermitAction {
     UpgradePermitAction::AuthorizePermit(Signed {
-        content: UpgradePermitRequest {
-            requestor,
-            request_height,
-        },
+        content: UpgradePermitRequest { requestor },
         signature: BasicSignatureBatch {
             signatures_map: BTreeMap::new(),
         },
@@ -3622,7 +3616,7 @@ fn upgrade_return_action(requestor: NodeId) -> UpgradePermitAction {
 fn upgrade_state_applies_request() {
     let mut state = UpgradeState::default();
     state.apply(
-        &[upgrade_request_action(node_test_id(1), Height::new(3))],
+        &[upgrade_request_action(node_test_id(1))],
         Height::new(3),
         &upgrade_state_members(&[1, 2, 3]),
     );
@@ -3639,12 +3633,12 @@ fn upgrade_state_authorize_moves_request_to_authorized() {
     let mut state = UpgradeState::default();
 
     state.apply(
-        &[upgrade_request_action(node_test_id(1), Height::new(1))],
+        &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
         &members,
     );
     state.apply(
-        &[upgrade_authorize_action(node_test_id(1), Height::new(1))],
+        &[upgrade_authorize_action(node_test_id(1))],
         Height::new(5),
         &members,
     );
@@ -3658,12 +3652,12 @@ fn upgrade_state_return_removes_authorization() {
     let mut state = UpgradeState::default();
 
     state.apply(
-        &[upgrade_request_action(node_test_id(1), Height::new(1))],
+        &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
         &members,
     );
     state.apply(
-        &[upgrade_authorize_action(node_test_id(1), Height::new(1))],
+        &[upgrade_authorize_action(node_test_id(1))],
         Height::new(2),
         &members,
     );
@@ -3681,9 +3675,15 @@ fn upgrade_state_expires_stale_requests() {
     let members = upgrade_state_members(&[1, 2, 3]);
     let mut state = UpgradeState::default();
 
+    state.apply(
+        &[upgrade_request_action(node_test_id(1))],
+        Height::new(1),
+        &members,
+    );
+
     // A request survives until UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS have passed...
     state.apply(
-        &[upgrade_request_action(node_test_id(1), Height::new(1))],
+        &[],
         Height::new(1 + UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS.get()),
         &members,
     );
@@ -3707,17 +3707,17 @@ fn upgrade_state_prunes_departed_members() {
     let mut state = UpgradeState::default();
 
     state.apply(
-        &[upgrade_request_action(node_test_id(1), Height::new(1))],
+        &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
         &old_members,
     );
     state.apply(
-        &[upgrade_request_action(node_test_id(7), Height::new(2))],
+        &[upgrade_request_action(node_test_id(7))],
         Height::new(2),
         &old_members,
     );
     state.apply(
-        &[upgrade_authorize_action(node_test_id(7), Height::new(2))],
+        &[upgrade_authorize_action(node_test_id(7))],
         Height::new(3),
         &old_members,
     );
@@ -3738,12 +3738,12 @@ fn upgrade_state_applies_multiple_actions_per_block() {
 
     // Two nodes request...
     state.apply(
-        &[upgrade_request_action(node_test_id(1), Height::new(1))],
+        &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
         &members,
     );
     state.apply(
-        &[upgrade_request_action(node_test_id(2), Height::new(2))],
+        &[upgrade_request_action(node_test_id(2))],
         Height::new(2),
         &members,
     );
@@ -3752,8 +3752,8 @@ fn upgrade_state_applies_multiple_actions_per_block() {
     // ... and both are authorized in the same block.
     state.apply(
         &[
-            upgrade_authorize_action(node_test_id(1), Height::new(1)),
-            upgrade_authorize_action(node_test_id(2), Height::new(2)),
+            upgrade_authorize_action(node_test_id(1)),
+            upgrade_authorize_action(node_test_id(2)),
         ],
         Height::new(5),
         &members,

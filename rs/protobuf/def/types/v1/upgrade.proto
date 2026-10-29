@@ -17,7 +17,6 @@ message UpgradePermitAction {
 
 message UpgradePermitRequest {
   types.v1.NodeId requestor = 1;
-  uint64 request_height = 2;
 }
 
 message RequestUpgradePermit {

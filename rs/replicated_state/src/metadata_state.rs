@@ -2449,7 +2449,7 @@ impl UpgradeState {
             match action {
                 UpgradePermitAction::RequestPermit(request) => {
                     self.unauthorized_upgrade_requests
-                        .insert(request.requestor, request.request_height);
+                        .insert(request.requestor, height);
                 }
                 UpgradePermitAction::AuthorizePermit(authorization) => {
                     let node = authorization.content.requestor;
