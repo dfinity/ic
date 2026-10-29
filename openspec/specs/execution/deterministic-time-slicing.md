@@ -48,6 +48,11 @@ DTS uses two levels of instruction limits: message-level and slice-level.
 - **THEN** the reported count is capped at the instructions left for the message (the message instruction limit minus the instructions already executed in previous slices), in addition to the existing floor of zero
 - **AND** this keeps the instructions accounted for the round consistent with the instructions charged for the message
 
+#### Scenario: Deductions from the round instruction limit saturate
+- **WHEN** executed instructions (of a slice, Wasm compilation or assembly, canister logs fetching, or a management canister operation) are deducted from the round's remaining instruction budget, or instructions executed are computed from the round limits before and after
+- **THEN** the subtraction saturates instead of overflowing, since instructions reported by untrusted Wasm execution could in principle exceed the remaining round budget
+- **AND** an exhausted budget, at zero or below, still ends the round's execution as before
+
 ### Requirement: Paused Execution State
 
 Paused executions maintain all necessary state for deterministic resumption.
