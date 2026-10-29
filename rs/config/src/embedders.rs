@@ -114,11 +114,12 @@ const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
     NumOsPages::new(GIB / (PAGE_SIZE as u64));
 
 // Maximum number of Wasm heap OS pages (4KiB) that a single message execution
-// is allowed to access. The default equals the maximum heap size, so the limit
-// is never hit; it is lowered through the config once all heap accesses are
-// covered by the limit checks.
-const WASM_MEMORY_ACCESSED_PAGE_LIMIT: NumOsPages =
-    NumOsPages::new(MAX_WASM64_MEMORY_IN_BYTES / (PAGE_SIZE as u64));
+// is allowed to access. The Wasm64 heap (`MAX_WASM64_MEMORY_IN_BYTES`) is
+// larger than this, so a message can only touch a part of a large heap: it
+// bounds the OS work (page faults, mappings) done for one message. The value
+// is the former maximum Wasm64 heap size, so no message that was possible
+// before the heap grew is affected.
+const WASM_MEMORY_ACCESSED_PAGE_LIMIT: NumOsPages = NumOsPages::new(6 * GIB / (PAGE_SIZE as u64));
 
 /// The maximum size in bytes for an uncompressed Wasm module. This value is
 /// also used as the maximum size for the Wasm chunk store of each canister.
