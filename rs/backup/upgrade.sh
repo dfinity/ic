@@ -12,7 +12,7 @@ CONFIG_FILE="config.json5"
 
 function download_backup_binary() {
     BUILD_ID=$1
-    DOWNLOAD_URL="https://download.dfinity.systems/ic/${BUILD_ID}/release/ic-backup.gz"
+    DOWNLOAD_URL="https://download.dfinity.systems/ic/${BUILD_ID}/binaries/x86_64-linux/ic-backup.gz"
 
     BACKUP_EXE="ic-backup_${BUILD_ID}"
     BACKUP_EXE_GZ="${BACKUP_EXE}.gz"
@@ -33,8 +33,8 @@ function download_backup_binary() {
 echo -e "${YELLOW}Attempting to upgrade the 'ic-backup' binary${ENDCOLOR}."
 
 if [ -z "$1" ]; then
-    echo -e "${YELLOW}Please provide a GIT SHA of the revision which contains the desired 'ic-backup' version. ${RED}Note ${YELLOW}that the revision should have a disk images built already.${ENDCOLOR}"
-    echo -e "${YELLOW}To get the latest revision that has a disk image pre-built, you can run '${GREEN}ci/src/artifacts/newest_sha_with_disk_image.sh master${YELLOW}' from within the IC repo${ENDCOLOR}."
+    echo -e "${YELLOW}Please provide a GIT SHA of the revision which contains the desired 'ic-backup' version. ${RED}Note ${YELLOW}that CI must have published the 'ic-backup' binary for that revision.${ENDCOLOR}"
+    echo -e "${YELLOW}The oldest version in use on mainnet is the GuestOS version of the NNS subnet (${GREEN}tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe${YELLOW}), listed in ${GREEN}https://github.com/dfinity/ic/blob/master/mainnet-icos-revisions.json${YELLOW}.${ENDCOLOR}"
 
     read -p "GIT SHA: " git_sha
 else

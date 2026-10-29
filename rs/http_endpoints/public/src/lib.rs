@@ -41,8 +41,8 @@ use crate::{
     health_status_refresher::HealthStatusRefreshLayer,
     metrics::{
         HttpHandlerMetrics, LABEL_HTTP_STATUS_CODE, LABEL_INSECURE, LABEL_IO_ERROR, LABEL_SECURE,
-        LABEL_TIMEOUT_ERROR, LABEL_TLS_ERROR, LABEL_UNKNOWN, REQUESTS_LABEL_NAMES, STATUS_ERROR,
-        STATUS_SUCCESS,
+        LABEL_TIMEOUT_ERROR, LABEL_TLS_ERROR, LABEL_UNKNOWN, LABEL_UNMATCHED_PATH,
+        REQUESTS_LABEL_NAMES, STATUS_ERROR, STATUS_SUCCESS,
     },
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
     status::StatusService,
@@ -732,11 +732,11 @@ async fn collect_timer_metric(
 ) -> axum::response::Response {
     use http_body::Body;
 
-    let path = if let Some(matched_path) = request.extensions().get::<MatchedPath>() {
-        matched_path.as_str().to_owned()
-    } else {
-        request.uri().path().to_owned()
-    };
+    let path = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map_or(LABEL_UNMATCHED_PATH, |matched_path| matched_path.as_str())
+        .to_string();
 
     let http_version = format!("{:?}", request.version());
 
@@ -747,7 +747,7 @@ async fn collect_timer_metric(
 
     metrics
         .request_body_size_bytes
-        .with_label_values(&[path.as_str(), LABEL_UNKNOWN])
+        .with_label_values(&[&path, LABEL_UNKNOWN])
         .observe(request.body().size_hint().lower() as f64);
 
     let request_timer = HistogramVecTimer::start_timer(

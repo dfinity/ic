@@ -11,13 +11,13 @@ on the process that this file is part of, see
 
 ## Changed
 
-* `UpdateSubnet` can now enable SEV on an existing subnet, not only at subnet creation. Disabling SEV
-  is still rejected, and enabling it only succeeds if the subnet's nodes all have a chip ID and its
-  GuestOS version has launch measurements, as the SEV invariants demand.
-
 ## Deprecated
 
 ## Removed
+
+* The deprecated `height`, `time` and `state_hash` fields of `CatchUpPackageContents`. Where
+  applicable, their equivalents are now found in `cup_type`: a `CupType::Recovery` record carries
+  them in its `RecoveryArgs`, and the height of a `CupType::Genesis` CUP is always 0.
 
 ## Fixed
 

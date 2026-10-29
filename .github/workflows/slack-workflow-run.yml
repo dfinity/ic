@@ -23,32 +23,33 @@ on:
       - Update mainnet canister versions file
       - Kickoff
       - Bazel Dependency Submission
+      - Advance Claude Security RC
 
 jobs:
   slack-workflow-run:
     name: Send Notification
+    # Skip runs from forks, whose workflow and branch names can match the filters above.
+    if: github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Setup Message and Channels
         id: setup
         shell: bash
         run: |
-          TRIGGERING_WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
-          TRIGGERING_WORKFLOW_BRANCH="${{ github.event.workflow_run.head_branch }}"
           CHANNEL="eng-idx-alerts"
           FULL_MESSAGE="nothing"
 
           # if a job was cancelled, never post it to slack
-          if [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(cancelled)$ ]]; then
+          if [[ "$TRIGGERING_WORKFLOW_CONCLUSION" =~ ^(cancelled)$ ]]; then
             POST_TO_SLACK="false"
             echo "post_to_slack=${POST_TO_SLACK}" >> $GITHUB_OUTPUT
             exit 0
           # if a job was successful, don't post it to slack, unless it was a release testing job (see below)
-          elif [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(success)$ ]]; then
+          elif [[ "$TRIGGERING_WORKFLOW_CONCLUSION" =~ ^(success)$ ]]; then
             FULL_MESSAGE=":white_check_mark: ${MESSAGE} :relaxed:"
             POST_TO_SLACK="false"
           # if a job failed or timed out, always post it to slack
-          elif [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(failure|timed_out)$ ]]; then
+          elif [[ "$TRIGGERING_WORKFLOW_CONCLUSION" =~ ^(failure|timed_out)$ ]]; then
             FULL_MESSAGE=":fire: ${MESSAGE} :disappointed:"
             POST_TO_SLACK="true"
           fi
@@ -56,7 +57,7 @@ jobs:
           # If the job was release testing, modify the message and channel and post it to slack
           if [[ "$TRIGGERING_WORKFLOW_NAME" == "Release Testing" ]]; then
             CHANNEL="release-management-alerts"
-            COMMIT="${{ github.event.workflow_run.head_sha }}"
+            COMMIT="$TRIGGERING_WORKFLOW_SHA"
             FULL_MESSAGE="${FULL_MESSAGE} commit: ${COMMIT}"
             POST_TO_SLACK="true"
           fi
@@ -78,6 +79,10 @@ jobs:
           echo "message=${FULL_MESSAGE}" >> $GITHUB_OUTPUT
           echo "post_to_slack=${POST_TO_SLACK}" >> $GITHUB_OUTPUT
         env:
+          TRIGGERING_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          TRIGGERING_WORKFLOW_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          TRIGGERING_WORKFLOW_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          TRIGGERING_WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
           MESSAGE: "*${{github.event.workflow_run.name}}* ${{github.event.workflow_run.conclusion}} on ${{github.event.workflow_run.head_branch}} - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.event.workflow_run.id}}|Run#${{github.event.workflow_run.id}}>"
 
       - name: Post Slack Notification

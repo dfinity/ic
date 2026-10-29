@@ -51,27 +51,34 @@ Also check for optional tools and inform the user what will be automated vs manu
 
 ## Step 1: Pick Release Candidate Commit
 
-Run:
+Use the commit of the most recent **successful** `Schedule Daily` run:
 ```
-./rs/nervous_system/tools/release/cmd.sh latest_commit_with_prebuilt_artifacts
+gh run list \
+    --repo dfinity/ic \
+    --workflow schedule-daily.yml \
+    --limit 6 \
+    --json headSha,createdAt,conclusion,status,databaseId
 ```
+Take the `headSha` of the newest entry with `"conclusion": "success"`.
 
-This returns the most recent master commit for which prebuilt artifacts have been
-uploaded. Artifacts are uploaded after `bazel build` but before `bazel test`, so
-having artifacts does NOT guarantee tests passed — always verify CI next.
-
-Verify the `bazel-test-all` job passed for the returned commit:
+Then confirm that commit's post-merge `CI Main` run passed its tests and
+uploaded the prebuilt artifacts that the proposal scripts download:
 ```
-gh api repos/dfinity/ic/commits/$RC_COMMIT/check-runs --jq '[.check_runs[] | select(.name == "ci-kickoff / bazel-test-all") | {status, conclusion}]'
+gh api repos/dfinity/ic/commits/$RC_COMMIT/check-runs \
+    --paginate \
+    --jq '.check_runs[] |
+        select(
+             .name == "CI Main / Bazel Test All"
+             or .name == "CI Main / Build IC"
+             or .name == "CI Main / Upload external artifacts"
+        )
+        | "\(.check_suite.id) | \(.name) | \(.status) | \(.conclusion) | \(.details_url)"'
 ```
-
-- If the conclusion is `success`, use this commit.
-- If tests have not yet finished (`status != "completed"`) or the conclusion is
-  not `success`, do **not** wait. Instead, open
-  https://github.com/dfinity/ic/actions/workflows/ci-kickoff.yml?query=branch%3Amaster+is%3Asuccess
-  and pick the most recent commit with a successful `ci-kickoff` run. Re-run the
-  `latest_commit_with_prebuilt_artifacts` check-runs query above on that commit
-  to confirm artifacts are available, then use it.
+Each of these checks usually appears twice: once from the merge-queue run, where
+`Build IC` and `Upload external artifacts` are `skipped`, and once from the
+post-merge master run. Look at the master run, the one where `Build IC` was not
+skipped. All three checks there must be `completed` / `success`. If they are not,
+fall back to the next-newest successful `Schedule Daily` run.
 
 Ask the user to confirm the commit or provide an override.
 
@@ -89,8 +96,38 @@ Parse the output to categorize each canister:
   (shown in green by the script). These are strong candidates for release.
 - **Chore-only commits**: canisters where every commit is chore, refactor, test,
   or docs. Generally skip these unless there is a reason to release.
-- **No new commits**: canisters with zero commits since last release. Do not
-  release.
+
+The script decides "interesting" from the conventional commit prefix alone, and
+prefixes are often wrong: a `fix:` can be a pure deduplication, and a `feat:`
+can be a dependency migration that keeps behavior identical. Before presenting
+the results, confirm each `feat`/`fix` commit:
+
+1. Read the commit's diff restricted to the canister's code, e.g.
+   `git show $COMMIT -- rs/nns/cmc/ rs/nervous_system/runtime/`. Include shared
+   libraries the canister depends on, not just its own directory.
+2. Check whether the commit added an entry to the canister's
+   `unreleased_changelog.md`. An entry is strong evidence that the author
+   considers the change user-visible; no entry is a hint (not proof) that it is
+   not. There is a reminder bot that tells people to add changelog entries.
+   In practice, it's pretty effective, but not always.
+3. Decide whether the canister's observable behavior changes: its API, its
+   responses or error codes, its state, or what it does. Refactors,
+   deduplication, comment changes, removing `#![allow(deprecated)]`, and
+   library upgrades (e.g. moving to a new `ic-cdk` version) that preserve
+   behavior are **not** interesting; treat them as chores, whatever their
+   prefix says. Do not trust the commit message on this; it can describe
+   behavior that the code does not actually implement.
+
+Reclassify commits that do not change behavior as uninteresting, and briefly
+tell the user why (e.g. "dedups an identical error mapping; codes unchanged").
+A canister whose only interesting-by-prefix commits fail this check becomes a
+SKIP.
+
+The reverse also happens: a `chore:` or `refactor:` commit that adds an
+`unreleased_changelog.md` entry changes behavior, so count it as interesting.
+Reading each canister's `unreleased_changelog.md` at `$RC_COMMIT` (e.g.
+`git show $RC_COMMIT:rs/registry/canister/unreleased_changelog.md`) is a quick
+way to catch these.
 
 **Exclude SNS ledger, index, and archive** from this process. The ICRC ledger suite
 (ledger/index/archive) is released separately by the DeFi team on a different cadence
@@ -124,8 +161,45 @@ Store the selected canisters as `NNS_CANISTERS` and `SNS_CANISTERS`.
 
 **Skip this step if no NNS canisters were selected** (i.e. only SNS canisters).
 
-Run the NNS canister upgrade dress rehearsal test. This ensures selected NNS canisters
-remain upgradeable (no panic during pre-upgrade). The test uses golden NNS state.
+**Usually this step is already done by Schedule Daily.** Its `Bazel Test NNS
+Nightly` job runs this same test with `NNS_CANISTER_UPGRADE_SEQUENCE=all`, which
+upgrades every NNS canister. So if `RC_COMMIT` came from a successful Schedule
+Daily run (step 1), confirm that the test actually ran and passed in that run,
+and then skip the rest of this step:
+
+```
+gh run view \
+    $SCHEDULE_DAILY_RUN_ID \
+    --repo dfinity/ic \
+    --json jobs \
+    --jq '.jobs[]
+        | select(.name == "Bazel Test NNS Nightly")
+        | .databaseId'
+
+# Pass the job ID printed by the previous command as $JOB_ID.
+gh run view \
+    $SCHEDULE_DAILY_RUN_ID \
+    --repo dfinity/ic --job $JOB_ID --log \
+    | grep -E 'upgrade_canisters_with_golden_nns_state .*(PASSED|FAILED|FLAKY)'
+```
+
+(`$SCHEDULE_DAILY_RUN_ID` is the `databaseId` of the Schedule Daily run chosen in
+step 1.) Expect a line like
+
+```
+//rs/nns/integration_tests:upgrade_canisters_with_golden_nns_state PASSED in 1207.2s
+```
+
+If the result says `(cached) PASSED`, the test passed against an older copy of
+the golden NNS state; ask the user whether that is acceptable or the test should
+be re-run as described below. Likewise if it says `FLAKY`: the job runs with
+`--config=flaky_retry`, so the test failed at least once before passing on a
+retry.
+
+If `RC_COMMIT` did not come from a successful Schedule Daily run (e.g. the user
+overrode it), run the NNS canister upgrade dress rehearsal test as follows. This
+ensures selected NNS canisters remain upgradeable (no panic during pre-upgrade).
+The test uses golden NNS state.
 
 Before running, check that the working tree is clean (`git status --porcelain`). If
 there are uncommitted changes, warn the user — `git checkout` will fail or lose work.
@@ -216,7 +290,10 @@ to confirm. If not found, ask the user for their neuron ID.
 
 Instruct the user to:
 1. Plug in their HSM key and unplug their YubiKey
-2. Test hardware: `pkcs11-tool --list-slots`
+2. Test hardware, with either of:
+   - `pkcs11-tool --list-slots`: quick check that the HSM is detected.
+   - `pkcs11-tool --login --test`: more thorough. It prompts for the HSM PIN, so
+     it also confirms that the PIN works before any proposal is submitted.
 
 Then, print the exact commands for the user to run in a **separate terminal / tmux pane**.
 Use the actual proposals directory path (e.g. `../proposals/release-2026-04-06`), not a
@@ -225,12 +302,20 @@ IDs afterward.
 
 For each NNS proposal:
 ```
-./rs/nervous_system/tools/release/submit-mainnet-nns-upgrade-proposal.sh ../proposals/release-YYYY-MM-DD/nns-$CANISTER.md $NEURON_ID 2>&1 | tee /tmp/proposal-nns-$CANISTER.out
+./rs/nervous_system/tools/release/submit-mainnet-nns-upgrade-proposal.sh \
+    ../proposals/release-YYYY-MM-DD/nns-$CANISTER.md \
+    $NEURON_ID \
+    2>&1 \
+    | tee /tmp/proposal-nns-$CANISTER.out
 ```
 
 For each SNS proposal:
 ```
-./rs/nervous_system/tools/release/submit-mainnet-publish-sns-wasm-proposal.sh ../proposals/release-YYYY-MM-DD/sns-$CANISTER.md $NEURON_ID 2>&1 | tee /tmp/proposal-sns-$CANISTER.out
+./rs/nervous_system/tools/release/submit-mainnet-publish-sns-wasm-proposal.sh \
+    ../proposals/release-YYYY-MM-DD/sns-$CANISTER.md \
+    $NEURON_ID \
+    2>&1 \
+    | tee /tmp/proposal-sns-$CANISTER.out
 ```
 
 Note: Do NOT pipe through `sed` — it buffers output and hides the interactive HSM PIN prompt.
@@ -289,26 +374,26 @@ to the new post. Only mention the thread for the type of release being done:
 
 ## Step 7: Schedule Trusted Neurons Vote
 
-Provide the user with copy-ready voting instructions. Only include sections (NNS Backend
-/ SNS) that have proposals. Format:
-```
-NNS Backend:
-- [Governance: $ID](https://dashboard.internetcomputer.org/proposal/$ID)
-- [Registry: $ID](https://dashboard.internetcomputer.org/proposal/$ID)
-SNS:
-- [Root: $ID](https://dashboard.internetcomputer.org/proposal/$ID)
-```
+Instruct the user to create a Google Calendar event:
+1. Click the 11 AM CET slot, 3 calendar days from today (use the user's local
+   date). E.g. Friday → Monday, Monday → Thursday, Tuesday → Friday.
+2. Put it on the "NNS Upgrades" calendar.
+3. Title: Upgrade NNS & SNS (drop whichever has no proposals)
+4. Description: paste from the clipboard.
 
-Instruct the user to:
-1. Duplicate a past calendar event from:
-   https://calendar.google.com/calendar/u/0/r/eventedit/duplicate/MjJvMTdva2xtdGJuZDhoYjRjN2poZzNwM2ogY182NGYwZDdmZDYzYjNlMDYxZjE1Zjk2MTU1NWYzMmFiN2EyZmY3M2NjMWJmM2Q3ZTRkNGI3NGVjYjk1ZWVhM2M0QGc
-2. Use the "NNS Upgrades" calendar
-3. Schedule at 11 AM CET, 3 calendar days from today (use the user's local date).
-   E.g. Friday → Monday, Monday → Thursday, Tuesday → Friday.
-4. Title: include canister name and proposal ID
-5. Description: link to the proposal
-6. Send email invitations when prompted
-7. If people do not respond, ping @trusted-neurons in #eng-release
+Before giving these instructions, write the description to a file and copy it to
+the clipboard (`pbcopy < $FILE`), so the user only has to paste it. Print the
+content and tell the user it has been copied to their clipboard. Google Calendar
+does not render Markdown, so use bare URLs; it turns them into links. Only
+include sections (NNS / SNS) that have proposals. Format:
+```
+NNS:
+- Governance: https://dashboard.internetcomputer.org/proposal/$ID
+- Registry: https://dashboard.internetcomputer.org/proposal/$ID
+
+SNS:
+- Root: https://dashboard.internetcomputer.org/proposal/$ID
+```
 
 ## Step 8: Update Changelog
 
@@ -324,15 +409,28 @@ For each proposal ID, run:
 
 After updating changelogs:
 1. Create a branch: `changelog-update-YYYY-MM-DD`
-2. Stage only the changed changelog files (e.g. `git add rs/nns/governance/CHANGELOG.md
-   rs/nns/governance/unreleased_changelog.md rs/registry/canister/CHANGELOG.md ...`).
-   Do NOT use `git add .` — it may stage unrelated files.
-3. Commit: `git commit -m "chore(nervous-system): update changelog"`
-4. Push: `git push --set-upstream origin changelog-update-YYYY-MM-DD`
-5. Create a draft PR:
+2. Commit only the changed changelog files, by passing their paths to
+   `git commit` (e.g. `git commit -m "chore(nervous-system): update changelog"
+   -- rs/registry/canister/CHANGELOG.md rs/registry/canister/unreleased_changelog.md ...`).
+   With paths, `git commit` commits only those files and leaves anything else
+   the user has staged untouched. Do NOT use `git add .` or a bare `git commit`;
+   either may pick up unrelated files.
+3. Push: `git push --set-upstream origin changelog-update-YYYY-MM-DD`
+4. Create the PR, **not** as a draft, even though `CLAUDE.md` says PRs should
+   be drafts:
    ```
-   gh pr create --draft --title "chore(nervous-system): Update changelog for release YYYY-MM-DD" --body "Update CHANGELOG.md for today's release."
+   gh pr create \
+       --title "chore(nervous-system): Update changelog for release YYYY-MM-DD" \
+       --body "Update CHANGELOG.md for today's release."
    ```
+   The PR is opened under whichever account `gh` is signed in as, which is
+   normally the user's own, so the user cannot approve it themselves; someone
+   else has to.
+
+   Do **not** request a Copilot review on this PR, even though `CLAUDE.md` says
+   to request one for every PR. Its content is generated entirely by
+   `add-release-to-changelog.sh` (entries moved from `unreleased_changelog.md`
+   into `CHANGELOG.md`), so there is nothing for Copilot to review.
 
 Tell the user: "PR can be merged before the proposals are executed."
 

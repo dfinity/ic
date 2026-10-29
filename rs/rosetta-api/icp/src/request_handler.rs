@@ -31,7 +31,7 @@ use crate::{
     request_types::{GetProposalInfo, STATUS_COMPLETED},
 };
 use ic_ledger_canister_blocks_synchronizer::{
-    blocks::{HashedBlock, RosettaBlocksMode},
+    blocks::{Blocks, HashedBlock, RosettaBlocksMode},
     rosetta_block::RosettaBlock,
 };
 use ic_ledger_core::block::BlockType;
@@ -265,7 +265,12 @@ impl RosettaRequestHandler {
                             .map_err(ApiError::from)?
                             .into_iter()
                         {
-                            blocks.push(self.hashed_block_to_rosetta_core_block(hb).await?);
+                            let parent_block_id = create_parent_block_id(&storage, hb.index)?;
+                            blocks.push(hashed_block_to_rosetta_core_block(
+                                hb,
+                                parent_block_id,
+                                self.ledger.token_symbol(),
+                            )?);
                         }
                     }
                 };
@@ -305,12 +310,7 @@ impl RosettaRequestHandler {
     }
 
     async fn is_a_rosetta_block_index(&self, block_index: BlockIndex) -> bool {
-        match self.rosetta_blocks_mode().await {
-            RosettaBlocksMode::Disabled => false,
-            RosettaBlocksMode::Enabled {
-                first_rosetta_block_index,
-            } => block_index >= first_rosetta_block_index,
-        }
+        is_a_rosetta_block_index(self.rosetta_blocks_mode().await, block_index)
     }
 
     async fn is_rosetta_blocks_mode_enabled(&self) -> bool {
@@ -385,21 +385,8 @@ impl RosettaRequestHandler {
         &self,
         block_index: BlockIndex,
     ) -> Result<BlockIdentifier, ApiError> {
-        // For the first block, we return the block itself as its parent
-        let parent_block_index = block_index.saturating_sub(1);
         let blocks = self.ledger.read_blocks().await;
-        if self.is_a_rosetta_block_index(parent_block_index).await {
-            let parent_block = blocks.get_rosetta_block(parent_block_index)?;
-            Ok(BlockIdentifier {
-                index: parent_block_index,
-                hash: hex::encode(parent_block.hash()),
-            })
-        } else if blocks.is_verified_by_idx(&parent_block_index)? {
-            let parent_block = &blocks.get_hashed_block(&parent_block_index)?;
-            convert::block_id(parent_block)
-        } else {
-            Err(ApiError::InvalidBlockId(true, Default::default()))
-        }
+        create_parent_block_id(&blocks, block_index)
     }
 
     async fn hashed_block_to_rosetta_core_block(
@@ -853,7 +840,12 @@ impl RosettaRequestHandler {
 
         let mut transactions = vec![];
         for block in blocks.clone().into_iter() {
-            let rosetta_core_block = self.hashed_block_to_rosetta_core_block(block).await?;
+            let parent_block_id = create_parent_block_id(&block_storage, block.index)?;
+            let rosetta_core_block = hashed_block_to_rosetta_core_block(
+                block,
+                parent_block_id,
+                self.ledger.token_symbol(),
+            )?;
             for transaction in rosetta_core_block.transactions.into_iter() {
                 transactions.push(BlockTransaction {
                     block_identifier: rosetta_core_block.block_identifier.clone(),
@@ -972,6 +964,42 @@ pub fn make_sig_data(message_id: &MessageId) -> Vec<u8> {
     sig_data.extend_from_slice(DOMAIN_IC_REQUEST);
     sig_data.extend_from_slice(message_id.as_bytes());
     sig_data
+}
+
+fn is_a_rosetta_block_index(
+    rosetta_blocks_mode: RosettaBlocksMode,
+    block_index: BlockIndex,
+) -> bool {
+    match rosetta_blocks_mode {
+        RosettaBlocksMode::Disabled => false,
+        RosettaBlocksMode::Enabled {
+            first_rosetta_block_index,
+        } => block_index >= first_rosetta_block_index,
+    }
+}
+
+/// Returns the identifier of the parent of the block at `block_index`.
+///
+/// Reads the Rosetta blocks mode from `blocks` instead of locking the
+/// blockchain again, so callers can keep holding their `Blocks` guard.
+fn create_parent_block_id(
+    blocks: &Blocks,
+    block_index: BlockIndex,
+) -> Result<BlockIdentifier, ApiError> {
+    // For the first block, we return the block itself as its parent
+    let parent_block_index = block_index.saturating_sub(1);
+    if is_a_rosetta_block_index(blocks.rosetta_blocks_mode, parent_block_index) {
+        let parent_block = blocks.get_rosetta_block(parent_block_index)?;
+        Ok(BlockIdentifier {
+            index: parent_block_index,
+            hash: hex::encode(parent_block.hash()),
+        })
+    } else if blocks.is_verified_by_idx(&parent_block_index)? {
+        let parent_block = &blocks.get_hashed_block(&parent_block_index)?;
+        convert::block_id(parent_block)
+    } else {
+        Err(ApiError::InvalidBlockId(true, Default::default()))
+    }
 }
 
 fn hashed_block_to_rosetta_core_block(

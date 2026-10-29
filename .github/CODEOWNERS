@@ -33,7 +33,8 @@ go.sum                    @dfinity/infra
 # [DevEnv]
 .vscode/                  @dfinity/infra
 
-.claude/                  @dfinity/infra
+.claude/                                        @dfinity/infra
+/.claude/skills/upgrade-governance-backend/     @dfinity/governance-team
 
 # [Publishing-Artifacts]
 /publish/ @dfinity/infra

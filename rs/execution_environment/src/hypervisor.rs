@@ -23,12 +23,12 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{binary_buckets_with_zero, decimal_buckets_with_zero, linear_buckets};
 use ic_replicated_state::{
     ExecutionState, Memory, NetworkTopology, NumWasmPages, ReplicatedState, SystemState,
-    canister_state::{execution_state::WasmExecutionMode, num_bytes_try_from},
+    canister_state::num_bytes_try_from,
 };
 use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
-    CanisterId, DiskBytes, MAX_WASM_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES, NumBytes,
-    NumInstructions, PrincipalId, SubnetId, Time, messages::RequestMetadata, methods::FuncRef,
+    CanisterId, DiskBytes, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
+    messages::RequestMetadata, methods::FuncRef,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
@@ -229,7 +229,7 @@ impl Hypervisor {
         let compilation_cost = self.cost_to_compile_wasm_instruction * wasm_size as u64;
         if let Err(err) = wasm_size_result {
             let total_cost = self.create_execution_state_base_cost + compilation_cost;
-            round_limits.instructions -= as_round_instructions(total_cost);
+            round_limits.deduct_instructions(as_round_instructions(total_cost));
             self.compilation_cache
                 .insert_err(&canister_module, err.clone().into());
             return (total_cost, Err(err.into()));
@@ -291,7 +291,7 @@ impl Hypervisor {
                 }
                 let total_cost = self.create_execution_state_base_cost
                     + compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
-                round_limits.instructions -= as_round_instructions(total_cost);
+                round_limits.deduct_instructions(as_round_instructions(total_cost));
                 let result =
                     Self::validate_wasm_memory(&execution_state, declared_wasm_memory_size)
                         .map(|()| execution_state);
@@ -299,7 +299,7 @@ impl Hypervisor {
             }
             Err(err) => {
                 let total_cost = self.create_execution_state_base_cost + compilation_cost;
-                round_limits.instructions -= as_round_instructions(total_cost);
+                round_limits.deduct_instructions(as_round_instructions(total_cost));
                 (total_cost, Err(err))
             }
         }
@@ -313,10 +313,7 @@ impl Hypervisor {
         execution_state: &ExecutionState,
         declared_wasm_memory_size: Option<NumWasmPages>,
     ) -> HypervisorResult<()> {
-        let max_wasm_memory_size = match execution_state.wasm_execution_mode {
-            WasmExecutionMode::Wasm32 => NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
-            WasmExecutionMode::Wasm64 => NumBytes::new(MAX_WASM64_MEMORY_IN_BYTES),
-        };
+        let max_wasm_memory_size = execution_state.wasm_execution_mode.max_wasm_memory_size();
         let wasm_memory_size = execution_state.wasm_memory_usage();
         if wasm_memory_size > max_wasm_memory_size {
             return Err(HypervisorError::InvalidWasmMemory {

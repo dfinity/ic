@@ -123,6 +123,37 @@ fn ensure_only_allowed_fields_set_accepts_all_allowed_fields() {
 }
 
 #[test]
+fn ensure_only_allowed_fields_set_accepts_state_limits() {
+    let mut payload = empty_update_payload();
+    payload.resource_limits = Some(ResourceLimitsPb {
+        maximum_state_size: Some(1 << 30),
+        maximum_state_delta: Some(1 << 28),
+        ..Default::default()
+    });
+    ensure_only_allowed_fields_set(&payload).expect("state limits must be allowed");
+}
+
+#[test]
+fn ensure_only_allowed_fields_set_rejects_query_limits() {
+    let mut payload = empty_update_payload();
+    payload.resource_limits = Some(ResourceLimitsPb {
+        maximum_state_size: Some(1 << 30),
+        maximum_query_instructions: Some(1),
+        maximum_query_walltime_seconds: Some(1),
+        ..Default::default()
+    });
+    let err = ensure_only_allowed_fields_set(&payload).expect_err("should reject");
+    assert!(
+        err.contains("resource_limits.maximum_query_instructions"),
+        "error must mention the query limit: {err}"
+    );
+    assert!(
+        err.contains("resource_limits.maximum_query_walltime_seconds"),
+        "error must mention the query limit: {err}"
+    );
+}
+
+#[test]
 fn ensure_only_allowed_fields_set_rejects_other_fields() {
     let mut payload = empty_update_payload();
     payload.max_number_of_canisters = Some(100);

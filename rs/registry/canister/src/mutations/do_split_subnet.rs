@@ -157,9 +157,6 @@ impl Registry {
                 destination_subnet_id: Some(subnet_id_into_protobuf(destination_subnet_id)),
             })),
 
-            height: 0,
-            time: 0,
-            state_hash: vec![],
             registry_store_uri: None,
             ecdsa_initializations: vec![],
             chain_key_initializations: vec![],
