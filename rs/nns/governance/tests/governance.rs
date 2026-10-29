@@ -5728,8 +5728,8 @@ fn run_periodic_tasks_often_enough_to_update_maturity_modulation(gov: &mut Gover
     // in unit tests (no XRC mock). Set it directly so consumers see a value consistent with
     // the FakeDriver's 100 bp.
     gov.heap_data.maturity_modulation = Some(MaturityModulation {
-        current_value_permyriad: Some(100),
-        updated_at_days_since_epoch: Some(gov.env.now() / ONE_DAY_SECONDS),
+        current_value_permyriad: 100,
+        updated_at_days_since_epoch: gov.env.now() / ONE_DAY_SECONDS,
     });
 }
 

@@ -223,12 +223,12 @@ pub fn initialize_governance(
         icp_price_history: None,
         // Default to a neutral 0 permyriad so that spawning and maturity disbursement keep
         // working immediately after init, before `update_icp_xdr_rate_related_data` accumulates
-        // enough price history to compute a real one. `updated_at_days_since_epoch` is left
-        // `None` so the task treats this as "no prior measurement" rather than "already updated
-        // today".
+        // enough price history to compute a real one. `updated_at_days_since_epoch` is left at 0
+        // (the "never measured" sentinel) so the task treats this as "no prior measurement"
+        // rather than "already updated today".
         maturity_modulation: Some(MaturityModulation {
-            current_value_permyriad: Some(0),
-            updated_at_days_since_epoch: None,
+            current_value_permyriad: 0,
+            updated_at_days_since_epoch: 0,
         }),
     };
 
