@@ -14,7 +14,7 @@ use ic_replicated_state::Stream;
 use ic_replicated_state::testing::StreamTesting;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    HistogramStats, fetch_int_counter_vec, metric_vec, nonzero_values,
+    HistogramStats, fetch_int_counter, fetch_int_counter_vec, metric_vec, nonzero_values,
 };
 use ic_test_utilities_state::arb_stream_slice;
 use ic_test_utilities_types::xnet::{StreamHeaderBuilder, StreamSliceBuilder};
@@ -26,8 +26,9 @@ use ic_types::xnet::{
 use ic_types::{CountBytes, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{
     CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER, CertifiedSliceError, CertifiedSlicePool,
-    CertifiedSliceResult, InvalidAppend, InvalidSlice, LABEL_STATUS, STATUS_LESS_USEFUL,
-    STATUS_NONE, STATUS_SUCCESS, UnpackedStreamSlice, certified_slice_count_bytes, testing,
+    CertifiedSliceResult, InvalidAppend, InvalidSlice, LABEL_STATUS,
+    METRIC_LAGGING_PUT_AND_APPEND_COUNT, STATUS_LESS_USEFUL, STATUS_NONE, STATUS_SUCCESS,
+    UnpackedStreamSlice, certified_slice_count_bytes, testing,
 };
 use ic_xnet_payload_builder::{ExpectedIndices, MAX_SIGNALS, STREAM_INDEX_MAX, max_message_index};
 use maplit::btreemap;
@@ -1887,7 +1888,8 @@ fn pool_advances_recorded_peer_header() {
 }
 
 /// Tests that a peer's header is recorded on every incoming slice, whether or
-/// not the slice is pooled; and that it never regresses.
+/// not the slice is pooled; that it never regresses; and that slices behind it
+/// are counted as having been pulled from a lagging node.
 #[test_strategy::proptest(ProptestConfig::with_cases(10))]
 fn pool_peer_header(
     #[strategy(arb_stream_slice(
@@ -1937,6 +1939,10 @@ fn pool_peer_header(
         // And a header behind it in signals does not replace it.
         put(&pool, SRC_SUBNET, slice, &store, &log).unwrap();
         assert_eq!(Some(newer_header.clone()), peer_header(&pool, SRC_SUBNET));
+        assert_eq!(
+            Some(1),
+            fetch_int_counter(&fixture.metrics, METRIC_LAGGING_PUT_AND_APPEND_COUNT)
+        );
 
         // Neither does an identical one.
         {

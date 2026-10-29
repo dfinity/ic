@@ -45,13 +45,14 @@ use ic_xnet_hyper::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
 use prometheus::{HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use rand::{Rng, thread_rng};
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use tokio::runtime;
 use tokio::sync::{mpsc, watch};
+use tokio::task::{self, JoinSet};
 
 /// Represents the location of a peer
 #[derive(Eq, PartialEq, Debug)]
@@ -1082,11 +1083,8 @@ pub const METRIC_OUTSTANDING_XNET_QUERIES: &str = "xnet_builder_outstanding_quer
 pub const METRIC_ADVERTS_SENT: &str = "xnet_builder_adverts_sent_total";
 pub const METRIC_SEND_ADVERT_DURATION: &str = "xnet_builder_advert_send_duration_seconds";
 pub const METRIC_OUTSTANDING_ADVERTS: &str = "xnet_builder_outstanding_adverts";
-pub const METRIC_SHADOW_PULLS: &str = "xnet_builder_shadow_pulls_total";
 pub const LABEL_PROXIMITY: &str = "proximity";
 pub const LABEL_REMOTE: &str = "remote";
-pub const LABEL_SCHEDULED: &str = "scheduled";
-pub const LABEL_POOLED: &str = "pooled";
 pub const STATUS_DECODE_ERROR: &str = "ProxyDecodeError";
 
 /// Metrics of `PullTask`.
@@ -1104,13 +1102,6 @@ pub struct PullTaskMetrics {
     pub outstanding_queries: IntGauge,
     /// Count of pulled slices larger than the requested size.
     pub pull_size_too_large: IntCounter,
-    /// Temporary: completed pulls, by remote subnet; whether advert-driven pulling
-    /// would have scheduled them; and whether they pooled anything.
-    ///
-    /// Not fully independent of the sweep: pulled headers are recorded too, so a
-    /// pull extending an already pooled prefix counts as scheduled even without an
-    /// advert. Unscheduled pulls that pool something point to missed adverts.
-    pub shadow_pulls: IntCounterVec,
 }
 
 impl PullTaskMetrics {
@@ -1136,11 +1127,6 @@ impl PullTaskMetrics {
                 "xnet_builder_pull_size_too_large_count",
                 "Count of pulled slices larger than the requested size",
             ),
-            shadow_pulls: metrics_registry.int_counter_vec(
-                METRIC_SHADOW_PULLS,
-                "Completed pulls, by remote subnet; whether advert-driven pulling would have scheduled them; and whether they pooled anything.",
-                &[LABEL_REMOTE, LABEL_SCHEDULED, LABEL_POOLED],
-            ),
         }
     }
 
@@ -1155,17 +1141,6 @@ impl PullTaskMetrics {
             .with_label_values(&[status, proximity])
             .observe(since.elapsed().as_secs_f64());
     }
-
-    /// Records a completed pull from `subnet_id`.
-    fn observe_shadow_pull(&self, subnet_id: SubnetId, scheduled: bool, pooled: bool) {
-        self.shadow_pulls
-            .with_label_values(&[
-                &subnet_id.to_string(),
-                &scheduled.to_string(),
-                &pooled.to_string(),
-            ])
-            .inc();
-    }
 }
 
 /// Describes the slice to be pulled from a subnet: messages from `msg_begin`,
@@ -1177,6 +1152,8 @@ pub struct PullIndices {
 }
 
 /// Subnets to pull from, in the order they were scheduled, without duplicates.
+/// A subnet leaves the FIFO queue when its pull starts, but remains in the
+/// schedule until the pull ends, so rescheduling it meanwhile is a no-op.
 #[derive(Default)]
 struct PullSchedule {
     queue: VecDeque<SubnetId>,
@@ -1184,20 +1161,62 @@ struct PullSchedule {
 }
 
 impl PullSchedule {
-    /// Schedules a pull from `subnet_id`, unless one is already scheduled.
+    /// Schedules a pull from `subnet_id`, unless one is already scheduled or in
+    /// flight.
     fn push(&mut self, subnet_id: SubnetId) {
         if self.scheduled.insert(subnet_id) {
             self.queue.push_back(subnet_id);
         }
     }
 
-    /// Removes `subnet_id` from the schedule. Returns whether it was scheduled.
-    fn remove(&mut self, subnet_id: SubnetId) -> bool {
-        if !self.scheduled.remove(&subnet_id) {
-            return false;
+    /// Pops the next subnet off the queue, leaving it scheduled.
+    fn pop(&mut self) -> Option<SubnetId> {
+        self.queue.pop_front()
+    }
+
+    /// Removes `subnet_id` from the schedule, whether queued or in flight.
+    fn remove(&mut self, subnet_id: SubnetId) {
+        if self.scheduled.remove(&subnet_id) {
+            self.queue.retain(|&scheduled| scheduled != subnet_id);
         }
-        self.queue.retain(|&scheduled| scheduled != subnet_id);
-        true
+    }
+}
+
+/// In-flight pulls, limited to at most one per subnet (see `PullSchedule`).
+#[derive(Default)]
+struct InFlightPulls {
+    /// The in-flight pull tasks, resolving to whether or not they pooled anything.
+    tasks: JoinSet<bool>,
+
+    /// The subnet that each in-flight task is pulling from: a task that panics only
+    /// yields its task ID, so we use this to retrieve the subnet.
+    subnets: BTreeMap<task::Id, SubnetId>,
+}
+
+impl InFlightPulls {
+    /// Spawns the given future that pulls from `subnet_id` and returns whether or
+    /// not it pooled anything.
+    fn spawn(&mut self, subnet_id: SubnetId, pull: impl Future<Output = bool> + Send + 'static) {
+        let id = self.tasks.spawn(pull).id();
+        self.subnets.insert(id, subnet_id);
+    }
+
+    /// Waits for the next pull to end.
+    ///
+    /// Returns the subnet and whether anything was pooled; or `None` if no pulls
+    /// are in flight.
+    async fn join_next(&mut self) -> Option<(SubnetId, bool)> {
+        let (id, pooled) = match self.tasks.join_next_with_id().await? {
+            Ok((id, pooled)) => (id, pooled),
+            Err(err) => (err.id(), false),
+        };
+        let subnet_id = self
+            .subnets
+            .remove(&id)
+            // `spawn()` records the subnet before returning, and both methods take
+            // `&mut self`, so the entry exists even if the task completed instantly.
+            .expect("Every pull is spawned with its subnet");
+        Some((subnet_id, pooled))
     }
 }
 
@@ -1205,21 +1224,19 @@ impl PullSchedule {
 const PULL_REQUESTS_CAPACITY: usize = 1024;
 
 /// A handle for a `PullTask`, used for triggering pool refills and requesting
-/// pulls. The task terminates once all its handles are dropped.
+/// pulls. The task terminates once all its handles are dropped and its pulls
+/// (including any rescheduled partial pulls) have ended; or if the runtime is
+/// dropped during replica exit, aborting all tasks.
 #[derive(Clone)]
 pub struct PullTaskHandle {
-    refill_trigger: mpsc::Sender<RegistryVersion>,
+    refill_trigger: mpsc::Sender<()>,
     pull_requests: mpsc::Sender<SubnetId>,
 }
 
 impl PullTaskHandle {
     /// Creates a handle, along with the receiving ends of its refill trigger and
     /// pull request channels.
-    pub(crate) fn new() -> (
-        Self,
-        mpsc::Receiver<RegistryVersion>,
-        mpsc::Receiver<SubnetId>,
-    ) {
+    pub(crate) fn new() -> (Self, mpsc::Receiver<()>, mpsc::Receiver<SubnetId>) {
         let (refill_trigger, refill_receiver) = mpsc::channel(1);
         let (pull_requests, pull_request_receiver) = mpsc::channel(PULL_REQUESTS_CAPACITY);
         let handle = Self {
@@ -1235,22 +1252,26 @@ impl PullTaskHandle {
         Self::new().0
     }
 
-    /// Triggers a slice pool refill, validating slices against the given registry
-    /// version. Also schedules a pull from every peer with something left to pull.
-    pub fn trigger_refill(&self, registry_version: RegistryVersion) {
-        // We don't care if the send succeeded or not. If it didn't, the task is just
-        // behind.
-        self.refill_trigger.try_send(registry_version).ok();
+    /// Triggers a pool refill: schedules a pull from every peer with something left
+    /// to pull.
+    pub fn trigger_refill(&self) {
+        // If the channel is full, a refill is already pending.
+        self.refill_trigger.try_send(()).ok();
     }
 
     /// Requests a pull from `subnet_id`.
-    pub(crate) fn request_pull(&self, subnet_id: SubnetId) {
+    pub fn request_pull(&self, subnet_id: SubnetId) {
         // If the channel is full, the next refill trigger schedules the pull anyway.
         self.pull_requests.try_send(subnet_id).ok();
     }
 }
 
-/// An async task that pulls stream slices into the slice pool.
+/// Async task that schedules pulls from explicitly requested subnets and (on
+/// a refill trigger) from all peers with something left to pull; and executes
+/// them.
+///
+/// A pull starts as soon as it is scheduled, with no global bound on concurrent
+/// pulls, but limited by the schedule to at most one pull per subnet.
 pub struct PullTask {
     /// The slice pool that this task populates.
     pool: Arc<Mutex<CertifiedSlicePool>>,
@@ -1267,8 +1288,9 @@ pub struct PullTask {
     /// which peers have something left to pull.
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
 
-    /// Tokio runtime to be used for spawning async query tasks.
-    runtime_handle: runtime::Handle,
+    /// Used for retrieving the latest registry version, to validate pulled slices
+    /// against.
+    registry: Arc<dyn RegistryClient>,
 
     metrics: PullTaskMetrics,
 
@@ -1283,6 +1305,7 @@ impl PullTask {
         xnet_client: Arc<dyn XNetClient>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        registry: Arc<dyn RegistryClient>,
         runtime_handle: runtime::Handle,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
@@ -1294,74 +1317,109 @@ impl PullTask {
             xnet_client,
             certified_stream_store,
             state_manager,
-            runtime_handle: runtime_handle.clone(),
+            registry,
             metrics: PullTaskMetrics::new(metrics_registry),
             log,
         });
 
         runtime_handle.spawn(async move {
-            // Owned by the event loop, which handles one event at a time, so it needs no
-            // lock.
             let mut schedule = PullSchedule::default();
+            let mut in_flight = InFlightPulls::default();
             loop {
                 tokio::select! {
-                    Some(registry_version) = refill_receiver.recv() => {
-                        task.schedule_pending_pulls(&mut schedule);
-                        task.refill_pool(registry_version, &mut schedule);
+                    Some(()) = refill_receiver.recv() => task.schedule_pending_pulls(&mut schedule),
+                    Some(subnet_id) = pull_request_receiver.recv() => {
+                        task.schedule_pull(&mut schedule, subnet_id)
                     }
-                    Some(subnet_id) = pull_request_receiver.recv() => schedule.push(subnet_id),
-                    // All handles were dropped.
+                    Some((subnet_id, pooled)) = in_flight.join_next() => {
+                        task.end_pull(&mut schedule, subnet_id, pooled)
+                    }
+                    // All handles were dropped and all pulls have ended.
                     else => break,
                 }
+                task.start_pulls(&mut schedule, &mut in_flight);
             }
         });
 
         handle
     }
 
-    /// Schedules a pull from every peer with something left to pull.
-    fn schedule_pending_pulls(&self, schedule: &mut PullSchedule) {
-        let state = self.state_manager.get_latest_certified_state();
-        let no_streams = StreamMap::new();
-        let own_streams = state
-            .as_ref()
-            .map_or(&no_streams, |state| state.get_ref().streams());
-        let pending = self
-            .pool
-            .lock()
-            .unwrap()
-            .subnets_with_something_to_pull(own_streams);
-        for subnet_id in pending {
+    /// Schedules a pull from `subnet_id`, unless it is our own subnet: the loopback
+    /// stream is inducted separately.
+    fn schedule_pull(&self, schedule: &mut PullSchedule, subnet_id: SubnetId) {
+        if subnet_id != self.endpoint_resolver.subnet_id {
             schedule.push(subnet_id);
         }
     }
 
-    /// Queries all subnets for new slices and puts / appends them to the pool after
-    /// validation against the given registry version.
-    ///
-    /// Also unschedules every subnet it pulls from, as advert-driven pulling
-    /// would; and records whether it was scheduled and whether the pull pooled
-    /// anything.
-    fn refill_pool(
-        self: &Arc<Self>,
-        registry_version: RegistryVersion,
-        schedule: &mut PullSchedule,
-    ) {
-        let pulls = self
-            .pool
-            .lock()
-            .unwrap()
-            .refill_stream_slice_indices(self.endpoint_resolver.subnet_id);
+    /// Schedules a pull from every peer with something left to pull.
+    fn schedule_pending_pulls(&self, schedule: &mut PullSchedule) {
+        let pending = self.with_own_streams(|own_streams| {
+            self.pool
+                .lock()
+                .unwrap()
+                .subnets_with_something_to_pull(own_streams)
+        });
+        for subnet_id in pending {
+            self.schedule_pull(schedule, subnet_id);
+        }
+    }
 
-        for (subnet_id, indices) in pulls {
-            let scheduled = schedule.remove(subnet_id);
-            let task = Arc::clone(self);
-            self.runtime_handle.spawn(async move {
-                if let Ok(pooled) = task.pull(subnet_id, indices, registry_version).await {
-                    task.metrics
-                        .observe_shadow_pull(subnet_id, scheduled, pooled);
+    /// Starts a pull from every queued subnet that still has something to pull; and
+    /// unschedules the rest.
+    fn start_pulls(self: &Arc<Self>, schedule: &mut PullSchedule, in_flight: &mut InFlightPulls) {
+        if schedule.queue.is_empty() {
+            return;
+        }
+
+        let mut pulls = Vec::new();
+        self.with_own_streams(|own_streams| {
+            let pool = self.pool.lock().unwrap();
+            while let Some(subnet_id) = schedule.pop() {
+                if pool.has_something_to_pull(subnet_id, own_streams)
+                    && let Some(indices) = pool.pull_indices(subnet_id)
+                {
+                    pulls.push((subnet_id, indices));
+                } else {
+                    schedule.remove(subnet_id);
                 }
+            }
+        });
+
+        let registry_version = self.registry.get_latest_version();
+        for (subnet_id, indices) in pulls {
+            let task = Arc::clone(self);
+            in_flight.spawn(subnet_id, async move {
+                task.pull(subnet_id, indices, registry_version).await == Ok(true)
             });
+        }
+    }
+
+    /// Ends a pull from `subnet_id`: requeues the subnet if the pull pooled
+    /// anything and there is still something to pull (e.g. after an advert that
+    /// arrived meanwhile); else unschedules it, leaving it to the next pull request
+    /// or refill trigger. Requeuing after a pull that pooled nothing (e.g. because
+    /// the pooled slice is at its byte limit) might spin.
+    fn end_pull(&self, schedule: &mut PullSchedule, subnet_id: SubnetId, pooled: bool) {
+        schedule.remove(subnet_id);
+        if pooled
+            && self.with_own_streams(|own_streams| {
+                self.pool
+                    .lock()
+                    .unwrap()
+                    .has_something_to_pull(subnet_id, own_streams)
+            })
+        {
+            schedule.push(subnet_id);
+        }
+    }
+
+    /// Calls `f` with our own streams, as of the latest certified state (none, if
+    /// nothing is certified yet).
+    fn with_own_streams<R>(&self, f: impl FnOnce(&StreamMap) -> R) -> R {
+        match self.state_manager.get_latest_certified_state() {
+            Some(state) => f(state.get_ref().streams()),
+            None => f(&StreamMap::new()),
         }
     }
 
@@ -1453,10 +1511,7 @@ impl PullTask {
                     }
 
                     Err(err) => {
-                        warn!(
-                            self.log,
-                            "Failed to join pool refill blocking thread: {err}"
-                        );
+                        warn!(self.log, "Failed to join pull blocking thread: {err}");
                         Err(())
                     }
                 }
