@@ -350,6 +350,16 @@ mod multi_call_results {
     }
 }
 
+mod sepolia_services {
+    use crate::eth_rpc_client::SEPOLIA_SERVICES;
+    use evm_rpc_types::EthSepoliaService;
+
+    #[test]
+    fn should_not_name_the_dropped_rpc_sepolia_org() {
+        assert!(!SEPOLIA_SERVICES.contains(&EthSepoliaService::Sepolia));
+    }
+}
+
 mod eth_get_transaction_receipt {
     use super::*;
 

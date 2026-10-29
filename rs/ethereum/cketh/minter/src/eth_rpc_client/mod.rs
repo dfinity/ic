@@ -28,37 +28,99 @@ pub const ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE: u64 = 100;
 
 pub const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
 
+/// The Sepolia services this minter is willing to query, ordered by preference: a client querying
+/// fewer than all of them takes a prefix.
+///
+/// Mainnet leaves the choice to the EVM RPC canister, which ranks its supported providers by when
+/// each last answered successfully
+/// (<https://github.com/internet-computer-protocol/evm-rpc-canister/blob/evm_rpc-v2.6.0/src/memory.rs>).
+/// Sepolia names them instead because that canister's supported set also holds `rpc.sepolia.org`,
+/// which this minter dropped, and naming is the only way to exclude it. Naming then fixes the count
+/// too: `ConsensusStrategy::Threshold` rejects a `total` that differs from the number of named
+/// services.
+const SEPOLIA_SERVICES: &[EthSepoliaService] = &[
+    EthSepoliaService::BlockPi,
+    EthSepoliaService::PublicNode,
+    EthSepoliaService::Alchemy,
+    EthSepoliaService::Ankr,
+];
+
+/// How many providers a client queries, and how many of them must return the same result for the
+/// EVM RPC canister to report a consistent one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Threshold {
+    total: u8,
+    min: u8,
+}
+
+impl Threshold {
+    /// The threshold [`balance_scan_rpc_client`] queries with.
+    pub const BALANCE_SCAN: Self = Self::new(3, 2);
+    const MINTING_MAINNET: Self = Self::new(4, 3);
+    const MINTING_SEPOLIA: Self = Self::new(4, 2);
+
+    const fn new(total: u8, min: u8) -> Self {
+        assert!(
+            min >= 1,
+            "BUG: a threshold must require at least one provider"
+        );
+        assert!(
+            min <= total,
+            "BUG: a threshold cannot require more providers than it queries"
+        );
+        assert!(
+            total as usize <= SEPOLIA_SERVICES.len(),
+            "BUG: a threshold cannot query more providers than Sepolia services are named"
+        );
+        Self { total, min }
+    }
+
+    pub const fn total(&self) -> u8 {
+        self.total
+    }
+}
+
+/// Client for the queries whose result the minter acts on irreversibly: minting, and signing and
+/// sending transactions.
 pub fn rpc_client(state: &State) -> EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles> {
-    const TOTAL_NUMBER_OF_PROVIDERS: u8 = 4;
+    let threshold = match state.ethereum_network() {
+        EthereumNetwork::Mainnet => Threshold::MINTING_MAINNET,
+        EthereumNetwork::Sepolia => Threshold::MINTING_SEPOLIA,
+    };
+    rpc_client_with_threshold(state, threshold)
+}
+
+/// Client for the ckERC20 automatic-deposit balance scan.
+///
+/// A lower threshold than [`rpc_client`] is acceptable because the scan reads balances at the
+/// latest (non-finalized) block only to notify the sweeper: nothing is minted off this path. Two
+/// providers must still agree, which — combined with [`NoReduction`] at the call site — is what
+/// stops a single faulty or malicious provider from hiding a funded deposit address behind a
+/// well-formed all-zeros answer.
+pub fn balance_scan_rpc_client(
+    state: &State,
+) -> EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles> {
+    rpc_client_with_threshold(state, Threshold::BALANCE_SCAN)
+}
+
+fn rpc_client_with_threshold(
+    state: &State,
+    threshold: Threshold,
+) -> EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles> {
     const MAX_NUM_RETRIES: u32 = 10;
 
-    let chain = state.ethereum_network();
-    let evm_rpc_id = state.evm_rpc_id();
-
-    let providers = match chain {
+    let providers = match state.ethereum_network() {
         EthereumNetwork::Mainnet => EvmRpcServices::EthMainnet(None),
-        EthereumNetwork::Sepolia => EvmRpcServices::EthSepolia(Some(vec![
-            EthSepoliaService::BlockPi,
-            EthSepoliaService::PublicNode,
-            EthSepoliaService::Alchemy,
-            EthSepoliaService::Ankr,
-        ])),
+        EthereumNetwork::Sepolia => EvmRpcServices::EthSepolia(Some(
+            SEPOLIA_SERVICES[..usize::from(threshold.total)].to_vec(),
+        )),
     };
 
-    let min_threshold = match chain {
-        EthereumNetwork::Mainnet => 3_u8,
-        EthereumNetwork::Sepolia => 2_u8,
-    };
-    assert!(
-        min_threshold <= TOTAL_NUMBER_OF_PROVIDERS,
-        "BUG: min_threshold too high"
-    );
-
-    EvmRpcClient::builder(IcRuntime::new(), evm_rpc_id)
+    EvmRpcClient::builder(IcRuntime::new(), state.evm_rpc_id())
         .with_rpc_sources(providers)
         .with_consensus_strategy(ConsensusStrategy::Threshold {
-            total: Some(TOTAL_NUMBER_OF_PROVIDERS),
-            min: min_threshold,
+            total: Some(threshold.total),
+            min: threshold.min,
         })
         .with_retry_strategy(DoubleCycles::with_max_num_retries(MAX_NUM_RETRIES))
         .build()
