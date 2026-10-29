@@ -105,8 +105,7 @@ impl RosettaRequestHandler {
     }
 
     /// Returns a retriable error until the initial sync is complete. The endpoints that read
-    /// blocks call this after the request checks that don't need blocks, and before their first
-    /// read.
+    /// blocks call this before their first read, after the request checks that come before it.
     fn check_initial_sync_complete(&self) -> Result<(), ApiError> {
         if !self
             .initial_sync_complete

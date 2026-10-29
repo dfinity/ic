@@ -212,8 +212,8 @@ async fn test_endpoints_that_read_blocks_return_error_during_initial_sync() {
     }
 }
 
-/// Test that during the initial sync, invalid requests to the endpoints that read blocks get
-/// their own errors, and so do the `/call` methods that don't read blocks.
+/// Test that during the initial sync, the request checks that come before the first block read
+/// still return their own errors, and so do the `/call` methods that don't read blocks.
 #[tokio::test]
 async fn test_invalid_requests_get_their_own_errors_during_initial_sync() {
     let req_handler = RosettaRequestHandler::new_with_default_blockchain(
