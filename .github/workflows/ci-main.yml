@@ -12,22 +12,32 @@ on:
         required: false
         default: ''
         type: string
+    secrets:
+      BEP_GPG_PASSPHRASE:
+        description: Encrypts the build event files that the bazel action uploads
+        required: false
+      CF_AWS_ACCESS_KEY_ID:
+        description: Uploads the artifacts of release builds; an upload-artifacts environment secret that the caller must pass (secrets inherit)
+        required: false
+      CF_AWS_SECRET_ACCESS_KEY:
+        description: Uploads the artifacts of release builds; an upload-artifacts environment secret that the caller must pass (secrets inherit)
+        required: false
 
 # This reusable workflow declares no `permissions:` of its own: its jobs run with
 # exactly the GITHUB_TOKEN permissions the calling job grants. Callers that run
 # release builds (ci-kickoff.yml, release-testing.yml) grant on their `ci-main` job:
-#   actions: write        # Actions artifacts (bazel-targets, BEP, execlogs)
+#   actions: write        # artifact uploads of bazel-test-arm64 (#9634)
 #   attestations: write   # Attest steps of bazel-test-all / upload-external-artifacts
 #   contents: read
 #   id-token: write       # AWS OIDC role assumption and Sigstore signing
 #   pull-requests: read
-# ci-kickoff-manual.yml (CI for pull requests from forks) grants the same set WITHOUT
-# `attestations: write`: it never runs a release build. A permission declared here
-# would be validated against every caller's grant at parse time regardless of `if:`
-# (https://github.com/orgs/community/discussions/155062) and so would force that
-# grant onto fork-PR runs. Not declaring it keeps fork-PR builds unable to store
-# attestations; the price is that a caller missing a grant fails at runtime (HTTP
-# 403 in the Attest step) rather than at parse time.
+# ci-kickoff-manual.yml (CI for pull requests from forks) grants only `contents: read`
+# and `pull-requests: read`: these jobs run the PR's code, and it never runs a release
+# build. A permission declared here would be validated against every caller's grant at
+# parse time regardless of `if:` (https://github.com/orgs/community/discussions/155062)
+# and so would force that grant onto fork-PR runs. Declaring none lets fork-PR builds
+# stay read-only; the price is that a caller missing a grant fails at runtime (e.g.
+# HTTP 403 in the Attest step) rather than at parse time.
 
 env:
   CI_COMMIT_SHA: ${{ inputs.commit-sha }}
