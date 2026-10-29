@@ -1,5 +1,5 @@
+use anyhow::Result;
 use clap::{Arg, ArgMatches};
-use eyre::Result;
 use ic_config::{
     embedders, execution_environment,
     subnet_config::{CyclesAccountManagerConfig, SchedulerConfig},

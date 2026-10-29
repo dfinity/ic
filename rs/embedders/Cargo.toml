@@ -7,10 +7,10 @@ name = "ic-embedders"
 version.workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
 bincode = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
+flate2 = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
@@ -33,7 +33,6 @@ ic-utils-lru-cache = { path = "../utils/lru_cache" }
 ic-wasm-types = { path = "../types/wasm_types" }
 itertools = { workspace = true }
 libc = { workspace = true }
-libflate = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }
 nix = { workspace = true }
 num-traits = { workspace = true }
@@ -51,12 +50,6 @@ wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
 wasmtime = { workspace = true }
 wirm = { workspace = true }
-
-# Wasmtime depends on 0.4.2 but specifies 0.4.1 in the toml file.
-# Enforce 0.4.2 using a dummy dependency until the upstream issue
-# is fixed.
-[target.'cfg(target_os = "macos")'.dependencies]
-mach2 = "0.4.2"
 
 [dev-dependencies]
 assert_matches = { workspace = true }

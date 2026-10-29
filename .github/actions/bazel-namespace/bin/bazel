@@ -17,7 +17,7 @@
 # * The startup options are the same for every command and only select rc files, which the bazel
 #   client handles itself, so all bazel commands of a job share one bazel server.
 # * build, test, run and coverage commands run by the action get their own BEP file and profile
-#   in $BAZEL_NAMESPACE_OUT, which the action uploads.
+#   in $BAZEL_NAMESPACE_OUT, which the action uploads (the BEP files only encrypted).
 # * When the action's timeout-minutes is set, bazel runs under `timeout` until
 #   $BAZEL_NAMESPACE_DEADLINE (seconds since the epoch), see below.
 #
@@ -75,8 +75,9 @@ if [ $# -gt 0 ]; then
                 id="$bazel_command-$(date -u +%Y%m%dT%H%M%SZ)-$$"
                 args+=(
                     --build_event_binary_file="$BAZEL_NAMESPACE_OUT/bazel-bep-$id.pb"
-                    # Bazel compresses the profile because of the .gz suffix.
-                    --profile="$BAZEL_NAMESPACE_OUT/profile-$id.json.gz"
+                    # github-stats reads profile-<id>.json as plain JSON and pairs it
+                    # with bazel-bep-<id>.pb.gpg, the BEP file encrypted by the action.
+                    --profile="$BAZEL_NAMESPACE_OUT/profile-$id.json"
                     # Associate each action in the profile with a target label, which helps
                     # tools like https://github.com/EngFlow/bazel_invocation_analyzer.
                     --experimental_profile_include_target_label

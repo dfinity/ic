@@ -8,8 +8,8 @@ use crate::canister_state::canister_snapshots::CanisterSnapshots;
 use crate::canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata};
 use crate::canister_state::system_state::testing::{OutputRequestBuilder, SystemStateTesting};
 use crate::canister_state::system_state::{
-    CallContextManager, CanisterHistory, CanisterStatus, MAX_CANISTER_HISTORY_CHANGES,
-    OutstandingPrepayments,
+    CallContextManager, CanisterHistory, CanisterStatus, ConnectionMetrics, LruConnectionMetrics,
+    MAX_CANISTER_HISTORY_CHANGES, MAX_CONNECTION_METRICS_ENTRIES, OutstandingPrepayments,
 };
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use assert_matches::assert_matches;
@@ -1067,9 +1067,7 @@ fn outstanding_prepayments_of_open_callbacks() {
     // the transmission of both the request and the response, so the response
     // transmission prepayment is not counted on top of it; it is the fallback for
     // legacy callbacks only, see
-    // `execute_response_of_legacy_callback_settles_the_outstanding_prepayments`. The
-    // same two are what an aborted response execution carries, see
-    // `checkpoint_round_backfills_consumed_cycles_monotonic_of_aborted_response_execution`.
+    // `execute_response_of_legacy_callback_settles_the_outstanding_prepayments`.
     //
     // The response execution prepayment is outstanding for `Instructions`, the call
     // transmission one for `RequestAndResponseTransmission`.
@@ -1144,12 +1142,10 @@ fn outstanding_prepayments_of_paused_and_aborted_executions() {
     );
 }
 
-/// Backfilling the monotonic amounts from the gauges is exact, thanks to the
-/// invariants that a gauge exceeds its monotonic counterpart by exactly the
-/// prepayments outstanding for it. And it is idempotent, so it can be redone in
-/// every checkpoint round. Covers the scalar total and the by-use-case map alike.
+/// A gauge exceeds its monotonic counterpart by exactly the prepayments outstanding
+/// for it. Covers the scalar total and the by-use-case map alike.
 #[test]
-fn migrate_consumed_cycles_to_monotonic_is_exact_and_idempotent() {
+fn consumed_cycles_monotonic_is_the_gauge_net_of_outstanding_prepayments() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let mut fixture = CanisterStateFixture::new();
     let system_state = &mut fixture.canister_state.system_state;
@@ -1228,95 +1224,6 @@ fn migrate_consumed_cycles_to_monotonic_is_exact_and_idempotent() {
     );
     assert_eq!(system_state.outstanding_prepayments(), Some(outstanding));
     assert_settled(system_state, settled, settled_memory, settled_instructions);
-
-    // Pretend the canister was loaded from a checkpoint predating the fields.
-    system_state.reset_consumed_cycles_monotonic();
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        NominalCycles::zero()
-    );
-    assert!(
-        system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases_monotonic()
-            .is_empty()
-    );
-
-    system_state.migrate_consumed_cycles_to_monotonic();
-    assert_settled(system_state, settled, settled_memory, settled_instructions);
-
-    // Redoing it changes nothing.
-    system_state.migrate_consumed_cycles_to_monotonic();
-    assert_settled(system_state, settled, settled_memory, settled_instructions);
-}
-
-/// The `HTTPOutcalls` entry of the monotonic map is the one entry with no
-/// canister-level gauge to derive it from, so the backfill must leave it alone.
-#[test]
-fn migrate_consumed_cycles_to_monotonic_skips_http_outcalls() {
-    let mut fixture = CanisterStateFixture::new();
-    let system_state = &mut fixture.canister_state.system_state;
-    system_state.consume_cycles(CompoundCycles::<MemoryUseCase>::new(
-        Cycles::new(500),
-        CanisterCyclesCostSchedule::Normal,
-    ));
-
-    // Pretend the canister was loaded from a checkpoint predating the monotonic
-    // amounts, then made an HTTPS outcall.
-    system_state.reset_consumed_cycles_monotonic();
-    let outcalls = NominalCycles::new(700);
-    system_state.observe_consumed_cycles_for_https_outcall(outcalls);
-
-    system_state.migrate_consumed_cycles_to_monotonic();
-
-    // The `Memory` entry was backfilled from its gauge; the `HTTPOutcalls` one was
-    // left at what the outcall above contributed, as the gauges account for HTTPS
-    // outcalls at the subnet level only.
-    assert_eq!(
-        system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases_monotonic(),
-        &BTreeMap::from([
-            (CyclesUseCase::Memory, NominalCycles::new(500)),
-            (CyclesUseCase::HTTPOutcalls, outcalls),
-        ])
-    );
-    // And it is not part of the scalar total, which covers the gauges' use cases only.
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        NominalCycles::new(500)
-    );
-}
-
-/// A canister with a paused execution cannot be backfilled, as the prepayment of the
-/// paused execution is not part of the replicated state.
-#[test]
-fn migrate_consumed_cycles_to_monotonic_skips_paused_execution() {
-    let mut fixture = CanisterStateFixture::new();
-    let system_state = &mut fixture.canister_state.system_state;
-    system_state.consume_cycles(CompoundCycles::<MemoryUseCase>::new(
-        Cycles::new(500),
-        CanisterCyclesCostSchedule::Normal,
-    ));
-    system_state
-        .task_queue
-        .enqueue(ExecutionTask::PausedExecution {
-            id: PausedExecutionId(0),
-            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
-        });
-
-    system_state.reset_consumed_cycles_monotonic();
-    system_state.migrate_consumed_cycles_to_monotonic();
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        NominalCycles::zero()
-    );
-    assert!(
-        system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases_monotonic()
-            .is_empty()
-    );
 }
 
 #[test]
@@ -1951,4 +1858,86 @@ fn reverts_stopping_status_after_split() {
     canister_state.drop_in_progress_management_calls_after_split();
 
     assert_eq!(expected_state, canister_state);
+}
+
+#[test]
+fn lru_connection_metrics_evicts_entries_in_correct_order() {
+    let connection_metrics = |nanos, count| ConnectionMetrics {
+        last_access_timestamp: Time::from_nanos_since_unix_epoch(nanos),
+        count,
+    };
+    // Least recently accessed: evicted first
+    let oldest_receiver = canister_test_id(56);
+    // Accessed recently with fewer messages: evicted second
+    let light_receiver_id = canister_test_id(99);
+    // Accessed recently with more messages: the one with the lower ID is evicted.
+    let heavy_receiver_low_id = canister_test_id(10);
+    let heavy_receiver_high_id = canister_test_id(102);
+
+    let mut metrics_per_receiver = BTreeMap::from([
+        (oldest_receiver, connection_metrics(0, 1_000)),
+        (light_receiver_id, connection_metrics(1, 1)),
+        (heavy_receiver_low_id, connection_metrics(1, 2)),
+        (heavy_receiver_high_id, connection_metrics(1, 2)),
+    ]);
+    // Most recently accessed entries, filling the map up to three entries over capacity.
+    for i in metrics_per_receiver.len()..(MAX_CONNECTION_METRICS_ENTRIES + 3) {
+        metrics_per_receiver.insert(canister_test_id(1000 + i as u64), connection_metrics(2, 1));
+    }
+
+    // Entries are evicted by access timestamp, then count, then canister ID.
+    let mut expected = metrics_per_receiver.clone();
+    expected.remove(&oldest_receiver);
+    expected.remove(&light_receiver_id);
+    expected.remove(&heavy_receiver_low_id);
+    assert_eq!(expected.len(), MAX_CONNECTION_METRICS_ENTRIES);
+
+    // Recording the messages one by one: entries are evicted as soon as the map overflows.
+    let mut from_increments = LruConnectionMetrics::default();
+    for (receiver, metrics) in &metrics_per_receiver {
+        for _ in 0..metrics.count {
+            from_increments.increment(*receiver, metrics.last_access_timestamp);
+        }
+    }
+    assert_eq!(from_increments.get(), &expected);
+
+    // Loading all the same entries at once, e.g. from a checkpoint.
+    let from_new = LruConnectionMetrics::new(metrics_per_receiver);
+    assert_eq!(from_new.get(), &expected);
+
+    assert_eq!(from_new, from_increments);
+}
+
+#[test]
+fn lru_connection_metrics_increment_refreshes_eviction_order() {
+    let t0 = Time::from_nanos_since_unix_epoch(0);
+    let t1 = Time::from_nanos_since_unix_epoch(1);
+    let mut metrics = LruConnectionMetrics::default();
+    for i in 0..MAX_CONNECTION_METRICS_ENTRIES as u64 {
+        metrics.increment(canister_test_id(i), t0);
+    }
+
+    // Accessing sender 0 again makes it the most recently accessed entry...
+    metrics.increment(canister_test_id(0), t1);
+    // ...so a new sender evicts sender 1 instead: the oldest entry with the lowest count and,
+    // among those, the lowest canister ID.
+    let new_sender = canister_test_id(MAX_CONNECTION_METRICS_ENTRIES as u64);
+    metrics.increment(new_sender, t1);
+
+    assert_eq!(metrics.get().len(), MAX_CONNECTION_METRICS_ENTRIES);
+    assert!(!metrics.get().contains_key(&canister_test_id(1)));
+    assert_eq!(
+        metrics.get()[&canister_test_id(0)],
+        ConnectionMetrics {
+            last_access_timestamp: t1,
+            count: 2,
+        }
+    );
+    assert_eq!(
+        metrics.get()[&new_sender],
+        ConnectionMetrics {
+            last_access_timestamp: t1,
+            count: 1,
+        }
+    );
 }

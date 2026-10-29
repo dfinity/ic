@@ -71,9 +71,18 @@ pub fn make_key(name: &str) -> EcdsaKeyId {
     }
 }
 
-pub fn make_ecdsa_key_id() -> MasterPublicKeyId {
+pub fn make_ecdsa_secp256k1_key_id() -> MasterPublicKeyId {
     MasterPublicKeyId::Ecdsa(EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
+        name: "some_ecdsa_key".to_string(),
+    })
+}
+
+/// Shares its name with the secp256k1 key, as keys of both curves would on
+/// mainnet, so that tests catch code telling ECDSA keys apart by name alone.
+pub fn make_ecdsa_secp256r1_key_id() -> MasterPublicKeyId {
+    MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256r1,
         name: "some_ecdsa_key".to_string(),
     })
 }
@@ -101,7 +110,8 @@ pub fn make_vetkd_key_id() -> MasterPublicKeyId {
 
 pub fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
     vec![
-        make_ecdsa_key_id(),
+        make_ecdsa_secp256k1_key_id(),
+        make_ecdsa_secp256r1_key_id(),
         make_bip340_key_id(),
         make_eddsa_key_id(),
         make_vetkd_key_id(),
@@ -110,7 +120,8 @@ pub fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
 
 pub fn make_key_ids_for_all_idkg_schemes() -> Vec<MasterPublicKeyId> {
     vec![
-        make_ecdsa_key_id(),
+        make_ecdsa_secp256k1_key_id(),
+        make_ecdsa_secp256r1_key_id(),
         make_bip340_key_id(),
         make_eddsa_key_id(),
     ]

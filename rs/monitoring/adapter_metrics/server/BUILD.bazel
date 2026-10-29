@@ -14,7 +14,6 @@ rust_library(
         "//rs/monitoring/metrics",
         "@crate_index//:futures",
         "@crate_index//:protobuf",
-        "@crate_index//:slog",
         "@crate_index//:tokio",
         "@crate_index//:tonic",
     ],

@@ -1,13 +1,12 @@
 //! ReplicaVersion can be converted to/from string representation.
-use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
-pub static REPLICA_BINARY_HASH: OnceCell<String> = OnceCell::new();
+pub static REPLICA_BINARY_HASH: OnceLock<String> = OnceLock::new();
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ReplicaVersion {
@@ -40,9 +39,12 @@ impl AsRef<str> for ReplicaVersion {
     }
 }
 
-/// Checks if a valid replica version is allowed to contain specified char.
-fn is_valid_version_symbol(c: char) -> bool {
-    matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '_' | '-')
+/// Only alphanumeric, dot, underscore, and dash characters are allowed in
+/// replica version IDs. In practice, replica version IDs are generally git
+/// commit IDs (from the dfinity/ic repo), which are lower case hexadecimal
+/// strings of length 40.
+fn is_invalid_version_symbol(c: char) -> bool {
+    !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '_' | '-')
 }
 
 impl FromStr for ReplicaVersion {
@@ -57,7 +59,7 @@ impl TryFrom<&str> for ReplicaVersion {
     type Error = ReplicaVersionParseError;
 
     fn try_from(version_str: &str) -> Result<Self, Self::Error> {
-        if !version_str.chars().all(is_valid_version_symbol) {
+        if version_str.is_empty() || version_str.chars().any(is_invalid_version_symbol) {
             Err(ReplicaVersionParseError(version_str.to_string()))
         } else {
             Ok(ReplicaVersion {
@@ -82,7 +84,7 @@ impl fmt::Display for ReplicaVersionParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "version must contain only alpha-numeric characters, dots(.), dashes(-) and underscores(_), got {}",
+            "version must not be empty, and contain only alpha-numeric characters, dots(.), dashes(-) and underscores(_), got '{}'",
             self.0
         )
     }
@@ -100,6 +102,7 @@ mod test {
         assert!(ReplicaVersion::from_str("1.2.1").is_ok());
         assert!(ReplicaVersion::from_str("8aefz17q_1").is_ok());
         assert!(ReplicaVersion::from_str("?+").is_err());
+        assert!(ReplicaVersion::from_str("").is_err());
     }
 }
 

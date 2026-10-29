@@ -192,6 +192,7 @@ impl TestConsensusPool {
             .expect("Failed to retreive the DKG transcripts from registry");
         let summary = get_dkg_summary_from_cup_contents(
             cup_contents.value.expect("Missing CUP contents"),
+            Height::from(0),
             subnet_id,
             &*registry_client,
             cup_contents.version,
@@ -891,8 +892,8 @@ impl ConsensusPool for TestConsensusPool {
         self.pool.build_block_chain(start_height, end)
     }
 
-    fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
-        self.pool.block_instant(hash)
+    fn block_instant(&self, block: &HashedBlock) -> Option<Instant> {
+        self.pool.block_instant(block)
     }
 
     fn message_instant(&self, id: &ConsensusMessageId) -> Option<Instant> {

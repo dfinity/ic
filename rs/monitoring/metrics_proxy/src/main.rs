@@ -9,16 +9,25 @@ struct MetricsProxyArgs {
     config: std::path::PathBuf,
 }
 
+/// Process exit code for a configuration error (`EX_CONFIG` in
+/// `<sysexits.h>`).
+const EXIT_CONFIG: i32 = 78;
+/// Process exit code for an operating system error (`EX_OSERR` in
+/// `<sysexits.h>`).
+const EXIT_OSERR: i32 = 71;
+
 pub async fn run() {
     let args = MetricsProxyArgs::parse();
     let maybecfg = metrics_proxy::config::Config::try_from(args.config.clone());
     if let Err(error) = maybecfg {
         eprintln!("Error parsing {}: {}", args.config.display(), error);
-        std::process::exit(exitcode::CONFIG);
+        std::process::exit(EXIT_CONFIG);
     }
     let mut set = JoinSet::new();
 
-    simple_logger::init_with_level(log::Level::Info).unwrap();
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
 
     // rustls 0.23 requires a process-wide default crypto provider to be
     // installed before any `ServerConfig`/`ClientConfig` is built.
@@ -80,7 +89,7 @@ pub async fn run() {
     while let Some(res) = set.join_next().await {
         if let Err(error) = res.unwrap() {
             eprintln!("HTTP server failed: {error}");
-            std::process::exit(exitcode::OSERR);
+            std::process::exit(EXIT_OSERR);
         }
     }
 }

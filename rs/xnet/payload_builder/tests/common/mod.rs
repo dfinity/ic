@@ -85,8 +85,7 @@ impl StateManagerFixture {
         }
     }
 
-    /// Adds a stream to the wrapped state, creates a new checkpoint and
-    /// certifies it.
+    /// Adds a stream to the wrapped state and certifies it.
     pub fn with_stream(mut self, destination_subnet: SubnetId, stream: Stream) -> Self {
         let (mut height, mut state) = self.state_manager.take_tip();
 
@@ -185,7 +184,7 @@ fn certify_height(state_manager: &impl StateManager, h: Height) -> Certification
 
     let certification = Certification {
         height: h,
-        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: Signed {
             content: CertificationContent::new(hash),
             signature: ThresholdSignature::fake(),

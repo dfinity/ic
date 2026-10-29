@@ -76,13 +76,13 @@ macro_rules! new_logger {
 #[macro_export(local_inner_macros)]
 macro_rules! trace {
     ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        log!($logger, slog::Level::Trace, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
+        log!($logger, $crate::slog::Level::Trace, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
     }};
     ($logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        log!($logger, slog::Level::Trace ; $( $field $( . $sub_field)* => $value ),*)
+        log!($logger, $crate::slog::Level::Trace ; $( $field $( . $sub_field)* => $value ),*)
     }};
     ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
-        log!($logger, slog::Level::Trace, $message $(,$args)*)
+        log!($logger, $crate::slog::Level::Trace, $message $(,$args)*)
     }};
     ($logger:expr_2021 $(,)*) => {{
         trace!($logger, "");
@@ -93,23 +93,23 @@ macro_rules! trace {
 #[macro_export(local_inner_macros)]
 macro_rules! debug {
     (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Debug)) {
-            log!($logger, slog::Level::Debug, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
+        if $logger.is_n_seconds($seconds, log_metadata!($crate::slog::Level::Debug)) {
+            log!($logger, $crate::slog::Level::Debug, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
         }
     }};
     ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        log!($logger, slog::Level::Debug, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
+        log!($logger, $crate::slog::Level::Debug, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
     }};
     ($logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        log!($logger, slog::Level::Debug ; $( $field $( . $sub_field)* => $value ),*)
+        log!($logger, $crate::slog::Level::Debug ; $( $field $( . $sub_field)* => $value ),*)
     }};
     (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
-        if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Debug)) {
-            log!($logger, slog::Level::Debug, $message $(,$args)*)
+        if $logger.is_n_seconds($seconds, log_metadata!($crate::slog::Level::Debug)) {
+            log!($logger, $crate::slog::Level::Debug, $message $(,$args)*)
         }
     }};
     ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
-        log!($logger, slog::Level::Debug, $message $(,$args)*)
+        log!($logger, $crate::slog::Level::Debug, $message $(,$args)*)
     }};
     ($logger:expr_2021 $(,)*) => {{
         debug!($logger, "");
@@ -120,28 +120,28 @@ macro_rules! debug {
 #[macro_export(local_inner_macros)]
 macro_rules! info {
     (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Info)) {
-            log!($logger, slog::Level::Info, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
+        if $logger.is_n_seconds($seconds, log_metadata!($crate::slog::Level::Info)) {
+            log!($logger, $crate::slog::Level::Info, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
         }
     }};
     ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        log!($logger, slog::Level::Info, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
+        log!($logger, $crate::slog::Level::Info, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
     }};
     (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
-        if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Info)) {
-            log!($logger, slog::Level::Info, $message $(,$args)*)
+        if $logger.is_n_seconds($seconds, log_metadata!($crate::slog::Level::Info)) {
+            log!($logger, $crate::slog::Level::Info, $message $(,$args)*)
         }
     }};
     (every_n_seconds => $seconds:expr_2021, $logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Info)) {
-            log!($logger, slog::Level::Info ; $( $field $( . $sub_field)* => $value ),*)
+        if $logger.is_n_seconds($seconds, log_metadata!($crate::slog::Level::Info)) {
+            log!($logger, $crate::slog::Level::Info ; $( $field $( . $sub_field)* => $value ),*)
         }
     }};
     ($logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        log!($logger, slog::Level::Info ; $( $field $( . $sub_field)* => $value ),*)
+        log!($logger, $crate::slog::Level::Info ; $( $field $( . $sub_field)* => $value ),*)
     }};
     ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
-        log!($logger, slog::Level::Info, $message $(,$args)*)
+        log!($logger, $crate::slog::Level::Info, $message $(,$args)*)
     }};
     ($logger:expr_2021 $(,)*) => {{
         info!($logger, "");
@@ -152,28 +152,28 @@ macro_rules! info {
 #[macro_export(local_inner_macros)]
 macro_rules! warn {
     (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Warning)) {
-            log!($logger, slog::Level::Warning, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
+        if $logger.is_n_seconds($seconds, log_metadata!($crate::slog::Level::Warning)) {
+            log!($logger, $crate::slog::Level::Warning, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
         }
     }};
     ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        log!($logger, slog::Level::Warning, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
+        log!($logger, $crate::slog::Level::Warning, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
     }};
     (every_n_seconds => $seconds:expr_2021, $logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Warning)) {
-            log!($logger, slog::Level::Warning ; $( $field $( . $sub_field)* => $value ),*)
+        if $logger.is_n_seconds($seconds, log_metadata!($crate::slog::Level::Warning)) {
+            log!($logger, $crate::slog::Level::Warning ; $( $field $( . $sub_field)* => $value ),*)
         }
     }};
     ($logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        log!($logger, slog::Level::Warning ; $( $field $( . $sub_field)* => $value ),*)
+        log!($logger, $crate::slog::Level::Warning ; $( $field $( . $sub_field)* => $value ),*)
     }};
     (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
-        if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Warning)) {
-            log!($logger, slog::Level::Warning, $message $(,$args)*)
+        if $logger.is_n_seconds($seconds, log_metadata!($crate::slog::Level::Warning)) {
+            log!($logger, $crate::slog::Level::Warning, $message $(,$args)*)
         }
     }};
     ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
-        log!($logger, slog::Level::Warning, $message $(,$args)*)
+        log!($logger, $crate::slog::Level::Warning, $message $(,$args)*)
     }};
     ($logger:expr_2021 $(,)*) => {{
         warn!($logger, "");
@@ -184,18 +184,18 @@ macro_rules! warn {
 #[macro_export(local_inner_macros)]
 macro_rules! error {
     (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
-        if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Error)) {
-            log!($logger, slog::Level::Error, $message $(,$args)*)
+        if $logger.is_n_seconds($seconds, log_metadata!($crate::slog::Level::Error)) {
+            log!($logger, $crate::slog::Level::Error, $message $(,$args)*)
         }
     }};
     ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        log!($logger, slog::Level::Error, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
+        log!($logger, $crate::slog::Level::Error, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
     }};
     ($logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        log!($logger, slog::Level::Error ; $( $field $( . $sub_field)* => $value ),*)
+        log!($logger, $crate::slog::Level::Error ; $( $field $( . $sub_field)* => $value ),*)
     }};
     ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
-        log!($logger, slog::Level::Error, $message $(,$args)*)
+        log!($logger, $crate::slog::Level::Error, $message $(,$args)*)
     }};
     ($logger:expr_2021 $(,)*) => {{
         error!($logger, "");
@@ -206,13 +206,13 @@ macro_rules! error {
 #[macro_export(local_inner_macros)]
 macro_rules! crit {
     ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        log!($logger, slog::Level::Critical, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
+        log!($logger, $crate::slog::Level::Critical, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
     }};
     ($logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        log!($logger, slog::Level::Critical ; $( $field $( . $sub_field)* => $value ),*)
+        log!($logger, $crate::slog::Level::Critical ; $( $field $( . $sub_field)* => $value ),*)
     }};
     ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
-        log!($logger, slog::Level::Critical, $message $(,$args)*)
+        log!($logger, $crate::slog::Level::Critical, $message $(,$args)*)
     }};
     ($logger:expr_2021 $(,)*) => {{
         crit!($logger, "");
@@ -223,15 +223,15 @@ macro_rules! crit {
 #[macro_export(local_inner_macros)]
 macro_rules! fatal {
     ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        log!($logger, slog::Level::Critical, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*);
+        log!($logger, $crate::slog::Level::Critical, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*);
         std::panic!($message $(,$args)*);
     }};
     ($logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
-        log!($logger, slog::Level::Critical ; $( $field $( . $sub_field)* => $value ),*);
+        log!($logger, $crate::slog::Level::Critical ; $( $field $( . $sub_field)* => $value ),*);
         std::panic!("");
     }};
     ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
-        log!($logger, slog::Level::Critical, $message $(,$args)*);
+        log!($logger, $crate::slog::Level::Critical, $message $(,$args)*);
         std::panic!($message $(,$args)*);
     }};
     ($logger:expr_2021 $(,)*) => {{

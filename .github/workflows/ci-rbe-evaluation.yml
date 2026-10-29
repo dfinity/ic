@@ -14,11 +14,6 @@ on:
         description: The commit sha to run the CI on
         required: true
         type: string
-      release-build:
-        description: Whether this CI run is for a release build which means artifacts will be stamped.
-        required: false
-        default: ''
-        type: string
 
 permissions:
   contents: read
@@ -64,7 +59,8 @@ jobs:
               fi
           done
 
-          if [[ "${is_protected_branch:-}" == "true" ]]; then
+          # Only on push: a workflow_dispatch, for one, runs on whichever ref its dispatcher picks.
+          if [[ "${is_protected_branch:-}" == "true" && "$CI_EVENT_NAME" == "push" ]]; then
               # if we are on a "protected" branch, targeting an rc branch or master we
               # upload all artifacts and run a release build (with versioning)
               release_build="true"
@@ -97,11 +93,6 @@ jobs:
               release_build="false"
               diff_only="true"
               skip_long_tests="true"
-          fi
-
-          # if release build was set, override whatever was determined above
-          if [[ '${{ inputs.release-build }}' != '' ]]; then
-              release_build=${{ inputs.release-build }}
           fi
 
           if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' == 'true' ]]; then
@@ -143,7 +134,7 @@ jobs:
     container:
       # The RBE worker image of .github/actions/bazel-namespace/rbe.bazelrc: the
       # update-image-references job of container-autobuild.yml rewrites both.
-      image: nscr.io/c9ptjuknd7oc6/ic-build@sha256:991e1c9b39455d275f3a852f7f10b3e38208cdcc3c8e8aab04025683ec166e0c
+      image: nscr.io/c9ptjuknd7oc6/ic-build@sha256:b897752c4c05ee6f26bf17e4dfb42f2f64ad409cbfb0b95203eeaa00ed1bd95c
       # ic-os image builds run 'podman build' (rootless) and are forced to run locally in
       # this container by --strategy_regexp=ic-os[:/].*=local in bazel/conf/.bazelrc.build.
       # Rootless podman needs to create user namespaces, which fails in an unprivileged
@@ -151,6 +142,8 @@ jobs:
       options: >-
         --privileged --mount type=tmpfs,target="/tmp/containers"
       volumes:
+        # nscloud-setup finds the runner's Namespace token in here and exports NSC_TOKEN_FILE,
+        # which nsc and namespace-actions/upload-artifact read.
         - /var/run/nsc/:/var/run/nsc/
         # The runner profile's Namespace cache volume (always /cache on the host). The
         # "Mount the Bazel repository cache" step bind-mounts a directory of it into this
@@ -158,17 +151,15 @@ jobs:
         - /cache:/cache
         # The runner's scratch filesystem, see runs-on above.
         - /namespace/scratch:/namespace/scratch
-      # Forward the Namespace credentials into the container so the
-      # namespace-actions/upload-artifact step can authenticate against Namespace
-      # Artifact Storage from inside the job container. See:
-      # https://namespace.so/docs/reference/github-actions/upload-artifact
+      # Forward the Namespace Artifact Storage variables into the container for the
+      # namespace-actions/upload-artifact of the "Upload target files to Namespace Artifact
+      # Storage" step. See: https://namespace.so/docs/reference/github-actions/upload-artifact
       env:
-        NSC_TOKEN_FILE: ${{ env.NSC_TOKEN_FILE }}
         NAMESPACE_ACTIONS_RESULTS_URL: ${{ env.NAMESPACE_ACTIONS_RESULTS_URL }}
         NAMESPACE_ACTIONS_RESULTS_SERVICE: ${{ env.NAMESPACE_ACTIONS_RESULTS_SERVICE }}
         NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD: ${{ env.NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD }}
         # Set (to /cache) by the Namespace runner when the profile has a cache volume and
-        # forwarded like the credentials above; the "Prepare the Bazel repository cache"
+        # forwarded like the variables above; the "Prepare the Bazel repository cache"
         # step checks it and the other repository-cache steps are skipped when it is unset.
         NSC_CACHE_PATH: ${{ env.NSC_CACHE_PATH }}
     # A job timeout cancels the job, skipping the uploads of the bazel-namespace action, so this
@@ -269,6 +260,8 @@ jobs:
       - name: Infer Bazel Args
         id: infer-bazel-args
         shell: bash
+        env:
+          RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
         run: |
           # Determine bazel_args based on event type or branch name
           bazel_args=( --config=flaky_retry ) # auto retry eg systests
@@ -280,7 +273,7 @@ jobs:
               bazel_args+=( --keep_going )
           fi
 
-          if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
+          if [[ "$RELEASE_BUILD" == 'true' ]]; then
             # make sure the version is stamped in
             bazel_args+=( --config=stamped )
           fi
@@ -293,21 +286,26 @@ jobs:
         # the action's uploads (see .github/actions/bazel-namespace/action.yaml).
         timeout-minutes: 35
         uses: ./.github/actions/bazel-namespace
+        env:
+          SKIP_LONG_TESTS: ${{ needs.config.outputs.skip_long_tests }}
+          SKIP_BUF_CHECKS: ${{ needs.config.outputs.skip_buf_checks }}
+          SKIP_SYSTEM_TESTS: ${{ needs.config.outputs.skip_system_tests }}
+          DIFF_ONLY: ${{ needs.config.outputs.diff-only }}
         with:
           timeout-minutes: 30
           run: |
             # Farm-based system-tests run via .github/workflows/ci-main.yml so skip them here:
             targets_args=(--exclude_tags=farm_system_test)
-            if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
+            if [[ "$SKIP_LONG_TESTS" == 'true' ]]; then
               targets_args+=("--skip_long_tests")
             fi
-            if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
+            if [[ "$SKIP_BUF_CHECKS" == 'true' ]]; then
               targets_args+=("--exclude_tags=buf")
             fi
-            if [[ '${{ needs.config.outputs.skip_system_tests }}' == 'true' ]]; then
+            if [[ "$SKIP_SYSTEM_TESTS" == 'true' ]]; then
               targets_args+=("--exclude_tags=system_test")
             fi
-            if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
+            if [[ "$DIFF_ONLY" == 'true' ]]; then
               targets_args+=(
                 '--base=${{ github.event.pull_request.base.sha }}'
                 '--head=${{ github.event.pull_request.head.sha }}'
@@ -364,6 +362,7 @@ jobs:
         uses: ./.github/actions/bazel-namespace
         with:
           timeout-minutes: 90
+          GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
           run: |
             read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
             bazel build "${inferred_args[@]}" --target_pattern_file="$HOME/bazel-targets/build-targets"
@@ -377,6 +376,7 @@ jobs:
         uses: ./.github/actions/bazel-namespace
         with:
           timeout-minutes: 120
+          GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
           run: |
             read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
             test_targets="$HOME/bazel-targets/test-targets"

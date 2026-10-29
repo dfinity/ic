@@ -40,6 +40,7 @@ pub mod audit;
 pub mod automatic_deposits;
 pub mod eth_logs_scraping;
 pub mod event;
+pub mod receipt_fetch;
 pub mod sweep_observations;
 pub mod sweeper_funding;
 pub mod transactions;
@@ -377,7 +378,7 @@ impl State {
             })
     }
 
-    pub fn supported_ck_erc20_tokens(&self) -> impl Iterator<Item = CkErc20Token> + '_ {
+    pub fn supported_ck_erc20_tokens(&self) -> impl Iterator<Item = CkErc20Token> {
         self.ckerc20_tokens
             .iter()
             .map(|(ledger_id, erc20_address, symbol)| CkErc20Token {

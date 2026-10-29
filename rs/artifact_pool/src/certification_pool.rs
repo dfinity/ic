@@ -7,7 +7,8 @@ use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, Mutations},
     consensus_pool::{HeightIndexedPool, HeightRange},
     p2p::consensus::{
-        ArtifactTransmit, ArtifactTransmits, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+        ArtifactTransmit, ArtifactTransmits, InitialBroadcastSource, MutablePool,
+        UnvalidatedArtifact, ValidatedPoolReader,
     },
 };
 use ic_logger::{ReplicaLogger, warn};
@@ -458,7 +459,9 @@ impl ValidatedPoolReader<CertificationMessage> for CertificationPoolImpl {
             }
         }
     }
+}
 
+impl InitialBroadcastSource<CertificationMessage> for CertificationPoolImpl {
     fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = CertificationMessage> + '_> {
         let certification_range = self.validated.certifications().height_range();
         let share_range = self.validated.certification_shares().height_range();
@@ -543,7 +546,7 @@ mod tests {
         let signature = ThresholdSignature::fake();
         CertificationMessage::Certification(Certification {
             height: Height::from(height),
-            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed { content, signature },
         })
     }

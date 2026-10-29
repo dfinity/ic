@@ -161,17 +161,10 @@ impl DelegationManager {
         delegation: &NNSDelegationBuilder,
     ) -> Option<bool> {
         let state = self.state_reader.get_latest_certified_state()?;
-        let network_topology = &state.get_ref().metadata.network_topology;
         delegation
             .is_consistent_with(
                 CanisterRangesCheck::AllSubnetRanges,
-                network_topology.routing_table(),
-                |subnet_id| {
-                    network_topology
-                        .subnets()
-                        .get(&subnet_id)
-                        .map(|subnet_topology| subnet_topology.public_key.as_slice())
-                },
+                state.get_ref().as_ref(),
             )
             .inspect_err(|err| {
                 warn!(

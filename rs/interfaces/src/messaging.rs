@@ -7,6 +7,7 @@ use ic_types::{
     consensus::Payload,
     xnet::CertifiedStreamSlice,
 };
+use thiserror::Error;
 
 /// Errors that `MessageRouting` may return.
 #[derive(Eq, PartialEq, Debug)]
@@ -106,8 +107,8 @@ pub trait XNetPayloadBuilder: Send + Sync {
 /// Interface for handling XNet adverts: certified stream headers pushed by a
 /// source subnet to advertise that it holds something we may not have seen.
 pub trait XNetAdvertHandler: Send + Sync {
-    /// Handles an advert claiming to come from `source_subnet`, verifying it
-    /// before acting on new content or replying to it.
+    /// Handles an advert from a node of `source_subnet`, verifying it before
+    /// acting on new content or recording its header.
     fn handle_advert(
         &self,
         source_subnet: SubnetId,
@@ -165,11 +166,11 @@ impl XNetAdvertOutcome {
 }
 
 /// The reason for rejecting a XNet advert.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum XNetAdvertError {
-    /// Could not be decoded.
+    #[error("Failed to decode advert: {0}")]
     DecodeError(String),
-    /// Invalid certification or mismatching witness.
+    #[error("Invalid certification or mismatching witness")]
     InvalidSignature,
 }
 

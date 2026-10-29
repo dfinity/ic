@@ -54,8 +54,14 @@ fn load_metrics_e2e_test() {
                 .unwrap()
                 .path();
         let load_samples_baseline_path = dir.path().join("load_samples_baseline.csv");
-        ic_state_tool::commands::canister_metrics::get(checkpoint_dir, &load_samples_baseline_path)
-            .expect("Should compute canister metrics for a valid checkpoint");
+        let communication_samples_baseline_path =
+            dir.path().join("communication_samples_baseline.csv");
+        ic_state_tool::commands::canister_metrics::get(
+            checkpoint_dir,
+            &load_samples_baseline_path,
+            &communication_samples_baseline_path,
+        )
+        .expect("Should compute canister metrics for a valid checkpoint");
 
         info!(logger, "Setting up state machines");
         set_up(
@@ -90,16 +96,13 @@ fn load_metrics_e2e_test() {
             "Using `state-tool` to extract the canister metrics from the replicated state."
         );
         let load_samples_path = dir.path().join("load_samples.csv");
-        ic_state_tool::commands::canister_metrics::get(checkpoint_dir.clone(), &load_samples_path)
-            .expect("Should compute canister metrics for a valid checkpoint");
-        let communication_samples_path = dir.path().join("comm_samples.csv");
-        // TODO(CON-1569): use actual connectivity metrics
-        {
-            let communication_data = include_str!("../test_data/fake_communication_sample.csv");
-            let mut communication_samples_file =
-                std::fs::File::create(&communication_samples_path).unwrap();
-            write!(communication_samples_file, "{communication_data}").unwrap();
-        }
+        let communication_samples_path = dir.path().join("communication_samples.csv");
+        ic_state_tool::commands::canister_metrics::get(
+            checkpoint_dir.clone(),
+            &load_samples_path,
+            &communication_samples_path,
+        )
+        .expect("Should compute canister metrics for a valid checkpoint");
 
         info!(
             logger,
@@ -117,6 +120,10 @@ fn load_metrics_e2e_test() {
             .args([
                 "--communication-data-path",
                 &communication_samples_path.display().to_string(),
+            ])
+            .args([
+                "--communication-baseline-data-path",
+                &communication_samples_baseline_path.display().to_string(),
             ])
             .args(["--output-path", &split_output_path.display().to_string()])
             .args(["--load-type", "instructions_executed"])
@@ -206,36 +213,36 @@ fn load_metrics_e2e_test() {
             states_sizes_bytes
                 .source
                 .min(states_sizes_bytes.destination),
-            3693264,
+            3705962,
             0.1
         );
         assert_near!(
             states_sizes_bytes
                 .source
                 .max(states_sizes_bytes.destination),
-            5539880,
+            5558934,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .min(instructions_executed.destination),
-            144321167,
+            144343027,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .max(instructions_executed.destination),
-            145740365,
+            145772259,
             0.1
         );
-        assert_eq_oriented!(canisters_installed, 8, 12);
-        assert_eq_oriented!(ingress_messages_executed, 15, 24);
-        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 4, 6);
-        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 11, 17);
-        assert_eq_oriented!(http_outcalls_executed, 4, 6);
-        assert_eq_oriented!(heartbeats_and_global_timers_executed, 368, 326);
+        assert_eq_oriented!(canisters_installed, 12, 8);
+        assert_eq_oriented!(ingress_messages_executed, 24, 15);
+        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 6, 4);
+        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 17, 11);
+        assert_eq_oriented!(http_outcalls_executed, 6, 4);
+        assert_eq_oriented!(heartbeats_and_global_timers_executed, 326, 368);
         // A single split cannot report some metrics in the original orientation and others in the
         // swapped one, so require all the orientation-sensitive metrics to agree on one labeling.
         assert!(

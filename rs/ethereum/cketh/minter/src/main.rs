@@ -1369,6 +1369,47 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The age of the oldest incomplete ETH withdrawal request in seconds.",
                 )?;
 
+                w.gauge_vec(
+                    "cketh_minter_unfinalized_requests",
+                    "Requests the minter still owes a finalized transaction, by pipeline and stage.",
+                )?
+                .value(
+                    &[("pipeline", "withdrawal"), ("stage", "queued")],
+                    s.withdrawal_transactions.requests_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "withdrawal"), ("stage", "unsent")],
+                    s.withdrawal_transactions.created_tx_excluding_resubmissions_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "withdrawal"), ("stage", "sent")],
+                    s.withdrawal_transactions.sent_tx_nonces_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper"), ("stage", "queued")],
+                    s.automatic_deposits.queued_sweep_requests_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper"), ("stage", "unsent")],
+                    s.automatic_deposits.created_sweep_tx_excluding_resubmissions_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper"), ("stage", "sent")],
+                    s.automatic_deposits.sent_sweep_tx_nonces_len() as f64,
+                )?;
+                w.gauge_vec(
+                    "cketh_minter_unfinalized_transactions",
+                    "Transactions behind the sent stage, one per attempt including fee bumps.",
+                )?
+                .value(
+                    &[("pipeline", "withdrawal")],
+                    s.withdrawal_transactions.sent_tx_transactions_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper")],
+                    s.automatic_deposits.sent_sweep_tx_transactions_len() as f64,
+                )?;
+
                 w.encode_gauge(
                     "cketh_minter_stored_attestations",
                     s.automatic_deposits.attestations_len() as f64,
@@ -1516,6 +1557,63 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Age of the sweeper funding awaiting finalization; 0 if none is outstanding.",
                 )?;
 
+                let withdrawal_pipeline = s.withdrawal_transactions.pipeline();
+                let sweeper_pipeline = s.automatic_deposits.sweeper_pipeline();
+                let receipt_fetch = [
+                    ("withdrawal", withdrawal_pipeline.receipt_fetch().counters()),
+                    ("sweeper", sweeper_pipeline.receipt_fetch().counters()),
+                ];
+                w.gauge_vec(
+                    "cketh_minter_receipt_fetch_window",
+                    "Maximum pipeline ids one finalization round fetches receipts for, per pipeline.",
+                )?
+                .value(
+                    &[("pipeline", "withdrawal")],
+                    withdrawal_pipeline.receipt_fetch().window() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper")],
+                    sweeper_pipeline.receipt_fetch().window() as f64,
+                )?;
+                w.gauge_vec(
+                    "cketh_minter_receipt_fetch_rounds_since_chain_read",
+                    "Consecutive rounds failing or skipping the finalized-count read, per pipeline.",
+                )?
+                .value(
+                    &[("pipeline", "withdrawal")],
+                    withdrawal_pipeline.receipt_fetch().rounds_since_chain_read() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper")],
+                    sweeper_pipeline.receipt_fetch().rounds_since_chain_read() as f64,
+                )?;
+                let mut receipt_lookups = w.counter_vec(
+                    "cketh_minter_receipt_lookups_total",
+                    "Transaction receipt lookups, by pipeline and outcome. Resets on upgrade.",
+                )?;
+                for (pipeline, counters) in receipt_fetch {
+                    receipt_lookups = receipt_lookups
+                        .value(
+                            &[("pipeline", pipeline), ("outcome", "receipt")],
+                            counters.receipts as f64,
+                        )?
+                        .value(
+                            &[("pipeline", pipeline), ("outcome", "not_mined")],
+                            counters.not_mined as f64,
+                        )?
+                        .value(
+                            &[("pipeline", pipeline), ("outcome", "error")],
+                            counters.failures as f64,
+                        )?;
+                }
+                let mut abandoned_rounds = w.counter_vec(
+                    "cketh_minter_receipt_fetch_abandoned_rounds_total",
+                    "Rounds dropped because two receipts named the same id. Resets on upgrade.",
+                )?;
+                for (pipeline, counters) in receipt_fetch {
+                    abandoned_rounds = abandoned_rounds
+                        .value(&[("pipeline", pipeline)], counters.abandoned_rounds as f64)?;
+                }
                 w.encode_gauge(
                     "cketh_minter_last_max_fee_per_gas",
                     s.last_transaction_price_estimate
