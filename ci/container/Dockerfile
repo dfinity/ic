@@ -56,10 +56,13 @@ RUN motoko_tar="$(mktemp)" && \
     rm -f "$motoko_tar" && \
     chmod +x /usr/local/bin/moc
 
-# Install AFLplusplus (`make install` puts the executables in /usr/local/bin/)
-ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
-RUN git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git /afl && \
+# Install AFLplusplus v4.35c (`make install` puts the executables in /usr/local/bin/)
+# NOTE: when bumping, pin the commit the upstream tag points to (its ^{} line if annotated):
+#       git ls-remote https://github.com/AFLplusplus/AFLplusplus.git 'refs/tags/<tag>*'
+ARG aflplusplus_commit=b449e4c544eaac1a0a9b7d1f2f15d5921907585e
+RUN git clone --depth=1 --revision="$aflplusplus_commit" https://github.com/AFLplusplus/AFLplusplus.git /afl && \
     cd /afl && \
+    test "$(git rev-parse HEAD)" = "$aflplusplus_commit" && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config CC=/usr/bin/clang CXX=/usr/bin/clang++ make all && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config CC=/usr/bin/clang CXX=/usr/bin/clang++ make install && \
     rm -rf /afl
@@ -70,11 +73,17 @@ RUN git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.c
 #   and gets fetched on the first `cargo` invocation.
 # - CARGO_HOME/RUSTUP_HOME are only set for the install step; runtime users
 #   fall back to their default $HOME/.{cargo,rustup} for per-user state.
+# - The installer must be named rustup-init: rustup picks its mode from argv[0].
 ENV PATH=/ic/bin:/opt/cargo/bin:$PATH
-RUN curl --fail https://sh.rustup.rs -sSf \
-    | env CARGO_HOME=/opt/cargo RUSTUP_HOME=/opt/rustup \
-      sh -s -- -y --default-toolchain none --no-modify-path \
-    && rm -rf /opt/rustup
+# NOTE: update rustup_sha whenever rustup_version changes
+ARG rustup_version=1.29.2
+ARG rustup_sha=5be191e8c70a5007074254cb74d78dbfdd25cd5a61c27de7b8e5410122ec24f4
+RUN rustup_dir="$(mktemp -d)" && \
+    curl -fsSL "https://static.rust-lang.org/rustup/archive/${rustup_version}/x86_64-unknown-linux-gnu/rustup-init" -o "$rustup_dir/rustup-init" && \
+    echo "$rustup_sha $rustup_dir/rustup-init" | sha256sum --check && \
+    chmod +x "$rustup_dir/rustup-init" && \
+    CARGO_HOME=/opt/cargo RUSTUP_HOME=/opt/rustup "$rustup_dir/rustup-init" -y --default-toolchain none --no-modify-path && \
+    rm -rf "$rustup_dir" /opt/rustup
 
 WORKDIR /
 # Bake the entrypoint into the image so it works without the repo bind-mounted.
@@ -89,8 +98,11 @@ USER buildifier
 FROM base as dev
 
 # Add GitHub CLI repository to get the latest version
+# NOTE: GitHub lists the keyring's SHA256 in https://github.com/cli/cli/blob/trunk/docs/install_linux.md
+ARG githubcli_keyring_sha=6084d5d7bd8e288441e0e94fc6275570895da18e6751f70f057485dc2d1a811b
 RUN mkdir -p -m 755 /etc/apt/keyrings \
 	&& out=$(mktemp) && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o "$out" \
+	&& echo "$githubcli_keyring_sha $out" | sha256sum --check \
 	&& cat $out | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
 	&& chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
 	&& mkdir -p -m 755 /etc/apt/sources.list.d \

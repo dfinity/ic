@@ -2988,26 +2988,29 @@ fn subnet_metrics_reports_the_subnets_metrics() {
         response.update_transactions_total,
         candid::Nat::from(metrics_before.update_transactions_total + 1)
     );
-    // `consumed_cycles_total`: the subnet-wide aggregate, including the cycles
-    // consumed by the canisters that still exist -- non-zero here only because
-    // `commit_and_certify` refreshes the canisters' part on every committed
-    // state. Creating and installing the caller charged cycles, and executing the
-    // ingress that made this call charged more, so both the reported total and
-    // the total the state holds now are above the snapshot.
+    // `consumed_cycles_total`: the subnet-wide monotonic aggregate, including
+    // the cycles consumed by the canisters that still exist -- non-zero here only
+    // because `commit_and_certify` refreshes the canisters' part on every
+    // committed state. Creating and installing the caller charged cycles, and
+    // executing the ingress that made this call charged more, so the reported
+    // total is above the snapshot.
     //
-    // Deliberately no upper bound: while the call is in flight the caller has
-    // prepaid for a maximum-size response, and the prepayment counts as consumed
-    // until the unused part is refunded, so the reported total is in fact *above*
-    // the total once the call has completed.
-    let consumed_before = metrics_before.consumed_cycles_total_including_canisters();
+    // The aggregate is monotonic: it leaves out the prepayment for the response
+    // that the caller made while the call was in flight, and the charges for
+    // executing the response come on top afterwards. So the reported total is
+    // below the total the state holds now that the call has completed.
+    let consumed_before = metrics_before.consumed_cycles_total_including_canisters_monotonic();
     let consumed_now = env
         .get_latest_state()
         .metadata
         .subnet_metrics
-        .consumed_cycles_total_including_canisters();
+        .consumed_cycles_total_including_canisters_monotonic();
     assert_gt!(consumed_before.get(), 0);
-    assert_gt!(consumed_now.get(), consumed_before.get());
     assert_gt!(
+        response.consumed_cycles_total,
+        candid::Nat::from(consumed_before.get())
+    );
+    assert_lt!(
         response.consumed_cycles_total,
         candid::Nat::from(consumed_now.get())
     );
@@ -3062,7 +3065,7 @@ fn subnet_metrics_reports_the_subnets_metrics() {
 
 /// Regression test: the `consumed_cycles_total` the endpoint reports is the
 /// aggregate of the last *committed* state, read from
-/// `SubnetMetrics::consumed_cycles_total_including_canisters`, and not recomputed
+/// `SubnetMetrics::consumed_cycles_total_including_canisters_monotonic`, and not recomputed
 /// from the fields as they stand mid-round.
 ///
 /// `delete_canister` adds the deleted canister's consumed cycles to
@@ -3136,13 +3139,13 @@ fn subnet_metrics_consumed_cycles_total_is_the_committed_aggregate() {
             state
                 .metadata
                 .subnet_metrics
-                .consumed_cycles_total_including_canisters(),
+                .consumed_cycles_total_including_canisters_monotonic(),
             state
                 .canister_state(&victim)
                 .expect("the victim must still exist at this point")
                 .system_state
                 .canister_metrics()
-                .consumed_cycles(),
+                .consumed_cycles_monotonic(),
         )
     };
 
@@ -3155,7 +3158,7 @@ fn subnet_metrics_consumed_cycles_total_is_the_committed_aggregate() {
         .get_latest_state()
         .metadata
         .subnet_metrics
-        .consumed_cycles_total_including_canisters();
+        .consumed_cycles_total_including_canisters_monotonic();
 
     // The reported total is a committed snapshot, so it cannot predate the state
     // the call started from.
@@ -3197,9 +3200,10 @@ fn certified_subnet_metrics(env: &StateMachine) -> (MixedHashTree, CryptoHashOfP
 /// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters`
 /// is not persisted: `ReplicatedState::new_from_checkpoint` re-derives it from the
 /// canisters it loads, exactly as the refresh on every committed state does. From
-/// certification version `V29` on, that aggregate is what
-/// `/subnet/<subnet_id>/metrics` certifies, so a replica restarting from a
-/// checkpoint has to certify byte-for-byte the same leaf as one that kept running.
+/// certification version `V29` on, that aggregate (or, from `V30` on, its
+/// monotonic counterpart) is what `/subnet/<subnet_id>/metrics` certifies, so a
+/// replica restarting from a checkpoint has to certify byte-for-byte the same leaf
+/// as one that kept running.
 #[test]
 fn subnet_metrics_are_unchanged_across_a_restart() {
     let env = StateMachineBuilder::new()
@@ -3298,7 +3302,8 @@ fn assert_consumed_cycles_are_refreshed(env: &StateMachine) -> NominalCycles {
 /// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters`
 /// is refreshed on every committed state, not only on the rounds that happen to
 /// touch the subnet-level fields. From certification version `V29` on the aggregate
-/// is certified at `/subnet/<subnet_id>/metrics`, so a stale one would be served to
+/// (or, from `V30` on, its monotonic counterpart) is certified at
+/// `/subnet/<subnet_id>/metrics`, so a stale one would be served to
 /// users as the current consumption of the subnet.
 ///
 /// A heartbeat that burns a fixed amount of cycles makes every single round consume
@@ -3689,6 +3694,54 @@ fn canister_metrics_via_query_call_by_controller_succeeds() {
 
     assert!(result.is_ok());
     assert_eq!(canister_metrics_count(&env), 1);
+}
+
+// A subnet admin who is not a controller of a canister can install code on it
+// on a cloud engine, but not on a rented subnet (both on the free cost
+// schedule).
+#[test]
+fn install_code_by_subnet_admin_succeeds_only_on_cloud_engine() {
+    let subnet_admin = user_test_id(100).get();
+    for subnet_type in [SubnetType::CloudEngine, SubnetType::Application] {
+        let env = StateMachineBuilder::new()
+            .with_config(Some(StateMachineConfig::new(
+                SubnetConfig::new(subnet_type),
+                HypervisorConfig::default(),
+            )))
+            .with_subnet_type(subnet_type)
+            .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+            .with_subnet_admins(vec![subnet_admin])
+            .build();
+        let canister_id = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+        assert!(
+            !env.get_controllers(canister_id)
+                .unwrap()
+                .contains(&subnet_admin)
+        );
+
+        let install_code_args = InstallCodeArgsV2 {
+            mode: CanisterInstallModeV2::Install,
+            canister_id: canister_id.get(),
+            wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
+            arg: vec![],
+            sender_canister_version: None,
+        };
+        let result = env.execute_ingress_as(
+            subnet_admin,
+            IC_00,
+            Method::InstallCode,
+            install_code_args.encode(),
+        );
+        match subnet_type {
+            SubnetType::CloudEngine => {
+                result.unwrap();
+            }
+            _ => assert_eq!(
+                result.unwrap_err().code(),
+                ErrorCode::CanisterInvalidController
+            ),
+        }
+    }
 }
 
 #[test]

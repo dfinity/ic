@@ -50,7 +50,9 @@ component_files = {
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("hostos/misc/sudoers"): "/etc/sudoers",
     Label("hostos/misc/limited-console"): "/opt/ic/bin/limited-console",
-    Label("hostos/misc/bash"): "/opt/ic/bin/rbash/bash",
+    Label("hostos/misc/rbash/bash"): "/opt/ic/bin/rbash/bash",
+    Label("hostos/misc/rbash/deny"): "/opt/ic/bin/rbash/deny",
+    Label("hostos/misc/rbash/rbash-shadow.list"): "/opt/ic/share/rbash-shadow.list",
     Label("hostos/misc/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("hostos/misc/20-ipmi.rules"): "/etc/udev/rules.d/20-ipmi.rules",
     Label("hostos/misc/reserve-hugepages/reserve-hugepages.service"): "/etc/systemd/system/reserve-hugepages.service",
@@ -104,9 +106,6 @@ component_files = {
     Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.service"): "/etc/systemd/system/generate-host-ssh-keys.service",
     Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys-hostos.sh"): "/opt/ic/bin/setup-ssh-user-keys.sh",
     Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.service"): "/etc/systemd/system/setup-ssh-user-keys.service",
-
-    # TODO: remove in NODE-1859
-    Label("hostos/update-config/update-config.service"): "/etc/systemd/system/update-config.service",
 
     # upgrade
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",

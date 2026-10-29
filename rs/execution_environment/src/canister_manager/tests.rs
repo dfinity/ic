@@ -53,7 +53,8 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState,
+    CallContextManager, CallOrigin, CanisterState, CanisterStatus, NetworkTopology,
+    ReplicatedState,
     canister_state::system_state::wasm_chunk_store::{self, ChunkValidationResult},
     metadata_state::{
         UnflushedCheckpointOp,
@@ -230,6 +231,7 @@ impl Default for InstallCodeContextBuilder {
     fn default() -> Self {
         Self {
             ctx: InstallCodeContext {
+                method: Method::InstallCode,
                 origin: canister_change_origin_from_principal(&PrincipalId::new_user_test_id(0)),
                 canister_id: canister_test_id(0),
                 wasm_source: WasmSource::CanisterModule(CanisterModule::new(
@@ -451,19 +453,15 @@ fn install_code(
 
 fn with_setup<F>(f: F)
 where
-    F: FnOnce(CanisterManager, ReplicatedState, SubnetId, Option<BTreeSet<PrincipalId>>),
+    F: FnOnce(CanisterManager, ReplicatedState, SubnetId, Arc<NetworkTopology>),
 {
     let subnet_id = subnet_test_id(1);
     let canister_manager = CanisterManagerBuilder::default()
         .with_subnet_id(subnet_id)
         .build();
-    let subnet_admins = None;
-    f(
-        canister_manager,
-        initial_state(subnet_id, false),
-        subnet_id,
-        subnet_admins,
-    );
+    let state = initial_state(subnet_id, false);
+    let network_topology = Arc::clone(&state.metadata.network_topology);
+    f(canister_manager, state, subnet_id, network_topology);
 }
 
 #[test]
@@ -943,7 +941,7 @@ fn stop_a_running_canister() {
 
 #[test]
 fn stop_a_stopped_canister() {
-    with_setup(|canister_manager, mut state, _, subnet_admins| {
+    with_setup(|canister_manager, mut state, _, network_topology| {
         let sender = user_test_id(1);
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister(canister_id);
@@ -959,7 +957,7 @@ fn stop_a_stopped_canister() {
         let call_id = StopCanisterCallId::new(0);
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let response = canister_manager
-            .stop_canister(&mut msg, call_id, canister, subnet_admins)
+            .stop_canister(&mut msg, call_id, canister, &network_topology)
             .unwrap();
         assert!(response.reply.is_some());
         assert!(response.stop_call_id_to_remove.is_some());
@@ -974,7 +972,7 @@ fn stop_a_stopped_canister() {
 
 #[test]
 fn stop_a_stopped_canister_from_another_canister() {
-    with_setup(|canister_manager, mut state, _, subnet_admins| {
+    with_setup(|canister_manager, mut state, _, network_topology| {
         let controller = canister_test_id(1);
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister_with_controller(canister_id, controller.get());
@@ -990,7 +988,7 @@ fn stop_a_stopped_canister_from_another_canister() {
         let call_id = StopCanisterCallId::new(0);
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let response = canister_manager
-            .stop_canister(&mut msg, call_id, canister, subnet_admins)
+            .stop_canister(&mut msg, call_id, canister, &network_topology)
             .unwrap();
         assert!(response.reply.is_some());
         assert!(response.stop_call_id_to_remove.is_some());
@@ -1304,7 +1302,7 @@ fn canister_only_accept_calls_if_running() {
 
 #[test]
 fn start_a_stopped_canister_succeeds() {
-    with_setup(|canister_manager, mut state, _, subnet_admins| {
+    with_setup(|canister_manager, mut state, _, network_topology| {
         let sender = user_test_id(1).get();
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister(canister_id);
@@ -1319,7 +1317,7 @@ fn start_a_stopped_canister_succeeds() {
         // Start the canister.
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
         canister_manager
-            .start_canister(sender, canister, subnet_admins)
+            .start_canister(sender, canister, &network_topology)
             .unwrap();
 
         // Canister should now be running.
@@ -1332,7 +1330,7 @@ fn start_a_stopped_canister_succeeds() {
 
 #[test]
 fn start_a_stopping_canister_with_no_stop_contexts() {
-    with_setup(|canister_manager, mut state, _, subnet_admins| {
+    with_setup(|canister_manager, mut state, _, network_topology| {
         let sender = user_test_id(1).get();
         let canister_id = canister_test_id(0);
         let canister = get_stopping_canister(canister_id);
@@ -1341,7 +1339,7 @@ fn start_a_stopping_canister_with_no_stop_contexts() {
 
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let stop_contexts_to_reject = canister_manager
-            .start_canister(sender, canister, subnet_admins)
+            .start_canister(sender, canister, &network_topology)
             .unwrap()
             .stop_contexts_to_reject;
         assert_eq!(stop_contexts_to_reject, Vec::new());
@@ -1350,7 +1348,7 @@ fn start_a_stopping_canister_with_no_stop_contexts() {
 
 #[test]
 fn start_a_stopping_canister_with_stop_contexts() {
-    with_setup(|canister_manager, mut state, _, subnet_admins| {
+    with_setup(|canister_manager, mut state, _, network_topology| {
         let sender = user_test_id(1).get();
         let canister_id = canister_test_id(0);
         let mut canister = get_stopping_canister(canister_id);
@@ -1365,7 +1363,7 @@ fn start_a_stopping_canister_with_stop_contexts() {
 
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let stop_contexts_to_reject = canister_manager
-            .start_canister(sender, canister, subnet_admins)
+            .start_canister(sender, canister, &network_topology)
             .unwrap()
             .stop_contexts_to_reject;
         assert_eq!(stop_contexts_to_reject, vec![stop_context]);
@@ -1569,7 +1567,7 @@ fn canister_status_module_hash() {
 
 #[test]
 fn get_canister_status_of_stopped_canister() {
-    with_setup(|canister_manager, mut state, _, subnet_admins| {
+    with_setup(|canister_manager, mut state, _, network_topology| {
         let sender = user_test_id(1).get();
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister(canister_id);
@@ -1582,7 +1580,7 @@ fn get_canister_status_of_stopped_canister() {
                 canister,
                 state.get_own_subnet_cycles_config(),
                 false,
-                subnet_admins.clone(),
+                &network_topology,
             )
             .unwrap();
         assert_eq!(status_res.status(), CanisterStatusType::Stopped);
@@ -1595,7 +1593,7 @@ fn get_canister_status_of_stopped_canister() {
                 canister,
                 state.get_own_subnet_cycles_config(),
                 true,
-                subnet_admins,
+                &network_topology,
             )
             .unwrap();
         assert!(status_res.ready_for_migration());
@@ -1604,7 +1602,7 @@ fn get_canister_status_of_stopped_canister() {
 
 #[test]
 fn get_canister_status_of_stopping_canister() {
-    with_setup(|canister_manager, mut state, _, subnet_admins| {
+    with_setup(|canister_manager, mut state, _, network_topology| {
         let sender = user_test_id(1).get();
         let canister_id = canister_test_id(0);
         let canister = get_stopping_canister(canister_id);
@@ -1617,7 +1615,7 @@ fn get_canister_status_of_stopping_canister() {
                 canister,
                 state.get_own_subnet_cycles_config(),
                 false,
-                subnet_admins,
+                &network_topology,
             )
             .unwrap()
             .status();
@@ -2455,6 +2453,7 @@ fn failed_upgrade_hooks_consume_instructions() {
         let res = install_code(
             &canister_manager,
             InstallCodeContext {
+                method: Method::InstallCode,
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
                 wasm_source: WasmSource::CanisterModule(CanisterModule::new(initial_wasm)),
@@ -2479,6 +2478,7 @@ fn failed_upgrade_hooks_consume_instructions() {
         let (instructions_left, result, _) = install_code(
             &canister_manager,
             InstallCodeContext {
+                method: Method::InstallCode,
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
                 wasm_source: WasmSource::CanisterModule(CanisterModule::new(upgrade_wasm)),
@@ -2600,6 +2600,7 @@ fn failed_install_hooks_consume_instructions() {
         let (instructions_left, result, _) = install_code(
             &canister_manager,
             InstallCodeContext {
+                method: Method::InstallCode,
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
                 wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
@@ -2721,6 +2722,7 @@ fn install_code_respects_instruction_limit() {
     let (instructions_left, result, canister) = install_code(
         &canister_manager,
         InstallCodeContext {
+            method: Method::InstallCode,
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
@@ -2755,6 +2757,7 @@ fn install_code_respects_instruction_limit() {
     let (instructions_left, result, canister) = install_code(
         &canister_manager,
         InstallCodeContext {
+            method: Method::InstallCode,
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
@@ -2781,6 +2784,7 @@ fn install_code_respects_instruction_limit() {
     let (instructions_left, result, canister) = install_code(
         &canister_manager,
         InstallCodeContext {
+            method: Method::InstallCode,
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
@@ -2814,6 +2818,7 @@ fn install_code_respects_instruction_limit() {
     let (instructions_left, result, _) = install_code(
         &canister_manager,
         InstallCodeContext {
+            method: Method::InstallCode,
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
@@ -3075,12 +3080,13 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
     );
 
     let time = state.time();
+    let network_topology = Arc::clone(&state.metadata.network_topology);
     let canister = state.canister_state_make_mut(&canister_test_id(0)).unwrap();
     canister_manager
         .uninstall_code(
             canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
             canister,
-            None,
+            &network_topology,
             time,
         )
         .unwrap();

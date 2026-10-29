@@ -73,6 +73,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         http_outcalls_executed: 0,
         heartbeats_and_global_timers_executed: 0,
         log_memory_store_persistent_next_idx: 0,
+        connection_metrics: BTreeMap::new(),
     }
 }
 
@@ -326,6 +327,55 @@ fn test_encode_decode_non_empty_environment_variables() {
         decoded_canister_state_bits.environment_variables,
         environment_variables
     );
+}
+
+#[test]
+fn test_encode_decode_non_empty_connection_metrics() {
+    let mut connection_metrics = BTreeMap::new();
+    connection_metrics.insert(
+        canister_test_id(1),
+        ConnectionMetrics {
+            last_access_timestamp: Time::from_nanos_since_unix_epoch(1_000),
+            count: 7,
+        },
+    );
+    connection_metrics.insert(
+        canister_test_id(2),
+        ConnectionMetrics {
+            last_access_timestamp: Time::from_nanos_since_unix_epoch(2_000),
+            count: 3,
+        },
+    );
+
+    // A canister state with non-empty connection metrics.
+    let canister_state_bits = CanisterStateBits {
+        connection_metrics: connection_metrics.clone(),
+        ..default_canister_state_bits()
+    };
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+    let decoded_canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+    assert_eq!(
+        decoded_canister_state_bits.connection_metrics,
+        connection_metrics
+    );
+}
+
+#[test]
+fn test_decode_connection_metrics_without_canister_id_fails() {
+    let mut pb_bits =
+        pb_canister_state_bits::CanisterStateBits::from(default_canister_state_bits());
+    pb_bits
+        .connection_metrics
+        .push(pb_canister_state_bits::CanisterToCanisterMetrics {
+            receiver_canister_id: None,
+            timestamp_nanos: 1_000,
+            count: 7,
+        });
+
+    assert!(matches!(
+        CanisterStateBits::try_from(pb_bits),
+        Err(ic_protobuf::proxy::ProxyDecodeError::MissingField(_))
+    ));
 }
 
 #[test]
@@ -612,6 +662,66 @@ fn test_can_remove_unverified_marker_file_twice() {
             .unwrap()
             .finalize_and_remove_unverified_marker(None);
         assert!(res.is_ok());
+    });
+}
+
+#[test]
+fn test_state_sync_checkpoint_stays_unverified_between_marker_removals() {
+    // `finalize_and_remove_unverified_marker` removes the unverified marker before the state sync marker.
+    // Readers on other threads, like the state sync advert loop calling `verified_or_state_sync_checkpoint_heights`,
+    // can observe the checkpoint in between and must still see an unverified state sync checkpoint.
+    with_test_replica_logger(|log| {
+        let tempdir = tmpdir("state_layout");
+        let root_path = tempdir.path().to_path_buf();
+        let metrics_registry = ic_metrics::MetricsRegistry::new();
+        let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
+
+        let height = Height::new(1);
+        let scratchpad_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+            state_layout.state_sync_scratchpad(height),
+            height,
+        )
+        .expect("failed to create checkpoint layout");
+        File::create(scratchpad_layout.raw_path().join(SYSTEM_METADATA_FILE)).unwrap();
+        // State sync marks its scratchpad before promoting it, which adds the unverified marker.
+        scratchpad_layout
+            .create_state_sync_checkpoint_marker()
+            .unwrap();
+        let checkpoint = state_layout
+            .promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height)
+            .unwrap()
+            .as_readonly();
+        assert!(checkpoint.is_unverified_state_sync_checkpoint());
+
+        checkpoint.remove_unverified_checkpoint_marker().unwrap();
+        assert!(checkpoint.is_unverified_state_sync_checkpoint());
+        assert!(matches!(
+            state_layout.checkpoint_status(height),
+            Ok(CheckpointStatus::UnverifiedStateSync)
+        ));
+        assert_eq!(
+            state_layout
+                .verified_or_state_sync_checkpoint_heights()
+                .unwrap(),
+            vec![height]
+        );
+        assert!(
+            state_layout
+                .verified_checkpoint_heights()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(matches!(
+            state_layout.checkpoint_verified(height),
+            Err(LayoutError::CheckpointUnverified(_))
+        ));
+
+        checkpoint.remove_state_sync_checkpoint_marker().unwrap();
+        assert!(checkpoint.is_checkpoint_verified());
+        assert_eq!(
+            state_layout.verified_checkpoint_heights().unwrap(),
+            vec![height]
+        );
     });
 }
 

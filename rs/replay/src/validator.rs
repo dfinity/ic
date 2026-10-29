@@ -1,6 +1,5 @@
 use std::{
-    collections::HashMap,
-    path::PathBuf,
+    collections::HashSet,
     sync::{Arc, RwLock},
 };
 
@@ -30,11 +29,9 @@ use ic_types::{
     Height, NodeId, PlatformVersion, PrincipalId, SubnetId,
     artifact::ConsensusMessageId,
     consensus::{
-        Block, ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasBlockHash,
-        HasCommittee,
+        ConsensusMessageHash, ConsensusMessageHashable, HasCommittee,
         certification::{Certification, CertificationShare},
     },
-    crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
 };
 use serde::{Deserialize, Serialize};
@@ -46,41 +43,7 @@ const MAX_VALIDATION_THREADS: usize = 8;
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct InvalidArtifact {
     pub id: ConsensusMessageId,
-    pub block_hash: Option<CryptoHashOf<Block>>,
     pub message: String,
-}
-
-impl InvalidArtifact {
-    pub fn get_file_name(&self) -> Option<String> {
-        let mut name = match self.id.hash {
-            ConsensusMessageHash::RandomBeacon(_) => "random_beacon",
-            ConsensusMessageHash::Finalization(_) => "finalization",
-            ConsensusMessageHash::Notarization(_) => "notarization",
-            ConsensusMessageHash::BlockProposal(_) => "block_proposal",
-            ConsensusMessageHash::RandomTape(_) => "random_tape",
-            ConsensusMessageHash::CatchUpPackage(_) => "catch_up_package",
-            _ => return None,
-        }
-        .to_string();
-
-        if let Some(hash) = &self.block_hash {
-            name.push_str(&format!(
-                "_{}_{}",
-                self.bytes_to_hex_string(&hash.get_ref().0),
-                self.bytes_to_hex_string(&self.id.hash.digest().0)
-            ));
-        }
-
-        name.push_str(".bin");
-        Some(name)
-    }
-
-    fn bytes_to_hex_string(&self, v: &[u8]) -> String {
-        v.iter().fold(String::new(), |mut hash, byte| {
-            hash.push_str(&format!("{byte:X}"));
-            hash
-        })
-    }
 }
 
 pub struct ReplayValidator {
@@ -261,7 +224,11 @@ impl ReplayValidator {
                 .unwrap_or_else(|| self.registry.get_latest_version());
 
         self.verifier
-            .validate(self.replica_cfg.subnet_id, certification, registry_version)
+            .validate(
+                self.replica_cfg.subnet_id,
+                &certification.signed,
+                registry_version,
+            )
             .map_err(|e| format!("{e:?}"))
     }
 
@@ -293,18 +260,16 @@ impl ReplayValidator {
     }
 
     /// Validate the given consensus pool and apply resulting changes, until no more changes are found.
-    /// Discovered invalid artifacts are returned. An error is returned if validation stops before the
-    /// target finalized height is reached.
+    /// Discovered invalid artifacts and hashes of validated artifacts are returned.
     pub fn validate(
         &self,
         pool: &mut ConsensusPoolImpl,
-        expected: &mut HashMap<ConsensusMessageHash, PathBuf>,
         dkg: &mut DkgKeyManager,
-        target_height: Height,
-    ) -> Result<Vec<InvalidArtifact>, ReplayError> {
+    ) -> (Vec<InvalidArtifact>, HashSet<ConsensusMessageHash>) {
         let validator = self.get_validator();
 
         let mut invalid_artifacts = Vec::new();
+        let mut validated_artifacts = HashSet::new();
 
         loop {
             let changes = {
@@ -315,24 +280,16 @@ impl ReplayValidator {
 
             changes.iter().for_each(|action| match action {
                 ChangeAction::HandleInvalid(a, s) => {
-                    let block_hash = match a {
-                        ConsensusMessage::Finalization(f) => Some(f.block_hash().clone()),
-                        ConsensusMessage::Notarization(n) => Some(n.block_hash().clone()),
-                        ConsensusMessage::BlockProposal(b) => Some(b.block_hash().clone()),
-                        _ => None,
-                    };
                     self.push_dedup(
                         &mut invalid_artifacts,
                         InvalidArtifact {
                             id: a.get_id(),
-                            block_hash,
                             message: s.clone(),
                         },
                     );
                 }
                 ChangeAction::MoveToValidated(a) => {
-                    let hash = a.get_cm_hash();
-                    expected.remove(&hash);
+                    validated_artifacts.insert(a.get_cm_hash());
                 }
                 other => {
                     println!("Unexpected change action: {other:?}");
@@ -346,21 +303,15 @@ impl ReplayValidator {
             }
         }
 
-        let new_height = PoolReader::new(pool).get_finalized_height();
-        println!("Validated artifacts up to new finalized height: {new_height}");
-
-        if new_height < target_height {
-            Err(ReplayError::ValidationIncomplete(
-                new_height,
-                invalid_artifacts,
-            ))
-        } else {
-            Ok(invalid_artifacts)
-        }
+        (invalid_artifacts, validated_artifacts)
     }
 
     /// Validate the given consensus pool by moving its artifacts to the unvalidated section of a
     /// temp pool, and doing validation there.
+    /// If the temp pool does not reach the target height, return a
+    /// [ReplayError::ValidationIncomplete] with the first height that couldn't be finalized and the
+    /// invalid artifacts found.
+    /// Return just the invalid artifacts otherwise.
     pub(crate) fn validate_in_tmp_pool(
         &self,
         consensus_pool: &dyn ConsensusPool,
@@ -369,6 +320,18 @@ impl ReplayValidator {
     ) -> Result<Vec<InvalidArtifact>, ReplayError> {
         let mut pool = self.get_new_unvalidated(consensus_pool, cup);
         let mut dkg = self.new_key_manager(&PoolReader::new(&pool));
-        self.validate(&mut pool, &mut HashMap::new(), &mut dkg, target_height)
+        let (invalid, _) = self.validate(&mut pool, &mut dkg);
+
+        let new_height = PoolReader::new(&pool).get_finalized_height();
+        println!("Validated artifacts up to new finalized height: {new_height}");
+        if new_height < target_height {
+            // `new_height` was finalized so `new_height + 1` or above failed
+            Err(ReplayError::ValidationIncomplete(
+                new_height.increment(),
+                invalid,
+            ))
+        } else {
+            Ok(invalid)
+        }
     }
 }

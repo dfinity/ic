@@ -11,10 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+- Requests to the bitcoin and dogecoin adapters (fetching blocks and sending transactions) time out after 1 s instead of 50 ms,
+  so that sending a transaction through the bitcoin or dogecoin canister is much less likely to fail spuriously on a loaded machine.
+
+
+
+## 16.1.0 - 2026-10-08
+
 ### Added
 - Threshold ECDSA keys over the curve secp256r1: the PocketIC II and fiduciary subnets hold such a key with name `key_1`
   and the PocketIC test threshold keys subnet holds such keys with names `test_key_1` and `dfx_test_key`.
-  Unlike PocketIC, the ICP mainnet does not hold secp256r1 keys with names `key_1` or `test_key_1` yet.
 
 
 
