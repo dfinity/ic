@@ -318,16 +318,39 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
             // Some canisters require an explicit upgrade arg. cycles-minting
             // needs a hand-provided one (usually '()'). engine-controller's
             // post_upgrade traps when decoding an empty arg, so it must be
-            // given at least '()'; otherwise the upgrade silently rolls back
-            // while the proposal still reports as executed.
+            // given a non-empty record; otherwise the upgrade silently rolls
+            // back while the proposal still reports as executed. We prompt for
+            // the authorized caller principal and build the record around it.
             let output = match canister.as_str() {
                 "cycles-minting" => {
                     let upgrade_arg = input_with_default("Upgrade arg for CMC?", "()")?;
                     run_script(script, &[canister, &commit, &upgrade_arg], &ic)
                         .expect("Failed to run NNS proposal text script")
                 }
-                "engine-controller" => run_script(script, &[canister, &commit, "()"], &ic)
-                    .expect("Failed to run NNS proposal text script"),
+                "engine-controller" => {
+                    // An empty answer emits `null`, which makes the canister
+                    // fall back to its built-in default authorized caller; a
+                    // non-empty value is wrapped in `opt principal "..."`.
+                    // The canister re-applies this on every post_upgrade, so
+                    // the caller must be supplied each release to retain it
+                    // (otherwise it reverts to the default).
+                    let new_caller = input(
+                        "Authorized caller principal for engine-controller? (leave empty for canister default)",
+                    )?;
+                    let authorized_caller = if new_caller.is_empty() {
+                        "null".to_string()
+                    } else {
+                        let principal = candid::Principal::from_text(&new_caller).map_err(|e| {
+                            anyhow::anyhow!("Invalid principal '{new_caller}': {e}")
+                        })?;
+                        format!("opt principal \"{}\"", principal.to_text())
+                    };
+                    let upgrade_arg = format!(
+                        "(opt record {{ authorized_caller = {authorized_caller}; initial_dkg_subnet_id = null }})"
+                    );
+                    run_script(script, &[canister, &commit, &upgrade_arg], &ic)
+                        .expect("Failed to run NNS proposal text script")
+                }
                 _ => run_script(script, &[canister, &commit], &ic)
                     .expect("Failed to run NNS proposal text script"),
             };
