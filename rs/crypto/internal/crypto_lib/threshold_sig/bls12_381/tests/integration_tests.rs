@@ -170,7 +170,8 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
             receiver_fs_public_keys.clone(),
             crsz.ciphertext_chunks().to_vec(),
             crsz.randomizers_r().clone(),
-        );
+        )
+        .expect("Valid chunking instance");
 
         let chunking_witness =
             ChunkingWitness::new(encryption_witness.witness().clone(), big_plaintext_chunks);
@@ -263,7 +264,8 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
             polynomial_exp,
             combined_r_exp,
             combined_ciphertexts,
-        );
+        )
+        .expect("Valid sharing instance");
         let sharing_witness = SharingWitness::new(combined_r, combined_plaintexts);
 
         let sharing_proof = prove_sharing(&sharing_instance, &sharing_witness, rng);
