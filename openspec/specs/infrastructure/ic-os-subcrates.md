@@ -693,6 +693,28 @@ GuestOS, HostOS, and SetupOS share one `chrony.conf` (`ic-os/components/misc/chr
 
 ---
 
+### Requirement: Console Status Terminal (infogetty)
+
+The `infogetty` crate (`rs/ic_os/infogetty`) is the Rust terminal manager installed as `/opt/ic/bin/infogetty` on GuestOS and HostOS. It replaces the login shell on the console and serial getty units, and it replaces the earlier C++ implementation, which was the last C++ build in the repository.
+
+#### Scenario: Status screen without login
+- **WHEN** `infogetty <TTY>` runs without `--user`
+- **THEN** it takes over the terminal: owned by root and the `tty` group with mode `0620` (`0600` if there is no `tty` group), made the controlling terminal, attached to stdin/stdout/stderr, and set as the foreground process group
+- **AND** it prints a UTC timestamp and one line per hardware-backed network interface (those with `/sys/class/net/<name>/device`), sorted by name, listing its up/running state, MAC address, IPv4 and IPv6 addresses, and gateways
+- **AND** it refreshes the screen every 30 seconds, or sooner on a keypress; no login is possible
+
+#### Scenario: Console activation with a login user
+- **WHEN** `infogetty --user <USER> <TTY>` runs
+- **THEN** the status screen also shows "Press ENTER to activate console", and on a keypress typed-ahead input is discarded and the console is activated
+- **AND** for the `limited-console` user it execs `/bin/su -s /opt/ic/bin/limited-console limited-console` with a cleared environment; for any other user it execs `/usr/bin/login -f -p <USER>`, in both cases with `TERM=linux`
+
+#### Scenario: Failures are logged and the process exits
+- **WHEN** taking over the terminal, drawing the screen, or exec-ing the login program fails, or the terminal hangs up
+- **THEN** the error is written to the systemd journal as `infogetty(<TTY>): <error>` (to stderr if the journal is unavailable) and the process exits with a failure status; the getty units run it as `ExecStart=-`, so the failure does not mark the unit failed and the stock getty restart policy starts it again
+- **AND** SIGHUP is caught and does not kill the process
+
+---
+
 ### Requirement: Manual GuestOS Recovery (manual_guestos_recovery)
 
 The `manual_guestos_recovery` crate provides an interactive TUI for performing manual GuestOS recovery operations.
