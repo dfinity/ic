@@ -12,6 +12,7 @@ dfn_candid = { path = "../../../../rust_canisters/dfn_candid" }
 futures = { workspace = true }
 ic-registry-subnet-type = { path = "../../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../../driver" }
+ic-types = { path = "../../../../types/types" }
 slog = { workspace = true }
 systest-message-routing-common = { path = "../../common" }
 tokio = { workspace = true }
