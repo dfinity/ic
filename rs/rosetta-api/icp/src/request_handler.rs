@@ -265,7 +265,7 @@ impl RosettaRequestHandler {
                             .map_err(ApiError::from)?
                             .into_iter()
                         {
-                            let parent_block_id = create_parent_block_id(&storage, hb.index)?;
+                            let parent_block_id = ledger_block_parent_id(&storage, hb.index)?;
                             blocks.push(hashed_block_to_rosetta_core_block(
                                 hb,
                                 parent_block_id,
@@ -381,19 +381,22 @@ impl RosettaRequestHandler {
         }
     }
 
-    async fn create_parent_block_id(
+    async fn rosetta_block_parent_id(
         &self,
         block_index: BlockIndex,
     ) -> Result<BlockIdentifier, ApiError> {
         let blocks = self.ledger.read_blocks().await;
-        create_parent_block_id(&blocks, block_index)
+        rosetta_block_parent_id(&blocks, block_index)
     }
 
     async fn hashed_block_to_rosetta_core_block(
         &self,
         block: HashedBlock,
     ) -> Result<rosetta_core::objects::Block, ApiError> {
-        let parent_block_id = self.create_parent_block_id(block.index).await?;
+        let parent_block_id = {
+            let blocks = self.ledger.read_blocks().await;
+            ledger_block_parent_id(&blocks, block.index)?
+        };
 
         let token_symbol = self.ledger.token_symbol();
         hashed_block_to_rosetta_core_block(block, parent_block_id, token_symbol)
@@ -459,7 +462,7 @@ impl RosettaRequestHandler {
             let blocks = self.ledger.read_blocks().await;
             blocks.get_rosetta_block(block_index)
         }?;
-        let parent_block_id = self.create_parent_block_id(block_index).await?;
+        let parent_block_id = self.rosetta_block_parent_id(block_index).await?;
         let token_symbol = self.ledger.token_symbol();
         rosetta_block_to_rosetta_core_block(rosetta_block, parent_block_id, token_symbol)
     }
@@ -839,19 +842,14 @@ impl RosettaRequestHandler {
             .map_err(|e| ApiError::invalid_block_id(format!("Error fetching blocks: {e:?}")))?;
 
         let mut transactions = vec![];
-        for block in blocks.clone().into_iter() {
-            let parent_block_id = create_parent_block_id(&block_storage, block.index)?;
-            let rosetta_core_block = hashed_block_to_rosetta_core_block(
-                block,
-                parent_block_id,
-                self.ledger.token_symbol(),
-            )?;
-            for transaction in rosetta_core_block.transactions.into_iter() {
-                transactions.push(BlockTransaction {
-                    block_identifier: rosetta_core_block.block_identifier.clone(),
-                    transaction,
-                });
-            }
+        for block in &blocks {
+            transactions.push(BlockTransaction {
+                block_identifier: convert::block_id(block)?,
+                transaction: convert::hashed_block_to_rosetta_core_transaction(
+                    block,
+                    self.ledger.token_symbol(),
+                )?,
+            });
         }
 
         transactions.iter_mut().for_each(|tx| {
@@ -978,11 +976,13 @@ fn is_a_rosetta_block_index(
     }
 }
 
-/// Returns the identifier of the parent of the block at `block_index`.
+/// Returns the identifier of the parent of the Rosetta block at `block_index`,
+/// which is the previous Rosetta block, or the last ledger block before the
+/// first Rosetta block.
 ///
 /// Reads the Rosetta blocks mode from `blocks` instead of locking the
 /// blockchain again, so callers can keep holding their `Blocks` guard.
-fn create_parent_block_id(
+fn rosetta_block_parent_id(
     blocks: &Blocks,
     block_index: BlockIndex,
 ) -> Result<BlockIdentifier, ApiError> {
@@ -994,7 +994,20 @@ fn create_parent_block_id(
             index: parent_block_index,
             hash: hex::encode(parent_block.hash()),
         })
-    } else if blocks.is_verified_by_idx(&parent_block_index)? {
+    } else {
+        ledger_block_parent_id(blocks, block_index)
+    }
+}
+
+/// Returns the identifier of the parent of the ledger block at `block_index`,
+/// which is the previous ledger block, also in Rosetta blocks mode.
+fn ledger_block_parent_id(
+    blocks: &Blocks,
+    block_index: BlockIndex,
+) -> Result<BlockIdentifier, ApiError> {
+    // For the first block, we return the block itself as its parent
+    let parent_block_index = block_index.saturating_sub(1);
+    if blocks.is_verified_by_idx(&parent_block_index)? {
         let parent_block = &blocks.get_hashed_block(&parent_block_index)?;
         convert::block_id(parent_block)
     } else {

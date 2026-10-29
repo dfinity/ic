@@ -1,20 +1,26 @@
 //! Tests for the RosettaRequestHandler.
 
 use crate::{
+    convert,
     errors::{ApiError, Details},
     ledger_client::LedgerAccess,
     models::{
         BlockRequest, CallRequest, NetworkRequest, ObjectMap, PartialBlockIdentifier,
-        QueryBlockRangeRequest, SearchTransactionsRequest,
+        QueryBlockRangeRequest, QueryBlockRangeResponse, SearchTransactionsRequest,
     },
     request_handler::RosettaRequestHandler,
 };
 use async_trait::async_trait;
-use ic_ledger_canister_blocks_synchronizer::blocks::{Blocks, RosettaBlocksMode, RosettaDbConfig};
+use ic_ledger_canister_blocks_synchronizer::blocks::{
+    Blocks, HashedBlock, RosettaBlocksMode, RosettaDbConfig,
+};
 use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::Scribe;
+use ic_ledger_core::block::BlockType;
 use ic_nns_governance_api::{KnownNeuron, ProposalInfo, manage_neuron::NeuronIdOrSubaccount};
-use ic_types::CanisterId;
-use icp_ledger::TransferFee;
+use ic_types::{CanisterId, PrincipalId};
+use icp_ledger::{
+    AccountIdentifier, Block, DEFAULT_TRANSFER_FEE, Memo, Operation, TimeStamp, Tokens, TransferFee,
+};
 use rosetta_core::metrics::RosettaMetrics;
 use std::{
     ops::Deref,
@@ -37,10 +43,12 @@ struct MockLedger {
 #[allow(clippy::disallowed_types)]
 impl MockLedger {
     fn new() -> Self {
+        Self::new_with_blocks(Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap())
+    }
+
+    fn new_with_blocks(blockchain: Blocks) -> Self {
         Self {
-            blockchain: RwLock::new(
-                Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap(),
-            ),
+            blockchain: RwLock::new(blockchain),
             canister_id: CanisterId::unchecked_from_principal(
                 ic_types::PrincipalId::from_str("5v3p4-iyaaa-aaaaa-qaaaa-cai").unwrap(),
             ),
@@ -163,14 +171,25 @@ async fn test_network_status_returns_error_during_initial_sync() {
 /// handler.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_requests_do_not_deadlock_with_concurrent_writer() {
-    let ledger = Arc::new(MockLedger::new());
-    {
-        let mut blockchain = ledger.blockchain.write().await;
-        for hb in &Scribe::new_with_sample_data(2, 0).blockchain {
-            blockchain.push(hb).unwrap();
-            blockchain.set_hashed_block_to_verified(&hb.index).unwrap();
-        }
-    }
+    assert_requests_do_not_deadlock_with_concurrent_writer(RosettaDbConfig::default_disabled())
+        .await;
+}
+
+/// Like `test_requests_do_not_deadlock_with_concurrent_writer`, but with Rosetta blocks, which
+/// `/block` returns for index 1.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_requests_do_not_deadlock_with_concurrent_writer_in_rosetta_blocks_mode() {
+    assert_requests_do_not_deadlock_with_concurrent_writer(RosettaDbConfig::default_enabled())
+        .await;
+}
+
+async fn assert_requests_do_not_deadlock_with_concurrent_writer(config: RosettaDbConfig) {
+    let mut blockchain = Blocks::new_in_memory(config).unwrap();
+    sync(
+        &mut blockchain,
+        &Vec::from(Scribe::new_with_sample_data(2, 0).blockchain),
+    );
+    let ledger = Arc::new(MockLedger::new_with_blocks(blockchain));
     let req_handler = RosettaRequestHandler::new_with_default_blockchain(
         ledger.clone(),
         Arc::new(AtomicBool::new(true)),
@@ -220,4 +239,268 @@ async fn test_requests_do_not_deadlock_with_concurrent_writer() {
         result.is_ok(),
         "request handler deadlocked with a concurrent writer"
     );
+}
+
+/// Returns ledger blocks with the given timestamps in seconds, each with a
+/// different transaction, so that consecutive blocks with the same timestamp
+/// end up in the same Rosetta block.
+fn make_ledger_blocks(timestamps_secs: &[u64]) -> Vec<HashedBlock> {
+    let mut blocks: Vec<HashedBlock> = vec![];
+    for (index, timestamp_secs) in timestamps_secs.iter().enumerate() {
+        let parent_hash = blocks.last().map(|hb| hb.hash);
+        let timestamp = TimeStamp::from_nanos_since_unix_epoch(timestamp_secs * 1_000_000_000);
+        let block = Block::new(
+            parent_hash,
+            Operation::Mint {
+                to: AccountIdentifier::new(PrincipalId::new_anonymous(), None),
+                amount: Tokens::from_e8s(index as u64 + 1),
+            },
+            Memo(index as u64),
+            timestamp,
+            timestamp,
+            DEFAULT_TRANSFER_FEE,
+        )
+        .unwrap();
+        blocks.push(HashedBlock::hash_block(
+            block.encode(),
+            parent_hash,
+            index as u64,
+            timestamp,
+        ));
+    }
+    blocks
+}
+
+/// Stores `ledger_blocks`, verifies them and makes their Rosetta blocks, like
+/// a sync does.
+fn sync(blockchain: &mut Blocks, ledger_blocks: &[HashedBlock]) {
+    for hb in ledger_blocks {
+        blockchain.push(hb).unwrap();
+    }
+    let tip_index = ledger_blocks.last().unwrap().index;
+    blockchain.set_hashed_block_to_verified(&tip_index).unwrap();
+    blockchain
+        .make_rosetta_blocks_if_enabled(tip_index)
+        .unwrap();
+}
+
+fn handler(blockchain: Blocks) -> RosettaRequestHandler {
+    RosettaRequestHandler::new_with_default_blockchain(
+        Arc::new(MockLedger::new_with_blocks(blockchain)),
+        Arc::new(AtomicBool::new(true)),
+    )
+}
+
+async fn query_block_range(
+    req_handler: &RosettaRequestHandler,
+    highest_block_index: u64,
+    number_of_blocks: u64,
+) -> Result<QueryBlockRangeResponse, ApiError> {
+    let response = req_handler
+        .call(CallRequest::new(
+            req_handler.network_id(),
+            "query_block_range".to_string(),
+            ObjectMap::try_from(QueryBlockRangeRequest {
+                highest_block_index,
+                number_of_blocks,
+            })
+            .unwrap(),
+        ))
+        .await?;
+    Ok(QueryBlockRangeResponse::try_from(response.result).unwrap())
+}
+
+async fn block(
+    req_handler: &RosettaRequestHandler,
+    index: Option<u64>,
+    hash: Option<String>,
+) -> Result<rosetta_core::objects::Block, ApiError> {
+    let response = req_handler
+        .block(BlockRequest {
+            network_identifier: req_handler.network_id(),
+            block_identifier: PartialBlockIdentifier { index, hash },
+        })
+        .await?;
+    Ok(response.block.unwrap())
+}
+
+/// Asserts that the endpoints that return ledger blocks give every ledger block
+/// the previous ledger block as parent, by checking that they return the same
+/// as with Rosetta blocks disabled.
+async fn assert_ledger_blocks_have_ledger_parents(
+    req_handler: &RosettaRequestHandler,
+    ledger_blocks: &[HashedBlock],
+) {
+    let mut blockchain = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
+    sync(&mut blockchain, ledger_blocks);
+    let without_rosetta_blocks = handler(blockchain);
+
+    let num_blocks = ledger_blocks.len() as u64;
+    let block_range = query_block_range(req_handler, num_blocks - 1, num_blocks)
+        .await
+        .unwrap();
+    assert_eq!(
+        block_range.blocks[0].parent_block_identifier,
+        block_range.blocks[0].block_identifier
+    );
+    for pair in block_range.blocks.windows(2) {
+        assert_eq!(pair[1].parent_block_identifier, pair[0].block_identifier);
+    }
+    for highest_block_index in 0..num_blocks {
+        assert_eq!(
+            query_block_range(req_handler, highest_block_index, num_blocks)
+                .await
+                .unwrap(),
+            query_block_range(&without_rosetta_blocks, highest_block_index, num_blocks)
+                .await
+                .unwrap()
+        );
+    }
+
+    let search_request = SearchTransactionsRequest::builder(req_handler.network_id()).build();
+    assert_eq!(
+        req_handler
+            .search_transactions(search_request.clone())
+            .await
+            .unwrap(),
+        without_rosetta_blocks
+            .search_transactions(search_request)
+            .await
+            .unwrap()
+    );
+
+    for hb in ledger_blocks {
+        let hash = convert::block_id(hb).unwrap().hash;
+        assert_eq!(
+            block(req_handler, None, Some(hash.clone())).await.unwrap(),
+            block(&without_rosetta_blocks, None, Some(hash))
+                .await
+                .unwrap()
+        );
+    }
+}
+
+/// Test that in Rosetta blocks mode the endpoints that return ledger blocks give
+/// them the previous ledger block as parent, instead of looking the parent up
+/// among the Rosetta blocks.
+#[tokio::test]
+async fn test_ledger_blocks_have_ledger_parents_in_rosetta_blocks_mode() {
+    let ledger_blocks = make_ledger_blocks(&[1, 1, 1, 2, 2, 2]);
+    let mut blockchain = Blocks::new_in_memory(RosettaDbConfig::default_enabled()).unwrap();
+    sync(&mut blockchain, &ledger_blocks);
+    // Rosetta block 0 holds ledger blocks 0 to 2 and Rosetta block 1 holds
+    // ledger blocks 3 to 5.
+    assert_eq!(
+        blockchain.rosetta_blocks_mode,
+        RosettaBlocksMode::Enabled {
+            first_rosetta_block_index: 0
+        }
+    );
+    assert_eq!(
+        blockchain.get_highest_rosetta_block_index().unwrap(),
+        Some(1)
+    );
+    assert_eq!(
+        Vec::from_iter(
+            blockchain
+                .get_rosetta_block(0)
+                .unwrap()
+                .transactions
+                .into_keys()
+        ),
+        vec![0, 1, 2]
+    );
+    let req_handler = handler(blockchain);
+
+    assert_ledger_blocks_have_ledger_parents(&req_handler, &ledger_blocks).await;
+
+    let rosetta_block_0 = block(&req_handler, Some(0), None).await.unwrap();
+    let rosetta_block_1 = block(&req_handler, Some(1), None).await.unwrap();
+    assert_eq!(
+        rosetta_block_0.parent_block_identifier,
+        rosetta_block_0.block_identifier
+    );
+    assert_eq!(
+        rosetta_block_1.parent_block_identifier,
+        rosetta_block_0.block_identifier
+    );
+}
+
+/// Like `test_ledger_blocks_have_ledger_parents_in_rosetta_blocks_mode`, but
+/// with Rosetta blocks enabled on a store that already holds ledger blocks, so
+/// that the first Rosetta block's parent is a ledger block.
+#[tokio::test]
+async fn test_ledger_blocks_have_ledger_parents_after_the_first_rosetta_block() {
+    let ledger_blocks = make_ledger_blocks(&[1, 2, 3, 3, 4, 4]);
+    let store_dir = tempfile::tempdir().unwrap();
+    sync(
+        &mut Blocks::new_persistent(store_dir.path(), RosettaDbConfig::default_disabled()).unwrap(),
+        &ledger_blocks[..2],
+    );
+    let mut blockchain =
+        Blocks::new_persistent(store_dir.path(), RosettaDbConfig::default_enabled()).unwrap();
+    sync(&mut blockchain, &ledger_blocks[2..]);
+    // Rosetta block 2 holds ledger blocks 2 and 3 and Rosetta block 3 holds
+    // ledger blocks 4 and 5.
+    assert_eq!(
+        blockchain.rosetta_blocks_mode,
+        RosettaBlocksMode::Enabled {
+            first_rosetta_block_index: 2
+        }
+    );
+    assert_eq!(
+        blockchain.get_highest_rosetta_block_index().unwrap(),
+        Some(3)
+    );
+    assert_eq!(
+        Vec::from_iter(
+            blockchain
+                .get_rosetta_block(2)
+                .unwrap()
+                .transactions
+                .into_keys()
+        ),
+        vec![2, 3]
+    );
+    let req_handler = handler(blockchain);
+
+    assert_ledger_blocks_have_ledger_parents(&req_handler, &ledger_blocks).await;
+
+    let rosetta_block_2 = block(&req_handler, Some(2), None).await.unwrap();
+    let rosetta_block_3 = block(&req_handler, Some(3), None).await.unwrap();
+    assert_eq!(
+        rosetta_block_2.parent_block_identifier,
+        convert::block_id(&ledger_blocks[1]).unwrap()
+    );
+    assert_eq!(
+        rosetta_block_3.parent_block_identifier,
+        rosetta_block_2.block_identifier
+    );
+}
+
+/// Test that `/search/transactions` finds the transactions of the oldest block
+/// of a pruned store, whose parent the store no longer holds.
+#[tokio::test]
+async fn test_search_transactions_in_pruned_store() {
+    let ledger_blocks = Vec::from(Scribe::new_with_sample_data(10, 0).blockchain);
+    let mut blockchain = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
+    sync(&mut blockchain, &ledger_blocks);
+    // Keeps block 0 and blocks 5 to 9.
+    blockchain.prune(&ledger_blocks[5]).unwrap();
+    let req_handler = handler(blockchain);
+
+    let response = req_handler
+        .search_transactions(SearchTransactionsRequest::builder(req_handler.network_id()).build())
+        .await
+        .unwrap();
+    assert_eq!(
+        Vec::from_iter(
+            response
+                .transactions
+                .iter()
+                .map(|tx| tx.block_identifier.index)
+        ),
+        vec![9, 8, 7, 6, 5, 0]
+    );
+    assert_eq!(response.next_offset, None);
 }
