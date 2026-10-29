@@ -5,12 +5,14 @@ use crate::{
     errors::{ApiError, Details},
     ledger_client::LedgerAccess,
     models::{
-        BlockRequest, CallRequest, NetworkRequest, ObjectMap, PartialBlockIdentifier,
-        QueryBlockRangeRequest, QueryBlockRangeResponse, SearchTransactionsRequest,
+        AccountBalanceRequest, BlockRequest, BlockTransactionRequest, CallRequest, NetworkRequest,
+        ObjectMap, PartialBlockIdentifier, QueryBlockRangeRequest, QueryBlockRangeResponse,
+        SearchTransactionsRequest,
     },
     request_handler::RosettaRequestHandler,
 };
 use async_trait::async_trait;
+use futures::{FutureExt, TryFutureExt, future::LocalBoxFuture};
 use ic_ledger_canister_blocks_synchronizer::blocks::{
     Blocks, HashedBlock, RosettaBlocksMode, RosettaDbConfig,
 };
@@ -25,7 +27,10 @@ use rosetta_core::metrics::RosettaMetrics;
 use std::{
     ops::Deref,
     str::FromStr,
-    sync::{Arc, atomic::AtomicBool},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 #[allow(clippy::disallowed_types)]
@@ -163,6 +168,177 @@ async fn test_network_status_returns_error_during_initial_sync() {
         }
         other => panic!("Expected NotAvailableOffline error, got: {:?}", other),
     }
+}
+
+/// Test that the endpoints that read blocks return the retriable error of `/network/status`
+/// until the initial sync is complete, before they read the blocks: they answer even while the
+/// blockchain is write-locked.
+#[tokio::test]
+async fn test_endpoints_that_read_blocks_return_error_during_initial_sync() {
+    let ledger_blocks = make_ledger_blocks(&[1, 2]);
+    let mut blockchain = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
+    sync(&mut blockchain, &ledger_blocks);
+    let ledger = Arc::new(MockLedger::new_with_blocks(blockchain));
+    let initial_sync_complete = Arc::new(AtomicBool::new(false));
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        ledger.clone(),
+        Arc::clone(&initial_sync_complete),
+    );
+    let still_syncing = ApiError::NotAvailableOffline(
+        true,
+        Details::from(
+            "The node is still syncing the blocks from the ledger canister. \
+             Please wait until the initial sync is complete."
+                .to_string(),
+        ),
+    );
+
+    {
+        let _writer = ledger.blockchain.write().await;
+        for (endpoint, request) in requests_that_read_blocks(&req_handler, &ledger_blocks) {
+            assert_eq!(
+                request.now_or_never(),
+                Some(Err(still_syncing.clone())),
+                "{endpoint} during the initial sync"
+            );
+        }
+    }
+
+    initial_sync_complete.store(true, Ordering::Relaxed);
+    for (endpoint, request) in requests_that_read_blocks(&req_handler, &ledger_blocks) {
+        if let Err(err) = request.await {
+            panic!("{endpoint} failed after the initial sync: {err:?}");
+        }
+    }
+}
+
+/// Test that during the initial sync, the request checks that come before the first block read
+/// still return their own errors, and so do the `/call` methods that don't read blocks.
+#[tokio::test]
+async fn test_invalid_requests_get_their_own_errors_during_initial_sync() {
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        Arc::new(MockLedger::new()),
+        Arc::new(AtomicBool::new(false)),
+    );
+    let network_identifier = req_handler.network_id();
+
+    let mut account = convert::to_model_account_identifier(&AccountIdentifier::new(
+        PrincipalId::new_anonymous(),
+        None,
+    ));
+    account.address = "not an account".to_string();
+    let result = req_handler
+        .account_balance(
+            AccountBalanceRequest::builder(network_identifier.clone(), account).build(),
+        )
+        .await;
+    assert!(
+        matches!(result, Err(ApiError::InvalidAccountId(false, _))),
+        "{result:?}"
+    );
+
+    let result = req_handler
+        .call(CallRequest::new(
+            network_identifier.clone(),
+            "query_block_range".to_string(),
+            ObjectMap::new(),
+        ))
+        .await;
+    assert!(
+        matches!(result, Err(ApiError::InternalError(false, _))),
+        "{result:?}"
+    );
+
+    let result = req_handler
+        .call(CallRequest::new(
+            network_identifier.clone(),
+            "unsupported_method".to_string(),
+            ObjectMap::new(),
+        ))
+        .await;
+    assert!(
+        matches!(result, Err(ApiError::InvalidRequest(false, _))),
+        "{result:?}"
+    );
+
+    let mut search_transactions_request =
+        SearchTransactionsRequest::builder(network_identifier).build();
+    search_transactions_request.success = Some(true);
+    let result = req_handler
+        .search_transactions(search_transactions_request)
+        .await;
+    assert!(
+        matches!(result, Err(ApiError::InvalidRequest(false, _))),
+        "{result:?}"
+    );
+}
+
+/// Returns a request to each endpoint that reads blocks, for a store with the given ledger
+/// blocks, which mint to the anonymous principal.
+fn requests_that_read_blocks<'a>(
+    req_handler: &'a RosettaRequestHandler,
+    ledger_blocks: &[HashedBlock],
+) -> Vec<(&'static str, LocalBoxFuture<'a, Result<(), ApiError>>)> {
+    let tip = ledger_blocks.last().unwrap();
+    let network_identifier = req_handler.network_id();
+    let account = convert::to_model_account_identifier(&AccountIdentifier::new(
+        PrincipalId::new_anonymous(),
+        None,
+    ));
+    let transaction_identifier = convert::hashed_block_to_rosetta_core_transaction(tip, "ICP")
+        .unwrap()
+        .transaction_identifier;
+    vec![
+        (
+            "/account/balance",
+            req_handler
+                .account_balance(
+                    AccountBalanceRequest::builder(network_identifier.clone(), account).build(),
+                )
+                .map_ok(|_| ())
+                .boxed_local(),
+        ),
+        (
+            "/block",
+            block(req_handler, Some(tip.index), None)
+                .map_ok(|_| ())
+                .boxed_local(),
+        ),
+        (
+            "/block/transaction",
+            req_handler
+                .block_transaction(BlockTransactionRequest::new(
+                    network_identifier.clone(),
+                    convert::block_id(tip).unwrap(),
+                    transaction_identifier,
+                ))
+                .map_ok(|_| ())
+                .boxed_local(),
+        ),
+        (
+            "/call query_block_range",
+            query_block_range(req_handler, tip.index, 1)
+                .map_ok(|_| ())
+                .boxed_local(),
+        ),
+        (
+            "/network/status",
+            req_handler
+                .network_status(NetworkRequest {
+                    network_identifier: network_identifier.clone(),
+                    metadata: None,
+                })
+                .map_ok(|_| ())
+                .boxed_local(),
+        ),
+        (
+            "/search/transactions",
+            req_handler
+                .search_transactions(SearchTransactionsRequest::builder(network_identifier).build())
+                .map_ok(|_| ())
+                .boxed_local(),
+        ),
+    ]
 }
 
 /// Test that requests reading blocks don't deadlock with a writer of the blockchain, like the
