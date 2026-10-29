@@ -190,33 +190,41 @@ mod tests {
 
         let now = now_system_time();
 
-        let node_operator_id = PrincipalId::new_user_test_id(1_000);
-        let node_provider_id = PrincipalId::new_user_test_id(10_000);
-        add_node_operator(&mut registry, node_operator_id, node_provider_id);
+        let original_node_operator_id = PrincipalId::new_user_test_id(1_000);
+        let original_node_provider_id = PrincipalId::new_user_test_id(10_000);
+        add_node_operator(
+            &mut registry,
+            original_node_operator_id,
+            original_node_provider_id,
+        );
 
-        // The new node provider is already the node provider of another node operator, i.e. the
-        // NNS has approved it before.
-        let new_np_id = PrincipalId::new_user_test_id(10_001);
-        let other_node_operator_id = PrincipalId::new_user_test_id(1_001);
-        add_node_operator(&mut registry, other_node_operator_id, new_np_id);
+        // Establish another node provider, i.e. one the NNS has approved before.
+        // The only thing special about the node operator here is that it must
+        // be different from the other/previous one.
+        let new_node_operator_id = PrincipalId::new_user_test_id(1_001);
+        let new_node_provider_id = PrincipalId::new_user_test_id(10_001);
+        add_node_operator(&mut registry, new_node_operator_id, new_node_provider_id);
 
         let request = UpdateNodeOperatorConfigDirectlyPayload {
-            node_operator_id: Some(node_operator_id),
-            node_provider_id: Some(new_np_id),
+            node_operator_id: Some(original_node_operator_id),
+            node_provider_id: Some(new_node_provider_id),
         };
 
         // The original node provider should be able to change the node operator configuration.
-        let caller = node_provider_id;
+        let caller = original_node_provider_id;
 
         registry
             .do_update_node_operator_config_directly_(request, caller, now)
             .unwrap();
 
-        assert_eq!(node_provider_of(&registry, node_operator_id), new_np_id);
+        assert_eq!(
+            node_provider_of(&registry, original_node_operator_id),
+            new_node_provider_id
+        );
         // The other node operator is untouched.
         assert_eq!(
-            node_provider_of(&registry, other_node_operator_id),
-            new_np_id
+            node_provider_of(&registry, new_node_operator_id),
+            new_node_provider_id
         );
     }
 
@@ -231,11 +239,11 @@ mod tests {
         add_node_operator(&mut registry, node_operator_id, node_provider_id);
 
         // No node operator record names this principal as its node provider.
-        let unknown_np_id = PrincipalId::new_user_test_id(10_001);
+        let unknown_node_provider_id = PrincipalId::new_user_test_id(10_001);
 
         let request = UpdateNodeOperatorConfigDirectlyPayload {
             node_operator_id: Some(node_operator_id),
-            node_provider_id: Some(unknown_np_id),
+            node_provider_id: Some(unknown_node_provider_id),
         };
 
         // Even the current node provider cannot hand the node operator to an unknown principal.
@@ -250,7 +258,10 @@ mod tests {
             error.contains("not the node provider of any node operator"),
             "unexpected error: {error}"
         );
-        assert!(error.contains(&unknown_np_id.to_string()), "{error}");
+        assert!(
+            error.contains(&unknown_node_provider_id.to_string()),
+            "{error}"
+        );
 
         // The record is unchanged, and the rejected call did not use up rate limit capacity.
         assert_eq!(
