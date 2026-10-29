@@ -104,6 +104,22 @@ impl RosettaRequestHandler {
         self.rosetta_metrics.clone()
     }
 
+    /// Returns a retriable error until the initial sync is complete. The endpoints that read
+    /// blocks call this after the request checks that don't need blocks, and before their first
+    /// read.
+    fn check_initial_sync_complete(&self) -> Result<(), ApiError> {
+        if !self
+            .initial_sync_complete
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            return Err(ApiError::NotAvailableOffline(
+                true,
+                "The node is still syncing the blocks from the ledger canister. Please wait until the initial sync is complete.".into(),
+            ));
+        }
+        Ok(())
+    }
+
     /// Get an Account Balance
     pub async fn account_balance(
         &self,
@@ -172,12 +188,6 @@ impl RosettaRequestHandler {
             }
         };
 
-        let neuron_info = if let Some((neuron_id, verified)) = neuron_info_request_params {
-            Some(self.neuron_info(neuron_id, verified).await?)
-        } else {
-            None
-        };
-
         let account_id = icp_ledger::AccountIdentifier::from_hex(&msg.account_identifier.address)
             .map_err(|e| {
             ApiError::invalid_account_id(format!(
@@ -185,6 +195,14 @@ impl RosettaRequestHandler {
                 msg.account_identifier.address, e,
             ))
         })?;
+        self.check_initial_sync_complete()?;
+
+        let neuron_info = if let Some((neuron_id, verified)) = neuron_info_request_params {
+            Some(self.neuron_info(neuron_id, verified).await?)
+        } else {
+            None
+        };
+
         let block = self.get_block(msg.block_identifier).await?;
         let blocks = self.ledger.read_blocks().await;
         let tokens = blocks.get_account_balance(&account_id, &block.block_identifier.index)?;
@@ -241,6 +259,7 @@ impl RosettaRequestHandler {
             "query_block_range" => {
                 let query_block_range = QueryBlockRangeRequest::try_from(msg.parameters)
                     .map_err(|err| ApiError::internal_error(format!("{err:?}")))?;
+                self.check_initial_sync_complete()?;
                 let mut blocks = vec![];
 
                 let storage = self.ledger.read_blocks().await;
@@ -302,6 +321,7 @@ impl RosettaRequestHandler {
     /// Get a Block
     pub async fn block(&self, msg: models::BlockRequest) -> Result<BlockResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        self.check_initial_sync_complete()?;
         let block = self.get_block(Some(msg.block_identifier)).await?;
         Ok(BlockResponse {
             block: Some(block),
@@ -485,6 +505,7 @@ impl RosettaRequestHandler {
         msg: models::BlockTransactionRequest,
     ) -> Result<BlockTransactionResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        self.check_initial_sync_complete()?;
         let block_id = Some(PartialBlockIdentifier {
             index: Some(msg.block_identifier.index),
             hash: Some(msg.block_identifier.hash),
@@ -590,15 +611,7 @@ impl RosettaRequestHandler {
         msg: models::NetworkRequest,
     ) -> Result<NetworkStatusResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
-        if !self
-            .initial_sync_complete
-            .load(std::sync::atomic::Ordering::Relaxed)
-        {
-            return Err(ApiError::NotAvailableOffline(
-                true,
-                "The node is still syncing the blocks from the ledger canister. Please wait until the initial sync is complete.".into(),
-            ));
-        }
+        self.check_initial_sync_complete()?;
         let rosetta_blocks_mode = self.ledger.read_blocks().await.rosetta_blocks_mode;
         let network_status = match rosetta_blocks_mode {
             // If rosetta mode is not enabled we simply fetched the latest verified block
@@ -735,6 +748,7 @@ impl RosettaRequestHandler {
                 "Currency not supported in search/transactions endpoint".to_owned(),
             ));
         }
+        self.check_initial_sync_complete()?;
         let block_storage = self.ledger.read_blocks().await;
 
         let block_with_highest_block_index = block_storage
