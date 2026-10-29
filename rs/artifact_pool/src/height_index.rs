@@ -36,12 +36,13 @@ impl<T: Eq + Clone> HeightIndex<T> {
         false
     }
 
-    pub fn remove_all(&mut self, height: Height) -> Vec<T> {
-        self.buckets.remove(&height).unwrap_or_default()
-    }
+    pub fn remove_all_below(&mut self, height: Height) -> impl Iterator<Item = (Height, T)> {
+        let above_height = self.buckets.split_off(&height);
+        let below_height = std::mem::replace(&mut self.buckets, above_height);
 
-    pub fn remove_all_below(&mut self, height: Height) {
-        self.buckets = self.buckets.split_off(&height);
+        below_height
+            .into_iter()
+            .flat_map(|(height, values)| values.into_iter().map(move |value| (height, value)))
     }
 
     /// Removes `value` from `height`. Returns `true` if `value` was removed,
@@ -80,16 +81,21 @@ impl<T: Eq + Clone> HeightIndex<T> {
         self.buckets.values().map(Vec::len).sum()
     }
 
-    /// Returns all heights of the index, in sorted order.
-    pub fn heights(&self) -> Box<dyn Iterator<Item = &Height> + '_> {
-        Box::new(self.buckets.keys())
+    pub fn min_height(&self) -> Option<Height> {
+        self.buckets.keys().next().copied()
     }
 
-    pub fn range<R>(&self, range: R) -> std::collections::btree_map::Range<'_, Height, Vec<T>>
+    pub fn max_height(&self) -> Option<Height> {
+        self.buckets.keys().next_back().copied()
+    }
+
+    pub fn get_by_range<R>(&self, range: R) -> impl Iterator<Item = &T>
     where
         R: std::ops::RangeBounds<Height>,
     {
-        self.buckets.range(range)
+        self.buckets
+            .range(range)
+            .flat_map(|(_height, values)| values)
     }
 }
 
@@ -315,13 +321,9 @@ impl<T: Eq + Ord + Clone> HeightIndexedInstants<T> {
     }
 
     pub fn clear(&mut self, h: Height) {
-        let range = self.index.range(Height::new(0)..h);
-        for (_, bucket) in range {
-            for hash in bucket {
-                self.instants.remove(hash);
-            }
+        for (_height, hash) in self.index.remove_all_below(h) {
+            self.instants.remove(&hash);
         }
-        self.index.remove_all_below(h);
     }
 }
 
@@ -356,7 +358,7 @@ mod tests {
 
         assert_eq!(
             vec![fifteen, sixty_six, one_hundred],
-            index.heights().cloned().collect::<Vec<_>>()
+            index.buckets.keys().copied().collect::<Vec<_>>()
         );
 
         let expected_values = vec![&12, &13, &17, &44];
@@ -415,6 +417,31 @@ mod tests {
     }
 
     #[test]
+    fn test_remove_all_below() {
+        let mut index = HeightIndex::new();
+        index.insert(Height::from(1), &10);
+        index.insert(Height::from(2), &20);
+        index.insert(Height::from(5), &50);
+        index.insert(Height::from(5), &51);
+        index.insert(Height::from(8), &80);
+
+        // The bound is exclusive: elements at exactly the given height stay.
+        let removed: Vec<_> = index.remove_all_below(Height::from(5)).collect();
+        assert_eq!(removed, vec![(Height::from(1), 10), (Height::from(2), 20)]);
+        assert_eq!(index.min_height(), Some(Height::from(5)));
+        assert_eq!(index.size(), 3);
+
+        // The removal takes effect even when the returned iterator is dropped.
+        drop(index.remove_all_below(Height::from(8)));
+        assert_eq!(index.min_height(), Some(Height::from(8)));
+        assert_eq!(index.size(), 1);
+
+        // Nothing is below the minimum height.
+        assert_eq!(index.remove_all_below(Height::from(0)).count(), 0);
+        assert_eq!(index.size(), 1);
+    }
+
+    #[test]
     fn test_height_index_retain() {
         let mut index = HeightIndex::new();
         let max = 100;
@@ -434,6 +461,63 @@ mod tests {
                 .unwrap()
                 .iter()
                 .any(|x| x % 2 != 0)
+        );
+    }
+
+    #[test]
+    fn test_min_max_height() {
+        let mut index = HeightIndex::new();
+        assert_eq!(index.min_height(), None);
+        assert_eq!(index.max_height(), None);
+
+        index.insert(Height::from(66), &1);
+        assert_eq!(index.min_height(), Some(Height::from(66)));
+        assert_eq!(index.max_height(), Some(Height::from(66)));
+
+        index.insert(Height::from(15), &2);
+        index.insert(Height::from(100), &3);
+        assert_eq!(index.min_height(), Some(Height::from(15)));
+        assert_eq!(index.max_height(), Some(Height::from(100)));
+
+        index.remove(Height::from(15), &2);
+        index.remove(Height::from(100), &3);
+        assert_eq!(index.min_height(), Some(Height::from(66)));
+        assert_eq!(index.max_height(), Some(Height::from(66)));
+
+        index.remove(Height::from(66), &1);
+        assert_eq!(index.min_height(), None);
+        assert_eq!(index.max_height(), None);
+    }
+
+    #[test]
+    fn test_get_by_range() {
+        let mut index = HeightIndex::new();
+        index.insert(Height::from(1), &10);
+        index.insert(Height::from(3), &30);
+        index.insert(Height::from(3), &31);
+        index.insert(Height::from(7), &70);
+
+        assert_eq!(
+            index.get_by_range(..).copied().collect::<Vec<_>>(),
+            vec![10, 30, 31, 70]
+        );
+        assert_eq!(
+            index
+                .get_by_range(Height::from(3)..=Height::from(7))
+                .copied()
+                .collect::<Vec<_>>(),
+            vec![30, 31, 70]
+        );
+        assert_eq!(
+            index
+                .get_by_range(Height::from(2)..Height::from(7))
+                .copied()
+                .collect::<Vec<_>>(),
+            vec![30, 31]
+        );
+        assert_eq!(
+            index.get_by_range(Height::from(4)..Height::from(7)).count(),
+            0
         );
     }
 }

@@ -53,18 +53,13 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
 
         macro_rules! purge {
             ($artifact_name:ident, $artifact_type:ident) => {
-                if let Some(range) = self.$artifact_name().height_range() {
-                    for h in range.min.get()..height.get() {
-                        let height = Height::from(h);
-                        for hash in self.indexes.$artifact_name.remove_all(height) {
-                            self.artifacts.remove(hash.get_ref());
-                            purged.push(ConsensusMessageId {
-                                hash: ConsensusMessageHash::$artifact_type(hash),
-                                height,
-                            });
-                        }
-                    }
-                };
+                for (height, hash) in self.indexes.$artifact_name.remove_all_below(height) {
+                    self.artifacts.remove(hash.get_ref());
+                    purged.push(ConsensusMessageId {
+                        hash: ConsensusMessageHash::$artifact_type(hash),
+                        height,
+                    });
+                }
             };
         }
 
@@ -98,9 +93,11 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
         purged
     }
 
-    fn get_by_hashes<S: ConsensusMessageHashable>(&self, hashes: Vec<&CryptoHashOf<S>>) -> Vec<S> {
+    fn get_by_hashes<'a, S: ConsensusMessageHashable + 'a>(
+        &self,
+        hashes: impl Iterator<Item = &'a CryptoHashOf<S>>,
+    ) -> Vec<S> {
         hashes
-            .iter()
             .map(|hash| {
                 let artifact_opt = self.get_by_hash(hash.get_ref());
                 match artifact_opt {
@@ -115,12 +112,12 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
     }
 
     /// Get a consensus message by its hash
-    pub fn get_by_hash(&self, hash: &CryptoHash) -> Option<T> {
-        self.artifacts.get(hash).cloned()
+    fn get_by_hash(&self, hash: &CryptoHash) -> Option<&T> {
+        self.artifacts.get(hash)
     }
 
     /// Get a consensus message by its hash
-    pub fn remove_by_hash(&mut self, hash: &CryptoHash) -> Option<T> {
+    fn remove_by_hash(&mut self, hash: &CryptoHash) -> Option<T> {
         self.artifacts.remove(hash).inspect(|artifact| {
             self.indexes.remove(artifact.as_ref(), hash);
         })
@@ -137,27 +134,21 @@ where
     CryptoHashOf<T>: SelectIndex,
 {
     fn get_all(&self) -> Box<dyn Iterator<Item = T>> {
-        Box::new(
-            self.get_by_hashes(self.select_index().get_all().collect())
-                .into_iter(),
-        )
+        let hashes = self.select_index().get_all();
+
+        Box::new(self.get_by_hashes(hashes).into_iter())
     }
 
     fn get_by_height(&self, h: Height) -> Box<dyn Iterator<Item = T>> {
-        let hashes = self.select_index().lookup(h).collect();
+        let hashes = self.select_index().lookup(h);
 
         Box::new(self.get_by_hashes(hashes).into_iter())
     }
 
     fn height_range(&self) -> Option<HeightRange> {
-        let heights = CryptoHashOf::<T>::select_index(&self.indexes)
-            .heights()
-            .cloned()
-            .collect::<Vec<_>>();
-        match (heights.first(), heights.last()) {
-            (Some(min), Some(max)) => Some(HeightRange::new(*min, *max)),
-            _ => None,
-        }
+        let min = self.select_index::<CryptoHashOf<T>>().min_height()?;
+        let max = self.select_index::<CryptoHashOf<T>>().max_height()?;
+        Some(HeightRange::new(min, max))
     }
 
     fn max_height(&self) -> Option<Height> {
@@ -168,25 +159,21 @@ where
         if range.min > range.max {
             return Box::new(std::iter::empty());
         }
-        let heights = CryptoHashOf::<T>::select_index(&self.indexes)
-            .range((
-                std::ops::Bound::Included(range.min),
-                std::ops::Bound::Included(range.max),
-            ))
-            .map(|(h, _)| h);
+        let hashes = self
+            .select_index::<CryptoHashOf<T>>()
+            .get_by_range(range.min..=range.max);
 
-        // returning the iterator directly isn't trusted due to the use of `self` in the
-        // closure
-        let vec: Vec<T> = heights.flat_map(|h| self.get_by_height(*h)).collect();
-        Box::new(vec.into_iter())
+        Box::new(self.get_by_hashes(hashes).into_iter())
     }
 
     fn get_only_by_height(&self, h: Height) -> Result<T, OnlyError> {
-        let mut to_vec: Vec<T> = self.get_by_height(h).collect();
-        match to_vec.len() {
-            0 => Err(OnlyError::NoneAvailable),
-            1 => Ok(to_vec.remove(0)),
-            _ => Err(OnlyError::MultipleValues),
+        let mut iter = self.get_by_height(h);
+        match iter.next() {
+            None => Err(OnlyError::NoneAvailable),
+            Some(value) => match iter.next() {
+                None => Ok(value),
+                Some(_) => Err(OnlyError::MultipleValues),
+            },
         }
     }
 
@@ -220,6 +207,7 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> PoolSection<T>
 
     fn get(&self, msg_id: &ConsensusMessageId) -> Option<ConsensusMessage> {
         self.get_by_hash(msg_id.hash.digest())
+            .cloned()
             .map(|x| x.into_inner())
     }
 
@@ -306,7 +294,10 @@ pub mod test {
     use super::*;
     use ic_interfaces::consensus_pool::ValidatedArtifact;
     use ic_test_utilities_consensus::{fake::*, make_genesis};
-    use ic_types::consensus::dkg::DkgSummary;
+    use ic_test_utilities_types::ids::node_test_id;
+    use ic_types::{
+        ReplicaVersion, consensus::dkg::DkgSummary, crypto::Signed, signature::MultiSignatureShare,
+    };
 
     fn make_summary(genesis_height: Height) -> DkgSummary {
         let mut summary = DkgSummary::fake();
@@ -326,6 +317,85 @@ pub mod test {
             msg: ConsensusMessage::RandomBeacon(beacon),
             timestamp: ic_types::time::UNIX_EPOCH,
         }
+    }
+
+    fn fake_notarization_share(height: u64, signer: u64) -> NotarizationShare {
+        Signed {
+            content: NotarizationContent::new(
+                Height::from(height),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+                ReplicaVersion::try_from("1.0").unwrap(),
+            ),
+            signature: MultiSignatureShare::fake(node_test_id(signer)),
+        }
+    }
+
+    fn make_share_artifact(share: NotarizationShare) -> ValidatedArtifact<ConsensusMessage> {
+        ValidatedArtifact {
+            msg: ConsensusMessage::NotarizationShare(share),
+            timestamp: ic_types::time::UNIX_EPOCH,
+        }
+    }
+
+    #[test]
+    fn test_get_only_by_height() {
+        let mut pool = InMemoryPoolSection::<ValidatedArtifact<ConsensusMessage>>::new();
+        let height = Height::from(1);
+        assert!(matches!(
+            pool.notarization_share().get_only_by_height(height),
+            Err(OnlyError::NoneAvailable)
+        ));
+
+        let share = fake_notarization_share(1, 1);
+        pool.insert(make_share_artifact(share.clone()));
+        assert_eq!(
+            pool.notarization_share()
+                .get_only_by_height(height)
+                .unwrap(),
+            share
+        );
+        assert!(matches!(
+            pool.notarization_share()
+                .get_only_by_height(Height::from(2)),
+            Err(OnlyError::NoneAvailable)
+        ));
+
+        pool.insert(make_share_artifact(fake_notarization_share(1, 2)));
+        assert!(matches!(
+            pool.notarization_share().get_only_by_height(height),
+            Err(OnlyError::MultipleValues)
+        ));
+    }
+
+    #[test]
+    fn test_purge_type_below() {
+        let mut pool = InMemoryPoolSection::<ValidatedArtifact<ConsensusMessage>>::new();
+        let beacon = fake_random_beacon(Height::from(1));
+        let beacon_id = beacon.get_id();
+        pool.insert(make_artifact(beacon));
+
+        let shares = (1..=3)
+            .map(|i| fake_notarization_share(i, i))
+            .collect::<Vec<_>>();
+        for share in &shares {
+            pool.insert(make_share_artifact(share.clone()));
+        }
+
+        let mut ops = PoolSectionOps::new();
+        ops.purge_type_below(PurgeableArtifactType::NotarizationShare, Height::from(3));
+        let purged = pool.mutate(ops);
+
+        // Only the notarization shares strictly below height 3 are purged, and
+        // their ids carry the height each share was stored at.
+        assert_eq!(
+            HashSet::from_iter(purged),
+            HashSet::from([shares[0].get_id(), shares[1].get_id()])
+        );
+        assert!(pool.contains(&beacon_id));
+        assert_eq!(pool.notarization_share().get_all().count(), 1);
+        let range = pool.notarization_share().height_range().unwrap();
+        assert_eq!(range.min, Height::from(3));
+        assert_eq!(range.max, Height::from(3));
     }
 
     #[test]
