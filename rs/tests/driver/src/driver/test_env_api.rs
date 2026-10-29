@@ -522,7 +522,7 @@ impl TopologySnapshot {
         )
     }
 
-    pub fn replica_version_records(&self) -> Result<Vec<(String, ReplicaVersionRecord)>> {
+    pub fn replica_version_records(&self) -> Result<Vec<ReplicaVersionRecord>> {
         self.local_registry
             .get_all_replica_version_records(self.registry_version)?
             .context("get_all_replica_version_records always returns Some (and it did not)")
@@ -2821,12 +2821,6 @@ pub async fn install_nns_canisters(
             .unwrap_or_default()
         {
             builder.enable_swapping_feature_for_subnet(subnet);
-        }
-        if registry_canister_init_payload
-            .is_blank_replica_version_id_for_cloud_engines_enabled
-            .unwrap_or_default()
-        {
-            builder.enable_blank_replica_version_id_for_cloud_engines();
         }
         if registry_canister_init_payload
             .is_subnet_splitting_enabled

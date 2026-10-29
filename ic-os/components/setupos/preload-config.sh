@@ -18,6 +18,16 @@ function clone_from_usb() {
         return
     fi
 
+    echo "--------------------------------------------------------------------------------"
+    echo "                                     WARNING"
+    echo "--------------------------------------------------------------------------------"
+    echo -e "\n"
+    echo -e "Sourcing config from OVERRIDE drive. Make sure this is intentional!"
+    echo -e "\n"
+    echo "--------------------------------------------------------------------------------"
+    echo "                                     WARNING"
+    echo "--------------------------------------------------------------------------------"
+
     TMPDIR=$(mktemp -d)
     mount "${CONFIG_OVERRIDE_PATH}" "${TMPDIR}"
     tar xf "${TMPDIR}/config.tar" --no-same-permissions --no-same-owner -C "${CONFIG_DIR}"

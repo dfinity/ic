@@ -37,7 +37,7 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         Block, BlockMetadata, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage,
-        CatchUpShareContent, Committee, ConsensusMessage, ConsensusMessageHashable,
+        CatchUpShareContent, Committee, ConsensusMessage, ConsensusMessageHashable, DataPayload,
         EquivocationProof, FinalizationContent, HasBlockHash, HasCommittee, HasHash, HasHeight,
         HasRank, HasVersion, Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare,
         RandomTape, RandomTapeShare, Rank,
@@ -122,7 +122,7 @@ enum InvalidArtifactReason {
     InvalidIDkgPayload(InvalidIDkgPayloadReason),
     InsufficientSignatures,
     CannotVerifyBlockHeightZero,
-    NonEmptyPayloadWhileHalting,
+    UnexpectedPayloadWhileHalting,
     NonStrictlyIncreasingValidationContext,
     CatchUpPackageParamNotStrictlyIncreasing {
         current: CatchUpPackageParam,
@@ -1427,15 +1427,21 @@ impl Validator {
         // While halting or halted, data blocks must have an empty payload: skip the rest of the
         // validation if they do, and reject them otherwise. Summary blocks always carry a payload,
         // so they are validated normally.
-        if status == Status::Halting || status == Status::Halted {
-            let payload = proposal.payload.as_ref();
-            if !payload.is_summary() {
-                return if payload.is_empty() {
-                    Ok(())
-                } else {
-                    Err(InvalidArtifactReason::NonEmptyPayloadWhileHalting.into())
-                };
+        if (status == Status::Halting || status == Status::Halted)
+            && let BlockPayload::Data(data_payload) = proposal.payload.as_ref()
+        {
+            let last_dkg_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
+            if last_dkg_summary.get_next_start_height() == proposal.height {
+                return Err(InvalidArtifactReason::InvalidDkgPayload(
+                    InvalidDkgPayloadReason::DkgDealingAtStartHeight(proposal.height),
+                )
+                .into());
             }
+            return if *data_payload == DataPayload::new_empty(last_summary_block.height) {
+                Ok(())
+            } else {
+                Err(InvalidArtifactReason::UnexpectedPayloadWhileHalting.into())
+            };
         }
 
         // Below are all the payload validations
@@ -3075,41 +3081,15 @@ pub mod test {
     #[test]
     fn test_summary_block_is_validated_while_halted() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let committee: Vec<_> = (0..4).map(node_test_id).collect();
             let ValidatorAndDependencies {
                 validator,
-                payload_builder,
                 state_manager,
                 registry,
                 replica_config,
                 mut pool,
                 time_source,
                 ..
-            } = ValidatorAndDependenciesBuilder::single_subnet(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
-                        .with_halt_at_cup_height(true)
-                        .build(),
-                )],
-            )
-            .build();
-
-            // Any payload validation fails, so we can observe whether validation was attempted.
-            payload_builder
-                .get_mut()
-                .expect_validate_payload()
-                .returning(|_, _, _, _| {
-                    Err(ValidationError::InvalidArtifact(
-                        InvalidPayloadReason::PayloadTooBig {
-                            expected: ic_types::NumBytes::new(0),
-                            received: ic_types::NumBytes::new(1),
-                        },
-                    ))
-                });
+            } = set_up_halted_subnet(pool_config);
 
             // Advance to the block right before the *next* summary height and build the summary
             // block proposal at the DKG boundary.
@@ -3150,6 +3130,148 @@ pub mod test {
                         InvalidPayloadReason::PayloadTooBig { .. }
                     )
                 ))
+            );
+        })
+    }
+
+    /// Sets up a validator of a subnet that halts from genesis on, whose payload builder rejects
+    /// every payload, so that we can observe whether payload validation was attempted.
+    fn set_up_halted_subnet(pool_config: ArtifactPoolConfig) -> ValidatorAndDependencies {
+        let committee: Vec<_> = (0..4).map(node_test_id).collect();
+        let deps = ValidatorAndDependenciesBuilder::single_subnet(
+            pool_config,
+            subnet_test_id(0),
+            vec![(
+                1,
+                SubnetRecordBuilder::from(&committee)
+                    .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                    .with_halt_at_cup_height(true)
+                    .build(),
+            )],
+        )
+        .build();
+        deps.payload_builder
+            .get_mut()
+            .expect_validate_payload()
+            .returning(|_, _, _, _| {
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::PayloadTooBig {
+                        expected: ic_types::NumBytes::new(0),
+                        received: ic_types::NumBytes::new(1),
+                    },
+                ))
+            });
+        deps
+    }
+
+    /// Replaces the payload of the given proposal with an empty data payload carrying the given
+    /// DKG start height.
+    fn with_empty_data_payload(
+        mut proposal: BlockProposal,
+        dkg_start_height: Height,
+    ) -> BlockProposal {
+        proposal.content.as_mut().payload = Payload::new(
+            ic_types::crypto::crypto_hash,
+            BlockPayload::Data(DataPayload::new_empty(dkg_start_height)),
+        );
+        proposal.update_content();
+        proposal
+    }
+
+    /// While halting, an empty data block must still be in the DKG interval of its parent, as
+    /// later blocks rely on its start height to find their summary block.
+    #[rstest]
+    #[case::interval_start(Height::new(0), true)]
+    #[case::next_interval(Height::new(DKG_INTERVAL_LENGTH + 1), false)]
+    #[case::earlier_data_block(Height::new(2), false)]
+    #[case::own_height(Height::new(4), false)]
+    fn test_dkg_start_height_is_validated_while_halted(
+        #[case] dkg_start_height: Height,
+        #[case] is_valid: bool,
+    ) {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let ValidatorAndDependencies {
+                validator,
+                state_manager,
+                registry,
+                replica_config,
+                mut pool,
+                time_source,
+                ..
+            } = set_up_halted_subnet(pool_config);
+
+            // Data blocks at heights 1 to 3 on top of the genesis summary block, followed by an
+            // empty data block at height 4.
+            pool.advance_round_normal_operation_n(3);
+            let block = with_empty_data_payload(pool.make_next_block(), dkg_start_height);
+
+            // Sanity check: the subnet is indeed halting/halted at this height.
+            assert_matches!(
+                status::get_status(
+                    block.height(),
+                    &PoolReader::new(&pool).get_highest_finalized_summary_block(),
+                    registry.as_ref(),
+                    replica_config.subnet_id,
+                    &PoolReader::new(&pool),
+                    replica_config.replica_version(),
+                    &no_op_logger()
+                ),
+                Some(Status::Halting | Status::Halted)
+            );
+
+            let context = block.content.as_ref().context.clone();
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(context.certified_height);
+            time_source.set_time(context.time).unwrap();
+
+            let result = validator.check_block_validity(&PoolReader::new(&pool), &block);
+            if is_valid {
+                assert_matches!(result, Ok(()));
+            } else {
+                assert_matches!(
+                    result,
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidArtifactReason::UnexpectedPayloadWhileHalting
+                    ))
+                );
+            }
+        })
+    }
+
+    /// While halting, a data block at the start of a DKG interval, where a summary block is
+    /// expected, must be rejected.
+    #[test]
+    fn test_data_block_at_dkg_start_height_is_rejected_while_halted() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let ValidatorAndDependencies {
+                validator,
+                state_manager,
+                mut pool,
+                time_source,
+                ..
+            } = set_up_halted_subnet(pool_config);
+
+            pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
+            let summary_proposal = pool.make_next_block();
+            assert!(summary_proposal.content.as_ref().payload.is_summary());
+            let block = with_empty_data_payload(summary_proposal, Height::new(0));
+
+            let context = block.content.as_ref().context.clone();
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(context.certified_height);
+            time_source.set_time(context.time).unwrap();
+
+            assert_matches!(
+                validator.check_block_validity(&PoolReader::new(&pool), &block),
+                Err(ValidationError::InvalidArtifact(
+                    InvalidArtifactReason::InvalidDkgPayload(
+                        InvalidDkgPayloadReason::DkgDealingAtStartHeight(height)
+                    )
+                )) if height == block.height()
             );
         })
     }
@@ -3707,9 +3829,9 @@ pub mod test {
             let mut test_block = make_next_block(&pool);
             test_block.content.as_mut().context.registry_version = block_registry_version;
             test_block.update_content();
-            let payload = &test_block.content.as_ref().payload;
-            assert!(
-                !payload.is_summary() && payload.as_ref().is_empty(),
+            assert_eq!(
+                test_block.content.as_ref().payload.as_ref(),
+                &BlockPayload::Data(DataPayload::new_empty(scheduled_summary_block.height)),
                 "expected an empty data block on top of the summary block starting the split",
             );
 
@@ -4690,15 +4812,7 @@ pub mod test {
         block.signature.signer = correct_signer;
         block.update_content();
         let first = block.clone();
-        block.content.as_mut().payload = Payload::new(
-            ic_types::crypto::crypto_hash,
-            BlockPayload::Data(DataPayload {
-                batch: BatchPayload::default(),
-                dkg: DkgDataPayload::new_empty(Height::new(0)),
-                idkg: None,
-            }),
-        );
-        block.update_content();
+        block = with_empty_data_payload(block, Height::new(0));
         let second = block.clone();
 
         (

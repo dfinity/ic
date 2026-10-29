@@ -1262,7 +1262,7 @@ fn select_all<T>() -> impl Fn(&T) -> bool {
     |_| true
 }
 
-fn select_equal_to<T: PartialEq>(expected_value: &T) -> impl Fn(&T) -> bool + '_ {
+fn select_equal_to<T: PartialEq>(expected_value: &T) -> impl Fn(&T) -> bool {
     move |x| x == expected_value
 }
 

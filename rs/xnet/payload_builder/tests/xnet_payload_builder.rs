@@ -2,9 +2,10 @@ use async_trait::async_trait;
 use ic_base_types::NumBytes;
 use ic_canonical_state::CURRENT_CERTIFICATION_VERSION;
 use ic_interfaces::messaging::{XNetPayloadBuilder, XNetPayloadValidationError};
-use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
+use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
+use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -19,8 +20,8 @@ use ic_replicated_state::testing::StreamTesting;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count,
-    fetch_int_counter_vec, metric_vec,
+    HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter,
+    metric_vec,
 };
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_state::{
@@ -35,16 +36,14 @@ use ic_types::batch::{ValidationContext, XNetPayload};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue, StreamSlice};
 use ic_types::{CountBytes, Height, NodeId, RegistryVersion, SubnetId};
-use ic_xnet_payload_builder::certified_slice_pool::{CertifiedSlicePool, UnpackedStreamSlice};
-use ic_xnet_payload_builder::testing::*;
-use ic_xnet_payload_builder::{
-    ExpectedIndices, LABEL_POOLED, LABEL_REMOTE, LABEL_SCHEDULED, LABEL_STATUS, MAX_SIGNALS,
-    METRIC_PULL_ATTEMPT_COUNT, METRIC_SHADOW_PULLS, POOL_BYTE_SIZE_SOFT_CAP,
-    POOLED_SLICE_BYTE_SIZE_DIVISOR, XNetPayloadBuilderImpl, adjusted_byte_limit,
-    refill_stream_slice_indices,
+use ic_xnet_payload_builder::certified_slice_pool::{
+    CertifiedSlicePool, METRIC_LAGGING_PUT_AND_APPEND_COUNT, POOL_BYTE_SIZE_SOFT_CAP,
+    POOLED_SLICE_BYTE_SIZE_DIVISOR, POOLED_SLICE_BYTE_SIZE_MAX, UnpackedStreamSlice,
+    adjusted_byte_limit,
 };
+use ic_xnet_payload_builder::testing::*;
+use ic_xnet_payload_builder::{ExpectedIndices, LABEL_STATUS, MAX_SIGNALS, XNetPayloadBuilderImpl};
 use maplit::btreemap;
-use mockall::predicate::{always, eq};
 use proptest::prelude::*;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
@@ -52,7 +51,6 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
-use tokio::sync::mpsc;
 use tokio::time::Duration;
 
 mod common;
@@ -79,15 +77,13 @@ impl XNetPayloadBuilderFixture {
         let registry = get_registry_for_test();
         let certified_slice_pool =
             Arc::new(Mutex::new(CertifiedSlicePool::new(&fixture.metrics, log)));
-        let (refill_trigger, _refill_receiver) = mpsc::channel(100);
-        let refill_task_handle = RefillTaskHandle(Mutex::new(refill_trigger));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&fixture.metrics));
         let xnet_payload_builder = XNetPayloadBuilderImpl::new_from_components(
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             registry,
             certified_slice_pool.clone(),
-            refill_task_handle,
+            PullTaskHandle::disconnected(),
             metrics,
             fixture.log,
         )
@@ -265,6 +261,16 @@ fn get_registry_for_test() -> Arc<dyn RegistryClient> {
     let registry = Arc::new(FakeRegistryClient::new(Arc::new(data_provider)));
     registry.update_to_latest_version();
     registry
+}
+
+/// A `StateManager` with no certified state, so a `PullTask` sees no streams of
+/// ours.
+fn state_manager_without_certified_state() -> Arc<MockStateManager> {
+    let mut state_manager = MockStateManager::new();
+    state_manager
+        .expect_get_latest_certified_state()
+        .returning(|| None);
+    Arc::new(state_manager)
 }
 
 /// Creates an incoming `CertifiedStreamSlice` containing `msg_count` messages
@@ -1043,7 +1049,10 @@ fn refill_stream_slice_indices_byte_limits_empty_pool() {
                 .collect(),
         );
 
-        let byte_limits = refill_stream_slice_indices(&pool.lock().unwrap(), OWN_SUBNET)
+        let byte_limits = pool
+            .lock()
+            .unwrap()
+            .refill_stream_slice_indices(OWN_SUBNET)
             .into_iter()
             .map(|(_, indices)| indices.byte_limit)
             .collect::<Vec<_>>();
@@ -1091,7 +1100,10 @@ fn refill_stream_slice_indices_byte_limits_non_empty_pool() {
         );
         let pooled_byte_size = pool.lock().unwrap().byte_size();
 
-        let byte_limits = refill_stream_slice_indices(&pool.lock().unwrap(), OWN_SUBNET)
+        let byte_limits = pool
+            .lock()
+            .unwrap()
+            .refill_stream_slice_indices(OWN_SUBNET)
             .into_iter()
             .map(|(_, indices)| indices.byte_limit)
             .collect::<Vec<_>>();
@@ -1105,9 +1117,9 @@ fn refill_stream_slice_indices_byte_limits_non_empty_pool() {
     });
 }
 
-/// Tests refilling an empty pool.
+/// Tests pulling a slice into an empty pool, on request.
 #[test_strategy::proptest(ProptestConfig::with_cases(10))]
-fn refill_pool_empty(
+fn pull_into_empty_pool(
     #[strategy(arb_stream_slice(
         3, // min_size
         5, // max_size
@@ -1117,7 +1129,9 @@ fn refill_pool_empty(
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
-    let (stream, from, msg_count) = test_slice;
+    let (stream, from, _) = test_slice;
+    // Pull everything, so there is nothing left to pull afterwards.
+    let msg_count = (stream.messages_end() - from).get() as usize;
 
     with_test_replica_logger(|log| {
         let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -1144,6 +1158,10 @@ fn refill_pool_empty(
         pool.lock()
             .unwrap()
             .garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
+        // The stream's header, as advertised.
+        pool.lock()
+            .unwrap()
+            .record_peer_header(REMOTE_SUBNET, &stream.header());
 
         let registry = get_registry_for_test();
         let proximity_map = Arc::new(ProximityMap::new(
@@ -1172,45 +1190,39 @@ fn refill_pool_empty(
             ],
         });
 
-        let refill_handle = PoolRefillTask::start(
+        let pull_task = PullTask::start(
             Arc::clone(&pool),
             endpoint_resolver,
             xnet_client,
             Arc::clone(&store),
+            state_manager_without_certified_state(),
+            registry,
             runtime.handle().clone(),
-            Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
+            &metrics_registry,
             log,
         );
-        refill_handle.trigger_refill(registry.get_latest_version());
+        pull_task.request_pull(REMOTE_SUBNET);
 
         runtime.block_on(async {
             let mut count: u64 = 0;
-            // Keep polling until a slice is present in the pool and the pull was recorded.
+            // Keep polling until a slice is present in the pool.
             loop {
                 if let (_, Some(_), _, _) = pool.lock().unwrap().slice_stats(REMOTE_SUBNET) {
                     break;
                 }
                 count += 1;
                 if count > 50 {
-                    panic!("refill task failed to complete within 5 seconds");
+                    panic!("pull task failed to complete within 5 seconds");
                 }
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
         });
 
-        let remote = REMOTE_SUBNET.to_string();
+        // Pulled from an up-to-date node.
         assert_eq!(
-            metric_vec(&[(
-                &[
-                    (LABEL_REMOTE, remote.as_str()),
-                    (LABEL_SCHEDULED, "false"),
-                    (LABEL_POOLED, "true")
-                ],
-                1
-            )]),
-            fetch_int_counter_vec(&metrics_registry, METRIC_SHADOW_PULLS)
+            Some(0),
+            fetch_int_counter(&metrics_registry, METRIC_LAGGING_PUT_AND_APPEND_COUNT)
         );
-        assert!(!pool.lock().unwrap().unschedule_pull(REMOTE_SUBNET));
 
         assert_opt_slices_eq(
             Some(certified_slice),
@@ -1223,10 +1235,10 @@ fn refill_pool_empty(
     });
 }
 
-/// Tests refilling a pool with an already existing slice, requiring an
-/// append.
+/// Tests pulling a suffix of an already pooled slice, on request; and appending
+/// it.
 #[test_strategy::proptest(ProptestConfig::with_cases(10))]
-fn refill_pool_append(
+fn pull_and_append(
     #[strategy(arb_stream_slice(
         3, // min_size
         5, // max_size
@@ -1236,11 +1248,12 @@ fn refill_pool_append(
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
-    let (stream, from, msg_count) = test_slice;
+    let (stream, from, _) = test_slice;
 
     // Bump `from` so we always get a non-empty prefix.
     let from = from.increment();
-    let msg_count = msg_count - 1;
+    // Pull everything, so there is nothing left to pull afterwards.
+    let msg_count = (stream.messages_end() - from).get() as usize;
 
     with_test_replica_logger(|log| {
         let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -1280,6 +1293,7 @@ fn refill_pool_append(
         let prefix_size_bytes = UnpackedStreamSlice::try_from(certified_prefix.clone())
             .unwrap()
             .count_bytes();
+        // Pooling the prefix records its header, which has more on offer.
         CertifiedSlicePool::put(
             &pool,
             REMOTE_SUBNET,
@@ -1323,16 +1337,18 @@ fn refill_pool_append(
             ],
         });
 
-        let refill_handle = PoolRefillTask::start(
+        let pull_task = PullTask::start(
             Arc::clone(&pool),
             endpoint_resolver,
             xnet_client,
             Arc::clone(&store),
+            state_manager_without_certified_state(),
+            registry,
             runtime.handle().clone(),
-            Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
+            &metrics_registry,
             log.clone(),
         );
-        refill_handle.trigger_refill(registry.get_latest_version());
+        pull_task.request_pull(REMOTE_SUBNET);
 
         runtime.block_on(async {
             let mut count: u64 = 0;
@@ -1344,269 +1360,14 @@ fn refill_pool_append(
                 }
                 count += 1;
                 if count > 50 {
-                    panic!("refill task failed to complete within 5 seconds");
+                    panic!("pull task failed to complete within 5 seconds");
                 }
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
         });
-
-        // Not scheduled, but pooled.
-        let remote = REMOTE_SUBNET.to_string();
-        assert_eq!(
-            metric_vec(&[(
-                &[
-                    (LABEL_REMOTE, remote.as_str()),
-                    (LABEL_SCHEDULED, "false"),
-                    (LABEL_POOLED, "true")
-                ],
-                1
-            )]),
-            fetch_int_counter_vec(&metrics_registry, METRIC_SHADOW_PULLS)
-        );
 
         assert_opt_slices_eq(
             Some(certified_slice),
-            pool.lock()
-                .unwrap()
-                .take_slice(REMOTE_SUBNET, Some(&stream_position), None, None)
-                .unwrap()
-                .map(|(slice, _)| slice),
-        );
-    });
-}
-
-/// Tests handling of an invalid slice when refilling the pool.
-#[test_strategy::proptest(ProptestConfig::with_cases(20))]
-fn refill_pool_put_invalid_slice(
-    #[strategy(arb_stream_slice(
-        3, // min_size
-        5, // max_size
-        0, // min_signal_count
-        10, // max_signal_count
-        CURRENT_CERTIFICATION_VERSION,
-    ))]
-    test_slice: (Stream, StreamIndex, usize),
-) {
-    let (stream, from, msg_count) = test_slice;
-
-    with_test_replica_logger(|log| {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-
-        let stream_position = ExpectedIndices {
-            message_index: from,
-            signal_index: stream.signals_end(),
-            ..Default::default()
-        };
-
-        let mut certified_stream_store = MockCertifiedStreamStore::new();
-        certified_stream_store
-            .expect_decode_certified_stream_slice()
-            .returning(|_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
-        let metrics_registry = MetricsRegistry::new();
-        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
-        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-            &metrics_registry,
-            log.clone(),
-        )));
-        pool.lock()
-            .unwrap()
-            .garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
-
-        let registry = get_registry_for_test();
-        let proximity_map = Arc::new(ProximityMap::new(
-            OWN_NODE,
-            registry.clone(),
-            &metrics_registry,
-            log.clone(),
-        ));
-        let endpoint_resolver = Arc::new(XNetEndpointResolver::new(
-            registry.clone(),
-            OWN_NODE,
-            OWN_SUBNET,
-            proximity_map,
-            log.clone(),
-        ));
-        let byte_limit = adjusted_byte_limit(POOLED_SLICE_BYTE_SIZE_MAX);
-        let url = endpoint_resolver
-            .xnet_stream_url(REMOTE_SUBNET, from, from, byte_limit)
-            .unwrap()
-            .url
-            .to_string();
-
-        let certified_slice = in_slice(&stream, from, from, msg_count, &log);
-        let xnet_client = Arc::new(FakeXNetClient {
-            results: btreemap![
-                url => Ok(certified_slice),
-            ],
-        });
-
-        let refill_handle = PoolRefillTask::start(
-            Arc::clone(&pool),
-            endpoint_resolver,
-            xnet_client,
-            Arc::clone(&store),
-            runtime.handle().clone(),
-            Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
-            log,
-        );
-        refill_handle.trigger_refill(registry.get_latest_version());
-
-        runtime.block_on(async {
-            let mut count: u64 = 0;
-            // Keep polling until we observe a `DecodeStreamError`.
-            loop {
-                if let Some(1) = fetch_int_counter_vec(&metrics_registry, METRIC_PULL_ATTEMPT_COUNT)
-                    .get(&btreemap![LABEL_STATUS.into() => "DecodeStreamError".into()])
-                {
-                    break;
-                }
-                count += 1;
-                if count > 50 {
-                    panic!("refill task failed to complete within 5 seconds");
-                }
-                tokio::time::sleep(Duration::from_millis(100)).await;
-            }
-        });
-
-        assert!(
-            pool.lock()
-                .unwrap()
-                .take_slice(REMOTE_SUBNET, Some(&stream_position), None, None)
-                .unwrap()
-                .is_none(),
-        );
-    });
-}
-
-/// Tests validation failure while refilling a pool with an already existing
-/// slice, requiring an append.
-#[test_strategy::proptest(ProptestConfig::with_cases(10))]
-fn refill_pool_append_invalid_slice(
-    #[strategy(arb_stream_slice(
-        3, // min_size
-        5, // max_size
-        0, // min_signal_count
-        10, // max_signal_count
-        CURRENT_CERTIFICATION_VERSION,
-    ))]
-    test_slice: (Stream, StreamIndex, usize),
-) {
-    let (stream, from, msg_count) = test_slice;
-
-    // Bump `from` so we always get a non-empty prefix.
-    let from = from.increment();
-    let msg_count = msg_count - 1;
-
-    with_test_replica_logger(|log| {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-
-        let stream_begin = stream.messages_begin();
-        let prefix_msg_count = (from - stream_begin).get() as usize;
-        let certified_prefix =
-            in_slice(&stream, stream_begin, stream_begin, prefix_msg_count, &log);
-        let certified_suffix = in_slice(&stream, stream_begin, from, msg_count, &log);
-        let expected_msg_count = prefix_msg_count + msg_count;
-        let slice = stream.slice(stream_begin, Some(expected_msg_count));
-
-        let stream_position = ExpectedIndices {
-            message_index: stream_begin,
-            signal_index: stream.signals_end(),
-            ..Default::default()
-        };
-
-        let mut certified_stream_store = MockCertifiedStreamStore::new();
-        // Accept the prefix as valid, but fail validation for the merged slice.
-        certified_stream_store
-            .expect_decode_certified_stream_slice()
-            .with(always(), always(), eq(certified_prefix.clone()))
-            .returning(move |_, _, _| Ok(slice.clone()));
-        certified_stream_store
-            .expect_decode_certified_stream_slice()
-            .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
-        let metrics_registry = MetricsRegistry::new();
-        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
-        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-            &metrics_registry,
-            log.clone(),
-        )));
-        let prefix_size_bytes = UnpackedStreamSlice::try_from(certified_prefix.clone())
-            .unwrap()
-            .count_bytes();
-
-        CertifiedSlicePool::put(
-            &pool,
-            REMOTE_SUBNET,
-            certified_prefix.clone(),
-            store.as_ref(),
-            REGISTRY_VERSION,
-            &log,
-        )
-        .unwrap();
-        pool.lock()
-            .unwrap()
-            .garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
-
-        let registry = get_registry_for_test();
-        let proximity_map = Arc::new(ProximityMap::new(
-            OWN_NODE,
-            registry.clone(),
-            &metrics_registry,
-            log.clone(),
-        ));
-        let endpoint_resolver = Arc::new(XNetEndpointResolver::new(
-            registry.clone(),
-            OWN_NODE,
-            OWN_SUBNET,
-            proximity_map,
-            log.clone(),
-        ));
-        // The pooled prefix takes up pool space, lowering the maximum slice size.
-        let slice_byte_size_max =
-            (POOL_BYTE_SIZE_SOFT_CAP - prefix_size_bytes) / POOLED_SLICE_BYTE_SIZE_DIVISOR;
-        let byte_limit = adjusted_byte_limit(slice_byte_size_max - prefix_size_bytes);
-        let url = endpoint_resolver
-            .xnet_stream_url(REMOTE_SUBNET, stream_begin, from, byte_limit)
-            .unwrap()
-            .url
-            .to_string();
-
-        let xnet_client = Arc::new(FakeXNetClient {
-            results: btreemap![
-                url => Ok(certified_suffix),
-            ],
-        });
-
-        let refill_handle = PoolRefillTask::start(
-            Arc::clone(&pool),
-            endpoint_resolver,
-            xnet_client,
-            Arc::clone(&store),
-            runtime.handle().clone(),
-            Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
-            log.clone(),
-        );
-        refill_handle.trigger_refill(registry.get_latest_version());
-
-        runtime.block_on(async {
-            let mut count: u64 = 0;
-            // Keep polling until we observe a `DecodeStreamError`.
-            loop {
-                if let Some(1) = fetch_int_counter_vec(&metrics_registry, METRIC_PULL_ATTEMPT_COUNT)
-                    .get(&btreemap![LABEL_STATUS.into() => "DecodeStreamError".into()])
-                {
-                    break;
-                }
-                count += 1;
-                if count > 50 {
-                    panic!("refill task failed to complete within 5 seconds");
-                }
-                tokio::time::sleep(Duration::from_millis(100)).await;
-            }
-        });
-
-        // Only the prefix is pooled.
-        assert_opt_slices_eq(
-            Some(certified_prefix),
             pool.lock()
                 .unwrap()
                 .take_slice(REMOTE_SUBNET, Some(&stream_position), None, None)

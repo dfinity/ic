@@ -3,11 +3,15 @@
 use crate::{
     errors::{ApiError, Details},
     ledger_client::LedgerAccess,
-    models::NetworkRequest,
+    models::{
+        BlockRequest, CallRequest, NetworkRequest, ObjectMap, PartialBlockIdentifier,
+        QueryBlockRangeRequest, SearchTransactionsRequest,
+    },
     request_handler::RosettaRequestHandler,
 };
 use async_trait::async_trait;
-use ic_ledger_canister_blocks_synchronizer::blocks::{Blocks, RosettaBlocksMode};
+use ic_ledger_canister_blocks_synchronizer::blocks::{Blocks, RosettaBlocksMode, RosettaDbConfig};
+use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::Scribe;
 use ic_nns_governance_api::{KnownNeuron, ProposalInfo, manage_neuron::NeuronIdOrSubaccount};
 use ic_types::CanisterId;
 use icp_ledger::TransferFee;
@@ -16,18 +20,27 @@ use std::{
     ops::Deref,
     str::FromStr,
     sync::{Arc, atomic::AtomicBool},
+    time::{Duration, Instant},
 };
+#[allow(clippy::disallowed_types)]
+use tokio::sync::RwLock;
 
 /// A minimal mock ledger for testing the request handler.
-/// Only implements enough to test `network_status` behavior.
+/// Only implements enough to test `network_status` and the endpoints that read blocks.
+#[allow(clippy::disallowed_types)]
 struct MockLedger {
+    blockchain: RwLock<Blocks>,
     canister_id: CanisterId,
     governance_canister_id: CanisterId,
 }
 
+#[allow(clippy::disallowed_types)]
 impl MockLedger {
     fn new() -> Self {
         Self {
+            blockchain: RwLock::new(
+                Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap(),
+            ),
             canister_id: CanisterId::unchecked_from_principal(
                 ic_types::PrincipalId::from_str("5v3p4-iyaaa-aaaaa-qaaaa-cai").unwrap(),
             ),
@@ -39,7 +52,7 @@ impl MockLedger {
 #[async_trait]
 impl LedgerAccess for MockLedger {
     async fn read_blocks<'a>(&'a self) -> Box<dyn Deref<Target = Blocks> + 'a> {
-        unimplemented!("Not needed for this test")
+        Box::new(self.blockchain.read().await)
     }
 
     async fn sync_blocks(&self, _stopped: Arc<AtomicBool>) -> Result<(), ApiError> {
@@ -95,8 +108,9 @@ impl LedgerAccess for MockLedger {
         unimplemented!("Not needed for this test")
     }
 
+    // Like `LedgerClient`, read the mode under the blockchain lock.
     async fn rosetta_blocks_mode(&self) -> RosettaBlocksMode {
-        RosettaBlocksMode::Disabled
+        self.blockchain.read().await.rosetta_blocks_mode
     }
 }
 
@@ -105,7 +119,7 @@ impl LedgerAccess for MockLedger {
 async fn test_network_status_returns_error_during_initial_sync() {
     let ledger = Arc::new(MockLedger::new());
     let canister_id = ledger.ledger_canister_id();
-    let canister_id_str = hex::encode(canister_id.get().into_vec());
+    let canister_id_str = hex::encode(canister_id.get_ref().as_slice());
 
     let initial_sync_complete = Arc::new(AtomicBool::new(false));
     let req_handler = RosettaRequestHandler::new(
@@ -141,4 +155,69 @@ async fn test_network_status_returns_error_during_initial_sync() {
         }
         other => panic!("Expected NotAvailableOffline error, got: {:?}", other),
     }
+}
+
+/// Test that requests reading blocks don't deadlock with a writer of the blockchain, like the
+/// sync thread. Tokio's `RwLock` is write-preferring, so a handler that read-locks the
+/// blockchain while holding a read lock on it waits for a queued writer, which waits for the
+/// handler.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_requests_do_not_deadlock_with_concurrent_writer() {
+    let ledger = Arc::new(MockLedger::new());
+    {
+        let mut blockchain = ledger.blockchain.write().await;
+        for hb in &Scribe::new_with_sample_data(2, 0).blockchain {
+            blockchain.push(hb).unwrap();
+            blockchain.set_hashed_block_to_verified(&hb.index).unwrap();
+        }
+    }
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        ledger.clone(),
+        Arc::new(AtomicBool::new(true)),
+    );
+
+    let writer = tokio::spawn(async move {
+        loop {
+            drop(ledger.blockchain.write().await);
+            tokio::task::yield_now().await;
+        }
+    });
+    let block_request = BlockRequest {
+        network_identifier: req_handler.network_id(),
+        block_identifier: PartialBlockIdentifier {
+            index: Some(1),
+            hash: None,
+        },
+    };
+    let query_block_range_request = CallRequest::new(
+        req_handler.network_id(),
+        "query_block_range".to_string(),
+        ObjectMap::try_from(QueryBlockRangeRequest {
+            highest_block_index: 1,
+            number_of_blocks: 2,
+        })
+        .unwrap(),
+    );
+    let search_transactions_request =
+        SearchTransactionsRequest::builder(req_handler.network_id()).build();
+    let result = tokio::time::timeout(Duration::from_secs(30), async {
+        let start = Instant::now();
+        while start.elapsed() < Duration::from_secs(1) {
+            req_handler.block(block_request.clone()).await.unwrap();
+            req_handler
+                .call(query_block_range_request.clone())
+                .await
+                .unwrap();
+            req_handler
+                .search_transactions(search_transactions_request.clone())
+                .await
+                .unwrap();
+        }
+    })
+    .await;
+    writer.abort();
+    assert!(
+        result.is_ok(),
+        "request handler deadlocked with a concurrent writer"
+    );
 }

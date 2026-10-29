@@ -2125,9 +2125,17 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn slice_instructions_executed(&self, instruction_counter: i64) -> NumInstructions {
+        // The instruction counter can end up below zero, e.g., if a system API
+        // call charged a huge fee before failing with an out-of-instructions
+        // error. Capping the result at the instructions left for the message
+        // keeps it consistent with the instructions charged for the message.
+        let message_instructions_left = i64::try_from(self.message_instruction_limit().get())
+            .unwrap_or(i64::MAX)
+            .saturating_sub(self.instructions_executed_before_current_slice);
         let result = self
             .current_slice_instruction_limit
             .saturating_sub(instruction_counter)
+            .min(message_instructions_left)
             .max(0) as u64;
         NumInstructions::from(result)
     }
@@ -3460,9 +3468,13 @@ impl SystemApi for SystemApiImpl {
 
                 // A Wasm memory limit of 0 means unlimited.
                 if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
+                    let wasm_execution_mode = WasmExecutionMode::from_is_wasm64(
+                        self.sandbox_safe_system_state.is_wasm64_execution,
+                    );
                     return Err(HypervisorError::WasmMemoryLimitExceeded {
                         bytes: wasm_memory_usage,
                         limit: wasm_memory_limit,
+                        max_wasm_memory_size: wasm_execution_mode.max_wasm_memory_size(),
                     });
                 }
             }
@@ -4359,6 +4371,7 @@ impl SystemApi for SystemApiImpl {
 
         let mut decoder_config = DecoderConfig::new();
         decoder_config.set_skipping_quota(MAX_COST_HTTP_REQUEST_V2_SKIPPING_QUOTA);
+        decoder_config.set_full_error_message(false);
 
         let cost_params_v2: CostHttpRequestV2Params =
             decode_one_with_config(params_bytes, &decoder_config).map_err(|e| {

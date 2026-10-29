@@ -426,7 +426,10 @@ fn lazy_pagemaps() {
 
     env.execute_ingress(canister_id, "write_heap_64k", vec![])
         .unwrap();
-    assert_eq!(page_maps_by_status("loaded", &env), 2);
+    // With debug assertions, the canister log page map is loaded, too, because
+    // a debug assertion compares canister logs when applying them after execution.
+    let expected_loaded = if cfg!(debug_assertions) { 3 } else { 2 };
+    assert_eq!(page_maps_by_status("loaded", &env), expected_loaded);
 }
 
 #[test]
@@ -2531,7 +2534,7 @@ fn uses_latest_certified_state_to_decode_certified_streams() {
             .encode_certified_stream_slice(subnet, None, None, None, None)
             .expect("failed to encode certified stream");
 
-        assert_eq!(certification, slice.certification);
+        assert_eq!(certification.signed, slice.certification);
     });
 }
 
@@ -9039,9 +9042,9 @@ fn stream_store_decode_with_modified_hash_fails(
         true,
         /* modification between encoding and decoding  */
         |_state_manager, mut slice| {
-            let mut hash = slice.certification.signed.content.hash.get();
+            let mut hash = slice.certification.content.hash.get();
             *hash.0.first_mut().unwrap() = hash.0.first().unwrap().overflowing_add(1).0;
-            slice.certification.signed.content.hash = CryptoHashOfPartialState::from(hash);
+            slice.certification.content.hash = CryptoHashOfPartialState::from(hash);
 
             slice
         },
@@ -9652,7 +9655,7 @@ fn fake_certification_for_height(height: Height) -> Certification {
 fn fake_certification_for_height_with_hash(height: Height, hash: CryptoHash) -> Certification {
     Certification {
         height,
-        height_witness: Some(Witness::new_for_testing_with_height()),
+        height_witness: Witness::new_for_testing_with_height(),
         signed: Signed {
             content: CertificationContent::new(CryptoHashOfPartialState::from(hash)),
             signature: ThresholdSignature::fake(),

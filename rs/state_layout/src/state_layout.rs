@@ -14,7 +14,9 @@ use ic_replicated_state::{
     CanisterStatus, ExportedFunctions, NumWasmPages,
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
-        system_state::{CanisterHistory, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata},
+        system_state::{
+            CanisterHistory, ConnectionMetrics, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata,
+        },
     },
     page_map::{Shard, StorageLayout, StorageResult},
 };
@@ -200,6 +202,7 @@ pub struct CanisterStateBits {
     pub canister_creation_timestamp_nanos: Option<u64>,
     pub consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     pub consumed_cycles_by_use_cases_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
+    pub connection_metrics: BTreeMap<CanisterId, ConnectionMetrics>,
     pub instructions_executed: NumInstructions,
     pub ingress_messages_executed: u64,
     pub remote_subnet_messages_executed: u64,
@@ -1940,11 +1943,9 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     /// Other methods should use this function rather than checking markers directly.
     pub fn checkpoint_status(&self) -> CheckpointStatus {
         if self.state_sync_checkpoint_marker().exists() {
-            // Checkpoints with state sync marker are always unverified. Therefore both markers should be present.
-            // For defensive programming, we treat it as unverified even if the unverified marker
-            // is accidentally missing, since the presence of a state sync marker alone indicates
-            // the checkpoint should never be considered verified.
-            debug_assert!(self.unverified_checkpoint_marker().exists());
+            // The state sync marker alone makes the checkpoint unverified. The unverified marker is
+            // normally present too, but is removed first, so a concurrent reader could observe only the
+            // state sync marker: let's thus not check that the unverified marker also exists.
             return CheckpointStatus::UnverifiedStateSync;
         }
         if self.unverified_checkpoint_marker().exists() {
