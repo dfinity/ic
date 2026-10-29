@@ -62,7 +62,7 @@ type change_origin = variant {
         user_id : principal;
     };
     from_canister : record {
-        canister_id : principal;
+        canister_id : canister_id;
         canister_version : opt nat64;
     };
 };
@@ -91,10 +91,10 @@ type change_details = variant {
         controllers : vec principal;
     };
     rename_canister : record {
-        canister_id : principal;
+        canister_id : canister_id;
         total_num_changes : nat64;
         rename_to : record {
-            canister_id : principal;
+            canister_id : canister_id;
             version : nat64;
             total_num_changes : nat64;
         };
@@ -256,13 +256,13 @@ type create_canister_result = record {
 };
 
 type update_settings_args = record {
-    canister_id : principal;
+    canister_id : canister_id;
     settings : canister_settings;
     sender_canister_version : opt nat64;
 };
 
 type upload_chunk_args = record {
-    canister_id : principal;
+    canister_id : canister_id;
     chunk : blob;
 };
 
@@ -498,40 +498,47 @@ type subnet_metrics_args = record {
     subnet_id : principal;
 };
 
-// This API is EXPERIMENTAL and may evolve in a non-backward-compatible way.
-//
-// Only `block_height` is current as of the block in which the call is executed.
-// The other five fields are read from the subnet's aggregated metrics, which the
-// replica updates at the *end* of a round, so they describe the state as of an
-// earlier block; see the individual fields.
+// Only `block_height` describes the block in whose execution the call is
+// processed. The other five fields are aggregates refreshed at block
+// boundaries, so they describe the subnet as of an earlier block, and they are
+// not all refreshed at the same rate; see the individual fields.
 type subnet_metrics_result = record {
-    // Height of the block in whose execution this call is processed.
-    // Monotonically non-decreasing for a given subnet; the heights of different
-    // subnets are unrelated.
+    // Current block height of the subnet, i.e. the height of the block in
+    // whose execution this call is processed. Monotonically non-decreasing for
+    // a given subnet; the heights of different subnets are unrelated.
     block_height : nat;
-    // Number of canisters on the subnet, as of the end of the previous round.
+    // Number of canisters on the subnet. A current value, not a counter.
     num_canisters : nat;
-    // Total size in bytes of the state taken by the canisters on the subnet, as
-    // of the end of the previous round. Recomputed only every 10 rounds, because
-    // summing it over every canister is expensive and it does not need to be
-    // exact, so it can be up to ten rounds stale and reads as 0 for the first
-    // rounds after the subnet is created.
+    // Total size in bytes of the state taken by canisters on the subnet. A
+    // current value, not a counter. Recomputing it is expensive, so it is
+    // refreshed only every 10 blocks, at heights that are multiples of 10. It
+    // can be up to 10 blocks behind block_height and up to 9 blocks behind the
+    // other aggregates. Reads 0 until the first refresh after subnet creation.
     canister_state_bytes : nat;
-    // Total cycles removed from circulation on the subnet by all current and
-    // deleted canisters, as of the end of the previous round.
+    // Total nominal cycles accounted for by the subnet: the historical
+    // consumption of current and deleted canisters (plus the remaining balances
+    // of deleted canisters), the cycles charged for HTTPS outcalls, threshold
+    // signature requests, and vetKD requests (accounted for at the subnet level
+    // rather than per canister), and the cycles lost when messages or refunds
+    // are dropped (e.g. because their recipient no longer exists). Resource use
+    // is recorded at normal cost-schedule rates even where it is free, so this
+    // is not a count of cycles burned. Refunds of prepaid charges reduce the
+    // total. Subnet splitting redistributes canisters' histories, so the total
+    // can decrease and can include consumption from before the receiving subnet
+    // was created.
     consumed_cycles_total : nat;
     // Total number of transactions processed on the subnet, i.e. the total
-    // number of messages executed in replicated mode, as of the end of the
-    // previous round.
+    // number of messages executed in the replicated mode. Monotonically
+    // non-decreasing.
     update_transactions_total : nat;
-    // Total instructions the subnet accounted for across the execution phases of
-    // all rounds, as of the end of the previous round, counted in units of one
-    // million and rounded up: a value of 42 means 42 million instructions.
-    // Covers both executed Wasm and the fixed per-execution and per-canister
-    // scheduler overheads plus non-Wasm charges (compilation, chunk assembly,
-    // snapshots), so it is not a Wasm instruction meter. Unlike the fields
-    // above, it has no counterpart under /subnet/<subnet_id>/metrics in the
-    // certified state.
+    // Total instructions the subnet accounted for when executing its blocks,
+    // in units of one million and rounded up: a value of 42 represents
+    // 41,000,001 through 42,000,000 instructions. Besides the executed Wasm
+    // instructions, it covers the fixed per-execution and per-canister
+    // overheads charged by the scheduler and the charges for work performed
+    // outside of Wasm execution, so it is not a Wasm instruction meter.
+    // Monotonically non-decreasing. Like `block_height`, it has no counterpart
+    // under `/subnet/<subnet_id>/metrics` in the certified state tree.
     million_round_instructions_total : nat;
 };
 
@@ -542,15 +549,6 @@ type subnet_info_args = record {
 type subnet_info_result = record {
     replica_version : text;
     registry_version : nat64;
-};
-
-type canister_id_range = record {
-    start : canister_id;
-    end : canister_id;
-};
-
-type list_canisters_result = record {
-    canisters : vec canister_id_range;
 };
 
 type provisional_create_canister_with_cycles_args = record {
@@ -612,7 +610,7 @@ type fetch_canister_logs_args = record {
     filter : opt variant {
         by_idx : record { start : nat64; end : nat64 };
         by_timestamp_nanos : record { start : nat64; end : nat64 };
-    }
+    };
 };
 
 type canister_log_record = record {
@@ -625,24 +623,13 @@ type fetch_canister_logs_result = record {
     canister_log_records : vec canister_log_record;
 };
 
-type cycles_consumed = record {
-    memory : nat;
-    compute_allocation : nat;
-    ingress_induction : nat;
-    instructions : nat;
-    request_and_response_transmission : nat;
-    uninstall : nat;
-    canister_creation : nat;
-    http_outcalls : nat;
-    burned_cycles : nat;
+type canister_id_range = record {
+    start : canister_id;
+    end : canister_id;
 };
 
-type canister_metrics_args = record {
-    canister_id : canister_id;
-};
-
-type canister_metrics_result = record {
-    cycles_consumed : cycles_consumed;
+type list_canisters_result = record {
+    canisters : vec canister_id_range;
 };
 
 type read_canister_snapshot_metadata_args = record {
@@ -755,6 +742,30 @@ type upload_canister_snapshot_data_args = record {
     chunk : blob;
 };
 
+type cycles_consumed = record {
+  memory : nat;
+  compute_allocation : nat;
+  ingress_induction : nat;
+  instructions : nat;
+  request_and_response_transmission : nat;
+  // This metric applies to canisters that ran out of cycles. In particular,
+  // uninstalling code explicitly would not result in this metric being updated.
+  // In fact, others might be updated in that case, e.g. cycles for ingress induction
+  // if the uninstallation of the canister was requested via an ingress message.
+  uninstall : nat;
+  canister_creation : nat;
+  http_outcalls : nat;
+  burned_cycles : nat;
+};
+
+type canister_metrics_args = record {
+  canister_id : canister_id;
+};
+
+type canister_metrics_result = record {
+  cycles_consumed : cycles_consumed;
+};
+
 service ic : {
     create_canister : (create_canister_args) -> (create_canister_result);
     update_settings : (update_settings_args) -> ();
@@ -767,6 +778,8 @@ service ic : {
     start_canister : (start_canister_args) -> ();
     stop_canister : (stop_canister_args) -> ();
     canister_status : (canister_status_args) -> (canister_status_result) query;
+    // Returns canister related metrics
+    canister_metrics: (canister_metrics_args) -> (canister_metrics_result) query;
     delete_canister : (delete_canister_args) -> ();
     deposit_cycles : (deposit_cycles_args) -> ();
     raw_rand : () -> (raw_rand_result);
@@ -802,7 +815,6 @@ service ic : {
 
     // subnet info
     subnet_info : (subnet_info_args) -> (subnet_info_result);
-    list_canisters : () -> (list_canisters_result) query;
 
     // provisional interfaces for the pre-ledger world
     provisional_create_canister_with_cycles : (provisional_create_canister_with_cycles_args) -> (provisional_create_canister_with_cycles_result);
@@ -821,6 +833,6 @@ service ic : {
     // canister logging
     fetch_canister_logs : (fetch_canister_logs_args) -> (fetch_canister_logs_result) query;
 
-    // canister metrics
-    canister_metrics : (canister_metrics_args) -> (canister_metrics_result) query;
+    // subnet admin methods
+    list_canisters : () -> (list_canisters_result) query;
 };

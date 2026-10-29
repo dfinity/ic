@@ -975,6 +975,34 @@ fn test_next_idx_preserved_when_appending_empty_delta_log() {
 }
 
 #[test]
+fn test_append_delta_log_drains_delta_log() {
+    for log_memory_limit in [0, TEST_LOG_MEMORY_LIMIT] {
+        let mut store = LogMemoryStore::new();
+        store.resize_for_testing(log_memory_limit);
+
+        let mut delta = CanisterLog::new_delta_with_next_index(TEST_NEXT_IDX, 4096);
+        delta.add_record(1001, b"a".to_vec());
+        delta.add_record(1002, b"b".to_vec());
+        let byte_capacity = delta.byte_capacity();
+
+        store.append_delta_log(&mut delta);
+
+        // The records are removed, but the next index and capacity are kept.
+        assert!(delta.is_empty());
+        assert_eq!(delta.bytes_used(), 0);
+        assert_eq!(delta.next_idx(), TEST_NEXT_IDX + 2);
+        assert_eq!(delta.byte_capacity(), byte_capacity);
+        assert_eq!(store.next_idx(), TEST_NEXT_IDX + 2);
+
+        // Appending the drained delta log again has no effect.
+        let records = store.records(None);
+        store.append_delta_log(&mut delta);
+        assert_eq!(store.records(None), records);
+        assert_eq!(store.next_idx(), TEST_NEXT_IDX + 2);
+    }
+}
+
+#[test]
 fn test_gap_in_delta_clears_store() {
     // Simulate a delta that overflowed its capacity and evicted older records,
     // creating a gap between the store's next_idx and the delta's first record.

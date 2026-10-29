@@ -592,7 +592,7 @@ fn metering_if() {
         p4 = add_one().repeat(30)
     );
 
-    let mut instance = new_instance(&wat, 100);
+    let mut instance = new_instance(&wat, 1000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -764,7 +764,7 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
             {memory}
         )"#
     );
-    let mut instance = new_instance(&wat, 10000);
+    let mut instance = new_instance(&wat, 1_000_000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -1116,7 +1116,7 @@ fn metering_wasm64_load_store_canister() {
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_page_overhead(page_overhead)
         .with_wat(wat)
-        .with_num_instructions(NumInstructions::new(10000))
+        .with_num_instructions(NumInstructions::new(1_000_000))
         .build();
 
     instance.run(func_ref("test")).unwrap();
@@ -1190,7 +1190,7 @@ fn metering_wasm64_load_store_canister() {
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_page_overhead(page_overhead)
         .with_wat(wat_wasm32)
-        .with_num_instructions(NumInstructions::new(10000))
+        .with_num_instructions(NumInstructions::new(1_000_000))
         .build();
 
     instance.run(func_ref("test")).unwrap();
@@ -1479,4 +1479,31 @@ fn test_64bit_heap_existing_memory_limit_too_large() {
         )"#,
         10 * GB / WASM_PAGE_SIZE_IN_BYTES as u64
     ))
+}
+
+/// Compiles `wat` and returns whether the resulting module is recorded as
+/// declaring a Wasm heap (`SerializedModule::declares_wasm_memory`).
+fn declares_wasm_memory(wat: &str) -> bool {
+    let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
+    let wasm = wat::parse_str(wat).expect("failed to parse wat");
+    let (_cache, result) = wasm_utils::compile(&embedder, &BinaryEncodedWasm::new(wasm));
+    let (_compilation_result, serialized_module) = result.expect("compilation failed");
+    serialized_module.declares_wasm_memory
+}
+
+#[test]
+fn declares_wasm_memory_ignores_non_memory_export_named_memory() {
+    // Control: a module with a real Wasm memory declares a heap.
+    assert!(declares_wasm_memory(r#"(module (memory 1))"#));
+
+    // Control: a module with neither a memory nor a `memory` export does not.
+    assert!(!declares_wasm_memory(r#"(module (func))"#));
+
+    // Bug: a function named `memory` with no memory section must not be
+    // treated as declaring a heap.
+    assert!(
+        !declares_wasm_memory(r#"(module (func (export "memory")))"#),
+        "a module exporting a function named `memory` with no memory section \
+         must not be recorded as declaring a Wasm heap"
+    );
 }

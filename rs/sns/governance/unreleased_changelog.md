@@ -21,9 +21,4 @@ prefix.
 
 ## Fixed
 
-* Proposals that execute a generic (non-native) nervous system function now
-  store the raw reply bytes from the target canister on the proposal
-  (`ProposalData.execution_reply`), instead of silently discarding them, so
-  the outcome of the call can be inspected after the fact.
-
 ## Security

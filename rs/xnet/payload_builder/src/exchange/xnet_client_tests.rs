@@ -1,9 +1,9 @@
 //! Heavyweight `XNetClient` tests against HTTP servers running in spawned
 //! threads.
 
-use super::test_fixtures::*;
+use super::proximity::METRIC_UNHEALTHY_NODES;
 use super::*;
-use crate::proximity::METRIC_UNHEALTHY_NODES;
+use crate::test_fixtures::*;
 use axum::{
     Router,
     http::{HeaderMap, StatusCode, header::CONTENT_TYPE},

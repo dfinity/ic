@@ -1,10 +1,10 @@
 // This module defines types and functions common between canister installation
 // and upgrades.
 
-use crate::execution::common::{log_dirty_pages, validate_controller};
+use crate::execution::common::{CanisterAccess, log_dirty_pages, validate_sender_on_subnet};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
-use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
+use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges},
     wasmtime_embedder::system_api::ExecutionParameters,
@@ -14,18 +14,19 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{error, fatal, info, warn};
 use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, Method as Ic00Method,
 };
 use ic_replicated_state::canister_state::system_state::{
     ReservationError, log_memory_store::LogMemoryStore,
 };
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
-use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
+use ic_replicated_state::{CanisterState, ExecutionState, NetworkTopology, num_bytes_try_from};
 use ic_sys::PAGE_SIZE;
 use ic_types::{CanisterTimer, MemoryAllocation, NumInstructions, Time, messages::CanisterCall};
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions};
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 use ic_wasm_types::WasmHash;
+use std::sync::Arc;
 
 use crate::{
     CompilationCostHandling, RoundLimits,
@@ -256,6 +257,7 @@ impl InstallCodeHelper {
         paused: PausedInstallCodeHelper,
         original: &OriginalContext,
         round: &RoundContext,
+        subnet_memory_saturation: ResourceSaturation,
     ) -> Result<Self, (CanisterManagerError, NumInstructions, LogMemoryStore)> {
         let mut helper = Self::new(clean_canister, original);
         let paused_instructions_left = paused.instructions_left;
@@ -304,6 +306,10 @@ impl InstallCodeHelper {
         // this counter (see `handle_wasm_execution`), so it is restored after
         // replaying all the steps.
         helper.executed_wasm_instructions = executed_wasm_instructions;
+        // The subnet memory usage might have changed while the execution was
+        // paused. Use the current saturation for storage reservation, both in
+        // subsequent stages (e.g., `canister_init` after `(start)`) and in `finish`.
+        helper.execution_parameters.subnet_memory_saturation = subnet_memory_saturation;
         Ok(helper)
     }
 
@@ -330,7 +336,7 @@ impl InstallCodeHelper {
             state
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases()
+                .consumed_cycles_by_use_cases_monotonic()
                 .get(&CyclesUseCase::BurnedCycles)
                 .map(|c| c.get())
                 .unwrap_or(0)
@@ -378,12 +384,21 @@ impl InstallCodeHelper {
                 num_bytes_try_from(es.wasm_memory.size).unwrap()
             });
 
+        // Use the execution mode of the newly installed module rather than
+        // `original.wasm_execution_mode`, which is only a charging default.
+        let wasm_execution_mode = self
+            .canister
+            .execution_state
+            .as_ref()
+            .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
+
         if let Some(wasm_memory_limit) = self.canister.system_state.wasm_memory_limit {
             // A Wasm memory limit of 0 means unlimited.
             if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
                 let err = HypervisorError::WasmMemoryLimitExceeded {
                     bytes: wasm_memory_usage,
                     limit: wasm_memory_limit,
+                    max_wasm_memory_size: wasm_execution_mode.max_wasm_memory_size(),
                 };
                 return finish_err(
                     clean_canister,
@@ -399,9 +414,11 @@ impl InstallCodeHelper {
         if self.allocated_bytes > self.deallocated_bytes {
             let bytes = self.allocated_bytes - self.deallocated_bytes;
 
+            // The allocated bytes only count towards the subnet memory usage
+            // from now on. Use the subnet memory saturation at the start of the slice.
             let reservation_cycles = round.cycles_account_manager.storage_reservation_cycles(
                 bytes,
-                &original.execution_parameters.subnet_memory_saturation,
+                &self.execution_parameters.subnet_memory_saturation,
                 original.subnet_cycles_config,
             );
 
@@ -535,7 +552,13 @@ impl InstallCodeHelper {
         let config = &original.config;
         let id = self.canister.canister_id();
 
-        validate_controller(&self.canister, &original.sender)?;
+        validate_sender_on_subnet(
+            &original.sender,
+            CanisterAccess::Method(original.method),
+            &self.canister,
+            &original.network_topology,
+            config.own_subnet_id,
+        )?;
 
         match original.mode {
             CanisterInstallModeV2::Install => {
@@ -674,8 +697,12 @@ impl InstallCodeHelper {
 
         let CanisterStateChanges {
             execution_state_changes,
-            system_state_modifications,
+            mut system_state_modifications,
         } = canister_state_changes;
+
+        // Canister logs are persisted even if the other changes are not.
+        system_state_modifications
+            .apply_canister_log(&mut self.canister.system_state, round.hypervisor.metrics());
 
         // Charge the ingress induction debit before applying the state changes of
         // the Wasm execution below: the latter may burn cycles via
@@ -750,9 +777,7 @@ impl InstallCodeHelper {
             }
         }
 
-        // Apply system state changes always.
-        // The result will be checked later after we've checked the wasm execution result so that we
-        // don't miss logging in case there was an error from Wasm execution.
+        // Apply the remaining system state changes.
         let result_of_applying_system_state_modifications = system_state_modifications
             .apply_changes(
                 original.time,
@@ -760,10 +785,11 @@ impl InstallCodeHelper {
                 &round.network_topology,
                 round.hypervisor.subnet_id(),
                 false, // Install cannot happen in composite_query.
-                round.hypervisor.metrics(),
                 round.log,
             );
 
+        // Check the Wasm execution result before the result of applying the
+        // system state changes so that a Wasm failure takes precedence.
         match output.wasm_result {
             Ok(None) => {}
             Ok(Some(_response)) => {
@@ -907,6 +933,13 @@ impl InstallCodeHelper {
 /// time slicing execution of `install_code`.
 #[derive(Debug)]
 pub(crate) struct OriginalContext {
+    /// The management canister method (`InstallCode` or `InstallChunkedCode`).
+    pub method: Ic00Method,
+    /// The network topology of the round in which the execution started. The
+    /// sender is validated against it in every round the execution spans, so
+    /// that replaying `InstallCodeStep::ValidateInput` in a later round cannot
+    /// reach a different verdict than the original validation did.
+    pub network_topology: Arc<NetworkTopology>,
     pub execution_parameters: ExecutionParameters,
     pub mode: CanisterInstallModeV2,
     pub config: CanisterMgrConfig,

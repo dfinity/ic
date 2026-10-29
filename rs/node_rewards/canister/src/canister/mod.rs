@@ -344,6 +344,26 @@ const REWARD_REDUCTIONS: &[RewardReduction] = &[
             "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG
         ],
     },
+    // Third round: 50% for three months for the node providers that failed to respond within the
+    // 24h window in BOTH of the incident-response smoke tests of July 27 and October 2, 2026. A
+    // late (>24h) response counts as a failure. The window starts on 2026-10-15, the first day
+    // after the round 1 window, and the three-month clock restarts there. All providers in this
+    // round are also in the second round, whose window runs until 2026-11-01; on the overlapping
+    // days they are reduced to 50%, not 25%, so this entry only changes their rewards from
+    // 2026-11-01 on, and they are reduced continuously until 2027-01-15. Providers from the second
+    // round that responded in time on October 2 are absent here, so their reduction ends with that
+    // round's window on 2026-11-01.
+    RewardReduction {
+        start: (2026, 10, 15),
+        end: (2027, 1, 15),
+        multiplier: (5, 1), // 0.5
+        providers: &[
+            "i7dto-bgkj2-xo5dx-cyrb7-zkk5y-q46eh-gz6iq-qkgyc-w4qte-scgtb-6ae", // Iancu Aurel
+            "7ws2n-wqorv-vmo4m-5e222-n42c3-hk43s-ei3kp-4hpbn-xlkzo-jgv7i-tqe", // InfoObjects
+            "sixix-2nyqd-t2k2v-vlsyz-dssko-ls4hl-hyij4-y7mdp-ja6cj-nsmpf-yae", // Starbase
+            "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG
+        ],
+    },
 ];
 
 /// One reduction window and the multiplier that applies within it.
@@ -854,7 +874,7 @@ mod reward_reduction_tests {
     // Tests against the real, compiled-in `REWARD_REDUCTIONS` table.
     // ------------------------------------------------------------------------------------------
 
-    /// In both rounds: reduced continuously from 2026-07-15 to 2026-11-01.
+    /// In all three rounds: reduced continuously from 2026-07-15 to 2027-01-15.
     const CONTINUING_PROVIDER: &str =
         "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae"; // Zondax AG
     /// First round only: recovered, so rewarded in full again from 2026-10-15.
@@ -863,6 +883,9 @@ mod reward_reduction_tests {
     /// Second round only: newly added, reduced from 2026-08-01 to 2026-11-01.
     const NEWLY_ADDED_PROVIDER: &str =
         "kos24-5xact-6aror-uofg2-tnvt6-dq3bk-c2c5z-jtptt-jbqvc-lmegy-qae"; // Anonstake
+    /// Second and third rounds: reduced continuously from 2026-08-01 to 2027-01-15.
+    const SECOND_AND_THIRD_ROUND_PROVIDER: &str =
+        "sixix-2nyqd-t2k2v-vlsyz-dssko-ls4hl-hyij4-y7mdp-ja6cj-nsmpf-yae"; // Starbase
 
     fn real_multiplier_on(provider: &str, date: NaiveDate) -> Option<Decimal> {
         let by_provider = parse_reward_reductions(REWARD_REDUCTIONS);
@@ -881,15 +904,18 @@ mod reward_reduction_tests {
     }
 
     #[test]
-    fn continuing_provider_is_reduced_across_both_windows() {
+    fn continuing_provider_is_reduced_across_all_windows() {
         let half = Some(Decimal::new(5, 1));
         for day in [
             d(2026, 7, 15),
             d(2026, 7, 31),
             d(2026, 8, 1),
+            d(2026, 10, 3),
             d(2026, 10, 14),
             d(2026, 10, 15),
             d(2026, 10, 31),
+            d(2026, 11, 1),
+            d(2027, 1, 14),
         ] {
             assert_eq!(
                 real_multiplier_on(CONTINUING_PROVIDER, day),
@@ -902,7 +928,32 @@ mod reward_reduction_tests {
             None
         );
         assert_eq!(
-            real_multiplier_on(CONTINUING_PROVIDER, d(2026, 11, 1)),
+            real_multiplier_on(CONTINUING_PROVIDER, d(2027, 1, 15)),
+            None
+        );
+    }
+
+    #[test]
+    fn second_and_third_round_provider_is_reduced_from_august_to_january() {
+        let half = Some(Decimal::new(5, 1));
+        assert_eq!(
+            real_multiplier_on(SECOND_AND_THIRD_ROUND_PROVIDER, d(2026, 7, 31)),
+            None
+        );
+        for day in [
+            d(2026, 8, 1),
+            d(2026, 10, 31),
+            d(2026, 11, 1),
+            d(2027, 1, 14),
+        ] {
+            assert_eq!(
+                real_multiplier_on(SECOND_AND_THIRD_ROUND_PROVIDER, day),
+                half,
+                "expected a 0.5 reduction on {day}"
+            );
+        }
+        assert_eq!(
+            real_multiplier_on(SECOND_AND_THIRD_ROUND_PROVIDER, d(2027, 1, 15)),
             None
         );
     }
@@ -952,12 +1003,16 @@ mod reward_reduction_tests {
     fn reward_reduction_round_membership_is_as_intended() {
         let by_provider = parse_reward_reductions(REWARD_REDUCTIONS);
 
-        // 19 providers in the first round, 18 in the second, 13 in both.
-        assert_eq!(REWARD_REDUCTIONS.len(), 2);
+        // 19 providers in the first round, 18 in the second, 4 in the third. 13 are in the first
+        // and second, all 4 of the third are in the second, and 3 of those 4 are in all three.
+        assert_eq!(REWARD_REDUCTIONS.len(), 3);
         assert_eq!(REWARD_REDUCTIONS[0].providers.len(), 19);
         assert_eq!(REWARD_REDUCTIONS[1].providers.len(), 18);
-        let in_both = by_provider.values().filter(|w| w.len() == 2).count();
-        assert_eq!(in_both, 13);
+        assert_eq!(REWARD_REDUCTIONS[2].providers.len(), 4);
+        let in_two = by_provider.values().filter(|w| w.len() == 2).count();
+        let in_three = by_provider.values().filter(|w| w.len() == 3).count();
+        assert_eq!(in_three, 3);
+        assert_eq!(in_two, (13 - 3) + (4 - 3));
         assert_eq!(by_provider.len(), 19 + 18 - 13);
 
         // No round lists a provider twice.
@@ -1044,11 +1099,19 @@ mod reward_reduction_tests {
         "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG (no reply / no reply)
     ];
 
+    /// Third round: missed the 24h window in BOTH the July 27 and October 2, 2026 drills.
+    const THIRD_ROUND_COHORT: [&str; 4] = [
+        "i7dto-bgkj2-xo5dx-cyrb7-zkk5y-q46eh-gz6iq-qkgyc-w4qte-scgtb-6ae", // Iancu Aurel
+        "7ws2n-wqorv-vmo4m-5e222-n42c3-hk43s-ei3kp-4hpbn-xlkzo-jgv7i-tqe", // InfoObjects
+        "sixix-2nyqd-t2k2v-vlsyz-dssko-ls4hl-hyij4-y7mdp-ja6cj-nsmpf-yae", // Starbase
+        "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG
+    ];
+
     #[test]
     fn reward_reduction_cohorts_are_pinned() {
         assert_eq!(
             REWARD_REDUCTIONS.len(),
-            2,
+            3,
             "a new round needs a pinned cohort here"
         );
         for (round, expected, label) in [
@@ -1061,6 +1124,11 @@ mod reward_reduction_tests {
                 &REWARD_REDUCTIONS[1],
                 SECOND_ROUND_COHORT.as_slice(),
                 "second",
+            ),
+            (
+                &REWARD_REDUCTIONS[2],
+                THIRD_ROUND_COHORT.as_slice(),
+                "third",
             ),
         ] {
             let actual: BTreeSet<&str> = round.providers.iter().copied().collect();
