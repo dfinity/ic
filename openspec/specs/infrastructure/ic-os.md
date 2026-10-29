@@ -171,6 +171,19 @@ IC-OS manages the GRUB bootloader configuration.
 - **THEN** the GRUB bootloader is set up with appropriate kernel parameters
 - **AND** boot configuration supports A/B partition upgrades
 
+### Requirement: GuestOS First-Boot Storage and Service Ordering
+On a node's first boot, GuestOS creates its storage volumes and prepares their permissions before the services that use them start.
+
+#### Scenario: Newly created logical volumes are rescanned
+- **WHEN** `setup-lvs.sh` creates one of the `shared-crypto`, `shared-data`, `shared-backup` or `shared-swap` logical volumes in the `store` volume group (first boot)
+- **THEN** right after `lvcreate` it runs `udevadm trigger --settle --action=change` on the new volume and waits for udev to process it
+- **AND** so the volume's systemd device unit always becomes active, rather than staying "not ready" for the rest of the boot (and dropping the node into emergency mode) when udev was not yet watching the volume when `lvcreate` closed it
+
+#### Scenario: Dogecoin adapters start after setup-permissions
+- **WHEN** GuestOS starts `ic-doge-mainnet-adapter.service` or `ic-doge-testnet-adapter.service`
+- **THEN** it orders them `After=setup-permissions.service`, as `generate-ic-config.service` already is, so an adapter does not start (and panic with `EACCES`) while its cache directory under `/var/lib/ic/data/ic_adapter` is still being created and chowned to `ic-replica`
+- **AND** the adapters do not `Want` `setup-permissions.service`, which `generate-ic-config.service` already pulls in, so a restart of an adapter never re-runs a failed `setup-permissions.service`
+
 ### Requirement: Development and Testing Tools
 IC-OS provides tools for development and testing deployments.
 
