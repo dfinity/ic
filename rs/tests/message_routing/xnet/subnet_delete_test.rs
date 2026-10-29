@@ -4,8 +4,8 @@ Title:: Subnet deletion with in-flight XNet messages.
 Goal:: Verify that deleting a subnet correctly handles in-flight XNet messages:
 requests towards the deleted subnet are rejected, responses towards the deleted
 subnet are silently dropped (a response can never be rejected), and messages
-from the deleted subnet that are still in its stream are not pulled after subnet
-deletion. The scenario is run once per type of the deleted subnet (as two
+from the deleted subnet that are still in its stream are not inducted after
+subnet deletion. The scenario is run once per type of the deleted subnet (as two
 separate tests sharing the same IC): it must behave the same whether the deleted
 subnet is a CloudEngine subnet or a regular Application subnet (subnet deletion
 is handled by the routing/topology layer, which is subnet-type agnostic).
@@ -39,9 +39,12 @@ Runbook::
    TARGET_STREAM_SIZE_BYTES); C is halted so the stream never drains.
 8. Set US3's global data, releasing its reply.  As the stream is now full, this
    second response towards C cannot be inducted and stays in US3's output queue.
-9. Delete C, unhalt T, verify T's registry version is the version at which C
-   was deleted, check UT's global data is still empty (T must not pull messages
-   from the deleted C's stream), and wait for all 10 calls from US to complete.
+9. Delete C. Wait until T's replicas have held the registry version at which C
+   was deleted long enough for T's block maker to use it. Unhalt T, verify T's
+   registry version is the version at which C was deleted, check UT's global
+   data is still empty (T may have pulled C's stream while halted, but must not
+   induct it: C's slices are invalid at that registry version), and wait for all
+   10 calls from US to complete.
 10. Assert at least one call from US was rejected with DestinationInvalid
    (call did not reach the stream: no route after deletion) and at least one
    with CanisterReject (call reached the stream, so its callback was still
@@ -71,7 +74,9 @@ use anyhow::{Result, bail};
 use candid::{Decode, Encode};
 use futures::future::join_all;
 use ic_config::message_routing::TARGET_STREAM_SIZE_BYTES;
+use ic_config::nns_registry_replicator::Config as NnsRegistryReplicatorConfig;
 use ic_consensus_system_test_utils::rw_message::cert_state_makes_no_progress_with_retries;
+use ic_interfaces_registry::POLLING_PERIOD;
 use ic_management_canister_types_private::{
     IC_00, Method, Payload, SubnetInfoArgs, SubnetInfoResponse,
 };
@@ -533,31 +538,50 @@ async fn run_scenario(
         c_delete_registry_version,
     );
 
-    // Step 9b: Unhalt subnet T.
+    // Step 9b: Wait until T's block maker would use a registry version without C:
+    // T may have pooled C's stream while halted, and validation against a registry
+    // version without C keeps the stream out of blocks. T resumes as soon as its
+    // replicas see it unhalted, but its block maker only uses registry versions
+    // held locally for `stable_registry_version_age`. So sleep for that long AFTER
+    // all of T's replicas observed C's deletion.
     slog::info!(
         logger,
-        "Step 9b: Unhalting subnet T ({})",
+        "Step 9b: Waiting for subnet T's replicas to observe registry version {}",
+        c_delete_registry_version,
+    );
+    wait_for_replicas_registry_version(t_subnet, c_delete_registry_version, logger).await;
+    let stable_registry_version_age = POLLING_PERIOD
+        + Duration::from_millis(NnsRegistryReplicatorConfig::default().poll_delay_duration_ms);
+    tokio::time::sleep(stable_registry_version_age).await;
+    slog::info!(
+        logger,
+        "Step 9b done: subnet T's replicas have held registry version {} for {:?}",
+        c_delete_registry_version,
+        stable_registry_version_age,
+    );
+
+    // Step 9c: Unhalt subnet T and check that it executed at the registry version at
+    // which C was deleted (or later), as set up by step 9b.
+    slog::info!(
+        logger,
+        "Step 9c: Unhalting subnet T ({})",
         t_subnet.subnet_id
     );
     set_subnet_halted(governance, t_subnet.subnet_id, false).await;
-    slog::info!(logger, "Step 9b done: subnet T unhalted");
-
-    // Step 9c: Wait for T to observe the registry version at which C was deleted.
-    slog::info!(
-        logger,
-        "Step 9c: Waiting for subnet T to observe registry version {}",
-        c_delete_registry_version,
+    let t_registry_version = read_subnet_registry_version(&ut, t_subnet.subnet_id).await;
+    assert!(
+        t_registry_version >= c_delete_registry_version,
+        "subnet T executes at registry version {t_registry_version}, expected at least \
+         {c_delete_registry_version}"
     );
-    wait_for_subnet_registry_version(&ut, t_subnet.subnet_id, c_delete_registry_version, logger)
-        .await;
     slog::info!(
         logger,
-        "Step 9c done: subnet T has observed registry version {}",
-        c_delete_registry_version,
+        "Step 9c done: subnet T unhalted, executes at registry version {}",
+        t_registry_version,
     );
 
     // Step 9d: Execute multiple update rounds on T, checking after each that UT's
-    // global data is still empty (T must not pull messages from the deleted C's stream).
+    // global data is still empty (T must not induct messages from the deleted C's stream).
     slog::info!(
         logger,
         "Step 9d: Checking that UT global data remains empty over multiple rounds"
@@ -851,41 +875,35 @@ async fn set_subnet_halted(
         .expect("update_subnet should succeed");
 }
 
-async fn wait_for_subnet_registry_version(
-    ut: &UniversalCanister<'_>,
-    subnet_id: SubnetId,
+/// Waits until the registry clients of all replicas of `subnet` have fetched
+/// registry version `target_version` (or later).
+async fn wait_for_replicas_registry_version(
+    subnet: &SubnetSnapshot,
     target_version: u64,
     logger: &slog::Logger,
 ) {
+    const METRIC: &str = "ic_registry_client_registry_version";
+    let subnet_id = subnet.subnet_id;
+    let node_count = subnet.nodes().count();
     retry_with_msg_async!(
-        format!("waiting for subnet {subnet_id} to reach registry version {target_version}"),
+        format!(
+            "waiting for the replicas of subnet {subnet_id} to observe registry version \
+             {target_version}"
+        ),
         logger,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || async {
-            let reply = ut
-                .update(
-                    wasm()
-                        .call_simple(
-                            IC_00,
-                            Method::SubnetInfo,
-                            call_args().other_side(
-                                SubnetInfoArgs {
-                                    subnet_id: subnet_id.get(),
-                                }
-                                .encode(),
-                            ),
-                        )
-                        .build(),
-                )
+            let versions = MetricsFetcher::new(subnet.nodes(), vec![METRIC.to_string()])
+                .fetch::<u64>()
                 .await
-                .map_err(|e| anyhow::anyhow!("subnet_info call failed: {e}"))?;
-            let response = Decode!(&reply, SubnetInfoResponse)
-                .map_err(|e| anyhow::anyhow!("failed to decode SubnetInfoResponse: {e}"))?;
-            if response.registry_version < target_version {
+                .map_err(|e| anyhow::anyhow!("failed to fetch {METRIC}: {e}"))?
+                .remove(METRIC)
+                .unwrap_or_default();
+            if versions.len() < node_count || versions.iter().any(|&v| v < target_version) {
                 bail!(
-                    "subnet {subnet_id} at registry version {} (target: {target_version})",
-                    response.registry_version
+                    "replicas of subnet {subnet_id} at registry versions {versions:?} \
+                     (target: {target_version} on all {node_count} replicas)"
                 );
             }
             Ok(())
@@ -893,6 +911,33 @@ async fn wait_for_subnet_registry_version(
     )
     .await
     .unwrap_or_else(|e| {
-        panic!("subnet {subnet_id} did not reach registry version {target_version}: {e}")
+        panic!(
+            "replicas of subnet {subnet_id} did not observe registry version {target_version}: {e}"
+        )
     });
+}
+
+/// Returns the registry version that subnet `subnet_id` executes at, as reported
+/// by `subnet_info` called via `ut`.
+async fn read_subnet_registry_version(ut: &UniversalCanister<'_>, subnet_id: SubnetId) -> u64 {
+    let reply = ut
+        .update(
+            wasm()
+                .call_simple(
+                    IC_00,
+                    Method::SubnetInfo,
+                    call_args().other_side(
+                        SubnetInfoArgs {
+                            subnet_id: subnet_id.get(),
+                        }
+                        .encode(),
+                    ),
+                )
+                .build(),
+        )
+        .await
+        .expect("subnet_info call should succeed");
+    Decode!(&reply, SubnetInfoResponse)
+        .expect("failed to decode SubnetInfoResponse")
+        .registry_version
 }
