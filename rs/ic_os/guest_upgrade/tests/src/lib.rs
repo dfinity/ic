@@ -306,6 +306,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
             Arc::new(move || Ok(Box::new(server_sev_firmware.clone()))),
             SevRootCertificateVerification::TestOnlySkipVerification,
             self.trusted_execution_environment_config.clone(),
+            ReplicaVersion::try_from(REPLICA_VERSION).unwrap(),
             self.registry_client.clone(),
             self.store_device.path().to_path_buf(),
             self.server_store_luks_header.path().to_path_buf(),

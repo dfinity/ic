@@ -316,6 +316,9 @@ impl Orchestrator {
             new_disk_encryption_key_exchange_server_agent_for_orchestrator(
                 tokio::runtime::Handle::current(),
                 Arc::clone(&registry_client),
+                // The upgrade VM verifies our launch measurement, which belongs to the GuestOS
+                // version we booted from, not to a fast-upgraded replica version.
+                guestos_version.clone(),
             );
 
         let subnet_assignment: Arc<RwLock<SubnetAssignment>> = Default::default();
