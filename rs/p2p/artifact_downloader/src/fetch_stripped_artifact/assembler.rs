@@ -116,7 +116,7 @@ pub struct FetchStrippedConsensusArtifact {
 }
 
 impl FetchStrippedConsensusArtifact {
-    pub fn new<ConsensusPool: ValidatedPoolReader<ConsensusMessage>>(
+    pub fn new<ConsensusPool: ValidatedPoolReader<ConsensusMessage> + 'static>(
         log: ReplicaLogger,
         rt: tokio::runtime::Handle,
         consensus_pool: Arc<RwLock<ConsensusPool>>,
