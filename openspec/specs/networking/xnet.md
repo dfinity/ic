@@ -58,7 +58,14 @@ The XNet endpoint serves certified stream slices over HTTPS to other subnets for
 - **AND** an advert that brings nothing new (`NothingNew`) is answered with our own certified header, so the sender can observe that we have consumed its stream
 - **AND** the advert's header is decoded and classified without verification first; its threshold signature is verified only before recording the header or acting on it, so a `NothingNew` advert that does not advance the recorded peer header is answered without verification
 - **AND** every verified header is recorded as the peer's header; an `Actionable` advert, or a `Duplicate` of a previously recorded header, additionally requests a pull from that subnet on `PullTask`'s schedule
-- **AND** for now the pull task still sweeps every peer each round; the schedule only feeds `xnet_builder_shadow_pulls_total`, which records for each completed pull whether advert-driven pulling would have scheduled it and whether it pooled anything
+
+#### Scenario: Stream slices are pulled on adverts, not every round
+- **WHEN** `PullTask` receives a pull request for a subnet (from an `Actionable` or `Duplicate` advert) or the refill trigger sent after every slice pool garbage collection
+- **THEN** a pull request schedules that subnet, and the refill trigger schedules every peer whose recorded header still offers something to pull; our own subnet is never scheduled, since the loopback stream is inducted separately
+- **AND** a scheduled subnet's pull starts immediately, with no global bound on concurrent pulls, if it still has something to pull (otherwise it is unscheduled); there is at most one pull in flight per subnet, and scheduling a subnet whose pull is in flight is a no-op
+- **AND** when a pull ends, the subnet is pulled again only if the pull pooled something and there is still more to pull (e.g. after an advert that arrived meanwhile); otherwise it waits for the next advert or refill trigger
+- **AND** pulled slices are validated against the latest registry version, as adverts are, rather than the registry version of the block being built
+- **AND** peers are no longer queried every round, and the `xnet_builder_shadow_pulls_total` shadow metric is gone; slices pulled from nodes lagging behind the recorded header are counted in `xnet_pool_lagging_put_and_append_count`
 
 #### Scenario: Send an advert
 - **WHEN** a new height is certified
@@ -90,7 +97,7 @@ The XNet payload builder constructs and validates cross-subnet message payloads 
 
 #### Scenario: Payload construction from remote subnets
 - **WHEN** the payload builder is asked to construct a payload
-- **THEN** it queries remote subnets for certified stream slices
+- **THEN** it takes certified stream slices from the `CertifiedSlicePool`, which the pull task fills from remote subnets as they advertise new stream content
 - **AND** slices are validated against the expected stream indices
 - **AND** the total payload size respects the configured byte limit
 
