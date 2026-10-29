@@ -75,7 +75,7 @@ pub trait MutablePool<T: IdentifiableArtifact> {
 /// ValidatedPoolReader trait is the generic interface used by P2P to interact
 /// with the validated portion of an artifact pool without resulting in any transmits.
 /// Every pool needs to implement this trait.
-pub trait ValidatedPoolReader<T: IdentifiableArtifact> {
+pub trait ValidatedPoolReader<T: IdentifiableArtifact>: Send + Sync + 'static {
     /// Get a validated artifact by its identifier
     ///
     /// #Returns:
