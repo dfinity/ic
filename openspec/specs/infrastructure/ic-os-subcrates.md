@@ -311,16 +311,10 @@ The `config_tool` crate provides CLI commands for creating, transforming, and ma
 - **THEN** it reads the `GuestOSConfig`
 - **AND** generates the `ic.json5` configuration file
 
-#### Scenario: Update HostOS config with node operator private key
-- **WHEN** the `update-config` command is run
-- **THEN** if the node operator private key file exists and is not already in config
-- **THEN** the key is read and injected into `icos_settings.node_operator_private_key`
-- **AND** `config_version` is updated to the current `CONFIG_VERSION`
-
-#### Scenario: Skip update when key already present
-- **WHEN** `update-config` is run but the config already contains a node operator private key
-- **THEN** the update is skipped
-- **AND** no file is modified
+#### Scenario: No in-place HostOS config migration command
+- **WHEN** a HostOS boots with an existing `config.json`
+- **THEN** `config_tool` performs no in-place migration of it: the `update-config` command (and the HostOS `update-config.service` that ran it at boot to inject the node operator private key from `/boot/config/node_operator_private_key.pem` and bump `config_version`) has been removed, since deployed configs are already at the current version
+- **AND** a future config migration would need a new mechanism
 
 #### Scenario: Dump OS configuration
 - **WHEN** the `dump-os-config` command is run with `--os-type HostOS`
