@@ -35,13 +35,13 @@ use super::metrics::FetchArtifactMetrics;
 const MIN_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
 
-type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
-
 pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {
     Artifact::NAME.to_lowercase()
 }
 
-fn build_axum_router<Artifact: PbArtifact>(pool: ValidatedPoolReaderRef<Artifact>) -> Router {
+fn build_axum_router<Artifact: PbArtifact>(
+    pool: Arc<RwLock<dyn ValidatedPoolReader<Artifact>>>,
+) -> Router {
     Router::new()
         .route(
             &format!("/{}/rpc", uri_prefix::<Artifact>()),
@@ -53,7 +53,7 @@ fn build_axum_router<Artifact: PbArtifact>(pool: ValidatedPoolReaderRef<Artifact
 }
 
 async fn rpc_handler<Artifact: PbArtifact>(
-    State(pool): State<ValidatedPoolReaderRef<Artifact>>,
+    State(pool): State<Arc<RwLock<dyn ValidatedPoolReader<Artifact>>>>,
     payload: Bytes,
 ) -> Result<Bytes, StatusCode> {
     let jh = tokio::task::spawn_blocking(move || {
@@ -123,7 +123,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         metrics_registry: MetricsRegistry,
     ) -> (impl Fn(Arc<dyn Transport>) -> Self, Router)
     where
-        Pool: ValidatedPoolReader<Artifact> + Send + Sync + 'static,
+        Pool: ValidatedPoolReader<Artifact> + 'static,
     {
         let pool_clone = pool.clone();
         (
