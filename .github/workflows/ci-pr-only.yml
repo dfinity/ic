@@ -60,7 +60,7 @@ jobs:
             export DID_CHECK_REV="$(git merge-base HEAD 'origin/${{ inputs.base-ref }}')"
             echo "DID_CHECK_REV=$DID_CHECK_REV"
             bazel run //pre-commit:did-check
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
 
 # Runs linters and formatters on code to automatically fix issues
   autofix:
