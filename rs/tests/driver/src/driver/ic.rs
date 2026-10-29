@@ -293,12 +293,15 @@ impl InternetComputer {
 
     /// Give this particular internet computer instance a name. The name must be
     /// unique across internet computer instances created within a system
-    /// environment.
+    /// environment and must not contain `/`: it names the instance's ic-prep
+    /// directory, from which the driver discovers the instance's nodes.
     ///
     /// By default, an IC instance has no name. Thus, not calling this method is
     /// equivalent to `.with_name("")`.
     pub fn with_name<S: ToString>(mut self, name: S) -> Self {
-        self.name = name.to_string();
+        let name = name.to_string();
+        assert!(!name.contains('/'), "IC name {name:?} must not contain '/'");
+        self.name = name;
         self
     }
 
