@@ -82,7 +82,11 @@ pub trait ValidatedPoolReader<T: IdentifiableArtifact> {
     /// - 'Some`: Artifact from the validated pool.
     /// - `None`: Artifact does not exist in the validated pool.
     fn get(&self, id: &T::Id) -> Option<T>;
+}
 
+/// InitialBroadcastSource trait is the interface used by the artifact manager to
+/// learn which artifacts of a pool to broadcast when it starts.
+pub trait InitialBroadcastSource<T: IdentifiableArtifact> {
     /// Returns all artifacts that need to be broadcasted.
     /// This is used only whenever a node is restarted.
     fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = T> + '_>;

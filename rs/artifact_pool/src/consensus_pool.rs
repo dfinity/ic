@@ -16,7 +16,10 @@ use ic_interfaces::{
         ConsensusTime, HeightIndexedPool, HeightRange, Mutations, PoolSection,
         PurgeableArtifactType, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
-    p2p::consensus::{ArtifactTransmit, ArtifactTransmits, MutablePool, ValidatedPoolReader},
+    p2p::consensus::{
+        ArtifactTransmit, ArtifactTransmits, InitialBroadcastSource, MutablePool,
+        ValidatedPoolReader,
+    },
     time_source::TimeSource,
 };
 use ic_logger::{ReplicaLogger, warn};
@@ -849,7 +852,9 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
     fn get(&self, id: &ConsensusMessageId) -> Option<ConsensusMessage> {
         self.validated.get(id).inspect(ConsensusMessage::load)
     }
+}
 
+impl InitialBroadcastSource<ConsensusMessage> for ConsensusPoolImpl {
     fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
         let node_id = self.node_id;
         let max_catch_up_height = self
