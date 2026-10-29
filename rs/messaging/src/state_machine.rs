@@ -165,7 +165,7 @@ impl StateMachine for StateMachineImpl {
         };
 
         state.metadata.upgrade_state.apply(
-            &batch_messages.upgrade.actions,
+            &batch_messages.upgrade_actions,
             batch.batch_number,
             &registry_settings.node_ids,
         );

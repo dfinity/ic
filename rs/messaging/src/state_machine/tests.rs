@@ -22,7 +22,7 @@ use ic_test_utilities_state::new_canister_state;
 use ic_test_utilities_types::batch::BatchBuilder;
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2, node_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, SignedIngressBuilder};
-use ic_types::batch::{BatchMessages, BlockmakerMetrics, ChainKeyData, UpgradePayload};
+use ic_types::batch::{BatchMessages, BlockmakerMetrics, ChainKeyData};
 use ic_types::consensus::UpgradePermitRequest;
 use ic_types::consensus::upgrade::UpgradePermitAction;
 use ic_types::messages::{
@@ -260,12 +260,10 @@ fn test_upgrade_actions_applied_to_state() {
     let requestor = node_test_id(1);
     let provided_batch = BatchBuilder::new()
         .messages(BatchMessages {
-            upgrade: UpgradePayload {
-                actions: vec![UpgradePermitAction::RequestPermit(UpgradePermitRequest {
-                    requestor,
-                    request_height: Height::from(1),
-                })],
-            },
+            upgrade_actions: vec![UpgradePermitAction::RequestPermit(UpgradePermitRequest {
+                requestor,
+                request_height: Height::from(1),
+            })],
             ..BatchMessages::default()
         })
         .batch_number(Height::from(1))

@@ -30,7 +30,10 @@ pub use self::{
 };
 use crate::{
     Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
-    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
+    consensus::{
+        idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
+        upgrade::UpgradePermitAction,
+    },
     crypto::{
         canister_threshold_sig::{MasterPublicKey, idkg::IDkgTranscript},
         threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId},
@@ -223,7 +226,7 @@ pub struct BatchMessages {
     pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
     pub bitcoin_adapter_responses: Vec<BitcoinAdapterResponse>,
     pub query_stats: Option<QueryStatsPayload>,
-    pub upgrade: UpgradePayload,
+    pub upgrade_actions: Vec<UpgradePermitAction>,
 }
 
 /// Error type that can occur during an `BatchPayload::into_messages` call
@@ -249,8 +252,9 @@ impl BatchPayload {
             bitcoin_adapter_responses: self.self_validating.0,
             query_stats: QueryStatsPayload::deserialize(&self.query_stats)
                 .map_err(IntoMessagesError::QueryStatsPayloadError)?,
-            upgrade: UpgradePayload::deserialize(&self.upgrade)
-                .map_err(IntoMessagesError::UpgradePayloadError)?,
+            upgrade_actions: UpgradePayload::deserialize(&self.upgrade)
+                .map_err(IntoMessagesError::UpgradePayloadError)
+                .map(|v| v.actions)?,
         })
     }
 

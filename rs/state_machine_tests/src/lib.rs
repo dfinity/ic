@@ -147,7 +147,7 @@ use ic_types::{
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpSpent,
         ChainKeyData, ConsensusResponse, QueryStatsPayload, SelfValidatingPayload, TotalQueryStats,
-        UpgradePayload, ValidationContext, XNetPayload,
+        ValidationContext, XNetPayload,
     },
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpRequestId,
@@ -157,6 +157,7 @@ use ic_types::{
     consensus::{
         block_maker::SubnetRecords,
         certification::{Certification, CertificationContent, SignedCertificationContent},
+        upgrade::UpgradePermitAction,
     },
     crypto::{
         AlgorithmId, CombinedThresholdSig, CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
@@ -3224,7 +3225,7 @@ impl StateMachine {
                     .map(|p| p.get().to_vec())
                     .unwrap_or_default(),
                 query_stats: payload.query_stats,
-                upgrade: payload.upgrade,
+                upgrade_actions: payload.upgrade_actions,
             },
             chain_key_data: ChainKeyData {
                 master_public_keys: self.chain_key_subnet_public_keys.clone(),
@@ -5569,7 +5570,7 @@ pub struct PayloadBuilder {
     query_stats: Option<QueryStatsPayload>,
     self_validating: Option<SelfValidatingPayload>,
     blockmaker_metrics: Option<BlockmakerMetrics>,
-    upgrade: UpgradePayload,
+    upgrade_actions: Vec<UpgradePermitAction>,
 }
 
 impl Default for PayloadBuilder {
@@ -5584,7 +5585,7 @@ impl Default for PayloadBuilder {
             query_stats: Default::default(),
             self_validating: Default::default(),
             blockmaker_metrics: Default::default(),
-            upgrade: Default::default(),
+            upgrade_actions: Default::default(),
         }
         .with_max_expiry_time_from_now(GENESIS.into())
     }
@@ -5602,8 +5603,11 @@ impl PayloadBuilder {
         }
     }
 
-    pub fn with_upgrade(self, upgrade: UpgradePayload) -> Self {
-        Self { upgrade, ..self }
+    pub fn with_upgrade(self, upgrade_actions: Vec<UpgradePermitAction>) -> Self {
+        Self {
+            upgrade_actions,
+            ..self
+        }
     }
 
     pub fn with_max_expiry_time_from_now(self, now: SystemTime) -> Self {
