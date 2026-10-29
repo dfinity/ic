@@ -200,6 +200,18 @@ The system collects per-canister load metrics for capacity planning and subnet s
 - **THEN** per-canister load data is written in CSV format
 - **AND** this data is consumed by subnet splitting estimation tools to plan optimal canister distribution
 
+#### Scenario: Canister-to-canister connection metrics
+- **WHEN** the stream builder routes a request from one canister to another canister on the same subnet (the loopback stream)
+- **THEN** the sending canister's `connection_metrics` entry for the receiver has its count incremented and its last-access timestamp set to the batch time
+- **AND** each canister keeps at most 100 receiver entries; when a new receiver would exceed that, the least recently accessed entry is evicted, ties broken by the lower count and then by receiver ID, so eviction is deterministic
+- **AND** the entries are part of the replicated state and are persisted in checkpoints (`CanisterToCanisterMetrics` in `canister_state_bits`)
+- **AND** cross-subnet requests and responses are not counted
+
+#### Scenario: Split finder uses connection metrics
+- **WHEN** `split_finder` looks for a subnet split
+- **THEN** it takes canister-to-canister communication from two `state_tool` connection exports, the current one and an earlier baseline (`--communication-baseline-data-path`), and uses the per-pair difference; a negative difference, meaning the entry was evicted and recreated since the baseline, is replaced by the current count
+- **AND** it ignores self-calls, pairs with no new messages since the baseline, and canisters missing from the load data (e.g. deleted or migrated away), and it minimizes the recent communication between canisters that end up on different subnets
+
 #### Scenario: Load metrics aggregation for subnet splitting
 - **WHEN** canister load metrics are aggregated for a subnet split decision
 - **THEN** ingress, XNet, intranet, HTTP outcalls, and instruction counts are summed per canister range
