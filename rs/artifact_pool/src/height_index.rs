@@ -507,18 +507,25 @@ mod tests {
         instants.insert(&FakeArtifact::new(9, 2), now);
         instants.insert(&FakeArtifact::new(10, 1), now);
         instants.insert(&FakeArtifact::new(11, 1), now);
+        instants.insert(&FakeArtifact::new(11, 2), now);
+        instants.insert(&FakeArtifact::new(12, 1), now);
 
-        instants.clear(Height::from(10));
+        instants.clear(Height::from(11));
         assert_eq!(instants.get(&FakeArtifact::new(9, 1)), None);
         assert_eq!(instants.get(&FakeArtifact::new(9, 2)), None);
-        assert_eq!(instants.get(&FakeArtifact::new(10, 1)), Some(&now));
+        assert_eq!(instants.get(&FakeArtifact::new(10, 1)), None);
         assert_eq!(instants.get(&FakeArtifact::new(11, 1)), Some(&now));
+        assert_eq!(instants.get(&FakeArtifact::new(11, 2)), Some(&now));
+        assert_eq!(instants.get(&FakeArtifact::new(12, 1)), Some(&now));
 
         // Clearing is idempotent and tolerates heights above everything.
-        instants.clear(Height::from(10));
-        assert_eq!(instants.get(&FakeArtifact::new(10, 1)), Some(&now));
-        instants.clear(Height::from(100));
+        instants.clear(Height::from(11));
         assert_eq!(instants.get(&FakeArtifact::new(10, 1)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(11, 1)), Some(&now));
+        assert_eq!(instants.get(&FakeArtifact::new(11, 2)), Some(&now));
+        instants.clear(Height::from(100));
         assert_eq!(instants.get(&FakeArtifact::new(11, 1)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(11, 2)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(12, 1)), None);
     }
 }
