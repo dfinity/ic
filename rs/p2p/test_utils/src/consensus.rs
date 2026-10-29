@@ -7,7 +7,8 @@ use std::{
 
 use ic_interfaces::p2p::consensus::{
     ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, BouncerFactory, BouncerValue,
-    MutablePool, PoolMutationsProducer, UnvalidatedArtifact, ValidatedPoolReader,
+    InitialBroadcastSource, MutablePool, PoolMutationsProducer, UnvalidatedArtifact,
+    ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
 use ic_types::NodeId;
@@ -273,6 +274,9 @@ impl ValidatedPoolReader<U64Artifact> for TestConsensus<U64Artifact> {
     fn get(&self, id: &<U64Artifact as IdentifiableArtifact>::Id) -> Option<U64Artifact> {
         self.my_pool().get(id).map(|id| self.id_to_msg(*id).into())
     }
+}
+
+impl InitialBroadcastSource<U64Artifact> for TestConsensus<U64Artifact> {
     fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = U64Artifact> + '_> {
         Box::new(
             self.my_pool()
