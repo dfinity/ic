@@ -173,7 +173,8 @@ The tool can display overlay file contents.
 The tool can extract canister metrics from checkpoints.
 
 #### Scenario: Extracting canister metrics
-- **WHEN** `state_tool canister_metrics --checkpoint <path> --output <file>` is executed
+- **WHEN** `state_tool canister_metrics --checkpoint <path> --canister-load-output <file> --canister-connections-output <file>` is executed
 - **THEN** the checkpoint is loaded
-- **AND** per-canister metrics (cycles, memory usage, etc.) are extracted
-- **AND** results are written to the output file in CSV format
+- **AND** per-canister load metrics are written in CSV format to the `--canister-load-output` file
+- **AND** canister-to-canister connection counts are written to the `--canister-connections-output` file, with header `sender_canister_id,receiver_canister_id,count` and one row per entry kept by each sending canister
+- **AND** the command fails if both output paths are the same, since the second file would otherwise overwrite the first
