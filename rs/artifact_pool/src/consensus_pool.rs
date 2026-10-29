@@ -25,7 +25,6 @@ use ic_interfaces::{
 use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
-use ic_types::crypto::CryptoHashOf;
 use ic_types::{Height, SubnetId, Time, artifact::ConsensusMessageId, consensus::*};
 use ic_types::{NodeId, ReplicaVersion};
 use prometheus::{Histogram, IntCounter, IntGauge, histogram_opts, labels, opts};
@@ -284,7 +283,7 @@ pub struct ConsensusPoolImpl {
     /// Block instants are recorded upon entering the validated pool. Instants
     /// below height h are purged whenever all validated or unvalidated
     /// artifacts are also purged below that height.
-    block_instants: HeightIndexedInstants<CryptoHashOf<Block>>,
+    block_instants: HeightIndexedInstants<HashedBlock>,
     /// Message instants are recorded upon entering the unvalidated pool.
     /// Currently the only messages we record are notarizations, random beacons
     /// and CUPs. Instants below height h are purged whenever all validated or
@@ -399,7 +398,7 @@ impl ConsensusPool for UncachedConsensusPoolImpl {
         ))
     }
 
-    fn block_instant(&self, _hash: &CryptoHashOf<Block>) -> Option<Instant> {
+    fn block_instant(&self, _block: &HashedBlock) -> Option<Instant> {
         // The uncached consensus pool is only used temporarily for genesis init.
         // We are not inserting new artifacts in this pool, so we don't have any
         // recorded instants at this point.
@@ -640,9 +639,7 @@ impl ConsensusPoolImpl {
         let now = self.time_source.get_instant();
         let msg = &artifact.msg;
         if let ConsensusMessage::BlockProposal(bp) = msg {
-            let hash = bp.content.get_hash().clone();
-            self.block_instants
-                .insert(&hash, now, bp.content.get_value().height);
+            self.block_instants.insert(&bp.content, now);
         }
         self.record_instant_unvalidated(msg);
     }
@@ -658,8 +655,7 @@ impl ConsensusPoolImpl {
                 | ConsensusMessage::RandomBeacon(_)
                 | ConsensusMessage::CatchUpPackage(_)
         ) {
-            let id = msg.get_id();
-            self.message_instants.insert(&id, now, id.height);
+            self.message_instants.insert(&msg.get_id(), now);
         }
     }
 }
@@ -689,8 +685,8 @@ impl ConsensusPool for ConsensusPoolImpl {
         ))
     }
 
-    fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
-        self.block_instants.get(hash).copied()
+    fn block_instant(&self, block: &HashedBlock) -> Option<Instant> {
+        self.block_instants.get(block).copied()
     }
 
     fn message_instant(&self, id: &ConsensusMessageId) -> Option<Instant> {

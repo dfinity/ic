@@ -108,6 +108,12 @@ impl<T: HasVersion, S> HasVersion for Signed<T, S> {
     }
 }
 
+impl<T> HasHash for Hashed<CryptoHashOf<T>, T> {
+    fn hash(&self) -> &CryptoHash {
+        self.hash.get_ref()
+    }
+}
+
 impl HasVersion for Block {
     fn version(&self) -> &ReplicaVersion {
         &self.version
