@@ -107,8 +107,13 @@ Before any mutation is applied, the registry validates that the resulting state 
 
 #### Scenario: cup_type is the protocol stack's source for height, time, and state_hash
 - **WHEN** the protocol stack reads a registry CUP record
-- **THEN** it reads `height`, `time`, and `state_hash` from the `Recovery` variant of `cup_type`, not from the record's legacy top-level fields of the same names, which it no longer consults
-- **AND** `Genesis` and `SubnetSplitting` carry no height/time/state_hash, since those kinds of CUP do not need them
+- **THEN** it reads `height`, `time`, and `state_hash` from the `Recovery` variant of `cup_type` (in its `RecoveryArgs`)
+- **AND** `Genesis` and `SubnetSplitting` carry no height/time/state_hash, since those kinds of CUP do not need them; a `Genesis` CUP's height is always 0
+
+#### Scenario: Legacy top-level height, time, and state_hash fields are removed
+- **WHEN** the registry canister creates, recovers, or splits a subnet, or `ic-prep` writes an initial subnet configuration
+- **THEN** the `CatchUpPackageContents` record it writes has no top-level `height`, `time`, or `state_hash` fields: they were removed from the protobuf definition and their field numbers (3, 4, 5) and names are reserved
+- **AND** this is a breaking change for external readers of those fields, who must read `cup_type` instead; it became safe once no electable replica version still read the legacy fields, so a rollback to one is no longer possible
 
 #### Scenario: Free cycles cost schedule restriction
 - **WHEN** a subnet's canister cycles cost schedule is set to "Free"
