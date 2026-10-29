@@ -712,21 +712,20 @@ async fn garbage_collection_triggers_refill() {
         )
         // Any slice, empty or not, has byte size 1.
         .with_count_bytes_fn(|_| Ok(1));
-        let registry_version = fixture.validation_context.registry_version;
 
         xnet_payload_builder.get_xnet_payload(
             &fixture.validation_context,
             &fixture.past_payloads(),
             PAYLOAD_BYTES_LIMIT,
         );
-        assert_eq!(Ok(registry_version), refill_triggers.try_recv());
+        assert_eq!(Ok(()), refill_triggers.try_recv());
 
         let payloads = fixture.past_payloads();
         let (payload, past_payloads) = payloads.split_first().unwrap();
         xnet_payload_builder
             .validate_xnet_payload(payload, &fixture.validation_context, past_payloads)
             .unwrap();
-        assert_eq!(Ok(registry_version), refill_triggers.try_recv());
+        assert_eq!(Ok(()), refill_triggers.try_recv());
     });
 }
 

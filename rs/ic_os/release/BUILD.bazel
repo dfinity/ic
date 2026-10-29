@@ -9,6 +9,7 @@ OBJECTS = {
     "guest_vm_runner_dev": "//rs/ic_os/os_tools/guest_vm_runner:guest_vm_runner_dev",
     "hostos_tool": "//rs/ic_os/os_tools/hostos_tool",
     "hostos_tool_dev": "//rs/ic_os/os_tools/hostos_tool:hostos_tool_dev",
+    "infogetty": "//rs/ic_os/infogetty:infogetty_bin",
     "nft-exporter": "//rs/ic_os/metrics/nft_exporter:nft-exporter",
     "setupos_tool": "//rs/ic_os/os_tools/setupos_tool:setupos_tool",
     "config_tool": "//rs/ic_os/config/tool:config_tool",

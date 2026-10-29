@@ -265,7 +265,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
 
     let instructions_to_assemble = context.wasm_source.instructions_to_assemble();
     helper.charge_for_large_wasm_assembly(instructions_to_assemble);
-    round_limits.instructions -= as_round_instructions(instructions_to_assemble);
+    round_limits.deduct_instructions(as_round_instructions(instructions_to_assemble));
     let wasm_module = match context.wasm_source.into_canister_module() {
         Ok(wasm_module) => wasm_module,
         Err(err) => {

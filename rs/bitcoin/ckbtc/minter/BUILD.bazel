@@ -321,6 +321,9 @@ rust_canbench(
     rustc_env = {
         "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
     },
+    test_tags = [
+        "long_test",  # The P90 duration was over 6 minutes in the month up to 2026-10-28.
+    ],
     visibility = ["//visibility:private"],
     deps = [
         # Keep sorted.

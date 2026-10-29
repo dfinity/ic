@@ -471,18 +471,29 @@ async fn handle_advert_invalid_signature() {
     });
 }
 
-/// A subnet is scheduled at most once, however many pulls from it are requested.
+/// A subnet is scheduled at most once, however many pulls from it are requested:
+/// including while its pull is in flight, after it was taken off the queue; until
+/// it is removed.
 #[test]
-fn pull_schedule_push_and_remove() {
+fn pull_schedule_push_pop_and_remove() {
     let mut schedule = PullSchedule::default();
     schedule.push(SUBNET_1);
     schedule.push(SUBNET_2);
     schedule.push(SUBNET_1);
     assert_eq!(VecDeque::from([SUBNET_1, SUBNET_2]), schedule.queue);
 
-    assert!(schedule.remove(SUBNET_1));
-    assert!(!schedule.remove(SUBNET_1));
+    // In flight, so still scheduled.
+    assert_eq!(Some(SUBNET_1), schedule.pop());
+    schedule.push(SUBNET_1);
     assert_eq!(VecDeque::from([SUBNET_2]), schedule.queue);
+
+    // Removing a queued subnet takes it off the queue.
+    schedule.remove(SUBNET_2);
+    assert_eq!(None, schedule.pop());
+
+    schedule.remove(SUBNET_1);
+    schedule.push(SUBNET_1);
+    assert_eq!(Some(SUBNET_1), schedule.pop());
 }
 
 /// A `XNetClient` that replies to every advert with the same canned response,
@@ -551,6 +562,162 @@ fn endpoint_resolver(metrics: &MetricsRegistry, log: ReplicaLogger) -> XNetEndpo
         log.clone(),
     ));
     XNetEndpointResolver::new(registry, LOCAL_NODE, LOCAL_SUBNET, proximity_map, log)
+}
+
+/// A `PullTask` for `LOCAL_SUBNET`, populating `pool`, with no certified state.
+/// Its client cannot query, so its pulls must never run.
+fn pull_task(pool: &Arc<Mutex<CertifiedSlicePool>>, log: ReplicaLogger) -> Arc<PullTask> {
+    let metrics = MetricsRegistry::new();
+    Arc::new(PullTask {
+        pool: Arc::clone(pool),
+        endpoint_resolver: Arc::new(endpoint_resolver(&metrics, log.clone())),
+        xnet_client: Arc::new(FakeAdvertClient::new(Ok(None), &metrics)),
+        certified_stream_store: Arc::new(MockCertifiedStreamStore::new()),
+        state_manager: Arc::new(FakeStateManager::new()),
+        registry: get_node_selection_registry_for_test(),
+        metrics: PullTaskMetrics::new(&metrics),
+        log,
+    })
+}
+
+/// `start_pulls()` starts a pull from every queued subnet that still has
+/// something to pull, keeping it scheduled meanwhile; and unschedules the rest.
+/// `end_pull()` requeues a subnet only if its pull pooled something and there is
+/// more to pull.
+#[tokio::test]
+async fn pull_task_start_and_end_pulls() {
+    with_test_replica_logger(|log| {
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            &MetricsRegistry::new(),
+            log.clone(),
+        )));
+        let header = generate_stream(&StreamConfig {
+            message_begin: 0,
+            message_end: 5,
+            signal_end: 0,
+        })
+        .header();
+        let covering_header = ExpectedIndices {
+            message_index: header.end(),
+            signal_index: header.signals_end(),
+            max_no_gc_header_begin: header.begin(),
+        };
+        // Something to pull from `REMOTE_SUBNET`; nothing left to pull from `SUBNET_2`;
+        // and no stream position to pull from for `SUBNET_3`.
+        {
+            let mut pool = pool.lock().unwrap();
+            pool.garbage_collect(btreemap! {
+                REMOTE_SUBNET => ExpectedIndices::default(),
+                SUBNET_2 => covering_header.clone(),
+            });
+            for subnet_id in [REMOTE_SUBNET, SUBNET_2, SUBNET_3] {
+                pool.record_peer_header(subnet_id, &header);
+            }
+        }
+        let task = pull_task(&pool, log);
+        let mut schedule = PullSchedule::default();
+        let mut in_flight = InFlightPulls::default();
+
+        for subnet_id in [REMOTE_SUBNET, SUBNET_2, SUBNET_3] {
+            schedule.push(subnet_id);
+        }
+        // Spawns a pull that never runs, because the test runs on a single-threaded
+        // runtime and the test body never awaits.
+        task.start_pulls(&mut schedule, &mut in_flight);
+        assert_eq!(
+            vec![REMOTE_SUBNET],
+            in_flight.subnets.values().copied().collect::<Vec<_>>()
+        );
+        assert_eq!(BTreeSet::from([REMOTE_SUBNET]), schedule.scheduled);
+        assert!(schedule.queue.is_empty());
+
+        // A pull that pooled something, with more left to pull, is requeued.
+        task.end_pull(&mut schedule, REMOTE_SUBNET, true);
+        assert_eq!(VecDeque::from([REMOTE_SUBNET]), schedule.queue);
+
+        // One that pooled nothing is not.
+        assert_eq!(Some(REMOTE_SUBNET), schedule.pop());
+        task.end_pull(&mut schedule, REMOTE_SUBNET, false);
+        assert!(schedule.scheduled.is_empty());
+
+        // Nor is one with nothing left to pull.
+        schedule.push(REMOTE_SUBNET);
+        assert_eq!(Some(REMOTE_SUBNET), schedule.pop());
+        pool.lock().unwrap().garbage_collect(btreemap! {
+            REMOTE_SUBNET => covering_header,
+        });
+        task.end_pull(&mut schedule, REMOTE_SUBNET, true);
+        assert!(schedule.scheduled.is_empty());
+    });
+}
+
+/// On a refill trigger, the pull task schedules every peer whose recorded header
+/// offers something left to pull; and no other.
+#[tokio::test]
+async fn pull_task_schedules_pending_pulls() {
+    with_test_replica_logger(|log| {
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            &MetricsRegistry::new(),
+            log.clone(),
+        )));
+        let header = generate_stream(&StreamConfig {
+            message_begin: 0,
+            message_end: 5,
+            signal_end: 0,
+        })
+        .header();
+        // Something to pull from `REMOTE_SUBNET`; nothing left to pull from `SUBNET_2`;
+        // and no recorded header for `SUBNET_3`.
+        {
+            let mut pool = pool.lock().unwrap();
+            pool.garbage_collect(btreemap! {
+                REMOTE_SUBNET => ExpectedIndices::default(),
+                SUBNET_2 => ExpectedIndices {
+                    message_index: header.end(),
+                    signal_index: header.signals_end(),
+                    max_no_gc_header_begin: header.begin(),
+                },
+                SUBNET_3 => ExpectedIndices::default(),
+            });
+            for subnet_id in [REMOTE_SUBNET, SUBNET_2] {
+                pool.record_peer_header(subnet_id, &header);
+            }
+        }
+        let task = pull_task(&pool, log);
+        let mut schedule = PullSchedule::default();
+
+        task.schedule_pending_pulls(&mut schedule);
+        assert_eq!(VecDeque::from([REMOTE_SUBNET]), schedule.queue);
+    });
+}
+
+/// The pull task never schedules our own subnet: the loopback stream is inducted
+/// separately.
+#[tokio::test]
+async fn pull_task_skips_own_subnet() {
+    with_test_replica_logger(|log| {
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            &MetricsRegistry::new(),
+            log.clone(),
+        )));
+        // Recorded headers offering something to pull.
+        let header = generate_stream(&StreamConfig {
+            message_begin: 0,
+            message_end: 1,
+            signal_end: 0,
+        })
+        .header();
+        for subnet_id in [LOCAL_SUBNET, REMOTE_SUBNET] {
+            pool.lock().unwrap().record_peer_header(subnet_id, &header);
+        }
+        let task = pull_task(&pool, log);
+        let mut schedule = PullSchedule::default();
+
+        // Neither on request, nor on refill.
+        task.schedule_pull(&mut schedule, LOCAL_SUBNET);
+        task.schedule_pending_pulls(&mut schedule);
+        assert_eq!(VecDeque::from([REMOTE_SUBNET]), schedule.queue);
+    });
 }
 
 /// An `AdvertTask` posting through `xnet_client`, with `fixture`'s handler

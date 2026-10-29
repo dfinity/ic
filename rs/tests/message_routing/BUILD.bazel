@@ -142,14 +142,16 @@ system_test_nns(
 system_test_nns(
     name = "subnet_cooling_down_test",
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 1 System + 2 Application subnets of 4 nodes each = 12 IC Node VMs * 6 vCPUs.
-    enable_mainnet_nns_variant = False,  # The NNS canisters have not been upgraded in production yet.
     tags = [
-        "long_test",  # since it reserves 12 IC Node VMs.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     test_timeout = "eternal",
-    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
+        "IC_ADMIN_PATH": "//rs/registry/admin:ic-admin",
+    },
     deps = [
         # Keep sorted.
+        "//rs/recovery",
         "//rs/recovery/subnet_merging",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -157,7 +159,9 @@ system_test_nns(
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
+        "@crate_index//:ic-agent",
         "@crate_index//:slog",
+        "@crate_index//:tokio",
     ],
 )
 

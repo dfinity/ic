@@ -1,7 +1,7 @@
 //! Scraping of replica metrics, and the aggregations across the replicas of a
 //! subnet that the "merge readiness" condition is evaluated on.
 
-use futures::future::join_all;
+use futures::{StreamExt, stream};
 use prometheus_parse::{Scrape, Value};
 
 use std::{
@@ -13,6 +13,10 @@ use std::{
 
 /// Timeout of a single metrics request, as in `ic_recovery::get_node_metrics`.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The maximum number of nodes scraped at the same time. On mainnet, a
+/// readiness round scrapes every replica of every subnet, i.e. several hundred.
+const MAX_CONCURRENT_SCRAPES: usize = 64;
 
 /// The port a replica exports its metrics on.
 const METRICS_PORT: u16 = 9090;
@@ -59,20 +63,54 @@ pub async fn fetch_available_metrics(
     node_ips: &[IpAddr],
     metrics: &[&str],
 ) -> (MetricsByReplica, Option<ScrapeError>) {
-    let responses = join_all(node_ips.iter().map(fetch_node_metrics)).await;
+    fetch_available_metrics_by_group([((), node_ips, metrics)])
+        .await
+        .remove(&())
+        .unwrap_or_default()
+}
 
-    let mut result = MetricsByReplica::new();
-    let mut failures = Vec::new();
-    for (ip, body) in node_ips.iter().zip(responses) {
-        match body {
-            Ok(body) => {
-                result.insert(*ip, parse_metrics(&body, metrics).into_iter().collect());
+/// Like `fetch_available_metrics`, for several groups of nodes (e.g. subnets),
+/// each with the metrics to fetch from its nodes. The nodes of all groups are
+/// scraped concurrently, at most `MAX_CONCURRENT_SCRAPES` at a time. Returns
+/// the result of every group, by key.
+pub async fn fetch_available_metrics_by_group<'a, K: Copy + Ord>(
+    groups: impl IntoIterator<Item = (K, &'a [IpAddr], &'a [&'a str])>,
+) -> BTreeMap<K, (MetricsByReplica, Option<ScrapeError>)> {
+    let mut results: BTreeMap<K, (MetricsByReplica, Vec<(IpAddr, String)>)> = BTreeMap::new();
+    let mut scrapes = Vec::new();
+    for (key, node_ips, metrics) in groups {
+        results.entry(key).or_default();
+        scrapes.extend(node_ips.iter().map(move |ip| (key, *ip, metrics)));
+    }
+
+    let responses: Vec<_> = stream::iter(scrapes)
+        .map(|(key, ip, metrics)| async move {
+            let response = fetch_node_metrics(&ip)
+                .await
+                .map(|body| parse_metrics(&body, metrics).into_iter().collect());
+            (key, ip, response)
+        })
+        .buffer_unordered(MAX_CONCURRENT_SCRAPES)
+        .collect()
+        .await;
+
+    for (key, ip, response) in responses {
+        let (metrics, failures) = results.get_mut(&key).expect("every key was inserted");
+        match response {
+            Ok(replica_metrics) => {
+                metrics.insert(ip, replica_metrics);
             }
-            Err(reason) => failures.push((*ip, reason)),
+            Err(reason) => failures.push((ip, reason)),
         }
     }
-    let failures = (!failures.is_empty()).then_some(ScrapeError { failures });
-    (result, failures)
+    results
+        .into_iter()
+        .map(|(key, (metrics, mut failures))| {
+            failures.sort();
+            let failures = (!failures.is_empty()).then_some(ScrapeError { failures });
+            (key, (metrics, failures))
+        })
+        .collect()
 }
 
 async fn fetch_node_metrics(ip: &IpAddr) -> Result<String, String> {

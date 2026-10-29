@@ -921,7 +921,7 @@ pub fn get_call_context(
 }
 
 pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutionOutput) {
-    round_limits.instructions -= as_round_instructions(slice.executed_instructions);
+    round_limits.deduct_instructions(as_round_instructions(slice.executed_instructions));
 }
 
 /// Tries to apply the given canister changes to the given system state and

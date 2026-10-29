@@ -786,7 +786,7 @@ async fn simulate_node_provider_action(
     )
     .to_shell_string();
 
-    // Note: keep in sync with the limited-console invocation in cpp/infogetty-cpp/infogetty.cc.
+    // Note: keep in sync with the limited-console invocation in rs/ic_os/infogetty/src/main.rs.
     // We need TWO "exit" commands: one to exit rbash, and one to exit limited-console's main loop.
     let script = format!(
         r#"echo -e "rbash-console\n{}\nexit\nexit" | sudo env -i TERM=linux su -s /opt/ic/bin/limited-console limited-console 2>&1"#,

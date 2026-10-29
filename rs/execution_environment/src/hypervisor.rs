@@ -229,7 +229,7 @@ impl Hypervisor {
         let compilation_cost = self.cost_to_compile_wasm_instruction * wasm_size as u64;
         if let Err(err) = wasm_size_result {
             let total_cost = self.create_execution_state_base_cost + compilation_cost;
-            round_limits.instructions -= as_round_instructions(total_cost);
+            round_limits.deduct_instructions(as_round_instructions(total_cost));
             self.compilation_cache
                 .insert_err(&canister_module, err.clone().into());
             return (total_cost, Err(err.into()));
@@ -291,7 +291,7 @@ impl Hypervisor {
                 }
                 let total_cost = self.create_execution_state_base_cost
                     + compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
-                round_limits.instructions -= as_round_instructions(total_cost);
+                round_limits.deduct_instructions(as_round_instructions(total_cost));
                 let result =
                     Self::validate_wasm_memory(&execution_state, declared_wasm_memory_size)
                         .map(|()| execution_state);
@@ -299,7 +299,7 @@ impl Hypervisor {
             }
             Err(err) => {
                 let total_cost = self.create_execution_state_base_cost + compilation_cost;
-                round_limits.instructions -= as_round_instructions(total_cost);
+                round_limits.deduct_instructions(as_round_instructions(total_cost));
                 (total_cost, Err(err))
             }
         }
