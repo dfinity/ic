@@ -430,7 +430,7 @@ impl From<&UpgradeState> for pb_metadata::UpgradeState {
     fn from(item: &UpgradeState) -> Self {
         Self {
             upgrade_requests: item
-                .upgrade_requests
+                .unauthorized_upgrade_requests
                 .iter()
                 .map(
                     |(node, height)| pb_metadata::upgrade_state::UpgradePermitRequest {
@@ -440,7 +440,7 @@ impl From<&UpgradeState> for pb_metadata::UpgradeState {
                 )
                 .collect(),
             authorized_nodes: item
-                .authorized_nodes
+                .rebooting_nodes
                 .iter()
                 .map(|node| node_id_into_protobuf(*node))
                 .collect(),
@@ -462,8 +462,8 @@ impl TryFrom<pb_metadata::UpgradeState> for UpgradeState {
             authorized_nodes.insert(node_id_try_from_option(Some(node))?);
         }
         Ok(UpgradeState {
-            upgrade_requests,
-            authorized_nodes,
+            unauthorized_upgrade_requests: upgrade_requests,
+            rebooting_nodes: authorized_nodes,
         })
     }
 }
@@ -636,11 +636,10 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             },
             unflushed_checkpoint_ops: Default::default(),
             subnet_ids_at_last_reject_generation: None,
-            upgrade_state: item
-                .upgrade_state
-                .map(UpgradeState::try_from)
-                .transpose()?
-                .unwrap_or_default(),
+            upgrade_state: match item.upgrade_state {
+                Some(upgrade_state) => upgrade_state.try_into()?,
+                None => UpgradeState::default(),
+            },
         })
     }
 }

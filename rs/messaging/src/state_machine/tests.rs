@@ -275,10 +275,10 @@ fn test_upgrade_actions_applied_to_state() {
 
     let upgrade_state = &state.metadata.upgrade_state;
     assert_eq!(
-        upgrade_state.upgrade_requests.get(&requestor),
+        upgrade_state.unauthorized_upgrade_requests.get(&requestor),
         Some(&Height::from(1))
     );
-    assert!(upgrade_state.authorized_nodes.is_empty());
+    assert!(upgrade_state.rebooting_nodes.is_empty());
 }
 
 #[test]

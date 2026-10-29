@@ -44,7 +44,6 @@ use ic_types_cycles::{CanisterCyclesCostSchedule, CyclesUseCase, NominalCycles};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::WasmHash;
-use num_traits::SaturatingSub;
 use serde::{Deserialize, Serialize};
 use std::ops::Bound::{Included, Unbounded};
 use std::{
@@ -2425,16 +2424,16 @@ impl UnflushedCheckpointOps {
 
 /// If a permit request is not authorized within this many blocks, it expires
 /// and the slot is freed for the next block maker to issue a new request.
-pub const UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS: Height = Height::new(20);
+pub const UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS: Height = Height::new(100);
 
 /// The Phase 2 state during fast GuestOS upgrades, stored in `SystemMetadata`.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct UpgradeState {
     /// Nodes that have requested a reboot permit but not yet been authorized,
     /// mapped to the height at which they requested.
-    pub upgrade_requests: BTreeMap<NodeId, Height>,
+    pub unauthorized_upgrade_requests: BTreeMap<NodeId, Height>,
     /// Nodes that have been authorized to reboot.
-    pub authorized_nodes: BTreeSet<NodeId>,
+    pub rebooting_nodes: BTreeSet<NodeId>,
 }
 
 impl UpgradeState {
@@ -2449,28 +2448,29 @@ impl UpgradeState {
         for action in actions {
             match action {
                 UpgradePermitAction::RequestPermit(request) => {
-                    self.upgrade_requests
+                    self.unauthorized_upgrade_requests
                         .insert(request.requestor, request.request_height);
                 }
                 UpgradePermitAction::AuthorizePermit(authorization) => {
                     let node = authorization.content.requestor;
-                    self.upgrade_requests.remove(&node);
-                    self.authorized_nodes.insert(node);
+                    self.unauthorized_upgrade_requests.remove(&node);
+                    self.rebooting_nodes.insert(node);
                 }
                 UpgradePermitAction::ReturnPermit { node } => {
-                    self.authorized_nodes.remove(node);
+                    self.rebooting_nodes.remove(node);
                 }
             }
         }
 
         // Expire stale requests and prune departed members.
-        let prune_below_height = height.saturating_sub(&UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS);
-        self.upgrade_requests.retain(|node, req_height| {
-            *req_height >= prune_below_height && subnet_members.contains(node)
-        });
+        self.unauthorized_upgrade_requests
+            .retain(|node, req_height| {
+                *req_height + UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS >= height
+                    && subnet_members.contains(node)
+            });
 
         // Prune departed members.
-        self.authorized_nodes
+        self.rebooting_nodes
             .retain(|node| subnet_members.contains(node));
     }
 }

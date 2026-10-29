@@ -3614,6 +3614,10 @@ fn upgrade_authorize_action(requestor: NodeId, request_height: Height) -> Upgrad
     })
 }
 
+fn upgrade_return_action(requestor: NodeId) -> UpgradePermitAction {
+    UpgradePermitAction::ReturnPermit { node: requestor }
+}
+
 #[test]
 fn upgrade_state_applies_request() {
     let mut state = UpgradeState::default();
@@ -3623,10 +3627,10 @@ fn upgrade_state_applies_request() {
         &upgrade_state_members(&[1, 2, 3]),
     );
     assert_eq!(
-        state.upgrade_requests,
+        state.unauthorized_upgrade_requests,
         BTreeMap::from([(node_test_id(1), Height::new(3))])
     );
-    assert!(state.authorized_nodes.is_empty());
+    assert!(state.rebooting_nodes.is_empty());
 }
 
 #[test]
@@ -3644,8 +3648,8 @@ fn upgrade_state_authorize_moves_request_to_authorized() {
         Height::new(5),
         &members,
     );
-    assert!(state.upgrade_requests.is_empty());
-    assert_eq!(state.authorized_nodes, BTreeSet::from([node_test_id(1)]));
+    assert!(state.unauthorized_upgrade_requests.is_empty());
+    assert_eq!(state.rebooting_nodes, BTreeSet::from([node_test_id(1)]));
 }
 
 #[test]
@@ -3664,14 +3668,12 @@ fn upgrade_state_return_removes_authorization() {
         &members,
     );
     state.apply(
-        &[UpgradePermitAction::ReturnPermit {
-            node: node_test_id(1),
-        }],
+        &[upgrade_return_action(node_test_id(1))],
         Height::new(3),
         &members,
     );
-    assert!(state.upgrade_requests.is_empty());
-    assert!(state.authorized_nodes.is_empty());
+    assert!(state.unauthorized_upgrade_requests.is_empty());
+    assert!(state.rebooting_nodes.is_empty());
 }
 
 #[test]
@@ -3686,7 +3688,7 @@ fn upgrade_state_expires_stale_requests() {
         &members,
     );
     assert_eq!(
-        state.upgrade_requests.get(&node_test_id(1)),
+        state.unauthorized_upgrade_requests.get(&node_test_id(1)),
         Some(&Height::new(1))
     );
 
@@ -3696,7 +3698,7 @@ fn upgrade_state_expires_stale_requests() {
         Height::new(2 + UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS.get()),
         &members,
     );
-    assert!(state.upgrade_requests.is_empty());
+    assert!(state.unauthorized_upgrade_requests.is_empty());
 }
 
 #[test]
@@ -3723,10 +3725,10 @@ fn upgrade_state_prunes_departed_members() {
     // Node 7 leaves the subnet; its request and permit are pruned.
     state.apply(&[], Height::new(4), &upgrade_state_members(&[1, 2, 3]));
     assert_eq!(
-        state.upgrade_requests,
+        state.unauthorized_upgrade_requests,
         BTreeMap::from([(node_test_id(1), Height::new(1))])
     );
-    assert!(state.authorized_nodes.is_empty());
+    assert!(state.rebooting_nodes.is_empty());
 }
 
 #[test]
@@ -3745,7 +3747,7 @@ fn upgrade_state_applies_multiple_actions_per_block() {
         Height::new(2),
         &members,
     );
-    assert_eq!(state.upgrade_requests.len(), 2);
+    assert_eq!(state.unauthorized_upgrade_requests.len(), 2);
 
     // ... and both are authorized in the same block.
     state.apply(
@@ -3756,20 +3758,20 @@ fn upgrade_state_applies_multiple_actions_per_block() {
         Height::new(5),
         &members,
     );
-    assert!(state.upgrade_requests.is_empty());
+    assert!(state.unauthorized_upgrade_requests.is_empty());
     assert_eq!(
-        state.authorized_nodes,
+        state.rebooting_nodes,
         BTreeSet::from([node_test_id(1), node_test_id(2)])
     );
 }
 #[test]
 fn upgrade_state_proto_roundtrip() {
     let state = UpgradeState {
-        upgrade_requests: BTreeMap::from([
+        unauthorized_upgrade_requests: BTreeMap::from([
             (node_test_id(1), Height::new(3)),
             (node_test_id(2), Height::new(7)),
         ]),
-        authorized_nodes: BTreeSet::from([node_test_id(3)]),
+        rebooting_nodes: BTreeSet::from([node_test_id(3)]),
     };
     let proto = pb_metadata::UpgradeState::from(&state);
     assert_eq!(proto.upgrade_requests.len(), 2);
