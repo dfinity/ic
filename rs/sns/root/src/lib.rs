@@ -268,6 +268,24 @@ impl SnsRootCanister {
             .expect("Invalid root canister state: missing index_canister_id.")
     }
 
+    /// Returns Ok if canister_id is one of the dapp canisters registered with
+    /// this SNS (i.e. it is in dapp_canister_ids). Otherwise, returns Err with
+    /// a description. The SNS framework canisters (Root, Governance, Ledger,
+    /// Index, Swap, archives) and extensions are never dapp canisters, so they
+    /// always get Err.
+    pub fn check_is_registered_dapp_canister(
+        &self,
+        canister_id: PrincipalId,
+    ) -> Result<(), String> {
+        if self.dapp_canister_ids.contains(&canister_id) {
+            return Ok(());
+        }
+
+        Err(format!(
+            "{canister_id} is not a registered dapp canister of this SNS."
+        ))
+    }
+
     /// Return the canister status of all SNS canisters that this root canister
     /// is part of, as well as of all registered dapp canisters (See
     /// SnsRootCanister::register_dapp_canister).
@@ -2443,6 +2461,35 @@ mod tests {
         )
         .unwrap_err();
         assert!(failure_reason.contains(&PrincipalId::new_user_test_id(4).to_string()));
+    }
+
+    #[test]
+    fn test_check_is_registered_dapp_canister() {
+        let dapp_canister_id = PrincipalId::new_user_test_id(5);
+        let state = SnsRootCanister {
+            dapp_canister_ids: vec![dapp_canister_id],
+            ..build_test_sns_root_canister(false)
+        };
+
+        assert_eq!(
+            state.check_is_registered_dapp_canister(dapp_canister_id),
+            Ok(())
+        );
+
+        for canister_id in [
+            state.governance_canister_id(),
+            state.ledger_canister_id(),
+            state.swap_canister_id(),
+            state.index_canister_id(),
+            PrincipalId::new_user_test_id(6),
+        ] {
+            assert_eq!(
+                state.check_is_registered_dapp_canister(canister_id),
+                Err(format!(
+                    "{canister_id} is not a registered dapp canister of this SNS."
+                )),
+            );
+        }
     }
 
     #[test]
