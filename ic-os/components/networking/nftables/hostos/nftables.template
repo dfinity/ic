@@ -37,6 +37,8 @@ table ip filter {
   chain INPUT {
     type filter hook input priority filter; policy drop;
     iif "lo" accept
+    # Mitigation for CVE-2026-98432: drop IPv4 packets carrying IP options (IHL > 5).
+    ip hdrlength != 5 counter drop
     ct state { invalid } drop
     ct state { established, related } accept
     icmp type $icmp_v4_types_accept accept

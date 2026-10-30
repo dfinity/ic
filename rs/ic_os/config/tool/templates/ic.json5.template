@@ -213,6 +213,8 @@ table filter {\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
+    # Mitigation for CVE-2026-98432: drop IPv4 packets carrying IP options (IHL > 5).\n\
+    ip hdrlength != 5 counter drop\n\
     ct state new add @rate_limit { ip saddr limit rate over 1000/minute burst 500 packets } counter name rate_limit_v4_counter drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
@@ -367,6 +369,8 @@ table filter {\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
+    # Mitigation for CVE-2026-98432: drop IPv4 packets carrying IP options (IHL > 5).\n\
+    ip hdrlength != 5 counter drop\n\
     ct state new add @rate_limit { ip saddr limit rate over 1000/minute burst 500 packets } counter name rate_limit_v4_counter drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
@@ -520,6 +524,8 @@ table filter {\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
+    # Mitigation for CVE-2026-98432: drop IPv4 packets carrying IP options (IHL > 5).\n\
+    ip hdrlength != 5 counter drop\n\
     ip saddr @blackhole drop\n\
     ct state new add @rate_limit { ip saddr limit rate over 2000/minute burst 1000 packets } counter name rate_limit_v4_counter drop\n\
     #  Notes about the rule below:\n\

@@ -24,6 +24,8 @@ table filter {
   chain INPUT {
     type filter hook input priority 0; policy drop;
     iif lo accept
+    # Mitigation for CVE-2026-98432: drop IPv4 packets carrying IP options (IHL > 5).
+    ip hdrlength != 5 counter drop
     ip saddr @blackhole drop
     ct state new add @rate_limit { ip saddr limit rate over 2000/minute burst 1000 packets } counter name rate_limit_v4_counter drop
     #  Notes about the rule below:
