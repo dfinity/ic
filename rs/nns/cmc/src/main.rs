@@ -73,6 +73,8 @@ const ONE_MINUTE_SECONDS: u64 = 60;
 const MAX_NOTIFY_HISTORY: usize = 1_000_000;
 /// The maximum number of old notification statuses we purge in one go.
 const MAX_NOTIFY_PURGE: usize = 100_000;
+/// The maximum number of pending burns to retry on a heartbeat.
+const MAX_STALLED_ICP_BURNS_PER_HEARTBEAT: usize = 100;
 /// The maximum memo length.
 const MAX_MEMO_LENGTH: usize = 32;
 
@@ -91,6 +93,7 @@ const SUBNET_RENTAL_DEFAULT_CYCLES_LIMIT: u128 = 500e15 as u128;
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
     static LIMITER_REJECT_COUNT: Cell<u64> = const { Cell::new(0_u64) };
+    static STALLED_ICP_BURNS_IN_PROGRESS: RefCell<Option<()>> = const { RefCell::new(None) };
 }
 
 fn with_state<R>(f: impl FnOnce(&State) -> R) -> R {
@@ -157,6 +160,18 @@ pub struct NotMeaningfulMemo {
     refund_block_index: Option<BlockIndex>,
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub struct StalledIcpBurn {
+    pub from_subaccount: Subaccount,
+    pub amount: Tokens,
+}
+
+impl StalledIcpBurn {
+    async fn retry(&self) -> Result<(), String> {
+        burn_and_log(self.from_subaccount, self.amount).await
+    }
+}
+
 /// Version of the State type.
 ///
 /// Each generation of the State type has an associated version.
@@ -196,7 +211,7 @@ struct StateVersion(u64);
 ///
 /// * Optionally remove older State types (StateVm where m < n)
 ///   because they are no longer needed.
-type State = StateV2;
+type State = StateV3;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct StateV2 {
@@ -295,6 +310,167 @@ impl StateV2 {
     }
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub struct StateV3 {
+    pub ledger_canister_id: CanisterId,
+
+    pub governance_canister_id: CanisterId,
+
+    /// An ID that provides an interface to a canister that provides exchange
+    /// rate information such as the [XRC](https://github.com/dfinity/exchange-rate-canister).
+    pub exchange_rate_canister_id: Option<CanisterId>,
+
+    pub cycles_ledger_canister_id: Option<CanisterId>,
+
+    /// Account used to burn funds.
+    pub minting_account_id: Option<AccountIdentifier>,
+
+    pub authorized_subnets: BTreeMap<PrincipalId, Vec<SubnetId>>,
+
+    pub default_subnets: Vec<SubnetId>,
+
+    /// How many XDR 1 ICP is worth, along with a timestamp.
+    pub icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
+
+    /// The average ICP/XDR rate over `NUM_DAYS_FOR_ICP_XDR_AVERAGE` days. The
+    /// timestamp is the UNIX epoch time in seconds at the start of the last
+    /// considered day, which should correspond to midnight of the current
+    /// day.
+    pub average_icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
+
+    /// The recent ICP/XDR rates used to compute the average rate.
+    pub recent_icp_xdr_rates: Option<Vec<IcpXdrConversionRate>>,
+
+    /// How many cycles 1 XDR is worth.
+    pub cycles_per_xdr: Cycles,
+
+    /// How many cycles are allowed to be minted in an hour.
+    pub base_cycles_limit: Cycles,
+
+    /// How many cycles are allowed to be minted by the Subnet Rental Canister in a month.
+    pub subnet_rental_cycles_limit: Cycles,
+
+    /// Maintain a count of how many cycles have been minted in the last hour.
+    pub base_limiter: limiter::Limiter,
+
+    /// Maintain a count of how many cycles have been minted by the Subnet Rental Canister
+    /// in the last month.
+    pub subnet_rental_canister_limiter: limiter::Limiter,
+
+    pub total_cycles_minted: Cycles,
+
+    // We use this for synchronization.
+    //
+    // Because our operations (e.g. minting cycles) require calling other
+    // canister(s), in particular ledger, it is possible for duplicate requests
+    // to interleave. In such cases, we want subsequent operations to see that
+    // an operation is already in flight. Therefore, before making any canister
+    // calls, we check that the block does not already have a status. If it
+    // already has a status, do not proceed. If it dos not already have a
+    // status, set it to Processing. Then, we can proceed with calling the other
+    // canister (i.e. ledger). Once that comes back, we update the block's
+    // status. This avoids using the same ICP to perform multiple operations.
+    pub blocks_notified: BTreeMap<BlockIndex, NotificationStatus>,
+    // The status of blocks not new than this is ambiguous. This is because we
+    // must bound how much memory we use; in particular, blocks_notified must
+    // not grow without bound.
+    pub last_purged_notification: BlockIndex,
+
+    // When an ICP burn fails, it gets enqueued here for later retry. Retries
+    // are performed by retry_stalled_icp_burns, which gets called during
+    // heartbeat. When a retry is launched, the entry remains, and is not
+    // modified. Therefore, there is no way to tell from this collection
+    // whether a stalled burn is currently in flight, or waiting to be
+    // retried. This is keyed on BlockIndex so that earlier operations are
+    // retried first. BlockIndex is just a breadcrumb here; it is not needed
+    // to actually perform the burn.
+    pub block_index_to_stalled_icp_burn: BTreeMap<BlockIndex, StalledIcpBurn>,
+
+    /// The current maturity modulation in basis points (permyriad), i.e.,
+    /// a value of 123 corresponds to 1.23%.
+    pub maturity_modulation_permyriad: Option<i32>,
+
+    /// Maintains the mapping of subnet types to subnet ids. Users can choose to
+    /// deploy their canisters on subnets with specific characteristics by
+    /// selecting one of these types.
+    ///
+    ///
+    /// These user facing subnet types capture common useful characteristics of
+    /// the subnets and should not be confused with the existing concept of
+    /// subnet types that exists in the registry (system/verified/application).
+    /// The idea is that these types provide an easy way for users to set their
+    /// preferences during canister creation. If no subnet type is provided
+    /// during canister creation, a subnet without a special type will be picked
+    /// at random as no special requirements were provided.
+    ///
+    /// Each subnet can be assigned to at most one type and cannot be a default
+    /// or an authorized subnet.
+    pub subnet_types_to_subnets: Option<BTreeMap<String, BTreeSet<SubnetId>>>,
+
+    /// This is used to ensure that only one exchange rate update is being performed at a time from heartbeat.
+    pub update_exchange_rate_canister_state: Option<UpdateExchangeRateState>,
+}
+
+impl StateV3 {
+    fn state_version() -> StateVersion {
+        StateVersion(3)
+    }
+}
+
+impl From<StateV2> for StateV3 {
+    fn from(state: StateV2) -> Self {
+        let StateV2 {
+            ledger_canister_id,
+            governance_canister_id,
+            exchange_rate_canister_id,
+            cycles_ledger_canister_id,
+            minting_account_id,
+            authorized_subnets,
+            default_subnets,
+            icp_xdr_conversion_rate,
+            average_icp_xdr_conversion_rate,
+            recent_icp_xdr_rates,
+            cycles_per_xdr,
+            base_cycles_limit,
+            subnet_rental_cycles_limit,
+            base_limiter,
+            subnet_rental_canister_limiter,
+            total_cycles_minted,
+            blocks_notified,
+            last_purged_notification,
+            maturity_modulation_permyriad,
+            subnet_types_to_subnets,
+            update_exchange_rate_canister_state,
+        } = state;
+
+        Self {
+            ledger_canister_id,
+            governance_canister_id,
+            exchange_rate_canister_id,
+            cycles_ledger_canister_id,
+            minting_account_id,
+            authorized_subnets,
+            default_subnets,
+            icp_xdr_conversion_rate,
+            average_icp_xdr_conversion_rate,
+            recent_icp_xdr_rates,
+            cycles_per_xdr,
+            base_cycles_limit,
+            subnet_rental_cycles_limit,
+            base_limiter,
+            subnet_rental_canister_limiter,
+            total_cycles_minted,
+            blocks_notified,
+            last_purged_notification,
+            maturity_modulation_permyriad,
+            subnet_types_to_subnets,
+            update_exchange_rate_canister_state,
+
+            block_index_to_stalled_icp_burn: BTreeMap::new(),
+        }
+    }
+}
+
 impl State {
     fn encode(&self) -> Vec<u8> {
         Encode!(&Self::state_version(), &self).unwrap()
@@ -315,17 +491,19 @@ impl State {
                 ));
             }
             Ordering::Less => {
-                // This is where you would put a function to do the migration, which would look something like this:
-                // if stored_state_version == StateVersion(*last_state_version*) {
-                //   let state = deserializer.get_value::<StateVLast>().unwrap();
-                //   deserializer.done().unwrap();
-                //   return Ok(migrate_last_to_current(state));
-                // }
-                // Migrations should be deleted after execution to keep the codebase tidy.
-                return Err(format!(
-                    "[cycles] ERROR: stored state version {stored_state_version:?} is lesser than the current state \
-                     version {current_state_version:?}! Did you forget to migrate the old to the current type?"
+                if stored_state_version != StateV2::state_version() {
+                    return Err(format!(
+                        "[cycles] ERROR: stored state version {stored_state_version:?} is lesser than the current state \
+                         version {current_state_version:?}! Did you forget to migrate the old to the current type?"
+                    ));
+                }
+                print(format!(
+                    "[cycles] INFO: stored state version {stored_state_version:?} is lower than the current state version \
+                    {current_state_version:?}. Migrating stable storage ... ",
                 ));
+                let state = deserializer.get_value::<StateV2>().unwrap();
+                deserializer.done().unwrap();
+                return Ok(State::from(state));
             }
             Ordering::Equal => print(format!(
                 "[cycles] INFO: stored state version {stored_state_version:?} equals the current state version {current_state_version:?}. \
@@ -356,7 +534,7 @@ impl State {
     }
 }
 
-impl Default for State {
+impl Default for StateV2 {
     fn default() -> Self {
         let resolution = Duration::from_secs(60);
         let max_age = Duration::from_secs(60 * 60);
@@ -394,6 +572,12 @@ impl Default for State {
             subnet_types_to_subnets: Some(BTreeMap::new()),
             update_exchange_rate_canister_state: Some(UpdateExchangeRateState::default()),
         }
+    }
+}
+
+impl Default for State {
+    fn default() -> Self {
+        State::from(StateV2::default())
     }
 }
 
@@ -1213,7 +1397,8 @@ async fn notify_top_up(
     match maybe_early_result {
         Some(result) => result,
         None => {
-            let result = process_top_up(canister_id, from, amount, limiter_to_use).await;
+            let result =
+                process_top_up(canister_id, from, amount, limiter_to_use, block_index).await;
 
             with_state_mut(|state| {
                 state.blocks_notified.insert(
@@ -1303,8 +1488,15 @@ async fn notify_mint_cycles(
     match maybe_early_result {
         Some(result) => result,
         None => {
-            let result =
-                process_mint_cycles(to_account, amount, deposit_memo, from, subaccount).await;
+            let result = process_mint_cycles(
+                block_index,
+                to_account,
+                amount,
+                deposit_memo,
+                from,
+                subaccount,
+            )
+            .await;
 
             with_state_mut(|state| {
                 state.blocks_notified.insert(
@@ -1409,8 +1601,15 @@ async fn notify_create_canister(
     match maybe_early_result {
         Some(result) => result,
         None => {
-            let result =
-                process_create_canister(controller, from, amount, subnet_selection, settings).await;
+            let result = process_create_canister(
+                block_index,
+                controller,
+                from,
+                amount,
+                subnet_selection,
+                settings,
+            )
+            .await;
 
             with_state_mut(|state| {
                 state.blocks_notified.insert(
@@ -1863,6 +2062,7 @@ async fn issue_automatic_refund_if_memo_not_offerred(
 
     // Now, it is safe to call ledger to send the ICP back, so do it.
     let refund_block_index = refund_icp(
+        incoming_block_index,
         incoming_to_subaccount,
         incoming_from,
         incoming_amount,
@@ -1927,6 +2127,7 @@ fn tokens_to_cycles(amount: Tokens) -> Result<Cycles, NotifyError> {
 }
 
 async fn process_create_canister(
+    block_index: BlockIndex,
     controller: PrincipalId,
     from: AccountIdentifier,
     amount: Tokens,
@@ -1946,11 +2147,12 @@ async fn process_create_canister(
     // If refund fails, we allow to retry.
     match do_create_canister(controller, cycles, subnet_selection, settings).await {
         Ok(canister_id) => {
-            burn_and_log(sub, amount).await;
+            burn_or_record_stalled_icp(block_index, sub, amount).await;
             Ok(canister_id)
         }
         Err(err) => {
-            let refund_block = refund_icp(sub, from, amount, CREATE_CANISTER_REFUND_FEE).await?;
+            let refund_block =
+                refund_icp(block_index, sub, from, amount, CREATE_CANISTER_REFUND_FEE).await?;
             Err(NotifyError::Refunded {
                 reason: err,
                 block_index: refund_block,
@@ -1960,6 +2162,7 @@ async fn process_create_canister(
 }
 
 async fn process_mint_cycles(
+    block_index: BlockIndex,
     to_account: Account,
     amount: Tokens,
     deposit_memo: Option<Vec<u8>>,
@@ -1969,7 +2172,7 @@ async fn process_mint_cycles(
     let cycles = tokens_to_cycles(amount)?;
     match do_mint_cycles(to_account, cycles, deposit_memo).await {
         Ok(deposit_result) => {
-            burn_and_log(sub, amount).await;
+            burn_or_record_stalled_icp(block_index, sub, amount).await;
             Ok(NotifyMintCyclesSuccess {
                 block_index: deposit_result.block_index,
                 minted: cycles.into(),
@@ -1977,7 +2180,8 @@ async fn process_mint_cycles(
             })
         }
         Err(err) => {
-            let refund_block = refund_icp(sub, from, amount, MINT_CYCLES_REFUND_FEE).await?;
+            let refund_block =
+                refund_icp(block_index, sub, from, amount, MINT_CYCLES_REFUND_FEE).await?;
             Err(NotifyError::Refunded {
                 reason: err,
                 block_index: refund_block,
@@ -1991,6 +2195,7 @@ async fn process_top_up(
     from: AccountIdentifier,
     amount: Tokens,
     limiter_to_use: CyclesMintingLimiterSelector,
+    block_index: BlockIndex,
 ) -> Result<Cycles, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
 
@@ -2002,11 +2207,12 @@ async fn process_top_up(
 
     match deposit_cycles(canister_id, cycles, true, limiter_to_use).await {
         Ok(()) => {
-            burn_and_log(sub, amount).await;
+            burn_or_record_stalled_icp(block_index, sub, amount).await;
             Ok(cycles)
         }
         Err(err) => {
-            let refund_block = refund_icp(sub, from, amount, TOP_UP_CANISTER_REFUND_FEE).await?;
+            let refund_block =
+                refund_icp(block_index, sub, from, amount, TOP_UP_CANISTER_REFUND_FEE).await?;
             Err(NotifyError::Refunded {
                 reason: err.to_string(),
                 block_index: refund_block,
@@ -2015,22 +2221,101 @@ async fn process_top_up(
     }
 }
 
+fn record_stalled_icp_burn(
+    source_block_index: BlockIndex,
+    from_subaccount: Subaccount,
+    amount: Tokens,
+) {
+    with_state_mut(|state| {
+        let clobbered = state.block_index_to_stalled_icp_burn.insert(
+            source_block_index,
+            StalledIcpBurn {
+                from_subaccount,
+                amount,
+            },
+        );
+        if let Some(clobbered) = clobbered {
+            print(format!(
+                "[cycles] WARNING: overwrote existing pending burn at block index \
+                 {source_block_index}: {clobbered:?}"
+            ));
+        }
+    });
+}
+
+fn remove_stalled_icp_burn(source_block_index: BlockIndex) {
+    with_state_mut(|state| {
+        state
+            .block_index_to_stalled_icp_burn
+            .remove(&source_block_index);
+    });
+}
+
+async fn burn_or_record_stalled_icp(
+    source_block_index: BlockIndex,
+    from_subaccount: Subaccount,
+    amount: Tokens,
+) {
+    match burn_and_log(from_subaccount, amount).await {
+        Ok(()) => remove_stalled_icp_burn(source_block_index),
+        Err(err) => {
+            record_stalled_icp_burn(source_block_index, from_subaccount, amount);
+            print(format!(
+                "[cycles] Burn for notification block {source_block_index} will be retried: {err}"
+            ));
+        }
+    }
+}
+
+/// Returns right away if another call is already in progress.
+async fn retry_stalled_icp_burns() {
+    let Ok(_guard) = ic_nervous_system_lock::acquire(&STALLED_ICP_BURNS_IN_PROGRESS, ()) else {
+        return;
+    };
+
+    let stalled_icp_burn_batch = with_state(|state| {
+        state
+            .block_index_to_stalled_icp_burn
+            .iter()
+            .take(MAX_STALLED_ICP_BURNS_PER_HEARTBEAT)
+            .map(|(block_index, stalled_icp_burn)| (*block_index, stalled_icp_burn.clone()))
+            .collect::<Vec<_>>()
+    });
+
+    // Burns in the batch are awaited one at a time (not concurrently). Taking
+    // only MAX_STALLED_ICP_BURNS_PER_HEARTBEAT of them here is what bounds how
+    // long this function can take per heartbeat.
+    for (source_block_index, stalled_icp_burn) in stalled_icp_burn_batch {
+        match stalled_icp_burn.retry().await {
+            Ok(()) => {
+                remove_stalled_icp_burn(source_block_index);
+                print(format!(
+                    "[cycles] Stalled ICP burn for notification block {source_block_index} succeeded."
+                ));
+            }
+            Err(err) => print(format!(
+                "[cycles] Stalled ICP burn for notification block {source_block_index} failed: {err}"
+            )),
+        }
+    }
+}
+
 /// Attempt to burn the funds.
-/// Burning doesn't return errors - we don't want to reject the transaction
-/// notification because then it could be retried.
-async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
+/// Burning errors are returned so a completed notification can retry only the burn.
+async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) -> Result<(), String> {
     let msg = format!("Burning of {amount} ICPTs from subaccount {from_subaccount}");
     let minting_account_id = with_state(|state| state.minting_account_id);
     if minting_account_id.is_none() {
-        print(format!("{msg} failed: minting_account_id not set"));
-        return;
+        let err = format!("{msg} failed: minting_account_id not set");
+        print(&err);
+        return Err(err);
     }
     let minting_account_id = minting_account_id.unwrap();
     let ledger_canister_id = with_state(|state| state.ledger_canister_id);
 
     if amount < DEFAULT_TRANSFER_FEE {
         print(format!("{msg}: amount too small ({amount})"));
-        return;
+        return Ok(());
     }
 
     let send_args = SendArgs {
@@ -2045,8 +2330,15 @@ async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
         call_protobuf(ledger_canister_id, "send_pb", send_args).await;
 
     match res {
-        Ok(block) => print(format!("{msg} done in block {block}.")),
-        Err((code, err)) => print(format!("{msg} failed with code {code}: {err:?}")),
+        Ok(block) => {
+            print(format!("{msg} done in block {block}."));
+            Ok(())
+        }
+        Err((code, err)) => {
+            let err = format!("{msg} failed with code {code}: {err:?}");
+            print(&err);
+            Err(err)
+        }
     }
 }
 
@@ -2055,6 +2347,7 @@ async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
 /// action (which is burned). Returns the index of the block in which
 /// the refund was done.
 async fn refund_icp(
+    source_block_index: BlockIndex,
     from_subaccount: Subaccount,
     to: AccountIdentifier,
     amount: Tokens,
@@ -2100,7 +2393,7 @@ async fn refund_icp(
     }
 
     if burned > Tokens::ZERO {
-        burn_and_log(from_subaccount, burned).await;
+        burn_or_record_stalled_icp(source_block_index, from_subaccount, burned).await;
     }
 
     Ok(refund_block_index)
@@ -2388,6 +2681,7 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
 
 #[heartbeat]
 async fn canister_heartbeat() {
+    retry_stalled_icp_burns().await;
     if with_state(|state| state.exchange_rate_canister_id.is_some()) {
         update_exchange_rate().await
     }
@@ -2442,6 +2736,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             "cmc_blocks_notified_count",
             state.blocks_notified.len() as f64,
             "Number of notifications stored in the cache.",
+        )?;
+        w.encode_gauge(
+            "cmc_stalled_icp_burns",
+            state.block_index_to_stalled_icp_burn.len() as f64,
+            "Number of pending ICP burns waiting to be retried.",
         )?;
         w.encode_gauge(
             "cmc_icp_xdr_conversion_rate",
@@ -2604,12 +2903,123 @@ mod tests {
             ))),
         );
         state.blocks_notified = blocks_notified;
+        state.block_index_to_stalled_icp_burn.insert(
+            61,
+            StalledIcpBurn {
+                from_subaccount: Subaccount::from(&PrincipalId::new_user_test_id(5)),
+                amount: Tokens::from_e8s(123_456),
+            },
+        );
 
         let bytes = state.encode();
 
         let state2 = State::decode(&bytes).unwrap();
 
         assert_eq!(state, state2);
+    }
+
+    #[test]
+    fn test_state_decode_migrates_v2_to_v3() {
+        let mut state_v2 = StateV2 {
+            minting_account_id: Some(AccountIdentifier::new(
+                PrincipalId::new_user_test_id(1),
+                None,
+            )),
+            default_subnets: vec![SubnetId::from(PrincipalId::new_subnet_test_id(123))],
+            total_cycles_minted: Cycles::new(1234),
+            last_purged_notification: 33,
+            ..Default::default()
+        };
+        state_v2.authorized_subnets.insert(
+            PrincipalId::new_user_test_id(2),
+            vec![SubnetId::from(PrincipalId::new_subnet_test_id(3))],
+        );
+        state_v2.blocks_notified.insert(
+            60,
+            NotificationStatus::NotifiedCreateCanister(Ok(CanisterId::unchecked_from_principal(
+                PrincipalId::new_user_test_id(4),
+            ))),
+        );
+
+        let bytes = Encode!(&StateV2::state_version(), &state_v2).unwrap();
+        let state = State::decode(&bytes).unwrap();
+
+        assert_eq!(state, State::from(state_v2));
+        assert!(state.block_index_to_stalled_icp_burn.is_empty());
+    }
+
+    #[test]
+    fn test_record_and_remove_stalled_icp_burn() {
+        STATE.with(|state| state.replace(Some(State::default())));
+
+        let block_index = 42;
+        let from_subaccount = Subaccount([1; 32]);
+        let amount = Tokens::from_e8s(123_456);
+        record_stalled_icp_burn(block_index, from_subaccount, amount);
+
+        let other_block_index = 43;
+        let other_from_subaccount = Subaccount([2; 32]);
+        let other_amount = Tokens::from_e8s(789_012);
+        record_stalled_icp_burn(other_block_index, other_from_subaccount, other_amount);
+
+        assert_eq!(
+            with_state(|state| state.block_index_to_stalled_icp_burn.clone()),
+            BTreeMap::from([
+                (
+                    block_index,
+                    StalledIcpBurn {
+                        from_subaccount,
+                        amount,
+                    },
+                ),
+                (
+                    other_block_index,
+                    StalledIcpBurn {
+                        from_subaccount: other_from_subaccount,
+                        amount: other_amount,
+                    },
+                ),
+            ]),
+        );
+
+        remove_stalled_icp_burn(block_index);
+
+        assert_eq!(
+            with_state(|state| state.block_index_to_stalled_icp_burn.clone()),
+            BTreeMap::from([(
+                other_block_index,
+                StalledIcpBurn {
+                    from_subaccount: other_from_subaccount,
+                    amount: other_amount,
+                },
+            )]),
+        );
+    }
+
+    #[test]
+    fn test_burn_or_record_stalled_icp_records_burn_when_burn_fails() {
+        // State::default() has no minting_account_id set, so the burn below fails.
+        STATE.with(|state| state.replace(Some(State::default())));
+
+        let block_index = 42;
+        let from_subaccount = Subaccount([1; 32]);
+        let amount = Tokens::from_e8s(123_456);
+        futures::executor::block_on(burn_or_record_stalled_icp(
+            block_index,
+            from_subaccount,
+            amount,
+        ));
+
+        assert_eq!(
+            with_state(|state| state
+                .block_index_to_stalled_icp_burn
+                .get(&block_index)
+                .cloned()),
+            Some(StalledIcpBurn {
+                from_subaccount,
+                amount,
+            }),
+        );
     }
 
     #[test]
