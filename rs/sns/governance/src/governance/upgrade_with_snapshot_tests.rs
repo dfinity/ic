@@ -85,6 +85,19 @@ fn execute_upgrade(
     take_canister_snapshot: Option<TakeSnapshotBeforeUpgrade>,
     take_canister_snapshot_reply: Option<TakeCanisterSnapshotResponse>,
 ) -> (ProposalData, Calls) {
+    execute_upgrade_with_change_canister_reply(
+        take_canister_snapshot,
+        take_canister_snapshot_reply,
+        Ok(Encode!().unwrap()),
+    )
+}
+
+/// Like execute_upgrade, but Root replies to change_canister with `change_canister_reply`.
+fn execute_upgrade_with_change_canister_reply(
+    take_canister_snapshot: Option<TakeSnapshotBeforeUpgrade>,
+    take_canister_snapshot_reply: Option<TakeCanisterSnapshotResponse>,
+    change_canister_reply: CanisterCallResult,
+) -> (ProposalData, Calls) {
     let dapp_summary = CanisterSummary {
         canister_id: Some(TEST_DAPP_CANISTER_IDS[0].get()),
         status: None,
@@ -100,7 +113,7 @@ fn execute_upgrade(
             index: None,
         })
         .unwrap()),
-        "change_canister" => Ok(Encode!().unwrap()),
+        "change_canister" => change_canister_reply,
     };
     if let Some(reply) = take_canister_snapshot_reply {
         replies.insert("take_canister_snapshot", Ok(Encode!(&reply).unwrap()));
@@ -275,5 +288,53 @@ fn test_upgrade_does_not_happen_when_root_cannot_take_snapshots() {
     assert_eq!(
         method_names(&calls),
         vec!["get_sns_canisters_summary", "take_canister_snapshot"]
+    );
+}
+
+/// The snapshot is recorded as soon as it has been taken, so that it is known (and can be loaded)
+/// even if the upgrade itself then fails.
+#[test]
+fn test_snapshot_is_recorded_even_when_upgrade_fails() {
+    let reply = TakeCanisterSnapshotResponse::Ok(RootTakeCanisterSnapshotOk {
+        id: snapshot_id(2),
+        taken_at_timestamp: 123,
+        total_size: 456,
+    });
+
+    let (proposal_data, calls) = execute_upgrade_with_change_canister_reply(
+        Some(TakeSnapshotBeforeUpgrade {
+            replace_snapshot: None,
+        }),
+        Some(reply),
+        Err((Some(5), "change_canister failed.".to_string())),
+    );
+
+    assert_eq!(proposal_data.status(), ProposalDecisionStatus::Failed);
+    let error_message = proposal_data.failure_reason.unwrap().error_message;
+    assert!(
+        error_message.contains("change_canister failed."),
+        "{error_message}"
+    );
+    assert_eq!(
+        method_names(&calls),
+        vec![
+            "get_sns_canisters_summary",
+            "take_canister_snapshot",
+            "change_canister"
+        ]
+    );
+    assert_eq!(
+        proposal_data.success_value,
+        Some(SuccessfulProposalExecutionValue {
+            proposal_type: Some(
+                successful_proposal_execution_value::ProposalType::TakeCanisterSnapshot(
+                    TakeCanisterSnapshotOk {
+                        snapshot_id: snapshot_id(2),
+                        taken_at_timestamp: 123,
+                        total_size: 456,
+                    }
+                )
+            ),
+        })
     );
 }
