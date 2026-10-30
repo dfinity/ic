@@ -522,11 +522,14 @@ pub struct UpgradeSnsControlledCanister {
     #[prost(message, optional, tag = "6")]
     pub canister_upgrade_options:
         ::core::option::Option<upgrade_sns_controlled_canister::CanisterUpgradeOptions>,
-    /// If set, a snapshot of the target canister is taken right before the new
-    /// code is installed. If taking the snapshot fails, the proposal fails, and
-    /// the canister is not upgraded. The ID of the new snapshot is recorded in
-    /// ProposalData.success_value, so that the canister can later be restored to
-    /// its pre-upgrade state by a LoadCanisterSnapshot proposal.
+    /// If set, a snapshot of the target canister is taken just before the
+    /// upgrade: the canister is stopped, snapshotted and started again, and then
+    /// upgraded. Anything the canister does between the snapshot and the upgrade
+    /// is not in the snapshot. If taking the snapshot fails, the proposal fails,
+    /// and the canister is not upgraded. The ID of the new snapshot is recorded in
+    /// ProposalData.success_value (even if the upgrade then fails), so that the
+    /// canister can later be restored to its pre-upgrade state by a
+    /// LoadCanisterSnapshot proposal.
     #[prost(message, optional, tag = "7")]
     pub take_canister_snapshot:
         ::core::option::Option<upgrade_sns_controlled_canister::TakeSnapshotBeforeUpgrade>,
@@ -574,8 +577,9 @@ pub mod upgrade_sns_controlled_canister {
     )]
     pub struct TakeSnapshotBeforeUpgrade {
         /// The ID of an existing snapshot of the target canister that is to be
-        /// replaced by the new snapshot. This is needed once the target canister has
-        /// reached the maximum number of snapshots allowed per canister.
+        /// replaced by the new snapshot (the existing snapshot is deleted). This is
+        /// needed once the target canister has reached the maximum number of
+        /// snapshots allowed per canister.
         #[prost(bytes = "vec", optional, tag = "1")]
         pub replace_snapshot: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     }

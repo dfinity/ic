@@ -1228,15 +1228,18 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
                 .as_ref()
                 .map(|replace_snapshot| {
                     format!(
-                        " It replaces the existing snapshot `{}`.",
+                        " It replaces (and deletes) the existing snapshot `{}`.",
                         hex::encode(replace_snapshot)
                     )
                 })
                 .unwrap_or_default();
             format!(
                 "\n\n## Snapshot before upgrade\n\n\
-                 A snapshot of the canister will be taken right before the new code is \
-                 installed. If that fails, the canister will not be upgraded.{replace_snapshot}"
+                 A snapshot of the canister will be taken just before the upgrade: the \
+                 canister is stopped, snapshotted and started again, and then upgraded. \
+                 Anything it does between the snapshot and the upgrade is not in the \
+                 snapshot. If taking the snapshot fails, the canister will not be \
+                 upgraded.{replace_snapshot}"
             )
         }
     };

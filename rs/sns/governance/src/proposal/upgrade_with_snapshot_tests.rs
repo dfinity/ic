@@ -58,9 +58,11 @@ fn test_upgrade_with_take_canister_snapshot_validation_and_rendering() {
     assert!(
         rendering.ends_with(&format!(
             "## Snapshot before upgrade\n\n\
-             A snapshot of the canister will be taken right before the new code is installed. \
-             If that fails, the canister will not be upgraded. It replaces the existing \
-             snapshot `{}`.",
+             A snapshot of the canister will be taken just before the upgrade: the canister \
+             is stopped, snapshotted and started again, and then upgraded. Anything it does \
+             between the snapshot and the upgrade is not in the snapshot. If taking the \
+             snapshot fails, the canister will not be upgraded. It replaces (and deletes) \
+             the existing snapshot `{}`.",
             hex::encode(snapshot_id(dapp_canister_id(), 1)),
         )),
         "{rendering}"
