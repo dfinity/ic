@@ -11,10 +11,23 @@ fn dapp_canister_id() -> CanisterId {
     canister_test_id(600)
 }
 
+/// Root knows about one dapp canister (dapp_canister_id).
 fn new_env() -> NativeEnvironment {
     let mut env = NativeEnvironment::new(Some(canister_test_id(501)));
-    // Validating an upgrade with an embedded Wasm makes no canister calls.
+    // Validating an upgrade with an embedded Wasm makes no other canister calls.
     env.default_canister_call_response = Err((Some(1), "Unexpected call!".to_string()));
+    env.set_call_canister_response(
+        root_canister_id(),
+        "list_sns_canisters",
+        Encode!(&ListSnsCanistersRequest {}).unwrap(),
+        Ok(Encode!(&ListSnsCanistersResponse {
+            root: Some(root_canister_id().get()),
+            governance: Some(canister_test_id(501).get()),
+            dapps: vec![dapp_canister_id().get()],
+            ..Default::default()
+        })
+        .unwrap()),
+    );
     env
 }
 
@@ -56,6 +69,26 @@ fn test_upgrade_with_take_canister_snapshot_validation_and_rendering() {
     // replace_snapshot must be a snapshot of the target canister.
     let err = validate(upgrade(Some(snapshot_id(canister_test_id(601), 1)))).unwrap_err();
     assert!(err.contains("not of the target canister"), "{err}");
+
+    // The target must be a registered dapp canister (SNS Root refuses anything else), e.g. not
+    // SNS Governance, nor SNS Root itself.
+    for canister_id in [
+        canister_test_id(501),
+        root_canister_id(),
+        canister_test_id(602),
+    ] {
+        let err = validate(UpgradeSnsControlledCanister {
+            canister_id: Some(canister_id.get()),
+            ..upgrade(None)
+        })
+        .unwrap_err();
+        assert!(
+            err.contains(&format!(
+                "Canister {canister_id} is not a dapp canister registered with this SNS"
+            )),
+            "{err}"
+        );
+    }
 
     // Not available unless enabled.
     let _disabled = crate::temporarily_disable_canister_snapshot_proposals();

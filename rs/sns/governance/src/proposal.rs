@@ -1161,6 +1161,14 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
         {
             defects.push(err);
         }
+        // SNS Root only takes snapshots of registered dapp canisters, so catch any other target
+        // now, rather than when the proposal is executed.
+        if let Some(canister_id) = canister_id
+            && let Err(err) =
+                validate_registered_dapp_canister(env, root_canister_id, canister_id).await
+        {
+            defects.push(err);
+        }
     }
 
     // Inspect wasm.
