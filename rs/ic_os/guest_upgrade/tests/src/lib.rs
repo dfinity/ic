@@ -211,7 +211,7 @@ impl ElectedMeasurementsSource for FakeElectedMeasurementsSource {
         let value = self
             .registry_client
             .get_value(&make_replica_version_key(guestos_version), registry_version)?
-            .context("version not elected")?;
+            .with_context(|| format!("GuestOS version '{guestos_version}' is not elected"))?;
         launch_measurements_from_registry_value(guestos_version, &value)
     }
 
