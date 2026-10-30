@@ -75,6 +75,7 @@ use candid::{Decode, Encode};
 use futures::future::join_all;
 use ic_config::message_routing::TARGET_STREAM_SIZE_BYTES;
 use ic_config::nns_registry_replicator::Config as NnsRegistryReplicatorConfig;
+use ic_consensus_system_test_utils::node::await_subnet_registry_client_registry_version;
 use ic_consensus_system_test_utils::rw_message::cert_state_makes_no_progress_with_retries;
 use ic_interfaces_registry::POLLING_PERIOD;
 use ic_management_canister_types_private::{
@@ -531,7 +532,7 @@ async fn run_scenario(
         .block_for_newer_registry_version()
         .await
         .expect("registry should update after delete_subnet");
-    let c_delete_registry_version = topo_after_delete.get_registry_version().get();
+    let c_delete_registry_version = topo_after_delete.get_registry_version();
     slog::info!(
         logger,
         "Step 9a done: subnet C deleted at registry version {}",
@@ -549,7 +550,14 @@ async fn run_scenario(
         "Step 9b: Waiting for subnet T's replicas to observe registry version {}",
         c_delete_registry_version,
     );
-    wait_for_replicas_registry_version(t_subnet, c_delete_registry_version, logger).await;
+    await_subnet_registry_client_registry_version(
+        t_subnet,
+        c_delete_registry_version,
+        logger,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+    )
+    .await;
     let stable_registry_version_age = POLLING_PERIOD
         + Duration::from_millis(NnsRegistryReplicatorConfig::default().poll_delay_duration_ms);
     tokio::time::sleep(stable_registry_version_age).await;
@@ -570,7 +578,7 @@ async fn run_scenario(
     set_subnet_halted(governance, t_subnet.subnet_id, false).await;
     let t_registry_version = read_subnet_registry_version(&ut, t_subnet.subnet_id).await;
     assert!(
-        t_registry_version >= c_delete_registry_version,
+        t_registry_version >= c_delete_registry_version.get(),
         "subnet T executes at registry version {t_registry_version}, expected at least \
          {c_delete_registry_version}"
     );
@@ -873,48 +881,6 @@ async fn set_subnet_halted(
         )
         .await
         .expect("update_subnet should succeed");
-}
-
-/// Waits until the registry clients of all replicas of `subnet` have fetched
-/// registry version `target_version` (or later).
-async fn wait_for_replicas_registry_version(
-    subnet: &SubnetSnapshot,
-    target_version: u64,
-    logger: &slog::Logger,
-) {
-    const METRIC: &str = "ic_registry_client_registry_version";
-    let subnet_id = subnet.subnet_id;
-    let node_count = subnet.nodes().count();
-    retry_with_msg_async!(
-        format!(
-            "waiting for the replicas of subnet {subnet_id} to observe registry version \
-             {target_version}"
-        ),
-        logger,
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
-        || async {
-            let versions = MetricsFetcher::new(subnet.nodes(), vec![METRIC.to_string()])
-                .fetch::<u64>()
-                .await
-                .map_err(|e| anyhow::anyhow!("failed to fetch {METRIC}: {e}"))?
-                .remove(METRIC)
-                .unwrap_or_default();
-            if versions.len() < node_count || versions.iter().any(|&v| v < target_version) {
-                bail!(
-                    "replicas of subnet {subnet_id} at registry versions {versions:?} \
-                     (target: {target_version} on all {node_count} replicas)"
-                );
-            }
-            Ok(())
-        }
-    )
-    .await
-    .unwrap_or_else(|e| {
-        panic!(
-            "replicas of subnet {subnet_id} did not observe registry version {target_version}: {e}"
-        )
-    });
 }
 
 /// Returns the registry version that subnet `subnet_id` executes at, as reported
