@@ -60,8 +60,6 @@ tracing-flame = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
-ic-canister-client = { path = "../../canister_client" }
-ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canonical-state = { path = "../../canonical_state" }
 ic-canonical-state-tree-hash = { path = "../../canonical_state/tree_hash" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
