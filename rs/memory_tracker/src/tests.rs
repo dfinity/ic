@@ -926,7 +926,7 @@ fn check_range_fits_beyond_the_tracked_memory() {
 
 #[test]
 fn check_ranges_fit_counts_shared_pages_once() {
-    with_accessed_page_limit(DirtyPageTracking::Track, Some(3), |tracker, _| {
+    with_accessed_page_limit(DirtyPageTracking::Track, enforce(3), |tracker, _| {
         // Accessed Wasm pages: {0}.
         sigsegv_wasm_page(&tracker, 0, AccessKind::Read);
         let r = wasm_page_byte_range;
@@ -1051,7 +1051,7 @@ mod count_unaccessed_wasm_pages {
             WASM_PAGES * OS_PAGES_IN_WASM_PAGE,
             vec![],
             DirtyPageTracking::Ignore,
-            Some(NumWasmPages::new(limit)),
+            enforce(limit),
             Arc::new(SignalMutex::new(|| {})),
         );
         for page in &accessed {

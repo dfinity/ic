@@ -21,7 +21,7 @@
 //! counter overflows, the value of the counter is the initial value minus the
 //! sum of cost of all executed instructions.
 //!
-//! In more details, first, it inserts six System API functions:
+//! In more details, first, it inserts five or six System API functions:
 //!
 //! ```wasm
 //! (import "__" "out_of_instructions" (func (;0;) (func)))
@@ -32,7 +32,9 @@
 //! (import "__" "check_heap_bulk_access" (func ((param i64) (param i64) (param i64) (param i32))))
 //! ```
 //! The last one is the slow path of the heap page limit check that is
-//! injected before every bulk memory operation on the heap.
+//! injected before every bulk memory operation on the heap. It is only
+//! inserted, and the checks are only injected, if the heap page limit is
+//! enabled.
 //!
 //! It then inserts (and exports) a global mutable counter:
 //! ```wasm
@@ -115,7 +117,7 @@
 use super::system_api_replacements::replacement_functions;
 use super::validation::API_VERSION_IC0;
 use super::{InstrumentationOutput, Segments, SystemApiFunc};
-use ic_config::embedders::MeteringType;
+use ic_config::{embedders::MeteringType, flag_status::FlagStatus};
 use ic_replicated_state::NumWasmPages;
 use ic_sys::PAGE_SIZE;
 use ic_types::NumBytes;
@@ -167,7 +169,9 @@ pub(crate) struct InjectedFunctions {
     pub try_grow_stable_memory: u32,
     pub internal_trap: u32,
     pub stable_read_first_access: u32,
-    pub check_heap_bulk_access: u32,
+    /// The slow path of the heap page limit check, `None` if the limit is
+    /// disabled and no checks are injected.
+    pub check_heap_bulk_access: Option<u32>,
 }
 
 // Gets the cost of an instruction.
@@ -746,6 +750,7 @@ fn max_memory_size_in_wasm_pages(memory_size: NumBytes) -> u64 {
 fn inject_helper_functions(
     module: &mut wirm::Module,
     mem_type: WasmMemoryType,
+    heap_page_limit: FlagStatus,
 ) -> InjectedFunctions {
     let ooi_type_idx = module.types.add_func_type(&[], &[]);
     let (out_of_instructions_fn_id, _) = module.add_import_func(
@@ -791,15 +796,19 @@ fn inject_helper_functions(
         fr_type_idx,
     );
 
-    let chba_type_idx = module.types.add_func_type(
-        &[DataType::I64, DataType::I64, DataType::I64, DataType::I32],
-        &[],
-    );
-    let (check_heap_bulk_access_fn_id, _) = module.add_import_func(
-        INSTRUMENTED_FUN_MODULE.to_string(),
-        CHECK_HEAP_BULK_ACCESS_FUN_NAME.to_string(),
-        chba_type_idx,
-    );
+    // The heap page limit check is only injected if the feature is enabled.
+    let check_heap_bulk_access = (heap_page_limit == FlagStatus::Enabled).then(|| {
+        let chba_type_idx = module.types.add_func_type(
+            &[DataType::I64, DataType::I64, DataType::I64, DataType::I32],
+            &[],
+        );
+        let (check_heap_bulk_access_fn_id, _) = module.add_import_func(
+            INSTRUMENTED_FUN_MODULE.to_string(),
+            CHECK_HEAP_BULK_ACCESS_FUN_NAME.to_string(),
+            chba_type_idx,
+        );
+        *check_heap_bulk_access_fn_id
+    });
 
     InjectedFunctions {
         out_of_instructions: *out_of_instructions_fn_id,
@@ -807,7 +816,7 @@ fn inject_helper_functions(
         try_grow_stable_memory: *try_grow_stable_memory_fn_id,
         internal_trap: *internal_trap_fn_id,
         stable_read_first_access: *stable_read_first_access_fn_id,
-        check_heap_bulk_access: *check_heap_bulk_access_fn_id,
+        check_heap_bulk_access,
     }
 }
 
@@ -827,8 +836,9 @@ pub(super) struct InjectedCounters {
     pub count_clean_pages_fn: u32,
     /// Functions that charge instructions for a bulk memory operation on the
     /// heap and check it against the heap page budget, indexed by
-    /// [`HeapBulkOp`].
-    pub heap_bulk_check_fns: [u32; 3],
+    /// [`HeapBulkOp`]. `None` if the heap page limit is disabled; bulk memory
+    /// operations are then only charged for their length.
+    pub heap_bulk_check_fns: Option<[u32; 3]>,
 }
 
 /// The bulk memory operations on the heap, which differ in which of their
@@ -1183,16 +1193,18 @@ fn export_additional_symbols<'a>(
     let decr_instruction_counter_fn_id = builder.finish_module(&mut module);
 
     // push the functions checking bulk memory operations on the heap against
-    // the heap page budget
-    let heap_bulk_check_fns = HeapBulkOp::ALL.map(|op| {
-        inject_heap_bulk_check_fn(
-            &mut module,
-            main_memory_type,
-            op,
-            heap_page_budget,
-            *decr_instruction_counter_fn_id,
-            injected_functions.check_heap_bulk_access,
-        )
+    // the heap page budget, if the heap page limit is enabled
+    let heap_bulk_check_fns = injected_functions.check_heap_bulk_access.map(|check_fn| {
+        HeapBulkOp::ALL.map(|op| {
+            inject_heap_bulk_check_fn(
+                &mut module,
+                main_memory_type,
+                op,
+                heap_page_budget,
+                *decr_instruction_counter_fn_id,
+                check_fn,
+            )
+        })
     });
 
     // function to count clean pages in a given range
@@ -1419,6 +1431,7 @@ impl InjectionPoint {
 fn injections(
     code: &[wirm::wasmparser::Operator],
     mem_type: WasmMemoryType,
+    heap_bulk_check: bool,
 ) -> Vec<InjectionPoint> {
     let mut res = Vec::new();
     use wirm::wasmparser::Operator::*;
@@ -1458,6 +1471,18 @@ fn injections(
             }
             // Bulk memory instructions require injected metering __before__ the instruction
             // executes so that size arguments can be read from the stack at runtime.
+            MemoryCopy { .. } | MemoryFill { .. } | MemoryInit { .. } if !heap_bulk_check => {
+                // MemoryInit has i32 arguments even in 64-bit mode; the other
+                // ops in Wasm32 will need to extend the i32 to i64.
+                let operand = if matches!(i, MemoryInit { .. })
+                    || matches!(mem_type, WasmMemoryType::Wasm32)
+                {
+                    CostOperandOnStack::X32Bit
+                } else {
+                    CostOperandOnStack::X64Bit
+                };
+                res.push(InjectionPoint::new_dynamic_cost(position, operand));
+            }
             // Canister code can only address the heap (multi-memory is not
             // enabled), so the bulk memory instructions are also checked
             // against the heap page budget.
@@ -1519,7 +1544,11 @@ fn inject_metering(
 ) {
     let points = match metering_type {
         MeteringType::None => Vec::new(),
-        MeteringType::New => injections(body.instructions.get_ops(), mem_type),
+        MeteringType::New => injections(
+            body.instructions.get_ops(),
+            mem_type,
+            injected_counters.heap_bulk_check_fns.is_some(),
+        ),
     };
     let points = points.iter().filter(|point| match point.cost_detail {
         InjectionPointCostDetail::StaticCost {
@@ -1597,8 +1626,11 @@ fn inject_metering(
                 // operation, charges instructions for its length, checks it
                 // against the heap page budget and returns the operands
                 // unchanged.
+                let heap_bulk_check_fns = injected_counters
+                    .heap_bulk_check_fns
+                    .expect("heap bulk op injection points exist only with the check functions");
                 elems.extend([Call {
-                    function_index: injected_counters.heap_bulk_check_fns[op as usize],
+                    function_index: heap_bulk_check_fns[op as usize],
                 }]);
             }
         }
@@ -1786,9 +1818,11 @@ pub(super) fn instrument(
     metering_type: MeteringType,
     max_wasm_memory_size: NumBytes,
     max_stable_memory_size: NumBytes,
+    heap_page_limit: FlagStatus,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
     let main_memory_type = main_memory_type(&module);
-    let injected_functions = inject_helper_functions(&mut module, main_memory_type);
+    let injected_functions =
+        inject_helper_functions(&mut module, main_memory_type, heap_page_limit);
 
     module = export_table(module);
     let stable_memory_index;
@@ -1818,7 +1852,9 @@ pub(super) fn instrument(
         .filter(|f| {
             *f.func_id != injected_counters.decr_instruction_counter_fn
                 && *f.func_id != injected_counters.count_clean_pages_fn
-                && !injected_counters.heap_bulk_check_fns.contains(&*f.func_id)
+                && !injected_counters
+                    .heap_bulk_check_fns
+                    .is_some_and(|fns| fns.contains(&*f.func_id))
         })
     {
         inject_metering(
