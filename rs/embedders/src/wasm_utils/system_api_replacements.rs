@@ -13,7 +13,9 @@
 
 use crate::{
     InternalErrorCode, WASM_PAGE_SIZE,
-    wasm_utils::instrumentation::{InjectedCounters, InjectedFunctions, WasmMemoryType},
+    wasm_utils::instrumentation::{
+        InjectedCounters, InjectedFunctions, WasmMemoryType, heap_page_limit_check,
+    },
     wasmtime_embedder::system_api_complexity::overhead_native,
 };
 use ic_interfaces::execution_environment::StableMemoryApi;
@@ -60,6 +62,18 @@ pub(super) fn replacement_functions(
     let dirty_pages_counter_index = injected_counters.dirty_pages_counter;
     let accessed_pages_counter_index = injected_counters.accessed_pages_counter;
     let decr_instruction_counter_fn = injected_counters.decr_instruction_counter_fn;
+    // The heap page limit check for a copy between the heap range
+    // `[addr, addr + len)` and stable memory, with `addr` and `len` in locals
+    // of type `operand_type`.
+    let check_heap_range = |addr: u32, len: u32, operand_type: DataType| {
+        heap_page_limit_check(
+            (addr, operand_type),
+            None,
+            (len, operand_type),
+            injected_counters.heap_page_budget,
+            injected_functions.check_heap_bulk_access,
+        )
+    };
 
     use wirm::wasmparser::Operator::*;
     let page_size_shift = PAGE_SIZE.trailing_zeros() as i32;
@@ -448,6 +462,11 @@ pub(super) fn replacement_functions(
                         BrIf { relative_depth: 0 },
                         End, // end loop
                         End, // end if
+                    ]
+                    .into_iter()
+                    // The copy writes to the heap range [dst, dst + len).
+                    .chain(check_heap_range(DST, LEN, DataType::I32))
+                    .chain([
                         // perform the copy, calling API if it's the first access.
                         LocalGet {
                             local_index: SHOULD_CALL_READ_API,
@@ -485,7 +504,8 @@ pub(super) fn replacement_functions(
                         GlobalSet {
                             global_index: accessed_pages_counter_index,
                         },
-                    ],
+                    ])
+                    .collect(),
                 )
             }),
         ),
@@ -728,6 +748,11 @@ pub(super) fn replacement_functions(
                         BrIf { relative_depth: 0 },
                         End, // end loop
                         End, // end if
+                    ]
+                    .into_iter()
+                    // The copy writes to the heap range [dst, dst + len).
+                    .chain(check_heap_range(DST, LEN, DataType::I64))
+                    .chain([
                         // perform the copy, calling API if it's the first access.
                         LocalGet {
                             local_index: SHOULD_CALL_READ_API,
@@ -763,7 +788,8 @@ pub(super) fn replacement_functions(
                         GlobalSet {
                             global_index: accessed_pages_counter_index,
                         },
-                    ],
+                    ])
+                    .collect(),
                 )
             }),
         ),
@@ -933,6 +959,11 @@ pub(super) fn replacement_functions(
                         MemoryFill {
                             mem: stable_memory_bytemap_index,
                         },
+                    ]
+                    .into_iter()
+                    // The copy reads from the heap range [src, src + len).
+                    .chain(check_heap_range(SRC, LEN, DataType::I32))
+                    .chain([
                         // copy memory contents
                         LocalGet { local_index: DST },
                         I64ExtendI32U,
@@ -964,7 +995,8 @@ pub(super) fn replacement_functions(
                         GlobalSet {
                             global_index: accessed_pages_counter_index,
                         },
-                    ],
+                    ])
+                    .collect(),
                 )
             }),
         ),
@@ -1164,6 +1196,11 @@ pub(super) fn replacement_functions(
                         MemoryFill {
                             mem: stable_memory_bytemap_index,
                         },
+                    ]
+                    .into_iter()
+                    // The copy reads from the heap range [src, src + len).
+                    .chain(check_heap_range(SRC, LEN, DataType::I64))
+                    .chain([
                         // copy memory contents
                         LocalGet { local_index: DST },
                         LocalGet { local_index: SRC },
@@ -1196,7 +1233,8 @@ pub(super) fn replacement_functions(
                         GlobalSet {
                             global_index: accessed_pages_counter_index,
                         },
-                    ],
+                    ])
+                    .collect(),
                 )
             }),
         ),
