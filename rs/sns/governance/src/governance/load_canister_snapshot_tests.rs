@@ -49,6 +49,13 @@ fn execute_load_canister_snapshot(
         Some(load_canister_snapshot_reply),
     );
 
+    execute_load_canister_snapshot_in(env)
+}
+
+/// Executes a LoadCanisterSnapshot proposal (for TEST_DAPP_CANISTER_IDS[0]) in `env`.
+fn execute_load_canister_snapshot_in(env: NativeEnvironment) -> ProposalData {
+    let dapp_canister_id = TEST_DAPP_CANISTER_IDS[0];
+
     let action = Action::LoadCanisterSnapshot(LoadCanisterSnapshot {
         canister_id: Some(dapp_canister_id.get()),
         snapshot_id: Some(SnapshotId::from((dapp_canister_id, 3)).to_vec()),
@@ -117,6 +124,39 @@ fn test_load_canister_snapshot_fails_when_root_fails() {
     let error_message = proposal_data.failure_reason.unwrap().error_message;
     assert!(
         error_message.contains("Could not find the snapshot ID."),
+        "{error_message}"
+    );
+}
+
+/// The target is checked again when the proposal is executed, because the dapp canister might
+/// have been deregistered since the proposal was submitted.
+#[test]
+fn test_load_canister_snapshot_fails_when_target_is_no_longer_a_dapp() {
+    let mut env = NativeEnvironment::default();
+    env.set_call_canister_response(
+        *TEST_ROOT_CANISTER_ID,
+        "list_sns_canisters",
+        Encode!(&ListSnsCanistersRequest {}).unwrap(),
+        Ok(Encode!(&ListSnsCanistersResponse {
+            dapps: vec![],
+            ..Default::default()
+        })
+        .unwrap()),
+    );
+    // Root would load the snapshot, if it were asked to.
+    env.set_call_canister_response(
+        *TEST_ROOT_CANISTER_ID,
+        "load_canister_snapshot",
+        load_canister_snapshot_request(),
+        Ok(Encode!(&LoadCanisterSnapshotResponse::Ok(LoadCanisterSnapshotOk {})).unwrap()),
+    );
+
+    let proposal_data = execute_load_canister_snapshot_in(env);
+
+    assert_eq!(proposal_data.status(), ProposalDecisionStatus::Failed);
+    let error_message = proposal_data.failure_reason.unwrap().error_message;
+    assert!(
+        error_message.contains("is not a dapp canister registered with this SNS"),
         "{error_message}"
     );
 }
