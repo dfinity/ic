@@ -262,6 +262,9 @@ impl governance::Mode {
             NervousSystemFunction::upgrade_sns_controlled_canister(),
             NervousSystemFunction::register_dapp_canisters(),
             NervousSystemFunction::deregister_dapp_canisters(),
+            // Like UpgradeSnsControlledCanister, this replaces the code (and state) of a dapp
+            // canister.
+            NervousSystemFunction::load_canister_snapshot(),
         ]
     }
 
