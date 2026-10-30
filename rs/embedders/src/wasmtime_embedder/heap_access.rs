@@ -4,6 +4,10 @@
 //! tracker, which refuses to map the first page beyond the limit. Host
 //! functions must not fault on such a page, so every heap range they touch is
 //! checked here first, through [`Heap`](ic_interfaces::execution_environment::Heap).
+//!
+//! The limit is only enforced if the `wasm_memory_accessed_page_limit`
+//! feature flag is enabled. Otherwise the check still runs, but an access
+//! beyond the limit is allowed.
 
 use std::ops::Range;
 use std::sync::{
@@ -11,7 +15,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-use ic_config::embedders::MemoryPageLimit;
+use ic_config::{embedders::MemoryPageLimit, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{HeapAccessCheck, HypervisorError, HypervisorResult};
 use ic_sys::PAGE_SIZE;
 use ic_types::NumOsPages;
@@ -27,6 +31,8 @@ pub struct TrackerHeapAccess {
     page_limit_exceeded: Arc<AtomicBool>,
     /// The configured limits, for the error message.
     limits: MemoryPageLimit,
+    /// Whether accesses beyond the limit are refused (the feature flag).
+    enforced: bool,
 }
 
 impl TrackerHeapAccess {
@@ -37,20 +43,29 @@ impl TrackerHeapAccess {
             tracker: None,
             page_limit_exceeded: Arc::new(AtomicBool::new(false)),
             limits,
+            enforced: false,
         }
     }
 
-    /// A check against the specified heap memory tracker.
+    /// A check against the specified heap memory tracker. Accesses beyond
+    /// the limit are refused only if `enforce` is enabled.
     pub fn new(
         tracker: Arc<SignalMutex<DeterministicMemoryTracker>>,
         limits: MemoryPageLimit,
+        enforce: FlagStatus,
     ) -> Self {
         let page_limit_exceeded = tracker.lock().page_limit_exceeded_flag().clone();
         Self {
             tracker: Some(tracker),
             page_limit_exceeded,
             limits,
+            enforced: enforce == FlagStatus::Enabled,
         }
+    }
+
+    /// Returns true if accesses beyond the limit are refused.
+    pub fn is_enforced(&self) -> bool {
+        self.enforced
     }
 
     /// Returns true if any heap access was refused because of the limit
@@ -88,7 +103,7 @@ impl HeapAccessCheck for TrackerHeapAccess {
         let fits = tracker
             .lock()
             .check_range_fits(range.start as u64..range.end as u64);
-        if fits {
+        if fits || !self.enforced {
             Ok(())
         } else {
             self.page_limit_exceeded.store(true, Ordering::Relaxed);

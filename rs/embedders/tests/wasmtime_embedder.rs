@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use ic_config::{
-    embedders::{Config, MemoryPageLimit},
+    embedders::{Config, FeatureFlags, MemoryPageLimit},
     flag_status::FlagStatus,
 };
 use ic_embedders::{
@@ -863,6 +863,10 @@ fn config_with_wasm_memory_accessed_page_limit(wasm_pages: u64) -> Config {
             upgrade: os_pages,
             query: os_pages,
         },
+        feature_flags: FeatureFlags {
+            wasm_memory_accessed_page_limit: FlagStatus::Enabled,
+            ..Default::default()
+        },
         ..Default::default()
     }
 }
@@ -940,6 +944,54 @@ fn wasm_memory_accessed_page_limit_for_loads_and_stores() {
         instance.get_stats().wasm_accessed_pages,
         3 * OS_PAGES_PER_WASM_PAGE
     );
+}
+
+/// With the feature flag disabled, the limit is only observed: executions
+/// that exceed it succeed and every page they touch is mapped.
+#[test]
+fn wasm_memory_accessed_page_limit_is_not_enforced_when_the_feature_is_disabled() {
+    fn func_ref(name: &str) -> FuncRef {
+        FuncRef::Method(WasmMethod::Update(name.to_string()))
+    }
+    let wat = r#"
+            (module
+                (import "ic0" "msg_arg_data_copy"
+                    (func $msg_arg_data_copy (param i32 i32 i32)))
+                (func (export "canister_update wasm_above_limit")
+                    (drop (i32.load (i32.const 0)))
+                    (i32.store (i32.const 65536) (i32.const 1))
+                    ;; page 2 exceeds the limit
+                    (drop (i32.load (i32.const 131072)))
+                )
+                (func (export "canister_update host_above_limit")
+                    ;; host write to pages 0, 1 and 2
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 196608))
+                )
+                (memory (export "memory") 4)
+            )"#;
+    let mut config = config_with_wasm_memory_accessed_page_limit(2);
+    config.feature_flags.wasm_memory_accessed_page_limit = FlagStatus::Disabled;
+
+    for method in ["wasm_above_limit", "host_above_limit"] {
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_api_type(ApiType::update(
+                UNIX_EPOCH,
+                vec![7_u8; 3 * WASM_PAGE_SIZE_IN_BYTES],
+                Cycles::zero(),
+                user_test_id(24).get(),
+                call_context_test_id(13),
+                None,
+            ))
+            .with_wat(wat)
+            .build();
+        instance.run(func_ref(method)).unwrap();
+        assert_eq!(
+            instance.get_stats().wasm_accessed_pages,
+            3 * OS_PAGES_PER_WASM_PAGE,
+            "{method}"
+        );
+    }
 }
 
 #[test]

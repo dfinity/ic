@@ -15,7 +15,7 @@ use wasmtime::{
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
-use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{
     CanisterBacktrace, HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
 };
@@ -31,7 +31,8 @@ use ic_types::{
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{
-    DeterministicMemoryTracker, DirtyPageTracking, MemoryLimits, signal_mutex::SignalMutex,
+    AccessedWasmPagesLimit, DeterministicMemoryTracker, DirtyPageTracking, MemoryLimits,
+    signal_mutex::SignalMutex,
 };
 use signal_stack::WasmtimeSignalStack;
 
@@ -503,21 +504,29 @@ impl WasmtimeEmbedder {
         let stable_memory_limits = MemoryLimits {
             max_memory_size: self.config.max_stable_memory_size,
             max_dirty_pages: current_dirty_page_limit,
-            accessed_wasm_pages_limit: memory_tracker::AccessedWasmPagesLimit::Unlimited,
+            accessed_wasm_pages_limit: AccessedWasmPagesLimit::Unlimited,
         };
         let max_heap_memory_size = self
             .config
             .max_wasm_memory_size
             .max(self.config.max_wasm64_memory_size);
+        let heap_accessed_wasm_page_limit = NumWasmPages::new(
+            current_heap_accessed_limit.get() as usize / (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE),
+        );
+        // Pages beyond the limit are only refused if the feature is enabled.
+        // Otherwise the tracker counts them and maps them like any other page.
+        let accessed_wasm_pages_limit = match self
+            .config
+            .feature_flags
+            .wasm_memory_accessed_page_limit
+        {
+            FlagStatus::Enabled => AccessedWasmPagesLimit::Enforce(heap_accessed_wasm_page_limit),
+            FlagStatus::Disabled => AccessedWasmPagesLimit::Observe(heap_accessed_wasm_page_limit),
+        };
         let heap_memory_limits = MemoryLimits {
             max_memory_size: max_heap_memory_size,
             max_dirty_pages: NumOsPages::new(max_heap_memory_size.get() / PAGE_SIZE as u64),
-            accessed_wasm_pages_limit: memory_tracker::AccessedWasmPagesLimit::Enforce(
-                NumWasmPages::new(
-                    current_heap_accessed_limit.get() as usize
-                        / (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE),
-                ),
-            ),
+            accessed_wasm_pages_limit,
         };
 
         let mut store = Store::new(
@@ -704,6 +713,7 @@ impl WasmtimeEmbedder {
             store.data_mut().heap_access = TrackerHeapAccess::new(
                 Arc::clone(heap_tracker),
                 self.config.wasm_memory_accessed_page_limit,
+                self.config.feature_flags.wasm_memory_accessed_page_limit,
             );
         }
 
@@ -1251,9 +1261,10 @@ impl WasmtimeInstance {
         // A Wasm load or store beyond the heap accessed page limit is refused
         // by the memory tracker and surfaces as a heap out of bounds trap.
         // Report it as the limit error instead. Host functions already return
-        // this error themselves; they only set the flag.
+        // this error themselves; they only set the flag. Nothing sets the
+        // flag while the limit is not enforced, but do not rely on that.
         let heap_access = &self.store.data().heap_access;
-        let result = if heap_access.page_limit_exceeded() {
+        let result = if heap_access.is_enforced() && heap_access.page_limit_exceeded() {
             Err(heap_access.limit_exceeded_error())
         } else {
             result
