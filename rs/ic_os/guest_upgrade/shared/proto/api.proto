@@ -20,6 +20,12 @@ message GetDiskEncryptionKeyResponse {
 
   // The detached LUKS header for the Store partition.
   optional bytes luks_header = 3;
+
+  // ID of the elected GuestOS version whose launch measurements include the
+  // server's own launch measurement, as found in the server's local registry.
+  // The client uses it to fetch just that version's record from the NNS
+  // registry instead of replicating the whole registry.
+  optional string guestos_version = 4;
 }
 
 message SignalStatusRequest {
