@@ -121,7 +121,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         pool: Arc<RwLock<Pool>>,
         bouncer_factory: Arc<dyn BouncerFactory<Artifact::Id, Pool>>,
         metrics_registry: MetricsRegistry,
-    ) -> (impl Fn(Arc<dyn Transport>) -> Self, Router)
+    ) -> (impl FnOnce(Arc<dyn Transport>) -> Self, Router)
     where
         Pool: ValidatedPoolReader<Artifact> + 'static,
     {
@@ -133,24 +133,21 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
                     bouncer_factory.new_bouncer(&p)
                 };
                 let (bouncer_tx, bouncer_rx) = watch::channel(bouncer);
-                let pool_clone = pool.clone();
-                let bouncer_factory_clone = bouncer_factory.clone();
-                let log_clone = log.clone();
                 let jh = rt.spawn(async move {
                     loop {
                         let bouncer = {
-                            let p = pool_clone.read().unwrap();
-                            bouncer_factory_clone.new_bouncer(&p)
+                            let p = pool.read().unwrap();
+                            bouncer_factory.new_bouncer(&p)
                         };
                         if bouncer_tx.send(bouncer).is_err() {
                             break;
                         }
 
-                        tokio::time::sleep(bouncer_factory_clone.refresh_period()).await
+                        tokio::time::sleep(bouncer_factory.refresh_period()).await
                     }
                 });
                 Self {
-                    log: log_clone,
+                    log,
                     transport,
                     bouncer_rx,
                     metrics: FetchArtifactMetrics::new::<Artifact>(&metrics_registry),
