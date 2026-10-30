@@ -1136,7 +1136,7 @@ impl WasmtimeInstance {
 
             let heap_access = &self.store.data().heap_access;
             let wasm_page_limit_refusals = HeapPageLimitRefusals {
-                handler: wasm_tracker.metrics().sigsegv_refused_count(),
+                handler: wasm_tracker.metrics().page_limit_exceeded_count(),
                 ..heap_access.refusals()
             };
             let wasm_bulk_check_slow_path_calls = heap_access.bulk_check_slow_path_calls();

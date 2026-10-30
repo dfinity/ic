@@ -45,9 +45,11 @@ pub struct TrackerHeapAccess {
     limits: MemoryPageLimit,
     /// Whether accesses beyond the limit are refused (the feature flag).
     enforced: bool,
-    /// Refusals by the heap accessor, i.e. through [`HeapAccessCheck::check`].
+    /// Accesses beyond the limit detected by the heap accessor, i.e. through
+    /// [`HeapAccessCheck::check`]. Refused only if the limit is enforced.
     host_accessor_refusals: AtomicUsize,
-    /// Refusals by the bulk pre-check, i.e. through [`Self::check_bulk`].
+    /// Accesses beyond the limit detected by the bulk pre-check, i.e. through
+    /// [`Self::check_bulk`]. Refused only if the limit is enforced.
     bulk_check_refusals: AtomicUsize,
     /// Calls of the `__.check_heap_bulk_access` import.
     bulk_check_slow_path_calls: AtomicUsize,
@@ -98,7 +100,8 @@ impl TrackerHeapAccess {
         self.page_limit_exceeded.load(Ordering::Relaxed)
     }
 
-    /// The refusals by this check so far. The handler's refusals are counted
+    /// The accesses beyond the limit detected by this check so far, refused
+    /// only if the limit is enforced. The handler's are counted
     /// by the tracker and filled in by the caller.
     pub fn refusals(&self) -> HeapPageLimitRefusals {
         HeapPageLimitRefusals {
@@ -156,16 +159,21 @@ impl TrackerHeapAccess {
         let fits = tracker
             .lock()
             .check_ranges_fit(as_u64(dst), as_u64(src.unwrap_or(0..0)));
-        if fits || !self.enforced {
-            Ok(())
-        } else {
+        if fits {
+            return Ok(());
+        }
+        // Count the detection even if the limit is only observed, so that
+        // the metrics show what would have been refused.
+        match detector {
+            Detector::HostAccessor => &self.host_accessor_refusals,
+            Detector::BulkCheck => &self.bulk_check_refusals,
+        }
+        .fetch_add(1, Ordering::Relaxed);
+        if self.enforced {
             self.page_limit_exceeded.store(true, Ordering::Relaxed);
-            match detector {
-                Detector::HostAccessor => &self.host_accessor_refusals,
-                Detector::BulkCheck => &self.bulk_check_refusals,
-            }
-            .fetch_add(1, Ordering::Relaxed);
             Err(self.limit_exceeded_error())
+        } else {
+            Ok(())
         }
     }
 }

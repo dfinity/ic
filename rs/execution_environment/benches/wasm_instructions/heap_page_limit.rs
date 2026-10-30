@@ -13,7 +13,9 @@
 
 use crate::helper::benchmark_with_confirmation;
 use execution_environment_bench::common;
-use ic_config::{embedders::MemoryPageLimit, execution_environment::Config};
+use ic_config::{
+    embedders::MemoryPageLimit, execution_environment::Config, flag_status::FlagStatus,
+};
 use ic_types::NumOsPages;
 
 /// Bulk memory operations on 8 bytes of the first heap page.
@@ -41,5 +43,9 @@ pub fn config() -> Config {
         upgrade: limit,
         query: limit,
     };
+    config
+        .embedders_config
+        .feature_flags
+        .wasm_memory_accessed_page_limit = FlagStatus::Enabled;
     config
 }

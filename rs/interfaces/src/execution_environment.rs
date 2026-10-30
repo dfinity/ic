@@ -104,7 +104,9 @@ pub struct InstanceStats {
 /// Refusals of heap accesses because of the accessed page limit, by detector.
 ///
 /// A message that exceeds the limit is refused once; the detector tells
-/// which check caught it. All three stay zero while the limit is inert.
+/// which check caught it. While the `wasm_memory_accessed_page_limit` feature
+/// is disabled, nothing is refused and the counts tell what would have been
+/// refused.
 #[derive(Clone, Copy, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct HeapPageLimitRefusals {
     /// Wasm loads and stores, refused by the memory tracker's signal handler.
