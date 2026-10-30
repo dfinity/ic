@@ -1,12 +1,12 @@
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use common::{
     STARTING_CYCLES_PER_CANISTER, account, index_ng_wasm, install_icrc3_test_ledger_with_wasm,
-    install_index_ng, run_rounds_until, status,
+    install_index_ng, parse_index_logs, run_rounds_until, status,
 };
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{IndexArg, InitArg, PokeCallers, UpgradeArg};
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
-use ic_ledger_suite_state_machine_helpers::{add_block, set_icrc3_enabled};
+use ic_ledger_suite_state_machine_helpers::{add_block, get_logs, set_icrc3_enabled};
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder};
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use std::time::Duration;
@@ -326,30 +326,189 @@ fn poke_policy_and_upgrade_compatibility() {
 }
 
 #[test]
-fn failed_poke_releases_guard_and_never_retries_or_skips() {
+fn scheduled_fatal_error_blocks_ingress_and_notifications() {
     let (env, ledger, index) = setup(100, Some(PokeCallers::All));
+    let mint = BlockBuilder::new(0, 0)
+        .mint(account(1, 0), Tokens::from(100_u64))
+        .build();
+    add_block(&env, ledger, &mint).unwrap();
     add_block(&env, ledger, &ICRC3Value::Text("invalid block".into())).unwrap();
-    advance_time_and_run_rounds(&env, 1);
-    notify(&env, ledger, index);
-    env.run_until_completion(20);
-    assert_eq!(count(&env, ledger), 1);
-    ingress(&env, index, PrincipalId::new_anonymous());
-    assert_eq!(count(&env, ledger), 2, "error released the shared guard");
-    advance_time_and_run_rounds(&env, 98);
-    assert_eq!(count(&env, ledger), 2);
-    advance_time_and_run_rounds(&env, 1); // original automatic wakeup also fails, stopping its chain
-    assert_eq!(count(&env, ledger), 3);
-    advance_time_and_run_rounds(&env, 102); // includes any accidental retries at t=101/102/200
-    assert_eq!(count(&env, ledger), 3);
-    notify(&env, ledger, index); // independent attempt after automatic stop
-    assert_eq!(count(&env, ledger), 4);
+    let later = BlockBuilder::new(2, 2)
+        .mint(account(2, 0), Tokens::from(50_u64))
+        .build();
+    add_block(&env, ledger, &later).unwrap();
     advance_time_and_run_rounds(&env, 100);
+    assert_eq!(count(&env, ledger), 1);
+    assert_eq!(status(&env, index).num_blocks_synced, Nat::from(1_u64));
+    for _ in 0..3 {
+        assert!(ingress(&env, index, PrincipalId::new_anonymous()));
+        notify(&env, ledger, index);
+        advance_time_and_run_rounds(&env, 100);
+    }
     assert_eq!(
         count(&env, ledger),
-        4,
-        "poke must not restart the stopped chain"
+        1,
+        "neither entry path bypasses the halt"
     );
+    assert_eq!(
+        status(&env, index).num_blocks_synced,
+        Nat::from(1_u64),
+        "the bad block is never skipped"
+    );
+    let logs = parse_index_logs(&get_logs(&env, index));
+    assert_eq!(
+        logs.entries
+            .iter()
+            .filter(|entry| entry.message.contains("Unable to decode"))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn fatal_poke_discards_pending_work_and_recovers_on_upgrade() {
+    let (env, ledger, index) = setup(100, None);
+    let listed = PrincipalId::new_user_test_id(42);
+    upgrade(
+        &env,
+        index,
+        Some(PokeCallers::Somebody(vec![ledger.into(), listed.0])),
+    );
+    add_block(&env, ledger, &ICRC3Value::Text("invalid block".into())).unwrap();
+    let mint = BlockBuilder::new(0, 0)
+        .mint(account(1, 0), Tokens::from(100_u64))
+        .build();
+    hold(&env, ledger, true);
+    notify(&env, ledger, index);
+    assert_eq!(count(&env, ledger), 1);
+    assert!(ingress(&env, index, listed)); // pending demand behind the bad response
+    advance_time_and_run_rounds(&env, 100); // the normal timer collides and rearms
+    assert_eq!(count(&env, ledger), 1);
+    notify(&env, ledger, index);
+    release_one(&env, ledger);
+    env.run_until_completion(20);
+    hold(&env, ledger, false);
+    assert_eq!(
+        count(&env, ledger),
+        1,
+        "fatal reply discards the pending pass"
+    );
+    assert!(ingress(&env, index, listed));
+    notify(&env, ledger, index);
+    advance_time_and_run_rounds(&env, 100); // already queued ordinary callback
+    advance_time_and_run_rounds(&env, 300);
+    assert_eq!(count(&env, ledger), 1, "queued work cannot revive indexing");
     assert_eq!(status(&env, index).num_blocks_synced, Nat::from(0_u64));
+    let logs = parse_index_logs(&get_logs(&env, index));
+    assert_eq!(
+        logs.entries
+            .iter()
+            .filter(|entry| entry.message.contains("Unable to decode"))
+            .count(),
+        1
+    );
+
+    // No block from the bad ledger was stored. The replacement history starts
+    // at block 0, so recovery cannot hide a skipped block or rewrite history.
+    let healthy = install_controllable_ledger(&env);
+    set_icrc3_enabled(&env, healthy, !cfg!(feature = "icrc3_disabled"));
+    add_block(&env, healthy, &mint).unwrap();
+    let arg = IndexArg::Upgrade(UpgradeArg {
+        ledger_id: Some(healthy.into()),
+        allowed_poke_callers: None,
+        #[allow(deprecated)]
+        retrieve_blocks_from_ledger_interval_seconds: None,
+        min_retrieve_blocks_from_ledger_interval_seconds: None,
+        max_retrieve_blocks_from_ledger_interval_seconds: None,
+    });
+    env.upgrade_canister(index, index_ng_wasm(), Encode!(&arg).unwrap())
+        .unwrap();
+    advance_time_and_run_rounds(&env, 100);
+    assert_eq!(count(&env, healthy), 1, "upgrade restarts ordinary polling");
+    assert_eq!(status(&env, index).num_blocks_synced, Nat::from(1_u64));
+    assert!(!ingress(&env, index, PrincipalId::new_anonymous()));
+    notify(&env, healthy, index); // The new ledger was not implicitly added to the policy.
+    assert_eq!(
+        count(&env, healthy),
+        1,
+        "upgrade preserves caller restrictions"
+    );
+    let transfer = BlockBuilder::new(1, 1)
+        .with_fee(Tokens::from(1_u64))
+        .transfer(account(1, 0), account(2, 0), Tokens::from(20_u64))
+        .build();
+    add_block(&env, healthy, &transfer).unwrap();
+    notify(&env, ledger, index); // The original listed forwarding canister is still allowed.
+    assert_eq!(count(&env, healthy), 2);
+    assert_eq!(status(&env, index).num_blocks_synced, Nat::from(2_u64));
+    let balance = env
+        .query(index, "icrc1_balance_of", Encode!(&account(2, 0)).unwrap())
+        .unwrap()
+        .bytes();
+    assert_eq!(Decode!(&balance, Nat).unwrap(), Nat::from(20_u64));
+    assert!(ingress(&env, index, listed));
+    assert_eq!(count(&env, healthy), 3, "pokes work again after upgrade");
+    advance_time_and_run_rounds(&env, 100);
+    assert_eq!(
+        count(&env, healthy),
+        4,
+        "one ordinary polling chain remains"
+    );
+    assert_eq!(count(&env, ledger), 1);
+}
+
+#[test]
+fn retriable_sync_errors_release_guard_and_recover_without_upgrade() {
+    for scheduled in [false, true] {
+        let (env, ledger, index) = setup(100, Some(PokeCallers::All));
+        assert!(ingress(&env, index, PrincipalId::new_anonymous()));
+        assert_eq!(count(&env, ledger), 1); // Cache the supported block API before stopping.
+        let mint = BlockBuilder::new(0, 0)
+            .mint(account(1, 0), Tokens::from(100_u64))
+            .build();
+        add_block(&env, ledger, &mint).unwrap();
+        env.stop_canister(ledger).unwrap();
+        if scheduled {
+            advance_time_and_run_rounds(&env, 100);
+        } else {
+            assert!(ingress(&env, index, PrincipalId::new_anonymous()));
+        }
+        env.run_until_completion(20);
+        let logs = parse_index_logs(&get_logs(&env, index));
+        assert!(
+            logs.entries
+                .iter()
+                .any(|entry| entry.message.contains("failed to get blocks"))
+        );
+        assert_eq!(status(&env, index).num_blocks_synced, Nat::from(0_u64));
+        env.start_canister(ledger).unwrap();
+        assert_eq!(count(&env, ledger), 1);
+        if scheduled {
+            advance_time_and_run_rounds(&env, 100);
+        } else {
+            assert!(ingress(&env, index, PrincipalId::new_anonymous()));
+        }
+        assert_eq!(
+            count(&env, ledger),
+            2,
+            "retriable failure releases the shared guard"
+        );
+        assert_eq!(status(&env, index).num_blocks_synced, Nat::from(1_u64));
+        let transfer = BlockBuilder::new(1, 1)
+            .with_fee(Tokens::from(1_u64))
+            .transfer(account(1, 0), account(2, 0), Tokens::from(20_u64))
+            .build();
+        add_block(&env, ledger, &transfer).unwrap();
+        notify(&env, ledger, index);
+        assert_eq!(count(&env, ledger), 3);
+        assert_eq!(status(&env, index).num_blocks_synced, Nat::from(2_u64));
+        advance_time_and_run_rounds(&env, 100);
+        assert_eq!(
+            count(&env, ledger),
+            4,
+            "recovery preserves one polling chain"
+        );
+    }
 }
 
 // Independently encoded wire types can express invalid optional-field contents

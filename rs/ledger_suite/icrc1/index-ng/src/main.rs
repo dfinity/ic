@@ -246,6 +246,8 @@ impl Storable for AccountDataType {
 struct Cache {
     pub get_blocks_method: Option<GetBlocksMethod>,
     poke_pending: bool,
+    /// Records a non-retriable synchronization failure until upgrade.
+    indexing_halted: bool,
 }
 
 struct SyncError {
@@ -733,7 +735,9 @@ async fn find_get_blocks_method() -> GetBlocksMethod {
 /// One scheduler-free pass. The guard is acquired before the first await and
 /// released on every completion path using the existing cleanup pattern.
 async fn synchronize() -> Option<Result<u64, SyncError>> {
-    if with_state(|state| state.is_build_index_running) {
+    if CACHE.with(|cache| cache.borrow().indexing_halted)
+        || with_state(|state| state.is_build_index_running)
+    {
         return None;
     }
     mutate_state(|state| {
@@ -744,14 +748,24 @@ async fn synchronize() -> Option<Result<u64, SyncError>> {
             state.is_build_index_running = false;
         });
     });
-    Some(match find_get_blocks_method().await {
+    let result = match find_get_blocks_method().await {
         GetBlocksMethod::GetBlocks => fetch_blocks_via_get_blocks().await,
         GetBlocksMethod::ICRC3GetBlocks => fetch_blocks_via_icrc3().await,
-    })
+    };
+    if matches!(&result, Err(error) if !error.retriable) {
+        CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            cache.indexing_halted = true;
+            cache.poke_pending = false;
+        });
+    }
+    Some(result)
 }
 
 async fn service_pending_poke() {
-    if with_state(|state| state.is_build_index_running) {
+    if CACHE.with(|cache| cache.borrow().indexing_halted)
+        || with_state(|state| state.is_build_index_running)
+    {
         return;
     }
     let pending = CACHE.with(|cache| std::mem::take(&mut cache.borrow_mut().poke_pending));
@@ -770,12 +784,20 @@ async fn service_pending_poke() {
         None => {
             // Defensive: the precheck and guard acquisition cannot interleave,
             // but preserve the request if that invariant changes.
-            CACHE.with(|cache| cache.borrow_mut().poke_pending = true);
+            CACHE.with(|cache| {
+                let mut cache = cache.borrow_mut();
+                if !cache.indexing_halted {
+                    cache.poke_pending = true;
+                }
+            });
             return;
         }
     }
 
-    if CACHE.with(|cache| cache.borrow().poke_pending) {
+    if CACHE.with(|cache| {
+        let cache = cache.borrow();
+        cache.poke_pending && !cache.indexing_halted
+    }) {
         // Bound each message to one synchronization pass. A zero-delay handoff
         // services demand received during that pass without creating a worker
         // that can be kept alive indefinitely by incoming pokes.
@@ -813,7 +835,7 @@ fn inspect_message() {
 #[candid::candid_method(oneway)]
 async fn poke() {
     let caller = ic_cdk::api::msg_caller();
-    if !is_poke_caller_allowed(&caller) {
+    if !is_poke_caller_allowed(&caller) || CACHE.with(|cache| cache.borrow().indexing_halted) {
         return;
     }
     CACHE.with(|cache| cache.borrow_mut().poke_pending = true);
@@ -822,9 +844,11 @@ async fn poke() {
 
 pub async fn build_index() -> Option<()> {
     let Some(num_indexed) = synchronize().await else {
-        // A one-shot callback that collides with poke must preserve polling.
-        // A skipped pass is not an empty response and must not change backoff.
-        set_build_index_timer(with_state(|state| state.last_wait_time));
+        // A busy callback preserves polling without changing backoff. A queued
+        // callback after a fatal error must not rearm the timer.
+        if !CACHE.with(|cache| cache.borrow().indexing_halted) {
+            set_build_index_timer(with_state(|state| state.last_wait_time));
+        }
         return None;
     };
     match num_indexed {
