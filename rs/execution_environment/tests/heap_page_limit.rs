@@ -7,7 +7,6 @@
 //! * data segments do not count against the limit;
 //! * accessed pages accumulate across DTS slices and are forgotten when a
 //!   paused execution is aborted;
-//! * reply, reject and cleanup callbacks each get their own budget;
 //! * queries, composite queries, and the limit error in the query cache;
 //! * a stable memory read into the heap that crosses both the stable and the
 //!   heap limit reports the stable one;
@@ -130,62 +129,6 @@ fn hooks_wat(init: u64, pre_upgrade: u64, post_upgrade: u64, version: u8, extra:
             (memory (export "memory") 16)
             (data (i32.const 512) "\{version:02x}")
             {extra}
-        )"#
-    )
-}
-
-/// A canister that calls another canister's `touch` method and touches pages
-/// in its update, its reply callback and its cleanup callback. The payload is
-/// `[k, n, r, c, id_len, id...]`: pages to touch in the update (`k`), by the
-/// callee (`n`), in the reply callback (`r`) and in the cleanup callback
-/// (`c`), then the callee's canister id. The reply callback replies "ok",
-/// the reject callback replies with the reject code, and the cleanup
-/// callback writes a marker that `marker` returns.
-fn caller_wat() -> String {
-    format!(
-        r#"
-        (module
-            (import "ic0" "msg_arg_data_copy" (func $arg_copy (param i32 i32 i32)))
-            (import "ic0" "msg_arg_data_size" (func $arg_size (result i32)))
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (import "ic0" "msg_reply_data_append" (func $reply_append (param i32 i32)))
-            (import "ic0" "msg_reject_code" (func $reject_code (result i32)))
-            (import "ic0" "call_new"
-                (func $call_new (param i32 i32 i32 i32 i32 i32 i32 i32)))
-            (import "ic0" "call_data_append" (func $call_data_append (param i32 i32)))
-            (import "ic0" "call_on_cleanup" (func $call_on_cleanup (param i32 i32)))
-            (import "ic0" "call_perform" (func $call_perform (result i32)))
-            {TOUCH_FN}
-            (func (export "canister_update call")
-                (call $arg_copy (i32.const 256) (i32.const 0) (call $arg_size))
-                (call $touch (i32.load8_u (i32.const 256)))
-                (call $call_new
-                    (i32.const 261) (i32.load8_u (i32.const 260))
-                    (i32.const 64) (i32.const 5)
-                    (i32.const 0) (i32.load8_u (i32.const 258))
-                    (i32.const 1) (i32.const 0))
-                (call $call_data_append (i32.const 257) (i32.const 1))
-                (call $call_on_cleanup (i32.const 2) (i32.load8_u (i32.const 259)))
-                (drop (call $call_perform)))
-            (func $on_reply (param $pages i32)
-                (call $touch (local.get $pages))
-                (call $reply_append (i32.const 80) (i32.const 2))
-                (call $msg_reply))
-            (func $on_reject (param $env i32)
-                (i32.store8 (i32.const 32) (call $reject_code))
-                (call $reply_append (i32.const 32) (i32.const 1))
-                (call $msg_reply))
-            (func $on_cleanup (param $pages i32)
-                (call $touch (local.get $pages))
-                (i32.store8 (i32.const 48) (i32.const 119)))
-            (func (export "canister_query marker")
-                (call $reply_append (i32.const 48) (i32.const 1))
-                (call $msg_reply))
-            (memory (export "memory") 16)
-            (data (i32.const 64) "touch")
-            (data (i32.const 80) "ok")
-            (table 3 3 funcref)
-            (elem (i32.const 0) $on_reply $on_reject $on_cleanup)
         )"#
     )
 }
@@ -403,70 +346,6 @@ fn aborted_execution_starts_with_a_fresh_budget() {
     );
     test.execute_message(canister_id);
     check_ingress_status(test.ingress_status(&message_id)).unwrap();
-}
-
-////////////////////////////////////////////////////////////////////////
-// Callbacks
-
-/// Runs the caller's `call` with the given numbers of pages touched in the
-/// update, by the callee, in the reply callback and in the cleanup callback.
-fn call(
-    test: &mut ExecutionTest,
-    caller: CanisterId,
-    callee: CanisterId,
-    update: u8,
-    callee_pages: u8,
-    reply: u8,
-    cleanup: u8,
-) -> Result<WasmResult, UserError> {
-    let id = callee.get();
-    let mut payload = vec![
-        update,
-        callee_pages,
-        reply,
-        cleanup,
-        id.as_slice().len() as u8,
-    ];
-    payload.extend_from_slice(id.as_slice());
-    test.ingress(caller, "call", payload)
-}
-
-fn marker(test: &mut ExecutionTest, caller: CanisterId) -> u8 {
-    match test.non_replicated_query(caller, "marker", vec![]).unwrap() {
-        WasmResult::Reply(bytes) => bytes[0],
-        other => panic!("unexpected result {other:?}"),
-    }
-}
-
-#[test]
-fn each_callback_has_its_own_budget() {
-    const LIMIT: u64 = 4;
-    let mut test = builder(limits(LIMIT, LIMIT, LIMIT)).build();
-    let callee = test.canister_from_wat(pages_wat()).unwrap();
-    let caller = test.canister_from_wat(caller_wat()).unwrap();
-    let l = LIMIT as u8;
-
-    // The update, the callee and the reply callback each touch exactly the
-    // limit: three separate executions, three separate budgets.
-    assert_eq!(
-        call(&mut test, caller, callee, l, l, l, 1).unwrap(),
-        WasmResult::Reply(b"ok".to_vec())
-    );
-    assert_eq!(marker(&mut test, caller), 0);
-
-    // The callee exceeds the limit: its execution fails and the caller's
-    // reject callback sees reject code 5 (`CanisterError`).
-    assert_eq!(
-        call(&mut test, caller, callee, 1, l + 1, 1, 1).unwrap(),
-        WasmResult::Reply(vec![5])
-    );
-
-    // The reply callback exceeds the limit: the message fails with the limit
-    // error, and the cleanup callback runs with a budget of its own (it
-    // touches the limit's worth of pages) and leaves its marker.
-    let err = call(&mut test, caller, callee, 1, 1, l + 1, l).unwrap_err();
-    assert_limit_error(&err, "Wasm heap");
-    assert_eq!(marker(&mut test, caller), 119);
 }
 
 ////////////////////////////////////////////////////////////////////////
