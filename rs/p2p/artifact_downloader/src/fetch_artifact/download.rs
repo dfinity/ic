@@ -39,9 +39,11 @@ pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {
     Artifact::NAME.to_lowercase()
 }
 
-fn build_axum_router<Artifact: PbArtifact>(
-    pool: Arc<RwLock<dyn ValidatedPoolReader<Artifact>>>,
-) -> Router {
+fn build_axum_router<Artifact, Pool>(pool: Arc<RwLock<Pool>>) -> Router
+where
+    Artifact: PbArtifact,
+    Pool: ValidatedPoolReader<Artifact> + 'static,
+{
     Router::new()
         .route(
             &format!("/{}/rpc", uri_prefix::<Artifact>()),
@@ -52,10 +54,14 @@ fn build_axum_router<Artifact: PbArtifact>(
         .layer(DefaultBodyLimit::disable())
 }
 
-async fn rpc_handler<Artifact: PbArtifact>(
-    State(pool): State<Arc<RwLock<dyn ValidatedPoolReader<Artifact>>>>,
+async fn rpc_handler<Artifact, Pool>(
+    State(pool): State<Arc<RwLock<Pool>>>,
     payload: Bytes,
-) -> Result<Bytes, StatusCode> {
+) -> Result<Bytes, StatusCode>
+where
+    Artifact: PbArtifact,
+    Pool: ValidatedPoolReader<Artifact> + 'static,
+{
     let jh = tokio::task::spawn_blocking(move || {
         let id: Artifact::Id =
             Artifact::PbId::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
