@@ -122,12 +122,19 @@ pub struct FeatureFlags {
     /// If this flag is enabled, then the output of the `debug_print` system-api
     /// call will be skipped based on heuristics.
     pub rate_limiting_of_debug_prints: FlagStatus,
+    /// If this flag is enabled, the limit on the number of Wasm heap pages a
+    /// single message execution may access is enforced: an execution that
+    /// would access one more page fails with `MemoryAccessLimitExceeded`.
+    /// If it is disabled, accesses beyond the limit are only counted in the
+    /// metrics and no checks are injected into the canister code.
+    pub wasm_memory_accessed_page_limit: FlagStatus,
 }
 
 impl FeatureFlags {
     const fn const_default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
+            wasm_memory_accessed_page_limit: FlagStatus::Disabled,
         }
     }
 }

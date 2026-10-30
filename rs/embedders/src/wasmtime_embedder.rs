@@ -498,7 +498,7 @@ impl WasmtimeEmbedder {
         let stable_memory_limits = MemoryLimits {
             max_memory_size: self.config.max_stable_memory_size,
             max_dirty_pages: current_dirty_page_limit,
-            max_accessed_wasm_pages: None,
+            accessed_wasm_pages_limit: memory_tracker::AccessedWasmPagesLimit::Unlimited,
         };
         let max_heap_memory_size = self
             .config
@@ -507,7 +507,7 @@ impl WasmtimeEmbedder {
         let heap_memory_limits = MemoryLimits {
             max_memory_size: max_heap_memory_size,
             max_dirty_pages: NumOsPages::new(max_heap_memory_size.get() / PAGE_SIZE as u64),
-            max_accessed_wasm_pages: None,
+            accessed_wasm_pages_limit: memory_tracker::AccessedWasmPagesLimit::Unlimited,
         };
 
         let mut store = Store::new(

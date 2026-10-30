@@ -79,10 +79,40 @@ pub use deterministic::DeterministicMemoryTracker;
 pub struct MemoryLimits {
     pub max_memory_size: NumBytes,
     pub max_dirty_pages: NumOsPages,
-    /// Maximum number of distinct Wasm pages that may be accessed during a
-    /// single execution. The tracker refuses to map the first page beyond the
-    /// limit (see `SigsegvOutcome::Refused`). `None` disables the limit.
-    pub max_accessed_wasm_pages: Option<NumWasmPages>,
+    /// Limit on the number of distinct Wasm pages that may be accessed during
+    /// a single execution.
+    pub accessed_wasm_pages_limit: AccessedWasmPagesLimit,
+}
+
+/// Limit on the number of distinct Wasm pages that may be accessed during a
+/// single execution, and what the tracker does when it is exceeded.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
+pub enum AccessedWasmPagesLimit {
+    /// No limit.
+    #[default]
+    Unlimited,
+    /// Accesses beyond the limit are counted in
+    /// `MemoryTrackerMetrics::page_limit_exceeded_count`, but the pages are
+    /// mapped like any other page.
+    Observe(NumWasmPages),
+    /// The tracker refuses to map the first page beyond the limit (see
+    /// `SigsegvOutcome::Refused`).
+    Enforce(NumWasmPages),
+}
+
+impl AccessedWasmPagesLimit {
+    /// The limit, if any, regardless of whether it is enforced.
+    pub fn limit(&self) -> Option<NumWasmPages> {
+        match self {
+            Self::Unlimited => None,
+            Self::Observe(limit) | Self::Enforce(limit) => Some(*limit),
+        }
+    }
+
+    /// Returns true if pages beyond the limit are refused.
+    pub fn is_enforced(&self) -> bool {
+        matches!(self, Self::Enforce(_))
+    }
 }
 
 /// The result of handling a missing page signal.
@@ -92,8 +122,8 @@ pub enum SigsegvOutcome {
     /// faulting instruction can be resumed.
     Handled,
     /// The faulting address belongs to the tracked memory, but mapping the page
-    /// would exceed `MemoryLimits::max_accessed_wasm_pages`. Nothing was
-    /// mapped; resuming the faulting instruction would fault again.
+    /// would exceed the enforced `AccessedWasmPagesLimit`. Nothing was mapped;
+    /// resuming the faulting instruction would fault again.
     Refused,
     /// The faulting address is outside of the tracked memory area.
     NotTracked,
@@ -119,7 +149,7 @@ pub enum AccessKind {
 #[derive(Default)]
 pub struct MemoryTrackerMetrics {
     sigsegv_count: AtomicUsize,
-    sigsegv_refused_count: AtomicUsize,
+    page_limit_exceeded_count: AtomicUsize,
     mmap_count: AtomicUsize,
     mprotect_count: AtomicUsize,
     copy_page_count: AtomicUsize,
@@ -131,9 +161,10 @@ impl MemoryTrackerMetrics {
         self.sigsegv_count.load(Ordering::Relaxed)
     }
 
-    /// The number of signals that were refused because of the accessed page limit.
-    pub fn sigsegv_refused_count(&self) -> usize {
-        self.sigsegv_refused_count.load(Ordering::Relaxed)
+    /// The number of signals for pages beyond the accessed page limit. Such
+    /// pages are refused if the limit is enforced, and mapped otherwise.
+    pub fn page_limit_exceeded_count(&self) -> usize {
+        self.page_limit_exceeded_count.load(Ordering::Relaxed)
     }
 
     pub fn mmap_count(&self) -> usize {
