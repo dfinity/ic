@@ -716,11 +716,10 @@ fn observed_accessed_page_limit_counts_but_maps_the_page_after_the_limit(
             assert!(!flag.load(Ordering::Relaxed));
             assert_eq!(tracker.metrics().page_limit_exceeded_count(), 2);
 
-            // The upfront check reports the limit regardless of whether it is
-            // enforced. The count is already beyond the limit, so no non-empty
-            // range fits, not even one of accessed pages.
+            // The upfront check only reports the limit for accesses to new
+            // pages, also when the count is already beyond the limit.
             assert!(tracker.check_range_fits(0..0));
-            assert!(!tracker.check_range_fits(wasm_page_byte_range(0..1)));
+            assert!(tracker.check_range_fits(wasm_page_byte_range(0..1)));
             assert!(!tracker.check_range_fits(wasm_page_byte_range(7..8)));
         },
     );

@@ -327,11 +327,12 @@ impl DeterministicState {
         if accessed + distinct <= limit.get() {
             return true;
         }
-        accessed
-            + self.count_unaccessed_wasm_pages(first)
+        let new_pages = self.count_unaccessed_wasm_pages(first)
             + self.count_unaccessed_wasm_pages(second)
-            - self.count_unaccessed_wasm_pages(overlap)
-            <= limit.get()
+            - self.count_unaccessed_wasm_pages(overlap);
+        // Accessing no new page always fits, like in the signal handler, also
+        // if the limit is only observed and the count is already beyond it.
+        new_pages == 0 || accessed + new_pages <= limit.get()
     }
 
     /// Marks specified Wasm page as dirty.
