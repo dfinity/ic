@@ -126,7 +126,7 @@ impl FetchStrippedConsensusArtifact {
         bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, ConsensusPool>>,
         metrics_registry: MetricsRegistry,
         node_id: NodeId,
-    ) -> (impl Fn(Arc<dyn Transport>) -> Self, axum::Router) {
+    ) -> (impl FnOnce(Arc<dyn Transport>) -> Self, axum::Router) {
         let ingress_pool_clone = ingress_pool.clone();
         let idkg_pool_clone = idkg_pool.clone();
         let canister_http_pool_clone = canister_http_pool.clone();
@@ -154,10 +154,10 @@ impl FetchStrippedConsensusArtifact {
             let fetch_stripped = fetch_stripped_fn(transport.clone());
 
             Self {
-                log: log.clone(),
-                ingress_pool: ingress_pool.clone(),
-                idkg_pool: idkg_pool.clone(),
-                canister_http_pool: canister_http_pool.clone(),
+                log,
+                ingress_pool,
+                idkg_pool,
+                canister_http_pool,
                 fetch_stripped,
                 transport,
                 node_id,
