@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1.6
+#
+# Slim x86_64 runtime image for an IC replica node.
+# Binaries are produced separately by build.sh and copied in from ./out/.
+FROM --platform=linux/amd64 ubuntu:24.04
+
+RUN apt-get update -qq && \
+    apt-get install -qq -y --no-install-recommends \
+        ca-certificates \
+        iproute2 \
+        iputils-ping \
+        jq \
+        libssl3 \
+        tini \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN userdel -r ubuntu 2>/dev/null || true; \
+    useradd -m -u 1000 -s /bin/bash ic && \
+    mkdir -p /var/lib/ic /etc/ic && \
+    chown -R ic:ic /var/lib/ic /etc/ic
+
+COPY out/ic-replica         /usr/local/bin/ic-replica
+COPY out/canister_sandbox   /usr/local/bin/canister_sandbox
+COPY out/compiler_sandbox   /usr/local/bin/compiler_sandbox
+COPY out/sandbox_launcher   /usr/local/bin/sandbox_launcher
+COPY out/ic-prep            /usr/local/bin/ic-prep
+COPY out/ic-admin           /usr/local/bin/ic-admin
+COPY out/ic-nns-init        /usr/local/bin/ic-nns-init
+
+RUN chmod 0755 /usr/local/bin/*
+
+USER ic
+WORKDIR /var/lib/ic
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["ic-replica", "--config-file", "/etc/ic/ic.json5"]
