@@ -411,6 +411,7 @@ lazy_static! {
             Action::UpgradeSnsControlledCanister(Default::default()),
             Action::RegisterDappCanisters(Default::default()),
             Action::DeregisterDappCanisters(Default::default()),
+            Action::LoadCanisterSnapshot(Default::default()),
         ];
 
         // Conditionally allow: No targeting SNS canisters.

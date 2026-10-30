@@ -3009,6 +3009,7 @@ fn test_sns_controlled_canister_upgrade_only_upgrades_dapp_canisters() {
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
             canister_upgrade_options: None,
+            take_canister_snapshot: None,
         });
 
         // Upgrade Proposal
@@ -4950,6 +4951,18 @@ fn test_list_topics() {
                         name: "Manage dapp canister settings".to_string(),
                         description: Some(
                             "Proposal to change canister settings for some dapp canisters.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 20,
+                        name: "Load canister snapshot".to_string(),
+                        description: Some(
+                            "Proposal to restore a dapp canister's code and memory from one of its snapshots.".to_string(),
                         ),
                         function_type: Some(
                             FunctionType::NativeNervousSystemFunction(

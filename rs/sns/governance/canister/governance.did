@@ -24,6 +24,7 @@ type Action = variant {
   ExecuteGenericNervousSystemFunction : ExecuteGenericNervousSystemFunction;
   ManageLedgerParameters : ManageLedgerParameters;
   Motion : Motion;
+  LoadCanisterSnapshot : LoadCanisterSnapshot;
 };
 
 type ActionAuxiliary = variant {
@@ -710,6 +711,17 @@ type ProposalData = record {
   executed_timestamp_seconds : nat64;
   topic : opt Topic;
   execution_reply : opt blob;
+  success_value : opt SuccessfulProposalExecutionValue;
+};
+
+type SuccessfulProposalExecutionValue = variant {
+  TakeCanisterSnapshot : TakeCanisterSnapshotOk;
+};
+
+type TakeCanisterSnapshotOk = record {
+  snapshot_id : blob;
+  taken_at_timestamp : nat64;
+  total_size : nat64;
 };
 
 type ProposalId = record {
@@ -918,6 +930,15 @@ type CanisterUpgradeOptions = record {
   wasm_memory_persistence : opt int32;
 };
 
+type LoadCanisterSnapshot = record {
+  canister_id : opt principal;
+  snapshot_id : opt blob;
+};
+
+type TakeSnapshotBeforeUpgrade = record {
+  replace_snapshot : opt blob;
+};
+
 type UpgradeSnsControlledCanister = record {
   new_canister_wasm : blob;
   canister_upgrade_options : opt CanisterUpgradeOptions;
@@ -925,6 +946,7 @@ type UpgradeSnsControlledCanister = record {
   mode : opt int32;
   canister_id : opt principal;
   canister_upgrade_arg : opt blob;
+  take_canister_snapshot : opt TakeSnapshotBeforeUpgrade;
 };
 
 type Valuation = record {
