@@ -825,10 +825,9 @@ fn inspect_message() {
     }
 }
 
-/// Best effort: authorized busy pokes coalesce into one pending pass. An
-/// in-flight request may miss a recent transfer; ordinary polling remains the
-/// fallback. Successful pokes can leave fewer blocks for normal polls, whose
-/// backoff algorithm is unchanged.
+/// Best-effort indexing notification with no completion acknowledgment.
+/// Authorized busy pokes are coalesced; non-retriable errors halt indexing
+/// until upgrade. See `index-ng.did` for the caller contract.
 // The CDK's manual_reply suppresses its application reply; the explicit Candid
 // annotation replaces the macro's default update signature in interface export.
 #[ic_cdk::update(manual_reply = true, hidden = true)]

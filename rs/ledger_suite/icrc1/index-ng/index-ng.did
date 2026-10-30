@@ -201,10 +201,14 @@ service : (index_arg : opt IndexArg) -> {
   icrc1_balance_of : (Account) -> (Tokens) query;
   ledger_id : () -> (principal) query;
   list_subaccounts : (ListSubaccountsArgs) -> (vec SubAccount) query;
-  // One-way submission does not acknowledge indexing completion. Authorized
-  // busy pokes coalesce into one immediate follow-up pass. Ordinary polling
-  // remains the fallback. Successful pokes can leave fewer blocks for normal
-  // polls, whose existing backoff algorithm continues unchanged.
+  // Best-effort notification; does not acknowledge indexing completion.
+  // Use a one-way/notify call, e.g. Call::unbounded_wait(index, "poke").oneway().
+  // A normal two-way call may receive a no-reply rejection even if work started.
+  // Authorized pokes received while busy coalesce into a follow-up pass.
+  // Ordinary polling remains the fallback unless a non-retriable error has
+  // halted indexing until upgrade. Pokes do not change the polling backoff
+  // algorithm, but can leave fewer blocks for subsequent polls.
+  // All allows anyone to request repeated scans; there is no explicit poke rate limit.
   poke : () -> () oneway;
   status : () -> (Status) query
 }
