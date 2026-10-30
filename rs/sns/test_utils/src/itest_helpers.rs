@@ -162,6 +162,7 @@ impl SnsTestsInitPayloadBuilder {
             retrieve_blocks_from_ledger_interval_seconds: None,
             min_retrieve_blocks_from_ledger_interval_seconds: None,
             max_retrieve_blocks_from_ledger_interval_seconds: None,
+            allowed_poke_callers: None,
         }));
 
         let mut governance = GovernanceCanisterInitPayloadBuilder::new();

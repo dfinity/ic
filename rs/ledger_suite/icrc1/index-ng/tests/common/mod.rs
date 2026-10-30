@@ -117,8 +117,12 @@ fn icrc3_test_ledger() -> Vec<u8> {
 }
 
 pub fn install_icrc3_test_ledger(env: &StateMachine) -> CanisterId {
+    install_icrc3_test_ledger_with_wasm(env, icrc3_test_ledger())
+}
+
+pub fn install_icrc3_test_ledger_with_wasm(env: &StateMachine, wasm: Vec<u8>) -> CanisterId {
     env.install_canister_with_cycles(
-        icrc3_test_ledger(),
+        wasm,
         Encode!(&()).unwrap(),
         None,
         ic_types_cycles::Cycles::new(STARTING_CYCLES_PER_CANISTER),
@@ -410,4 +414,15 @@ pub fn status(env: &StateMachine, index_id: CanisterId) -> Status {
         .expect("Failed to send status")
         .bytes();
     Decode!(&res, Status).expect("Failed to decode status response")
+}
+
+/// Run a bounded number of rounds without moving canister time.
+pub fn run_rounds_until(env: &StateMachine, condition: impl Fn() -> bool) {
+    for _ in 0..20 {
+        if condition() {
+            return;
+        }
+        env.tick();
+    }
+    assert!(condition(), "condition did not hold within 20 rounds");
 }

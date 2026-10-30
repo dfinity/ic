@@ -114,9 +114,16 @@ thread_local! {
 
 }
 
+fn disabled_poke_callers() -> Option<Vec<Principal>> {
+    Some(Vec::new())
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct State {
-    /// Equals to `true` while the [build_index] task runs.
+    /// Historical state defaults to disabled poke access.
+    #[serde(default = "disabled_poke_callers")]
+    allowed_poke_callers: Option<Vec<Principal>>,
+    /// Equals to `true` while a scheduled or poke synchronization pass runs.
     is_build_index_running: bool,
 
     /// The principal of the ledger canister that is indexed by this index.
@@ -165,6 +172,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             is_build_index_running: false,
+            allowed_poke_callers: disabled_poke_callers(),
             ledger_id: Principal::management_canister(),
             max_blocks_per_response: DEFAULT_MAX_BLOCKS_PER_RESPONSE,
             last_wait_time: Duration::from_secs(0),
@@ -228,6 +236,7 @@ impl Storable for AccountDataType {
 #[derive(Clone, Debug, Default)]
 struct Cache {
     pub get_blocks_method: Option<GetBlocksMethod>,
+    poke_pending: bool,
 }
 
 struct SyncError {
@@ -323,6 +332,7 @@ fn init(index_arg: Option<IndexArg>) {
     // rule that it cannot be set alongside the new `min_`/`max_` fields.
     #[allow(deprecated)]
     let InitArg {
+        allowed_poke_callers,
         ledger_id,
         retrieve_blocks_from_ledger_interval_seconds,
         min_retrieve_blocks_from_ledger_interval_seconds,
@@ -351,6 +361,7 @@ fn init(index_arg: Option<IndexArg>) {
     // stable memory initialization
     mutate_state(|state| {
         state.ledger_id = ledger_id;
+        state.allowed_poke_callers = allowed_poke_callers.unwrap_or_else(disabled_poke_callers);
         state.min_retrieve_blocks_from_ledger_interval = min_retrieve_blocks_from_ledger_interval;
         state.max_retrieve_blocks_from_ledger_interval = max_retrieve_blocks_from_ledger_interval;
         state.last_wait_time = state.min_retrieve_blocks_from_ledger_interval();
@@ -400,6 +411,7 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
             // `min_`/`max_` fields.
             #[allow(deprecated)]
             let UpgradeArg {
+                allowed_poke_callers,
                 ledger_id,
                 retrieve_blocks_from_ledger_interval_seconds,
                 min_retrieve_blocks_from_ledger_interval_seconds,
@@ -425,6 +437,10 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
             });
 
             mutate_state(|state| {
+                if let Some(new_value) = allowed_poke_callers {
+                    state.allowed_poke_callers = new_value;
+                }
+
                 if let Some(new_value) = ledger_id {
                     state.ledger_id = new_value;
                 }
@@ -703,7 +719,9 @@ async fn find_get_blocks_method() -> GetBlocksMethod {
     get_blocks_method
 }
 
-pub async fn build_index() -> Option<()> {
+/// One scheduler-free pass. The guard is acquired before the first await and
+/// released on every completion path using the existing cleanup pattern.
+async fn synchronize() -> Option<Result<u64, SyncError>> {
     if with_state(|state| state.is_build_index_running) {
         return None;
     }
@@ -715,9 +733,75 @@ pub async fn build_index() -> Option<()> {
             state.is_build_index_running = false;
         });
     });
-    let num_indexed = match find_get_blocks_method().await {
+    Some(match find_get_blocks_method().await {
         GetBlocksMethod::GetBlocks => fetch_blocks_via_get_blocks().await,
         GetBlocksMethod::ICRC3GetBlocks => fetch_blocks_via_icrc3().await,
+    })
+}
+
+async fn service_pending_poke() {
+    if with_state(|state| state.is_build_index_running) {
+        return;
+    }
+    let pending = CACHE.with(|cache| std::mem::take(&mut cache.borrow_mut().poke_pending));
+    if !pending {
+        return;
+    }
+
+    // No await separates claiming the request from synchronize's acquisition
+    // of the shared guard.
+    match synchronize().await {
+        Some(Err(error)) => {
+            log!(P0, "{}", error.message);
+            ic_cdk::eprintln!("{}", error.message);
+        }
+        Some(Ok(_)) => {}
+        None => {
+            // Defensive: the precheck and guard acquisition cannot interleave,
+            // but preserve the request if that invariant changes.
+            CACHE.with(|cache| cache.borrow_mut().poke_pending = true);
+            return;
+        }
+    }
+
+    if CACHE.with(|cache| cache.borrow().poke_pending) {
+        // Bound each message to one synchronization pass. A zero-delay handoff
+        // services demand received during that pass without creating a worker
+        // that can be kept alive indefinitely by incoming pokes.
+        ic_cdk_timers::set_timer(Duration::ZERO, async {
+            service_pending_poke().await;
+        });
+    }
+}
+
+/// Best effort: authorized busy pokes coalesce into one pending pass. An
+/// in-flight request may miss a recent transfer; ordinary polling remains the
+/// fallback. Successful pokes can leave fewer blocks for normal polls, whose
+/// backoff algorithm is unchanged.
+// The CDK's manual_reply suppresses its application reply; the explicit Candid
+// annotation replaces the macro's default update signature in interface export.
+#[ic_cdk::update(manual_reply = true, hidden = true)]
+#[candid::candid_method(oneway)]
+async fn poke() {
+    let caller = ic_cdk::api::msg_caller();
+    if !with_state(|state| {
+        state
+            .allowed_poke_callers
+            .as_ref()
+            .is_none_or(|callers| callers.contains(&caller))
+    }) {
+        return;
+    }
+    CACHE.with(|cache| cache.borrow_mut().poke_pending = true);
+    service_pending_poke().await;
+}
+
+pub async fn build_index() -> Option<()> {
+    let Some(num_indexed) = synchronize().await else {
+        // A one-shot callback that collides with poke must preserve polling.
+        // A skipped pass is not an empty response and must not change backoff.
+        set_build_index_timer(with_state(|state| state.last_wait_time));
+        return None;
     };
     match num_indexed {
         Ok(num_indexed) => {
@@ -740,6 +824,8 @@ pub async fn build_index() -> Option<()> {
             }
         }
     };
+
+    service_pending_poke().await;
 
     Some(())
 }
@@ -1531,4 +1617,38 @@ fn check_index_and_ledger_block_equality() {
         &index_block_type,
     )
     .expect("Ledger and Index block types are different");
+}
+
+#[test]
+fn historical_state_without_poke_policy_is_disabled() {
+    // Independent historical schema, rather than serializing the candidate State.
+    #[derive(Serialize)]
+    struct HistoricalState {
+        is_build_index_running: bool,
+        ledger_id: Principal,
+        max_blocks_per_response: u64,
+        last_wait_time: Duration,
+        fee_collectors: HashMap<Account, Vec<Range<BlockIndex64>>>,
+        last_fee: Option<Tokens>,
+        fee_collector_107: Option<Option<Account>>,
+        min_retrieve_blocks_from_ledger_interval: Option<Duration>,
+        max_retrieve_blocks_from_ledger_interval: Option<Duration>,
+    }
+    let historical = HistoricalState {
+        is_build_index_running: false,
+        ledger_id: Principal::anonymous(),
+        max_blocks_per_response: 2000,
+        last_wait_time: Duration::from_secs(7),
+        fee_collectors: HashMap::new(),
+        last_fee: None,
+        fee_collector_107: None,
+        min_retrieve_blocks_from_ledger_interval: None,
+        max_retrieve_blocks_from_ledger_interval: None,
+    };
+    let mut bytes = vec![];
+    ciborium::ser::into_writer(&historical, &mut bytes).unwrap();
+    let decoded = State::from_bytes(Cow::Owned(bytes));
+    assert_eq!(decoded.allowed_poke_callers, Some(vec![]));
+    assert_eq!(decoded.last_wait_time, Duration::from_secs(7));
+    assert_eq!(decoded.ledger_id, Principal::anonymous());
 }

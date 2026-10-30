@@ -106,6 +106,7 @@ rust_test(
         timeout = "long",
         srcs = [
             "tests/index_timer_backoff.rs",
+            "tests/poke.rs",
             "tests/retrieve_blocks_from_ledger_interval.rs",
             "tests/tests.rs",
         ],
@@ -114,12 +115,14 @@ rust_test(
             conf["index_wasm"],
             conf["ledger_wasm"],
             "//rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger:icrc3_test_ledger_canister.wasm.gz",
+            "//rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger:icrc3_test_ledger_canister_controllable.wasm.gz",
         ],
         env = {
             "RUST_TEST_THREADS": "4",
             "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/index-ng",
             "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath " + conf["index_wasm"] + ")",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath " + conf["ledger_wasm"] + ")",
+            "IC_ICRC3_POKE_TEST_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger:icrc3_test_ledger_canister_controllable.wasm.gz)",
             "IC_ICRC3_TEST_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger:icrc3_test_ledger_canister.wasm.gz)",
         },
         exec_properties = {"test.cpu": "4"},

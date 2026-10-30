@@ -1,6 +1,8 @@
 type Tokens = nat;
 
 type InitArg = record {
+  // Outer null disables poke; opt null enables public access.
+  allowed_poke_callers : opt opt vec principal;
   ledger_id : principal;
   // The legacy parameter to set a fixed interval in seconds in which to retrieve blocks from the ledger.
   // If set, the index will set both `min_retrieve_blocks_from_ledger_interval_seconds` and
@@ -17,6 +19,8 @@ type InitArg = record {
 };
 
 type UpgradeArg = record {
+  // Outer null preserves the setting; opt null restores public access.
+  allowed_poke_callers : opt opt vec principal;
   ledger_id : opt principal;
   // The legacy parameter to set a fixed interval in seconds in which to retrieve blocks from the ledger.
   // If set, the index will set both `min_retrieve_blocks_from_ledger_interval_seconds` and
@@ -194,5 +198,10 @@ service : (index_arg : opt IndexArg) -> {
   icrc1_balance_of : (Account) -> (Tokens) query;
   ledger_id : () -> (principal) query;
   list_subaccounts : (ListSubaccountsArgs) -> (vec SubAccount) query;
+  // One-way submission does not acknowledge indexing completion. Authorized
+  // busy pokes coalesce into one immediate follow-up pass. Ordinary polling
+  // remains the fallback. Successful pokes can leave fewer blocks for normal
+  // polls, whose existing backoff algorithm continues unchanged.
+  poke : () -> () oneway;
   status : () -> (Status) query
 }

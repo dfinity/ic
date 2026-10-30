@@ -18,43 +18,57 @@ rust_library(
     ],
 )
 
-rust_canister(
-    name = "icrc3_test_ledger_canister",
-    srcs = ["src/main.rs"],
-    crate_name = "ic_icrc3_test_ledger_canister",
-    opt = "z",
-    service_file = ":icrc3_test_ledger.did",
-    version = "0.9.0",
-    deps = [
-        # Keep sorted.
-        ":icrc3_test_ledger",
-        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
-        "//rs/ledger_suite/common/ledger_canister_core",
-        "//rs/ledger_suite/icrc1",
-        "@crate_index//:candid",
-        "@crate_index//:ciborium",
-        "@crate_index//:ic-cdk",
-        "@crate_index//:ic-certification",
-        "@crate_index//:leb128",
-        "@crate_index//:num-traits",
-        "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
-    ],
-)
+[
+    rust_canister(
+        name = "icrc3_test_ledger_canister" + suffix,
+        srcs = ["src/main.rs"],
+        crate_features = ["controllable"] if suffix else [],
+        crate_name = "ic_icrc3_test_ledger_canister",
+        opt = "z",
+        service_file = ":icrc3_test_ledger" + suffix + ".did",
+        version = "0.9.0",
+        deps = [
+            # Keep sorted.
+            ":icrc3_test_ledger",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+            "//rs/ledger_suite/common/ledger_canister_core",
+            "//rs/ledger_suite/icrc1",
+            "@crate_index//:candid",
+            "@crate_index//:ciborium",
+            "@crate_index//:ic-cdk",
+            "@crate_index//:ic-certification",
+            "@crate_index//:leb128",
+            "@crate_index//:num-traits",
+            "@crate_index//:serde",
+            "@crate_index//:serde_bytes",
+        ],
+    )
+    for suffix in [
+        "",
+        "_controllable",
+    ]
+]
 
-rust_test(
-    name = "icrc3_test_ledger_canister_test",
-    crate = ":_wasm_icrc3_test_ledger_canister",
-    data = [
-        ":icrc3_test_ledger.did",
-    ],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger",
-    },
-    deps = [
-        "@crate_index//:candid_parser",
-    ],
-)
+[
+    rust_test(
+        name = "icrc3_test_ledger_canister_test" + suffix,
+        crate = ":_wasm_icrc3_test_ledger_canister" + suffix,
+        crate_features = ["controllable"] if suffix else [],
+        data = [
+            ":icrc3_test_ledger" + suffix + ".did",
+        ],
+        env = {
+            "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger",
+        },
+        deps = [
+            "@crate_index//:candid_parser",
+        ],
+    )
+    for suffix in [
+        "",
+        "_controllable",
+    ]
+]
 
 rust_ic_test_suite(
     name = "icrc3_test_ledger_integration_test",
