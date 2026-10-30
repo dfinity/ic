@@ -455,7 +455,7 @@ mod tests {
         registry_add_node_operator_for_node, registry_create_subnet_with_nodes,
     };
     use crate::rate_limits::get_available_add_node_capacity;
-    use attestation::SevAttestationPackage;
+    use attestation::{LAUNCH_MEASUREMENT_LEN, SevAttestationPackage};
     use attestation_testing::attestation_package::ParsedSevAttestationPackageBuilder;
     use ic_base_types::{NodeId, PrincipalId};
     use ic_config::crypto::CryptoConfig;
@@ -1481,13 +1481,13 @@ mod tests {
 
     // --- SEV attestation helpers ---
 
-    const SEV_TEST_MEASUREMENT: [u8; 48] = [42; 48];
+    const SEV_TEST_MEASUREMENT: [u8; LAUNCH_MEASUREMENT_LEN] = [42; LAUNCH_MEASUREMENT_LEN];
     const SEV_TEST_CHIP_ID: [u8; 64] = [3; 64];
 
     /// Creates a mock `SevAttestationPackage` for testing node registration.
     fn create_mock_sev_attestation_package(
         node_signing_pk: &[u8],
-        measurement: [u8; 48],
+        measurement: [u8; LAUNCH_MEASUREMENT_LEN],
         chip_id: [u8; 64],
     ) -> SevAttestationPackage {
         let custom_data = NodeRegistrationAttestationCustomData {
@@ -1504,9 +1504,8 @@ mod tests {
     }
 
     fn add_elected_measurement_to_registry(registry: &mut Registry, measurement: &[u8]) {
-        let replica_version_id = test_replica_version().to_string();
         let replica_version = ReplicaVersionRecord {
-            replica_version_id: Some(replica_version_id.clone()),
+            replica_version_id: test_replica_version().to_string(),
             release_package_sha256_hex: "".to_string(),
             release_package_urls: vec![],
             guest_launch_measurements: Some(GuestLaunchMeasurements {
@@ -1517,7 +1516,7 @@ mod tests {
             }),
         };
         registry.maybe_apply_mutation_internal(vec![update(
-            make_replica_version_key(replica_version_id).as_bytes(),
+            make_replica_version_key(&replica_version.replica_version_id).as_bytes(),
             replica_version.encode_to_vec(),
         )]);
     }
@@ -1566,7 +1565,7 @@ mod tests {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
         // Add a elected measurement that does NOT match what we'll put in the attestation
-        let different_measurement: [u8; 48] = [99; 48];
+        let different_measurement: [u8; LAUNCH_MEASUREMENT_LEN] = [99; LAUNCH_MEASUREMENT_LEN];
         add_elected_measurement_to_registry(&mut registry, &different_measurement);
 
         let node_operator_record = NodeOperatorRecord {

@@ -589,7 +589,7 @@ impl OverlayFile {
     fn get_overlapping_page_ranges(
         &self,
         range: Range<PageIndex>,
-    ) -> impl Iterator<Item = PageIndexRange> + '_ {
+    ) -> impl Iterator<Item = PageIndexRange> {
         let slice = self.index_slice();
         // `range.start` cannot be contained in any index range before this index, no need to iterate over them.
         let start_slice_index =
@@ -721,7 +721,7 @@ impl OverlayFile {
     }
 
     /// Iterate over all ranges in the index.
-    pub fn index_iter(&self) -> impl Iterator<Item = PageIndexRange> + '_ {
+    pub fn index_iter(&self) -> impl Iterator<Item = PageIndexRange> {
         self.index_slice().iter().map(PageIndexRange::from)
     }
 }
@@ -1577,11 +1577,11 @@ impl PageIndexRange {
         }
     }
 
-    fn iter_page_indices(&self) -> impl Iterator<Item = PageIndex> + '_ {
+    fn iter_page_indices(&self) -> impl Iterator<Item = PageIndex> {
         (self.start_page.get()..self.end_page.get()).map(PageIndex::from)
     }
 
-    fn iter_page_and_file_indices(&self) -> impl Iterator<Item = (PageIndex, FileIndex)> + '_ {
+    fn iter_page_and_file_indices(&self) -> impl Iterator<Item = (PageIndex, FileIndex)> {
         (self.start_page.get()..self.end_page.get()).map(|i| {
             (
                 PageIndex::from(i),

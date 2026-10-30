@@ -13,7 +13,7 @@ use ic_types::{
         FinalizationShare, NotarizationContent, NotarizationShare, Payload, RandomBeacon,
         RandomBeaconContent, RandomBeaconShare, RandomTapeContent, RandomTapeShare, Rank,
         SummaryPayload,
-        certification::{Certification, CertificationContent},
+        certification::{Certification, CertificationContent, SignedCertificationContent},
         dkg::{DkgDataPayload, DkgSummary, SubnetSplittingStatus},
         hashed,
     },
@@ -44,11 +44,7 @@ impl Fake for SummaryPayload {
 
 impl Fake for DataPayload {
     fn fake() -> Self {
-        Self {
-            batch: BatchPayload::default(),
-            dkg: DkgDataPayload::new_empty(Height::from(0)),
-            idkg: None,
-        }
+        Self::new_empty(Height::from(0))
     }
 }
 
@@ -75,7 +71,7 @@ impl Fake for Certification {
     fn fake() -> Self {
         Certification {
             height: Height::new(0),
-            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
                     vec![],
@@ -386,7 +382,7 @@ impl Verifier for FakeVerifier {
     fn validate(
         &self,
         _subnet_id: SubnetId,
-        _certification: &Certification,
+        _certification: &SignedCertificationContent,
         _registry_version: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
         Ok(())
@@ -406,11 +402,7 @@ mod tests {
             CryptoHashOf::from(CryptoHash(Vec::new())),
             Payload::new(
                 ic_types::crypto::crypto_hash,
-                BlockPayload::Data(DataPayload {
-                    batch: BatchPayload::default(),
-                    dkg: DkgDataPayload::new_empty(Height::from(1)),
-                    idkg: None,
-                }),
+                BlockPayload::Data(DataPayload::new_empty(Height::from(1))),
             ),
             Height::from(123),
             Rank(456),
@@ -434,11 +426,7 @@ mod tests {
             CryptoHashOf::from(CryptoHash(Vec::new())),
             Payload::new(
                 ic_types::crypto::crypto_hash,
-                BlockPayload::Data(DataPayload {
-                    batch: BatchPayload::default(),
-                    dkg: DkgDataPayload::new_empty(Height::from(1)),
-                    idkg: None,
-                }),
+                BlockPayload::Data(DataPayload::new_empty(Height::from(1))),
             ),
             Height::from(123),
             Rank(456),

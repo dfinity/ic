@@ -1,7 +1,15 @@
+// State limits for a new engine subnet, in bytes. A null field keeps the
+// protocol default.
+type EngineResourceLimits = record {
+  maximum_state_size : opt nat64;
+  maximum_state_delta : opt nat64;
+};
+
 type CreateEngineArgs = record {
   node_ids : vec principal;
   subnet_admins : vec principal;
   replica_version_id : text;
+  resource_limits : opt EngineResourceLimits;
 };
 
 type DeleteEngineArgs = record {
@@ -43,8 +51,9 @@ type ResourceLimits = record {
 
 // Mirror of the subset of registry types referenced by UpdateSubnetPayload.
 // The engine controller forwards the payload unchanged to the registry, but
-// besides `subnet_id` only `subnet_admins`, `is_halted` and `cooling_down` may
-// be set; every other field must be `null`/`false` or the call is rejected.
+// besides `subnet_id` only `subnet_admins`, `is_halted`, `cooling_down` and the
+// state limits in `resource_limits` may be set; every other field must be
+// `null`/`false` or the call is rejected.
 type EcdsaCurve = variant { secp256k1; secp256r1 };
 type EcdsaKeyId = record { curve : EcdsaCurve; name : text };
 type SchnorrAlgorithm = variant { bip340secp256k1; ed25519 };
@@ -120,10 +129,24 @@ type ChangeSubnetMembershipPayload = record {
   node_ids_remove : vec principal;
 };
 
+// Creates an empty canister on a cloud engine subnet. `controllers` (1 to 10)
+// become its only controllers.
+type CreateCanisterArgs = record {
+  subnet_id : principal;
+  controllers : vec principal;
+};
+
+type NewCanister = record {
+  canister_id : principal;
+};
+
+type CreateCanisterResult = variant { Ok : NewCanister; Err : text };
+
 service : (opt EngineControllerInitArgs) -> {
   create_engine : (CreateEngineArgs) -> (CreateEngineResult);
   delete_engine : (DeleteEngineArgs) -> (Result);
   update_subnet : (UpdateSubnetPayload) -> (Result);
   change_subnet_membership : (ChangeSubnetMembershipPayload) -> (Result);
   deploy_guestos_to_all_subnet_nodes : (DeployGuestosToAllSubnetNodesPayload) -> (Result);
+  create_canister : (CreateCanisterArgs) -> (CreateCanisterResult);
 }

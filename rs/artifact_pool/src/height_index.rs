@@ -3,8 +3,11 @@ use ic_types::{
     consensus::*,
     crypto::{CryptoHash, CryptoHashOf},
 };
-use std::collections::BTreeMap;
 use std::time::Instant;
+use std::{
+    collections::{BTreeMap, HashMap},
+    marker::PhantomData,
+};
 
 pub struct HeightIndex<T: Eq> {
     buckets: BTreeMap<Height, Vec<T>>,
@@ -72,8 +75,8 @@ impl<T: Eq + Clone> HeightIndex<T> {
         self.buckets.get(&height).into_iter().flatten()
     }
 
-    pub fn get_all(&self) -> Box<dyn Iterator<Item = &T> + '_> {
-        Box::new(self.buckets.values().flat_map(|bucket| bucket.iter()))
+    pub fn get_all(&self) -> impl Iterator<Item = &T> {
+        self.buckets.values().flat_map(|bucket| bucket.iter())
     }
 
     pub fn size(&self) -> usize {
@@ -81,8 +84,8 @@ impl<T: Eq + Clone> HeightIndex<T> {
     }
 
     /// Returns all heights of the index, in sorted order.
-    pub fn heights(&self) -> Box<dyn Iterator<Item = &Height> + '_> {
-        Box::new(self.buckets.keys())
+    pub fn heights(&self) -> impl Iterator<Item = &Height> {
+        self.buckets.keys()
     }
 
     pub fn range<R>(&self, range: R) -> std::collections::btree_map::Range<'_, Height, Vec<T>>
@@ -286,42 +289,45 @@ impl SelectIndex for CryptoHashOf<EquivocationProof> {
     }
 }
 
-/// Stores instants for any object, and indexes them by height
-pub struct HeightIndexedInstants<T: Eq + Ord + Clone> {
-    instants: BTreeMap<T, Instant>,
-    index: HeightIndex<T>,
+/// Stores instants for any object that has a height and a hash.
+/// We use [`CryptoHash`] and [`PhantomData<T>`] separately instead of
+/// [`CryptoHashOf<T>`] because [`HasHash`] returns a type-erased
+/// [`CryptoHash`]. The [`PhantomData<T>`] still ensures that we are
+/// always storing instants for the same type `T`.
+pub struct HeightIndexedInstants<T: HasHeight + HasHash> {
+    instants: BTreeMap<Height, HashMap<CryptoHash, Instant>>,
+    phantom: PhantomData<T>,
 }
 
-impl<T: Eq + Ord + Clone> Default for HeightIndexedInstants<T> {
+impl<T: HasHeight + HasHash> Default for HeightIndexedInstants<T> {
     fn default() -> Self {
         Self {
             instants: Default::default(),
-            index: Default::default(),
+            phantom: PhantomData,
         }
     }
 }
 
-impl<T: Eq + Ord + Clone> HeightIndexedInstants<T> {
+impl<T: HasHeight + HasHash> HeightIndexedInstants<T> {
     pub fn get(&self, key: &T) -> Option<&Instant> {
-        self.instants.get(key)
+        let height = key.height();
+        let hash = key.hash();
+
+        self.instants.get(&height).and_then(|m| m.get(hash))
     }
 
     /// Inserts the key-value pair at the given height. If the key
     /// already exists, the value is *not* updated.
-    pub fn insert(&mut self, key: &T, value: Instant, height: Height) {
-        if self.index.insert(height, key) {
-            self.instants.entry(key.clone()).or_insert(value);
-        }
+    pub fn insert(&mut self, key: &T, value: Instant) {
+        let height = key.height();
+        let hash = key.hash();
+
+        let bucket = self.instants.entry(height).or_default();
+        bucket.entry(hash.clone()).or_insert(value);
     }
 
     pub fn clear(&mut self, h: Height) {
-        let range = self.index.range(Height::new(0)..h);
-        for (_, bucket) in range {
-            for hash in bucket {
-                self.instants.remove(hash);
-            }
-        }
-        self.index.remove_all_below(h);
+        self.instants = self.instants.split_off(&h);
     }
 }
 
@@ -435,5 +441,91 @@ mod tests {
                 .iter()
                 .any(|x| x % 2 != 0)
         );
+    }
+
+    struct FakeArtifact {
+        height: Height,
+        hash: CryptoHash,
+    }
+
+    impl FakeArtifact {
+        fn new(height: u64, hash: u8) -> Self {
+            Self {
+                height: Height::from(height),
+                hash: CryptoHash(vec![hash]),
+            }
+        }
+    }
+
+    impl HasHeight for FakeArtifact {
+        fn height(&self) -> Height {
+            self.height
+        }
+    }
+
+    impl HasHash for FakeArtifact {
+        fn hash(&self) -> &CryptoHash {
+            &self.hash
+        }
+    }
+
+    #[test]
+    fn test_instants_insert_and_get() {
+        let mut instants = HeightIndexedInstants::default();
+        let now = Instant::now();
+
+        assert_eq!(instants.get(&FakeArtifact::new(10, 1)), None);
+
+        instants.insert(&FakeArtifact::new(10, 1), now);
+        assert_eq!(instants.get(&FakeArtifact::new(10, 1)), Some(&now));
+
+        // Entries are keyed by height *and* hash: neither a different hash at
+        // the same height nor the same hash at a different height matches.
+        assert_eq!(instants.get(&FakeArtifact::new(10, 2)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(11, 1)), None);
+    }
+
+    #[test]
+    fn test_instants_insert_does_not_overwrite() {
+        let mut instants = HeightIndexedInstants::default();
+        let earlier = Instant::now();
+        let later = earlier + std::time::Duration::from_secs(1);
+
+        // The first recorded instant wins; a repeated insert is a no-op.
+        instants.insert(&FakeArtifact::new(10, 1), earlier);
+        instants.insert(&FakeArtifact::new(10, 1), later);
+        assert_eq!(instants.get(&FakeArtifact::new(10, 1)), Some(&earlier));
+        assert_eq!(instants.instants.len(), 1);
+    }
+
+    #[test]
+    fn test_instants_clear_removes_strictly_below() {
+        let mut instants = HeightIndexedInstants::default();
+        let now = Instant::now();
+
+        instants.insert(&FakeArtifact::new(9, 1), now);
+        instants.insert(&FakeArtifact::new(9, 2), now);
+        instants.insert(&FakeArtifact::new(10, 1), now);
+        instants.insert(&FakeArtifact::new(11, 1), now);
+        instants.insert(&FakeArtifact::new(11, 2), now);
+        instants.insert(&FakeArtifact::new(12, 1), now);
+
+        instants.clear(Height::from(11));
+        assert_eq!(instants.get(&FakeArtifact::new(9, 1)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(9, 2)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(10, 1)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(11, 1)), Some(&now));
+        assert_eq!(instants.get(&FakeArtifact::new(11, 2)), Some(&now));
+        assert_eq!(instants.get(&FakeArtifact::new(12, 1)), Some(&now));
+
+        // Clearing is idempotent and tolerates heights above everything.
+        instants.clear(Height::from(11));
+        assert_eq!(instants.get(&FakeArtifact::new(10, 1)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(11, 1)), Some(&now));
+        assert_eq!(instants.get(&FakeArtifact::new(11, 2)), Some(&now));
+        instants.clear(Height::from(100));
+        assert_eq!(instants.get(&FakeArtifact::new(11, 1)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(11, 2)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(12, 1)), None);
     }
 }

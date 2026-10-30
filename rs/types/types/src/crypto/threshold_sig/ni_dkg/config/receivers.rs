@@ -67,7 +67,7 @@ impl NiDkgReceivers {
     /// the canonical indexing.  That stable indexing is based on the natural
     /// ordering of NodeIds, also used by the BTreeSet, however that is an
     /// implementation detail and external code should not rely on this.
-    pub fn iter(&self) -> impl Iterator<Item = (NodeIndex, NodeId)> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = (NodeIndex, NodeId)> {
         (0..).zip(self.receivers.iter().copied())
     }
 

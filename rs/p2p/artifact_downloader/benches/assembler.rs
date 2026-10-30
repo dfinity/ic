@@ -63,10 +63,6 @@ impl ValidatedPoolReader<SignedIngress> for FakeIngressPool {
     fn get(&self, id: &IngressMessageId) -> Option<SignedIngress> {
         self.ingresses.get(id).cloned()
     }
-
-    fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = SignedIngress> + '_> {
-        unimplemented!()
-    }
 }
 
 struct FakeIDkgPool {
@@ -76,10 +72,6 @@ struct FakeIDkgPool {
 impl ValidatedPoolReader<IDkgMessage> for FakeIDkgPool {
     fn get(&self, id: &IDkgArtifactId) -> Option<IDkgMessage> {
         self.dealings.get(id).cloned().map(IDkgMessage::Dealing)
-    }
-
-    fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = IDkgMessage> + '_> {
-        unimplemented!()
     }
 }
 
@@ -117,6 +109,9 @@ fn set_up_assembler(
     mock_bouncer_factory
         .expect_new_bouncer()
         .returning(|_| Box::new(|_| BouncerValue::Wants));
+    mock_bouncer_factory
+        .expect_refresh_period()
+        .return_const(Duration::from_secs(1));
     let handler = FetchStrippedConsensusArtifact::new(
         no_op_logger(),
         handle,

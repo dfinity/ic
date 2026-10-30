@@ -26,6 +26,17 @@ pub struct DataPayload {
     pub idkg: idkg::Payload,
 }
 
+impl DataPayload {
+    /// Return an empty [`DataPayload`] in the DKG interval starting at the given height.
+    pub fn new_empty(dkg_start_height: Height) -> Self {
+        Self {
+            batch: BatchPayload::default(),
+            dkg: DkgDataPayload::new_empty(dkg_start_height),
+            idkg: None,
+        }
+    }
+}
+
 /// The payload of a summary block.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
@@ -69,16 +80,6 @@ pub enum BlockPayload {
 }
 
 impl BlockPayload {
-    /// Return true if it is a normal block and empty
-    pub fn is_empty(&self) -> bool {
-        match self {
-            BlockPayload::Data(DataPayload { batch, dkg, idkg }) => {
-                batch.is_empty() && dkg.is_empty() && idkg.is_none()
-            }
-            BlockPayload::Summary(_) => false,
-        }
-    }
-
     /// Return true if the given payload is a summary block.
     pub fn is_summary(&self) -> bool {
         matches!(self, BlockPayload::Summary(_))
@@ -208,6 +209,12 @@ impl Payload {
                 value: Thunk::new(init),
             }),
         }
+    }
+
+    /// Loads a payload created by [`Self::new_with`] now rather than on first access.
+    /// Does nothing if the payload is loaded already.
+    pub fn load(&self) {
+        let _: &BlockPayload = self.as_ref();
     }
 
     pub(crate) fn new_from_hash_and_value(

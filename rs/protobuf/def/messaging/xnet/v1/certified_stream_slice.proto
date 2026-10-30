@@ -15,5 +15,5 @@ message CertifiedStreamSlice {
   bytes merkle_proof = 2;
 
   // Certification of the root hash.
-  Certification certification = 3;
+  SignedCertificationContent certification = 3;
 }

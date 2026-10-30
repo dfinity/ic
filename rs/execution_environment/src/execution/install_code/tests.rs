@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::TEST_DEFAULT_LOG_MEMORY_USAGE;
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
@@ -22,7 +22,10 @@ use ic_test_utilities_execution_environment::{
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
-use ic_types::{CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions};
+use ic_types::{
+    CanisterId, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes,
+    NumInstructions,
+};
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions, NominalCycles};
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
@@ -123,6 +126,157 @@ fn dts_resume_works_in_install_code() {
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
+}
+
+fn check_install_code_replay_preserves_canister_log(mode: CanisterInstallMode) {
+    for log_capacity in [0, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT] {
+        for trap in [false, true] {
+            let mut test = ExecutionTestBuilder::new()
+                .with_install_code_instruction_limit(50_000_000)
+                .with_install_code_slice_instruction_limit(132_000)
+                .with_create_execution_state_base_cost(0)
+                .with_cost_to_compile_wasm_instruction(0)
+                .with_manual_execution()
+                .build();
+            let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+            test.canister_state_mut(canister_id)
+                .system_state
+                .log_memory_store
+                .resize_for_testing(log_capacity);
+
+            if mode != CanisterInstallMode::Install {
+                // Seed an old log, and a pre-upgrade hook whose log must also
+                // survive replay during an upgrade.
+                let ingress_id = test.dts_install_code(InstallCodeArgs {
+                    mode: CanisterInstallMode::Install,
+                    canister_id: canister_id.get(),
+                    wasm_module: wat::parse_str(
+                        r#"(module
+                            (import "ic0" "debug_print" (func $log (param i32 i32)))
+                            (memory 1)
+                            (data (i32.const 0) "oldpre_upgrade")
+                            (func $start (call $log (i32.const 0) (i32.const 3)))
+                            (start $start)
+                            (func (export "canister_pre_upgrade")
+                                (call $log (i32.const 3) (i32.const 11)))
+                        )"#,
+                    )
+                    .unwrap(),
+                    arg: vec![],
+                    sender_canister_version: None,
+                });
+                test.execute_message(canister_id);
+                check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+            }
+
+            let clean_canister = test.canister_state(canister_id).clone();
+            let last_hook = if mode == CanisterInstallMode::Upgrade {
+                "canister_post_upgrade"
+            } else {
+                "canister_init"
+            };
+            let module = format!(
+                r#"(module
+                    (import "ic0" "debug_print" (func $log (param i32 i32)))
+                    (memory 1)
+                    (data (i32.const 0) "startbeforeafter")
+                    (func $start (call $log (i32.const 0) (i32.const 5)))
+                    (start $start)
+                    (func (export "{last_hook}")
+                        (call $log (i32.const 5) (i32.const 6))
+                        {work}
+                        (call $log (i32.const 11) (i32.const 5))
+                        {trap}
+                    )
+                )"#,
+                // Keep the earlier hooks short, then force multiple pauses in
+                // the last hook so their completed state changes are replayed.
+                work = "(memory.fill (i32.const 1024) (i32.const 12) (i32.const 50000))".repeat(12),
+                trap = if trap { "unreachable" } else { "" },
+            );
+            let ingress_id = test.dts_install_code(InstallCodeArgs {
+                mode,
+                canister_id: canister_id.get(),
+                wasm_module: wat::parse_str(module).unwrap(),
+                arg: vec![],
+                sender_canister_version: None,
+            });
+            let mut pauses = 0;
+            while test.canister_state(canister_id).next_execution()
+                == NextExecution::ContinueInstallCode
+            {
+                assert!(test.canister_state(canister_id).has_paused_install_code());
+                pauses += 1;
+                // Replaying completed hooks must not publish any changes while
+                // install_code is still paused, including records or indices.
+                assert_eq!(
+                    test.canister_state(canister_id)
+                        .system_state
+                        .log_memory_store,
+                    clean_canister.system_state.log_memory_store,
+                );
+                test.execute_slice(canister_id);
+            }
+            assert!(pauses >= 2, "expected multiple resumes, got {pauses}");
+
+            let result = check_ingress_status(test.ingress_status(&ingress_id));
+            if trap {
+                assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
+                assert_eq!(
+                    test.canister_state(canister_id).execution_state,
+                    clean_canister.execution_state,
+                );
+            } else {
+                assert_eq!(result.unwrap(), WasmResult::Reply(EmptyBlob.encode()));
+                assert!(test.canister_state(canister_id).execution_state.is_some());
+            }
+
+            let mut expected_contents = match mode {
+                CanisterInstallMode::Install | CanisterInstallMode::Reinstall => vec![],
+                CanisterInstallMode::Upgrade => vec![b"old".to_vec(), b"pre_upgrade".to_vec()],
+            };
+            expected_contents.extend([b"start".to_vec(), b"before".to_vec(), b"after".to_vec()]);
+            let first_idx = u64::from(mode == CanisterInstallMode::Reinstall);
+            let store = &test
+                .canister_state(canister_id)
+                .system_state
+                .log_memory_store;
+            assert_eq!(
+                store.next_idx(),
+                first_idx + expected_contents.len() as u64 + u64::from(trap),
+            );
+            let records = store.all_records_for_testing();
+            if log_capacity == 0 {
+                assert!(records.is_empty());
+            } else {
+                assert_eq!(records.len(), expected_contents.len() + usize::from(trap));
+                for (i, record) in records.iter().enumerate() {
+                    assert_eq!(record.idx, first_idx + i as u64);
+                }
+                for (record, expected_content) in records.iter().zip(expected_contents) {
+                    assert_eq!(record.content, expected_content);
+                }
+                if trap {
+                    assert!(records.last().unwrap().content.starts_with(b"[TRAP]:"));
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn dts_install_code_replay_preserves_canister_log() {
+    check_install_code_replay_preserves_canister_log(CanisterInstallMode::Install);
+}
+
+#[test]
+fn dts_reinstall_code_replay_preserves_canister_log() {
+    check_install_code_replay_preserves_canister_log(CanisterInstallMode::Reinstall);
+}
+
+#[test]
+fn dts_upgrade_replay_preserves_canister_log() {
+    check_install_code_replay_preserves_canister_log(CanisterInstallMode::Upgrade);
 }
 
 /// Returns the cycles consumed for instructions by the given canister so far.
@@ -294,6 +448,62 @@ fn dts_install_code_resume_fails_due_to_cycles_decrease() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_balance - expected_cost.real() - Cycles::new(1)
+    );
+}
+
+/// An `install_code` whose `canister_init` burns cycles fails if the cycles
+/// balance decreased concurrently (due to a postponed charge) while the Wasm
+/// execution was paused, but the canister log of `canister_init` is persisted.
+#[test]
+fn dts_install_code_concurrent_cycles_change_persists_canister_log() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_slice_instruction_limit(1_000_000)
+        .with_create_execution_state_base_cost(0)
+        .with_manual_execution()
+        .build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    let cycles_to_burn = Cycles::new(1000);
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
+        arg: wasm()
+            .debug_print(b"init")
+            .instruction_counter_is_at_least(1_000_000)
+            .cycles_burn128(cycles_to_burn)
+            .build(),
+        sender_canister_version: None,
+    };
+
+    let ingress_id = test.dts_install_code(payload);
+    while !test.canister_state(canister_id).has_paused_install_code() {
+        assert_eq!(
+            test.canister_state(canister_id).next_execution(),
+            NextExecution::ContinueInstallCode
+        );
+        test.execute_slice(canister_id);
+    }
+
+    // Emulate a postponed charge leaving fewer cycles than burned by `canister_init`.
+    let cycles_debit = test.canister_state(canister_id).system_state.balance() - Cycles::new(1);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
+
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueInstallCode {
+        test.execute_slice(canister_id);
+    }
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
+
+    // The canister has no code installed.
+    assert!(test.canister_state(canister_id).execution_state.is_none());
+
+    // The canister log of the failed `canister_init` is persisted.
+    assert_eq!(
+        test.canister_log_contents(canister_id),
+        vec![b"init".to_vec()]
     );
 }
 
@@ -1756,6 +1966,129 @@ fn install_code_args(canister_id: CanisterId) -> InstallCodeArgs {
         arg: vec![],
         sender_canister_version: None,
     }
+}
+
+/// Uploads `DTS_INSTALL_WAT` into the chunk store of `store` and returns the
+/// payload of an `install_chunked_code` call installing it on `target`.
+fn install_chunked_code_payload(
+    test: &mut ExecutionTest,
+    target: CanisterId,
+    store: CanisterId,
+) -> Vec<u8> {
+    let wasm = wat::parse_str(DTS_INSTALL_WAT).unwrap();
+    let wasm_module_hash = ic_crypto_sha2::Sha256::hash(&wasm).to_vec();
+    let hash = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: store.into(),
+                chunk: wasm,
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+    InstallChunkedCodeArgs::new(
+        CanisterInstallModeV2::Install,
+        target,
+        Some(store),
+        vec![hash],
+        wasm_module_hash,
+        vec![],
+    )
+    .encode()
+}
+
+/// Sends an `install_chunked_code` via `send`, which gets its payload; makes its
+/// re-execution after an abort fail; and checks that the call is no longer tracked
+/// and that its prepayment was refunded. Returns the test, the store canister and
+/// the result of `send`.
+fn failed_reexecution_of_aborted_install_helper<T>(
+    send: impl FnOnce(&mut ExecutionTest, Vec<u8>) -> T,
+) -> (ExecutionTest, CanisterId, T) {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        // Ensure that all `install_code()` executions will get paused.
+        .with_install_code_slice_instruction_limit(132_000)
+        .with_create_execution_state_base_cost(0)
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let target = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+    let store = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(target, controllers.clone())
+        .unwrap();
+    test.canister_update_controller(store, controllers).unwrap();
+    let payload = install_chunked_code_payload(&mut test, target, store);
+    let balance_before = test.canister_state(target).system_state.balance();
+
+    let sent = send(&mut test, payload);
+    test.execute_subnet_message();
+    assert_eq!(
+        test.canister_state(target).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+
+    test.stop_canister(store);
+    test.process_stopping_canisters();
+    test.delete_canister(store).unwrap();
+
+    // Abort the execution, as on a checkpoint; and re-execute it.
+    test.abort_all_paused_executions();
+    assert_consistent_install_code_calls(test.state(), 1);
+    test.execute_slice(target);
+
+    // The call is no longer tracked and the prepayment was refunded.
+    assert_eq!(
+        test.canister_state(target).next_execution(),
+        NextExecution::None
+    );
+    assert_consistent_install_code_calls(test.state(), 0);
+    assert_eq!(
+        test.canister_state(target).system_state.balance(),
+        balance_before
+    );
+    (test, store, sent)
+}
+
+#[test]
+fn failed_reexecution_of_aborted_install_removes_install_code_call() {
+    let (mut test, store, ()) = failed_reexecution_of_aborted_install_helper(|test, payload| {
+        test.inject_call_to_ic00(
+            Method::InstallChunkedCode,
+            payload,
+            Cycles::new(1_000_000_000),
+        )
+    });
+
+    test.induct_messages();
+    assert_eq!(test.xnet_messages().len(), 1);
+    match &test.get_xnet_response(0).response_payload {
+        ic_types::messages::Payload::Reject(reject) => reject.assert_contains(
+            RejectCode::DestinationInvalid,
+            &format!("Store canister {store} was not found"),
+        ),
+        payload => panic!("Expected a reject, got {payload:?}"),
+    }
+}
+
+#[test]
+fn failed_reexecution_of_aborted_install_from_ingress_removes_install_code_call() {
+    let (test, _, message_id) = failed_reexecution_of_aborted_install_helper(|test, payload| {
+        test.subnet_message_raw(Method::InstallChunkedCode, payload)
+    });
+
+    let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterNotFound);
 }
 
 #[test]

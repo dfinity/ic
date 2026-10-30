@@ -352,11 +352,6 @@ impl ValidatedPoolReader<SignedIngress> for IngressPoolImpl {
     fn get(&self, id: &IngressMessageId) -> Option<SignedIngress> {
         self.validated.get(id).map(|a| a.msg.signed_ingress.clone())
     }
-
-    fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = SignedIngress>> {
-        // Ingress artifacts are not persisted.
-        Box::new(std::iter::empty())
-    }
 }
 
 impl IngressPoolThrottler for IngressPoolImpl {
@@ -494,46 +489,6 @@ mod tests {
 
                 ingress_pool.remove(&message_id);
                 assert!(!ingress_pool.unvalidated.artifacts.contains_key(&message_id));
-            })
-        })
-    }
-
-    #[test]
-    fn test_get_all_validated() {
-        with_test_replica_logger(|log| {
-            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-                let time_source = FastForwardTimeSource::new();
-                let time = time_source.get_relative_time();
-                let metrics_registry = MetricsRegistry::new();
-                let mut ingress_pool =
-                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
-
-                let max_seconds = 10;
-                let range_min = 3;
-                let range_max = 7;
-                let step = 66; // in seconds
-                let range_min = time + Duration::from_secs(range_min * step);
-                let range_max = time + Duration::from_secs(range_max * step);
-                let range = range_min..=range_max;
-                let mut msgs_in_range = Vec::new();
-                for i in 0..max_seconds {
-                    let expiry = time + Duration::from_secs(i * step);
-                    let ingress_msg = SignedIngressBuilder::new().expiry_time(expiry).build();
-                    if range.contains(&expiry) {
-                        msgs_in_range.push(ingress_msg.clone())
-                    }
-                    let message_id = IngressMessageId::from(&ingress_msg);
-                    ingress_pool.validated.insert(
-                        message_id.clone(),
-                        ValidatedIngressArtifact {
-                            msg: IngressPoolObject::new(node_test_id(0), ingress_msg),
-                            timestamp: UNIX_EPOCH,
-                        },
-                    );
-                }
-                // empty
-                let filtered_msgs = ingress_pool.get_all_for_initial_broadcast();
-                assert!(filtered_msgs.count() == 0);
             })
         })
     }

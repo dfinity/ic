@@ -15,6 +15,7 @@
 
 use crate::{Args, Partition, crypt_name, metrics_file_path, run};
 use anyhow::{Result, anyhow};
+use attestation::LAUNCH_MEASUREMENT_LEN;
 use attestation::attestation_report::tcb_version_to_u64;
 use config_types::GuestVMType;
 use guest_disk::DiskEncryption;
@@ -62,7 +63,7 @@ fn default_launch_tcb_as_u64() -> u64 {
 
 /// The default launch measurement for slot A. Tests that assert on keyslot metadata
 /// expect this value (and its derived key) to be written by the SEV format path.
-fn default_launch_measurement() -> [u8; 48] {
+fn default_launch_measurement() -> [u8; LAUNCH_MEASUREMENT_LEN] {
     std::array::from_fn(|i| i as u8)
 }
 
@@ -261,13 +262,13 @@ impl<'a> PartitionView<'a> {
 /// launch measurement identifying the GuestOS version installed on this slot.
 struct BootSlot {
     name: &'static str,
-    launch_measurement: [u8; 48],
+    launch_measurement: [u8; LAUNCH_MEASUREMENT_LEN],
     var_dir: TempDir,
     var_device: TempDevice,
 }
 
 impl BootSlot {
-    fn new(name: &'static str, launch_measurement: [u8; 48]) -> Self {
+    fn new(name: &'static str, launch_measurement: [u8; LAUNCH_MEASUREMENT_LEN]) -> Self {
         let var_device = TempDevice::new(Bytes(18 * 1024 * 1024).sectors()).unwrap();
         Self {
             name,
@@ -333,7 +334,7 @@ impl TestFixture {
             _store_device: store_device,
             slots: [
                 BootSlot::new("A", default_launch_measurement()),
-                BootSlot::new("B", [0_u8; 48]),
+                BootSlot::new("B", [0_u8; LAUNCH_MEASUREMENT_LEN]),
             ],
             active_slot: 0,
             sev_enabled,
@@ -472,7 +473,7 @@ impl TestFixture {
     }
 
     /// Sets the active boot slot's SEV launch measurement (identifies the GuestOS version).
-    fn set_launch_measurement(&mut self, measurement: [u8; 48]) {
+    fn set_launch_measurement(&mut self, measurement: [u8; LAUNCH_MEASUREMENT_LEN]) {
         self.slots[self.active_slot].launch_measurement = measurement;
     }
 
@@ -482,7 +483,7 @@ impl TestFixture {
     /// the new GuestOS's code) copies the header to the new slot's var partition and
     /// re-keys it to the new GuestOS's derived key. Returns the result of opening the
     /// store so callers can attach context (e.g. an iteration index).
-    fn upgrade_sev_guestos_to(&mut self, new_launch_measurement: [u8; 48]) {
+    fn upgrade_sev_guestos_to(&mut self, new_launch_measurement: [u8; LAUNCH_MEASUREMENT_LEN]) {
         // The old GuestOS's orchestrator derives and serves its Store key.
         let served_key = self.derive_sev_key(Partition::Store);
 
@@ -844,7 +845,7 @@ fn test_rollback_uses_frozen_header_without_key_exchange() {
     fixture.store_partition().deactivate();
 
     // Upgrade to the other slot.
-    fixture.upgrade_sev_guestos_to([0x11; 48]);
+    fixture.upgrade_sev_guestos_to([0x11; LAUNCH_MEASUREMENT_LEN]);
     fixture.store_partition().open().unwrap();
     fixture.store_partition().deactivate();
 
@@ -869,7 +870,7 @@ fn test_open_store_fails_with_wrong_launch_measurement() {
     fixture.store_partition().format().unwrap();
 
     // Simulate a different GuestOS booting from the same slot.
-    fixture.slots[fixture.active_slot].launch_measurement = [0xAA; 48];
+    fixture.slots[fixture.active_slot].launch_measurement = [0xAA; LAUNCH_MEASUREMENT_LEN];
     fixture
         .store_partition()
         .open()
@@ -935,7 +936,7 @@ fn test_open_store_multiple_times_with_different_keys() {
     fixture.store_partition().format().unwrap();
 
     for iteration in 0..6 {
-        fixture.upgrade_sev_guestos_to([iteration as u8; 48]);
+        fixture.upgrade_sev_guestos_to([iteration as u8; LAUNCH_MEASUREMENT_LEN]);
         fixture.store_partition().open().unwrap_or_else(|e| {
             panic!("Failed to open store partition on iteration {iteration}: {e:#}")
         });
@@ -948,7 +949,7 @@ fn test_open_store_multiple_times_with_different_keys() {
 
     // An upgrade to a GuestOS with the same launch measurement re-keys the header with
     // the same key; it must remain in the single-keyslot/single-token state.
-    fixture.upgrade_sev_guestos_to([5_u8; 48]);
+    fixture.upgrade_sev_guestos_to([5_u8; LAUNCH_MEASUREMENT_LEN]);
     fixture.store_partition().deactivate();
 
     // Each re-key replaces the old key in place: the single keyslot (always the first)
@@ -957,7 +958,7 @@ fn test_open_store_multiple_times_with_different_keys() {
     let token = fixture.store_partition().read_keyslot_token();
     assert_eq!(
         token.sev_metadata.launch_measurement_hex,
-        hex::encode([5_u8; 48])
+        hex::encode([5_u8; LAUNCH_MEASUREMENT_LEN])
     );
     assert_eq!(token.sev_metadata.tcb_version, fixture.launch_tcb_as_u64());
     assert_eq!(fixture.store_partition().active_keyslot_count(), 1);
@@ -988,7 +989,7 @@ fn test_upgrade_removes_stale_keyslots() {
     drop(crypt_device);
     assert_eq!(fixture.store_partition().active_keyslot_count(), 2);
 
-    fixture.upgrade_sev_guestos_to([0x22; 48]);
+    fixture.upgrade_sev_guestos_to([0x22; LAUNCH_MEASUREMENT_LEN]);
 
     assert_eq!(fixture.store_partition().active_keyslot_count(), 1);
     // The re-key converges the legacy header back to the single token in the first
@@ -1053,7 +1054,7 @@ fn test_rekey_migrates_legacy_keyslot_and_token_positions() {
         CryptTokenInfo::ExternalUnknown(ref token_type) if token_type == IC_KEY_TOKEN_TYPE
     ));
 
-    fixture.upgrade_sev_guestos_to([0x33; 48]);
+    fixture.upgrade_sev_guestos_to([0x33; LAUNCH_MEASUREMENT_LEN]);
 
     // The migrated header carries exactly one active keyslot, and it is at index 0.
     assert_eq!(fixture.store_partition().active_keyslot_count(), 1);
@@ -1071,7 +1072,7 @@ fn test_rekey_migrates_legacy_keyslot_and_token_positions() {
     let token = fixture.store_partition().read_keyslot_token();
     assert_eq!(
         token.sev_metadata.launch_measurement_hex,
-        hex::encode([0x33_u8; 48])
+        hex::encode([0x33_u8; LAUNCH_MEASUREMENT_LEN])
     );
 }
 
@@ -1096,7 +1097,7 @@ fn test_cannot_open_store_when_no_key_works() {
     fixture.store_partition().format().unwrap();
     // Simulate a different GuestOS booting from the same slot: its derived key does not
     // unlock the keyslot.
-    fixture.set_launch_measurement([0xAA; 48]);
+    fixture.set_launch_measurement([0xAA; LAUNCH_MEASUREMENT_LEN]);
 
     fixture
         .can_open_store()
@@ -1451,9 +1452,9 @@ fn test_firmware_downgrade_cannot_unlock_store() {
 /// measurement; rollback to an older GuestOS works via that slot's frozen header.
 #[test]
 fn test_firmware_upgrade_then_guestos_upgrade() {
-    let guestos_v1_measurement = [0x11_u8; 48];
-    let guestos_v2_measurement = [0x22_u8; 48];
-    let guestos_v3_measurement = [0x33_u8; 48];
+    let guestos_v1_measurement = [0x11_u8; LAUNCH_MEASUREMENT_LEN];
+    let guestos_v2_measurement = [0x22_u8; LAUNCH_MEASUREMENT_LEN];
+    let guestos_v3_measurement = [0x33_u8; LAUNCH_MEASUREMENT_LEN];
 
     let tcb_v1 = TcbVersion::new(None, 1, 0, 0, 0);
     let tcb_v2 = TcbVersion::new(None, 2, 0, 0, 0);
@@ -1545,8 +1546,8 @@ fn test_firmware_upgrade_then_guestos_upgrade() {
 /// Rollback uses the frozen detached header from the previous GuestOS's var partition.
 #[test]
 fn test_guestos_upgrade_then_firmware_upgrade_then_rollback() {
-    let guestos_v1_measurement = [0x11_u8; 48];
-    let guestos_v2_measurement = [0x22_u8; 48];
+    let guestos_v1_measurement = [0x11_u8; LAUNCH_MEASUREMENT_LEN];
+    let guestos_v2_measurement = [0x22_u8; LAUNCH_MEASUREMENT_LEN];
 
     let tcb_v1 = TcbVersion::new(None, 1, 0, 0, 0);
     let tcb_v2 = TcbVersion::new(None, 2, 0, 0, 0);

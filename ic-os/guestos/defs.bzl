@@ -55,7 +55,7 @@ def image_deps(mode, malicious = False):
             "//rs/ic_os/os_tools/guest_disk": "/opt/ic/bin/guest_disk:0755",
             "//rs/ic_os/release:nft-exporter": "/opt/ic/bin/nft-exporter:0755",  # Firewall (NFTables) counter exporter for observability.
             "//rs/ic_os/release:vsock_guest": "/opt/ic/bin/vsock_guest:0755",  # HostOS <--> GuestOS communication client.
-            "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",  # Terminal manager that replaces the login shell.
+            "//rs/ic_os/release:infogetty": "/opt/ic/bin/infogetty:0755",  # Terminal manager that replaces the login shell.
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",  # Proxies, filters, and serves public node metrics.
             "//rs/ic_os/release:custom_metrics": "/opt/ic/bin/custom_metrics:0755",  # Collects and reports custom metrics.
             "//rs/ic_os/remote_attestation/server": "/opt/ic/bin/remote_attestation_server:0755",  # Remote Attestation service

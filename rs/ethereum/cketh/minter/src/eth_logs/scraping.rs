@@ -121,7 +121,7 @@ impl LogScraping for ReceivedEthOrErc20LogScraping {
     }
 }
 
-fn erc20_smart_contracts_addresses_as_topics(state: &State) -> impl Iterator<Item = Hex32> + '_ {
+fn erc20_smart_contracts_addresses_as_topics(state: &State) -> impl Iterator<Item = Hex32> {
     state
         .ckerc20_tokens
         .alt_keys()

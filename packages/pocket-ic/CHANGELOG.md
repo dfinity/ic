@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+- Bumped `ic-management-canister-types` to v0.11.0, so the reexported `CanisterSettings` has the new fields `minimum_incoming_canister_call_cycles` and `status_visibility`.
+
 ## 16.1.0 - 2026-10-08
 
 ### Changed

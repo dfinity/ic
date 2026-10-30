@@ -43,7 +43,7 @@ jobs:
           if grep $image_tag ci/container/TAG; then
             echo "build_image=false" >> "$GITHUB_OUTPUT"
             echo "Update with this image already in this PR!"
-            echo "Modify ci/container/TAG with random string to trigger new build."
+            echo "Modify ci/container/TAG with a random string to trigger a new build."
           else
             echo "build_image=true" >> "$GITHUB_OUTPUT"
             echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
@@ -158,15 +158,32 @@ jobs:
           set -xeuo pipefail
 
           IMAGE_PREFIX="ghcr.io/dfinity/"
-          IMG_NAME_IC_BUILD="${IMAGE_PREFIX}ic-build@${{ needs.ic-build-image.outputs.ic-build-imagedigest }}"
-          IMG_NAME_IC_DEV="${IMAGE_PREFIX}ic-dev@${{ needs.ic-build-image.outputs.ic-dev-imagedigest }}"
+          IC_BUILD_DIGEST='${{ needs.ic-build-image.outputs.ic-build-imagedigest }}'
+          IC_DEV_DIGEST='${{ needs.ic-build-image.outputs.ic-dev-imagedigest }}'
+          for digest in "$IC_BUILD_DIGEST" "$IC_DEV_DIGEST"; do
+            if ! [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::malformed image digest '$digest'"
+              exit 1
+            fi
+          done
+          IMG_NAME_IC_BUILD="${IMAGE_PREFIX}ic-build@${IC_BUILD_DIGEST}"
+          IMG_NAME_IC_DEV="${IMAGE_PREFIX}ic-dev@${IC_DEV_DIGEST}"
 
           echo '${{ needs.build-image-prep.outputs.image_tag }}' > ci/container/TAG
-          pushd .devcontainer
-          sed -i -E "s|${IMAGE_PREFIX}ic-dev(:\|@)[^\"]{5,}|$IMG_NAME_IC_DEV|g" -- *
-          popd
+          echo "$IC_BUILD_DIGEST" > ci/container/ic-build.digest
+          echo "$IC_DEV_DIGEST" > ci/container/ic-dev.digest
+          # Re-point every reference to either image, by tag or by digest, under
+          # .devcontainer/ and .github/: the scope ci/container/check-image-pins.sh
+          # verifies below, with its pattern. grep -r only lists regular files (sed -i
+          # fails on directories like actions/bazel/bin) and fails the step if there
+          # are none.
+          repoint() { # <image> <new reference>
+            local re="ghcr\.io/dfinity/${1}(:|@)[A-Za-z0-9:._-]+"
+            grep -rlZE -- "$re" .devcontainer .github | xargs -0 -r sed -i -E "s#${re}#${2}#g" --
+          }
+          repoint ic-build "$IMG_NAME_IC_BUILD"
+          repoint ic-dev "$IMG_NAME_IC_DEV"
           pushd .github
-          sed -i -E "s|${IMAGE_PREFIX}ic-build(:\|@)[^\"]{5,}|$IMG_NAME_IC_BUILD|g" -- workflow*/*
           # The RBE worker image is also referenced outside workflows/, by
           # actions/bazel-namespace/rbe.bazelrc, so rewrite it in every file under .github that
           # references it (the pattern is anchored on the digest). grep -r only lists regular files
@@ -175,6 +192,9 @@ jobs:
           worker_image_re='nscr\.io/[^"/]+/ic-build@sha256:[0-9a-f]{64}'
           grep -rlZE -- "$worker_image_re" . | xargs -0 -r sed -i -E "s|${worker_image_re}|${WORKER_IMAGE}|g" --
           popd
+
+          # Fail before committing if any reference escaped the rewrites above.
+          ./ci/container/check-image-pins.sh
 
           git config --global user.name "IDX GitHub Automation"
           git config --global user.email "<>"

@@ -138,7 +138,7 @@ struct TaskHistogram {
 }
 
 impl TaskHistogram {
-    fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
+    fn iter(&self) -> impl Iterator<Item = (f64, f64)> {
         BUCKETS
             .iter()
             .copied()

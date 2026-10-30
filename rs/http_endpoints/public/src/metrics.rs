@@ -34,6 +34,9 @@ pub const CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS: &str =
 /// Placeholder used when we can't determine the appropriate prometheus label.
 pub const LABEL_UNKNOWN: &str = "unknown";
 
+/// Label value used for requests whose path did not match any registered route.
+pub const LABEL_UNMATCHED_PATH: &str = "unmatched_path";
+
 pub const STATUS_SUCCESS: &str = "success";
 pub const STATUS_ERROR: &str = "error";
 

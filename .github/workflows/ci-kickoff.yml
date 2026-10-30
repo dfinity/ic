@@ -10,12 +10,6 @@ on:
     branches-ignore:
       - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
   workflow_dispatch:
-    inputs:
-      release-build:
-        description: Whether this CI run is for a release build, which may require additional steps such as uploading artifacts.
-        required: false
-        default: ''
-        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -33,15 +27,17 @@ jobs:
     secrets: inherit
     with:
       commit-sha: ${{ github.sha }}
-      release-build: ${{ inputs.release-build }}
     permissions:
       actions: write
       # The upload jobs of ci-main.yml attest what they uploaded; only release
       # builds upload. The grant also applies to this workflow's pull-request,
-      # merge-group and dev-gh-* runs, which never upload: an attestation minted
-      # from one of those would carry that run's ref (refs/pull/N/merge,
-      # refs/heads/gh-readonly-queue/..., refs/heads/dev-gh-*) and commit, which
-      # the release workflows consuming attestations reject.
+      # merge-group, dev-gh-* and workflow_dispatch runs, which never upload: an
+      # attestation minted from one of those would carry that run's ref
+      # (refs/pull/N/merge, refs/heads/gh-readonly-queue/...,
+      # refs/heads/dev-gh-*, the dispatched ref) and commit, which the release
+      # workflows consuming attestations reject unless a dispatch picked master,
+      # which then runs nothing but master's own tree: this workflow's dispatch
+      # takes no inputs.
       attestations: write
       contents: read
       id-token: write
@@ -72,7 +68,6 @@ jobs:
     secrets: inherit
     with:
       commit-sha: ${{ github.sha }}
-      release-build: ${{ inputs.release-build }}
     permissions:
       contents: read
 

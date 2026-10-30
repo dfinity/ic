@@ -63,7 +63,7 @@ pub struct SpanInfo {
 }
 
 impl SpanInfo {
-    pub fn iter_buckets(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
+    pub fn iter_buckets(&self) -> impl Iterator<Item = (f64, f64)> {
         BUCKETS
             .iter()
             .cloned()

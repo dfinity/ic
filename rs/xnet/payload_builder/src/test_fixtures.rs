@@ -1,6 +1,7 @@
 //! Common test fixtures for `XNetPayloadBuilder` tests.
 
 use super::*;
+use crate::exchange::GenRangeFn;
 use ic_base_types::PrincipalId;
 use ic_canonical_state::CURRENT_CERTIFICATION_VERSION;
 use ic_interfaces_state_manager::CertificationScope;
@@ -30,7 +31,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     CryptoHashOfPartialState, Height, NumBytes, RegistryVersion, SubnetId,
-    consensus::certification::{Certification, CertificationContent},
+    consensus::certification::CertificationContent,
     crypto::{CryptoHash, Signed},
     messages::CallbackId,
     signature::ThresholdSignature,
@@ -278,15 +279,9 @@ pub(crate) fn make_advert_for(
     CertifiedStreamSlice {
         payload: stream_encoding::encode_tree(tree),
         merkle_proof: vec![],
-        certification: Certification {
-            height: CERTIFIED_HEIGHT,
-            height_witness: None,
-            signed: Signed {
-                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                    vec![],
-                ))),
-                signature: ThresholdSignature::fake(),
-            },
+        certification: Signed {
+            content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
+            signature: ThresholdSignature::fake(),
         },
     }
 }

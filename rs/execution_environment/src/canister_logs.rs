@@ -30,7 +30,7 @@ pub(crate) fn fetch_canister_logs(
     // Charge the read/encode work against the round's instruction budget. No cycles
     // fee is charged for the call because every term is already covered by fees the
     // caller pays (per-message execution fee and per-byte response transmission fee).
-    round_limits.instructions -= as_round_instructions(instructions);
+    round_limits.deduct_instructions(as_round_instructions(instructions));
     Ok(CanisterManagerResponse {
         canister_id,
         reply: Some(reply),

@@ -340,6 +340,43 @@ pub(crate) fn validate_message(
     Ok(())
 }
 
+/// Returns the Wasm method a call to `method_name` executes in replicated
+/// mode: a query or composite query if the canister exports one with that
+/// name, and an update otherwise.
+pub(crate) fn replicated_call_method(canister: &CanisterState, method_name: &str) -> WasmMethod {
+    // Note that Wasm validation guarantees that a name cannot be
+    // exported multiple times as different types. So the order of
+    // checks here matters only for performance, not correctness.
+    let method = WasmMethod::Query(method_name.to_string());
+    if canister.exports_method(&method) {
+        return method;
+    }
+    let method = WasmMethod::CompositeQuery(method_name.to_string());
+    if canister.exports_method(&method) {
+        return method;
+    }
+    WasmMethod::Update(method_name.to_string())
+}
+
+/// Validates a call executed in replicated mode: the canister must be running
+/// and export the called method which must not be a composite query (composite
+/// queries cannot be called in replicated mode).
+pub(crate) fn validate_replicated_call(
+    canister: &CanisterState,
+    wasm_method: &WasmMethod,
+) -> Result<(), UserError> {
+    validate_message(canister, wasm_method)?;
+
+    if let WasmMethod::CompositeQuery(_) = wasm_method {
+        return Err(UserError::new(
+            ErrorCode::CompositeQueryCalledInReplicatedMode,
+            "Composite query cannot be called in replicated mode",
+        ));
+    }
+
+    Ok(())
+}
+
 pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserError> {
     if CanisterStatusType::Running != canister.status() {
         let canister_id = canister.canister_id();
@@ -884,7 +921,7 @@ pub fn get_call_context(
 }
 
 pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutionOutput) {
-    round_limits.instructions -= as_round_instructions(slice.executed_instructions);
+    round_limits.deduct_instructions(as_round_instructions(slice.executed_instructions));
 }
 
 /// Tries to apply the given canister changes to the given system state and
@@ -904,7 +941,6 @@ fn try_apply_canister_state_changes(
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
     is_composite_query: bool,
-    metrics: &HypervisorMetrics,
     log: &ReplicaLogger,
 ) -> HypervisorResult<RequestMetadataStats> {
     let already_reserved_cycles = system_state_modifications.reserved_cycles();
@@ -923,7 +959,6 @@ fn try_apply_canister_state_changes(
         network_topology,
         subnet_id,
         is_composite_query,
-        metrics,
         log,
     )?;
 
@@ -1008,8 +1043,12 @@ pub fn apply_canister_state_changes(
 ) {
     let CanisterStateChanges {
         execution_state_changes,
-        system_state_modifications,
+        mut system_state_modifications,
     } = canister_state_changes;
+
+    // Canister logs are persisted even if applying the other changes fails
+    // below and hence they are applied before taking the clean system state.
+    system_state_modifications.apply_canister_log(system_state, metrics);
 
     let clean_system_state = system_state.clone();
     let clean_subnet_available_memory = round_limits.subnet_available_memory;
@@ -1029,7 +1068,6 @@ pub fn apply_canister_state_changes(
         network_topology,
         subnet_id,
         is_composite_query,
-        metrics,
         log,
     ) {
         Ok(request_stats) => {

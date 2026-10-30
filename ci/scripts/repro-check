@@ -1578,7 +1578,10 @@ class ReproducibilityVerifier:
             self.clone_and_checkout_repo(ic_clone_path)
 
             logger.info("Building IC-OS (./ci/container/build-ic.sh --icos).")
-            subprocess.run(["./ci/container/build-ic.sh", "--icos"], check=True)
+            # A verification must run the build container that ci/container/*.digest
+            # pins: never pass on an opt-out the verifier's shell may export for other work.
+            build_env = {k: v for k, v in os.environ.items() if k != "CONTAINER_RUN_ALLOW_UNPINNED"}
+            subprocess.run(["./ci/container/build-ic.sh", "--icos"], check=True, env=build_env)
             logger.info("IC-OS build complete.")
         finally:
             progress_hidden.popleft()

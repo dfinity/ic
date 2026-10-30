@@ -8,7 +8,7 @@ is put onto the target system by installing the +selinux-policy-default+
 package during the docker system build. This will implicitly
 set everything up such that the policy is activated when
 the kernel is booted using correct boot arguments
-(+security=selinux+ +selinux=1+).
+(an +lsm=+ list including +selinux+, and +selinux=1+).
 
 Additional policy modules are built using the Makefile supplied
 by the SELinux distribution (see +prep/prep.sh+).

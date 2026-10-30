@@ -17,7 +17,7 @@ jobs:
       group: dm1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:0b6a915e614105c632a0c7a0f6e530ed506decfbd0316b297b28e9c555c532a2
+      image: ghcr.io/dfinity/ic-build@sha256:6184a4beddca0e898c9e2113b2dd78f0391caefef7c13090c56ae1ab7b1ec399
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 480
@@ -49,7 +49,7 @@ jobs:
               --target_pattern_file="$target_pattern_file" \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
               --keep_going --jobs=1
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
       - name: Post Slack Notification
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         if: failure()

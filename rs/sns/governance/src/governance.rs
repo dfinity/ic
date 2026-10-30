@@ -1,5 +1,4 @@
 use crate::{
-    MAX_SCALAR_FIELD_LEN_BYTES,
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
@@ -159,6 +158,12 @@ lazy_static! {
 /// That is, when `list_proposals` is called, for each proposal whose payload exceeds
 /// this limit, the payload will not be returned in the reply.
 pub const EXECUTE_NERVOUS_SYSTEM_FUNCTION_PAYLOAD_LISTING_BYTES_MAX: usize = 1000; // 1 KB
+
+/// When a generic nervous system function is successfully executed, the reply
+/// from the target canister is stored in the proposal (in the execution_reply
+/// field), but only up to this many bytes; the rest is discarded. This is
+/// enough to fully hold the large majority of replies.
+pub const MAX_EXECUTION_REPLY_LEN_BYTES: usize = 5_000;
 
 const MAX_HEAP_SIZE_IN_KIB: usize = 4 * 1024 * 1024;
 const WASM32_PAGE_SIZE_IN_KIB: usize = 64;
@@ -1767,18 +1772,20 @@ impl Governance {
     }
 
     /// Saves a generic function call's reply on its proposal, keeping at most
-    /// `MAX_SCALAR_FIELD_LEN_BYTES` bytes.
-    fn set_proposal_execution_reply(&mut self, pid: u64, mut execution_reply: Vec<u8>) {
-        execution_reply.truncate(MAX_SCALAR_FIELD_LEN_BYTES);
-        let Some(proposal) = self.proto.proposals.get_mut(&pid) else {
+    /// `MAX_EXECUTION_REPLY_LEN_BYTES` bytes.
+    fn set_proposal_execution_reply(&mut self, proposal_id: u64, mut execution_reply: Vec<u8>) {
+        let Some(proposal) = self.proto.proposals.get_mut(&proposal_id) else {
             log!(
                 ERROR,
                 "Tried to record reply after executing proposal {}, but unable to find the proposal.",
-                pid,
+                proposal_id,
             );
             return;
         };
 
+        execution_reply.truncate(MAX_EXECUTION_REPLY_LEN_BYTES);
+        // Because truncate (previous line) does not actually free the extra space.
+        execution_reply.shrink_to_fit();
         proposal.execution_reply = Some(execution_reply);
     }
 
@@ -1945,7 +1952,7 @@ impl Governance {
     }
 
     /// Returns the proposal IDs for all proposals that have reward status ReadyToSettle
-    fn ready_to_be_settled_proposal_ids(&self) -> impl Iterator<Item = ProposalId> + '_ {
+    fn ready_to_be_settled_proposal_ids(&self) -> impl Iterator<Item = ProposalId> {
         let now = self.env.now();
         self.proto
             .proposals
