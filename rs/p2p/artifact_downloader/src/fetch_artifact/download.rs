@@ -40,7 +40,7 @@ pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {
 }
 
 /// A pool shared with the components writing to it, read by taking its lock on each access.
-struct SharedPool<Pool>(Arc<RwLock<Pool>>);
+pub(crate) struct SharedPool<Pool>(pub(crate) Arc<RwLock<Pool>>);
 
 impl<Artifact, Pool> ValidatedPoolReader<Artifact> for SharedPool<Pool>
 where
