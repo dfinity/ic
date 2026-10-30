@@ -551,10 +551,10 @@ fn should_match_slip10_derivation_test_data() {
 fn should_handle_short_len_prehashed() {
     // k256 somewhat arbitrarily rejects prehashed digests under 128
     // bits. This is somewhat ok, since we hopefully don't ever do
-    // this, but it makes an otherwise infalliable function fallible,
+    // this, but it makes an otherwise infallible function fallible,
     // which is unfortunate. So we perform the (correct/standard)
     // prefixing of zero padding the digest in order to make the
-    // function infalliable. Test this using a short input generated
+    // function infallible. Test this using a short input generated
     // by another ECDSA implementation
 
     let pk = PublicKey::deserialize_sec1(&hex!(

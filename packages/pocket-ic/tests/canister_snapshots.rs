@@ -184,7 +184,7 @@ fn test_canister_snapshot_download_upload(
 
     // Compare snapshot metadata.
     // The source and timestamps are expected to differ and
-    // thus they are overwritten before comparision.
+    // thus they are overwritten before comparison.
     let downloaded_metadata_path = downloaded_snapshot_dir.join("metadata.json");
     let downloaded_metadata_bytes = std::fs::read(downloaded_metadata_path).unwrap();
     let downloaded_metadata: ReadCanisterSnapshotMetadataResponse =
