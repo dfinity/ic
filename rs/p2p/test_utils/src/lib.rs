@@ -484,7 +484,7 @@ pub fn start_consensus_manager(
 ) {
     let _enter = rt_handle.enter();
     let pool = Arc::new(RwLock::new(processor));
-    let bouncer_factory = Arc::new(pool.clone().read().unwrap().clone());
+    let bouncer_factory = pool.clone().read().unwrap().clone();
     let downloader = FetchArtifact::new(
         log.clone(),
         rt_handle.clone(),
