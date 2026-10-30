@@ -25,6 +25,13 @@ const NNS_PUBLIC_KEY_PATH: &str = "/run/config/nns_public_key.pem";
 /// guest-upgrade-client.service)
 const VERSION_RECORD_TIMEOUT: Duration = Duration::from_secs(60);
 
+/// Upper bound on a single attempt to read the record of a GuestOS version from one NNS
+/// endpoint. An update call normally completes within a few seconds, but by default the agent
+/// waits up to 6 minutes on an endpoint that stalls. Keeping each attempt well below
+/// VERSION_RECORD_TIMEOUT leaves time for retries, each of which goes to a randomly chosen
+/// endpoint
+const VERSION_RECORD_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(15);
+
 /// Delay between attempts to read the record of a single GuestOS version
 const VERSION_RECORD_RETRY_DELAY: Duration = Duration::from_secs(2);
 
@@ -62,7 +69,9 @@ impl NnsElectedMeasurementsSource {
 
         let registry_canister =
             RegistryCanister::new_with_agent_transformer(nns_urls.clone(), |agent| {
-                agent.with_nns_public_key(nns_public_key)
+                agent
+                    .with_nns_public_key(nns_public_key)
+                    .with_ingress_timeout(VERSION_RECORD_ATTEMPT_TIMEOUT)
             });
 
         Ok(Self {
@@ -72,7 +81,9 @@ impl NnsElectedMeasurementsSource {
         })
     }
 
-    /// Reads the latest value of `key`, retrying on errors other than that the key is missing
+    /// Reads the latest value of `key`, retrying on errors other than that the key is missing.
+    /// Each attempt goes to a randomly chosen NNS endpoint, and the agent gives up on it after
+    /// VERSION_RECORD_ATTEMPT_TIMEOUT
     async fn get_certified_value(&self, key: &str) -> Result<Option<Vec<u8>>> {
         loop {
             let result = self
