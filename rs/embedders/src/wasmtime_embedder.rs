@@ -15,7 +15,7 @@ use wasmtime::{
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
-use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{
     CanisterBacktrace, HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
 };
@@ -31,7 +31,8 @@ use ic_types::{
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{
-    DeterministicMemoryTracker, DirtyPageTracking, MemoryLimits, signal_mutex::SignalMutex,
+    AccessedWasmPagesLimit, DeterministicMemoryTracker, DirtyPageTracking, MemoryLimits,
+    signal_mutex::SignalMutex,
 };
 use signal_stack::WasmtimeSignalStack;
 
@@ -47,6 +48,7 @@ use super::InstanceRunResult;
 
 use self::host_memory::{MemoryPageSize, MemoryStart};
 
+pub mod heap_access;
 pub mod host_memory;
 /// pub for usage in fuzzing
 #[doc(hidden)]
@@ -56,6 +58,7 @@ mod signal_stack;
 pub mod system_api;
 pub mod system_api_complexity;
 
+use heap_access::TrackerHeapAccess;
 use system_api::{ModificationTracking, SystemApiImpl};
 
 #[cfg(test)]
@@ -479,35 +482,51 @@ impl WasmtimeEmbedder {
             Err(err) => return Err((err.clone(), system_api)),
         };
 
-        // Compute dirty page limit and access page limit based on the message type.
-        let (current_dirty_page_limit, current_accessed_limit) = match system_api {
-            Some(ref system_api) => (
-                system_api.get_page_limit(&self.config.stable_memory_dirty_page_limit),
-                system_api.get_page_limit(&self.config.stable_memory_accessed_page_limit),
-            ),
+        // Compute dirty page limit and access page limits based on the message type.
+        let (current_dirty_page_limit, current_accessed_limit, current_heap_accessed_limit) =
+            match system_api {
+                Some(ref system_api) => (
+                    system_api.get_page_limit(&self.config.stable_memory_dirty_page_limit),
+                    system_api.get_page_limit(&self.config.stable_memory_accessed_page_limit),
+                    system_api.get_page_limit(&self.config.wasm_memory_accessed_page_limit),
+                ),
 
-            // If system api is not present, then this function has been called from
-            // get_initial_globals_and_memory(). In this case, the number of
-            // dirty pages does not matter as the canister is not running.
-            None => (
-                self.config.stable_memory_dirty_page_limit.message,
-                self.config.stable_memory_accessed_page_limit.message,
-            ),
-        };
+                // If system api is not present, then this function has been called from
+                // get_initial_globals_and_memory(). In this case, the number of
+                // dirty pages does not matter as the canister is not running.
+                None => (
+                    self.config.stable_memory_dirty_page_limit.message,
+                    self.config.stable_memory_accessed_page_limit.message,
+                    self.config.wasm_memory_accessed_page_limit.message,
+                ),
+            };
 
         let stable_memory_limits = MemoryLimits {
             max_memory_size: self.config.max_stable_memory_size,
             max_dirty_pages: current_dirty_page_limit,
-            accessed_wasm_pages_limit: memory_tracker::AccessedWasmPagesLimit::Unlimited,
+            accessed_wasm_pages_limit: AccessedWasmPagesLimit::Unlimited,
         };
         let max_heap_memory_size = self
             .config
             .max_wasm_memory_size
             .max(self.config.max_wasm64_memory_size);
+        let heap_accessed_wasm_page_limit = NumWasmPages::new(
+            current_heap_accessed_limit.get() as usize / (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE),
+        );
+        // Pages beyond the limit are only refused if the feature is enabled.
+        // Otherwise the tracker counts them and maps them like any other page.
+        let accessed_wasm_pages_limit = match self
+            .config
+            .feature_flags
+            .wasm_memory_accessed_page_limit
+        {
+            FlagStatus::Enabled => AccessedWasmPagesLimit::Enforce(heap_accessed_wasm_page_limit),
+            FlagStatus::Disabled => AccessedWasmPagesLimit::Observe(heap_accessed_wasm_page_limit),
+        };
         let heap_memory_limits = MemoryLimits {
             max_memory_size: max_heap_memory_size,
             max_dirty_pages: NumOsPages::new(max_heap_memory_size.get() / PAGE_SIZE as u64),
-            accessed_wasm_pages_limit: memory_tracker::AccessedWasmPagesLimit::Unlimited,
+            accessed_wasm_pages_limit,
         };
 
         let mut store = Store::new(
@@ -521,6 +540,9 @@ impl WasmtimeEmbedder {
                     .tables(MAX_STORE_TABLES)
                     .table_elements(MAX_STORE_TABLE_ELEMENTS)
                     .build(),
+                heap_access: TrackerHeapAccess::inactive(
+                    self.config.wasm_memory_accessed_page_limit,
+                ),
             },
         );
         store.limiter(|state| &mut state.limits);
@@ -685,6 +707,15 @@ impl WasmtimeEmbedder {
             self.config.page_overhead,
             subtract_instruction_counter,
         );
+
+        // Host functions check their heap accesses against the heap tracker.
+        if let Some(heap_tracker) = memory_trackers.get(&CanisterMemoryType::Heap) {
+            store.data_mut().heap_access = TrackerHeapAccess::new(
+                Arc::clone(heap_tracker),
+                self.config.wasm_memory_accessed_page_limit,
+                self.config.feature_flags.wasm_memory_accessed_page_limit,
+            );
+        }
 
         Ok(WasmtimeInstance {
             instance,
@@ -900,6 +931,8 @@ pub struct StoreData {
     pub num_instructions_global: Option<wasmtime::Global>,
     pub log: ReplicaLogger,
     pub limits: StoreLimits,
+    /// Checks the heap accesses of host functions against the accessed page limit.
+    pub heap_access: TrackerHeapAccess,
 }
 
 impl StoreData {
@@ -926,6 +959,17 @@ impl StoreData {
             ))
         })?;
         Ok((api, &self.log))
+    }
+
+    pub fn system_api_mut_heap_access(
+        &mut self,
+    ) -> HypervisorResult<(&mut SystemApiImpl, &TrackerHeapAccess)> {
+        let api = self.system_api.as_mut().ok_or_else(|| {
+            HypervisorError::WasmEngineError(WasmEngineError::Other(
+                "System api not present in data store".to_string(),
+            ))
+        })?;
+        Ok((api, &self.heap_access))
     }
 }
 
@@ -1213,6 +1257,18 @@ impl WasmtimeInstance {
             // compute instance stats because they will not be used anyway.
             return Err(HypervisorError::Aborted);
         }
+
+        // A Wasm load or store beyond the heap accessed page limit is refused
+        // by the memory tracker and surfaces as a heap out of bounds trap.
+        // Report it as the limit error instead. Host functions already return
+        // this error themselves; they only set the flag. Nothing sets the
+        // flag while the limit is not enforced, but do not rely on that.
+        let heap_access = &self.store.data().heap_access;
+        let result = if heap_access.is_enforced() && heap_access.page_limit_exceeded() {
+            Err(heap_access.limit_exceeded_error())
+        } else {
+            result
+        };
 
         let access = self.page_accesses()?;
         self.set_instance_stats(&access);
