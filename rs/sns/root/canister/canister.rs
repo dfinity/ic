@@ -22,8 +22,12 @@ use ic_nervous_system_proto::pb::v1::{
 };
 use ic_nervous_system_root::{
     change_canister::ChangeCanisterRequest,
-    load_canister_snapshot::{LoadCanisterSnapshotRequest, LoadCanisterSnapshotResponse},
-    take_canister_snapshot::{TakeCanisterSnapshotRequest, TakeCanisterSnapshotResponse},
+    load_canister_snapshot::{
+        LoadCanisterSnapshotError, LoadCanisterSnapshotRequest, LoadCanisterSnapshotResponse,
+    },
+    take_canister_snapshot::{
+        TakeCanisterSnapshotError, TakeCanisterSnapshotRequest, TakeCanisterSnapshotResponse,
+    },
 };
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_sns_root::{
@@ -415,13 +419,18 @@ async fn manage_dapp_canister_settings(
     })
 }
 
-/// Takes a snapshot of a canister controlled by SNS Root. Only callable by SNS
-/// Governance.
+/// Takes a snapshot of a registered dapp canister of this SNS. Only callable by
+/// SNS Governance.
+///
+/// Any other target is refused (with Err), before anything else is done. In
+/// particular, this refuses the SNS framework canisters (Governance, Root,
+/// Ledger, etc.), since those are never dapp canisters.
 ///
 /// Unlike change_canister, this replies only once the snapshot has been taken
 /// (or the attempt has failed), so that Governance can learn the ID of the new
-/// snapshot. Governance only ever targets registered dapp canisters with this,
-/// never itself; therefore, there is no risk of deadlock here.
+/// snapshot. That is safe only because the target cannot be Governance (the
+/// caller): Root has to stop the target, and Governance cannot stop while it is
+/// waiting for this reply.
 #[candid_method(update)]
 #[update]
 async fn take_canister_snapshot(
@@ -429,6 +438,16 @@ async fn take_canister_snapshot(
 ) -> TakeCanisterSnapshotResponse {
     log!(INFO, "take_canister_snapshot");
     assert_eq_governance_canister_id(PrincipalId(msg_caller()));
+
+    let target_check =
+        STATE.with_borrow(|state| state.check_is_registered_dapp_canister(request.canister_id));
+    if let Err(description) = target_check {
+        log!(ERROR, "take_canister_snapshot refused: {description}");
+        return TakeCanisterSnapshotResponse::Err(TakeCanisterSnapshotError {
+            code: None,
+            description,
+        });
+    }
 
     let response = ic_nervous_system_root::take_canister_snapshot::take_canister_snapshot(
         request,
@@ -440,11 +459,16 @@ async fn take_canister_snapshot(
     response
 }
 
-/// Loads a snapshot of a canister controlled by SNS Root (into that same
-/// canister). Only callable by SNS Governance.
+/// Loads a snapshot into a registered dapp canister of this SNS. Only callable
+/// by SNS Governance.
 ///
 /// This replaces the canister's code and memory with what was saved in the
 /// snapshot.
+///
+/// Like take_canister_snapshot, this refuses (with Err) any target that is not
+/// a registered dapp canister, before anything else is done, and replies only
+/// once the operation is done. Again, that is safe only because the target
+/// cannot be Governance.
 #[candid_method(update)]
 #[update]
 async fn load_canister_snapshot(
@@ -452,6 +476,16 @@ async fn load_canister_snapshot(
 ) -> LoadCanisterSnapshotResponse {
     log!(INFO, "load_canister_snapshot");
     assert_eq_governance_canister_id(PrincipalId(msg_caller()));
+
+    let target_check =
+        STATE.with_borrow(|state| state.check_is_registered_dapp_canister(request.canister_id));
+    if let Err(description) = target_check {
+        log!(ERROR, "load_canister_snapshot refused: {description}");
+        return LoadCanisterSnapshotResponse::Err(LoadCanisterSnapshotError {
+            code: None,
+            description,
+        });
+    }
 
     let response = ic_nervous_system_root::load_canister_snapshot::load_canister_snapshot(
         request,
