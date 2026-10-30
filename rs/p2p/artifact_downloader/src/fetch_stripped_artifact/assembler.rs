@@ -150,10 +150,9 @@ impl FetchStrippedConsensusArtifact {
             BouncerFactoryWrapper { bouncer_factory },
             metrics_registry.clone(),
         );
-        let subrouter =
-            FetchArtifact::<MaybeStrippedConsensusMessage>::router(StrippingPoolWrapper {
-                pool: SharedPool(consensus_pool),
-            });
+        let subrouter = FetchArtifact::router(StrippingPoolWrapper {
+            pool: SharedPool(consensus_pool),
+        });
 
         let router = axum::Router::new().merge(router).merge(subrouter);
 
