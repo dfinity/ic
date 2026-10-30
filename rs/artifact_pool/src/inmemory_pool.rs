@@ -12,7 +12,7 @@ use ic_types::{
     consensus::*,
     crypto::{CryptoHash, CryptoHashOf},
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, btree_map::Entry};
 
 pub struct InMemoryPoolSection<T: IntoInner<ConsensusMessage>> {
     indexes: Indexes,
@@ -30,8 +30,11 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
     fn insert(&mut self, artifact: T) {
         let msg = artifact.as_ref();
         let hash = msg.get_cm_hash().digest().clone();
-        self.indexes.insert(msg, &hash);
-        self.artifacts.entry(hash).or_insert(artifact);
+        // Don't overwrite existing artifacts.
+        if let Entry::Vacant(entry) = self.artifacts.entry(hash.clone()) {
+            self.indexes.insert(msg, hash);
+            entry.insert(artifact);
+        }
     }
 
     fn remove(&mut self, msg_id: &ConsensusMessageId) -> Option<T> {
@@ -119,7 +122,7 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
         self.artifacts.get(hash).cloned()
     }
 
-    /// Get a consensus message by its hash
+    /// Remove a consensus message by its hash
     pub fn remove_by_hash(&mut self, hash: &CryptoHash) -> Option<T> {
         self.artifacts.remove(hash).inspect(|artifact| {
             self.indexes.remove(artifact.as_ref(), hash);
@@ -326,6 +329,19 @@ pub mod test {
             msg: ConsensusMessage::RandomBeacon(beacon),
             timestamp: ic_types::time::UNIX_EPOCH,
         }
+    }
+
+    #[test]
+    fn test_insert_duplicate_is_ignored() {
+        let mut pool = InMemoryPoolSection::new();
+        let height = Height::from(5);
+        let beacon = fake_random_beacon(height);
+        pool.insert(make_artifact(beacon.clone()));
+        pool.insert(make_artifact(beacon));
+
+        assert_eq!(pool.artifacts.len(), 1);
+        assert_eq!(pool.indexes.random_beacon.size(), 1);
+        assert_eq!(pool.random_beacon().get_by_height(height).count(), 1);
     }
 
     #[test]
