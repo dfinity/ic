@@ -1448,3 +1448,92 @@ mod submit_pending_requests {
         mutate_state(|s| s.ecdsa_public_key = Some(ecdsa_public_key()))
     }
 }
+
+mod consolidate_utxos_signing_failure {
+    use crate::management::CallError;
+    use crate::state::ChangeOutput;
+    use crate::state::eventlog::CkBtcEventLogger;
+    use crate::state::{
+        ConsolidateUtxosRequest, SubmittedWithdrawalRequests, audit, mutate_state, read_state,
+    };
+    use crate::test_fixtures::mock::MockCanisterRuntime;
+    use crate::test_fixtures::{NOW, ecdsa_public_key, init_args, init_state, minter_address};
+    use crate::tx::UnsignedTransaction;
+    use crate::{Network, SignTxRequest, queries::WithdrawalFee, sign_and_submit_request};
+    use ic_btc_interface::Utxo;
+
+    #[tokio::test]
+    async fn should_clear_consolidation_latch_when_signing_fails() {
+        init_state(init_args());
+        mutate_state(|s| s.ecdsa_public_key = Some(ecdsa_public_key()));
+
+        let mut runtime = MockCanisterRuntime::new();
+        runtime.expect_event_logger().return_const(CkBtcEventLogger);
+        runtime
+            .expect_time()
+            .return_const(NOW.as_nanos_since_unix_epoch());
+
+        let used_utxos: Vec<Utxo> = (0..5)
+            .map(|i| super::dummy_utxo_from_value(100_000 + i))
+            .collect();
+        let total_amount: u64 = used_utxos.iter().map(|u| u.value).sum();
+
+        // Consolidation records the request, and so sets the latch, before signing.
+        let request = ConsolidateUtxosRequest {
+            block_index: 0,
+            address: minter_address(),
+            amount: total_amount,
+            received_at: NOW.as_nanos_since_unix_epoch(),
+        };
+        mutate_state(|s| audit::create_consolidate_utxos_request(s, request.clone(), &runtime));
+        read_state(|s| assert!(s.current_consolidate_utxos_request.is_some()));
+
+        runtime.expect_sign_transaction().times(1).return_const(Err(
+            CallError::from_cdk_call_error(
+                "sign_with_ecdsa",
+                ic_cdk::call::CallRejected::with_rejection(1, "BOOM!".to_string()),
+            ),
+        ));
+
+        let num_used_utxos = used_utxos.len();
+        let req = SignTxRequest {
+            key_name: read_state(|s| s.ecdsa_key_name.clone()),
+            network: Network::Mainnet,
+            ecdsa_public_key: ecdsa_public_key(),
+            unsigned_tx: UnsignedTransaction {
+                inputs: vec![],
+                outputs: vec![],
+                lock_time: 0,
+            },
+            accounts: vec![],
+            change_output: ChangeOutput {
+                vout: 1,
+                value: total_amount / 2,
+            },
+            requests: SubmittedWithdrawalRequests::ToConsolidate { request },
+            utxos: used_utxos,
+        };
+        let result = sign_and_submit_request(
+            req,
+            WithdrawalFee {
+                minter_fee: 0,
+                bitcoin_fee: 0,
+            },
+            &runtime,
+        )
+        .await;
+
+        assert!(result.is_err(), "signing was expected to fail");
+        read_state(|s| {
+            assert_eq!(
+                s.available_utxos.len(),
+                num_used_utxos,
+                "UTXOs should be back in the available set"
+            );
+            assert_eq!(
+                s.current_consolidate_utxos_request, None,
+                "the consolidation latch should not survive a failed signing attempt"
+            );
+        });
+    }
+}
