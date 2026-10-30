@@ -8,18 +8,30 @@
 //! The limit is only enforced if the `wasm_memory_accessed_page_limit`
 //! feature flag is enabled. Otherwise the check still runs, but an access
 //! beyond the limit is allowed.
+//!
+//! Bulk memory operations and stable memory copies are checked through
+//! [`TrackerHeapAccess::check_bulk`] by the `__.check_heap_bulk_access` import.
 
 use std::ops::Range;
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
 use ic_config::{embedders::MemoryPageLimit, flag_status::FlagStatus};
-use ic_interfaces::execution_environment::{HeapAccessCheck, HypervisorError, HypervisorResult};
+use ic_interfaces::execution_environment::{
+    HeapAccessCheck, HeapPageLimitRefusals, HypervisorError, HypervisorResult,
+};
 use ic_sys::PAGE_SIZE;
 use ic_types::NumOsPages;
 use memory_tracker::{DeterministicMemoryTracker, signal_mutex::SignalMutex};
+
+/// The component that refused a heap access, for the metrics.
+#[derive(Clone, Copy)]
+enum Detector {
+    HostAccessor,
+    BulkCheck,
+}
 
 /// Checks host accesses to the Wasm heap against the accessed page limit of
 /// the heap memory tracker.
@@ -33,6 +45,14 @@ pub struct TrackerHeapAccess {
     limits: MemoryPageLimit,
     /// Whether accesses beyond the limit are refused (the feature flag).
     enforced: bool,
+    /// Accesses beyond the limit detected by the heap accessor, i.e. through
+    /// [`HeapAccessCheck::check`]. Refused only if the limit is enforced.
+    host_accessor_refusals: AtomicUsize,
+    /// Accesses beyond the limit detected by the bulk pre-check, i.e. through
+    /// [`Self::check_bulk`]. Refused only if the limit is enforced.
+    bulk_check_refusals: AtomicUsize,
+    /// Calls of the `__.check_heap_bulk_access` import.
+    bulk_check_slow_path_calls: AtomicUsize,
 }
 
 impl TrackerHeapAccess {
@@ -44,6 +64,9 @@ impl TrackerHeapAccess {
             page_limit_exceeded: Arc::new(AtomicBool::new(false)),
             limits,
             enforced: false,
+            host_accessor_refusals: AtomicUsize::new(0),
+            bulk_check_refusals: AtomicUsize::new(0),
+            bulk_check_slow_path_calls: AtomicUsize::new(0),
         }
     }
 
@@ -60,6 +83,9 @@ impl TrackerHeapAccess {
             page_limit_exceeded,
             limits,
             enforced: enforce == FlagStatus::Enabled,
+            host_accessor_refusals: AtomicUsize::new(0),
+            bulk_check_refusals: AtomicUsize::new(0),
+            bulk_check_slow_path_calls: AtomicUsize::new(0),
         }
     }
 
@@ -72,6 +98,28 @@ impl TrackerHeapAccess {
     /// during this execution. Does not lock the tracker.
     pub fn page_limit_exceeded(&self) -> bool {
         self.page_limit_exceeded.load(Ordering::Relaxed)
+    }
+
+    /// The accesses beyond the limit detected by this check so far, refused
+    /// only if the limit is enforced. The handler's are counted
+    /// by the tracker and filled in by the caller.
+    pub fn refusals(&self) -> HeapPageLimitRefusals {
+        HeapPageLimitRefusals {
+            handler: 0,
+            host_accessor: self.host_accessor_refusals.load(Ordering::Relaxed),
+            bulk_check: self.bulk_check_refusals.load(Ordering::Relaxed),
+        }
+    }
+
+    /// The number of calls of the `__.check_heap_bulk_access` import so far.
+    pub fn bulk_check_slow_path_calls(&self) -> usize {
+        self.bulk_check_slow_path_calls.load(Ordering::Relaxed)
+    }
+
+    /// Records a call of the `__.check_heap_bulk_access` import.
+    pub fn record_bulk_check_slow_path_call(&self) {
+        self.bulk_check_slow_path_calls
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     /// The error reported when the limit is exceeded.
@@ -92,6 +140,15 @@ impl TrackerHeapAccess {
     /// and, for a copy within the heap, its source) together, so that pages
     /// shared by the two ranges are counted once.
     pub fn check_bulk(&self, dst: Range<usize>, src: Option<Range<usize>>) -> HypervisorResult<()> {
+        self.check_ranges(dst, src, Detector::BulkCheck)
+    }
+
+    fn check_ranges(
+        &self,
+        dst: Range<usize>,
+        src: Option<Range<usize>>,
+        detector: Detector,
+    ) -> HypervisorResult<()> {
         let Some(tracker) = &self.tracker else {
             return Ok(());
         };
@@ -102,17 +159,27 @@ impl TrackerHeapAccess {
         let fits = tracker
             .lock()
             .check_ranges_fit(as_u64(dst), as_u64(src.unwrap_or(0..0)));
-        if fits || !self.enforced {
-            Ok(())
-        } else {
+        if fits {
+            return Ok(());
+        }
+        // Count the detection even if the limit is only observed, so that
+        // the metrics show what would have been refused.
+        match detector {
+            Detector::HostAccessor => &self.host_accessor_refusals,
+            Detector::BulkCheck => &self.bulk_check_refusals,
+        }
+        .fetch_add(1, Ordering::Relaxed);
+        if self.enforced {
             self.page_limit_exceeded.store(true, Ordering::Relaxed);
             Err(self.limit_exceeded_error())
+        } else {
+            Ok(())
         }
     }
 }
 
 impl HeapAccessCheck for TrackerHeapAccess {
     fn check(&self, range: Range<usize>) -> HypervisorResult<()> {
-        self.check_bulk(range, None)
+        self.check_ranges(range, None, Detector::HostAccessor)
     }
 }
