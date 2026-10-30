@@ -1,0 +1,99 @@
+name: External Contributor CI Kickoff Reminder
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+
+# This helps avoid duplicate reviews/comments from this bot.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  mainJob:
+    runs-on: ubuntu-latest
+    # Only run on PRs from forks: dfinity/ic does not auto-run CI on those for
+    # security reasons, so maintainers need to be told how to kick it off manually.
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      # IMPORTANT: we use `pull_request_target` so this can run on external PRs and have write permissions (to post a comment)
+      # However this means that no checkout step can be introduced, as that would expose a security vulnerability.
+      - uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          retries: 3
+          script: |
+            const pullRequestNumber = context.payload.number;
+
+            const commentText = `
+              👋 Thanks for this pull request from a fork!
+
+              For security reasons, \`dfinity/ic\` does **not** automatically run CI on
+              pull requests submitted from external forks. A maintainer has to review the
+              code first, then kick off CI manually. This applies to both the initial run
+              and any re-run after new commits, so this comment is for the author and
+              reviewers alike.
+
+              # For Maintainers: How to Kick Off CI
+
+              1. Go to the [**CI Kickoff Manual**](https://github.com/dfinity/ic/actions/workflows/ci-kickoff-manual.yml)
+                 workflow (Actions tab → "CI Kickoff Manual" in the left sidebar).
+              2. Click **"Run workflow"** (top right of the runs table).
+              3. Fill in the form that appears:
+                 - \`commit-sha\`: this PR's current HEAD commit SHA (see the **Commits**
+                   tab on this PR, or run \`git rev-parse HEAD\` on the PR branch).
+                 - \`pr-number\`: \`${pullRequestNumber}\` (this PR).
+                 - \`confirm\`: check the box to confirm you've reviewed the code at that commit.
+              4. Click **"Run workflow"** to submit.
+
+              A comment linking to the CI run will be posted here once it starts, and the
+              usual status checks will report back to this PR when it completes.
+
+              **This has to be repeated after every new push to this branch.** Pushing new
+              commits also dismisses existing approvals, so re-running CI and re-reviewing
+              the new commits typically go hand in hand.
+
+              For more detail, see [_"Running CI on your code changes"_ in
+              CONTRIBUTING.md](https://github.com/dfinity/ic/blob/master/CONTRIBUTING.md#running-ci-on-your-code-changes).
+
+              EXTERNAL_PR_CI_KICKOFF_REMINDER_DEDUP
+            `
+            .replace(/^ {14}/gm, '')
+            .trim();
+
+            // Update our own earlier comment instead of posting a new one, so
+            // re-opening the PR doesn't spam it with duplicate reminders.
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: "dfinity",
+              repo: "ic",
+              issue_number: pullRequestNumber,
+            });
+            const existingComment = comments.find(comment =>
+              comment.user?.type === "Bot" &&
+              comment.body.includes("EXTERNAL_PR_CI_KICKOFF_REMINDER_DEDUP")
+            );
+
+            if (existingComment) {
+              console.log(`Updating existing reminder comment (id=${existingComment.id})...`);
+              await github.rest.issues.updateComment({
+                owner: "dfinity",
+                repo: "ic",
+                comment_id: existingComment.id,
+                body: commentText,
+              });
+            } else {
+              console.log("Posting new external-contributor CI kickoff reminder...");
+              await github.rest.issues.createComment({
+                owner: "dfinity",
+                repo: "ic",
+                issue_number: pullRequestNumber,
+                body: commentText,
+              });
+            }
+            console.log("Done.");
