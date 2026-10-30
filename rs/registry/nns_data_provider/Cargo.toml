@@ -29,6 +29,7 @@ url = { workspace = true }
 futures-util = { workspace = true }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-nervous-system-agent = { path = "../../nervous_system/agent" }
 ic-nervous-system-chunks = { path = "../../nervous_system/chunks" }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }

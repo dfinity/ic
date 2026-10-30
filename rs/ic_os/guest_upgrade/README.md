@@ -38,10 +38,28 @@ Both VMs attest to each other over TLS using SEV-SNP attestation reports:
 1. Both sides generate ephemeral self-signed TLS certificates.
 2. Both TLS public keys are hashed together and used as the attestation report's custom data field.
 3. Each side generates an SEV-SNP attestation report with this custom data.
-4. Each side verifies the other's report against three properties:
-   - **Measurement** matches approved launch measurements from the registry.
+4. Each side verifies the other's report against these properties:
+   - **Measurement** matches approved launch measurements from the registry (see below). The
+     client never accepts its own measurement, so that an attacker cannot reflect the client's
+     own report back to it.
    - **Custom data** matches the expected TLS key binding (prevents MITM/replay).
    - **Chip ID** matches the local report's chip ID (proves same physical CPU).
+   - **Guest policy** disallows debugging and migrating the VM.
+
+### Approved Measurements
+
+The server checks the client's measurement against the measurements of the target version, read
+from the orchestrator's local copy of the registry.
+
+The client has no local registry. The server tells it the GuestOS version whose elected
+measurements include the server's own measurement (`guestos_version` in
+`GetDiskEncryptionKeyResponse`), as found in the server's local registry. The client reads just
+that version's record from the NNS registry with an update call, whose response is certified by
+the NNS subnet and verified against the NNS public key.
+
+If that check fails, for example because the server runs an older GuestOS version, it falls back
+to replicating the whole registry and checking the server's measurement against all elected versions.
+This fallback will be removed once all GuestOSes are upgraded.
 
 ## Sequence
 
