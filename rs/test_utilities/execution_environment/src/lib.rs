@@ -2952,6 +2952,11 @@ impl ExecutionTestBuilder {
         self.execution_config
             .embedders_config
             .wasm_memory_accessed_page_limit = wasm_memory_accessed_page_limit;
+        // Lowering the limit is only observable if the feature is enabled.
+        self.execution_config
+            .embedders_config
+            .feature_flags
+            .wasm_memory_accessed_page_limit = FlagStatus::Enabled;
 
         self
     }

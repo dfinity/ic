@@ -401,7 +401,8 @@ impl SandboxedExecutionMetrics {
                     heap pages, by api type and by the check that detected it \
                     (handler: Wasm loads and stores, host_accessor: host \
                     functions, bulk_check: bulk memory operations and stable \
-                    memory copies).",
+                    memory copies). While the feature is disabled nothing is refused and \
+                    the executions that would have been refused are counted.",
                 &["api_type", "detector"],
             ),
             wasm_bulk_check_slow_path_calls: metrics_registry.int_counter_vec(

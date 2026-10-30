@@ -1264,6 +1264,70 @@ fn heap_page_limit_stats_report_detector_and_slow_path() {
     assert_eq!(slow_path_calls, 0);
 }
 
+/// With the feature disabled nothing is refused, but the stats still report
+/// which check detected an access beyond the limit. The tracker's handler
+/// maps every page beyond the limit and counts it, whichever code touches
+/// it. Bulk memory operations are not checked at all, since no check is
+/// injected without the feature.
+#[test]
+fn heap_page_limit_stats_are_reported_when_the_feature_is_disabled() {
+    let wat = r#"
+            (module
+                (import "ic0" "msg_arg_data_copy"
+                    (func $msg_arg_data_copy (param i32 i32 i32)))
+
+                (func (export "canister_update load_pages_0_to_2")
+                    (drop (i32.load (i32.const 0)))
+                    (drop (i32.load (i32.const 65536)))
+                    (drop (i32.load (i32.const 131072)))
+                )
+                (func (export "canister_update host_write_pages_0_to_2")
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 196608))
+                )
+                (func (export "canister_update fill_pages_0_to_2")
+                    (memory.fill (i32.const 0) (i32.const 1) (i32.const 196608))
+                )
+                (memory (export "memory") 4)
+            )"#;
+    let mut config = config_with_wasm_memory_accessed_page_limit(2);
+    config.feature_flags.wasm_memory_accessed_page_limit = FlagStatus::Disabled;
+    let refusals = |handler, host_accessor, bulk_check| HeapPageLimitRefusals {
+        handler,
+        host_accessor,
+        bulk_check,
+    };
+
+    for (method, expected) in [
+        ("load_pages_0_to_2", refusals(1, 0, 0)),
+        ("host_write_pages_0_to_2", refusals(1, 1, 0)),
+        ("fill_pages_0_to_2", refusals(1, 0, 0)),
+    ] {
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_api_type(ApiType::update(
+                UNIX_EPOCH,
+                vec![7_u8; 3 * WASM_PAGE_SIZE_IN_BYTES],
+                Cycles::zero(),
+                user_test_id(24).get(),
+                call_context_test_id(13),
+                None,
+            ))
+            .with_wat(wat)
+            .build();
+        instance
+            .run(FuncRef::Method(WasmMethod::Update(method.to_string())))
+            .unwrap();
+        let stats = instance.get_stats();
+        assert_eq!(
+            stats.wasm_accessed_pages,
+            3 * OS_PAGES_PER_WASM_PAGE,
+            "{method}"
+        );
+        assert_eq!(stats.wasm_page_limit_refusals, expected, "{method}");
+        assert_eq!(stats.wasm_bulk_check_slow_path_calls, 0, "{method}");
+    }
+}
+
 /// Runs `method` of a fresh instance of `wat` with the given heap page limit
 /// and returns the result together with the number of accessed Wasm heap
 /// pages.

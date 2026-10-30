@@ -1,9 +1,8 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use ic_types::{NumBytes, NumOsPages};
 use memory_tracker::{
-    AccessedWasmPagesLimit,
-    AccessKind, DeterministicMemoryTracker, DirtyPageTracking, MemoryLimits,
-    signal_mutex::SignalMutex,
+    AccessKind, AccessedWasmPagesLimit, DeterministicMemoryTracker, DirtyPageTracking,
+    MemoryLimits, signal_mutex::SignalMutex,
 };
 
 use libc::{self, c_void};
