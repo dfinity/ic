@@ -1117,7 +1117,8 @@ fn heap_page_budget_equals_limit_minus_accessed_pages() {
     let globals = instance.get_exported_globals().unwrap();
     assert_eq!(globals.len(), 1, "{globals:?}");
 
-    // With the default config the budget is the maximal heap size in pages.
+    // With the default config the budget is the default accessed page limit
+    // in Wasm pages.
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let default_config = Config::default();
     let expected = default_config.wasm_memory_accessed_page_limit.message.get() as i64
