@@ -785,6 +785,24 @@ async fn service_pending_poke() {
     }
 }
 
+fn is_poke_caller_allowed(caller: &Principal) -> bool {
+    with_state(|state| {
+        state
+            .allowed_poke_callers
+            .as_ref()
+            .is_none_or(|callers| callers.contains(caller))
+    })
+}
+
+#[ic_cdk::inspect_message]
+fn inspect_message() {
+    if ic_cdk::api::msg_method_name() != "poke"
+        || is_poke_caller_allowed(&ic_cdk::api::msg_caller())
+    {
+        ic_cdk::api::accept_message();
+    }
+}
+
 /// Best effort: authorized busy pokes coalesce into one pending pass. An
 /// in-flight request may miss a recent transfer; ordinary polling remains the
 /// fallback. Successful pokes can leave fewer blocks for normal polls, whose
@@ -795,12 +813,7 @@ async fn service_pending_poke() {
 #[candid::candid_method(oneway)]
 async fn poke() {
     let caller = ic_cdk::api::msg_caller();
-    if !with_state(|state| {
-        state
-            .allowed_poke_callers
-            .as_ref()
-            .is_none_or(|callers| callers.contains(&caller))
-    }) {
+    if !is_poke_caller_allowed(&caller) {
         return;
     }
     CACHE.with(|cache| cache.borrow_mut().poke_pending = true);

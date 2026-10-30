@@ -7,7 +7,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{IndexArg, InitArg, PokeCallers, UpgradeArg};
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
 use ic_ledger_suite_state_machine_helpers::{add_block, set_icrc3_enabled};
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder};
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use std::time::Duration;
 
@@ -99,11 +99,21 @@ fn notify(env: &StateMachine, ledger: CanisterId, index: CanisterId) {
     run_rounds(env);
 }
 
-fn ingress(env: &StateMachine, index: CanisterId, caller: PrincipalId) {
-    // A no-application-reply ingress may be rejected after executing. Observe
-    // effects separately instead of awaiting or asserting an application reply.
-    env.send_ingress(caller, index, "poke", Encode!().unwrap());
+fn ingress(env: &StateMachine, index: CanisterId, caller: PrincipalId) -> bool {
+    // Check admission separately from any later no-reply rejection.
+    let admitted = match env.send_ingress_safe(caller, index, "poke", Encode!().unwrap()) {
+        Ok(_) => true,
+        Err(error) => {
+            assert_eq!(
+                error.code(),
+                ErrorCode::CanisterRejectedMessage,
+                "unexpected poke admission error: {error}"
+            );
+            false
+        }
+    };
     run_rounds(env);
+    admitted
 }
 
 fn hold(env: &StateMachine, ledger: CanisterId, enabled: bool) {
@@ -149,7 +159,7 @@ fn poke_preserves_deadline_and_busy_callback_preserves_one_polling_chain() {
         .build();
     add_block(&env, ledger, &transfer).unwrap();
     notify(&env, ledger, index);
-    ingress(&env, index, PrincipalId::new_anonymous());
+    assert!(ingress(&env, index, PrincipalId::new_anonymous()));
     notify(&env, ledger, index);
     assert_eq!(count(&env, ledger), 1, "busy pokes do not overlap");
 
@@ -165,7 +175,7 @@ fn poke_preserves_deadline_and_busy_callback_preserves_one_polling_chain() {
 
     // The follow-up has started but its response has not been applied yet. A
     // new poke during it must request one more pass after this one completes.
-    ingress(&env, index, PrincipalId::new_anonymous());
+    assert!(ingress(&env, index, PrincipalId::new_anonymous()));
     release_one(&env, ledger);
     run_rounds_until(&env, || count(&env, ledger) == 3);
     release_one(&env, ledger);
@@ -474,4 +484,65 @@ fn omitted_upgrade_policy_preserves_public_access() {
     .unwrap();
     ingress(&env, index, anonymous);
     assert_eq!(count(&env, ledger), 3);
+}
+
+#[test]
+fn poke_ingress_admission_follows_caller_policy() {
+    let listed = PrincipalId::new_user_test_id(42);
+    for (policy, anonymous_allowed, listed_allowed) in [
+        (None, false, false),
+        (Some(PokeCallers::Nobody), false, false),
+        (Some(PokeCallers::All), true, true),
+        (Some(PokeCallers::Somebody(vec![listed.0])), false, true),
+    ] {
+        let (env, ledger, index) = setup(100, policy);
+        assert_eq!(
+            ingress(&env, index, PrincipalId::new_anonymous()),
+            anonymous_allowed
+        );
+        assert_eq!(ingress(&env, index, listed), listed_allowed);
+        assert_eq!(
+            count(&env, ledger),
+            u64::from(anonymous_allowed) + u64::from(listed_allowed)
+        );
+        // Exercise another existing method through ingress, including when
+        // neither caller is allowed to poke.
+        let reply = env
+            .execute_ingress(index, "ledger_id", Encode!().unwrap())
+            .unwrap()
+            .bytes();
+        assert_eq!(Decode!(&reply, Principal).unwrap(), Principal::from(ledger));
+    }
+}
+
+#[test]
+fn unauthorized_notifications_do_not_request_blocks_or_leave_pending_demand() {
+    let (env, ledger, index) = setup(100, None);
+    let unlisted = install_controllable_ledger(&env);
+    upgrade(
+        &env,
+        index,
+        Some(PokeCallers::Somebody(vec![ledger.into()])),
+    );
+    notify(&env, unlisted, index);
+    assert_eq!(count(&env, ledger), 0);
+
+    hold(&env, ledger, true);
+    notify(&env, ledger, index);
+    assert_eq!(
+        count(&env, ledger),
+        1,
+        "listed forwarding canister can poke"
+    );
+    notify(&env, unlisted, index);
+    assert!(!ingress(&env, index, PrincipalId::new_anonymous()));
+    hold(&env, ledger, false);
+    env.run_until_completion(20);
+    assert_eq!(
+        count(&env, ledger),
+        1,
+        "unauthorized calls leave no pending pass"
+    );
+    advance_time_and_run_rounds(&env, 100);
+    assert_eq!(count(&env, ledger), 2, "ordinary polling remains scheduled");
 }
