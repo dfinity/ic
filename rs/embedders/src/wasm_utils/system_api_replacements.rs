@@ -64,15 +64,19 @@ pub(super) fn replacement_functions(
     let decr_instruction_counter_fn = injected_counters.decr_instruction_counter_fn;
     // The heap page limit check for a copy between the heap range
     // `[addr, addr + len)` and stable memory, with `addr` and `len` in locals
-    // of type `operand_type`.
-    let check_heap_range = |addr: u32, len: u32, operand_type: DataType| {
-        heap_page_limit_check(
+    // of type `operand_type`. Nothing is emitted if the heap page limit is
+    // disabled, i.e. if its slow path was not imported.
+    let check_heap_range = |addr: u32, len: u32, operand_type: DataType| match injected_functions
+        .check_heap_bulk_access
+    {
+        Some(check_heap_bulk_access_fn) => heap_page_limit_check(
             (addr, operand_type),
             None,
             (len, operand_type),
             injected_counters.heap_page_budget,
-            injected_functions.check_heap_bulk_access,
-        )
+            check_heap_bulk_access_fn,
+        ),
+        None => Vec::new(),
     };
 
     use wirm::wasmparser::Operator::*;
