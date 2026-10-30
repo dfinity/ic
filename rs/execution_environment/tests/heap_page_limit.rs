@@ -103,10 +103,8 @@ fn pages_wat() -> String {
 }
 
 /// A canister whose install and upgrade hooks touch the given numbers of
-/// pages. `version` replies with a byte from a data segment, which tells
-/// which module is installed after an upgrade; `extra` is appended to the
-/// module (e.g. another data segment).
-fn hooks_wat(init: u64, pre_upgrade: u64, post_upgrade: u64, version: u8, extra: &str) -> String {
+/// pages; `extra` is appended to the module (e.g. a data segment).
+fn hooks_wat(init: u64, pre_upgrade: u64, post_upgrade: u64, extra: &str) -> String {
     format!(
         r#"
         (module
@@ -117,9 +115,6 @@ fn hooks_wat(init: u64, pre_upgrade: u64, post_upgrade: u64, version: u8, extra:
             (func (export "canister_init") (call $touch (i32.const {init})))
             (func (export "canister_pre_upgrade") (call $touch (i32.const {pre_upgrade})))
             (func (export "canister_post_upgrade") (call $touch (i32.const {post_upgrade})))
-            (func (export "canister_update version")
-                (call $reply_append (i32.const 512) (i32.const 1))
-                (call $msg_reply))
             ;; Replies with the byte at the address given by the first
             ;; four payload bytes (little endian).
             (func (export "canister_query byte_at")
@@ -127,7 +122,6 @@ fn hooks_wat(init: u64, pre_upgrade: u64, post_upgrade: u64, version: u8, extra:
                 (call $reply_append (i32.load (i32.const 256)) (i32.const 1))
                 (call $msg_reply))
             (memory (export "memory") 16)
-            (data (i32.const 512) "\{version:02x}")
             {extra}
         )"#
     )
@@ -207,55 +201,34 @@ fn limit_value_depends_on_the_kind_of_execution() {
     touch(&mut test, canister_id, 3).unwrap();
 }
 
+/// `canister_init`, `pre_upgrade` and `post_upgrade` are checked against
+/// the upgrade value of the limit, not the message value.
 #[test]
 fn install_and_upgrade_hooks_use_the_upgrade_limit() {
     let mut test = builder(limits(1, 5, 1)).build();
-    let wasm =
-        |init, pre, post, version| wat::parse_str(hooks_wat(init, pre, post, version, "")).unwrap();
+    let wasm = |init, pre, post| wat::parse_str(hooks_wat(init, pre, post, "")).unwrap();
 
-    // `canister_init` touching more than the upgrade limit fails the install.
-    let err = test.canister_from_binary(wasm(6, 1, 1, 1)).unwrap_err();
+    // `canister_init`: 5 pages (the upgrade value, well over the message
+    // value) pass, 6 fail.
+    test.canister_from_binary(wasm(5, 0, 0)).unwrap();
+    let err = test.canister_from_binary(wasm(6, 0, 0)).unwrap_err();
     assert_limit_error(&err, "Wasm heap");
 
-    // Exactly the upgrade limit is fine, and the message limit (1 page) is
-    // not what applies here.
-    let canister_id = test.canister_from_binary(wasm(5, 1, 1, 1)).unwrap();
-    assert_eq!(
-        test.ingress(canister_id, "version", vec![]).unwrap(),
-        WasmResult::Reply(vec![1])
-    );
-
-    // A `post_upgrade` over the limit fails the upgrade and keeps the old
-    // module and state.
+    // `post_upgrade` of the new module.
+    let canister_id = test.canister_from_binary(wasm(0, 0, 0)).unwrap();
+    test.upgrade_canister(canister_id, wasm(0, 0, 5)).unwrap();
     let err = test
-        .upgrade_canister(canister_id, wasm(1, 1, 6, 2))
+        .upgrade_canister(canister_id, wasm(0, 0, 6))
         .unwrap_err();
     assert_limit_error(&err, "Wasm heap");
-    assert_eq!(
-        test.ingress(canister_id, "version", vec![]).unwrap(),
-        WasmResult::Reply(vec![1])
-    );
 
-    // The same for `pre_upgrade` of the old module: install a module whose
-    // pre-upgrade hook is over the limit, then try to upgrade away from it.
-    let canister_id = test.canister_from_binary(wasm(1, 6, 1, 3)).unwrap();
+    // `pre_upgrade` of the old module.
+    let canister_id = test.canister_from_binary(wasm(0, 5, 0)).unwrap();
+    test.upgrade_canister(canister_id, wasm(0, 6, 0)).unwrap();
     let err = test
-        .upgrade_canister(canister_id, wasm(1, 1, 1, 4))
+        .upgrade_canister(canister_id, wasm(0, 0, 0))
         .unwrap_err();
     assert_limit_error(&err, "Wasm heap");
-    assert_eq!(
-        test.ingress(canister_id, "version", vec![]).unwrap(),
-        WasmResult::Reply(vec![3])
-    );
-
-    // Hooks at the limit succeed.
-    let canister_id = test.canister_from_binary(wasm(5, 5, 1, 5)).unwrap();
-    test.upgrade_canister(canister_id, wasm(1, 1, 5, 6))
-        .unwrap();
-    assert_eq!(
-        test.ingress(canister_id, "version", vec![]).unwrap(),
-        WasmResult::Reply(vec![6])
-    );
 }
 
 /// Data segments are written into the heap when the module is installed,
@@ -266,7 +239,7 @@ fn data_segments_do_not_count_against_the_limit() {
     let mut test = builder(limits(1, 1, 2)).build();
     // `canister_init` touches page 0 (the whole upgrade limit); the data
     // segment puts a byte into page 7.
-    let wat = hooks_wat(1, 0, 0, 1, r#"(data (i32.const 458752) "\07")"#);
+    let wat = hooks_wat(1, 0, 0, r#"(data (i32.const 458752) "\07")"#);
     let canister_id = test.canister_from_wat(wat).unwrap();
 
     // The byte is there (the query touches pages 0 and 7, within its limit).
