@@ -38,6 +38,7 @@ use ic_types::{
 
 use crate::{
     FetchArtifact,
+    fetch_artifact::SharedPool,
     fetch_stripped_artifact::{
         canister_http::{CanisterHttpPayloadError, reinsert_responses},
         types::{
@@ -65,29 +66,25 @@ struct BouncerFactoryWrapper<Factory> {
     bouncer_factory: Factory,
 }
 
-struct ConsensusPoolWrapper<Pool: ValidatedPoolReader<ConsensusMessage>> {
-    consensus_pool: Arc<RwLock<Pool>>,
+/// Serves the messages of `pool` by first stripping them
+struct StrippingPoolWrapper<Pool> {
+    pool: Pool,
 }
 
 impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrippedConsensusMessage>
-    for ConsensusPoolWrapper<Pool>
+    for StrippingPoolWrapper<Pool>
 {
     fn get(
         &self,
         id: &<MaybeStrippedConsensusMessage as IdentifiableArtifact>::Id,
     ) -> Option<MaybeStrippedConsensusMessage> {
-        // The pool hands out a block proposal with its payload already loaded.
-        let message = self.consensus_pool.read().unwrap().get(id.as_ref());
-        // Stripping a block can take milliseconds, so it is done once the lock on the
-        // pool is released.
-        message.map(Strippable::strip)
+        self.pool.get(id.as_ref()).map(Strippable::strip)
     }
 }
 
 impl<Pool, Factory> BouncerFactory<StrippedConsensusMessageId, Pool>
     for BouncerFactoryWrapper<Factory>
 where
-    Pool: ValidatedPoolReader<ConsensusMessage>,
     Factory: BouncerFactory<ConsensusMessageId, Pool>,
 {
     fn new_bouncer(
@@ -153,7 +150,9 @@ impl FetchStrippedConsensusArtifact {
             metrics_registry.clone(),
         );
         let subrouter = FetchArtifact::<MaybeStrippedConsensusMessage>::router(Arc::new(
-            ConsensusPoolWrapper { consensus_pool },
+            StrippingPoolWrapper {
+                pool: SharedPool(consensus_pool),
+            },
         ));
 
         let router = axum::Router::new().merge(router).merge(subrouter);
