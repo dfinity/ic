@@ -38,6 +38,7 @@ use ic_types::{
 
 use crate::{
     FetchArtifact,
+    fetch_artifact::SharedPool,
     fetch_stripped_artifact::{
         canister_http::{CanisterHttpPayloadError, reinsert_responses},
         types::{
@@ -63,32 +64,27 @@ use super::{
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
 
-struct BouncerFactoryWrapper<Pool: ValidatedPoolReader<ConsensusMessage>> {
+struct BouncerFactoryWrapper<Pool> {
     bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
 }
 
-struct ConsensusPoolWrapper<Pool: ValidatedPoolReader<ConsensusMessage>> {
-    consensus_pool: Arc<RwLock<Pool>>,
+/// Serves the messages of `consensus_pool` with their block proposals stripped.
+struct StrippingConsensusPool<Pool> {
+    consensus_pool: Pool,
 }
 
 impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrippedConsensusMessage>
-    for ConsensusPoolWrapper<Pool>
+    for StrippingConsensusPool<Pool>
 {
     fn get(
         &self,
         id: &<MaybeStrippedConsensusMessage as IdentifiableArtifact>::Id,
     ) -> Option<MaybeStrippedConsensusMessage> {
-        // The pool hands out a block proposal with its payload already loaded.
-        let message = self.consensus_pool.read().unwrap().get(id.as_ref());
-        // Stripping a block can take milliseconds, so it is done once the lock on the
-        // pool is released.
-        message.map(Strippable::strip)
+        self.consensus_pool.get(id.as_ref()).map(Strippable::strip)
     }
 }
 
-impl<Pool: ValidatedPoolReader<ConsensusMessage>> BouncerFactory<StrippedConsensusMessageId, Pool>
-    for BouncerFactoryWrapper<Pool>
-{
+impl<Pool> BouncerFactory<StrippedConsensusMessageId, Pool> for BouncerFactoryWrapper<Pool> {
     fn new_bouncer(
         &self,
         pool: &Pool,
@@ -148,7 +144,9 @@ impl FetchStrippedConsensusArtifact {
             metrics_registry.clone(),
         );
         let subrouter = FetchArtifact::<MaybeStrippedConsensusMessage>::router(Arc::new(
-            ConsensusPoolWrapper { consensus_pool },
+            StrippingConsensusPool {
+                consensus_pool: SharedPool(consensus_pool),
+            },
         ));
 
         let router = axum::Router::new().merge(router).merge(subrouter);
