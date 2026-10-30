@@ -41,10 +41,10 @@ use crate::{
             GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
             Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
             ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
-            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
-            ManageSnsMetadata, Metrics, MintSnsTokens, MintTokensRequest, MintTokensResponse,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+            LoadCanisterSnapshot, ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron,
+            ManageNeuronResponse, ManageSnsMetadata, Metrics, MintSnsTokens, MintTokensRequest,
+            MintTokensResponse, NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId,
+            NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
             ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
             RegisterExtension, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
             TransferSnsTreasuryFunds, TreasuryMetrics, UpgradeSnsControlledCanister, Vote,
@@ -78,6 +78,7 @@ use crate::{
         ValidGenericNervousSystemFunction, get_action_auxiliary,
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
         validate_and_render_proposal, validate_and_render_set_topics_for_custom_proposals,
+        validate_registered_dapp_canister, validate_snapshot_id_of_canister,
     },
     sns_upgrade::{
         SnsCanisterType, UpgradeSnsParams, canister_type_and_wasm_hash_for_upgrade,
@@ -110,7 +111,10 @@ use ic_nervous_system_governance::maturity_modulation::{
     MIN_MATURITY_MODULATION_PERMYRIAD, apply_maturity_modulation,
 };
 use ic_nervous_system_lock::acquire;
-use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
+use ic_nervous_system_root::{
+    change_canister::ChangeCanisterRequest,
+    load_canister_snapshot::{LoadCanisterSnapshotRequest, LoadCanisterSnapshotResponse},
+};
 use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_protobuf::types::v1::WasmMemoryPersistence as WasmMemoryPersistenceProto;
@@ -2256,6 +2260,10 @@ impl Governance {
             Action::SetTopicsForCustomProposals(set_topics_for_custom_proposals) => {
                 self.perform_set_topics_for_custom_proposals(set_topics_for_custom_proposals)
             }
+            Action::LoadCanisterSnapshot(load_canister_snapshot) => {
+                self.perform_load_canister_snapshot(proposal_id, load_canister_snapshot)
+                    .await
+            }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
             Action::Unspecified(_) => Err(GovernanceError::new_with_message(
@@ -2729,6 +2737,74 @@ impl Governance {
             canister_upgrade_options,
         )
         .await
+    }
+
+    /// Executes a LoadCanisterSnapshot proposal by calling SNS Root.
+    async fn perform_load_canister_snapshot(
+        &mut self,
+        proposal_id: u64,
+        load_canister_snapshot: LoadCanisterSnapshot,
+    ) -> Result<(), GovernanceError> {
+        self.check_no_upgrades_in_progress(Some(proposal_id))?;
+
+        // These were already checked when the proposal was submitted, but they are cheap enough
+        // to check again (the dapp might have been deregistered since then).
+        let LoadCanisterSnapshot {
+            canister_id,
+            snapshot_id,
+        } = load_canister_snapshot;
+        let canister_id = get_canister_id(&canister_id)?;
+        let snapshot_id = snapshot_id.unwrap_or_default();
+        validate_snapshot_id_of_canister("snapshot_id", &snapshot_id, canister_id)
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
+        validate_registered_dapp_canister(
+            &*self.env,
+            self.proto.root_canister_id_or_panic(),
+            canister_id,
+        )
+        .await
+        .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
+
+        let request = Encode!(&LoadCanisterSnapshotRequest {
+            canister_id: canister_id.get(),
+            snapshot_id,
+        })
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Could not encode LoadCanisterSnapshotRequest: {err:?}"),
+            )
+        })?;
+        let reply = self
+            .env
+            .call_canister(
+                self.proto.root_canister_id_or_panic(),
+                "load_canister_snapshot",
+                request,
+            )
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Canister method call Root.load_canister_snapshot failed: {err:?}"),
+                )
+            })?;
+
+        match Decode!(&reply, LoadCanisterSnapshotResponse) {
+            Ok(LoadCanisterSnapshotResponse::Ok(_)) => Ok(()),
+            Ok(LoadCanisterSnapshotResponse::Err(err)) => Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Failed to load a snapshot into canister {canister_id} \
+                     (error code {:?}): {}",
+                    err.code, err.description,
+                ),
+            )),
+            Err(err) => Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Could not decode the reply from Root.load_canister_snapshot: {err:?}"),
+            )),
+        }
     }
 
     pub(crate) async fn upgrade_non_root_canister(
@@ -6791,6 +6867,9 @@ mod get_metrics;
 
 #[cfg(test)]
 mod execute_generic_nervous_system_function_tests;
+
+#[cfg(test)]
+mod load_canister_snapshot_tests;
 
 #[cfg(feature = "canbench-rs")]
 mod benches;
