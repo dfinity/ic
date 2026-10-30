@@ -27,6 +27,7 @@ table filter {
     type filter hook input priority 0; policy drop;
     iif lo accept
     # Mitigation for CVE-2026-98432: drop IPv4 packets carrying IP options (IHL > 5).
+    # TODO: remove once IC-OS ships an Ubuntu kernel with the CVE-2026-98432 fix.
     ip hdrlength != 5 counter drop
     ct state new add @rate_limit { ip saddr limit rate over 1000/minute burst 500 packets } counter name rate_limit_v4_counter drop
     #  Notes about the rule below:

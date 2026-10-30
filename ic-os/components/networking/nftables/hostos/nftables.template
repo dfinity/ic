@@ -38,6 +38,7 @@ table ip filter {
     type filter hook input priority filter; policy drop;
     iif "lo" accept
     # Mitigation for CVE-2026-98432: drop IPv4 packets carrying IP options (IHL > 5).
+    # TODO: remove once IC-OS ships an Ubuntu kernel with the CVE-2026-98432 fix.
     ip hdrlength != 5 counter drop
     ct state { invalid } drop
     ct state { established, related } accept
