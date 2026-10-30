@@ -119,7 +119,7 @@ fn set_up_assembler(
         Arc::new(RwLock::new(ingress_pool)),
         Arc::new(RwLock::new(idkg_pool)),
         Arc::new(RwLock::new(canister_http_pool)),
-        Arc::new(mock_bouncer_factory),
+        mock_bouncer_factory,
         MetricsRegistry::new(),
         NODE_1,
     )

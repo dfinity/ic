@@ -115,15 +115,16 @@ impl<Artifact: PbArtifact> ArtifactAssembler<Artifact, Artifact> for FetchArtifa
 }
 
 impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
-    pub fn new<Pool>(
+    pub fn new<Pool, Factory>(
         log: ReplicaLogger,
         rt: Handle,
         pool: Arc<RwLock<Pool>>,
-        bouncer_factory: Arc<dyn BouncerFactory<Artifact::Id, Pool>>,
+        bouncer_factory: Factory,
         metrics_registry: MetricsRegistry,
     ) -> (impl FnOnce(Arc<dyn Transport>) -> Self, Router)
     where
         Pool: ValidatedPoolReader<Artifact> + 'static,
+        Factory: BouncerFactory<Artifact::Id, Pool> + 'static,
     {
         let pool_clone = pool.clone();
         (
