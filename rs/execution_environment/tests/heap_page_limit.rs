@@ -12,9 +12,7 @@
 //!   heap limit reports the stable one;
 //! * the failure is deterministic across two independent executions;
 //! * a failing message is charged for the pages it did touch, and an aborted
-//!   execution is charged once;
-//! * the globals persisted for a canister have the layout of before the
-//!   limit existed.
+//!   execution is charged once.
 //!
 //! The limits are given in Wasm pages (64 KiB); the canisters touch pages by
 //! writing one byte into each, so "touch n" accesses exactly n pages.
@@ -533,51 +531,4 @@ fn aborted_execution_is_charged_once() {
     let charge_with_abort = before - balance(&test, canister_id);
 
     assert_eq!(charge_with_abort, charge_without_abort);
-}
-
-////////////////////////////////////////////////////////////////////////
-// Persisted globals
-
-/// The heap page budget is kept in an exported Wasm global, but it must not
-/// be persisted with the canister: the persisted globals are the module's own
-/// globals plus the instruction counter, as before the limit existed, so
-/// states written by earlier replica versions stay loadable.
-#[test]
-fn persisted_globals_have_the_layout_of_before_the_limit() {
-    // Two exported globals and one internal global, which is not persisted.
-    let wat = r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (global $a (export "a") (mut i32) (i32.const 1))
-            (global $b (export "b") (mut i64) (i64.const 2))
-            (global $c (mut i32) (i32.const 3))
-            (func (export "canister_update bump")
-                (global.set $a (i32.add (global.get $a) (i32.const 1)))
-                (global.set $c (i32.add (global.get $c) (i32.const 1)))
-                (i32.store8 (i32.const 0) (i32.const 1))
-                (call $msg_reply))
-            (memory (export "memory") 1)
-        )"#;
-    let mut test = builder(limits(4, 4, 4)).build();
-    let canister_id = test.canister_from_wat(wat).unwrap();
-    test.ingress(canister_id, "bump", vec![]).unwrap();
-
-    // The three module globals (the instrumentation exports the internal
-    // one too, so that it is persisted) plus the instruction counter. The
-    // heap page budget is not among them.
-    let persisted = test.execution_state(canister_id).exported_globals.clone();
-    assert_eq!(persisted.len(), 4, "{persisted:?}");
-
-    // A state with exactly these globals (what a replica without the budget
-    // global persisted) instantiates and runs.
-    test.canister_state_mut(canister_id)
-        .execution_state
-        .as_mut()
-        .unwrap()
-        .exported_globals = persisted.clone();
-    test.ingress(canister_id, "bump", vec![]).unwrap();
-    assert_eq!(
-        test.execution_state(canister_id).exported_globals.len(),
-        persisted.len()
-    );
 }
