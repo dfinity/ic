@@ -42,6 +42,12 @@ pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {
 /// A pool shared with the components writing to it, read by taking its lock on each access.
 pub(crate) struct SharedPool<Pool>(pub(crate) Arc<RwLock<Pool>>);
 
+impl<Pool> Clone for SharedPool<Pool> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
 impl<Artifact, Pool> ValidatedPoolReader<Artifact> for SharedPool<Pool>
 where
     Artifact: IdentifiableArtifact,
@@ -53,12 +59,12 @@ where
 }
 
 async fn rpc_handler<Artifact, Pool>(
-    State(pool): State<Arc<Pool>>,
+    State(pool): State<Pool>,
     payload: Bytes,
 ) -> Result<Bytes, StatusCode>
 where
     Artifact: PbArtifact,
-    Pool: ValidatedPoolReader<Artifact> + 'static,
+    Pool: ValidatedPoolReader<Artifact> + Clone + 'static,
 {
     let jh = tokio::task::spawn_blocking(move || {
         let id: Artifact::Id =
@@ -130,7 +136,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
     {
         (
             Self::downloader(log, rt, pool.clone(), bouncer_factory, metrics_registry),
-            Self::router(Arc::new(SharedPool(pool))),
+            Self::router(SharedPool(pool)),
         )
     }
 
@@ -176,14 +182,14 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
     }
 
     /// Serves the `Artifact`s of `pool` to the peers' downloaders.
-    pub(crate) fn router<Pool>(pool: Arc<Pool>) -> Router
+    pub(crate) fn router<Pool>(pool: Pool) -> Router
     where
-        Pool: ValidatedPoolReader<Artifact> + 'static,
+        Pool: ValidatedPoolReader<Artifact> + Clone + 'static,
     {
         Router::new()
             .route(
                 &format!("/{}/rpc", uri_prefix::<Artifact>()),
-                any(rpc_handler),
+                any(rpc_handler::<Artifact, Pool>),
             )
             .with_state(pool)
             // Disable request size limit since consensus might push artifacts larger than limit.

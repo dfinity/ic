@@ -67,6 +67,7 @@ struct BouncerFactoryWrapper<Factory> {
 }
 
 /// Serves the messages of `pool` by first stripping them
+#[derive(Clone)]
 struct StrippingPoolWrapper<Pool> {
     pool: Pool,
 }
@@ -149,11 +150,10 @@ impl FetchStrippedConsensusArtifact {
             BouncerFactoryWrapper { bouncer_factory },
             metrics_registry.clone(),
         );
-        let subrouter = FetchArtifact::<MaybeStrippedConsensusMessage>::router(Arc::new(
-            StrippingPoolWrapper {
+        let subrouter =
+            FetchArtifact::<MaybeStrippedConsensusMessage>::router(StrippingPoolWrapper {
                 pool: SharedPool(consensus_pool),
-            },
-        ));
+            });
 
         let router = axum::Router::new().merge(router).merge(subrouter);
 
