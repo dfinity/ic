@@ -2,7 +2,7 @@ use crate::common::{default_archive_options, install_index_ng, install_ledger};
 use candid::{Encode, Nat, Principal};
 use ic_agent::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_index_ng::InitArg;
+use ic_icrc1_index_ng::{InitArg, PokeCallers};
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_suite_state_machine_helpers::{retrieve_metrics, send_transfer};
 use ic_registry_subnet_type::SubnetType;
@@ -303,7 +303,7 @@ fn poke_indexes_a_real_transfer_without_changing_adaptive_backoff() {
             retrieve_blocks_from_ledger_interval_seconds: None,
             min_retrieve_blocks_from_ledger_interval_seconds: Some(1),
             max_retrieve_blocks_from_ledger_interval_seconds: Some(10),
-            allowed_poke_callers: Some(None),
+            allowed_poke_callers: Some(PokeCallers::All),
         },
     );
     let start = env.time();

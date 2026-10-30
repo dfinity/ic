@@ -4,7 +4,7 @@ use common::{
     install_index_ng, run_rounds_until, status,
 };
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_index_ng::{IndexArg, InitArg, UpgradeArg};
+use ic_icrc1_index_ng::{IndexArg, InitArg, PokeCallers, UpgradeArg};
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
 use ic_ledger_suite_state_machine_helpers::{add_block, set_icrc3_enabled};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
@@ -48,7 +48,7 @@ fn install_controllable_ledger(env: &StateMachine) -> CanisterId {
 
 fn setup(
     interval: u64,
-    allowed_poke_callers: Option<Option<Vec<Principal>>>,
+    allowed_poke_callers: Option<PokeCallers>,
 ) -> (StateMachine, CanisterId, CanisterId) {
     let env = test_env();
     let ledger = install_controllable_ledger(&env);
@@ -116,7 +116,7 @@ fn release_one(env: &StateMachine, ledger: CanisterId) {
         .unwrap();
 }
 
-fn upgrade(env: &StateMachine, index: CanisterId, policy: Option<Option<Vec<Principal>>>) {
+fn upgrade(env: &StateMachine, index: CanisterId, policy: Option<PokeCallers>) {
     let arg = IndexArg::Upgrade(UpgradeArg {
         ledger_id: None,
         #[allow(deprecated)]
@@ -131,7 +131,7 @@ fn upgrade(env: &StateMachine, index: CanisterId, policy: Option<Option<Vec<Prin
 
 #[test]
 fn poke_preserves_deadline_and_busy_callback_preserves_one_polling_chain() {
-    let (env, ledger, index) = setup(100, Some(None));
+    let (env, ledger, index) = setup(100, Some(PokeCallers::All));
     let mint = BlockBuilder::new(0, 0)
         .mint(account(1, 0), Tokens::from(100_u64))
         .build();
@@ -207,14 +207,16 @@ fn poke_preserves_deadline_and_busy_callback_preserves_one_polling_chain() {
 #[test]
 fn poke_policy_and_upgrade_compatibility() {
     let listed = PrincipalId::new_user_test_id(42);
-    for (policy, expected_requests) in [
-        (None, 0),
-        (Some(Some(vec![])), 0),
-        (Some(Some(vec![listed.0])), 1),
+    for (policy, anonymous_requests, expected_requests) in [
+        (None, 0, 0),
+        (Some(PokeCallers::Nobody), 0, 0),
+        (Some(PokeCallers::Somebody(vec![])), 0, 0),
+        (Some(PokeCallers::All), 1, 2),
+        (Some(PokeCallers::Somebody(vec![listed.0])), 0, 1),
     ] {
         let (env, ledger, index) = setup(100, policy);
         ingress(&env, index, PrincipalId::new_anonymous());
-        assert_eq!(count(&env, ledger), 0);
+        assert_eq!(count(&env, ledger), anonymous_requests);
         ingress(&env, index, listed);
         assert_eq!(count(&env, ledger), expected_requests);
     }
@@ -243,14 +245,18 @@ fn poke_policy_and_upgrade_compatibility() {
         "old init payload without a policy disables poke"
     );
 
-    let (env, ledger, index) = setup(100, Some(None));
+    let (env, ledger, index) = setup(100, Some(PokeCallers::All));
     let anonymous = PrincipalId::new_anonymous();
     ingress(&env, index, anonymous); // anonymous public access
     assert_eq!(count(&env, ledger), 1);
     notify(&env, ledger, index);
     assert_eq!(count(&env, ledger), 2);
 
-    upgrade(&env, index, Some(Some(vec![ledger.into(), listed.0])));
+    upgrade(
+        &env,
+        index,
+        Some(PokeCallers::Somebody(vec![ledger.into(), listed.0])),
+    );
     ingress(&env, index, anonymous);
     ingress(&env, index, PrincipalId::new_user_test_id(43));
     assert_eq!(count(&env, ledger), 2);
@@ -288,10 +294,11 @@ fn poke_policy_and_upgrade_compatibility() {
     );
 
     for (policy, expected) in [
-        (Some(Some(vec![])), 6),
-        (Some(None), 7),
-        (Some(Some(vec![anonymous.0])), 8),
-        (Some(Some(vec![ledger.into()])), 8),
+        (Some(PokeCallers::Nobody), 6),
+        (Some(PokeCallers::Somebody(vec![])), 6),
+        (Some(PokeCallers::All), 7),
+        (Some(PokeCallers::Somebody(vec![anonymous.0])), 8),
+        (Some(PokeCallers::Somebody(vec![ledger.into()])), 8),
         (None, 8),
     ] {
         upgrade(&env, index, policy);
@@ -300,7 +307,7 @@ fn poke_policy_and_upgrade_compatibility() {
     }
     // Restore public access, poke immediately before the automatic deadline,
     // and show that ordinary polling still runs on that deadline.
-    upgrade(&env, index, Some(None));
+    upgrade(&env, index, Some(PokeCallers::All));
     advance_time_and_run_rounds(&env, 99);
     ingress(&env, index, anonymous);
     let before = count(&env, ledger);
@@ -310,7 +317,7 @@ fn poke_policy_and_upgrade_compatibility() {
 
 #[test]
 fn failed_poke_releases_guard_and_never_retries_or_skips() {
-    let (env, ledger, index) = setup(100, Some(None));
+    let (env, ledger, index) = setup(100, Some(PokeCallers::All));
     add_block(&env, ledger, &ICRC3Value::Text("invalid block".into())).unwrap();
     advance_time_and_run_rounds(&env, 1);
     notify(&env, ledger, index);
@@ -333,4 +340,138 @@ fn failed_poke_releases_guard_and_never_retries_or_skips() {
         "poke must not restart the stopped chain"
     );
     assert_eq!(status(&env, index).num_blocks_synced, Nat::from(0_u64));
+}
+
+// Independently encoded wire types can express invalid optional-field contents
+// that cannot be constructed using PokeCallers itself.
+#[derive(Clone, CandidType)]
+enum WrongPokeCallers {
+    Somebody(Vec<String>),
+}
+
+#[derive(Clone, CandidType)]
+enum UnknownPokeCallers {
+    Unknown,
+}
+
+#[derive(CandidType)]
+struct WireInitArg<T> {
+    ledger_id: Principal,
+    allowed_poke_callers: Option<T>,
+    min_retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+    max_retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+}
+
+#[derive(CandidType)]
+struct WireUpgradeArg<T> {
+    allowed_poke_callers: Option<T>,
+}
+
+#[derive(CandidType)]
+enum WireIndexArg<T> {
+    Init(WireInitArg<T>),
+    Upgrade(WireUpgradeArg<T>),
+}
+
+fn malformed_policy_args<T: CandidType + Clone>(
+    ledger: CanisterId,
+    policy: T,
+) -> (Vec<u8>, Vec<u8>) {
+    (
+        Encode!(&WireIndexArg::<T>::Init(WireInitArg {
+            ledger_id: ledger.into(),
+            allowed_poke_callers: Some(policy.clone()),
+            min_retrieve_blocks_from_ledger_interval_seconds: Some(100),
+            max_retrieve_blocks_from_ledger_interval_seconds: Some(100),
+        }))
+        .unwrap(),
+        Encode!(&WireIndexArg::<T>::Upgrade(WireUpgradeArg {
+            allowed_poke_callers: Some(policy),
+        }))
+        .unwrap(),
+    )
+}
+
+#[test]
+fn malformed_optional_policy_does_not_expand_access() {
+    let env = test_env();
+    let ledger = install_controllable_ledger(&env);
+    set_icrc3_enabled(&env, ledger, !cfg!(feature = "icrc3_disabled"));
+    for (init_bytes, upgrade_bytes) in [
+        malformed_policy_args(ledger, WrongPokeCallers::Somebody(vec!["aaaaa-aa".into()])),
+        malformed_policy_args(ledger, UnknownPokeCallers::Unknown),
+    ] {
+        let before = count(&env, ledger);
+        // These are valid Candid payloads. The pinned decoder accepts them via
+        // optional-field fallback, rather than rejecting the whole argument.
+        let decoded = Decode!(&init_bytes, Option<IndexArg>).unwrap();
+        assert!(matches!(decoded, Some(IndexArg::Init(arg)) if arg.allowed_poke_callers.is_none()));
+        let decoded = Decode!(&upgrade_bytes, Option<IndexArg>).unwrap();
+        assert!(
+            matches!(decoded, Some(IndexArg::Upgrade(arg)) if arg.allowed_poke_callers.is_none())
+        );
+
+        let index = env
+            .install_canister_with_cycles(
+                index_ng_wasm(),
+                init_bytes,
+                None,
+                ic_types_cycles::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+            )
+            .unwrap();
+        ingress(&env, index, PrincipalId::new_anonymous());
+        notify(&env, ledger, index);
+        assert_eq!(count(&env, ledger), before, "malformed init disables pokes");
+
+        upgrade(
+            &env,
+            index,
+            Some(PokeCallers::Somebody(vec![ledger.into()])),
+        );
+        env.upgrade_canister(index, index_ng_wasm(), upgrade_bytes.clone())
+            .unwrap();
+        ingress(&env, index, PrincipalId::new_anonymous());
+        assert_eq!(
+            count(&env, ledger),
+            before,
+            "malformed upgrade preserves restriction"
+        );
+        notify(&env, ledger, index);
+        assert_eq!(
+            count(&env, ledger),
+            before + 1,
+            "listed caller remains allowed"
+        );
+
+        upgrade(&env, index, Some(PokeCallers::All));
+        env.upgrade_canister(index, index_ng_wasm(), upgrade_bytes)
+            .unwrap();
+        ingress(&env, index, PrincipalId::new_anonymous());
+        assert_eq!(
+            count(&env, ledger),
+            before + 2,
+            "malformed upgrade preserves public policy"
+        );
+    }
+}
+
+#[test]
+fn omitted_upgrade_policy_preserves_public_access() {
+    let (env, ledger, index) = setup(100, Some(PokeCallers::All));
+    let anonymous = PrincipalId::new_anonymous();
+    upgrade(&env, index, None);
+    ingress(&env, index, anonymous);
+    assert_eq!(count(&env, ledger), 1);
+    env.upgrade_canister(index, index_ng_wasm(), Encode!().unwrap())
+        .unwrap();
+    ingress(&env, index, anonymous);
+    assert_eq!(count(&env, ledger), 2);
+    env.upgrade_canister(
+        index,
+        index_ng_wasm(),
+        Encode!(&OldIndexArg::Upgrade(OldUpgradeArg { ledger_id: None })).unwrap(),
+    )
+    .unwrap();
+    ingress(&env, index, anonymous);
+    assert_eq!(count(&env, ledger), 3);
 }

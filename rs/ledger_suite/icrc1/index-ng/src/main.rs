@@ -12,7 +12,8 @@ use ic_icrc1::{Block, Operation};
 use ic_icrc1_index_ng::{
     DEFAULT_MAX_BLOCKS_PER_RESPONSE, FeeCollectorRanges, GetAccountTransactionsArgs,
     GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksMethod, IndexArg,
-    InitArg, ListSubaccountsArgs, Log, LogEntry, Status, TransactionWithId, UpgradeArg,
+    InitArg, ListSubaccountsArgs, Log, LogEntry, PokeCallers, Status, TransactionWithId,
+    UpgradeArg,
 };
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
@@ -112,6 +113,14 @@ thread_local! {
     /// persistent between upgrades
     static CACHE: RefCell<Cache> = RefCell::new(Cache::default());
 
+}
+
+fn poke_callers_to_stored_policy(callers: PokeCallers) -> Option<Vec<Principal>> {
+    match callers {
+        PokeCallers::Nobody => Some(vec![]),
+        PokeCallers::All => None,
+        PokeCallers::Somebody(callers) => Some(callers),
+    }
 }
 
 fn disabled_poke_callers() -> Option<Vec<Principal>> {
@@ -361,7 +370,9 @@ fn init(index_arg: Option<IndexArg>) {
     // stable memory initialization
     mutate_state(|state| {
         state.ledger_id = ledger_id;
-        state.allowed_poke_callers = allowed_poke_callers.unwrap_or_else(disabled_poke_callers);
+        state.allowed_poke_callers = allowed_poke_callers
+            .map(poke_callers_to_stored_policy)
+            .unwrap_or_else(disabled_poke_callers);
         state.min_retrieve_blocks_from_ledger_interval = min_retrieve_blocks_from_ledger_interval;
         state.max_retrieve_blocks_from_ledger_interval = max_retrieve_blocks_from_ledger_interval;
         state.last_wait_time = state.min_retrieve_blocks_from_ledger_interval();
@@ -438,7 +449,7 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
 
             mutate_state(|state| {
                 if let Some(new_value) = allowed_poke_callers {
-                    state.allowed_poke_callers = new_value;
+                    state.allowed_poke_callers = poke_callers_to_stored_policy(new_value);
                 }
 
                 if let Some(new_value) = ledger_id {
@@ -1617,6 +1628,28 @@ fn check_index_and_ledger_block_equality() {
         &index_block_type,
     )
     .expect("Ledger and Index block types are different");
+}
+
+#[test]
+fn poke_policy_conversion_preserves_membership() {
+    assert_eq!(
+        poke_callers_to_stored_policy(PokeCallers::Nobody),
+        Some(vec![])
+    );
+    assert_eq!(poke_callers_to_stored_policy(PokeCallers::All), None);
+    assert_eq!(
+        poke_callers_to_stored_policy(PokeCallers::Somebody(vec![])),
+        Some(vec![])
+    );
+    let callers = vec![
+        Principal::anonymous(),
+        Principal::management_canister(),
+        Principal::anonymous(),
+    ];
+    assert_eq!(
+        poke_callers_to_stored_policy(PokeCallers::Somebody(callers.clone())),
+        Some(callers)
+    );
 }
 
 #[test]

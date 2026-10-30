@@ -13,10 +13,19 @@ pub enum IndexArg {
     Upgrade(UpgradeArg),
 }
 
+/// Who may request a best-effort indexing pass with `poke`.
+/// An empty `Somebody` list is equivalent to `Nobody`.
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum PokeCallers {
+    Nobody,
+    All,
+    Somebody(Vec<Principal>),
+}
+
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct InitArg {
-    /// None disables poke; Some(None) permits everyone.
-    pub allowed_poke_callers: Option<Option<Vec<Principal>>>,
+    /// None disables poke.
+    pub allowed_poke_callers: Option<PokeCallers>,
     pub ledger_id: Principal,
     #[deprecated(
         note = "This field is deprecated and will be removed in a future version. Please use min_retrieve_blocks_from_ledger_interval_seconds and max_retrieve_blocks_from_ledger_interval_seconds instead."
@@ -28,8 +37,8 @@ pub struct InitArg {
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct UpgradeArg {
-    /// None preserves the policy; Some(None) restores public access.
-    pub allowed_poke_callers: Option<Option<Vec<Principal>>>,
+    /// None preserves the current policy.
+    pub allowed_poke_callers: Option<PokeCallers>,
     pub ledger_id: Option<Principal>,
     #[deprecated(
         note = "This field is deprecated and will be removed in a future version. Please use min_retrieve_blocks_from_ledger_interval_seconds and max_retrieve_blocks_from_ledger_interval_seconds instead."

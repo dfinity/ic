@@ -1,8 +1,11 @@
 type Tokens = nat;
 
+// An empty Somebody list is equivalent to Nobody.
+type PokeCallers = variant { Nobody; All; Somebody : vec principal };
+
 type InitArg = record {
-  // Outer null disables poke; opt null enables public access.
-  allowed_poke_callers : opt opt vec principal;
+  // Omitted/null disables poke; All explicitly permits everyone.
+  allowed_poke_callers : opt PokeCallers;
   ledger_id : principal;
   // The legacy parameter to set a fixed interval in seconds in which to retrieve blocks from the ledger.
   // If set, the index will set both `min_retrieve_blocks_from_ledger_interval_seconds` and
@@ -19,8 +22,8 @@ type InitArg = record {
 };
 
 type UpgradeArg = record {
-  // Outer null preserves the setting; opt null restores public access.
-  allowed_poke_callers : opt opt vec principal;
+  // Omitted/null preserves the setting; All explicitly permits everyone.
+  allowed_poke_callers : opt PokeCallers;
   ledger_id : opt principal;
   // The legacy parameter to set a fixed interval in seconds in which to retrieve blocks from the ledger.
   // If set, the index will set both `min_retrieve_blocks_from_ledger_interval_seconds` and
