@@ -17,7 +17,14 @@ permissions: {}
 jobs:
   advance-claude-security-rc:
     name: Advance claude-security-rc
-    if: github.repository == 'dfinity/ic' && github.event.workflow_run.conclusion == 'success'
+    # The workflows and branches filters above match names that a fork PR's run controls,
+    # so also require a push run of this repository's own release-testing.yml.
+    if: |
+      github.repository == 'dfinity/ic' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.path == '.github/workflows/release-testing.yml'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -35,6 +42,12 @@ jobs:
           if [[ ! "$BRANCH" =~ ^rc--[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}$ ]]; then
             echo "$BRANCH is not a scheduled RC cut"
             exit 0
+          fi
+
+          TIP="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" --jq .object.sha)"
+          if [[ "$TIP" != "$SHA" ]]; then
+            echo "$BRANCH points at $TIP, not at the tested $SHA"
+            exit 1
           fi
 
           gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/claude-security-rc" \

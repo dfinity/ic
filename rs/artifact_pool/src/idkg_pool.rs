@@ -17,8 +17,8 @@ use ic_interfaces::idkg::{
     IDkgPoolSectionOps, MutableIDkgPoolSection,
 };
 use ic_interfaces::p2p::consensus::{
-    ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
-    ValidatedPoolReader,
+    ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, InitialBroadcastSource, MutablePool,
+    UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_metrics::MetricsRegistry;
@@ -548,7 +548,9 @@ impl ValidatedPoolReader<IDkgMessage> for IDkgPoolImpl {
     fn get(&self, msg_id: &IDkgMessageId) -> Option<IDkgMessage> {
         self.validated.as_pool_section().get(msg_id)
     }
+}
 
+impl InitialBroadcastSource<IDkgMessage> for IDkgPoolImpl {
     fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = IDkgMessage> + '_> {
         let pool_section = self.validated.as_pool_section();
         let dealings = pool_section

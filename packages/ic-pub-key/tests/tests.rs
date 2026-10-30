@@ -1,10 +1,13 @@
 use ic_pub_key::*;
 
+#[cfg(any(feature = "secp256k1", feature = "secp256r1"))]
 fn test_ecdsa_derivation(
+    curve: EcdsaCurve,
     key_name: &'static str,
     canister_id: &'static str,
     derivation_path: &[&'static str],
     expected_dpk: &'static str,
+    expected_chain_code: &'static str,
 ) {
     use std::str::FromStr;
 
@@ -17,7 +20,7 @@ fn test_ecdsa_derivation(
         canister_id: Some(ic_pub_key::CanisterId::from_str(canister_id).unwrap()),
         derivation_path,
         key_id: EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
+            curve,
             name: key_name.to_string(),
         },
     };
@@ -25,8 +28,46 @@ fn test_ecdsa_derivation(
     let dpk = derive_ecdsa_key(&args).unwrap();
 
     assert_eq!(hex::encode(dpk.public_key), expected_dpk);
+    assert_eq!(hex::encode(dpk.chain_code), expected_chain_code);
 }
 
+#[cfg(feature = "secp256k1")]
+fn test_ecdsa_secp256k1_derivation(
+    key_name: &'static str,
+    canister_id: &'static str,
+    derivation_path: &[&'static str],
+    expected_dpk: &'static str,
+    expected_chain_code: &'static str,
+) {
+    test_ecdsa_derivation(
+        EcdsaCurve::Secp256k1,
+        key_name,
+        canister_id,
+        derivation_path,
+        expected_dpk,
+        expected_chain_code,
+    );
+}
+
+#[cfg(feature = "secp256r1")]
+fn test_ecdsa_secp256r1_derivation(
+    key_name: &'static str,
+    canister_id: &'static str,
+    derivation_path: &[&'static str],
+    expected_dpk: &'static str,
+    expected_chain_code: &'static str,
+) {
+    test_ecdsa_derivation(
+        EcdsaCurve::Secp256r1,
+        key_name,
+        canister_id,
+        derivation_path,
+        expected_dpk,
+        expected_chain_code,
+    );
+}
+
+#[cfg(any(feature = "secp256k1", feature = "ed25519"))]
 fn test_schnorr_derivation(
     algorithm: SchnorrAlgorithm,
     key_name: &'static str,
@@ -55,6 +96,7 @@ fn test_schnorr_derivation(
     assert_eq!(hex::encode(dpk.public_key), expected_dpk,);
 }
 
+#[cfg(feature = "ed25519")]
 fn test_ed25519_derivation(
     key_name: &'static str,
     canister_id: &'static str,
@@ -70,6 +112,7 @@ fn test_ed25519_derivation(
     );
 }
 
+#[cfg(feature = "secp256k1")]
 fn test_bip340_derivation(
     key_name: &'static str,
     canister_id: &'static str,
@@ -268,7 +311,7 @@ fn test_bip340_derivation_pocketic_dfx_test_key() {
 #[cfg(feature = "secp256k1")]
 #[test]
 fn test_ecdsa_secp256k1_derivation_key1() {
-    test_ecdsa_derivation(
+    test_ecdsa_secp256k1_derivation(
         "key_1",
         "h5jwf-5iaaa-aaaan-qmvoa-cai",
         &[
@@ -281,20 +324,22 @@ fn test_ecdsa_secp256k1_derivation_key1() {
             "key_1",
         ],
         "03e99cc5403dfefbc1de767ab34b637ab93c11cecffe89d6475e9701cffa2d51b4",
+        "e4613655c9f0c9daa769ac5215cd4ef28d02f424c32a0b702a9cd89cbfbf28d7",
     );
 }
 
 #[cfg(feature = "secp256k1")]
 #[test]
 fn test_ecdsa_secp256k1_derivation_test_key1() {
-    test_ecdsa_derivation(
+    test_ecdsa_secp256k1_derivation(
         "test_key_1",
         "h5jwf-5iaaa-aaaan-qmvoa-cai",
         &["Hello", "Threshold", "Signatures"],
         "0315ae8bb8c6e9f78eec2167f5ac773067f37a39da1a1efbc585f9e90658d1c620",
+        "366057592ee6212c33dd76f5b4de2ac44a20e861078347fc77d252cbc9d70a5c",
     );
 
-    test_ecdsa_derivation(
+    test_ecdsa_secp256k1_derivation(
         "test_key_1",
         "h5jwf-5iaaa-aaaan-qmvoa-cai",
         &[
@@ -307,13 +352,54 @@ fn test_ecdsa_secp256k1_derivation_test_key1() {
             "test_key_1",
         ],
         "0262c4eb6534f278ceebcc8f4172d38acf7d76e1c74ee1e10f362d59f73658ae50",
+        "95040337537953fc480879186261f689c7fa6a99aab1d1c27c1245692cfa8455",
+    );
+}
+
+#[cfg(feature = "secp256r1")]
+#[test]
+fn test_ecdsa_secp256r1_derivation_key1() {
+    test_ecdsa_secp256r1_derivation(
+        "key_1",
+        "h5jwf-5iaaa-aaaan-qmvoa-cai",
+        &[
+            "Test",
+            "Derivation",
+            "For",
+            "Mainnet",
+            "ECDSA",
+            "secp256r1",
+            "key_1",
+        ],
+        "02cda0a98456eaf736d750a6b3885433df81b9a5e76c2ee74e4552d9de1a3b38a5",
+        "a06fa0ac7c5d36631ee816b70a423d35c50af364d589c3e71e956a5b5e4457b4",
+    );
+}
+
+#[cfg(feature = "secp256r1")]
+#[test]
+fn test_ecdsa_secp256r1_derivation_test_key1() {
+    test_ecdsa_secp256r1_derivation(
+        "test_key_1",
+        "h5jwf-5iaaa-aaaan-qmvoa-cai",
+        &[
+            "Test",
+            "Derivation",
+            "For",
+            "Mainnet",
+            "ECDSA",
+            "secp256r1",
+            "test_key_1",
+        ],
+        "038bee03c1155d5b11e08b90fbdebb584c84ba617b916498b9c3d7bdc7a3d32eb8",
+        "5bea193fe95011f0274a55679d441b9f822abfd829a6482a9b259dc3ed9215e5",
     );
 }
 
 #[cfg(feature = "secp256k1")]
 #[test]
 fn test_ecdsa_secp256k1_derivation_pocketic_key1() {
-    test_ecdsa_derivation(
+    test_ecdsa_secp256k1_derivation(
         "pocketic_key_1",
         "uzt4z-lp777-77774-qaabq-cai",
         &[
@@ -326,13 +412,14 @@ fn test_ecdsa_secp256k1_derivation_pocketic_key1() {
             "key_1",
         ],
         "03bca84b5629dc70a37cadb5b3cda0bfc35abc5658f1d9bf8335b10199785a3836",
+        "69797aab9c7b3d2498669bab8c5c77656ba168159c9173544d60a6e9c3d7cf25",
     );
 }
 
 #[cfg(feature = "secp256k1")]
 #[test]
 fn test_ecdsa_secp256k1_derivation_pocketic_test_key1() {
-    test_ecdsa_derivation(
+    test_ecdsa_secp256k1_derivation(
         "pocketic_test_key_1",
         "uzt4z-lp777-77774-qaabq-cai",
         &[
@@ -345,13 +432,14 @@ fn test_ecdsa_secp256k1_derivation_pocketic_test_key1() {
             "test_key_1",
         ],
         "022ff35c84bd4cf899707789cfe5db76ce4a650563e678c53e8b128cb4bf4c3763",
+        "603256c83731d211d638aacfbb82b1964eaabf257dbdcfcf8c2bce5d8c41a425",
     );
 }
 
 #[cfg(feature = "secp256k1")]
 #[test]
 fn test_ecdsa_secp256k1_derivation_pocketic_dfx_test_key() {
-    test_ecdsa_derivation(
+    test_ecdsa_secp256k1_derivation(
         "dfx_test_key",
         "uzt4z-lp777-77774-qaabq-cai",
         &[
@@ -364,7 +452,99 @@ fn test_ecdsa_secp256k1_derivation_pocketic_dfx_test_key() {
             "dfx_test_key",
         ],
         "03f005cf69911ae75f622ce0a621ccddba1a30ea1f6c3d67dd56acbbddb88a9374",
+        "a0898d1325d632c5851045f32a70f9b635ac74d6eb42a0d4029e8bb5570f4b14",
     );
+}
+
+#[cfg(feature = "secp256r1")]
+#[test]
+fn test_ecdsa_secp256r1_derivation_pocketic_key1() {
+    test_ecdsa_secp256r1_derivation(
+        "pocketic_key_1",
+        "uzt4z-lp777-77774-qaabq-cai",
+        &[
+            "Test",
+            "Derivation",
+            "For",
+            "PocketIC",
+            "ECDSA",
+            "secp256r1",
+            "key_1",
+        ],
+        "02d3536db48ecef1eb8249f04553046902fbe7d979140530e5294452b94f0e38ad",
+        "5bda5d523723999fcac4a482118b98b23faef6a9a0968c8984393891ca10a11b",
+    );
+}
+
+#[cfg(feature = "secp256r1")]
+#[test]
+fn test_ecdsa_secp256r1_derivation_pocketic_test_key1() {
+    test_ecdsa_secp256r1_derivation(
+        "pocketic_test_key_1",
+        "uzt4z-lp777-77774-qaabq-cai",
+        &[
+            "Test",
+            "Derivation",
+            "For",
+            "PocketIC",
+            "ECDSA",
+            "secp256r1",
+            "test_key_1",
+        ],
+        "03080d5850ca18f277d7f39c3cfd37635b6527a73ba63b774d26d4cdf725e1ce39",
+        "2ceb3a125d9d9a936b6da671f8b185da23d295ee84855adbca671598c728ff75",
+    );
+}
+
+#[cfg(feature = "secp256r1")]
+#[test]
+fn test_ecdsa_secp256r1_derivation_pocketic_dfx_test_key() {
+    test_ecdsa_secp256r1_derivation(
+        "dfx_test_key",
+        "uzt4z-lp777-77774-qaabq-cai",
+        &[
+            "Test",
+            "Derivation",
+            "For",
+            "PocketIC",
+            "ECDSA",
+            "secp256r1",
+            "dfx_test_key",
+        ],
+        "036cd2e52401b60ec8b86041f9c624438eb69ab271def9c9a439bd9fb49fa88ac7",
+        "3599e883d6781d34d0bf342c0ac973d67fd06e72a93a6fbad691da461d4076f2",
+    );
+}
+
+#[cfg(any(feature = "secp256k1", feature = "secp256r1"))]
+fn test_ecdsa_derivation_rejects_unknown_key(curve: EcdsaCurve) {
+    use std::str::FromStr;
+
+    let args = EcdsaPublicKeyArgs {
+        canister_id: Some(ic_pub_key::CanisterId::from_str("h5jwf-5iaaa-aaaan-qmvoa-cai").unwrap()),
+        derivation_path: vec![],
+        key_id: EcdsaKeyId {
+            curve,
+            name: "key_2".to_string(),
+        },
+    };
+
+    assert_eq!(
+        derive_ecdsa_key(&args).unwrap_err(),
+        Error::UnknownKeyIdentifier
+    );
+}
+
+#[cfg(feature = "secp256k1")]
+#[test]
+fn test_ecdsa_secp256k1_derivation_rejects_unknown_key() {
+    test_ecdsa_derivation_rejects_unknown_key(EcdsaCurve::Secp256k1);
+}
+
+#[cfg(feature = "secp256r1")]
+#[test]
+fn test_ecdsa_secp256r1_derivation_rejects_unknown_key() {
+    test_ecdsa_derivation_rejects_unknown_key(EcdsaCurve::Secp256r1);
 }
 
 #[test]

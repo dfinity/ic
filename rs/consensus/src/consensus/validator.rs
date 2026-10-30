@@ -39,8 +39,8 @@ use ic_types::{
         Block, BlockMetadata, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage,
         CatchUpShareContent, Committee, ConsensusMessage, ConsensusMessageHashable, DataPayload,
         EquivocationProof, FinalizationContent, HasBlockHash, HasCommittee, HasHash, HasHeight,
-        HasRank, HasVersion, Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare,
-        RandomTape, RandomTapeShare, Rank,
+        HasRank, HasVersion, HashedBlock, Notarization, NotarizationContent, RandomBeacon,
+        RandomBeaconShare, RandomTape, RandomTapeShare, Rank,
         catchup::{CatchUpPackageParam, CatchUpPackageType},
         dkg::{
             DkgPayloadValidationFailure, InvalidDkgPayloadReason, PostSplitArgs,
@@ -683,11 +683,10 @@ fn verify_threshold_committee(
 fn get_notarized_parent(
     pool: &PoolReader<'_>,
     proposal: &BlockProposal,
-) -> Result<Block, ValidatorError> {
+) -> Result<HashedBlock, ValidatorError> {
     let parent = &proposal.as_ref().parent;
     let height = proposal.height().decrement();
     pool.get_notarized_block(parent, height)
-        .map(|block| block.into_inner())
         .ok_or_else(|| ValidationFailure::BlockNotFound(parent.clone(), height).into())
 }
 
@@ -1193,7 +1192,7 @@ impl Validator {
                 self.registry_client.as_ref(),
                 self.replica_config.subnet_id,
                 pool_reader,
-                parent,
+                parent.into_inner(),
                 proposal.height(),
                 proposal.rank(),
                 self.time_source.as_ref(),
@@ -1298,9 +1297,10 @@ impl Validator {
             return Err(InvalidArtifactReason::CannotVerifyBlockHeightZero.into());
         }
 
-        let parent = get_notarized_parent(pool_reader, proposal)?;
+        let hashed_parent = get_notarized_parent(pool_reader, proposal)?;
+        let parent = hashed_parent.get_value();
         let last_summary_block = pool_reader
-            .dkg_summary_block(&parent)
+            .dkg_summary_block(parent)
             .ok_or(ValidationFailure::DkgSummaryNotFound(parent.height))?;
         let Some(status) = status::get_status(
             proposal.height(),
@@ -1338,7 +1338,7 @@ impl Validator {
         // proposal. Any heights after that point will have instants, so there will be no
         // further slowdown for other rounds.
         let parent_block_instant = pool_reader
-            .get_block_instant(&proposal.parent)
+            .get_block_instant(&hashed_parent)
             .unwrap_or(self.time_source.get_origin_instant());
         let duration_since_received_parent = self
             .time_source
@@ -1491,7 +1491,7 @@ impl Validator {
             pool_reader,
             self.state_manager.as_ref(),
             &proposal.context,
-            &parent,
+            parent,
             &last_summary_block,
             proposal.payload.as_ref(),
             self.metrics.idkg_validation_duration.clone(),

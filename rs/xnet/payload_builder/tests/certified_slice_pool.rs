@@ -14,7 +14,7 @@ use ic_replicated_state::Stream;
 use ic_replicated_state::testing::StreamTesting;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    HistogramStats, fetch_int_counter_vec, metric_vec, nonzero_values,
+    HistogramStats, fetch_int_counter, fetch_int_counter_vec, metric_vec, nonzero_values,
 };
 use ic_test_utilities_state::arb_stream_slice;
 use ic_test_utilities_types::xnet::{StreamHeaderBuilder, StreamSliceBuilder};
@@ -26,8 +26,9 @@ use ic_types::xnet::{
 use ic_types::{CountBytes, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{
     CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER, CertifiedSliceError, CertifiedSlicePool,
-    CertifiedSliceResult, InvalidAppend, InvalidSlice, LABEL_STATUS, STATUS_LESS_USEFUL,
-    STATUS_NONE, STATUS_SUCCESS, UnpackedStreamSlice, certified_slice_count_bytes, testing,
+    CertifiedSliceResult, InvalidAppend, InvalidSlice, LABEL_STATUS,
+    METRIC_LAGGING_PUT_AND_APPEND_COUNT, STATUS_LESS_USEFUL, STATUS_NONE, STATUS_SUCCESS,
+    UnpackedStreamSlice, certified_slice_count_bytes, testing,
 };
 use ic_xnet_payload_builder::{ExpectedIndices, MAX_SIGNALS, STREAM_INDEX_MAX, max_message_index};
 use maplit::btreemap;
@@ -1798,11 +1799,11 @@ fn pool_put_more_useful_slice_only(
     });
 }
 
-/// Tests that `schedule_pending_pulls()` schedules a pull from a peer iff its
-/// recorded header offers something not covered by the cached stream position
-/// (or pooled slice); and only once.
+/// Tests that `subnets_with_something_to_pull()` returns a peer iff its recorded
+/// header offers something not covered by the cached stream position (or pooled
+/// slice).
 #[test]
-fn pool_schedule_pending_pulls() {
+fn pool_subnets_with_something_to_pull() {
     with_test_replica_logger(|log| {
         let mut pool = CertifiedSlicePool::new(&MetricsRegistry::new(), log);
         let header = StreamHeaderBuilder::new()
@@ -1812,17 +1813,19 @@ fn pool_schedule_pending_pulls() {
             .build();
         let no_reject_signals = btreemap![];
 
-        // Nothing scheduled for a peer we have heard nothing from.
-        pool.schedule_pending_pulls(&no_reject_signals);
-        assert!(!pool.unschedule_pull(SRC_SUBNET));
+        // Nothing to pull from a peer we have heard nothing from.
+        assert!(
+            pool.subnets_with_something_to_pull(&no_reject_signals)
+                .is_empty()
+        );
 
         // With nothing pooled and no stream position, the recorded header has
-        // something to pull. Scheduled only once.
+        // something to pull.
         pool.record_peer_header(SRC_SUBNET, &header);
-        pool.schedule_pending_pulls(&no_reject_signals);
-        pool.schedule_pending_pulls(&no_reject_signals);
-        assert!(pool.unschedule_pull(SRC_SUBNET));
-        assert!(!pool.unschedule_pull(SRC_SUBNET));
+        assert_eq!(
+            vec![SRC_SUBNET],
+            pool.subnets_with_something_to_pull(&no_reject_signals)
+        );
 
         // Nothing to pull once past payloads cover the recorded header...
         pool.garbage_collect(btreemap! {
@@ -1832,8 +1835,10 @@ fn pool_schedule_pending_pulls() {
                 max_no_gc_header_begin: header.begin(),
             }
         });
-        pool.schedule_pending_pulls(&no_reject_signals);
-        assert!(!pool.unschedule_pull(SRC_SUBNET));
+        assert!(
+            pool.subnets_with_something_to_pull(&no_reject_signals)
+                .is_empty()
+        );
 
         // ...unless the recorded header's `begin` would garbage collect a reject
         // signal of ours that the stream position's would not.
@@ -1844,15 +1849,47 @@ fn pool_schedule_pending_pulls() {
                 max_no_gc_header_begin: 0.into(),
             }
         });
-        pool.schedule_pending_pulls(&btreemap! {
-            SRC_SUBNET => stream_with_reject_signal_at(0.into())
-        });
-        assert!(pool.unschedule_pull(SRC_SUBNET));
+        assert_eq!(
+            vec![SRC_SUBNET],
+            pool.subnets_with_something_to_pull(&btreemap! {
+                SRC_SUBNET => stream_with_reject_signal_at(0.into())
+            })
+        );
+    });
+}
+
+/// Tests that a header advances the peer's recorded header iff there is none, or
+/// it is ahead of it in any of `begin`, `end` or `signals_end`.
+#[test]
+fn pool_advances_recorded_peer_header() {
+    with_test_replica_logger(|log| {
+        let mut pool = CertifiedSlicePool::new(&MetricsRegistry::new(), log);
+        let header = |begin: u64, end: u64, signals_end: u64| {
+            StreamHeaderBuilder::new()
+                .begin(begin.into())
+                .end(end.into())
+                .signals_end(signals_end.into())
+                .build()
+        };
+
+        assert!(pool.advances_recorded_peer_header(SRC_SUBNET, &header(0, 0, 0)));
+
+        pool.record_peer_header(SRC_SUBNET, &header(2, 5, 3));
+        // Equal, or behind in every index.
+        assert!(!pool.advances_recorded_peer_header(SRC_SUBNET, &header(2, 5, 3)));
+        assert!(!pool.advances_recorded_peer_header(SRC_SUBNET, &header(1, 4, 2)));
+        // Ahead in any one index.
+        assert!(pool.advances_recorded_peer_header(SRC_SUBNET, &header(3, 5, 3)));
+        assert!(pool.advances_recorded_peer_header(SRC_SUBNET, &header(2, 6, 3)));
+        assert!(pool.advances_recorded_peer_header(SRC_SUBNET, &header(2, 5, 4)));
+        // Ahead in one index, behind in others.
+        assert!(pool.advances_recorded_peer_header(SRC_SUBNET, &header(1, 6, 2)));
     });
 }
 
 /// Tests that a peer's header is recorded on every incoming slice, whether or
-/// not the slice is pooled; and that it never regresses.
+/// not the slice is pooled; that it never regresses; and that slices behind it
+/// are counted as having been pulled from a lagging node.
 #[test_strategy::proptest(ProptestConfig::with_cases(10))]
 fn pool_peer_header(
     #[strategy(arb_stream_slice(
@@ -1902,6 +1939,10 @@ fn pool_peer_header(
         // And a header behind it in signals does not replace it.
         put(&pool, SRC_SUBNET, slice, &store, &log).unwrap();
         assert_eq!(Some(newer_header.clone()), peer_header(&pool, SRC_SUBNET));
+        assert_eq!(
+            Some(1),
+            fetch_int_counter(&fixture.metrics, METRIC_LAGGING_PUT_AND_APPEND_COUNT)
+        );
 
         // Neither does an identical one.
         {

@@ -874,7 +874,8 @@ impl QueryContext {
             measurement_scope,
         );
 
-        self.round_limits.instructions -= self.instruction_overhead_per_query_call;
+        self.round_limits
+            .deduct_instructions(self.instruction_overhead_per_query_call);
 
         match result {
             // Execution of the message failed. We do not need to bother with
@@ -940,7 +941,8 @@ impl QueryContext {
         // Charge the base overhead of a query call. This happens after rejecting
         // calls to methods that are not management canister query methods, in the
         // same way as calls to non-existing methods of a canister are not charged.
-        self.round_limits.instructions -= self.instruction_overhead_per_query_call;
+        self.round_limits
+            .deduct_instructions(self.instruction_overhead_per_query_call);
 
         let since = Instant::now(); // Start logging execution time.
         let (result, instructions) = match execute_subnet_query(
@@ -958,7 +960,8 @@ impl QueryContext {
 
         // Account for the instructions consumed while producing the reply
         // in the same way as for the instructions executed by a canister.
-        self.round_limits.instructions -= as_round_instructions(instructions);
+        self.round_limits
+            .deduct_instructions(as_round_instructions(instructions));
 
         match result {
             Ok(reply) => ExecutionResult::Response(to_query_result(Payload::Data(reply))),

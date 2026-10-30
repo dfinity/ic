@@ -1,6 +1,7 @@
 use super::*;
 
 use crate::invariants::common::RegistrySnapshot;
+use attestation::LAUNCH_MEASUREMENT_LEN;
 use ic_base_types::SubnetId;
 use ic_protobuf::{
     registry::{
@@ -205,8 +206,8 @@ fn elect_replica_version(
     let guest_launch_measurements = if with_launch_measurements {
         Some(GuestLaunchMeasurements {
             guest_launch_measurements: vec![GuestLaunchMeasurement {
-                // A SEV-SNP measurement is 48 bytes long. The value itself does not matter here.
-                measurement: vec![0x42; 48],
+                // The value itself does not matter here.
+                measurement: vec![0x42; LAUNCH_MEASUREMENT_LEN],
                 metadata: None,
             }],
         })

@@ -271,6 +271,9 @@ rust_test(
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
     ],
+    tags = [
+        "long_test",  # The P90 duration was over 5 minutes in the month up to 2026-10-28.
+    ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
@@ -286,6 +289,9 @@ rust_test(
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
+    ],
+    tags = [
+        "long_test",  # The P90 duration was over 5 minutes in the month up to 2026-10-28.
     ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
 )

@@ -1,6 +1,7 @@
 //! Common test fixtures for `XNetPayloadBuilder` tests.
 
 use super::*;
+use crate::exchange::GenRangeFn;
 use ic_base_types::PrincipalId;
 use ic_canonical_state::CURRENT_CERTIFICATION_VERSION;
 use ic_interfaces_state_manager::CertificationScope;

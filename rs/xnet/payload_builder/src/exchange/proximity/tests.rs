@@ -1,5 +1,5 @@
-use super::super::test_fixtures::*;
 use super::*;
+use crate::test_fixtures::*;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     MetricVec, fetch_gauge_vec, fetch_int_counter, fetch_int_gauge, metric_vec,
