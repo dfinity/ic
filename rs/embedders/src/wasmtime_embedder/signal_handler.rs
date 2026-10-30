@@ -4,7 +4,8 @@ use crate::wasmtime_embedder::host_memory::MemoryPageSize;
 use ic_types::NumBytes;
 use libc::c_void;
 use memory_tracker::{
-    DeterministicMemoryTracker, signal_access_kind_and_address, signal_mutex::SignalMutex,
+    DeterministicMemoryTracker, SigsegvOutcome, signal_access_kind_and_address,
+    signal_mutex::SignalMutex,
 };
 use std::convert::TryFrom;
 use std::sync::{Arc, atomic::Ordering};
@@ -88,9 +89,16 @@ pub(crate) fn sigsegv_memory_tracker_handler(
 
         // We handle SIGSEGV from the Wasm module heap ourselves.
         if memory_tracker.memory_area().contains(si_addr) {
-            // Returns true if the signal has been handled by our handler which indicates
-            // that the instance should continue.
-            memory_tracker.handle_sigsegv(access_kind, si_addr)
+            match memory_tracker.handle_sigsegv(access_kind, si_addr) {
+                // The signal has been handled by our handler, so the instance
+                // should continue.
+                SigsegvOutcome::Handled => true,
+                // The page was not mapped because of the accessed page limit.
+                // Returning `false` makes wasmtime treat the access as a trap.
+                SigsegvOutcome::Refused => false,
+                // Unreachable: the address is within the tracked area.
+                SigsegvOutcome::NotTracked => false,
+            }
         // The heap has expanded. Update tracked memory area.
         } else if let Some(heap_size) =
             check_if_expanded(&memory_tracker, si_addr, memory_page_size)
