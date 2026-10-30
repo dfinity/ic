@@ -197,50 +197,19 @@ impl From<MaybeStrippedConsensusMessage> for pb::StrippedConsensusMessage {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash)]
-pub struct StrippedConsensusMessageId(ConsensusMessageId);
-
-impl AsRef<ConsensusMessageId> for StrippedConsensusMessageId {
-    fn as_ref(&self) -> &ConsensusMessageId {
-        &self.0
-    }
-}
-
-impl From<StrippedConsensusMessageId> for pb::StrippedConsensusMessageId {
-    fn from(value: StrippedConsensusMessageId) -> Self {
-        pb::StrippedConsensusMessageId {
-            unstripped_id: Some(value.0.into()),
-        }
-    }
-}
-
-impl TryFrom<pb::StrippedConsensusMessageId> for StrippedConsensusMessageId {
-    type Error = ProxyDecodeError;
-
-    fn try_from(value: pb::StrippedConsensusMessageId) -> Result<Self, Self::Error> {
-        let unstripped = try_from_option_field(
-            value.unstripped_id,
-            "StrippedConsensusMessageId::unstripped_id",
-        )?;
-
-        Ok(Self(unstripped))
-    }
-}
-
 impl IdentifiableArtifact for MaybeStrippedConsensusMessage {
     const NAME: &'static str = "strippedconsensus";
 
-    type Id = StrippedConsensusMessageId;
+    /// A stripped message is identified by the message it was stripped from.
+    type Id = ConsensusMessageId;
 
     fn id(&self) -> Self::Id {
-        let unstripped_id = match self {
+        match self {
             MaybeStrippedConsensusMessage::Unstripped(unstripped) => unstripped.id(),
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) => {
                 stripped.unstripped_consensus_message_id.clone()
             }
-        };
-
-        StrippedConsensusMessageId(unstripped_id)
+        }
     }
 }
 

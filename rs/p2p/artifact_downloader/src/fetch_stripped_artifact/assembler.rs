@@ -1,7 +1,6 @@
 use std::{
     collections::BTreeMap,
     sync::{Arc, RwLock},
-    time::Duration,
 };
 use thiserror::Error;
 
@@ -56,17 +55,11 @@ use super::{
     stripper::Strippable,
     types::{
         SignedIngressId,
-        stripped::{
-            MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedConsensusMessageId,
-        },
+        stripped::{MaybeStrippedConsensusMessage, StrippedBlockProposal},
     },
 };
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
-
-struct BouncerFactoryWrapper<Pool> {
-    bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
-}
 
 /// Serves the messages of `consensus_pool` with their block proposals stripped.
 struct StrippingConsensusPool<Pool> {
@@ -80,22 +73,7 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrip
         &self,
         id: &<MaybeStrippedConsensusMessage as IdentifiableArtifact>::Id,
     ) -> Option<MaybeStrippedConsensusMessage> {
-        self.consensus_pool.get(id.as_ref()).map(Strippable::strip)
-    }
-}
-
-impl<Pool> BouncerFactory<StrippedConsensusMessageId, Pool> for BouncerFactoryWrapper<Pool> {
-    fn new_bouncer(
-        &self,
-        pool: &Pool,
-    ) -> ic_interfaces::p2p::consensus::Bouncer<StrippedConsensusMessageId> {
-        let nested = self.bouncer_factory.new_bouncer(pool);
-
-        Box::new(move |id| nested(id.as_ref()))
-    }
-
-    fn refresh_period(&self) -> Duration {
-        self.bouncer_factory.refresh_period()
+        self.consensus_pool.get(id).map(Strippable::strip)
     }
 }
 
@@ -140,7 +118,7 @@ impl FetchStrippedConsensusArtifact {
             log.clone(),
             rt,
             consensus_pool.clone(),
-            Arc::new(BouncerFactoryWrapper { bouncer_factory }),
+            bouncer_factory,
             metrics_registry.clone(),
         );
         let subrouter = FetchArtifact::<MaybeStrippedConsensusMessage>::router(Arc::new(
@@ -225,7 +203,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
                 self.idkg_pool.clone(),
                 self.canister_http_pool.clone(),
                 self.transport.clone(),
-                id.as_ref().clone(),
+                id.clone(),
                 self.log.clone(),
                 self.metrics.clone(),
                 self.node_id,
@@ -767,6 +745,7 @@ mod tests {
     use ic_types::consensus::idkg::IDkgObject;
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_2};
     use std::collections::BTreeSet;
+    use std::time::Duration;
     use tower::ServiceExt;
 
     use super::*;
@@ -1248,7 +1227,7 @@ mod tests {
     /// do.
     async fn request_consensus_message(
         router: axum::Router,
-        id: StrippedConsensusMessageId,
+        id: ConsensusMessageId,
     ) -> Result<MaybeStrippedConsensusMessage, StatusCode> {
         let request = Request::builder()
             .uri("/strippedconsensus/rpc")
@@ -1703,24 +1682,6 @@ mod tests {
         tokio::time::advance(BOUNCER_REFRESH_PERIOD).await;
 
         assert_eq!(handle.await.unwrap(), AssembleResult::Unwanted);
-    }
-
-    /// Stripped consensus messages are bounced like the consensus messages they were stripped
-    /// from, so their bouncer is refreshed just as often.
-    #[test]
-    fn bouncer_factory_wrapper_uses_the_wrapped_refresh_period() {
-        let refresh_period = Duration::from_millis(1234);
-        let mut bouncer_factory = MockBouncerFactory::<ConsensusMessage>::default();
-        bouncer_factory
-            .expect_refresh_period()
-            .times(1)
-            .return_const(refresh_period);
-        let wrapper: BouncerFactoryWrapper<MockValidatedPoolReader<ConsensusMessage>> =
-            BouncerFactoryWrapper {
-                bouncer_factory: Arc::new(bouncer_factory),
-            };
-
-        assert_eq!(wrapper.refresh_period(), refresh_period);
     }
 
     #[test]

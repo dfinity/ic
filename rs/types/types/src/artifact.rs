@@ -90,6 +90,24 @@ impl TryFrom<pb::ConsensusMessageId> for ConsensusMessageId {
     }
 }
 
+impl From<ConsensusMessageId> for pb::StrippedConsensusMessageId {
+    fn from(value: ConsensusMessageId) -> Self {
+        Self {
+            unstripped_id: Some(value.into()),
+        }
+    }
+}
+
+impl TryFrom<pb::StrippedConsensusMessageId> for ConsensusMessageId {
+    type Error = ProxyDecodeError;
+    fn try_from(value: pb::StrippedConsensusMessageId) -> Result<Self, Self::Error> {
+        try_from_option_field(
+            value.unstripped_id,
+            "StrippedConsensusMessageId::unstripped_id",
+        )
+    }
+}
+
 impl From<&ConsensusMessage> for ConsensusMessageId {
     fn from(msg: &ConsensusMessage) -> ConsensusMessageId {
         msg.get_id()
