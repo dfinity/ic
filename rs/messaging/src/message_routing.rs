@@ -132,6 +132,7 @@ const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_all
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
 pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
+pub const CRITICAL_ERROR_UPGRADE_PERMIT_EXPIRED: &str = "mr_upgrade_permit_expired";
 pub const CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE: &str = "mr_illegal_engine_message";
 const CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS: &str = "mr_illegal_non_empty_subnet_admins";
 const CRITICAL_ERROR_UNEXPECTED_INGRESS_STATUS_AFTER_MERGE: &str =
@@ -351,6 +352,9 @@ pub(crate) struct MessageRoutingMetrics {
     /// failures to induct responses.
     pub critical_error_induct_response_failed: IntCounter,
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
+    /// expired upgrade permits.
+    pub critical_error_upgrade_permit_expired: IntCounter,
+    /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
     /// messages to/from CloudEngine subnets that carried cycles or were
     /// guaranteed-response calls, which are not permitted on non-engine subnets.
     pub critical_error_engine_message: IntCounter,
@@ -499,6 +503,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_NON_INCREASING_BATCH_TIME),
             critical_error_induct_response_failed: metrics_registry
                 .error_counter(CRITICAL_ERROR_INDUCT_RESPONSE_FAILED),
+            critical_error_upgrade_permit_expired: metrics_registry
+                .error_counter(CRITICAL_ERROR_UPGRADE_PERMIT_EXPIRED),
             critical_error_engine_message: metrics_registry
                 .error_counter(CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE),
             critical_error_illegal_non_empty_subnet_admins: metrics_registry

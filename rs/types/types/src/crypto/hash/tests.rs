@@ -462,13 +462,12 @@ mod crypto_hash_stability {
     fn upgrade_permit_request_signed_bytes_stability() {
         let data = UpgradePermitRequest {
             requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
-            request_height: Height::from(42),
         };
         let mut bytes = vec![];
         data.write_signed_bytes_without_domain_separator(&mut bytes);
         assert_eq!(
             hex::encode(bytes),
-            "a269726571756573746f724a2a00000000000000fd016e726571756573745f686569676874182a",
+            "a169726571756573746f724a2a00000000000000fd01",
             "Signed bytes of UpgradePermitRequest changed"
         );
     }
@@ -479,7 +478,6 @@ mod crypto_hash_stability {
         let data: UpgradeAuthorizationShare = Signed {
             content: UpgradePermitRequest {
                 requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
-                request_height: Height::from(42),
             },
             signature: BasicSignature {
                 signature: BasicSigOf::new(BasicSig(vec![0x42; 64])),
@@ -489,7 +487,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "1e780154b2467bdf06efa99128aa50b5ad8db4a494a300cbe9d35b9747e85c98",
+            "2b110ca36709645a96a302dea4def8b469f45154f928e63843adcf3459747675",
             "Hash of UpgradeAuthorizationShare changed"
         );
     }

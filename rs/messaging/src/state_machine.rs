@@ -1,7 +1,10 @@
 use crate::canister_http_spent::{
     deliver_canister_http_spent, refund_timed_out_canister_http_contexts,
 };
-use crate::message_routing::{CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics};
+use crate::message_routing::{
+    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, CRITICAL_ERROR_UPGRADE_PERMIT_EXPIRED,
+    MessageRoutingMetrics,
+};
 use crate::routing::demux::Demux;
 use crate::routing::stream_builder::{
     StreamBuilder, generate_reject_responses_for_deleted_subnets,
@@ -163,6 +166,21 @@ impl StateMachine for StateMachineImpl {
                 return state;
             }
         };
+
+        for node in state.metadata.upgrade_state.apply(
+            &batch_messages.upgrade_actions,
+            batch.batch_number,
+            &registry_settings.node_ids,
+        ) {
+            error!(
+                self.log,
+                "{}: Upgrade permit request from '{}' expired at height '{}'",
+                CRITICAL_ERROR_UPGRADE_PERMIT_EXPIRED,
+                node,
+                batch.batch_number,
+            );
+            self.metrics.critical_error_upgrade_permit_expired.inc();
+        }
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
         if let Some(query_stats) = &batch_messages.query_stats {
