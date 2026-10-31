@@ -14578,15 +14578,20 @@ dependencies = [
 name = "ic-subnet-merging"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
  "clap",
  "futures",
  "ic-base-types",
+ "ic-cup-explorer",
  "ic-interfaces-registry",
  "ic-protobuf",
  "ic-recovery",
  "ic-registry-client-helpers",
+ "ic-registry-routing-table",
  "ic-registry-subnet-type",
+ "ic-state-layout",
  "ic-subnet-tools",
+ "ic-test-utilities-tmpdir",
  "ic-types",
  "prometheus-parse",
  "reqwest",
@@ -17795,6 +17800,7 @@ dependencies = [
  "candid",
  "canister-test",
  "dfn_candid",
+ "hex",
  "ic-agent",
  "ic-base-types",
  "ic-management-canister-types 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
