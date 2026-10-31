@@ -1,8 +1,11 @@
 use candid::Encode;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
-use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, LogVisibilityV2};
+use ic_management_canister_types_private::{
+    BoundedVec, CanisterSettingsArgsBuilder, LogVisibilityV2,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig};
+use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{CanisterId, PrincipalId};
 use ic_types_cycles::Cycles;
 use regex_lite::RegexBuilder;
@@ -191,9 +194,83 @@ _wasm_backtrace_canister::stable_oob::outer
     )
 }
 
-mod visibility {
-    use ic_management_canister_types_private::BoundedVec;
+#[test]
+fn backtrace_visibility_after_paused_execution() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_controllers(vec![CONTROLLER])
+        .with_log_visibility(LogVisibilityV2::AllowedViewers(BoundedVec::new(vec![])))
+        .build();
+    // The application subnet executes at most 2B instructions per slice
+    // and 4B instructions per round, so a 5B-instruction execution is
+    // still paused at the end of the first round.
+    // Give the Wasm function a name so a visible trap includes a backtrace.
+    let named_wasm = wat::parse_str(
+        r#"(module
+            (import "ic0" "performance_counter" (func $performance_counter (param i32) (result i64)))
+            (import "ic0" "trap" (func $trap (param i32 i32)))
+            (memory 1)
+            (func $update (export "canister_update update")
+                (loop $wait
+                    (br_if $wait
+                        (i64.lt_u
+                            (call $performance_counter (i32.const 0))
+                            (i64.const 5000000000))))
+                (call $trap (i32.const 0) (i32.const 0))))"#,
+    )
+    .unwrap();
+    let canister_id = env
+        .install_canister_with_cycles(
+            named_wasm,
+            vec![],
+            Some(settings),
+            Cycles::new(1_000_000 * B),
+        )
+        .unwrap();
+    // Executes the update method and asserts that the execution
+    // is still paused (i.e., not yet completed) after the first round.
+    let execute_paused = |caller: PrincipalId| {
+        let msg_id = env.send_ingress(caller, canister_id, "update", vec![]);
+        env.tick();
+        assert!(
+            env.get_latest_state()
+                .canister_state(&canister_id)
+                .unwrap()
+                .has_paused_execution(),
+            "Expected paused execution after one round"
+        );
+        let status = env.ingress_status(&msg_id);
+        assert!(
+            matches!(
+                status,
+                IngressStatus::Known {
+                    state: IngressState::Processing,
+                    ..
+                }
+            ),
+            "Expected ingress message to be processing after one round, got {status:?}"
+        );
+        env.await_ingress(msg_id, 10).unwrap_err()
+    };
 
+    let err = execute_paused(OTHER1);
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(
+        !err.description().contains("Canister Backtrace:"),
+        "Unexpected backtrace in error: {err}"
+    );
+
+    let err = execute_paused(CONTROLLER);
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(
+        err.description().contains("Canister Backtrace:"),
+        "Missing backtrace in controller error: {err}"
+    );
+}
+
+mod visibility {
     use super::*;
 
     // Check that the backtrace is seen or not seen by the caller. It should
