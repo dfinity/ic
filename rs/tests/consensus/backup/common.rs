@@ -273,6 +273,7 @@ pub fn test(env: TestEnv) {
         replay_period_secs: 30,
         thread_id: 0,
         disable_cold_storage: false,
+        cold_storage_retention_policy: None,
     };
     let cold_storage = Some(ColdStorage {
         cold_storage_dir: cold_storage_dir.clone(),

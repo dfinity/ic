@@ -76,6 +76,9 @@ async fn main() {
         Some(SubCommand::GetReplicaVersion { subnet_id }) => {
             BackupManager::get_version(log, args.config_file, subnet_id.0)
         }
+        Some(SubCommand::SimulateRetentionPolicy { subnet_id, rules }) => {
+            BackupManager::simulate_retention_policy(log, args.config_file, subnet_id.0, rules);
+        }
         _ => {
             // TODO(CON-1548): gracefully stop backup tasks on SIGTERM
             let bm = BackupManager::new(log, args, CancellationToken::new()).await;
