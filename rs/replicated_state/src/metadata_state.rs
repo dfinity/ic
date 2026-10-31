@@ -2438,13 +2438,14 @@ pub struct UpgradeState {
 
 impl UpgradeState {
     /// Apply a block's upgrade actions at `height`, pruning expired
-    /// requests and permits of departed members.
+    /// requests and permits of departed members. Any nodes with expired
+    /// requests are returned for logging.
     pub fn apply(
         &mut self,
         actions: &[UpgradePermitAction],
         height: Height,
         subnet_members: &BTreeSet<NodeId>,
-    ) {
+    ) -> Vec<NodeId> {
         for action in actions {
             match action {
                 UpgradePermitAction::RequestPermit(request) => {
@@ -2463,15 +2464,23 @@ impl UpgradeState {
         }
 
         // Expire stale requests and prune departed members.
+        let mut expired = Vec::new();
         self.unauthorized_upgrade_requests
             .retain(|node, req_height| {
-                *req_height + UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS >= height
-                    && subnet_members.contains(node)
+                let retain = *req_height + UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS >= height
+                    && subnet_members.contains(node);
+                if !retain {
+                    expired.push(*node);
+                }
+
+                retain
             });
 
         // Prune departed members.
         self.rebooting_nodes
             .retain(|node| subnet_members.contains(node));
+
+        expired
     }
 }
 
