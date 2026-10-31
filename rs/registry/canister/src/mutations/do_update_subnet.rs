@@ -769,6 +769,7 @@ mod tests {
             is_halted: false,
             halt_at_cup_height: false,
             cooling_down: false,
+            is_in_recovery_mode: false,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -869,6 +870,7 @@ mod tests {
                 is_halted: true,
                 halt_at_cup_height: false,
                 cooling_down: true,
+                is_in_recovery_mode: false,
                 features: Some(
                     SubnetFeatures {
                         canister_sandboxing: false,
@@ -917,6 +919,7 @@ mod tests {
             is_halted: false,
             halt_at_cup_height: false,
             cooling_down: false,
+            is_in_recovery_mode: false,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -993,6 +996,7 @@ mod tests {
                 is_halted: false,
                 halt_at_cup_height: true,
                 cooling_down: false,
+                is_in_recovery_mode: false,
                 features: None,
                 max_number_of_canisters: 50,
                 ssh_readonly_access: vec![],

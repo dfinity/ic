@@ -144,6 +144,14 @@ impl<'a> ConsensusRunner<'a> {
             deps.replica_config.clone(),
         )));
         let malicious_flags = MaliciousFlags::default();
+        let certification_pool = Arc::new(std::sync::RwLock::new(
+            ic_artifact_pool::certification_pool::CertificationPoolImpl::new(
+                node_id,
+                pool_config.clone(),
+                replica_logger.clone(),
+                deps.metrics_registry.clone(),
+            ),
+        ));
         let consensus = ic_consensus::consensus::ConsensusImpl::new(
             deps.replica_config.clone(),
             Arc::clone(&deps.registry_client),
@@ -158,6 +166,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.upgrade_payload_builder.clone(),
             deps.dkg_pool.clone(),
             deps.idkg_pool.clone(),
+            certification_pool.clone(),
             dkg_key_manager.clone(),
             deps.message_routing.clone(),
             deps.state_manager.clone(),
@@ -220,10 +229,10 @@ impl<'a> ConsensusRunner<'a> {
                 apply_modifier_idkg(&modifier, idkg),
                 Box::new(certifier),
                 deps.consensus_pool.clone(),
+                certification_pool,
                 deps.dkg_pool.clone(),
                 deps.idkg_pool.clone(),
                 replica_logger,
-                deps.metrics_registry.clone(),
             ),
             clock: RefCell::new(now),
             index: self.instances.len(),

@@ -121,6 +121,21 @@ pub struct SubnetRecord {
     /// semantics.
     #[prost(bool, tag = "35")]
     pub cooling_down: bool,
+    /// If `true`, the subnet is instructed to perform an automated recovery:
+    /// consensus stops certifying new heights, delivers batches only up to the
+    /// latest state that at least `f + 1` nodes certified, checkpoints one height
+    /// above it, and produces a recovery CUP skipping ahead a full DKG interval
+    /// (using the registry version at which this flag was set). Nodes read this
+    /// flag at the *latest* registry version (like `recalled_replica_version_ids`
+    /// and unlike `replica_version_id`, which is read at the CUP's registry
+    /// version).
+    ///
+    /// Note: the mutation setting this flag is not implemented yet; it would live
+    /// in the registry canister, either in `do_update_subnet.rs`
+    /// (`merge_subnet_record`) or as a new operational level code in
+    /// `do_set_subnet_operational_level.rs`.
+    #[prost(bool, tag = "36")]
+    pub is_in_recovery_mode: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {

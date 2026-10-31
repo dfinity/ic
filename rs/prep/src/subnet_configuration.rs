@@ -351,6 +351,7 @@ impl SubnetConfig {
             is_halted: self.running_state == SubnetRunningState::Halted,
             halt_at_cup_height: false,
             cooling_down: false,
+            is_in_recovery_mode: false,
             features: Some(self.features.into()),
             max_number_of_canisters: self.max_number_of_canisters,
             ssh_readonly_access: self.ssh_readonly_access,

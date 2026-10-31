@@ -156,6 +156,14 @@ fn consensus_produces_expected_batches() {
             no_op_logger(),
             summary.height,
         )));
+        let certification_pool = Arc::new(RwLock::new(
+            ic_artifact_pool::certification_pool::CertificationPoolImpl::new(
+                node_id,
+                pool_config.clone(),
+                no_op_logger(),
+                metrics_registry.clone(),
+            ),
+        ));
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
             node_id,
             subnet_id,
@@ -190,6 +198,7 @@ fn consensus_produces_expected_batches() {
             upgrade_payload_builder,
             Arc::clone(&dkg_pool) as Arc<_>,
             Arc::clone(&idkg_pool) as Arc<_>,
+            Arc::clone(&certification_pool) as Arc<_>,
             dkg_key_manager.clone(),
             Arc::clone(&router) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
@@ -240,10 +249,10 @@ fn consensus_produces_expected_batches() {
             Box::new(idkg),
             Box::new(certifier),
             consensus_pool,
+            certification_pool,
             dkg_pool,
             idkg_pool,
             no_op_logger(),
-            metrics_registry,
         );
         driver.step(); // this stops before notary timeout expires after making 1st block
         time_source.advance_time(INITIAL_NOTARY_DELAY);
