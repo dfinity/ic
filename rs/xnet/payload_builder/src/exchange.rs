@@ -12,7 +12,7 @@ mod xnet_client_tests;
 pub use proximity::{GenRangeFn, ProximityMap};
 
 use crate::certified_slice_pool::{
-    CertifiedSlicePool, POOLED_SLICE_BYTE_SIZE_MAX, decode_slice_header,
+    CertifiedSliceError, CertifiedSlicePool, POOLED_SLICE_BYTE_SIZE_MAX, decode_slice_header,
 };
 use crate::{LABEL_STATUS, STATUS_SUCCESS};
 use async_trait::async_trait;
@@ -607,8 +607,8 @@ pub(crate) struct XNetAdvertHandlerImpl {
     /// Used for retrieving the registry version to verify adverts against.
     registry: Arc<dyn RegistryClient>,
 
-    /// Classifies adverts against the pooled slices and stream positions; and
-    /// holds the recorded headers.
+    /// Classifies adverts against the pooled slices and stream positions; holds the
+    /// recorded headers; and pools verified adverts.
     slice_pool: Arc<Mutex<CertifiedSlicePool>>,
 
     /// Used for requesting pulls from peers whose adverts offer something to pull.
@@ -741,22 +741,27 @@ impl XNetAdvertHandler for XNetAdvertHandlerImpl {
         // condition here, but it's benign: our and the peer's views of the subnet
         // record will converge eventually, and unblock validation.
         let registry_version = self.registry.get_latest_version();
-        let slice = self
-            .certified_stream_store
-            .decode_certified_stream_slice(source_subnet, registry_version, &advert)
-            .map_err(|err| match err {
-                DecodeStreamError::InvalidSignature(_) => XNetAdvertError::InvalidSignature,
-                _ => XNetAdvertError::DecodeError(err.to_string()),
-            })?;
-        debug_assert_eq!(slice.header(), &claimed, "Inconsistent slice decoding");
 
-        // Record every verified header: even a `NothingNew` one may advance the peer's
-        // `begin`, acknowledging our signals and changing whether we still owe it an
-        // advert.
-        self.slice_pool
-            .lock()
-            .unwrap()
-            .record_peer_header(source_subnet, slice.header());
+        // Verify and pool the advertised header: it may only displace a header-only
+        // slice (see `compare_usefulness()`), but it is recorded either way: even a
+        // `NothingNew` header may advance the peer's `begin`, acknowledging our signals
+        // and changing whether we still owe it an advert.
+        CertifiedSlicePool::put(
+            &self.slice_pool,
+            source_subnet,
+            advert,
+            self.certified_stream_store.as_ref(),
+            registry_version,
+            &self.log,
+        )
+        .map_err(|err| match err {
+            CertifiedSliceError::DecodeStreamError(DecodeStreamError::InvalidSignature(_)) => {
+                XNetAdvertError::InvalidSignature
+            }
+            // Any other error from `put()` means the advert itself is malformed.
+            _ => XNetAdvertError::DecodeError(err.to_string()),
+        })?;
+
         if outcome == XNetAdvertOutcome::Actionable {
             self.pull_task.request_pull(source_subnet);
         }
