@@ -22,13 +22,11 @@ PUBLIC_KEY_NAME="ic_public_key.pem"
 PUBLIC_KEY_FILE="${TMP_DIR}/${PUBLIC_KEY_NAME}"
 BACKUP_INSTANCE=$(hostname -a)
 
-DEFAULT_BUILD_ID="6a917910ff4dc50b45e45a83c840091b51ef2a4f"
-echo "Enter the BUILD_ID of the proper ic-backup version:"
-echo "(default: ${DEFAULT_BUILD_ID}):"
-read BUILD_ID
-if [ -z "${BUILD_ID// /}" ]; then
-    BUILD_ID=${DEFAULT_BUILD_ID}
-fi
+BUILD_ID=""
+while [ -z "${BUILD_ID// /}" ]; do
+    echo "Enter the BUILD_ID (GIT SHA) of the proper ic-backup version (required):"
+    read BUILD_ID
+done
 
 DEFAULT_USER_ID=$(whoami)
 echo "Enter the local USER_ID that will run the backup:"
@@ -76,7 +74,7 @@ echo
 
 ROOT_DIR="${WORK_DIR}/backup"
 
-DOWNLOAD_URL="https://download.dfinity.systems/ic/${BUILD_ID}/release/${BACKUP_EXE_NAME}.gz"
+DOWNLOAD_URL="https://download.dfinity.systems/ic/${BUILD_ID}/binaries/x86_64-linux/${BACKUP_EXE_NAME}.gz"
 echo "Downloading: ${DOWNLOAD_URL}"
 curl -L ${DOWNLOAD_URL} --output ${BACKUP_EXE_GZ}
 

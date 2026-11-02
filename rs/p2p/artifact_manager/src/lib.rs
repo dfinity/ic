@@ -3,8 +3,8 @@ use ic_interfaces::{
     p2p::{
         artifact_manager::JoinGuard,
         consensus::{
-            ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool,
-            PoolMutationsProducer, UnvalidatedArtifact, ValidatedPoolReader,
+            ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, InitialBroadcastSource,
+            MutablePool, PoolMutationsProducer, UnvalidatedArtifact,
         },
     },
     time_source::TimeSource,
@@ -226,9 +226,7 @@ fn process_messages<Artifact: IdentifiableArtifact + 'static>(
 /// Periodic duration of `PollEvent` in milliseconds.
 const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 
-pub fn create_ingress_handlers<
-    PoolIngress: MutablePool<SignedIngress> + Send + Sync + ValidatedPoolReader<SignedIngress> + 'static,
->(
+pub fn create_ingress_handlers<PoolIngress: MutablePool<SignedIngress> + Send + Sync + 'static>(
     channel: AbortableBroadcastChannel<SignedIngress>,
     time_source: Arc<dyn TimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
@@ -255,7 +253,7 @@ pub fn create_ingress_handlers<
 /// Starts the event loop that polls consensus for updates on what needs to be replicated.
 pub fn create_artifact_handler<
     Artifact: IdentifiableArtifact + Send + Sync + 'static,
-    Pool: MutablePool<Artifact> + Send + Sync + ValidatedPoolReader<Artifact> + 'static,
+    Pool: MutablePool<Artifact> + Send + Sync + InitialBroadcastSource<Artifact> + 'static,
     C: PoolMutationsProducer<Pool, Mutations = <Pool as MutablePool<Artifact>>::Mutations> + 'static,
 >(
     channel: AbortableBroadcastChannel<Artifact>,

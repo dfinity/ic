@@ -47,6 +47,7 @@ pub type CertifiedSliceResult<T> = Result<T, CertifiedSliceError>;
 struct CertifiedSlicePoolMetrics {
     pool_size_bytes: IntGauge,
     put_count: IntCounterVec,
+    lagging_put_and_append_count: IntCounter,
     take_count: IntCounterVec,
     take_messages: Histogram,
     take_gced_messages: Histogram,
@@ -56,6 +57,7 @@ struct CertifiedSlicePoolMetrics {
 
 pub const METRIC_POOL_SIZE_BYTES: &str = "xnet_pool_size_bytes";
 pub const METRIC_PUT_COUNT: &str = "xnet_pool_put_count";
+pub const METRIC_LAGGING_PUT_AND_APPEND_COUNT: &str = "xnet_pool_lagging_put_and_append_count";
 pub const METRIC_TAKE_COUNT: &str = "xnet_pool_take_count";
 pub const METRIC_TAKE_MESSAGES: &str = "xnet_pool_take_messages";
 pub const METRIC_TAKE_SIZE_BYTES: &str = "xnet_pool_take_size_bytes";
@@ -80,6 +82,10 @@ impl CertifiedSlicePoolMetrics {
                 METRIC_PUT_COUNT,
                 "Count of valid XNet slice pool puts and appends, by status. Errors are instrumented separately, as failed pull attempts.",
                 &[LABEL_STATUS]
+            ),
+            lagging_put_and_append_count: metrics_registry.int_counter(
+                METRIC_LAGGING_PUT_AND_APPEND_COUNT,
+                "Count of XNet slice pool puts and appends whose stream header is behind the recorded one, i.e. of slices pulled from a lagging node.",
             ),
             take_count: metrics_registry.int_counter_vec(
                 METRIC_TAKE_COUNT,
@@ -1406,10 +1412,10 @@ impl CertifiedSlicePool {
     /// Computes the `PullIndices` for pulling a slice from `subnet_id`;
     /// or `None` if there is no cached stream position for it.
     pub fn pull_indices(&self, subnet_id: SubnetId) -> Option<PullIndices> {
-        // No cached stream position, no pooling / refill necessary.
         let (Some(stream_position), messages_begin, msg_count, byte_size) =
             self.slice_stats(subnet_id)
         else {
+            // No cached stream position, nothing to pull.
             return None;
         };
 
@@ -1555,8 +1561,18 @@ impl CertifiedSlicePool {
         subnet_id: SubnetId,
         mut unpacked: UnpackedStreamSlice,
     ) -> CertifiedSliceResult<(bool, Option<UnpackedStreamSlice>)> {
+        // Count headers behind the recorded one, i.e. pulled from a lagging node.
+        let header = unpacked.payload.header.decoded();
+        if self
+            .peer_headers
+            .get(&subnet_id)
+            .is_some_and(|recorded| header_advances(recorded, header))
+        {
+            self.metrics.lagging_put_and_append_count.inc();
+        }
+
         // Record every pulled header, whether or not we end up pooling it.
-        self.record_peer_header(subnet_id, unpacked.payload.header.decoded());
+        self.record_peer_header(subnet_id, header);
 
         // Trim off everything before the cached stream position.
         let stream_position = self.stream_positions.get(&subnet_id);
@@ -1671,10 +1687,6 @@ impl CertifiedSlicePool {
     /// a header that is ahead in one and behind in another comes from a peer that
     /// is misbehaving. It is ignored rather than merged.
     pub fn record_peer_header(&mut self, subnet_id: SubnetId, header: &StreamHeader) {
-        if !self.advances_recorded_peer_header(subnet_id, header) {
-            return;
-        }
-
         match self.peer_headers.entry(subnet_id) {
             Entry::Vacant(vacant) => {
                 vacant.insert(Arc::new(header.clone()));
@@ -1682,10 +1694,12 @@ impl CertifiedSlicePool {
 
             Entry::Occupied(mut occupied) => {
                 let recorded = occupied.get();
-                if recorded.begin() <= header.begin()
-                    && recorded.end() <= header.end()
-                    && recorded.signals_end() <= header.signals_end()
-                {
+                // Nothing to do unless the header advances the recorded one.
+                if !header_advances(header, recorded) {
+                    return;
+                }
+
+                if !header_advances(recorded, header) {
                     occupied.insert(Arc::new(header.clone()));
                 } else {
                     error!(
@@ -1707,17 +1721,12 @@ impl CertifiedSlicePool {
         subnet_id: SubnetId,
         header: &StreamHeader,
     ) -> bool {
-        self.peer_headers.get(&subnet_id).is_none_or(|recorded| {
-            recorded.begin() < header.begin()
-                || recorded.end() < header.end()
-                || recorded.signals_end() < header.signals_end()
-        })
+        self.peer_headers
+            .get(&subnet_id)
+            .is_none_or(|recorded| header_advances(header, recorded))
     }
 
-    /// Returns every peer whose recorded header offers something that neither the
-    /// cached stream position nor the pooled slice cover (see `classify_advert()`),
-    /// given `own_streams` (to check for reject signals that would be garbage
-    /// collected).
+    /// Returns every peer with something to pull (see `has_something_to_pull()`).
     pub fn subnets_with_something_to_pull(&self, own_streams: &StreamMap) -> Vec<SubnetId> {
         self.peer_headers
             .iter()
@@ -1727,6 +1736,17 @@ impl CertifiedSlicePool {
             })
             .map(|(&subnet_id, _)| subnet_id)
             .collect()
+    }
+
+    /// Whether the recorded header of `subnet_id` offers something that neither the
+    /// cached stream position nor the pooled slice cover (see `classify_advert()`),
+    /// given `own_streams` (to check for reject signals that would be garbage
+    /// collected).
+    pub fn has_something_to_pull(&self, subnet_id: SubnetId, own_streams: &StreamMap) -> bool {
+        self.peer_headers.get(&subnet_id).is_some_and(|header| {
+            self.classify_advert(subnet_id, header, own_streams.get(&subnet_id))
+                == XNetAdvertOutcome::Duplicate
+        })
     }
 
     /// Observes the total size of all pooled slices.
@@ -1919,6 +1939,14 @@ fn validate_slice(
             Err(err.into())
         }
     }
+}
+
+/// Whether `header` is ahead of `other` in any of `begin`, `end` or
+/// `signals_end`, i.e. has something `other` does not.
+fn header_advances(header: &StreamHeader, other: &StreamHeader) -> bool {
+    header.begin() > other.begin()
+        || header.end() > other.end()
+        || header.signals_end() > other.signals_end()
 }
 
 /// Decodes the payload of a `CertifiedStreamSlice`, without validating its

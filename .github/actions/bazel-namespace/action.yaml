@@ -63,8 +63,8 @@ inputs:
     default: ''
     description: |
       Passphrase to encrypt the BEP files with for the public <artifact-name>-bep artifact on
-      GitHub: pass secrets.GPG_PASSPHRASE, with which github-stats decrypts them. BEP files contain
-      the options and environment of the bazel client, so they are only uploaded encrypted.
+      GitHub: pass secrets.BEP_GPG_PASSPHRASE, with which github-stats decrypts them. BEP files
+      contain the options and environment of the bazel client, so they are only uploaded encrypted.
 
 runs:
   using: composite

@@ -147,6 +147,7 @@ system_test(
     deps = [
         # Keep sorted.
         "//rs/config",
+        "//rs/interfaces/registry",
         "//rs/nns/constants",
         "//rs/registry/canister",
         "//rs/registry/subnet_type",

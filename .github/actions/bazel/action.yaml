@@ -66,6 +66,9 @@ runs:
       run: |
         set -euo pipefail
 
+        # Keep the job's OIDC token request credentials out of the environment that the BEP files record.
+        unset ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL
+
         # Here we overwrite the PATH with our custom bazel wrapper to ensure
         # the specified commands are run with the CI-specific options included
         # in the wrapper.
@@ -84,10 +87,15 @@ runs:
       shell: bash
       # only upload on success or failure but _not_ on canceled jobs
       if: (success() || failure()) && inputs.GPG_PASSPHRASE != ''
+      env:
+        GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
       run: |
+        # gpg reads the passphrase from stdin (printf is a builtin): not on argv, not in gpg-agent's environment.
+        passphrase="$GPG_PASSPHRASE"
+        unset GPG_PASSPHRASE
         for bep in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'bazel-bep-*.pb'); do
-            gpg --symmetric --cipher-algo AES256 -o "$bep.gpg" \
-                --passphrase '${{ inputs.GPG_PASSPHRASE }}' --batch --yes "$bep"
+            printf '%s' "$passphrase" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+                --no-symkey-cache --symmetric --cipher-algo AES256 -o "$bep.gpg" "$bep"
             rm -f "$bep"
         done
 

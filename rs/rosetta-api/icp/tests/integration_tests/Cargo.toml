@@ -11,6 +11,7 @@ candid = { workspace = true }
 ic-icrc-rosetta-client = { path = "../../../icrc1/client" }
 ic-rosetta-api = { path = "../.." }
 icp-ledger = { path = "../../../../ledger_suite/icp" }
+reqwest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }

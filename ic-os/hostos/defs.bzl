@@ -34,7 +34,7 @@ def image_deps(mode, _malicious = False):
             "//rs/ic_os/release:guest_vm_runner": "/opt/ic/bin/guest_vm_runner:0755",
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
             "//rs/ic_os/release:config_tool": "/opt/ic/bin/config_tool:0755",
-            "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",
+            "//rs/ic_os/release:infogetty": "/opt/ic/bin/infogetty:0755",
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",

@@ -74,6 +74,15 @@ watchdog_thresh=60` make a GuestOS that hits a kernel Oops, panic or soft lockup
 reboot (and be relaunched by HostOS) instead of hanging; see the comment in the
 template.
 
+`lsm=lockdown,capability,landlock,yama,selinux,ima,evm` enables exactly these
+security modules, in this order, instead of the kernel's built-in `CONFIG_LSM`
+list; HostOS and SetupOS use the same list. libselinux and systemd read and set
+SELinux contexts through `/proc/<pid>/attr/*`, which only the first enabled
+module implementing them answers, so `selinux` must come before every such
+module: the BPF LSM, for one, answers them with `EINVAL`, so `bpf` may only be
+added after `selinux`. The legacy `security=selinux` appends SELinux after the
+built-in list, which ends in `bpf` on Ubuntu kernels since 7.0.0-39.
+
 == Mount +/boot+ filesystems
 
 The partition used to be mounted as +/boot+ depends on the partition
