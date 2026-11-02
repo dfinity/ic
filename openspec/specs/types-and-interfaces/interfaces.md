@@ -244,6 +244,13 @@ The P2P consensus interface defines how consensus artifacts are replicated acros
 - **WHEN** get(id) is called on ValidatedPoolReader
 - **THEN** Some(artifact) is returned if it exists in the validated pool
 - **AND** None otherwise
+- **AND** `get` is the only method of `ValidatedPoolReader`; P2P uses it to serve `FetchArtifact` RPCs and to fill in stripped block proposals
+
+#### Scenario: InitialBroadcastSource artifacts on startup
+- **WHEN** `create_artifact_handler` starts an artifact handler for a pool
+- **THEN** it requires the pool to implement `InitialBroadcastSource` and broadcasts the artifacts returned by `get_all_for_initial_broadcast`
+- **AND** the consensus, certification, IDKG, DKG and canister HTTP pools implement both traits, while the ingress pool, `ConsensusPoolWrapper` and test mocks implement only `ValidatedPoolReader`
+- **AND** `create_ingress_handlers` requires neither trait, since it broadcasts no initial artifacts
 
 ### Requirement: BatchPayloadBuilder Opaque Payload Construction
 BatchPayloadBuilder handles variable-size payloads that are opaque to consensus and only meaningful to upper layers.

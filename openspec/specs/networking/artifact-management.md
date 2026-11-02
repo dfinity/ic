@@ -34,7 +34,7 @@ The consensus pool must initialize correctly from configuration, supporting both
 - **AND** height-indexed lookups are available for all consensus message types (RandomBeacon, BlockProposal, Notarization, Finalization, RandomTape, CatchUpPackage, and their share variants, plus EquivocationProof)
 
 #### Scenario: Unsigned CatchUpPackages are not offered to peers
-- **WHEN** `ConsensusPoolImpl` computes the validated artifacts to offer peers (`ValidatedPoolReader::get_all_validated_by_filter` for `CatchUpPackage`)
+- **WHEN** `ConsensusPoolImpl` computes the validated artifacts to offer peers (`InitialBroadcastSource::get_all_for_initial_broadcast`, which yields no unsigned `CatchUpPackage`)
 - **AND** the validated pool contains an unsigned CatchUpPackage, e.g. a genesis or recovery CUP taken directly from the registry without a signature
 - **THEN** that CatchUpPackage is filtered out of what gets offered, since peers cannot validate a CUP with no signature
 - **AND** each peer instead obtains the same unsigned CUP from its own orchestrator, which creates it from the registry directly
