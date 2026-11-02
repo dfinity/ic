@@ -22,6 +22,7 @@ use std::convert::TryFrom;
 /// CertificationMessage captures the different types of messages sent around
 /// for the purpose of state certification.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum CertificationMessage {
     /// Certification captures a full certification on behalf of a subnet
     Certification(Certification),
@@ -240,6 +241,7 @@ impl CountBytes for Certification {
 /// A certification share is the signature of a single replica on a
 /// CertificationContent
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CertificationShare {
     /// the height that the CertificationContent belongs to
     pub height: Height,
@@ -252,5 +254,72 @@ pub struct CertificationShare {
 impl HasHeight for CertificationShare {
     fn height(&self) -> Height {
         self.height
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::exhaustive::ExhaustiveSet;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use prost::Message;
+
+    #[test]
+    fn verify_exhaustive_certification_message() {
+        let set = CertificationMessage::exhaustive_set(&mut reproducible_rng());
+        println!("Number of certification message variants: {}", set.len());
+        for msg in set {
+            let bytes = pb::CertificationMessage::from(msg.clone()).encode_to_vec();
+            let proto_msg = pb::CertificationMessage::decode(bytes.as_slice()).unwrap();
+            let new_msg = CertificationMessage::try_from(proto_msg).unwrap();
+
+            assert_eq!(
+                msg, new_msg,
+                "deserialized certification message is different from original"
+            );
+        }
+    }
+
+    /// As the certification pool is kept across replica versions, a replica must be able to
+    /// read the certification messages persisted by the replica versions it is upgraded or
+    /// downgraded from. These tests are not meant to be run as part of the regular test suite
+    /// (hence the `ignore` attributes), but are invoked from the test binaries of the mainnet
+    /// and branch versions by `//rs/tests/consensus/orchestrator:certification_compatibility_test`.
+    /// Hence, they must not be moved or renamed.
+    mod mainnet_compatibility_tests {
+        use super::*;
+        use std::{fs, path::Path};
+
+        const OUTPUT_DIR: &str = "certification_messages";
+
+        /// Serialize a set of [`CertificationMessage`]s to [`OUTPUT_DIR`], encoded as they
+        /// are persisted in the certification pool.
+        #[test]
+        #[ignore]
+        fn serialize() {
+            let directory = Path::new(OUTPUT_DIR);
+            fs::create_dir(directory).expect("Failed to create directory");
+            let set = CertificationMessage::exhaustive_set(&mut reproducible_rng());
+            println!("Number of certification message variants: {}", set.len());
+
+            for (i, msg) in set.into_iter().enumerate() {
+                let bytes = pb::CertificationMessage::from(msg).encode_to_vec();
+                fs::write(directory.join(format!("{i}.pb")), bytes).expect("Failed to write bytes");
+            }
+        }
+
+        /// Deserialize all [`CertificationMessage`]s found in [`OUTPUT_DIR`].
+        #[test]
+        #[ignore]
+        fn deserialize() {
+            for entry in fs::read_dir(OUTPUT_DIR).expect("Failed to read directory") {
+                let path = entry.unwrap().path();
+                let bytes = fs::read(&path).expect("Failed to read file");
+                let proto_msg = pb::CertificationMessage::decode(bytes.as_slice())
+                    .unwrap_or_else(|err| panic!("Failed to decode {path:?}: {err:?}"));
+                CertificationMessage::try_from(proto_msg)
+                    .unwrap_or_else(|err| panic!("Failed to deserialize {path:?}: {err:?}"));
+            }
+        }
     }
 }

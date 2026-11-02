@@ -1426,14 +1426,13 @@ impl PoolArtifact for CertificationMessage {
         value: Self::ObjectType,
         artifacts: Database,
         tx: &mut RwTransaction,
-        log: &ReplicaLogger,
+        _log: &ReplicaLogger,
     ) -> lmdb::Result<()> {
-        let bytes = log_err!(
-            bincode::serialize::<Self::ObjectType>(&value),
-            log,
-            "CertificationArtifact::save serialize"
-        )
-        .ok_or(lmdb::Error::Panic)?;
+        // Certification artifacts are protobuf-encoded, as the certification pool is kept
+        // across replica versions. Neighbouring replica versions must thus be able to decode
+        // each other's certification messages, which is checked by
+        // `//rs/tests/consensus/orchestrator:certification_compatibility_test`.
+        let bytes = pb::CertificationMessage::from(value).encode_to_vec();
         tx.put(artifacts, &key, &bytes, WriteFlags::empty())
     }
 
@@ -1445,10 +1444,16 @@ impl PoolArtifact for CertificationMessage {
         log: &ReplicaLogger,
     ) -> lmdb::Result<T> {
         let bytes = tx.get(artifacts, &key)?;
-        let msg = log_err!(
-            bincode::deserialize::<Self::ObjectType>(bytes),
+        let protobuf = log_err!(
+            pb::CertificationMessage::decode(bytes),
             log,
-            "CertificationArtifact::load_as deserialize"
+            "CertificationArtifact::load_as protobuf decoding"
+        )
+        .ok_or(lmdb::Error::Panic)?;
+        let msg = log_err!(
+            CertificationMessage::try_from(protobuf),
+            log,
+            "CertificationArtifact::load_as protobuf conversion"
         )
         .ok_or(lmdb::Error::Panic)?;
         log_err!(
@@ -1467,7 +1472,7 @@ impl PersistentHeightIndexedPool<CertificationMessage> {
         log: ReplicaLogger,
     ) -> PersistentHeightIndexedPool<CertificationMessage> {
         let mut path = config.persistent_pool_validated_persistent_db_path;
-        path.push("certification");
+        path.push(crate::CERTIFICATION_POOL_DIR);
         std::fs::create_dir_all(path.as_path()).ok();
         PersistentHeightIndexedPool::new(path.as_path(), read_only, log)
     }

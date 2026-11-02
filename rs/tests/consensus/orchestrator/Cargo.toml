@@ -45,6 +45,10 @@ name = "ic-systest-cup-compatibility"
 path = "cup_compatibility_test.rs"
 
 [[bin]]
+name = "ic-systest-certification-compatibility"
+path = "certification_compatibility_test.rs"
+
+[[bin]]
 name = "ic-systest-cloud-engine-ic-gateway-test"
 path = "cloud_engine_ic_gateway_test.rs"
 

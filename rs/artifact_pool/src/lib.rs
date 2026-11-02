@@ -30,6 +30,17 @@ use std::convert::TryFrom;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Name of the directory of the (LMDB) certification pool within the persistent
+/// pool directory.
+///
+/// Unlike the rest of the persistent pool, the certification pool is kept when the
+/// replica version changes, so that certifications and shares created before an
+/// upgrade remain available after it. Its artifacts are therefore protobuf-encoded.
+/// Older replica versions stored bincode-encoded artifacts in `certification`
+/// instead, which is deleted on the first replica version change like the rest of
+/// the pool.
+pub const CERTIFICATION_POOL_DIR: &str = "certification_v2";
+
 pub fn get_replica_version<P: AsRef<Path>>(filepath: P) -> Option<ReplicaVersion> {
     std::fs::read_to_string(filepath)
         .ok()
@@ -41,8 +52,8 @@ pub fn set_replica_version<P: AsRef<Path>>(filepath: P, replica_version: &Replic
 }
 
 /// Check that the replica version of the pool matches that of this process. If
-/// it does not, delete the contents of the old pool directory and create a new
-/// one.
+/// it does not, delete the contents of the old pool directory, except for the
+/// certification pool (see [`CERTIFICATION_POOL_DIR`]), and create a new one.
 pub fn ensure_persistent_pool_replica_version_compatibility(
     pool_path: PathBuf,
     replica_version: &ReplicaVersion,
@@ -52,7 +63,11 @@ pub fn ensure_persistent_pool_replica_version_compatibility(
     if get_replica_version(&replica_version_file_path).as_ref() != Some(replica_version) {
         if pool_path.exists() {
             for entry in fs::read_dir(&pool_path).expect("Couldn't read the directory") {
-                let path = entry.expect("Couldn't read the metadata").path();
+                let entry = entry.expect("Couldn't read the metadata");
+                if entry.file_name() == CERTIFICATION_POOL_DIR {
+                    continue;
+                }
+                let path = entry.path();
                 if path.is_dir() {
                     fs::remove_dir_all(path).expect("Couldn't remove the directory");
                 } else {
@@ -156,6 +171,36 @@ mod tests {
             assert_eq!(
                 replica_version,
                 get_replica_version(replica_version_file_path).unwrap()
+            );
+        })
+    }
+
+    #[test]
+    fn test_only_certification_pool_is_kept_across_replica_versions() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|config| {
+            let pool_path = config.persistent_pool_db_path();
+            ensure_persistent_pool_replica_version_compatibility(
+                pool_path.clone(),
+                &ReplicaVersion::from_str("old_version").unwrap(),
+            );
+            // `certification` is the (bincode-encoded) certification pool of older replica
+            // versions.
+            for dir in ["consensus", "certification", CERTIFICATION_POOL_DIR] {
+                std::fs::create_dir_all(pool_path.join(dir)).unwrap();
+                std::fs::write(pool_path.join(dir).join("data.mdb"), "stuff").unwrap();
+            }
+
+            ensure_persistent_pool_replica_version_compatibility(
+                pool_path.clone(),
+                &ReplicaVersion::from_str("new_version").unwrap(),
+            );
+
+            assert!(!pool_path.join("consensus").exists());
+            assert!(!pool_path.join("certification").exists());
+            assert_eq!(
+                std::fs::read_to_string(pool_path.join(CERTIFICATION_POOL_DIR).join("data.mdb"))
+                    .unwrap(),
+                "stuff"
             );
         })
     }
