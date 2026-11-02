@@ -141,7 +141,7 @@ impl FeatureFlags {
     const fn const_default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            wasm_memory_accessed_page_limit: FlagStatus::Disabled,
+            wasm_memory_accessed_page_limit: FlagStatus::Enabled,
         }
     }
 }
