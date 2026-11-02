@@ -197,9 +197,28 @@ ICP Rosetta synchronizes blocks from the ledger and its archives.
 - **WHEN** new blocks are produced on the ledger
 - **THEN** Rosetta periodically fetches and stores the new blocks
 
+#### Scenario: Syncing blocks does not block readers
+- **WHEN** the ICP Rosetta sync thread calls `sync_blocks` (once a second) while API requests read blocks
+- **THEN** it reads the local tip under a read lock and returns without taking the write lock when there are no new blocks
+- **AND** new blocks are fetched from the ledger and its archives and checked without holding the blockchain lock; the write lock is taken only to store each batch of 500k blocks and, at the end, to store and verify the remaining blocks and make the Rosetta blocks and prune under the same guard
+- **AND** a separate sync mutex serializes concurrent `sync_blocks` calls, so API requests no longer wait for the network round trips of a sync
+
+#### Scenario: Block-reading endpoints during the initial sync
+- **WHEN** an API request that reads blocks arrives before ICP Rosetta's initial sync is complete
+- **THEN** `/account/balance`, `/block`, `/block/transaction`, `/search/transactions` and the `query_block_range` method of `/call` return the same retriable "still syncing" error as `/network/status`, instead of reading the partially synced store
+- **AND** the check runs just before each endpoint's first block read, so earlier request validation still answers immediately
+- **AND** the other `/call` methods and the construction endpoints, which do not read blocks, keep working during the initial sync
+
 #### Scenario: Rosetta blocks mode
 - **WHEN** Rosetta is configured in a specific blocks mode
 - **THEN** it can serve blocks in the configured format (raw or Rosetta blocks)
+
+#### Scenario: Parents of ledger and Rosetta blocks in Rosetta blocks mode
+- **WHEN** ICP Rosetta runs in Rosetta blocks mode, serving ledger blocks below the first Rosetta block index F and Rosetta blocks from F on
+- **THEN** the parent of a Rosetta block is the previous Rosetta block, or the last ledger block before F for the first Rosetta block
+- **AND** the parent of a ledger block is always the previous ledger block, looked up as with Rosetta blocks disabled, even when its index is F or above; the genesis block is its own parent
+- **AND** `/call` `query_block_range` and `/search/transactions` therefore return ledger blocks with ledger parents instead of failing with `Block not found` for the newest ledger blocks
+- **AND** `/block` and `/account/balance` given only the hash of a ledger block return its ledger parent instead of a Rosetta parent or a panic
 
 ### Requirement: ICRC-1 Rosetta - Network Identification
 
