@@ -44,7 +44,7 @@ mod tests {
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_tree_hash::{Digest, Witness};
     use ic_test_utilities_consensus::fake::*;
-    use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
     use ic_types::{
         CryptoHashOfPartialState, Height,
         consensus::certification::{Certification, CertificationContent},
@@ -74,6 +74,7 @@ mod tests {
                 signature,
                 content: CertificationContent::new(hash),
             },
+            replica_version: test_replica_version(),
         }
     }
 

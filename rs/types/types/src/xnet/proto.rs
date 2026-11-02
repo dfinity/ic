@@ -3,7 +3,7 @@
 //! wire format.
 
 use crate::{
-    CryptoHashOfPartialState, Height,
+    CryptoHashOfPartialState, Height, ReplicaVersion,
     consensus::certification::{
         Certification, CertificationContent, CertificationShare, SignedCertificationContent,
     },
@@ -47,6 +47,7 @@ impl From<Certification> for pb::Certification {
             height_witness: Some(value.height_witness.into()),
             content: Some(value.signed.content.into()),
             signature: Some(value.signed.signature.into()),
+            replica_version: value.replica_version.into(),
         }
     }
 }
@@ -64,6 +65,7 @@ impl TryFrom<pb::Certification> for Certification {
                 content: try_from_option_field(value.content, "Certification::content")?,
                 signature: try_from_option_field(value.signature, "Certification::signature")?,
             },
+            replica_version: ReplicaVersion::try_from(value.replica_version)?,
         })
     }
 }
@@ -102,6 +104,7 @@ impl From<CertificationShare> for pb::CertificationShare {
             height_witness: Some(share.height_witness.into()),
             content: Some(share.signed.content.into()),
             signature: Some(share.signed.signature.into()),
+            replica_version: share.replica_version.into(),
         }
     }
 }
@@ -119,6 +122,7 @@ impl TryFrom<pb::CertificationShare> for CertificationShare {
                 content: try_from_option_field(value.content, "CertificationShare::content")?,
                 signature: try_from_option_field(value.signature, "CertificationShare::signature")?,
             },
+            replica_version: ReplicaVersion::try_from(value.replica_version)?,
         })
     }
 }

@@ -961,6 +961,7 @@ impl Player {
                     self.subnet_id,
                     &state_hash_metadata.height,
                     &state_hash_metadata.hash,
+                    &self.replica_version,
                 ));
         }
     }
@@ -969,6 +970,7 @@ impl Player {
         subnet_id: SubnetId,
         height: &Height,
         hash: &CryptoHashOfPartialState,
+        replica_version: &ReplicaVersion,
     ) -> Certification {
         let combined_sig = CombinedThresholdSigOf::from(CombinedThresholdSig(vec![]));
         Certification {
@@ -986,6 +988,7 @@ impl Player {
                     },
                 },
             },
+            replica_version: replica_version.clone(),
         }
     }
 
@@ -1829,7 +1832,7 @@ mod tests {
         HighCapacityRegistryValue, LargeValueChunkKeys, high_capacity_registry_value,
     };
     use ic_test_utilities_consensus::fake::FakeSigner;
-    use ic_test_utilities_types::ids::node_test_id;
+    use ic_test_utilities_types::ids::{node_test_id, test_replica_version};
     use ic_types::{
         consensus::certification::{
             CertificationContent, CertificationMessage, CertificationShare,
@@ -1851,6 +1854,7 @@ mod tests {
                 content: CertificationContent::new(CryptoHash(hash).into()),
                 signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
             },
+            replica_version: test_replica_version(),
         })
     }
 

@@ -15,7 +15,7 @@ use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
 use ic_test_utilities_metrics::{
     HistogramStats, MetricVec, fetch_gauge, fetch_histogram_stats, fetch_int_counter_vec,
 };
-use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_42};
+use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_42, test_replica_version};
 use ic_types::{
     Height, SubnetId,
     consensus::certification::{Certification, CertificationContent},
@@ -189,6 +189,7 @@ fn certify_height(state_manager: &impl StateManager, h: Height) -> Certification
             content: CertificationContent::new(hash),
             signature: ThresholdSignature::fake(),
         },
+        replica_version: test_replica_version(),
     };
 
     state_manager.deliver_state_certification(certification.clone());

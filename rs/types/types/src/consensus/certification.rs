@@ -1,10 +1,10 @@
 //! Defines types used for certification.
 
 use crate::{
-    CryptoHashOfPartialState, Height,
+    CryptoHashOfPartialState, Height, ReplicaVersion,
     artifact::{CertificationMessageId, IdentifiableArtifact, PbArtifact},
     consensus::{
-        Committee, CountBytes, HasCommittee, HasHeight, IsShare, ThresholdSignature,
+        Committee, CountBytes, HasCommittee, HasHeight, HasVersion, IsShare, ThresholdSignature,
         ThresholdSignatureShare,
     },
     crypto::{CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator},
@@ -50,6 +50,15 @@ impl HasHeight for CertificationMessage {
         match self {
             CertificationMessage::Certification(c) => c.height,
             CertificationMessage::CertificationShare(c) => c.height,
+        }
+    }
+}
+
+impl HasVersion for CertificationMessage {
+    fn version(&self) -> &ReplicaVersion {
+        match self {
+            CertificationMessage::Certification(c) => c.version(),
+            CertificationMessage::CertificationShare(c) => c.version(),
         }
     }
 }
@@ -221,11 +230,19 @@ pub struct Certification {
     pub height_witness: Witness,
     /// the signature on the CertificationContent
     pub signed: SignedCertificationContent,
+    /// the replica version of the replicas that created the certification
+    pub replica_version: ReplicaVersion,
 }
 
 impl HasHeight for Certification {
     fn height(&self) -> Height {
         self.height
+    }
+}
+
+impl HasVersion for Certification {
+    fn version(&self) -> &ReplicaVersion {
+        &self.replica_version
     }
 }
 
@@ -247,10 +264,18 @@ pub struct CertificationShare {
     pub height_witness: Witness,
     /// the signature on the CertificationContent
     pub signed: Signed<CertificationContent, ThresholdSignatureShare<CertificationContent>>,
+    /// the replica version of the replica that created the share
+    pub replica_version: ReplicaVersion,
 }
 
 impl HasHeight for CertificationShare {
     fn height(&self) -> Height {
         self.height
+    }
+}
+
+impl HasVersion for CertificationShare {
+    fn version(&self) -> &ReplicaVersion {
+        &self.replica_version
     }
 }

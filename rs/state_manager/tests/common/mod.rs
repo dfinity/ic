@@ -24,7 +24,7 @@ use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::{initial_execution_state, new_canister_state};
 use ic_test_utilities_tmpdir::tmpdir;
-use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version, user_test_id};
 use ic_types::{
     CanisterId, CryptoHashOfState, Height, RegistryVersion, SubnetId,
     consensus::certification::{Certification, CertificationContent, SignedCertificationContent},
@@ -94,6 +94,7 @@ pub fn certify_height(state_manager: &impl StateManager, h: Height) -> Certifica
             content: CertificationContent::new(hash),
             signature: ThresholdSignature::fake(),
         },
+        replica_version: test_replica_version(),
     };
 
     state_manager.deliver_state_certification(certification.clone());

@@ -46,7 +46,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterQueues, NetworkTopology, RefundPool, ReplicatedState, SystemMetadata,
 };
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_platform_version};
+use ic_test_utilities_types::ids::{
+    node_test_id, subnet_test_id, test_platform_version, test_replica_version,
+};
 use ic_types::{
     CanisterId, CryptoHashOfPartialState, Height, PlatformVersion, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
@@ -205,6 +207,7 @@ pub fn default_read_certified_state(
             },
             content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
         },
+        replica_version: test_replica_version(),
     };
 
     Some((latest_state.get_ref().clone(), mht, cert))

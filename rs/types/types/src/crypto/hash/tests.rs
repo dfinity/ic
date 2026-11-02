@@ -532,11 +532,12 @@ mod crypto_hash_stability {
                     signer: test_ni_dkg_id(),
                 },
             },
+            replica_version: replica_version_for_stability(),
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "102f527663a1ff91768134dcd391c8fe39423f6c3d3d0b172e07187919704b3f",
+            "566e0d1b49214d4950f543fd2b1d77389eb23e8c6e250ff158dacbd4fc9850f8",
             "Hash of Certification changed"
         );
     }
@@ -556,11 +557,12 @@ mod crypto_hash_stability {
                     signer: NodeId::from(PrincipalId::new_node_test_id(42)),
                 },
             },
+            replica_version: replica_version_for_stability(),
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "53da5b1d79ac888f4016ca7a6c97715e97411752268893dfc0f6ade437d88325",
+            "7ffc2931b8183c6ddb0c658babc0a118eb392744e0e163eac188bd381bd8297f",
             "Hash of CertificationShare changed"
         );
     }
@@ -722,12 +724,13 @@ mod crypto_hash_stability {
                     signer: test_ni_dkg_id(),
                 },
             },
+            replica_version: replica_version_for_stability(),
         };
         let data = CertificationMessage::Certification(cert);
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "fce9b924904bcb7e4ce7df579e959188bc885aab660d2af849b800c0591c18ed",
+            "d746ddd7aa0063ea2b5f1dd785d624fc0a04da21172321eb3fc8c83848cba770",
             "Hash of CertificationMessage changed"
         );
     }

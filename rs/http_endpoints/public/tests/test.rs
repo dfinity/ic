@@ -47,7 +47,9 @@ use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_metrics::{HistogramStats, MetricVec, fetch_histogram_vec_stats, metric_vec};
 use ic_test_utilities_state::ReplicatedStateBuilder;
-use ic_test_utilities_types::ids::{NODE_1, canister_test_id, subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::{
+    NODE_1, canister_test_id, subnet_test_id, test_replica_version, user_test_id,
+};
 use ic_types::{
     CanisterId, CryptoHashOfPartialState, Height, NumBytes, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
@@ -825,6 +827,7 @@ fn can_retrieve_subnet_metrics(
                     hash_tree.digest().to_vec(),
                 ))),
             },
+            replica_version: test_replica_version(),
         };
 
         (state, hash_tree, certification)
@@ -1333,6 +1336,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
                                 CryptoHash(hash_tree.digest().to_vec()),
                             )),
                         },
+                        replica_version: test_replica_version(),
                     };
 
                     Some((hash_tree, certification))

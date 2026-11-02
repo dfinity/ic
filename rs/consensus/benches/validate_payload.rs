@@ -226,6 +226,7 @@ fn setup_ingress_state(now: Time, state_manager: &mut StateManagerImpl) {
         height: Height::new(CERTIFIED_HEIGHT),
         height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: SignedCertificationContent::fake(CertificationContent::new(hash.clone())),
+        replica_version: test_replica_version(),
     });
 }
 

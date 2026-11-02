@@ -31,6 +31,7 @@ message Certification {
   CertificationContent content = 2;
   types.v1.ThresholdSignature signature = 3;
   messaging.xnet.v1.Witness height_witness = 4;
+  string replica_version = 5;
 }
 
 // Certification signed by a single replica
@@ -39,4 +40,5 @@ message CertificationShare {
   CertificationContent content = 2;
   types.v1.ThresholdSignatureShare signature = 3;
   messaging.xnet.v1.Witness height_witness = 4;
+  string replica_version = 5;
 }
