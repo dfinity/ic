@@ -113,4 +113,6 @@ component_files = {
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/install-upgrade.sh"): "/opt/ic/bin/install-upgrade.sh",
     Label("upgrade/boot-state.sh"): "/opt/ic/bin/boot-state.sh",
+    Label("upgrade/upgrade-proxy.service"): "/etc/systemd/system/upgrade-proxy.service",
+    Label("upgrade/upgrade-proxy.conf"): "/etc/nginx/upgrade-proxy.conf",
 }
