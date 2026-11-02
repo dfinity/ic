@@ -45,7 +45,7 @@ use ic_types::{
         CallbackId, CanisterTask, MAX_RESPONSE_COUNT_BYTES, MessageId, NO_DEADLINE, Payload,
         RejectContext, RequestOrResponse, Response,
     },
-    time::UNIX_EPOCH,
+    time::{CoarseTime, UNIX_EPOCH},
 };
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
@@ -4034,7 +4034,7 @@ fn execute_canister_http_request_pricing_version() {
             );
 
             // The outcall is only counted once its response is delivered, so the
-            // counter is still zero here. Every (pricing version, replication)
+            // counter is still zero here. Every (pricing version, replication, class)
             // series is registered nonetheless, so none of them read as missing.
             let delivered = fetch_int_counter_vec(
                 test.metrics_registry(),
@@ -4042,7 +4042,7 @@ fn execute_canister_http_request_pricing_version() {
             );
             assert_eq!(
                 delivered.len(),
-                6,
+                12,
                 "unexpected delivered series for pricing_version={pricing_version:?} with \
                  flexible_http_requests enabled={flexible_http_requests_enabled}"
             );
@@ -4065,6 +4065,7 @@ fn execute_canister_http_request_pricing_version() {
                     &[
                         ("pricing_version", expected.as_str()),
                         ("replication", "fully_replicated"),
+                        ("class", "guaranteed response"),
                     ],
                     1
                 )]),
@@ -4073,6 +4074,66 @@ fn execute_canister_http_request_pricing_version() {
             );
         }
     }
+}
+
+#[test]
+fn delivered_http_outcalls_are_counted_by_call_class() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = true;
+
+    let args = http_request_args_with_pricing_version(caller_canister, None);
+    for _ in 0..2 {
+        test.inject_call_to_ic00(
+            Method::HttpRequest,
+            args.encode(),
+            Cycles::new(1_000_000_000),
+        );
+    }
+    test.execute_all();
+
+    // Make the second outcall a bounded-wait one.
+    let contexts = &mut test
+        .state_mut()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    Arc::make_mut(&mut contexts.get_mut(&CallbackId::from(1)).unwrap().request).deadline =
+        CoarseTime::from_secs_since_unix_epoch(1);
+
+    test.deliver_consensus_response(CallbackId::from(0), Payload::Data(vec![]));
+    test.deliver_consensus_response(CallbackId::from(1), Payload::Data(vec![]));
+    let legacy = PricingVersion::Legacy.as_str();
+    assert_eq!(
+        nonzero_values(fetch_int_counter_vec(
+            test.metrics_registry(),
+            "execution_http_outcalls_delivered_total"
+        )),
+        metric_vec(&[
+            (
+                &[
+                    ("pricing_version", legacy),
+                    ("replication", "fully_replicated"),
+                    ("class", "guaranteed response"),
+                ],
+                1
+            ),
+            (
+                &[
+                    ("pricing_version", legacy),
+                    ("replication", "fully_replicated"),
+                    ("class", "best-effort"),
+                ],
+                1
+            ),
+        ]),
+    );
 }
 
 #[test]
