@@ -4,6 +4,7 @@ use crate::artifact::IngressMessageId;
 use crate::backwards_compatibility::BackwardsCompatible;
 use crate::batch::ChainKeyAgreement;
 use crate::canister_http::CanisterHttpResponseSignature;
+use crate::consensus::certification::SignedCertificationContent;
 use crate::consensus::dkg::RemoteDkgAttempts;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::IDkgMasterPublicKeyId;
@@ -646,6 +647,23 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, ThresholdSignature<T>> {
                     ])),
                     signer,
                 },
+            })
+            .collect()
+    }
+}
+
+impl ExhaustiveSet for CertifiedStreamSlice {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <(Vec<u8>, Vec<u8>, SignedCertificationContent)>::exhaustive_set(rng)
+            .into_iter()
+            .map(|(payload, merkle_proof, mut certification)| {
+                // Decoding rejects any other signer.
+                certification.signature.signer.dkg_tag = NiDkgTag::HighThreshold;
+                Self {
+                    payload,
+                    merkle_proof,
+                    certification,
+                }
             })
             .collect()
     }
