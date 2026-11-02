@@ -2833,23 +2833,27 @@ fn wasm64_memory_init_test() {
 #[test]
 // Verify behavior of failed memory grow in wasm64 mode
 fn wasm64_handles_memory_grow_failure_test() {
-    let wat = r#"
+    // Growing by more than the maximal heap size fails.
+    let config = ic_config::embedders::Config::default();
+    let too_many_pages = config.max_wasm64_memory_size.get() / WASM_PAGE_SIZE as u64 + 1;
+    let wat = format!(
+        r#"
     (module
         (global $g1 (export "g1") (mut i64) (i64.const 0))
         (global $g2 (export "g2") (mut i64) (i64.const 0))
         (func $test (export "canister_update test")
-            (memory.grow (i64.const 165536))
+            (memory.grow (i64.const {too_many_pages}))
             global.set $g1
             (i64.const 137)
             global.set $g2
         )
         (memory (export "memory") i64 10)
-    )"#;
+    )"#
+    );
 
-    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
-        .with_wat(wat)
+        .with_wat(&wat)
         .build();
     let res = instance
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
