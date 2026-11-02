@@ -4,7 +4,7 @@ use crate::{
     artifact::ConsensusMessageId,
     batch::{BatchPayload, ValidationContext},
     consensus::dkg::DkgPayload,
-    crypto::threshold_sig::ni_dkg::NiDkgId,
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag},
     crypto::*,
     replica_version::ReplicaVersion,
     signature::*,
@@ -14,6 +14,7 @@ use ic_base_types::PrincipalIdError;
 use ic_base_types::subnet_id_try_from_option;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_management_canister_types_private::VetKdKeyId;
 use ic_protobuf::types::v1::{self as pb, consensus_message::Msg};
 use ic_protobuf::{
     log::block_log_entry::v1::BlockLogEntry,
@@ -1457,7 +1458,20 @@ impl TryFrom<pb::Block> for Block {
 
 impl CountBytes for NiDkgId {
     fn count_bytes(&self) -> usize {
-        std::mem::size_of::<Self>()
+        let Self {
+            start_block_height: _,
+            dealer_subnet: _,
+            dkg_tag,
+            target_subnet: _,
+        } = self;
+        let key_name_bytes = match dkg_tag {
+            NiDkgTag::LowThreshold | NiDkgTag::HighThreshold => 0,
+            NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+                curve: _,
+                name,
+            })) => name.len(),
+        };
+        std::mem::size_of::<Self>() + key_name_bytes
     }
 }
 
