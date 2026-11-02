@@ -139,8 +139,7 @@ pub fn registration_with_timeout(env: TestEnv, timeout: Duration) {
 /// (rs/ic_os/os_tools/guest_vm_runner/src/main.rs, `run()`); the gates below count it.
 const GUEST_VM_RELAUNCH_LINE: &str = "Guest VM stopped, restarting";
 
-/// Check that both the HostOS and the GuestOS kernels took the panic/lockup parameters, then
-/// crash the GuestOS kernel (sysrq 'c' panics it) and check that `panic=10` on its kernel
+/// Crash the GuestOS kernel (sysrq 'c' panics it) and check that `panic=10` on its kernel
 /// command line reboots it and that HostOS (libvirt `on_reboot=destroy` plus `guest_vm_runner`)
 /// relaunches the VM exactly once. Runs after `registration`, so `boot_cycle` is already stable
 /// and the relaunch boots the same slot.
@@ -209,19 +208,29 @@ fn ensure_kernel_panic_params(os: &str, out: &str) -> Result<()> {
     Ok(())
 }
 
+/// Check that the HostOS kernel took the panic/lockup parameters: a HostOS that panics must
+/// reboot (and relaunch its GuestOS) instead of hanging silently. Shares `registration`'s
+/// nested VM to avoid a dedicated target.
+pub fn hostos_kernel_panic_params(env: TestEnv) {
+    let logger = env.logger();
+    let host = env
+        .get_nested_vm(HOST_VM_NAME)
+        .expect("Unable to find HostOS node.");
+    let out = host
+        .block_on_bash_script(PANIC_PARAMS_SCRIPT)
+        .expect("Failed to read the kernel cmdline and panic/lockup sysctls on the HostOS");
+    info!(
+        logger,
+        "HostOS kernel cmdline and panic/lockup sysctls:\n{out}"
+    );
+    ensure_kernel_panic_params("HostOS", &out).expect("HostOS kernel panic-parameter check failed");
+}
+
 fn guestos_panic_relaunch_inner(env: &TestEnv, host: &NestedVm) -> Result<()> {
     let logger = env.logger();
     let guest = host.get_guest_ssh()?;
 
-    // 1. Both kernels took the parameters on their boot paths (the HostOS panicking silently
-    // is what these params are for in the first place); remember the guest's boot id.
-    let host_out = host.block_on_bash_script(PANIC_PARAMS_SCRIPT)?;
-    info!(
-        logger,
-        "HostOS kernel cmdline and panic/lockup sysctls:\n{host_out}"
-    );
-    ensure_kernel_panic_params("HostOS", &host_out)?;
-
+    // 1. The kernel took the parameters on the direct-boot path; remember the boot id.
     let out = guest.block_on_bash_script(&format!(
         "{PANIC_PARAMS_SCRIPT}; cat /proc/sys/kernel/random/boot_id"
     ))?;
