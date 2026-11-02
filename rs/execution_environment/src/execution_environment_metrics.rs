@@ -1,3 +1,4 @@
+use crate::metrics::{LABEL_CLASS, LABEL_VALUE_BEST_EFFORT, LABEL_VALUE_GUARANTEED_RESPONSE};
 use ic_cycles_account_manager::{
     CRITICAL_ERROR_EXECUTION_CYCLES_REFUND, CRITICAL_ERROR_RESPONSE_CYCLES_REFUND,
 };
@@ -194,16 +195,23 @@ impl ExecutionEnvironmentMetrics {
                     let delivered = metrics_registry.int_counter_vec(
                         "execution_http_outcalls_delivered_total",
                         "HTTP outcalls whose response was delivered to the caller, by the \
-                         pricing version and replication kind.",
+                         pricing version, replication kind and call class.",
                         &[
                             HTTP_OUTCALL_PRICING_VERSION_LABEL,
                             HTTP_OUTCALL_REPLICATION_LABEL,
+                            LABEL_CLASS,
                         ],
                     );
                     // Initialize all time series to zero.
                     for pricing_version in PricingVersion::iter() {
                         for replication in ReplicationKind::all_as_str() {
-                            delivered.with_label_values(&[pricing_version.as_str(), replication]);
+                            for class in [LABEL_VALUE_GUARANTEED_RESPONSE, LABEL_VALUE_BEST_EFFORT] {
+                                delivered.with_label_values(&[
+                                    pricing_version.as_str(),
+                                    replication,
+                                    class,
+                                ]);
+                            }
                         }
                     }
                     delivered
@@ -259,11 +267,17 @@ impl ExecutionEnvironmentMetrics {
         context: &CanisterHttpRequestContext,
         response: &Response,
     ) {
+        let class = if context.request.is_best_effort() {
+            LABEL_VALUE_BEST_EFFORT
+        } else {
+            LABEL_VALUE_GUARANTEED_RESPONSE
+        };
         self.http_outcalls_metrics
             .delivered
             .with_label_values(&[
                 context.pricing_version.as_str(),
                 context.replication.kind().as_str(),
+                class,
             ])
             .inc();
 
