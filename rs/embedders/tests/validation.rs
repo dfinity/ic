@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::time::{Duration, Instant};
 
 use assert_matches::assert_matches;
 use ic_config::embedders::Config as EmbeddersConfig;
@@ -549,6 +550,7 @@ fn can_validate_invalid_export_with_canister_prefix() {
 }
 
 fn many_exported_functions(n: usize) -> String {
+    use std::fmt::Write;
     let mut ret: String = "(module\n  (func $read)\n".to_string();
     for i in 0..n {
         let typ = if i % 3 == 0 {
@@ -558,9 +560,10 @@ fn many_exported_functions(n: usize) -> String {
         } else {
             "composite_query"
         };
-        ret = format!("{ret}  (export \"canister_{typ} xxx{i}\" (func $read))\n");
+        writeln!(ret, "  (export \"canister_{typ} xxx{i}\" (func $read))").unwrap();
     }
-    format!("{ret}\n)")
+    ret.push_str("\n)");
+    ret
 }
 
 #[test]
@@ -586,6 +589,34 @@ fn can_validate_too_many_exported_functions() {
             defined: 1001,
             allowed: 1000
         })
+    );
+}
+
+#[test]
+fn validating_many_exports_is_quadratic() {
+    const NUM_EXPORTS: usize = 49_999;
+    // An upper bound on how long an `install_code` is allowed to take; validation of a
+    // single module must stay well below this.
+    const INSTALL_CODE_BUDGET: Duration = Duration::from_secs(1);
+
+    let wasm = wat2wasm(&many_exported_functions(NUM_EXPORTS)).unwrap();
+
+    let start = Instant::now();
+    let result = validate_wasm_binary(&wasm, &EmbeddersConfig::default());
+    let elapsed = start.elapsed();
+    println!("validating {NUM_EXPORTS} exports took {elapsed:?}");
+
+    assert_eq!(
+        result,
+        Err(WasmValidationError::TooManyExports {
+            defined: NUM_EXPORTS,
+            allowed: 1000
+        })
+    );
+    assert!(
+        elapsed > INSTALL_CODE_BUDGET,
+        "validating {NUM_EXPORTS} exports took {elapsed:?}, which is within the \
+         {INSTALL_CODE_BUDGET:?} budget;"
     );
 }
 
@@ -1520,7 +1551,7 @@ fn wasm_with_many_locals_is_invalid() {
     let wat = format!(
         r#"
           (module
-            (func $f (export "canister_update f") 
+            (func $f (export "canister_update f")
               (local {})
             )
           )"#,
