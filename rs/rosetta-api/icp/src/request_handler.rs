@@ -104,6 +104,21 @@ impl RosettaRequestHandler {
         self.rosetta_metrics.clone()
     }
 
+    /// Returns a retriable error until the initial sync is complete. The endpoints that read
+    /// blocks call this before their first read, after the request checks that come before it.
+    fn check_initial_sync_complete(&self) -> Result<(), ApiError> {
+        if !self
+            .initial_sync_complete
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            return Err(ApiError::NotAvailableOffline(
+                true,
+                "The node is still syncing the blocks from the ledger canister. Please wait until the initial sync is complete.".into(),
+            ));
+        }
+        Ok(())
+    }
+
     /// Get an Account Balance
     pub async fn account_balance(
         &self,
@@ -172,12 +187,6 @@ impl RosettaRequestHandler {
             }
         };
 
-        let neuron_info = if let Some((neuron_id, verified)) = neuron_info_request_params {
-            Some(self.neuron_info(neuron_id, verified).await?)
-        } else {
-            None
-        };
-
         let account_id = icp_ledger::AccountIdentifier::from_hex(&msg.account_identifier.address)
             .map_err(|e| {
             ApiError::invalid_account_id(format!(
@@ -185,6 +194,14 @@ impl RosettaRequestHandler {
                 msg.account_identifier.address, e,
             ))
         })?;
+        self.check_initial_sync_complete()?;
+
+        let neuron_info = if let Some((neuron_id, verified)) = neuron_info_request_params {
+            Some(self.neuron_info(neuron_id, verified).await?)
+        } else {
+            None
+        };
+
         let block = self.get_block(msg.block_identifier).await?;
         let blocks = self.ledger.read_blocks().await;
         let tokens = blocks.get_account_balance(&account_id, &block.block_identifier.index)?;
@@ -241,6 +258,7 @@ impl RosettaRequestHandler {
             "query_block_range" => {
                 let query_block_range = QueryBlockRangeRequest::try_from(msg.parameters)
                     .map_err(|err| ApiError::internal_error(format!("{err:?}")))?;
+                self.check_initial_sync_complete()?;
                 let mut blocks = vec![];
 
                 let storage = self.ledger.read_blocks().await;
@@ -265,7 +283,7 @@ impl RosettaRequestHandler {
                             .map_err(ApiError::from)?
                             .into_iter()
                         {
-                            let parent_block_id = create_parent_block_id(&storage, hb.index)?;
+                            let parent_block_id = ledger_block_parent_id(&storage, hb.index)?;
                             blocks.push(hashed_block_to_rosetta_core_block(
                                 hb,
                                 parent_block_id,
@@ -302,6 +320,7 @@ impl RosettaRequestHandler {
     /// Get a Block
     pub async fn block(&self, msg: models::BlockRequest) -> Result<BlockResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        self.check_initial_sync_complete()?;
         let block = self.get_block(Some(msg.block_identifier)).await?;
         Ok(BlockResponse {
             block: Some(block),
@@ -381,19 +400,22 @@ impl RosettaRequestHandler {
         }
     }
 
-    async fn create_parent_block_id(
+    async fn rosetta_block_parent_id(
         &self,
         block_index: BlockIndex,
     ) -> Result<BlockIdentifier, ApiError> {
         let blocks = self.ledger.read_blocks().await;
-        create_parent_block_id(&blocks, block_index)
+        rosetta_block_parent_id(&blocks, block_index)
     }
 
     async fn hashed_block_to_rosetta_core_block(
         &self,
         block: HashedBlock,
     ) -> Result<rosetta_core::objects::Block, ApiError> {
-        let parent_block_id = self.create_parent_block_id(block.index).await?;
+        let parent_block_id = {
+            let blocks = self.ledger.read_blocks().await;
+            ledger_block_parent_id(&blocks, block.index)?
+        };
 
         let token_symbol = self.ledger.token_symbol();
         hashed_block_to_rosetta_core_block(block, parent_block_id, token_symbol)
@@ -459,7 +481,7 @@ impl RosettaRequestHandler {
             let blocks = self.ledger.read_blocks().await;
             blocks.get_rosetta_block(block_index)
         }?;
-        let parent_block_id = self.create_parent_block_id(block_index).await?;
+        let parent_block_id = self.rosetta_block_parent_id(block_index).await?;
         let token_symbol = self.ledger.token_symbol();
         rosetta_block_to_rosetta_core_block(rosetta_block, parent_block_id, token_symbol)
     }
@@ -482,6 +504,7 @@ impl RosettaRequestHandler {
         msg: models::BlockTransactionRequest,
     ) -> Result<BlockTransactionResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        self.check_initial_sync_complete()?;
         let block_id = Some(PartialBlockIdentifier {
             index: Some(msg.block_identifier.index),
             hash: Some(msg.block_identifier.hash),
@@ -587,15 +610,7 @@ impl RosettaRequestHandler {
         msg: models::NetworkRequest,
     ) -> Result<NetworkStatusResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
-        if !self
-            .initial_sync_complete
-            .load(std::sync::atomic::Ordering::Relaxed)
-        {
-            return Err(ApiError::NotAvailableOffline(
-                true,
-                "The node is still syncing the blocks from the ledger canister. Please wait until the initial sync is complete.".into(),
-            ));
-        }
+        self.check_initial_sync_complete()?;
         let rosetta_blocks_mode = self.ledger.read_blocks().await.rosetta_blocks_mode;
         let network_status = match rosetta_blocks_mode {
             // If rosetta mode is not enabled we simply fetched the latest verified block
@@ -732,6 +747,7 @@ impl RosettaRequestHandler {
                 "Currency not supported in search/transactions endpoint".to_owned(),
             ));
         }
+        self.check_initial_sync_complete()?;
         let block_storage = self.ledger.read_blocks().await;
 
         let block_with_highest_block_index = block_storage
@@ -839,19 +855,14 @@ impl RosettaRequestHandler {
             .map_err(|e| ApiError::invalid_block_id(format!("Error fetching blocks: {e:?}")))?;
 
         let mut transactions = vec![];
-        for block in blocks.clone().into_iter() {
-            let parent_block_id = create_parent_block_id(&block_storage, block.index)?;
-            let rosetta_core_block = hashed_block_to_rosetta_core_block(
-                block,
-                parent_block_id,
-                self.ledger.token_symbol(),
-            )?;
-            for transaction in rosetta_core_block.transactions.into_iter() {
-                transactions.push(BlockTransaction {
-                    block_identifier: rosetta_core_block.block_identifier.clone(),
-                    transaction,
-                });
-            }
+        for block in &blocks {
+            transactions.push(BlockTransaction {
+                block_identifier: convert::block_id(block)?,
+                transaction: convert::hashed_block_to_rosetta_core_transaction(
+                    block,
+                    self.ledger.token_symbol(),
+                )?,
+            });
         }
 
         transactions.iter_mut().for_each(|tx| {
@@ -978,11 +989,13 @@ fn is_a_rosetta_block_index(
     }
 }
 
-/// Returns the identifier of the parent of the block at `block_index`.
+/// Returns the identifier of the parent of the Rosetta block at `block_index`,
+/// which is the previous Rosetta block, or the last ledger block before the
+/// first Rosetta block.
 ///
 /// Reads the Rosetta blocks mode from `blocks` instead of locking the
 /// blockchain again, so callers can keep holding their `Blocks` guard.
-fn create_parent_block_id(
+fn rosetta_block_parent_id(
     blocks: &Blocks,
     block_index: BlockIndex,
 ) -> Result<BlockIdentifier, ApiError> {
@@ -994,7 +1007,20 @@ fn create_parent_block_id(
             index: parent_block_index,
             hash: hex::encode(parent_block.hash()),
         })
-    } else if blocks.is_verified_by_idx(&parent_block_index)? {
+    } else {
+        ledger_block_parent_id(blocks, block_index)
+    }
+}
+
+/// Returns the identifier of the parent of the ledger block at `block_index`,
+/// which is the previous ledger block, also in Rosetta blocks mode.
+fn ledger_block_parent_id(
+    blocks: &Blocks,
+    block_index: BlockIndex,
+) -> Result<BlockIdentifier, ApiError> {
+    // For the first block, we return the block itself as its parent
+    let parent_block_index = block_index.saturating_sub(1);
+    if blocks.is_verified_by_idx(&parent_block_index)? {
         let parent_block = &blocks.get_hashed_block(&parent_block_index)?;
         convert::block_id(parent_block)
     } else {

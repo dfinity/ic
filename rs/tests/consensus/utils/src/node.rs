@@ -358,3 +358,30 @@ pub async fn await_subnet_firewall_registry_version_with_retries_async(
     )
     .await
 }
+
+const REGISTRY_CLIENT_REGISTRY_VERSION: (&str, u16) =
+    ("ic_registry_client_registry_version", REPLICA_METRICS_PORT);
+
+/// Waits until the registry clients of all replicas of `subnet` have fetched
+/// registry version `target_version` (or later).
+pub async fn await_subnet_registry_client_registry_version(
+    subnet: &SubnetSnapshot,
+    target_version: RegistryVersion,
+    logger: &Logger,
+    retry_timeout: Duration,
+    retry_backoff: Duration,
+) {
+    await_metric_registry_version(
+        REGISTRY_CLIENT_REGISTRY_VERSION,
+        &format!(
+            "Waiting until registry client registry version {} on subnet {}",
+            target_version, subnet.subnet_id,
+        ),
+        subnet.nodes().collect(),
+        target_version,
+        logger,
+        retry_timeout,
+        retry_backoff,
+    )
+    .await
+}

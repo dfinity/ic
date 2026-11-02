@@ -28,6 +28,13 @@ on:
         required: false
         default: ${{ github.event.pull_request.number }}
         type: string
+    secrets:
+      BEP_GPG_PASSPHRASE:
+        description: Encrypts the build event files that the bazel action uploads
+        required: false
+      PR_CREATION_BOT_PRIVATE_KEY:
+        description: Mints the token that pushes fixes to a head branch in this repository
+        required: false
 
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
@@ -73,6 +80,8 @@ jobs:
       HEAD_REPO: ${{ inputs.head-repo }}
     steps:
       - name: Create GitHub App Token
+        # Only the push below needs it, and only for a head branch in this repository.
+        if: env.HEAD_REPO == github.repository
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         id: app-token
         with:
@@ -83,7 +92,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ case(github.event_name == 'pull_request', github.event.pull_request.head.ref, inputs.commit-sha) }}
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
       - uses: ./.github/actions/netrc
       - name: Run Linter
         id: linter
@@ -127,8 +136,7 @@ jobs:
                 # There are some changes staged. Only commit and push them when the PR's
                 # head branch lives in this repository: on the ci-kickoff-manual path the
                 # PR can come from a fork, in which case "origin" is still this repository
-                # and the push would create a branch named after the fork's branch here
-                # instead of updating the PR. Show the diff for the contributor instead.
+                # and a push could not update the PR. Show the diff for the contributor instead.
                 if [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
                     git config --global user.email "infra+github-automation@dfinity.org"
                     git config --global user.name "IDX GitHub Automation"
@@ -184,6 +192,7 @@ jobs:
     env: *pr-branch-env
     steps:
       - name: Create GitHub App Token
+        if: env.HEAD_REPO == github.repository
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         id: app-token
         with:
@@ -227,8 +236,7 @@ jobs:
               # There are some changes staged. Only commit and push them when the PR's
               # head branch lives in this repository: on the ci-kickoff-manual path the
               # PR can come from a fork, in which case "origin" is still this repository
-              # and the push would create a branch named after the fork's branch here
-              # instead of updating the PR. Show the diff for the contributor instead.
+              # and a push could not update the PR. Show the diff for the contributor instead.
               if [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
                   git config --global user.email "infra+github-automation@dfinity.org"
                   git config --global user.name "IDX GitHub Automation"
@@ -254,6 +262,7 @@ jobs:
     env: *pr-branch-env
     steps:
       - name: Create GitHub App Token
+        if: env.HEAD_REPO == github.repository
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         id: app-token
         with:
@@ -288,8 +297,7 @@ jobs:
               # There are some changes staged. Only commit and push them when the PR's
               # head branch lives in this repository: on the ci-kickoff-manual path the
               # PR can come from a fork, in which case "origin" is still this repository
-              # and the push would create a branch named after the fork's branch here
-              # instead of updating the PR. Show the diff for the contributor instead.
+              # and a push could not update the PR. Show the diff for the contributor instead.
               if [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
                   git config --global user.email "infra+github-automation@dfinity.org"
                   git config --global user.name "IDX GitHub Automation"

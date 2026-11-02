@@ -892,8 +892,8 @@ impl ConsensusPool for TestConsensusPool {
         self.pool.build_block_chain(start_height, end)
     }
 
-    fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
-        self.pool.block_instant(hash)
+    fn block_instant(&self, block: &HashedBlock) -> Option<Instant> {
+        self.pool.block_instant(block)
     }
 
     fn message_instant(&self, id: &ConsensusMessageId) -> Option<Instant> {
