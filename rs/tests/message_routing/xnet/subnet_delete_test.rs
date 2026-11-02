@@ -497,11 +497,10 @@ async fn run_scenario(
     .expect("setting US3 global data should succeed");
     slog::info!(logger, "Step 8 done: US3 reply released");
 
-    // Step 9a: Delete subnet C. Snapshot the topology right before the deletion:
-    // `block_for_newer_registry_version` derives its target version from the
-    // snapshot's registry version + 1, so the baseline must be captured before
-    // the deletion, otherwise it could block forever waiting for a version that
-    // only appears after the (later) unhalting of T.
+    // Step 9a: Delete subnet C. The test driver's copy of the registry is only
+    // synced on demand (so it misses e.g. the halting of C), so sync it right
+    // before the deletion. As this test is the only registry writer, C is then
+    // deleted at the next registry version.
     slog::info!(
         logger,
         "Step 9a: Deleting subnet C ({})",
@@ -514,7 +513,12 @@ async fn run_scenario(
     let dropped_responses_before = read_dropped_response_count(&s_node)
         .await
         .expect("failed to read the dropped response counter before deletion");
-    let topo_before_delete = env.topology_snapshot();
+    let topo_before_delete = env
+        .topology_snapshot()
+        .block_for_newest_mainnet_registry_version()
+        .await
+        .expect("failed to sync the registry before delete_subnet");
+    let c_delete_registry_version = topo_before_delete.get_registry_version().increment();
     let delete_arg = DeleteSubnetPayload {
         subnet_id: c_subnet.subnet_id.get().into(),
     };
@@ -527,12 +531,21 @@ async fn run_scenario(
         .await
         .expect("delete_subnet should succeed");
 
-    // Record the registry version at which C was deleted.
     let topo_after_delete = topo_before_delete
-        .block_for_newer_registry_version()
+        .block_for_min_registry_version(c_delete_registry_version)
         .await
         .expect("registry should update after delete_subnet");
-    let c_delete_registry_version = topo_after_delete.get_registry_version();
+    assert_eq!(
+        topo_after_delete.get_registry_version(),
+        c_delete_registry_version,
+        "unexpected registry mutation besides delete_subnet"
+    );
+    assert!(
+        topo_after_delete
+            .subnets()
+            .all(|s| s.subnet_id != c_subnet.subnet_id),
+        "subnet C still exists at registry version {c_delete_registry_version}"
+    );
     slog::info!(
         logger,
         "Step 9a done: subnet C deleted at registry version {}",
