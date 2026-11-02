@@ -598,8 +598,17 @@ Node operators are entities authorized to add and remove nodes. They are associa
 - **THEN** the specified fields of the node operator record are updated
 
 #### Scenario: Update node operator configuration directly
-- **WHEN** an `UpdateNodeOperatorConfigDirectlyPayload` is submitted by the node operator
-- **THEN** the limited set of directly-modifiable fields are updated
+- **WHEN** an `UpdateNodeOperatorConfigDirectlyPayload` is submitted to `update_node_operator_config_directly`
+- **THEN** the caller must be the current node provider of the node operator record (`node_provider_principal_id`), or the call fails with "Caller ... not equal to the node_provider_princpal_id for this record."
+- **AND** the call reserves capacity against the caller's node provider rate limit
+- **AND** the payload must name a `node_provider_id`, which must differ from the node operator ID
+- **AND** the record's node provider is set to the new `node_provider_id` without an NNS proposal
+
+#### Scenario: Direct reassignment only to known node providers
+- **WHEN** `update_node_operator_config_directly` names a `node_provider_id` that is not the node provider of any node operator record at the latest registry version
+- **THEN** the call is rejected, with an error saying the node operator can only be reassigned directly to a principal that is already a node provider in the registry, and that an `UpdateNodeOperatorConfig` proposal is needed to assign it to a new node provider
+- **AND** the rejected call does not consume the caller's node provider rate-limit capacity, because the reservation is dropped rather than committed
+- **AND** this keeps node provider principals entering the registry only through NNS proposals (`AddNodeOperator`, `UpdateNodeOperatorConfig`), so a node provider cannot move the node-rewards attribution of its node operators to a principal of its own choosing
 
 #### Scenario: Remove node operators
 - **WHEN** a `RemoveNodeOperatorsPayload` is submitted
