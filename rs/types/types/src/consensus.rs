@@ -4,7 +4,7 @@ use crate::{
     artifact::ConsensusMessageId,
     batch::{BatchPayload, ValidationContext},
     consensus::dkg::DkgPayload,
-    crypto::threshold_sig::ni_dkg::NiDkgId,
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag},
     crypto::*,
     replica_version::ReplicaVersion,
     signature::*,
@@ -1457,7 +1457,13 @@ impl TryFrom<pb::Block> for Block {
 
 impl CountBytes for NiDkgId {
     fn count_bytes(&self) -> usize {
-        std::mem::size_of::<Self>()
+        let key_name_bytes = match &self.dkg_tag {
+            NiDkgTag::LowThreshold | NiDkgTag::HighThreshold => 0,
+            NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(key_id)) => {
+                key_id.name.len()
+            }
+        };
+        std::mem::size_of::<Self>() + key_name_bytes
     }
 }
 
