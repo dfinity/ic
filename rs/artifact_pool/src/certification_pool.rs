@@ -510,7 +510,7 @@ mod tests {
     use ic_interfaces::certification::CertificationPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_consensus::fake::{Fake, FakeSigner};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::artifact::IdentifiableArtifact;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{
@@ -538,6 +538,7 @@ mod tests {
                 signature: ThresholdSignatureShare::fake(node_test_id(node)),
                 content,
             },
+            replica_version: test_replica_version(),
         })
     }
 
@@ -548,6 +549,7 @@ mod tests {
             height: Height::from(height),
             height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed { content, signature },
+            replica_version: test_replica_version(),
         })
     }
 

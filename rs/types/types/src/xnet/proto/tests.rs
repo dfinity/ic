@@ -1,11 +1,13 @@
 use crate::{
-    CryptoHashOfPartialState, Height, PrincipalId, PrincipalIdBlobParseError, SubnetId,
-    consensus::certification::{Certification, CertificationContent},
+    CryptoHashOfPartialState, Height, NodeId, PrincipalId, PrincipalIdBlobParseError,
+    ReplicaVersion, SubnetId,
+    consensus::certification::{Certification, CertificationContent, CertificationShare},
     crypto::{
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed, ThresholdSigShare,
+        ThresholdSigShareOf,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet},
     },
-    signature::ThresholdSignature,
+    signature::{ThresholdSignature, ThresholdSignatureShare},
     xnet::CertifiedStreamSlice,
 };
 use assert_matches::assert_matches;
@@ -121,6 +123,38 @@ fn error_invalid_principal_id() {
 }
 
 #[test]
+fn certification_share_roundtrip() {
+    let share = certification_share_for_test();
+    assert_eq!(
+        share.clone(),
+        v1::CertificationShare::proxy_decode(&v1::CertificationShare::proxy_encode(share)).unwrap()
+    );
+}
+
+/// Certifications and shares from replica versions that do not set the replica
+/// version fail to decode.
+#[test]
+fn error_missing_replica_version() {
+    let mut certification_proto: v1::Certification = certification_for_test().into();
+    certification_proto.replica_version = String::new();
+    assert_matches!(
+        <v1::Certification as ProtoProxy<Certification>>::proxy_decode(
+            &v1::Certification::proxy_encode(certification_proto)
+        ),
+        Err(ProxyDecodeError::ReplicaVersionParseError(_))
+    );
+
+    let mut share_proto: v1::CertificationShare = certification_share_for_test().into();
+    share_proto.replica_version = String::new();
+    assert_matches!(
+        <v1::CertificationShare as ProtoProxy<CertificationShare>>::proxy_decode(
+            &v1::CertificationShare::proxy_encode(share_proto)
+        ),
+        Err(ProxyDecodeError::ReplicaVersionParseError(_))
+    );
+}
+
+#[test]
 fn error_missing_field() {
     let sig = threshold_signature_for_test();
     let mut sig_proto: pb_types::ThresholdSignature = sig.into();
@@ -150,7 +184,27 @@ fn certification_for_test() -> Certification {
             content: certification_content_for_test(),
             signature: threshold_signature_for_test(),
         },
+        replica_version: replica_version_for_test(),
     }
+}
+
+fn certification_share_for_test() -> CertificationShare {
+    CertificationShare {
+        height: Height::new(14),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
+        signed: Signed {
+            content: certification_content_for_test(),
+            signature: ThresholdSignatureShare {
+                signature: ThresholdSigShareOf::new(ThresholdSigShare(vec![4, 5, 6])),
+                signer: NodeId::from(PrincipalId::new_node_test_id(42)),
+            },
+        },
+        replica_version: replica_version_for_test(),
+    }
+}
+
+fn replica_version_for_test() -> ReplicaVersion {
+    ReplicaVersion::try_from("version_for_test").unwrap()
 }
 
 fn certification_content_for_test() -> CertificationContent {

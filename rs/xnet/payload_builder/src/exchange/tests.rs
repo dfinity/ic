@@ -14,7 +14,9 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_vec_count, fetch_int_counter_vec, fetch_int_gauge, metric_vec,
 };
-use ic_test_utilities_types::ids::{NODE_42, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5};
+use ic_test_utilities_types::ids::{
+    NODE_42, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5, test_replica_version,
+};
 use ic_types::CryptoHashOfPartialState;
 use ic_types::consensus::certification::{Certification, CertificationContent};
 use ic_types::crypto::{CryptoHash, Signed};
@@ -147,6 +149,7 @@ impl AdvertHandlerFixture {
                 ))),
                 signature: ThresholdSignature::fake(),
             },
+            replica_version: test_replica_version(),
         });
         let registry = get_registry_for_test(&[REMOTE_SUBNET]);
 

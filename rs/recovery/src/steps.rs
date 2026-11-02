@@ -1221,7 +1221,7 @@ impl Step for UploadAndHostTarStep {
 mod tests {
     use ic_crypto_tree_hash::{Digest, Witness};
     use ic_test_utilities_consensus::fake::{Fake, FakeSigner};
-    use ic_test_utilities_types::ids::node_test_id;
+    use ic_test_utilities_types::ids::{node_test_id, test_replica_version};
     use ic_types::{
         consensus::certification::{Certification, CertificationContent, CertificationShare},
         crypto::{CryptoHash, Signed},
@@ -1239,6 +1239,7 @@ mod tests {
                 content: CertificationContent::new(CryptoHash(hash).into()),
                 signature: ThresholdSignature::fake(),
             },
+            replica_version: test_replica_version(),
         })
     }
 
@@ -1250,6 +1251,7 @@ mod tests {
                 content: CertificationContent::new(CryptoHash(hash).into()),
                 signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
             },
+            replica_version: test_replica_version(),
         })
     }
 

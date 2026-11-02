@@ -78,6 +78,7 @@ impl Fake for Certification {
                 ))),
                 signature: ThresholdSignature::fake(),
             },
+            replica_version: test_replica_version(),
         }
     }
 }

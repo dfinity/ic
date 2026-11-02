@@ -74,6 +74,8 @@ pub struct Certification {
     pub signature: ::core::option::Option<super::super::super::types::v1::ThresholdSignature>,
     #[prost(message, optional, tag = "4")]
     pub height_witness: ::core::option::Option<Witness>,
+    #[prost(string, tag = "5")]
+    pub replica_version: ::prost::alloc::string::String,
 }
 /// Certification signed by a single replica
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
@@ -86,6 +88,8 @@ pub struct CertificationShare {
     pub signature: ::core::option::Option<super::super::super::types::v1::ThresholdSignatureShare>,
     #[prost(message, optional, tag = "4")]
     pub height_witness: ::core::option::Option<Witness>,
+    #[prost(string, tag = "5")]
+    pub replica_version: ::prost::alloc::string::String,
 }
 /// XNet stream slice with certification and matching Merkle proof.
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]

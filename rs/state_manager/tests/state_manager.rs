@@ -63,7 +63,7 @@ use ic_test_utilities_state::{arb_stream, arb_stream_slice, canister_ids};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::ids::{
     SUBNET_1, SUBNET_2, canister_test_id, message_test_id, node_test_id, subnet_test_id,
-    user_test_id,
+    test_replica_version, user_test_id,
 };
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::batch::{
@@ -9660,6 +9660,7 @@ fn fake_certification_for_height_with_hash(height: Height, hash: CryptoHash) -> 
             content: CertificationContent::new(CryptoHashOfPartialState::from(hash)),
             signature: ThresholdSignature::fake(),
         },
+        replica_version: test_replica_version(),
     }
 }
 

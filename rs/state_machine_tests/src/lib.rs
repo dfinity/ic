@@ -5554,6 +5554,7 @@ fn certify_hash(
                 },
             },
         },
+        replica_version: test_replica_version(),
     }
 }
 

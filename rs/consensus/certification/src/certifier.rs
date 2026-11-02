@@ -22,7 +22,7 @@ use ic_types::{
     CryptoHashOfPartialState, Height,
     artifact::CertificationMessageId,
     consensus::{
-        Committee, HasCommittee, HasHeight,
+        Committee, HasCommittee, HasHeight, HasVersion,
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
@@ -361,6 +361,7 @@ impl CertifierImpl {
                         height: state_hash_metadata.height,
                         height_witness: state_hash_metadata.height_witness,
                         signed: Signed { content, signature },
+                        replica_version: self.replica_config.replica_version().clone(),
                     }),
                     Err(err) => {
                         error!(self.log, "Couldn't create a signature: {:?}", err);
@@ -418,6 +419,7 @@ impl CertifierImpl {
                     content: signed_cert_tuple.content.2,
                     signature: signed_cert_tuple.signature,
                 },
+                replica_version: self.replica_config.replica_version().clone(),
             })
         })
         .collect()
@@ -481,6 +483,12 @@ impl CertifierImpl {
 
     fn validate_certification(&self, certification: &Certification) -> Option<ChangeAction> {
         let msg = CertificationMessage::Certification(certification.clone());
+
+        // Ignore certifications created by replicas running a different replica version.
+        if certification.version() != self.replica_config.replica_version() {
+            return Some(ChangeAction::RemoveFromUnvalidated(msg));
+        }
+
         let verifier = VerifierImpl::new(self.crypto.clone());
         let registry_version =
             registry_version_at_height(self.consensus_pool_cache.as_ref(), certification.height)?;
@@ -545,6 +553,11 @@ impl CertifierImpl {
     ) -> Option<ChangeAction> {
         let msg = CertificationMessage::CertificationShare(share.clone());
         let content = &share.signed.content;
+
+        // Ignore shares created by replicas running a different replica version.
+        if share.version() != self.replica_config.replica_version() {
+            return Some(ChangeAction::RemoveFromUnvalidated(msg));
+        }
 
         // If a subnet splitting is taking place, we need to skip validating certifications (and
         // shares). In particular because after a split, before replicas get restarted, they are
@@ -711,10 +724,10 @@ mod tests {
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::consensus::{BlockPayload, HashedBlock, Payload, dkg::SplittingArgs};
     use ic_types::{
-        CryptoHashOfPartialState, Height,
+        CryptoHashOfPartialState, Height, ReplicaVersion,
         artifact::CertificationMessageId,
         consensus::certification::{
             Certification, CertificationContent, CertificationMessage, CertificationMessageHash,
@@ -756,8 +769,24 @@ mod tests {
                     signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
                     content,
                 },
+                replica_version: test_replica_version(),
             },
         ))
+    }
+
+    fn with_replica_version(
+        mut artifact: UnvalidatedArtifact<CertificationMessage>,
+        replica_version: &ReplicaVersion,
+    ) -> UnvalidatedArtifact<CertificationMessage> {
+        match &mut artifact.message {
+            CertificationMessage::Certification(cert) => {
+                cert.replica_version = replica_version.clone()
+            }
+            CertificationMessage::CertificationShare(share) => {
+                share.replica_version = replica_version.clone()
+            }
+        }
+        artifact
     }
 
     fn fake_dkg_id(h: u64) -> NiDkgId {
@@ -781,6 +810,7 @@ mod tests {
             height,
             height_witness: Witness::new_for_testing_with_height(),
             signed: Signed { content, signature },
+            replica_version: test_replica_version(),
         }))
     }
 
@@ -1588,6 +1618,111 @@ mod tests {
         })
     }
 
+    /// Test that certification artifacts created by replicas running a different replica
+    /// version are removed without being validated, and that the artifacts created by this
+    /// replica carry its replica version.
+    #[test]
+    fn test_ignore_artifacts_from_other_replica_versions() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                pool,
+                replica_config,
+                registry,
+                crypto,
+                state_manager,
+                ..
+            } = DependenciesBuilder::new(pool_config.clone(), 4).build();
+            let metrics_registry = MetricsRegistry::new();
+            let mut cert_pool = CertificationPoolImpl::new(
+                replica_config.node_id,
+                pool_config,
+                ic_logger::replica_logger::no_op_logger(),
+                metrics_registry.clone(),
+            );
+            let own_version = replica_config.replica_version().clone();
+            let other_version = ReplicaVersion::try_from("other_version").unwrap();
+            with_test_replica_logger(|log| {
+                let certifier = CertifierImpl::new(
+                    replica_config,
+                    registry,
+                    crypto,
+                    state_manager,
+                    pool.get_cache(),
+                    metrics_registry,
+                    log,
+                );
+
+                // Unvalidated artifacts from another replica version are removed.
+                let height = Height::from(4);
+                cert_pool.insert(with_replica_version(
+                    fake_cert_default(height),
+                    &other_version,
+                ));
+                for node_id in 0..4 {
+                    cert_pool.insert(with_replica_version(
+                        fake_share(height, node_id),
+                        &other_version,
+                    ));
+                }
+                let change_set = certifier.validate(&cert_pool, std::iter::once(height));
+                assert_eq!(change_set.len(), 5, "unexpected changeset: {change_set:?}");
+                assert!(
+                    change_set
+                        .iter()
+                        .all(|x| matches!(x, ChangeAction::RemoveFromUnvalidated(_))),
+                    "All items should be RemoveFromUnvalidated"
+                );
+                cert_pool.apply(change_set);
+                assert_eq!(cert_pool.unvalidated_shares_at_height(height).count(), 0);
+                assert_eq!(
+                    cert_pool
+                        .unvalidated_certifications_at_height(height)
+                        .count(),
+                    0
+                );
+                assert_eq!(cert_pool.shares_at_height(height).count(), 0);
+                assert!(cert_pool.certification_at_height(height).is_none());
+
+                // This replica signs with its replica version...
+                let shares = certifier.sign(
+                    &cert_pool,
+                    &[StateHashMetadata {
+                        height,
+                        hash: gen_content(height).hash,
+                        height_witness: Witness::new_for_testing_with_height(),
+                    }],
+                );
+                assert_eq!(shares.len(), 1);
+                assert_eq!(shares[0].version(), &own_version);
+                cert_pool.apply(
+                    shares
+                        .into_iter()
+                        .map(ChangeAction::AddToValidated)
+                        .collect(),
+                );
+
+                // ... and accepts shares with the same replica version...
+                for node_id in 1..4 {
+                    cert_pool.insert(fake_share(height, node_id));
+                }
+                let change_set = certifier.validate(&cert_pool, std::iter::once(height));
+                assert_eq!(change_set.len(), 3, "unexpected changeset: {change_set:?}");
+                assert!(
+                    change_set
+                        .iter()
+                        .all(|x| matches!(x, ChangeAction::MoveToValidated(_))),
+                    "All items should be MoveToValidated"
+                );
+                cert_pool.apply(change_set);
+
+                // ... which it aggregates into a certification with its replica version.
+                let certifications = certifier.aggregate(&cert_pool, height);
+                assert_eq!(certifications.len(), 1);
+                assert_eq!(certifications[0].version(), &own_version);
+            })
+        })
+    }
+
     /// Test that the certifier delivers certification requested by the state manager
     /// via the function `StateManager::list_state_heights_to_certify`.
     /// Test scenario:
@@ -1626,6 +1761,7 @@ mod tests {
                                 content: gen_content(Height::from(height)),
                                 signature: ThresholdSignature::fake(),
                             },
+                            replica_version: test_replica_version(),
                         }));
                 }
 
@@ -1877,6 +2013,7 @@ mod tests {
                                 content,
                                 signature: ThresholdSignatureShare::fake(node_test_id(1)),
                             },
+                            replica_version: test_replica_version(),
                         };
 
                         let result = certifier.validate_share(&cert_pool, &share);
