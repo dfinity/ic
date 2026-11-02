@@ -1,4 +1,11 @@
 # Kernel cmdline parameters for launching the HostOS.
 # BOOT_ARGS_A targets partition set "A" while BOOT_ARGS_B targets partition set "B"
-BOOT_ARGS_A="root=/dev/hostlvm/A_root console=ttyS0,115200 console=tty0 nomodeset video=1024x768 dfinity.system=A lsm=lockdown,capability,landlock,yama,selinux,ima,evm selinux=1 enforcing=0"
-BOOT_ARGS_B="root=/dev/hostlvm/B_root console=ttyS0,115200 console=tty0 nomodeset video=1024x768 dfinity.system=B lsm=lockdown,capability,landlock,yama,selinux,ima,evm selinux=1 enforcing=0"
+#
+# oops=panic panic=10: turn any kernel Oops into a panic and reboot 10 s later.
+# softlockup_panic=1 watchdog_thresh=60: also panic when a CPU is stuck in the kernel for 120 s
+# (twice watchdog_thresh). The default 20 s is too short: in system tests the HostOS itself runs
+# virtualized, and a vCPU starved by an oversubscribed host looks stuck as well. The window cannot
+# be longer: a stuck CPU reports an RCU stall itself every 180 s
+# (3 x rcupdate.rcu_cpu_stall_timeout) and that report restarts the soft-lockup window.
+BOOT_ARGS_A="root=/dev/hostlvm/A_root console=ttyS0,115200 console=tty0 nomodeset video=1024x768 oops=panic panic=10 softlockup_panic=1 watchdog_thresh=60 dfinity.system=A lsm=lockdown,capability,landlock,yama,selinux,ima,evm selinux=1 enforcing=0"
+BOOT_ARGS_B="root=/dev/hostlvm/B_root console=ttyS0,115200 console=tty0 nomodeset video=1024x768 oops=panic panic=10 softlockup_panic=1 watchdog_thresh=60 dfinity.system=B lsm=lockdown,capability,landlock,yama,selinux,ima,evm selinux=1 enforcing=0"
