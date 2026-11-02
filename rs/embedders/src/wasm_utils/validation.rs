@@ -1176,10 +1176,7 @@ fn validate_export_section(
                     }
                 }
                 if let Some(valid_signature) = valid_exported_functions.get(func_name) {
-                    let fn_id = module
-                        .exports
-                        .get_func_by_name(export.name.clone())
-                        .unwrap();
+                    let fn_id = FunctionID(export.index);
                     let type_id = module.functions.get_type_id(fn_id);
                     let ty = module.types.get(type_id).unwrap();
                     let Types::FuncType {
