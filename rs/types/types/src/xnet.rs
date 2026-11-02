@@ -1,8 +1,6 @@
 //! Types used by the Xnet component.
 use crate::ProxyDecodeError;
 use crate::{consensus::certification::SignedCertificationContent, messages::StreamMessage};
-#[cfg(test)]
-use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::state::queues::v1 as pb_queues;
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
@@ -379,7 +377,6 @@ impl StreamSlice {
 /// A slice of the stream of messages produced by the other subnet together with
 /// a cryptographic proof that the majority of the subnet agrees on it.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CertifiedStreamSlice {
     /// Serialized part of the state tree containing the stream data.
     #[serde(with = "serde_bytes")]

@@ -14,7 +14,6 @@ use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
 use ic_protobuf::messaging::xnet::v1;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::types::v1 as pb_types;
-use prost::Message;
 
 const SUBNET_1: SubnetId = SubnetId::new(PrincipalId::new(
     10,
@@ -75,69 +74,26 @@ fn certified_stream_slice_roundtrip() {
     );
 }
 
-/// `v1::CertifiedStreamSlice` as of older replica versions, with a full
-/// `v1::Certification`.
-///
-/// TODO: Remove (along with the test below) once no subnet runs such a version.
-#[derive(Clone, PartialEq, Message)]
-struct CertifiedStreamSliceWithCertification {
-    #[prost(bytes = "vec", tag = "1")]
-    payload: Vec<u8>,
-    #[prost(bytes = "vec", tag = "2")]
-    merkle_proof: Vec<u8>,
-    #[prost(message, optional, tag = "3")]
-    certification: Option<v1::Certification>,
-}
-
-/// Slices are wire compatible with older replica versions, whose certifications
-/// also have a height and height witness.
+/// Decoding rejects signers other than high-threshold NI-DKG IDs.
 #[test]
-fn certified_stream_slice_wire_compatibility() {
-    let certified_stream_slice = certified_stream_slice_for_test();
-    let with_certification = CertifiedStreamSliceWithCertification {
-        payload: certified_stream_slice.payload.clone(),
-        merkle_proof: certified_stream_slice.merkle_proof.clone(),
-        certification: Some(certification_for_test().into()),
-    };
-
-    // Decoding ignores the height and height witness.
-    assert_eq!(
-        certified_stream_slice,
-        v1::CertifiedStreamSlice::proxy_decode(&with_certification.encode_to_vec()).unwrap()
-    );
-
-    // Older replica versions decode a certification without height and height witness.
-    let mut expected = with_certification;
-    let certification = expected.certification.as_mut().unwrap();
-    certification.height = 0;
-    certification.height_witness = None;
-    assert_eq!(
-        expected,
-        CertifiedStreamSliceWithCertification::decode(
-            v1::CertifiedStreamSlice::proxy_encode(certified_stream_slice).as_slice()
-        )
-        .unwrap()
-    );
-}
-
-/// Decoding sets the signer's NI-DKG tag to `HighThreshold`.
-#[test]
-fn certified_stream_slice_normalizes_signer() {
-    let certified_stream_slice = certified_stream_slice_for_test();
+fn certified_stream_slice_rejects_other_signers() {
     let master_public_key_tag =
         NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
             curve: VetKdCurve::Bls12_381_G2,
             name: "key".to_string(),
         }));
     for dkg_tag in [NiDkgTag::LowThreshold, master_public_key_tag] {
-        let mut other_signer = certified_stream_slice.clone();
+        let mut other_signer = certified_stream_slice_for_test();
         other_signer.certification.signature.signer.dkg_tag = dkg_tag;
-        assert_eq!(
-            certified_stream_slice,
-            v1::CertifiedStreamSlice::proxy_decode(&v1::CertifiedStreamSlice::proxy_encode(
-                other_signer
-            ))
-            .unwrap()
+        let decoded: Result<CertifiedStreamSlice, _> = v1::CertifiedStreamSlice::proxy_decode(
+            &v1::CertifiedStreamSlice::proxy_encode(other_signer),
+        );
+        assert_matches!(
+            decoded,
+            Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "SignedCertificationContent",
+                ..
+            })
         );
     }
 }
