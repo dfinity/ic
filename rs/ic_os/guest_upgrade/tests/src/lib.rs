@@ -586,6 +586,13 @@ async fn test_server_measurement_not_in_registry() {
     let mut fixture = DiskEncryptionKeyExchangeTestFixture::new(config);
     fixture.expect_can_open(false);
     assert_statuses_contain_errors(fixture.run_key_exchange_test().await, "InvalidMeasurement");
+    // Another elected version might include the server's measurement, so the client falls back.
+    assert_eq!(
+        fixture
+            .elected_measurements_source
+            .all_elected_measurements_request_count(),
+        1
+    );
     fixture.verify_no_artifacts_persisted();
 }
 
@@ -615,6 +622,13 @@ async fn test_server_wrong_custom_data() {
 
     assert_status_contains_error(&server_result, "Debug info from Upgrade VM");
     assert_statuses_contain_errors((server_result, client_result), "InvalidCustomData");
+    // Other measurements cannot fix wrong custom data, so the client does not fall back.
+    assert_eq!(
+        fixture
+            .elected_measurements_source
+            .all_elected_measurements_request_count(),
+        0
+    );
 }
 
 #[tokio::test]
@@ -690,6 +704,13 @@ async fn test_server_attestation_report_not_signed() {
 
     assert_status_contains_error(&server_result, "Debug info from Upgrade VM");
     assert_statuses_contain_errors((server_result, client_result), "InvalidSignature");
+    // Other measurements cannot fix a missing signature, so the client does not fall back.
+    assert_eq!(
+        fixture
+            .elected_measurements_source
+            .all_elected_measurements_request_count(),
+        0
+    );
 }
 
 #[tokio::test]

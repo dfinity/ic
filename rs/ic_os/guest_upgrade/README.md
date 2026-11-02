@@ -59,6 +59,8 @@ the NNS subnet and verified against the NNS public key.
 
 If that check fails, for example because the server runs an older GuestOS version, it falls back
 to replicating the whole registry and checking the server's measurement against all elected versions.
+Failures that other measurements cannot fix, such as an invalid signature, custom data, chip ID or
+guest policy, fail the verification right away without the fallback.
 This fallback will be removed once all GuestOSes are upgraded.
 
 ## Sequence

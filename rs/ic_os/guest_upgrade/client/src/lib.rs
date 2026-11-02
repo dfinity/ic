@@ -1,10 +1,10 @@
 use crate::elected_measurements::ElectedMeasurementsSource;
 use crate::tls::SkipServerCertificateCheck;
 use anyhow::{Context, Error, Result, anyhow, bail};
-use attestation::SevAttestationPackage;
 use attestation::attestation_package::{
     AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
+use attestation::{SevAttestationPackage, VerificationError, VerificationErrorDetail};
 use config_types::GuestOSConfig;
 use der::asn1::OctetStringRef;
 use guest_disk::crypt::LuksHeaderLocation;
@@ -265,8 +265,10 @@ impl DiskEncryptionKeyExchangeClientAgent {
     ///
     /// The server's launch measurement is checked against the elected measurements of the
     /// GuestOS version that the server reports.
-    /// If the check against the reported version fails, we fall back to the old approach
-    /// of checking against all elected GuestOS versions.
+    /// If the measurements of the reported version cannot be fetched or do not include the
+    /// server's measurement, we fall back to the old approach of checking against all elected
+    /// GuestOS versions. Any other verification failure is final, since other measurements
+    /// cannot fix it.
     ///
     /// TODO: Remove the fallback once everything is upgraded.
     /// Also remove the returned note since it would make no sense.
@@ -310,6 +312,20 @@ impl DiskEncryptionKeyExchangeClientAgent {
             Err(err) => err,
         };
 
+        // Other measurements cannot fix a server attestation package that fails verification for
+        // another reason than its launch measurement
+        if version_verification_error
+            .downcast_ref::<VerificationError>()
+            .is_some_and(|verification_error| {
+                !matches!(
+                    verification_error.detail,
+                    Some(VerificationErrorDetail::InvalidMeasurement(_))
+                )
+            })
+        {
+            return Err(version_verification_error);
+        }
+
         println!(
             "Could not verify the server against the GuestOS version it reported, \
             falling back to all elected GuestOS versions: {version_verification_error:#}"
@@ -319,7 +335,12 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .elected_measurements_source
             .get_all_elected_measurements()
             .await
-            .context("Failed to get all elected measurements")?;
+            .with_context(|| {
+                format!(
+                    "Verification against the reported GuestOS version failed first: \
+                     {version_verification_error:#}, then getting all elected measurements failed"
+                )
+            })?;
 
         verify_server_attestation_package(
             server_attestation_package,
