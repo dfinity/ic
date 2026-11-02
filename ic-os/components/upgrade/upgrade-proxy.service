@@ -1,0 +1,27 @@
+[Unit]
+Description=Upgrade Proxy
+After=network-online.target
+Wants=network-online.target
+Before=guestos.target
+StartLimitIntervalSec=300s
+StartLimitBurst=30
+
+[Service]
+Type=exec
+DynamicUser=yes
+StateDirectory=ic/upgrade-proxy ic/upgrade-proxy/tmp
+
+ExecStartPre=/usr/sbin/nginx -t -c /etc/nginx/upgrade-proxy.conf -g 'daemon off;'
+ExecStart=/usr/sbin/nginx -c /etc/nginx/upgrade-proxy.conf -g 'daemon off;'
+ExecReload=/usr/sbin/nginx -t -c /etc/nginx/upgrade-proxy.conf -g 'daemon off;'
+ExecReload=/bin/kill -HUP $MAINPID
+
+KillSignal=SIGQUIT
+KillMode=mixed
+TimeoutStopSec=30s
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
+WantedBy=guestos.target
