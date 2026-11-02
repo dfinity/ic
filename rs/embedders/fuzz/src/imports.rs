@@ -7,7 +7,9 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::instrumentation::WasmMemoryType,
     wasmtime_embedder::{
-        StoreData, WasmtimeEmbedder, linker,
+        StoreData, WasmtimeEmbedder,
+        heap_access::TrackerHeapAccess,
+        linker,
         system_api::{ApiType, DefaultOutOfInstructionsHandler, SystemApiImpl},
     },
 };
@@ -58,6 +60,7 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig, is_wasm64: bool) -> Sy
             num_instructions_global: None,
             log: no_op_logger(),
             limits: StoreLimits::default(),
+            heap_access: TrackerHeapAccess::inactive(config.wasm_memory_accessed_page_limit),
         },
     );
     let mut linker: wasmtime::Linker<StoreData> = wasmtime::Linker::new(&engine);

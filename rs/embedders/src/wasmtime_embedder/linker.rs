@@ -8,7 +8,7 @@ use crate::{
     },
 };
 use ic_config::{
-    embedders::{FeatureFlags, StableMemoryPageLimit},
+    embedders::{FeatureFlags, MemoryPageLimit},
     flag_status::FlagStatus,
 };
 use ic_interfaces::execution_environment::{
@@ -234,8 +234,8 @@ pub fn syscalls<
 >(
     linker: &mut Linker<StoreData>,
     feature_flags: FeatureFlags,
-    stable_memory_dirty_page_limit: StableMemoryPageLimit,
-    stable_memory_access_page_limit: StableMemoryPageLimit,
+    stable_memory_dirty_page_limit: MemoryPageLimit,
+    stable_memory_access_page_limit: MemoryPageLimit,
     main_memory_type: WasmMemoryType,
 ) where
     <I as TryInto<usize>>::Error: std::fmt::Display,
@@ -282,10 +282,9 @@ pub fn syscalls<
             })
             .and_then(|mem| {
                 let (mem, store) = mem.data_and_store_mut(&mut caller);
-                // TODO(heap page limit): replace with `Heap::new` and a check
-                // against the memory tracker once the accessed page limit lands.
-                let mut heap = Heap::unchecked(mem);
-                f(store.system_api_mut()?, &mut heap)
+                let (system_api, heap_access) = store.system_api_mut_heap_access()?;
+                let mut heap = Heap::new(mem, heap_access);
+                f(system_api, &mut heap)
             })
             .map_err(|e| process_err(&mut caller, e))
     }
