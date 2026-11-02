@@ -185,6 +185,15 @@ As a temporary mitigation for CVE-2026-98432, a remotely triggerable use-after-f
 - **THEN** it is not filtered by this rule: loopback traffic is accepted before it, IPv6 tables are unchanged (IPv6 is not affected by the CVE), and SetupOS loads no nftables ruleset
 - **AND** each rule site carries a TODO to remove the rule once IC-OS ships an Ubuntu kernel with the CVE-2026-98432 fix
 
+### Requirement: Explicit Linux Security Module Stack
+The kernel command lines of GuestOS (`BOOT_ARGS_A/B` and `BOOT_ARGS_TEE_A/B`), HostOS (`BOOT_ARGS_A/B`) and SetupOS (`BOOT_ARGS`) select the security modules explicitly with `lsm=lockdown,capability,landlock,yama,selinux,ima,evm`, together with `selinux=1` and `enforcing=1` (GuestOS) or `enforcing=0` (HostOS, SetupOS).
+
+#### Scenario: Kernel appends bpf to CONFIG_LSM
+- **WHEN** IC-OS boots an Ubuntu kernel whose `CONFIG_LSM` lists the BPF LSM ahead of SELinux (Ubuntu 7.0.0-39 and later)
+- **THEN** `lsm=` overrides both `CONFIG_LSM` and the legacy `security=` parameter, which IC-OS no longer uses, so the BPF LSM stays disabled and SELinux owns the generic `/proc/<pid>/attr/*` interface
+- **AND** libselinux and systemd can read and set SELinux contexts through those files, so GuestOS (enforcing) does not freeze PID 1 early in boot and HostOS services such as dbus, sshd host-key generation and `guestos@0` start
+- **AND** the module stack is the same one the earlier 7.0.0-38 kernel ran, so the change makes no difference there; to enable the BPF LSM later, it must be listed after `selinux`
+
 ### Requirement: GuestOS First-Boot Storage and Service Ordering
 On a node's first boot, GuestOS creates its storage volumes and prepares their permissions before the services that use them start.
 
