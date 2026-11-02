@@ -171,6 +171,20 @@ IC-OS manages the GRUB bootloader configuration.
 - **THEN** the GRUB bootloader is set up with appropriate kernel parameters
 - **AND** boot configuration supports A/B partition upgrades
 
+### Requirement: Node Firewalls Drop IPv4 Packets Carrying IP Options
+As a temporary mitigation for CVE-2026-98432, a remotely triggerable use-after-free in the Linux kernel's IPv4 TCP connection setup when a connection request carries the Record Route or Timestamp IP options, the GuestOS and HostOS firewalls drop every inbound IPv4 packet that carries IP options until IC-OS ships an Ubuntu kernel with the fix.
+
+#### Scenario: Inbound IPv4 packet with IP options
+- **WHEN** an inbound IPv4 packet whose header length is not 5 words (i.e. it carries IP options) reaches the IPv4 INPUT chain of a GuestOS firewall (the replica, API boundary node and cloud engine variants of `ic.json5.template`, as rendered by the orchestrator) or of the HostOS firewall (`nftables.template`)
+- **THEN** the rule `ip hdrlength != 5 counter drop`, placed directly after the loopback accept, drops it and increments the rule's counter
+- **AND** because the rule precedes the per-source rate and connection limits and the `established, related` accept, it also drops such packets on already-established connections, and dropped packets do not count toward those limits
+- **AND** packets without IP options (header length 5) are handled by the remaining rules exactly as before
+
+#### Scenario: Scope of the mitigation
+- **WHEN** traffic does not enter through a node's IPv4 INPUT chain
+- **THEN** it is not filtered by this rule: loopback traffic is accepted before it, IPv6 tables are unchanged (IPv6 is not affected by the CVE), and SetupOS loads no nftables ruleset
+- **AND** each rule site carries a TODO to remove the rule once IC-OS ships an Ubuntu kernel with the CVE-2026-98432 fix
+
 ### Requirement: GuestOS First-Boot Storage and Service Ordering
 On a node's first boot, GuestOS creates its storage volumes and prepares their permissions before the services that use them start.
 
