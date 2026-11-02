@@ -14,6 +14,8 @@ pub enum LebDecodingError {
     /// The bytes contained a valid number, but there was extra data in the
     /// buffer.
     TrailingData,
+    /// The bytes did not contain a complete LEB128-encoded number.
+    IncompleteInput,
 }
 
 impl fmt::Display for LebDecodingError {
@@ -21,6 +23,9 @@ impl fmt::Display for LebDecodingError {
         match self {
             Self::Overflow => write!(f, "LEB128-encoded number overflows 64-bit unsigned int"),
             Self::TrailingData => write!(f, "input contained trailing data"),
+            Self::IncompleteInput => {
+                write!(f, "input did not contain a complete LEB128-encoded number")
+            }
         }
     }
 }
@@ -34,7 +39,8 @@ impl TryFrom<&'_ [u8]> for Leb128EncodedU64 {
         let value = match leb128::read::unsigned(&mut bytes) {
             Ok(value) => Leb128EncodedU64(value),
             Err(Error::Overflow) => return Err(LebDecodingError::Overflow),
-            Err(Error::IoError(err)) => unreachable!("{:?}", err),
+            // Reading from a byte slice fails with an I/O error only when there is not enough data
+            Err(Error::IoError(_)) => return Err(LebDecodingError::IncompleteInput),
         };
 
         if !bytes.is_empty() {
