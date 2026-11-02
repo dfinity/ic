@@ -41,3 +41,12 @@ hyper-util = { workspace = true }
 tower = { workspace = true }
 http = { workspace = true }
 url = { workspace = true }
+
+[dev-dependencies]
+candid = { workspace = true }
+ic-certification-test-utils = { path = "../../../certification/test-utils" }
+ic-nervous-system-integration-tests = { path = "../../../nervous_system/integration_tests" }
+ic-nns-constants = { path = "../../../nns/constants" }
+ic-nns-test-utils = { path = "../../../nns/test_utils" }
+pocket-ic = { path = "../../../../packages/pocket-ic" }
+rand = { workspace = true }
