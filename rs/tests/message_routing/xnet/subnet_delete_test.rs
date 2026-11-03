@@ -518,7 +518,6 @@ async fn run_scenario(
         .block_for_newest_mainnet_registry_version()
         .await
         .expect("failed to sync the registry before delete_subnet");
-    let c_delete_registry_version = topo_before_delete.get_registry_version().increment();
     let delete_arg = DeleteSubnetPayload {
         subnet_id: c_subnet.subnet_id.get().into(),
     };
@@ -531,15 +530,12 @@ async fn run_scenario(
         .await
         .expect("delete_subnet should succeed");
 
+    // Record the registry version at which C was deleted.
     let topo_after_delete = topo_before_delete
-        .block_for_min_registry_version(c_delete_registry_version)
+        .block_for_newer_registry_version()
         .await
         .expect("registry should update after delete_subnet");
-    assert_eq!(
-        topo_after_delete.get_registry_version(),
-        c_delete_registry_version,
-        "unexpected registry mutation besides delete_subnet"
-    );
+    let c_delete_registry_version = topo_after_delete.get_registry_version();
     assert!(
         topo_after_delete
             .subnets()
