@@ -23,7 +23,7 @@ impl<T> Default for HeightIndex<T> {
 
 /// Provides a thin wrapper around a sorted map of buckets and provides
 /// height-indexed access to the buckets.
-impl<T> HeightIndex<T> {
+impl<T: Eq> HeightIndex<T> {
     pub fn new() -> HeightIndex<T> {
         HeightIndex::default()
     }
@@ -42,18 +42,24 @@ impl<T> HeightIndex<T> {
         self.buckets = self.buckets.split_off(&height);
     }
 
+    /// Removes `value` from `height`. Returns `true` if `value` was removed,
+    /// `false` if not present.
+    pub fn remove(&mut self, height: &Height, value: &T) -> bool {
+        self.retain(height, |x| x != value)
+    }
+
     /// Retains only the elements of the given height that match the predicate.
     /// Returns `true` if any value was removed, otherwise `false`.
-    pub fn retain<F>(&mut self, height: Height, f: F) -> bool
+    pub fn retain<F>(&mut self, height: &Height, f: F) -> bool
     where
         F: FnMut(&T) -> bool,
     {
-        if let Some(bucket) = self.buckets.get_mut(&height) {
+        if let Some(bucket) = self.buckets.get_mut(height) {
             let len = bucket.len();
             bucket.retain(f);
             let removed = len != bucket.len();
             if bucket.is_empty() {
-                self.buckets.remove(&height);
+                self.buckets.remove(height);
             }
             return removed;
         }
@@ -119,85 +125,65 @@ impl Indexes {
         }
     }
 
-    pub fn insert(&mut self, msg: &ConsensusMessage, hash: CryptoHash) {
-        match msg {
-            ConsensusMessage::RandomBeacon(artifact) => self
-                .random_beacon
-                .insert(artifact.height(), CryptoHashOf::from(hash)),
-            ConsensusMessage::Finalization(artifact) => self
-                .finalization
-                .insert(artifact.height(), CryptoHashOf::from(hash)),
-            ConsensusMessage::Notarization(artifact) => self
-                .notarization
-                .insert(artifact.height(), CryptoHashOf::from(hash)),
-            ConsensusMessage::BlockProposal(artifact) => self
-                .block_proposal
-                .insert(artifact.height(), CryptoHashOf::from(hash)),
-            ConsensusMessage::RandomBeaconShare(artifact) => self
-                .random_beacon_share
-                .insert(artifact.height(), CryptoHashOf::from(hash)),
-            ConsensusMessage::NotarizationShare(artifact) => self
-                .notarization_share
-                .insert(artifact.height(), CryptoHashOf::from(hash)),
-            ConsensusMessage::FinalizationShare(artifact) => self
-                .finalization_share
-                .insert(artifact.height(), CryptoHashOf::from(hash)),
-            ConsensusMessage::RandomTape(artifact) => self
-                .random_tape
-                .insert(artifact.height(), CryptoHashOf::from(hash)),
-            ConsensusMessage::RandomTapeShare(artifact) => self
-                .random_tape_share
-                .insert(artifact.height(), CryptoHashOf::from(hash)),
-            ConsensusMessage::CatchUpPackage(artifact) => self
-                .catch_up_package
-                .insert(artifact.height(), CryptoHashOf::from(hash)),
-            ConsensusMessage::CatchUpPackageShare(artifact) => self
-                .catch_up_package_share
-                .insert(artifact.height(), CryptoHashOf::from(hash)),
-            ConsensusMessage::EquivocationProof(artifact) => self
-                .equivocation_proof
-                .insert(artifact.height(), CryptoHashOf::from(hash)),
+    pub fn insert(&mut self, height: Height, cm_hash: ConsensusMessageHash) {
+        match cm_hash {
+            ConsensusMessageHash::RandomBeacon(hash) => self.random_beacon.insert(height, hash),
+            ConsensusMessageHash::Finalization(hash) => self.finalization.insert(height, hash),
+            ConsensusMessageHash::Notarization(hash) => self.notarization.insert(height, hash),
+            ConsensusMessageHash::BlockProposal(hash) => self.block_proposal.insert(height, hash),
+            ConsensusMessageHash::RandomBeaconShare(hash) => {
+                self.random_beacon_share.insert(height, hash)
+            }
+            ConsensusMessageHash::NotarizationShare(hash) => {
+                self.notarization_share.insert(height, hash)
+            }
+            ConsensusMessageHash::FinalizationShare(hash) => {
+                self.finalization_share.insert(height, hash)
+            }
+            ConsensusMessageHash::RandomTape(hash) => self.random_tape.insert(height, hash),
+            ConsensusMessageHash::RandomTapeShare(hash) => {
+                self.random_tape_share.insert(height, hash)
+            }
+            ConsensusMessageHash::CatchUpPackage(hash) => {
+                self.catch_up_package.insert(height, hash)
+            }
+            ConsensusMessageHash::CatchUpPackageShare(hash) => {
+                self.catch_up_package_share.insert(height, hash)
+            }
+            ConsensusMessageHash::EquivocationProof(hash) => {
+                self.equivocation_proof.insert(height, hash)
+            }
         };
     }
 
-    pub fn remove(&mut self, msg: &ConsensusMessage, hash: &CryptoHash) {
-        match msg {
-            ConsensusMessage::RandomBeacon(artifact) => self
-                .random_beacon
-                .retain(artifact.height(), |x| x.get_ref() != hash),
-            ConsensusMessage::Finalization(artifact) => self
-                .finalization
-                .retain(artifact.height(), |x| x.get_ref() != hash),
-            ConsensusMessage::Notarization(artifact) => self
-                .notarization
-                .retain(artifact.height(), |x| x.get_ref() != hash),
-            ConsensusMessage::BlockProposal(artifact) => self
-                .block_proposal
-                .retain(artifact.height(), |x| x.get_ref() != hash),
-            ConsensusMessage::RandomBeaconShare(artifact) => self
-                .random_beacon_share
-                .retain(artifact.height(), |x| x.get_ref() != hash),
-            ConsensusMessage::NotarizationShare(artifact) => self
-                .notarization_share
-                .retain(artifact.height(), |x| x.get_ref() != hash),
-            ConsensusMessage::FinalizationShare(artifact) => self
-                .finalization_share
-                .retain(artifact.height(), |x| x.get_ref() != hash),
-            ConsensusMessage::RandomTape(artifact) => self
-                .random_tape
-                .retain(artifact.height(), |x| x.get_ref() != hash),
-            ConsensusMessage::RandomTapeShare(artifact) => self
-                .random_tape_share
-                .retain(artifact.height(), |x| x.get_ref() != hash),
-            ConsensusMessage::CatchUpPackage(artifact) => self
-                .catch_up_package
-                .retain(artifact.height(), |x| x.get_ref() != hash),
-            ConsensusMessage::CatchUpPackageShare(artifact) => self
-                .catch_up_package_share
-                .retain(artifact.height(), |x| x.get_ref() != hash),
-            ConsensusMessage::EquivocationProof(artifact) => self
-                .equivocation_proof
-                .retain(artifact.height(), |x| x.get_ref() != hash),
+    pub fn remove(&mut self, height: &Height, cm_hash: &ConsensusMessageHash) {
+        match cm_hash {
+            ConsensusMessageHash::RandomBeacon(hash) => self.random_beacon.remove(height, hash),
+            ConsensusMessageHash::Finalization(hash) => self.finalization.remove(height, hash),
+            ConsensusMessageHash::Notarization(hash) => self.notarization.remove(height, hash),
+            ConsensusMessageHash::BlockProposal(hash) => self.block_proposal.remove(height, hash),
+            ConsensusMessageHash::RandomBeaconShare(hash) => {
+                self.random_beacon_share.remove(height, hash)
+            }
+            ConsensusMessageHash::NotarizationShare(hash) => {
+                self.notarization_share.remove(height, hash)
+            }
+            ConsensusMessageHash::FinalizationShare(hash) => {
+                self.finalization_share.remove(height, hash)
+            }
+            ConsensusMessageHash::RandomTape(hash) => self.random_tape.remove(height, hash),
+            ConsensusMessageHash::RandomTapeShare(hash) => {
+                self.random_tape_share.remove(height, hash)
+            }
+            ConsensusMessageHash::CatchUpPackage(hash) => {
+                self.catch_up_package.remove(height, hash)
+            }
+            ConsensusMessageHash::CatchUpPackageShare(hash) => {
+                self.catch_up_package_share.remove(height, hash)
+            }
+            ConsensusMessageHash::EquivocationProof(hash) => {
+                self.equivocation_proof.remove(height, hash)
+            }
         };
     }
 }
@@ -369,7 +355,7 @@ mod tests {
             &expected
         );
 
-        index.retain(twelve, |x| *x != 1);
+        index.retain(&twelve, |x| *x != 1);
 
         expected.retain(|x| *x != 1);
         assert_eq!(
@@ -378,7 +364,7 @@ mod tests {
         );
         assert_eq!(index.buckets.len(), 4);
 
-        index.retain(twelve, |x| *x != 2);
+        index.retain(&twelve, |x| *x != 2);
         assert_eq!(index.buckets.len(), 3);
     }
 
@@ -403,7 +389,7 @@ mod tests {
         }
 
         for (i, e) in elems.iter().enumerate() {
-            index.retain(Height::from((i % num_heights) as u64), |x| x != e);
+            index.retain(&Height::from((i % num_heights) as u64), |x| x != e);
         }
 
         assert!(index.buckets.is_empty());
@@ -424,7 +410,7 @@ mod tests {
         assert_eq!(index.size(), 2);
 
         // `retain` removes all copies at once.
-        index.retain(height, |x| *x != 1);
+        index.retain(&height, |x| *x != 1);
         assert!(index.buckets.is_empty());
     }
 
@@ -438,8 +424,8 @@ mod tests {
             index.insert(height, i);
         }
 
-        assert!(!index.retain(height, |x| *x < max));
-        assert!(index.retain(height, |x| *x % 2 == 0));
+        assert!(!index.retain(&height, |x| *x < max));
+        assert!(index.retain(&height, |x| *x % 2 == 0));
 
         assert!(
             !index

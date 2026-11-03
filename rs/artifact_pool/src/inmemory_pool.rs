@@ -28,17 +28,23 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
     }
 
     fn insert(&mut self, artifact: T) {
-        let msg = artifact.as_ref();
-        let hash = msg.get_cm_hash().digest().clone();
+        let ConsensusMessageId { hash, height } = artifact.as_ref().get_id();
+
         // Don't overwrite existing artifacts.
-        if let Entry::Vacant(entry) = self.artifacts.entry(hash.clone()) {
-            self.indexes.insert(msg, hash);
+        if let Entry::Vacant(entry) = self.artifacts.entry(hash.digest().clone()) {
+            self.indexes.insert(height, hash);
             entry.insert(artifact);
         }
     }
 
     fn remove(&mut self, msg_id: &ConsensusMessageId) -> Option<T> {
-        self.remove_by_hash(msg_id.hash.digest())
+        let ConsensusMessageId { hash, height } = msg_id;
+
+        let artifact = self.artifacts.remove(hash.digest());
+        if artifact.is_some() {
+            self.indexes.remove(height, hash);
+        }
+        artifact
     }
 
     /// Purge artifacts below the given [`Height`].
@@ -120,13 +126,6 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
     /// Get a consensus message by its hash
     pub fn get_by_hash(&self, hash: &CryptoHash) -> Option<T> {
         self.artifacts.get(hash).cloned()
-    }
-
-    /// Remove a consensus message by its hash
-    pub fn remove_by_hash(&mut self, hash: &CryptoHash) -> Option<T> {
-        self.artifacts.remove(hash).inspect(|artifact| {
-            self.indexes.remove(artifact.as_ref(), hash);
-        })
     }
 
     fn select_index<S: SelectIndex>(&self) -> &HeightIndex<S> {

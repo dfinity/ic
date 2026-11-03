@@ -279,10 +279,10 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
         if match id.hash {
             CertificationMessageHash::Certification(_) => self
                 .unvalidated_cert_index
-                .retain(id.height, |c| c != &id.hash),
+                .retain(&id.height, |c| c != &id.hash),
             CertificationMessageHash::CertificationShare(_) => self
                 .unvalidated_share_index
-                .retain(id.height, |c| c != &id.hash),
+                .retain(&id.height, |c| c != &id.hash),
         } {
             self.unvalidated.remove(&id.hash);
         }
