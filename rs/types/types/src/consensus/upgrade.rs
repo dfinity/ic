@@ -18,11 +18,12 @@ use ic_protobuf::types::v1 as pb;
 use serde::Serialize;
 
 use crate::artifact::{IdentifiableArtifact, PbArtifact};
+use crate::consensus::HasHeight;
 use crate::crypto::{
     CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator, crypto_hash,
 };
 use crate::signature::{BasicSignatureBatch, BasicSigned};
-use crate::{NodeId, node_id_into_protobuf, node_id_try_from_option};
+use crate::{Height, NodeId, node_id_into_protobuf, node_id_try_from_option};
 
 /// A single action in a block's upgrade payload section. A block may carry
 /// multiple actions (e.g. `Request` for the block maker and `Authorize` for
@@ -53,13 +54,34 @@ impl SignedBytesWithoutDomainSeparator for UpgradePermitRequest {
     }
 }
 
-pub type UpgradeAuthorizationShare = BasicSigned<UpgradePermitRequest>;
+/// UpgradeAuthorizationContent holds the values that are signed in an upgrade
+/// permit authorization share.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Serialize)]
+pub struct UpgradeAuthorizationContent {
+    pub requestor: NodeId,
+    pub request_height: Height,
+}
+
+impl HasHeight for UpgradeAuthorizationContent {
+    fn height(&self) -> Height {
+        self.request_height
+    }
+}
+
+pub type UpgradeAuthorizationShare = BasicSigned<UpgradeAuthorizationContent>;
 
 /// Upgrade permit authorization message identifier carries both a message hash
 /// and a height, used by the upgrade permit auth pool for lookup.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct UpgradeAuthorizationShareId {
+    pub height: Height,
     pub hash: CryptoHashOf<UpgradeAuthorizationShare>,
+}
+
+impl HasHeight for UpgradeAuthorizationShareId {
+    fn height(&self) -> Height {
+        self.height
+    }
 }
 
 impl IdentifiableArtifact for UpgradeAuthorizationShare {
@@ -68,6 +90,7 @@ impl IdentifiableArtifact for UpgradeAuthorizationShare {
     fn id(&self) -> Self::Id {
         UpgradeAuthorizationShareId {
             hash: crypto_hash(self),
+            height: self.content.height(),
         }
     }
 }
@@ -103,10 +126,30 @@ impl TryFrom<pb::UpgradePermitRequest> for UpgradePermitRequest {
     }
 }
 
+impl From<&UpgradeAuthorizationContent> for pb::UpgradeAuthorizationContent {
+    fn from(content: &UpgradeAuthorizationContent) -> Self {
+        pb::UpgradeAuthorizationContent {
+            requestor: Some(node_id_into_protobuf(content.requestor)),
+            request_height: content.request_height.get(),
+        }
+    }
+}
+
+impl TryFrom<pb::UpgradeAuthorizationContent> for UpgradeAuthorizationContent {
+    type Error = ProxyDecodeError;
+
+    fn try_from(content: pb::UpgradeAuthorizationContent) -> Result<Self, Self::Error> {
+        Ok(UpgradeAuthorizationContent {
+            requestor: node_id_try_from_option(content.requestor)?,
+            request_height: Height::from(content.request_height),
+        })
+    }
+}
+
 impl From<UpgradeAuthorizationShare> for pb::UpgradeAuthorizationShare {
     fn from(share: UpgradeAuthorizationShare) -> Self {
         pb::UpgradeAuthorizationShare {
-            request: Some(pb::UpgradePermitRequest::from(&share.content)),
+            content: Some(pb::UpgradeAuthorizationContent::from(&share.content)),
             signature: Some(pb::BasicSignature::from(share.signature)),
         }
     }
@@ -116,7 +159,7 @@ impl TryFrom<pb::UpgradeAuthorizationShare> for UpgradeAuthorizationShare {
     type Error = ProxyDecodeError;
 
     fn try_from(message: pb::UpgradeAuthorizationShare) -> Result<Self, Self::Error> {
-        let content = try_from_option_field(message.request, "UpgradeAuthorizationShare::request")?;
+        let content = try_from_option_field(message.content, "UpgradeAuthorizationShare::content")?;
         let signature =
             try_from_option_field(message.signature, "UpgradeAuthorizationShare::signature")?;
         Ok(UpgradeAuthorizationShare { content, signature })
@@ -127,6 +170,7 @@ impl From<UpgradeAuthorizationShareId> for pb::UpgradeAuthorizationShareId {
     fn from(id: UpgradeAuthorizationShareId) -> Self {
         Self {
             hash: id.hash.get().0,
+            height: id.height.get(),
         }
     }
 }
@@ -137,6 +181,7 @@ impl TryFrom<pb::UpgradeAuthorizationShareId> for UpgradeAuthorizationShareId {
     fn try_from(id: pb::UpgradeAuthorizationShareId) -> Result<Self, Self::Error> {
         Ok(Self {
             hash: CryptoHash(id.hash).into(),
+            height: Height::from(id.height),
         })
     }
 }

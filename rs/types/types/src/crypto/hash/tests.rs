@@ -79,7 +79,7 @@ mod crypto_hash_stability {
         EquivocationProof, Finalization, FinalizationContent, FinalizationShare, HashedBlock,
         HashedRandomBeacon, Notarization, NotarizationContent, NotarizationShare, Payload,
         RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank, SummaryPayload,
-        UpgradeAuthorizationShare, UpgradePermitRequest,
+        UpgradeAuthorizationContent, UpgradeAuthorizationShare, UpgradePermitRequest,
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
@@ -476,8 +476,9 @@ mod crypto_hash_stability {
     #[test]
     fn upgrade_authorization_share_stability() {
         let data: UpgradeAuthorizationShare = Signed {
-            content: UpgradePermitRequest {
+            content: UpgradeAuthorizationContent {
                 requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
+                request_height: Height::from(42),
             },
             signature: BasicSignature {
                 signature: BasicSigOf::new(BasicSig(vec![0x42; 64])),
@@ -487,8 +488,8 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "2b110ca36709645a96a302dea4def8b469f45154f928e63843adcf3459747675",
-            "Hash of UpgradeAuthorizationShare changed"
+            "1e780154b2467bdf06efa99128aa50b5ad8db4a494a300cbe9d35b9747e85c98",
+            "Hash of UpgradeAuthorizationContent changed"
         );
     }
 
