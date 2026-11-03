@@ -290,21 +290,17 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
     }
 
     fn remove(&mut self, id: &CertificationMessageId) {
-        match &id.hash {
+        let CertificationMessageId { height, hash } = id;
+
+        match hash {
             CertificationMessageHash::Certification(cert_hash) => {
-                if self
-                    .unvalidated_cert_index
-                    .retain(&id.height, |c| c != cert_hash)
-                {
-                    self.unvalidated_certs.remove(cert_hash);
+                if self.unvalidated_certs.remove(cert_hash).is_some() {
+                    self.unvalidated_cert_index.remove(height, cert_hash);
                 }
             }
             CertificationMessageHash::CertificationShare(share_hash) => {
-                if self
-                    .unvalidated_share_index
-                    .retain(&id.height, |c| c != share_hash)
-                {
-                    self.unvalidated_shares.remove(share_hash);
+                if self.unvalidated_shares.remove(share_hash).is_some() {
+                    self.unvalidated_share_index.remove(height, share_hash);
                 }
             }
         }

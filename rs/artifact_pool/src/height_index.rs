@@ -43,28 +43,16 @@ impl<T: Eq> HeightIndex<T> {
             .flat_map(|(height, values)| values.into_iter().map(move |value| (height, value)))
     }
 
-    /// Removes `value` from `height`. Returns `true` if `value` was removed,
-    /// `false` if not present.
-    pub fn remove(&mut self, height: &Height, value: &T) -> bool {
-        self.retain(height, |x| x != value)
-    }
+    /// Removes `value` from `height`.
+    pub fn remove(&mut self, height: &Height, value: &T) {
+        let Some(bucket) = self.buckets.get_mut(height) else {
+            return;
+        };
 
-    /// Retains only the elements of the given height that match the predicate.
-    /// Returns `true` if any value was removed, otherwise `false`.
-    pub fn retain<F>(&mut self, height: &Height, f: F) -> bool
-    where
-        F: FnMut(&T) -> bool,
-    {
-        if let Some(bucket) = self.buckets.get_mut(height) {
-            let len = bucket.len();
-            bucket.retain(f);
-            let removed = len != bucket.len();
-            if bucket.is_empty() {
-                self.buckets.remove(height);
-            }
-            return removed;
+        bucket.retain(|x| x != value);
+        if bucket.is_empty() {
+            self.buckets.remove(height);
         }
-        false
     }
 
     pub fn lookup(&self, height: Height) -> impl Iterator<Item = &T> {
@@ -446,7 +434,7 @@ mod tests {
     }
 
     #[test]
-    fn test_height_index_retain() {
+    fn test_height_index_remove() {
         let mut index = HeightIndex::new();
         let max = 100;
         let height = Height::from(0);
@@ -455,16 +443,11 @@ mod tests {
             index.insert(height, i);
         }
 
-        assert!(!index.retain(&height, |&x| x < max));
-        assert!(index.retain(&height, |&x| x % 2 == 0));
-
-        assert!(
-            !index
-                .buckets
-                .get(&height)
-                .unwrap()
-                .iter()
-                .any(|x| x % 2 != 0)
+        index.remove(&height, &0);
+        index.remove(&height, &100);
+        assert_eq!(
+            index.lookup(height).copied().collect::<Vec<i32>>(),
+            (1..max).collect::<Vec<i32>>()
         );
     }
 
