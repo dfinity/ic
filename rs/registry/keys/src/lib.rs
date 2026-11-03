@@ -130,6 +130,12 @@ pub fn make_canister_migrations_record_key() -> String {
     "canister_migrations".to_string()
 }
 
+/// Returns the key of the `CanisterIdAllocation`, which tracks the canister IDs
+/// that have ever been allocated to a subnet (see `CanisterIdAllocation`).
+pub fn make_canister_id_allocation_key() -> String {
+    "canister_id_allocation".to_string()
+}
+
 // TODO: Remove when all subnets are upgraded with IC-1026
 pub fn make_firewall_config_record_key() -> String {
     "firewall_config".to_string()

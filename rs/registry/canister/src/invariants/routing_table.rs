@@ -4,10 +4,13 @@ use std::convert::TryFrom;
 
 use ic_base_types::CanisterId;
 use ic_protobuf::registry::routing_table::v1::{
-    CanisterMigrations as pbCanisterMigrations, RoutingTable as pbRoutingTable,
+    CanisterIdAllocation as pbCanisterIdAllocation, CanisterMigrations as pbCanisterMigrations,
+    RoutingTable as pbRoutingTable,
 };
-use ic_registry_keys::{make_canister_migrations_record_key, make_canister_ranges_key};
-use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
+use ic_registry_keys::{
+    make_canister_id_allocation_key, make_canister_migrations_record_key, make_canister_ranges_key,
+};
+use ic_registry_routing_table::{CanisterMigrations, RoutingTable, canister_id_into_u64};
 use prost::Message;
 
 /// Routing table invariants hold if reading and conversion succeed.
@@ -81,6 +84,81 @@ pub(crate) fn check_canister_migrations_invariants(
             };
         }
     }
+    Ok(())
+}
+
+/// Decodes the `next_unallocated_canister_index` of the `CanisterIdAllocation` in `bytes`.
+pub(crate) fn decode_next_unallocated_canister_index(
+    bytes: &[u8],
+) -> Result<u64, prost::DecodeError> {
+    let canister_id_allocation = pbCanisterIdAllocation::decode(bytes)?;
+    Ok(canister_id_allocation.next_unallocated_canister_index)
+}
+
+/// Checks the invariants of the `CanisterIdAllocation`, which records one past the largest
+/// canister index ever allocated to a subnet:
+///
+/// * Once present, it is never deleted.
+/// * It never decreases. `previous_next_unallocated_canister_index` is its value before the
+///   mutations being checked, if it was present.
+/// * If present, every range in the routing table ends below it, i.e., every canister ID hosted
+///   by a subnet has been accounted for as allocated.
+///
+/// It is written by the post-upgrade backfill (`backfill_canister_id_allocation`) and by every
+/// allocation of canister IDs to a new subnet. So it is only absent if no canister IDs have been
+/// allocated yet, or if the registry was installed with an initial routing table and has not been
+/// upgraded since; in the latter case, the next allocation computes the value from the history of
+/// the routing table. Either way, there is nothing to check while it is absent (and was absent
+/// before).
+pub(crate) fn check_canister_id_allocation_invariants(
+    snapshot: &RegistrySnapshot,
+    previous_next_unallocated_canister_index: Option<u64>,
+) -> Result<(), InvariantCheckError> {
+    let Some(bytes) = snapshot.get(make_canister_id_allocation_key().as_bytes()) else {
+        if previous_next_unallocated_canister_index.is_some() {
+            return Err(InvariantCheckError {
+                msg: "The CanisterIdAllocation must not be deleted.".to_string(),
+                source: None,
+            });
+        }
+        return Ok(());
+    };
+    let next_unallocated_canister_index =
+        decode_next_unallocated_canister_index(bytes).map_err(|err| InvariantCheckError {
+            msg: "Unable to decode the CanisterIdAllocation.".to_string(),
+            source: Some(Box::new(err)),
+        })?;
+
+    if let Some(previous) = previous_next_unallocated_canister_index
+        && next_unallocated_canister_index < previous
+    {
+        return Err(InvariantCheckError {
+            msg: format!(
+                "next_unallocated_canister_index of the CanisterIdAllocation must never \
+                 decrease, but it would go from {previous} to {next_unallocated_canister_index}."
+            ),
+            source: None,
+        });
+    }
+
+    let routing_table = get_routing_table(snapshot);
+    let ranges_beyond_allocation = routing_table
+        .iter()
+        .filter(|(range, _)| canister_id_into_u64(range.end) >= next_unallocated_canister_index)
+        .map(|(range, subnet_id)| format!("{range:?} (subnet {subnet_id})"))
+        .collect::<Vec<String>>();
+    if !ranges_beyond_allocation.is_empty() {
+        return Err(InvariantCheckError {
+            msg: format!(
+                "The routing table hosts canister IDs at or above the \
+                 next_unallocated_canister_index {next_unallocated_canister_index} of the \
+                 CanisterIdAllocation: {}",
+                ranges_beyond_allocation.join(", ")
+            ),
+            source: None,
+        });
+    }
+
     Ok(())
 }
 
@@ -273,5 +351,95 @@ mod tests {
 
         assert!(check_routing_table_invariants(&snapshot).is_ok());
         assert!(check_canister_migrations_invariants(&snapshot).is_err());
+    }
+
+    fn insert_canister_id_allocation_to_snapshot(
+        next_unallocated_canister_index: u64,
+        snapshot: &mut RegistrySnapshot,
+    ) {
+        let canister_id_allocation = pbCanisterIdAllocation {
+            next_unallocated_canister_index,
+        };
+        snapshot.insert(
+            make_canister_id_allocation_key().into_bytes(),
+            canister_id_allocation.encode_to_vec(),
+        );
+    }
+
+    fn new_snapshot_with_routing_table_up_to_0x1ff() -> RegistrySnapshot {
+        let mut snapshot = RegistrySnapshot::new();
+        let routing_table = RoutingTable::try_from(btreemap! {
+            CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => subnet_test_id(1),
+            CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
+        })
+        .unwrap();
+        insert_routing_table_to_snapshot(routing_table, &mut snapshot);
+        snapshot
+    }
+
+    #[test]
+    fn test_absent_canister_id_allocation_passes_invariants_check() {
+        let snapshot = new_snapshot_with_routing_table_up_to_0x1ff();
+
+        assert!(check_canister_id_allocation_invariants(&snapshot, None).is_ok());
+    }
+
+    #[test]
+    fn test_canister_id_allocation_covering_routing_table_passes_invariants_check() {
+        let mut snapshot = new_snapshot_with_routing_table_up_to_0x1ff();
+        // Above the routing table, e.g., because the subnet that held 0x200..=0x2ff was deleted.
+        insert_canister_id_allocation_to_snapshot(0x300, &mut snapshot);
+
+        assert!(check_canister_id_allocation_invariants(&snapshot, None).is_ok());
+        assert!(check_canister_id_allocation_invariants(&snapshot, Some(0x200)).is_ok());
+        assert!(check_canister_id_allocation_invariants(&snapshot, Some(0x300)).is_ok());
+    }
+
+    #[test]
+    fn test_routing_table_beyond_canister_id_allocation_fails_invariants_check() {
+        let mut snapshot = new_snapshot_with_routing_table_up_to_0x1ff();
+        insert_canister_id_allocation_to_snapshot(0x1ff, &mut snapshot);
+
+        let error = check_canister_id_allocation_invariants(&snapshot, None).unwrap_err();
+
+        assert!(error.msg.contains("at or above"), "{}", error.msg);
+        assert!(
+            error.msg.contains(&subnet_test_id(2).to_string()),
+            "{}",
+            error.msg
+        );
+    }
+
+    #[test]
+    fn test_decreasing_canister_id_allocation_fails_invariants_check() {
+        let mut snapshot = new_snapshot_with_routing_table_up_to_0x1ff();
+        insert_canister_id_allocation_to_snapshot(0x200, &mut snapshot);
+
+        let error = check_canister_id_allocation_invariants(&snapshot, Some(0x300)).unwrap_err();
+
+        assert!(error.msg.contains("never decrease"), "{}", error.msg);
+    }
+
+    #[test]
+    fn test_undecodable_canister_id_allocation_fails_invariants_check() {
+        let mut snapshot = new_snapshot_with_routing_table_up_to_0x1ff();
+        snapshot.insert(
+            make_canister_id_allocation_key().into_bytes(),
+            b"not a protobuf".to_vec(),
+        );
+
+        let error = check_canister_id_allocation_invariants(&snapshot, None).unwrap_err();
+
+        assert!(error.msg.contains("Unable to decode"), "{}", error.msg);
+        assert!(error.source.is_some());
+    }
+
+    #[test]
+    fn test_deleting_canister_id_allocation_fails_invariants_check() {
+        let snapshot = new_snapshot_with_routing_table_up_to_0x1ff();
+
+        let error = check_canister_id_allocation_invariants(&snapshot, Some(0x200)).unwrap_err();
+
+        assert!(error.msg.contains("must not be deleted"), "{}", error.msg);
     }
 }

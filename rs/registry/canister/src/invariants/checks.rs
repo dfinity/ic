@@ -11,7 +11,10 @@ use crate::{
         node_operator::check_node_operator_invariants,
         node_record::check_node_record_invariants,
         replica_version::check_replica_version_invariants,
-        routing_table::{check_canister_migrations_invariants, check_routing_table_invariants},
+        routing_table::{
+            check_canister_id_allocation_invariants, check_canister_migrations_invariants,
+            check_routing_table_invariants, decode_next_unallocated_canister_index,
+        },
         standard_engine_replica_version::check_standard_engine_replica_version_invariants,
         subnet::check_subnet_invariants,
         unassigned_nodes_config::check_unassigned_nodes_config_invariants,
@@ -24,6 +27,7 @@ use crate::{
 use dfn_core::println;
 use ic_nervous_system_string::clamp_debug_len;
 use ic_registry_canister_chunkify::dechunkify;
+use ic_registry_keys::make_canister_id_allocation_key;
 use ic_registry_transport::pb::v1::{
     RegistryMutation, high_capacity_registry_value, registry_mutation::Type,
 };
@@ -93,6 +97,23 @@ impl Registry {
 
         // Canister migrations invariants
         result = result.and(check_canister_migrations_invariants(&snapshot));
+
+        // Canister ID allocation invariants. The value before the mutations passed these checks
+        // when it was written, so it decodes.
+        let previous_next_unallocated_canister_index = self
+            .get(
+                make_canister_id_allocation_key().as_bytes(),
+                self.latest_version(),
+            )
+            .map(|registry_value| {
+                decode_next_unallocated_canister_index(&registry_value.value).unwrap_or_else(
+                    |err| panic!("Unable to decode the stored CanisterIdAllocation: {err}"),
+                )
+            });
+        result = result.and(check_canister_id_allocation_invariants(
+            &snapshot,
+            previous_next_unallocated_canister_index,
+        ));
 
         // Subnet invariants
         result = result.and(check_subnet_invariants(&snapshot));

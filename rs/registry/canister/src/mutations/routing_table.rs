@@ -3,6 +3,7 @@ use crate::{
         LOG_PREFIX,
         key_family::{get_key_family_iter_at_version, get_key_family_raw_iter_at_version},
     },
+    mutations::canister_id_allocation::make_canister_id_allocation_mutation,
     pb::v1::SubnetForCanister,
     registry::Registry,
     storage::with_chunks,
@@ -16,7 +17,8 @@ use ic_registry_keys::{
 };
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable,
-    routing_table_insert_subnet, routing_table_insert_subnet_and_reroute_or_panic,
+    routing_table_insert_subnet_after_allocated_canister_ids,
+    routing_table_insert_subnet_and_reroute_or_panic,
 };
 use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 use ic_registry_transport::{delete, upsert};
@@ -325,30 +327,54 @@ impl Registry {
     }
 
     /// Handle adding a subnet to the routing table.
+    ///
+    /// The new subnet is assigned canister IDs that have never been allocated to any subnet
+    /// before (see `canister_id_allocation`), and the returned mutations also record that these
+    /// canister IDs are now allocated.
     pub fn add_subnet_to_routing_table(
         &self,
         version: u64,
         subnet_id_to_add: SubnetId,
     ) -> Vec<RegistryMutation> {
-        self.modify_routing_table(version, |routing_table| {
-            routing_table_insert_subnet(routing_table, subnet_id_to_add).unwrap();
-        })
+        let mut next_unallocated_canister_index = self.get_next_unallocated_canister_index(version);
+        let mut mutations = self.modify_routing_table(version, |routing_table| {
+            next_unallocated_canister_index =
+                routing_table_insert_subnet_after_allocated_canister_ids(
+                    routing_table,
+                    subnet_id_to_add,
+                    next_unallocated_canister_index,
+                )
+                .unwrap();
+        });
+        mutations.push(make_canister_id_allocation_mutation(
+            next_unallocated_canister_index,
+        ));
+        mutations
     }
 
-    /// Handle adding a subnet to the routing table.
+    /// Handle adding a subnet to the routing table, and rerouting `canister_id_ranges` to it.
+    ///
+    /// As in `add_subnet_to_routing_table`, the new subnet is (additionally) assigned canister IDs
+    /// that have never been allocated before.
     pub fn add_subnet_to_routing_table_and_reroute(
         &self,
         version: u64,
         canister_id_ranges: CanisterIdRanges,
         subnet_id_to_add: SubnetId,
     ) -> Vec<RegistryMutation> {
-        self.modify_routing_table(version, |routing_table| {
-            routing_table_insert_subnet_and_reroute_or_panic(
+        let mut next_unallocated_canister_index = self.get_next_unallocated_canister_index(version);
+        let mut mutations = self.modify_routing_table(version, |routing_table| {
+            next_unallocated_canister_index = routing_table_insert_subnet_and_reroute_or_panic(
                 subnet_id_to_add,
                 routing_table,
                 canister_id_ranges,
-            )
-        })
+                next_unallocated_canister_index,
+            );
+        });
+        mutations.push(make_canister_id_allocation_mutation(
+            next_unallocated_canister_index,
+        ));
+        mutations
     }
 
     /// Handle removing a subnet from the routing table.

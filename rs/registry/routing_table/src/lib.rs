@@ -220,35 +220,79 @@ impl CanisterIdRanges {
 }
 
 /// A helper function to help insert a new subnet to the routing table
+///
+/// The new subnet is assigned the `CANISTER_IDS_PER_SUBNET` canister IDs
+/// directly after the last range in `routing_table`. If the subnet holding the
+/// last range was deleted, this hands out its canister IDs again. To avoid
+/// that, use [routing_table_insert_subnet_after_allocated_canister_ids].
 pub fn routing_table_insert_subnet(
     routing_table: &mut RoutingTable,
     subnet_id: SubnetId,
 ) -> Result<(), WellFormedError> {
-    let start = match routing_table.iter().last() {
+    let _next_unallocated_canister_index =
+        routing_table_insert_subnet_after_allocated_canister_ids(
+            routing_table,
+            subnet_id,
+            /* next_unallocated_canister_index = */ 0,
+        )?;
+    Ok(())
+}
+
+/// Inserts a new subnet into the routing table, assigning it
+/// `CANISTER_IDS_PER_SUBNET` canister IDs that have never been allocated
+/// before.
+///
+/// `next_unallocated_canister_index` is the smallest canister index that has
+/// never been allocated to any subnet (including subnets that have since been
+/// deleted, and whose ranges are therefore no longer in `routing_table`). The
+/// new range starts at that index, or directly after the last range in
+/// `routing_table` if that is higher.
+///
+/// Returns the new `next_unallocated_canister_index`, i.e., one past the end of
+/// the newly assigned range.
+pub fn routing_table_insert_subnet_after_allocated_canister_ids(
+    routing_table: &mut RoutingTable,
+    subnet_id: SubnetId,
+    next_unallocated_canister_index: u64,
+) -> Result<u64, WellFormedError> {
+    let after_last_range = match routing_table.iter().last() {
         Some((last_canister_id_range, _)) => canister_id_into_u64(last_canister_id_range.end) + 1,
         None => 0,
     };
+    let start = after_last_range.max(next_unallocated_canister_index);
     // The -1 because the ranges are stored as closed intervals.
     let end = start + CANISTER_IDS_PER_SUBNET - 1;
     let canister_id_range = CanisterIdRange {
         start: CanisterId::from(start),
         end: CanisterId::from(end),
     };
-    routing_table.insert(canister_id_range, subnet_id)
+    routing_table.insert(canister_id_range, subnet_id)?;
+    Ok(end + 1)
 }
 
 /// A helper function to help insert a new subnet to the routing table
+///
+/// The new subnet is assigned fresh canister IDs as in
+/// [routing_table_insert_subnet_after_allocated_canister_ids] (and the new
+/// `next_unallocated_canister_index` is returned), and then additionally
+/// becomes the host of `migrated_canister_id_ranges`.
 pub fn routing_table_insert_subnet_and_reroute_or_panic(
     subnet_id: SubnetId,
     routing_table: &mut RoutingTable,
     migrated_canister_id_ranges: CanisterIdRanges,
-) {
-    routing_table_insert_subnet(routing_table, subnet_id)
-        .expect("Failed to insert a subnet to the routing table");
+    next_unallocated_canister_index: u64,
+) -> u64 {
+    let next_unallocated_canister_index = routing_table_insert_subnet_after_allocated_canister_ids(
+        routing_table,
+        subnet_id,
+        next_unallocated_canister_index,
+    )
+    .expect("Failed to insert a subnet to the routing table");
     routing_table
         .assign_ranges(migrated_canister_id_ranges, subnet_id)
         .expect("Failed to reroute canisters in the routing table");
     routing_table.optimize();
+    next_unallocated_canister_index
 }
 
 /// Stores an ordered map mapping `CanisterId` ranges to `SubnetIds`. The ranges
