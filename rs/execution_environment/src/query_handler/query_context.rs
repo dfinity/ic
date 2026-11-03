@@ -829,10 +829,16 @@ impl<'a> QueryContext<'a> {
         info!(
             every_n_seconds => 10,
             self.log,
-            "Composite query: canister {} calls method {} of canister {}",
+            "Composite query: canister {} calls method {} of canister {}{}",
             request.sender,
             request.method_name,
-            canister_id
+            canister_id,
+            // Also log effective canister ID if calling the management canister.
+            (canister_id == CanisterId::ic_00())
+                .then(|| request.extract_effective_canister_id())
+                .flatten()
+                .map(|id| format!(" (effective canister ID {id})"))
+                .unwrap_or_default()
         );
 
         // Requests to the management canister made by a composite query are not
