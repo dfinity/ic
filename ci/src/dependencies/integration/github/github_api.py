@@ -84,6 +84,9 @@ class GithubApi:
             # The PR number comes from the event payload GitHub writes for the
             # run, so workflows on branches cut before this change still work.
             if "GITHUB_PR_DIR" in os.environ or "GITHUB_PR_SHA" in os.environ:
+                missing = [v for v in ("GITHUB_PR_DIR", "GITHUB_PR_SHA") if v not in os.environ]
+                if missing:
+                    raise RuntimeError(f"A pull request snapshot also needs {', '.join(missing)}")
                 with open(os.environ["GITHUB_EVENT_PATH"]) as f:
                     pr_number = json.load(f)["pull_request"]["number"]
                 if type(pr_number) is not int or pr_number < 1:

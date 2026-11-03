@@ -75,7 +75,8 @@ def test_pr_snapshot_is_never_recorded_under_the_base_branch(monkeypatch, tmp_pa
         pytest.param(
             {}, {"pull_request": {"number": "12/../../heads/master"}}, RuntimeError, "number", id="string-number"
         ),
-        pytest.param({"GITHUB_PR_SHA": None}, PR_EVENT, KeyError, "GITHUB_PR_SHA", id="only-pr-dir"),
+        pytest.param({"GITHUB_PR_SHA": None}, PR_EVENT, RuntimeError, "GITHUB_PR_SHA", id="only-pr-dir"),
+        pytest.param({"GITHUB_PR_DIR": None}, PR_EVENT, RuntimeError, "GITHUB_PR_DIR", id="only-pr-sha"),
         pytest.param(
             {"GITHUB_PR_DIR": None, "GITHUB_PR_SHA": None}, PR_EVENT, RuntimeError, "must set", id="no-pr-vars"
         ),
