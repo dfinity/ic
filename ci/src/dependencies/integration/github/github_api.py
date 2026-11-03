@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import traceback
@@ -72,10 +73,25 @@ class GithubApi:
 
     @staticmethod
     def submit_dependencies(toml_lock_filenames: typing.List[typing.Tuple[str, str]]) -> None:
-        def get_sha():
-            if "GITHUB_PR_SHA" in os.environ:
-                return os.environ["GITHUB_PR_SHA"]
-            return os.environ["GITHUB_SHA"]
+        def get_sha_and_ref() -> typing.Tuple[str, str]:
+            # A snapshot of a pull request's lock file must never be recorded under
+            # the base branch. Under `pull_request_target` GITHUB_REF is the base
+            # branch (refs/heads/master), and since the correlator and detector
+            # below are shared with the master job, such a snapshot would replace
+            # the default branch's dependency graph (and Dependabot alerts) with
+            # the PR's untrusted lock file. Record it under the PR's own head ref
+            # instead; dependency review compares by commit, so it still works.
+            # The PR number comes from the event payload GitHub writes for the
+            # run, so workflows on branches cut before this change still work.
+            if "GITHUB_PR_DIR" in os.environ or "GITHUB_PR_SHA" in os.environ:
+                with open(os.environ["GITHUB_EVENT_PATH"]) as f:
+                    pr_number = json.load(f)["pull_request"]["number"]
+                if type(pr_number) is not int or pr_number < 1:
+                    raise RuntimeError(f"Invalid pull request number in the event payload: {pr_number!r}")
+                return os.environ["GITHUB_PR_SHA"], f"refs/pull/{pr_number}/head"
+            if os.environ.get("GITHUB_EVENT_NAME", "").startswith("pull_request"):
+                raise RuntimeError("Pull request runs must set GITHUB_PR_DIR and GITHUB_PR_SHA")
+            return os.environ["GITHUB_SHA"], os.environ["GITHUB_REF"]
 
         if toml_lock_filenames is None or len(toml_lock_filenames) == 0:
             raise RuntimeError("No toml lock files provided")
@@ -83,6 +99,7 @@ class GithubApi:
         if GITHUB_TOKEN == TOKEN_NOT_SET:
             raise RuntimeError("Dependency submission not possible because GITHUB_TOKEN not set")
 
+        sha, ref = get_sha_and_ref()
         detector = GHSubDetector("bazel-rust-detector", "0.0.1", "https://github.com/dfinity/ic")
         correlator = "Bazel Dependency Submission / bazel-dependency-submission"
         job = GHSubJob(os.environ["GITHUB_RUN_ID"], correlator)
@@ -91,7 +108,7 @@ class GithubApi:
         for basedir, filepath in toml_lock_filenames:
             manifests.append(parse_bazel_toml_to_gh_manifest(basedir, filepath))
 
-        req = GHSubRequest(0, job, get_sha(), os.environ["GITHUB_REF"], detector, manifests)
+        req = GHSubRequest(0, job, sha, ref, detector, manifests)
         req_json = req.to_json()
 
         # https://docs.github.com/en/rest/dependency-graph/dependency-submission?apiVersion=2022-11-28#create-a-snapshot-of-dependencies-for-a-repository
