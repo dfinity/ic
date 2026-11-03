@@ -1172,7 +1172,10 @@ fn install_code_running_out_of_instructions() {
          (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
          (func (export "canister_init")
             (drop (memory.grow (i32.const 1)))
-            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            ;; The first slice ends during the first memory fill with
+            ;; instructions left in the message budget and the second slice
+            ;; runs out of the message budget during the second memory fill.
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 600))
             (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
             (drop (call $stable_grow (i32.const 1)))
             unreachable

@@ -97,9 +97,15 @@ impl State {
                 self.total_instructions_left()
             );
         }
-        // Note that `self.instructions_executed` may exceed either of the
-        // limits because Wasm execution does a best-effort detection of
-        // out-of-instruction condition.
+        debug_assert!(
+            self.instructions_executed <= self.total_instruction_limit,
+            "instructions executed {} exceed total instruction limit {}",
+            self.instructions_executed,
+            self.total_instruction_limit
+        );
+        // Note that the instructions executed in a slice may exceed the
+        // `slice_instruction_limit` because Wasm execution does a best-effort
+        // detection of out-of-instruction condition.
         assert!(self.instructions_executed >= 0);
     }
 
@@ -112,11 +118,20 @@ impl State {
     /// Computes the limit for the next slice taking into account
     /// the instructions remaining in the total limit and
     /// the instructions carried over from the current slice.
+    ///
+    /// This function must be called before the instructions executed in the
+    /// current slice are added to `self.instructions_executed`.
     fn next_slice_instruction_limit(&mut self, instruction_counter: i64) -> i64 {
         let newly_executed = self.newly_executed(instruction_counter);
         let carry_over = (newly_executed - self.slice_instruction_limit).max(0);
+        // The upper bound must reflect what is left in the total budget
+        // *after* this slice's (already capped) consumption, not what was
+        // left before it: otherwise a slice that consumes the whole
+        // remaining budget would still appear to leave room for a next one.
+        let total_instructions_left_after_slice =
+            (self.total_instructions_left() - newly_executed).max(0);
         (self.max_slice_instruction_limit - carry_over)
-            .clamp(0, self.total_instructions_left().max(0))
+            .clamp(0, total_instructions_left_after_slice)
     }
 
     /// Returns the number of instructions executed in the current slice.
@@ -124,18 +139,24 @@ impl State {
         // Normally the instruction counter does not exceed the instruction
         // limit. However, we cannot trust the instruction counter because it is
         // coming from Wasm execution, so we use saturating operations here to avoid
-        // over-/underflows and invalid state.
+        // over-/underflows and invalid state. We also cap the result at the
+        // instructions left in the total instruction budget, e.g., if a system
+        // API call charged a huge fee before failing with an out-of-instructions
+        // error, to keep this value (and `instructions_executed`, which it feeds)
+        // consistent with the total instruction budget.
         self.slice_instruction_limit
             .saturating_sub(instruction_counter)
+            .min(self.total_instructions_left())
             .max(0)
     }
 
     /// Updates the state to prepare for the next slice.
     fn update(&mut self, instruction_counter: i64) {
-        self.instructions_executed = self
-            .instructions_executed
-            .saturating_add(self.newly_executed(instruction_counter));
+        // Both `newly_executed` and the next slice's limit must be computed
+        // from the pre-update state.
+        let newly_executed = self.newly_executed(instruction_counter);
         self.slice_instruction_limit = self.next_slice_instruction_limit(instruction_counter);
+        self.instructions_executed = self.instructions_executed.saturating_add(newly_executed);
         self.slices_left -= 1;
         self.check_invariants();
     }
@@ -210,6 +231,14 @@ impl DeterministicTimeSlicing {
         }
 
         let newly_executed = state.newly_executed(instruction_counter);
+        if newly_executed >= state.total_instructions_left() {
+            // The current slice exhausted the total instruction budget, so
+            // execution fails because of the total instruction limit (and not
+            // because of the slice instruction limit).
+            return Err(HypervisorError::InstructionLimitExceeded(
+                NumInstructions::from(state.instruction_limit_to_report as u64),
+            ));
+        }
         if state.next_slice_instruction_limit(instruction_counter) == 0 {
             // If the next slice doesn't have any instructions left, then
             // execution will fail anyway, so we can return the error now.
