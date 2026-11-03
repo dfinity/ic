@@ -21,8 +21,7 @@ use ic_recovery::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_tools::{
-    admin_helper::get_halt_subnet_at_cup_height_command,
-    utils::{print_url_and_ask_for_confirmation, readonly_keys_adding},
+    steps::HaltSubnetAtCupHeightStep, utils::print_url_and_ask_for_confirmation,
 };
 use serde::{Deserialize, Serialize};
 use slog::{Logger, warn};
@@ -373,26 +372,17 @@ impl SubnetMerging {
         Ok(subnet_record)
     }
 
-    /// Proposes to halt the subnet at its next CUP and, if a readonly key is
-    /// supplied, to add it to the readonly keys of the subnet.
     fn halt_subnet_at_cup_height_step(
         &self,
         target_subnet: TargetSubnet,
-    ) -> RecoveryResult<AdminStep> {
-        let subnet_id = self.subnet_id(target_subnet);
-
-        Ok(AdminStep {
-            logger: self.recovery.logger.clone(),
-            ic_admin_cmd: get_halt_subnet_at_cup_height_command(
-                &self.recovery.admin_helper,
-                subnet_id,
-                &readonly_keys_adding(
-                    &self.recovery.registry_helper,
-                    subnet_id,
-                    &self.params.readonly_pub_key,
-                )?,
-            ),
-        })
+    ) -> HaltSubnetAtCupHeightStep {
+        HaltSubnetAtCupHeightStep::new(
+            self.recovery.logger.clone(),
+            self.recovery.admin_helper.clone(),
+            self.recovery.registry_helper.clone(),
+            self.subnet_id(target_subnet),
+            self.params.readonly_pub_key.clone(),
+        )
     }
 
     fn wait_for_halting_cup_step(
@@ -567,11 +557,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             .into(),
 
             StepType::HaltSourceSubnetAtCupHeight => self
-                .halt_subnet_at_cup_height_step(TargetSubnet::Source)?
+                .halt_subnet_at_cup_height_step(TargetSubnet::Source)
                 .into(),
 
             StepType::HaltDestinationSubnetAtCupHeight => self
-                .halt_subnet_at_cup_height_step(TargetSubnet::Destination)?
+                .halt_subnet_at_cup_height_step(TargetSubnet::Destination)
                 .into(),
 
             StepType::WaitForHaltingCupOnSourceSubnet => {
