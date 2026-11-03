@@ -132,6 +132,21 @@ pub struct SubnetMergingArgs {
     pub skip: Option<Vec<StepType>>,
 }
 
+/// Whether the tool, when resumed at `next_step`, checks that neither subnet is
+/// halted nor scheduled to halt at its next CUP.
+///
+/// Not when it is resumed past `HaltSourceSubnetAtCupHeight`, i.e. after it has
+/// started halting the subnets itself, nor when it is resumed at that step:
+/// progress is saved only after a step is executed, so a run that stops after
+/// the proposal to halt the source subnet has been adopted, but before that is
+/// saved, resumes at that step, with the source subnet scheduled to halt.
+/// Proposing to halt it again does no harm.
+fn checks_not_halted(next_step: Option<StepType>) -> bool {
+    next_step.is_none_or(|next_step| {
+        (next_step as usize) < StepType::HaltSourceSubnetAtCupHeight as usize
+    })
+}
+
 fn default_halt_timeout_secs() -> u64 {
     900
 }
@@ -186,8 +201,8 @@ impl SubnetMerging {
     /// 2) Both are `Application` (or `VerifiedApplication`) subnets;
     /// 3) Neither holds any chain keys;
     /// 4) Neither is halted nor scheduled to halt at its next CUP, unless the
-    ///    tool is resumed past `HaltSourceSubnetAtCupHeight`, i.e. after it
-    ///    started halting them itself;
+    ///    tool is resumed at or past `HaltSourceSubnetAtCupHeight` (see
+    ///    `checks_not_halted`);
     /// 5) The destination subnet is not cooling down;
     /// 6) Both have the same subnet type, cycles cost schedule, subnet admins
     ///    and SEV setting.
@@ -203,9 +218,7 @@ impl SubnetMerging {
             )));
         }
 
-        let check_not_halted = next_step.is_none_or(|next_step| {
-            next_step as usize <= StepType::HaltSourceSubnetAtCupHeight as usize
-        });
+        let check_not_halted = checks_not_halted(next_step);
         let source =
             Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id, check_not_halted)?;
         let destination = Self::get_and_pre_validate_subnet_record(
@@ -619,6 +632,22 @@ mod tests {
             next_step: Some(StepType::CheckMergeReadiness),
             skip: None,
         }
+    }
+
+    #[test]
+    fn not_halted_is_checked_only_before_the_tool_halts_the_subnets() {
+        assert!(checks_not_halted(None));
+        for step in StepType::iter() {
+            let before_halting = (step as usize) < StepType::HaltSourceSubnetAtCupHeight as usize;
+            assert_eq!(checks_not_halted(Some(step)), before_halting, "{step:?}");
+        }
+        assert!(checks_not_halted(Some(StepType::CheckMergeReadiness)));
+        assert!(!checks_not_halted(Some(
+            StepType::HaltSourceSubnetAtCupHeight
+        )));
+        assert!(!checks_not_halted(Some(
+            StepType::HaltDestinationSubnetAtCupHeight
+        )));
     }
 
     #[test]
