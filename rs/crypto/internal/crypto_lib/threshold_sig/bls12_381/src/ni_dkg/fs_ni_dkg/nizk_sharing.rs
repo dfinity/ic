@@ -28,20 +28,32 @@ pub struct SharingInstance {
 }
 
 impl SharingInstance {
+    /// Creates a new `SharingInstance`, validating the inputs.
+    ///
+    /// Returns `Err(ZkProofSharingError::InvalidInstance)` if
+    ///   * `public_keys` is empty,
+    ///   * `public_coefficients` is empty, or
+    ///   * `public_keys` and `combined_ciphertexts` have different lengths.
     pub fn new(
         public_keys: Vec<G1Affine>,
         public_coefficients: Vec<G2Affine>,
         combined_randomizer: G1Affine,
         combined_ciphertexts: Vec<G1Affine>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, ZkProofSharingError> {
+        if public_keys.is_empty() || public_coefficients.is_empty() {
+            return Err(ZkProofSharingError::InvalidInstance);
+        }
+        if public_keys.len() != combined_ciphertexts.len() {
+            return Err(ZkProofSharingError::InvalidInstance);
+        }
+        Ok(Self {
             g1_gen: G1Affine::generator().clone(),
             g2_gen: G2Affine::generator().clone(),
             public_keys,
             public_coefficients,
             combined_randomizer,
             combined_ciphertexts,
-        }
+        })
     }
 }
 
@@ -145,15 +157,6 @@ impl SharingInstance {
     pub fn hash_to_scalar(&self) -> Scalar {
         random_oracle_to_scalar(DOMAIN_PROOF_OF_SHARING_INSTANCE, self)
     }
-    pub fn check_instance(&self) -> Result<(), ZkProofSharingError> {
-        if self.public_keys.is_empty() || self.public_coefficients.is_empty() {
-            return Err(ZkProofSharingError::InvalidInstance);
-        };
-        if self.public_keys.len() != self.combined_ciphertexts.len() {
-            return Err(ZkProofSharingError::InvalidInstance);
-        };
-        Ok(())
-    }
 }
 impl From<&ProofSharing> for FirstMoveSharing {
     fn from(proof: &ProofSharing) -> Self {
@@ -192,9 +195,6 @@ pub fn prove_sharing<R: RngCore + CryptoRng>(
 ) -> ProofSharing {
     //   instance = ([y_1..y_n], [A_0..A_{t-1}], R, [C_1..C_n])
     //   witness = (r, [s_1..s_n])
-    instance
-        .check_instance()
-        .expect("The sharing proof instance is invalid");
     assert_eq!(instance.public_keys.len(), witness.scalars_s.len());
 
     // Hash of instance: x = oracle(instance)
@@ -254,7 +254,6 @@ pub fn verify_sharing(
     instance: &SharingInstance,
     nizk: &ProofSharing,
 ) -> Result<(), ZkProofSharingError> {
-    instance.check_instance()?;
     // Hash of Instance
     // x = oracle(instance)
     let x = instance.hash_to_scalar();
