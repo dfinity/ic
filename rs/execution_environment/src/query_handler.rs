@@ -281,7 +281,7 @@ impl InternalHttpQueryHandler {
             None => resource_limits.maximum_query_instructions_or(self.max_instructions_per_query),
         };
         let mut context = query_context::QueryContext::new(
-            self.log.clone(),
+            &self.log,
             Arc::clone(&self.hypervisor),
             Arc::clone(&self.canister_manager),
             self.own_subnet_type,

@@ -90,8 +90,8 @@ fn wasm_query_method(
 }
 
 /// Executes a single user query along with its outgoing query calls.
-pub(super) struct QueryContext {
-    log: ReplicaLogger,
+pub(super) struct QueryContext<'a> {
+    log: &'a ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
     canister_manager: Arc<CanisterManager>,
     own_subnet_type: SubnetType,
@@ -127,10 +127,10 @@ pub(super) struct QueryContext {
     instruction_observation: Option<Arc<AtomicU64>>,
 }
 
-impl QueryContext {
+impl<'a> QueryContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
-        log: ReplicaLogger,
+        log: &'a ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
         canister_manager: Arc<CanisterManager>,
         own_subnet_type: SubnetType,
@@ -589,14 +589,14 @@ impl QueryContext {
         let callback = common::unregister_callback(
             &mut canister,
             &response,
-            &self.log,
+            self.log,
             &self.metrics.query_critical_error,
         )
         .ok_or_else(err)?;
         let (call_context, call_context_id) = common::get_call_context(
             &canister,
             &callback,
-            &self.log,
+            self.log,
             &self.metrics.query_critical_error,
         )
         .ok_or_else(err)?;
@@ -825,6 +825,15 @@ impl QueryContext {
         };
 
         let canister_id = request.receiver;
+
+        info!(
+            every_n_seconds => 10,
+            self.log,
+            "Composite query: canister {} calls method {} of canister {}",
+            request.sender,
+            request.method_name,
+            canister_id
+        );
 
         // Requests to the management canister made by a composite query are not
         // routed to a destination subnet, i.e. they reach the query handler with

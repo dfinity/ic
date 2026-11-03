@@ -43,7 +43,7 @@ struct PendingCall(CanisterState, CallOrigin, VecDeque<Arc<Request>>);
 /// - the limit on the total number of executed instructions by all queries and
 ///   response callbacks.
 pub(super) fn evaluate_query_call_graph(
-    query_context: &mut QueryContext,
+    query_context: &mut QueryContext<'_>,
     canister: CanisterState,
     call_origin: CallOrigin,
     requests: VecDeque<Arc<Request>>,
