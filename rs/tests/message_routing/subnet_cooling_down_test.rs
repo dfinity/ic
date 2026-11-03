@@ -86,7 +86,8 @@ Runbook::
    halts at: served at its public endpoint, written to its disk, and with the
    state it names certified.
 13. After `WaitForHaltingCupOnDestinationSubnet`: check that both subnets are
-   halted, i.e. that the certified height of none of their nodes advances.
+   halted, i.e. that every one of their nodes certifies the height its subnet
+   halts at and none goes past it.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -217,8 +218,7 @@ const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// interval away.
 const HALT_TIMEOUT: Duration = Duration::from_secs(900);
 
-/// How long `UT`'s loop is observed to be stalled (step 11), and the subnets to
-/// be halted (step 13).
+/// How long `UT`'s loop is observed to be stalled (step 11).
 const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 
 /// Timeouts of the test itself, above the sum of the timeouts of its steps
@@ -607,40 +607,68 @@ fn download_node(subnet: &SubnetSnapshot) -> IpAddr {
     subnet.nodes().next().unwrap().get_ip_addr()
 }
 
-/// Step 13: check that `M` and `T` are halted, i.e. that the certified height of
-/// none of their nodes advances.
+/// Step 13: check that `M` and `T` are halted, i.e. that every one of their
+/// nodes certifies the height its subnet halts at, and none goes past it.
+///
+/// The tool only waits for the node of each subnet the state would be
+/// downloaded from, so the other nodes are waited for to catch up with the
+/// halting height.
 async fn check_subnets_halted(context: &Context<'_>) {
     let logger = &context.logger;
-    info!(
-        logger,
-        "Step 13: Checking that subnets M and T are halted over {STALL_OBSERVATION_PERIOD:?}"
-    );
-    let node_ips: Vec<IpAddr> = [&context.m_subnet, &context.t_subnet]
-        .into_iter()
-        .flat_map(|subnet| subnet.nodes().map(|node| node.get_ip_addr()))
-        .collect();
-    let certification_heights = || async {
-        let mut heights = Vec::new();
-        for ip in &node_ips {
-            let metrics = get_node_metrics(logger, ip)
-                .await
-                .unwrap_or_else(|| panic!("failed to get the metrics of node {ip}"));
-            heights.push(metrics.certification_height);
-        }
-        heights
-    };
-    let before = certification_heights().await;
-    tokio::time::sleep(STALL_OBSERVATION_PERIOD).await;
-    let after = certification_heights().await;
-    assert_eq!(
-        before, after,
-        "the certified heights of the nodes of M and T advanced from {before:?} to {after:?}, so \
-         the subnets are not halted",
-    );
-    info!(
-        logger,
-        "Step 13 done: subnets M and T are halted at the certified heights {after:?}"
-    );
+
+    for subnet in [&context.m_subnet, &context.t_subnet] {
+        let subnet_id = subnet.subnet_id;
+        // The tool has checked that the download node holds the CUP the subnet
+        // halts at, and no CUP follows that one.
+        let download_node = download_node(subnet);
+        let halting_height = get_node_metrics(logger, &download_node)
+            .await
+            .unwrap_or_else(|| panic!("failed to get the metrics of node {download_node}"))
+            .catch_up_package_height;
+        info!(
+            logger,
+            "Step 13: Waiting until every node of subnet {subnet_id} has certified the height \
+             {halting_height} it halts at"
+        );
+        retry_with_msg_async!(
+            format!(
+                "waiting until every node of subnet {subnet_id} has certified height \
+                 {halting_height}"
+            ),
+            logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                for node in subnet.nodes() {
+                    let ip = node.get_ip_addr();
+                    let Some(metrics) = get_node_metrics(logger, &ip).await else {
+                        bail!("failed to get the metrics of node {ip}");
+                    };
+                    let height = metrics.certification_height;
+                    assert!(
+                        height <= halting_height,
+                        "node {ip} of subnet {subnet_id} certified height {height}, past the \
+                         height {halting_height} the subnet halts at"
+                    );
+                    if height < halting_height {
+                        bail!(
+                            "node {ip} of subnet {subnet_id} has certified up to height {height}"
+                        );
+                    }
+                }
+                Ok(())
+            }
+        )
+        .await
+        .expect("not every node certified the height its subnet halts at");
+        info!(
+            logger,
+            "Step 13: every node of subnet {subnet_id} has certified the height {halting_height} \
+             it halts at"
+        );
+    }
+
+    info!(logger, "Step 13 done: subnets M and T are halted");
 }
 
 /// Step 9: wait until the replicas of `M` observed the "cooling down" label,
