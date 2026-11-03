@@ -61,8 +61,6 @@ use super::{
     },
 };
 
-type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
-
 struct BouncerFactoryWrapper<Pool: ValidatedPoolReader<ConsensusMessage>> {
     bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
 }
@@ -108,8 +106,8 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>>
 #[derive(Clone)]
 pub struct FetchStrippedConsensusArtifact {
     log: ReplicaLogger,
-    ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
-    idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
+    ingress_pool: Arc<RwLock<dyn ValidatedPoolReader<SignedIngress>>>,
+    idkg_pool: Arc<RwLock<dyn ValidatedPoolReader<IDkgMessage>>>,
     canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
     fetch_stripped: FetchArtifact<MaybeStrippedConsensusMessage>,
     transport: Arc<dyn Transport>,
@@ -118,14 +116,14 @@ pub struct FetchStrippedConsensusArtifact {
 }
 
 impl FetchStrippedConsensusArtifact {
-    pub fn new<Pool: ValidatedPoolReader<ConsensusMessage> + Send + Sync + 'static>(
+    pub fn new<ConsensusPool: ValidatedPoolReader<ConsensusMessage> + 'static>(
         log: ReplicaLogger,
         rt: tokio::runtime::Handle,
-        consensus_pool: Arc<RwLock<Pool>>,
-        ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
-        idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
+        consensus_pool: Arc<RwLock<ConsensusPool>>,
+        ingress_pool: Arc<RwLock<dyn ValidatedPoolReader<SignedIngress>>>,
+        idkg_pool: Arc<RwLock<dyn ValidatedPoolReader<IDkgMessage>>>,
         canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
-        bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
+        bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, ConsensusPool>>,
         metrics_registry: MetricsRegistry,
         node_id: NodeId,
     ) -> (impl Fn(Arc<dyn Transport>) -> Self, axum::Router) {
@@ -323,8 +321,8 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
 /// it.
 async fn get_or_fetch<P: Peers>(
     stripped_message_id: StrippedMessageId,
-    ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
-    idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
+    ingress_pool: Arc<RwLock<dyn ValidatedPoolReader<SignedIngress>>>,
+    idkg_pool: Arc<RwLock<dyn ValidatedPoolReader<IDkgMessage>>>,
     canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
     transport: Arc<dyn Transport>,
     // Id of the *full* artifact which should contain the missing data

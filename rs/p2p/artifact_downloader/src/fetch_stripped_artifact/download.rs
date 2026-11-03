@@ -51,8 +51,6 @@ use super::{
     },
 };
 
-type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
-
 const INGRESS_URI: &str = "/block/ingress/rpc";
 const IDKG_DEALING_URI: &str = "/block/idkg_dealing/rpc";
 const CANISTER_HTTP_RESPONSE_URI: &str = "/block/canister_http_response/rpc";
@@ -61,9 +59,9 @@ const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Clone)]
 pub(super) struct Pools {
-    pub(super) consensus_pool: ValidatedPoolReaderRef<ConsensusMessage>,
-    pub(super) ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
-    pub(super) idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
+    pub(super) consensus_pool: Arc<RwLock<dyn ValidatedPoolReader<ConsensusMessage>>>,
+    pub(super) ingress_pool: Arc<RwLock<dyn ValidatedPoolReader<SignedIngress>>>,
+    pub(super) idkg_pool: Arc<RwLock<dyn ValidatedPoolReader<IDkgMessage>>>,
     pub(super) canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
     pub(super) metrics: StrippedMessageSenderMetrics,
 }
