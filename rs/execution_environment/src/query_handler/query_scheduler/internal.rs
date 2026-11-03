@@ -15,6 +15,25 @@ use tracing::instrument;
 /// and can be set to any reasonable duration from 1ms to 1000ms.
 pub(crate) const DEFAULT_QUERY_DURATION: Duration = Duration::from_millis(5);
 
+/// Capacity that `canisters` and `scheduled` keep when shrinking. It prevents
+/// freeing and re-allocating the collections whenever they become (nearly)
+/// empty, e.g., when a single canister is queried repeatedly, while still
+/// bounding the memory retained after a burst of many distinct canisters.
+const MIN_RETAINED_CAPACITY: usize = 64;
+
+/// Returns the capacity to shrink a collection with the given length and
+/// capacity to, or `None` if it should not be shrunk. A collection is shrunk to
+/// twice its length once it is at most a quarter full, but never below
+/// `MIN_RETAINED_CAPACITY`. Shrinking only kicks in above twice that minimum so
+/// that a collection already at (rounded-up) minimum size is left alone.
+fn shrink_target(len: usize, capacity: usize) -> Option<usize> {
+    if capacity > 2 * MIN_RETAINED_CAPACITY && len <= capacity / 4 {
+        Some((len * 2).max(MIN_RETAINED_CAPACITY))
+    } else {
+        None
+    }
+}
+
 pub(crate) struct QuerySchedulerMetrics {
     pub queue_length: Histogram,
 }
@@ -240,11 +259,11 @@ impl QuerySchedulerCore {
         if !canister.has_queries() && canister.active_threads == 0 {
             debug_assert!(!canister.has_been_scheduled);
             self.canisters.remove(&canister_id);
-            if self.canisters.len() <= self.canisters.capacity() / 4 {
-                self.canisters.shrink_to(self.canisters.len() * 2);
+            if let Some(target) = shrink_target(self.canisters.len(), self.canisters.capacity()) {
+                self.canisters.shrink_to(target);
             }
-            if self.scheduled.len() <= self.scheduled.capacity() / 4 {
-                self.scheduled.shrink_to(self.scheduled.len() * 2);
+            if let Some(target) = shrink_target(self.scheduled.len(), self.scheduled.capacity()) {
+                self.scheduled.shrink_to(target);
             }
         }
 
@@ -410,9 +429,47 @@ mod tests {
 
         let core = scheduler.core.lock().unwrap();
         assert!(core.canisters.is_empty());
-        assert_eq!(core.canisters.capacity(), 0);
+        assert!(core.canisters.capacity() <= 2 * MIN_RETAINED_CAPACITY);
         assert!(core.scheduled.is_empty());
-        assert_eq!(core.scheduled.capacity(), 0);
+        assert!(core.scheduled.capacity() <= 2 * MIN_RETAINED_CAPACITY);
+    }
+
+    #[test]
+    fn small_collections_are_not_deallocated() {
+        let metrics_registry = MetricsRegistry::new();
+        let scheduler =
+            QuerySchedulerInternal::new(2, Duration::from_millis(100), &metrics_registry);
+
+        for _ in 0..3 {
+            scheduler.push(
+                canister_test_id(1),
+                Query(Box::new(|| DEFAULT_QUERY_DURATION)),
+            );
+            let (id, _) = scheduler.try_pop().unwrap();
+            scheduler.notify_finished_execution(id, DEFAULT_QUERY_DURATION, vec![]);
+
+            let core = scheduler.core.lock().unwrap();
+            assert!(core.canisters.is_empty());
+            assert!(core.canisters.capacity() > 0);
+            assert!(core.scheduled.is_empty());
+            assert!(core.scheduled.capacity() > 0);
+        }
+    }
+
+    #[test]
+    fn shrink_target_respects_minimum() {
+        // Small collections are never shrunk.
+        assert_eq!(shrink_target(0, 0), None);
+        assert_eq!(shrink_target(0, 4), None);
+        assert_eq!(shrink_target(0, 2 * MIN_RETAINED_CAPACITY), None);
+        // Large, mostly empty collections are shrunk, but not below the minimum.
+        assert_eq!(
+            shrink_target(0, 4 * MIN_RETAINED_CAPACITY),
+            Some(MIN_RETAINED_CAPACITY)
+        );
+        assert_eq!(shrink_target(1000, 4000), Some(2000));
+        // Collections more than a quarter full are not shrunk.
+        assert_eq!(shrink_target(1001, 4000), None);
     }
 
     #[test]
