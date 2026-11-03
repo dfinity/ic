@@ -833,6 +833,49 @@ pub fn syscalls<
         })
         .unwrap();
 
+    // The "slow" path of the heap page limit check that the instrumentation
+    // injects before bulk memory operations (`memory.copy`, `memory.fill`,
+    // `memory.init`). It is only called when the operation might not fit the
+    // remaining page budget. Operands are zero-extended for Wasm32 modules.
+    // `src` is only a heap address if `src_is_heap` is non-zero.
+    linker
+        .func_wrap("__", "check_heap_bulk_access", {
+            move |mut caller: Caller<'_, StoreData>,
+                  dst: i64,
+                  src: i64,
+                  len: i64,
+                  src_is_heap: i32| {
+                with_error_handling(&mut caller, |caller| {
+                    let heap_size = caller
+                        .get_export(WASM_HEAP_MEMORY_NAME)
+                        .and_then(|ext| ext.into_memory())
+                        .ok_or_else(|| HypervisorError::ToolchainContractViolation {
+                            error: "WebAssembly module must define memory".to_string(),
+                        })?
+                        .data_size(&*caller);
+                    // An operation that is out of bounds traps without touching
+                    // any page, so it is not subject to the limit.
+                    let range = |start: i64| -> Option<std::ops::Range<usize>> {
+                        let end = (start as u64).checked_add(len as u64)?;
+                        (end <= heap_size as u64).then_some(start as usize..end as usize)
+                    };
+                    let Some(dst) = range(dst) else {
+                        return Ok(());
+                    };
+                    let src = if src_is_heap != 0 {
+                        match range(src) {
+                            Some(src) => Some(src),
+                            None => return Ok(()),
+                        }
+                    } else {
+                        None
+                    };
+                    caller.data().heap_access.check_bulk(dst, src)
+                })
+            }
+        })
+        .unwrap();
+
     linker
         .func_wrap("ic0", "time", {
             move |mut caller: Caller<'_, StoreData>| {

@@ -6211,11 +6211,11 @@ fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
     assert_eq!(error.code(), ErrorCode::SubnetOversubscribed);
 }
 
-/// Helper function that installs and runs an update call on a canister in
-/// Wasm32 and Wasm64 mode and returns the balance and the cost of the call(s).
-fn run_canister_in_wasm_mode(is_wasm64_mode: bool, execute_ingress: bool) -> (Cycles, Cycles) {
+/// A canister with a Wasm32 or Wasm64 memory and an update method with a few
+/// instructions.
+fn wasm_mode_canister_wat(is_wasm64_mode: bool) -> String {
     let memory_type = if is_wasm64_mode { "i64" } else { "" };
-    let canister_wat = format!(
+    format!(
         r#"
         (module
             (func (export "canister_update test")
@@ -6228,7 +6228,13 @@ fn run_canister_in_wasm_mode(is_wasm64_mode: bool, execute_ingress: bool) -> (Cy
             (memory {memory_type} 1)
         )
     "#
-    );
+    )
+}
+
+/// Helper function that installs and runs an update call on a canister in
+/// Wasm32 and Wasm64 mode and returns the balance and the cost of the call(s).
+fn run_canister_in_wasm_mode(is_wasm64_mode: bool, execute_ingress: bool) -> (Cycles, Cycles) {
+    let canister_wat = wasm_mode_canister_wat(is_wasm64_mode);
 
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test

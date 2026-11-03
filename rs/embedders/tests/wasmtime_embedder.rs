@@ -4,12 +4,13 @@ use ic_config::{
     flag_status::FlagStatus,
 };
 use ic_embedders::{
+    InstanceRunResult,
     wasm_utils::instrumentation::WasmMemoryType,
     wasm_utils::instrumentation::instruction_to_cost,
     wasmtime_embedder::{CanisterMemoryType, system_api::ApiType, system_api_complexity},
 };
 use ic_interfaces::execution_environment::{
-    CanisterBacktrace, Heap, HypervisorError, SystemApi, TrapCode,
+    CanisterBacktrace, Heap, HypervisorError, HypervisorResult, SystemApi, TrapCode,
 };
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
@@ -1177,6 +1178,196 @@ fn heap_page_budget_equals_limit_minus_accessed_pages() {
     assert_eq!(instance.heap_page_budget(), expected - 1);
 }
 
+/// Runs `method` of a fresh instance of `wat` with the given heap page limit
+/// and returns the result together with the number of accessed Wasm heap
+/// pages.
+fn run_with_heap_page_limit(
+    wat: &str,
+    limit_wasm_pages: u64,
+    method: &str,
+) -> (HypervisorResult<InstanceRunResult>, usize) {
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config_with_wasm_memory_accessed_page_limit(
+            limit_wasm_pages,
+        ))
+        .with_wat(wat)
+        .build();
+    let result = instance.run(FuncRef::Method(WasmMethod::Update(method.to_string())));
+    let accessed = instance.get_stats().wasm_accessed_pages / OS_PAGES_PER_WASM_PAGE;
+    (result, accessed)
+}
+
+/// The expectations shared by the Wasm32 and Wasm64 variants of the bulk
+/// memory tests: method name, heap page limit, whether the method exceeds
+/// the limit, and the number of Wasm pages accessed afterwards.
+fn assert_bulk_memory_ops_respect_heap_page_limit(wat: &str) {
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    enum Expected {
+        Succeeds,
+        ExceedsLimit,
+        TrapsOutOfBounds,
+    }
+    use Expected::*;
+    let cases = [
+        // Fast path: the bound of `(len >> 16) + 2` pages per heap range fits
+        // into the budget.
+        ("fill_pages_0_1", 4, Succeeds, 2),
+        ("copy_page_0_to_1", 6, Succeeds, 2),
+        ("init_page_0", 2, Succeeds, 1),
+        // Slow path: the bound exceeds the budget, so the host counts the
+        // pages exactly. Nothing is mapped if the check fails.
+        ("fill_pages_0_1", 2, Succeeds, 2),
+        ("fill_pages_0_1_2", 2, ExceedsLimit, 0),
+        ("fill_pages_0_1_2", 3, Succeeds, 3),
+        ("copy_page_0_to_1", 2, Succeeds, 2),
+        ("copy_page_0_to_2", 1, ExceedsLimit, 0),
+        ("copy_page_0_to_2", 2, Succeeds, 2),
+        ("init_page_0", 0, ExceedsLimit, 0),
+        // The exact check only counts distinct unaccessed pages: a copy whose
+        // source and destination share pages only touches pages 0 and 1.
+        ("copy_overlapping_pages_0_1", 2, Succeeds, 2),
+        ("copy_overlapping_pages_0_1", 1, ExceedsLimit, 0),
+        // Accessed pages do not count: loads from pages 0 and 1 use up the
+        // budget, but filling them again fits, filling a new page does not.
+        ("load_pages_0_1_then_fill_them", 2, Succeeds, 2),
+        ("load_pages_0_1_then_fill_page_2", 2, ExceedsLimit, 2),
+        // A short copy with a constant length is expanded inline by the
+        // compiler; it is checked all the same.
+        (
+            "load_pages_0_1_then_copy_8_bytes_to_page_2",
+            2,
+            ExceedsLimit,
+            2,
+        ),
+        (
+            "load_pages_0_1_then_copy_8_bytes_within_page_1",
+            2,
+            Succeeds,
+            2,
+        ),
+        // Zero-length operations touch no page, also when the host checks them.
+        ("fill_zero_bytes_at_page_3", 0, Succeeds, 0),
+        // Out-of-bounds operations trap without touching any page, also when
+        // they would exceed the limit.
+        // ... both on the fast path (bound 4, budget 4) ...
+        ("fill_out_of_bounds", 4, TrapsOutOfBounds, 0),
+        // ... and on the slow path (bound 4, budget 1).
+        ("fill_out_of_bounds", 1, TrapsOutOfBounds, 0),
+        ("copy_from_out_of_bounds", 2, TrapsOutOfBounds, 0),
+    ];
+    for (method, limit, expected, expected_accessed) in cases {
+        let (result, accessed) = run_with_heap_page_limit(wat, limit, method);
+        match (expected, &result) {
+            (Succeeds, Ok(_)) => {}
+            (ExceedsLimit, Err(HypervisorError::MemoryAccessLimitExceeded(_))) => {}
+            (
+                TrapsOutOfBounds,
+                Err(HypervisorError::Trapped {
+                    trap_code: TrapCode::HeapOutOfBounds,
+                    ..
+                }),
+            ) => {}
+            _ => panic!("{method} with limit {limit}: expected {expected:?}, got {result:?}"),
+        }
+        assert_eq!(
+            accessed, expected_accessed,
+            "{method} with limit {limit}: accessed pages"
+        );
+    }
+}
+
+/// A module with a 4-page heap and one method per bulk memory operation
+/// under test, with `i32` or `i64` heap addresses.
+fn bulk_memory_ops_wat(wasm64: bool) -> String {
+    let (a, memory) = if wasm64 {
+        ("i64", "i64 4")
+    } else {
+        ("i32", "4")
+    };
+    format!(
+        r#"
+    (module
+        (func (export "canister_update fill_pages_0_1")
+            (memory.fill ({a}.const 0) (i32.const 1) ({a}.const 131072)))
+        (func (export "canister_update fill_pages_0_1_2")
+            (memory.fill ({a}.const 0) (i32.const 1) ({a}.const 196608)))
+        (func (export "canister_update copy_page_0_to_1")
+            (memory.copy ({a}.const 65536) ({a}.const 0) ({a}.const 65536)))
+        (func (export "canister_update copy_page_0_to_2")
+            (memory.copy ({a}.const 131072) ({a}.const 0) ({a}.const 65536)))
+        (func (export "canister_update copy_overlapping_pages_0_1")
+            ;; source [100, 65636), destination [1000, 66536)
+            (memory.copy ({a}.const 1000) ({a}.const 100) ({a}.const 65536)))
+        (func (export "canister_update init_page_0")
+            (memory.init 0 ({a}.const 0) (i32.const 0) (i32.const 4)))
+        (func (export "canister_update load_pages_0_1_then_fill_them")
+            (drop (i32.load ({a}.const 0)))
+            (drop (i32.load ({a}.const 65536)))
+            (memory.fill ({a}.const 0) (i32.const 1) ({a}.const 131072)))
+        (func (export "canister_update load_pages_0_1_then_fill_page_2")
+            (drop (i32.load ({a}.const 0)))
+            (drop (i32.load ({a}.const 65536)))
+            (memory.fill ({a}.const 131072) (i32.const 1) ({a}.const 1)))
+        (func (export "canister_update load_pages_0_1_then_copy_8_bytes_to_page_2")
+            (drop (i32.load ({a}.const 0)))
+            (drop (i32.load ({a}.const 65536)))
+            (memory.copy ({a}.const 131072) ({a}.const 0) ({a}.const 8)))
+        (func (export "canister_update load_pages_0_1_then_copy_8_bytes_within_page_1")
+            (drop (i32.load ({a}.const 0)))
+            (drop (i32.load ({a}.const 65536)))
+            (memory.copy ({a}.const 65600) ({a}.const 65536) ({a}.const 8)))
+        (func (export "canister_update fill_zero_bytes_at_page_3")
+            (memory.fill ({a}.const 196608) (i32.const 1) ({a}.const 0)))
+        (func (export "canister_update fill_out_of_bounds")
+            (memory.fill ({a}.const 196608) (i32.const 1) ({a}.const 131072)))
+        (func (export "canister_update copy_from_out_of_bounds")
+            (memory.copy ({a}.const 0) ({a}.const 196608) ({a}.const 131072)))
+        (memory (export "memory") {memory})
+        (data "\01\02\03\04")
+    )"#
+    )
+}
+
+#[test]
+fn wasm_memory_accessed_page_limit_for_bulk_memory_ops_wasm32() {
+    assert_bulk_memory_ops_respect_heap_page_limit(&bulk_memory_ops_wat(false));
+}
+
+#[test]
+fn wasm_memory_accessed_page_limit_for_bulk_memory_ops_wasm64() {
+    assert_bulk_memory_ops_respect_heap_page_limit(&bulk_memory_ops_wat(true));
+}
+
+/// The injected check charges the same instructions for a bulk memory
+/// operation as before: its length.
+#[test]
+fn bulk_memory_ops_are_charged_for_their_length() {
+    let wat = r#"
+        (module
+            (func (export "canister_update nothing"))
+            (func (export "canister_update fill_1000")
+                (memory.fill (i32.const 0) (i32.const 1) (i32.const 1000)))
+            (func (export "canister_update fill_0")
+                (memory.fill (i32.const 0) (i32.const 1) (i32.const 0)))
+            (memory (export "memory") 1)
+        )"#;
+    let instructions_used = |method: &str| {
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let before = instance.instruction_counter();
+        instance
+            .run(FuncRef::Method(WasmMethod::Update(method.to_string())))
+            .unwrap();
+        before - instance.instruction_counter()
+    };
+    let nothing = instructions_used("nothing");
+    // The static cost of `memory.fill` and its three constant operands.
+    let fill_static_cost = instructions_used("fill_0") - nothing;
+    assert_eq!(
+        instructions_used("fill_1000") - nothing,
+        fill_static_cost + 1000
+    );
+}
+
 #[test]
 fn multiple_stable_write() {
     let wat = r#"
@@ -1962,6 +2153,8 @@ fn wasm_heap_oob_access() {
     let err = instance
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
+    // The function index accounts for the five functions imported by the
+    // instrumentation (the heap page limit is disabled by default).
     assert_eq!(
         err,
         HypervisorError::Trapped {
