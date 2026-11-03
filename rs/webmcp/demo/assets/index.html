@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebMCP Demo Shop</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { color: #29abe2; }
+    .badge { background: #29abe2; color: white; border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <h1>WebMCP Demo Shop <span class="badge">AI-ready</span></h1>
+  <p>
+    This demo canister exposes an e-commerce shop to AI agents via
+    <a href="https://webmcp.link/">WebMCP</a>.
+    Open Chrome 146+ with the WebMCP flag enabled and an AI agent will
+    be able to browse products, manage your cart, and complete purchases.
+  </p>
+  <h2>Available tools</h2>
+  <ul>
+    <li><code>list_products</code> — Browse the product catalog</li>
+    <li><code>get_product</code> — Get details for a specific product</li>
+    <li><code>get_cart</code> — View current cart contents</li>
+    <li><code>add_to_cart</code> — Add items to cart (requires login)</li>
+    <li><code>checkout</code> — Complete the purchase (requires login)</li>
+  </ul>
+  <p>
+    The manifest is served at
+    <a href="/.well-known/webmcp.json">/.well-known/webmcp.json</a>.
+  </p>
+  <!-- Auto-registers all tools when loaded in a WebMCP-capable browser -->
+  <script type="module" src="/webmcp.js"></script>
+</body>
+</html>

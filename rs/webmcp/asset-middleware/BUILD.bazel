@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+ALIASES = {}
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+]
+
+rust_library(
+    name = "ic_webmcp_asset_middleware",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "ic_webmcp_asset_middleware",
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "unit_tests",
+    aliases = ALIASES,
+    crate = ":ic_webmcp_asset_middleware",
+)
