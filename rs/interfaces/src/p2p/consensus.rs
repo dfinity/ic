@@ -78,7 +78,6 @@ pub trait MutablePool<T: IdentifiableArtifact> {
 pub trait ValidatedPoolReader<T: IdentifiableArtifact>: Send + Sync {
     /// Get a validated artifact by its identifier
     ///
-    /// #Returns:
     /// # Returns
     /// - `Some`: Artifact from the validated pool.
     /// - `None`: Artifact does not exist in the validated pool.
