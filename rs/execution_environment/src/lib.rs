@@ -61,7 +61,7 @@ pub use scheduler::{
 use std::{path::Path, sync::Arc};
 use tokio::sync::mpsc::Sender;
 
-/// Checks that the receiver of a non-replicated request exists on this subnet.
+/// Checks that the receiver of a request exists on this subnet.
 fn receiver_exists(state: &ReplicatedState, receiver: CanisterId) -> Result<(), UserError> {
     if receiver == CanisterId::ic_00() || state.canister_state(&receiver).is_some() {
         Ok(())
