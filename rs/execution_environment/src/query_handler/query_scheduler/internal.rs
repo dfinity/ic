@@ -15,9 +15,9 @@ use tracing::instrument;
 /// and can be set to any reasonable duration from 1ms to 1000ms.
 pub(crate) const DEFAULT_QUERY_DURATION: Duration = Duration::from_millis(5);
 
-/// Capacity that `canisters` and `scheduled` keep when shrinking. It prevents
-/// freeing and re-allocating the collections whenever they become (nearly)
-/// empty, e.g., when a single canister is queried repeatedly, while still
+/// Capacity that the query scheduler's collections keep when shrinking. It
+/// prevents freeing and re-allocating the collections whenever they become
+/// (nearly) empty, e.g., when a single canister is queried repeatedly, while still
 /// bounding the memory retained after a burst of many distinct canisters.
 const MIN_RETAINED_CAPACITY: usize = 64;
 
@@ -414,15 +414,22 @@ mod tests {
         let scheduler =
             QuerySchedulerInternal::new(2, Duration::from_millis(100), &metrics_registry);
 
-        for id in 0..1000 {
+        let num_canisters: usize = 1000;
+        // Ensure the collections grow beyond the capacity retained on shrinking.
+        assert!(num_canisters > 2 * MIN_RETAINED_CAPACITY);
+
+        for id in 0..num_canisters {
             scheduler.push(
-                canister_test_id(id),
+                canister_test_id(id as u64),
                 Query(Box::new(|| DEFAULT_QUERY_DURATION)),
             );
         }
-        assert_eq!(scheduler.core.lock().unwrap().canisters.len(), 1000);
+        assert_eq!(
+            scheduler.core.lock().unwrap().canisters.len(),
+            num_canisters
+        );
 
-        for _ in 0..1000 {
+        for _ in 0..num_canisters {
             let (id, _) = scheduler.try_pop().unwrap();
             scheduler.notify_finished_execution(id, DEFAULT_QUERY_DURATION, vec![]);
         }
@@ -467,9 +474,11 @@ mod tests {
             shrink_target(0, 4 * MIN_RETAINED_CAPACITY),
             Some(MIN_RETAINED_CAPACITY)
         );
-        assert_eq!(shrink_target(1000, 4000), Some(2000));
+        let len: usize = 1000;
+        assert!(len > 2 * MIN_RETAINED_CAPACITY);
+        assert_eq!(shrink_target(len, 4 * len), Some(2 * len));
         // Collections more than a quarter full are not shrunk.
-        assert_eq!(shrink_target(1001, 4000), None);
+        assert_eq!(shrink_target(len + 1, 4 * len), None);
     }
 
     #[test]
