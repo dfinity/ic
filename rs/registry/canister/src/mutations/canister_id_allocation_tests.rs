@@ -1,5 +1,6 @@
 use super::*;
 use crate::mutations::routing_table::routing_table_into_registry_mutation;
+use ic_protobuf::registry::routing_table::v1 as pb;
 use ic_registry_routing_table::{
     CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable, routing_table_insert_subnet,
 };
@@ -181,6 +182,43 @@ fn test_compute_next_unallocated_canister_index_from_history_includes_legacy_rou
         vec![(5 * N, 6 * N - 1)]
     );
     assert_eq!(next_unallocated_canister_index, 6 * N);
+}
+
+#[test]
+fn test_compute_next_unallocated_canister_index_from_history_includes_legacy_uint64_encoding() {
+    // Step 1: Prepare the world: a deleted version of the legacy single-key routing table, in the
+    // very old encoding where range ends were plain u64 canister indices. Today's
+    // `pb::RoutingTable` would not see this range at all.
+    let mut registry = Registry::new();
+    let legacy_routing_table = HistoricalRoutingTable {
+        entries: vec![HistoricalRoutingTableEntry {
+            range: Some(HistoricalCanisterIdRange {
+                legacy_end: Some(7 * N - 1),
+                end_canister_id: None,
+            }),
+        }],
+    }
+    .encode_to_vec();
+    assert_eq!(
+        pb::RoutingTable::decode(legacy_routing_table.as_slice())
+            .unwrap()
+            .entries[0]
+            .range
+            .as_ref()
+            .unwrap()
+            .end_canister_id,
+        None
+    );
+    let legacy_key = make_routing_table_record_key();
+    registry.apply_mutations_for_test(vec![insert(&legacy_key, legacy_routing_table)]);
+    registry.apply_mutations_for_test(vec![delete(&legacy_key)]);
+
+    // Step 2: Run the code under test.
+    let next_unallocated_canister_index =
+        registry.compute_next_unallocated_canister_index_from_history(registry.latest_version());
+
+    // Step 3: Verify result: the legacy range counts.
+    assert_eq!(next_unallocated_canister_index, 7 * N);
 }
 
 #[test]

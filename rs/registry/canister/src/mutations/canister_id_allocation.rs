@@ -7,7 +7,8 @@
 //! and new ranges always start at or above it.
 
 use crate::{common::LOG_PREFIX, registry::Registry, storage::with_chunks};
-use ic_protobuf::registry::routing_table::v1::{self as pb, CanisterIdAllocation};
+use ic_protobuf::registry::routing_table::v1::CanisterIdAllocation;
+use ic_protobuf::types::v1 as pb_types;
 use ic_registry_canister_chunkify::dechunkify_registry_value;
 use ic_registry_keys::{
     CANISTER_RANGES_PREFIX, make_canister_id_allocation_key, make_routing_table_record_key,
@@ -69,8 +70,8 @@ impl Registry {
                     continue;
                 };
 
-                let routing_table =
-                    pb::RoutingTable::decode(bytes.as_slice()).unwrap_or_else(|err| {
+                let routing_table = HistoricalRoutingTable::decode(bytes.as_slice())
+                    .unwrap_or_else(|err| {
                         panic!(
                             "Unable to decode version {} of routing table key {}: {err}",
                             value.version,
@@ -78,26 +79,62 @@ impl Registry {
                         )
                     });
                 for entry in routing_table.entries {
-                    // Very old versions encoded ranges with since-removed u64 fields, which now
-                    // decode as `None`. They predate every range in later versions, so skipping them
-                    // cannot lower the result.
-                    let Some(end) = entry.range.and_then(|range| range.end_canister_id) else {
+                    let Some(range) = entry.range else {
                         continue;
                     };
-                    let end = CanisterId::try_from(end).unwrap_or_else(|err| {
+                    let end = range.try_get_end_canister_index().unwrap_or_else(|err| {
                         panic!(
                             "Invalid range end in version {} of routing table key {}: {err}",
                             value.version,
                             String::from_utf8_lossy(key),
                         )
                     });
-                    next_unallocated_canister_index =
-                        next_unallocated_canister_index.max(canister_id_into_u64(end) + 1);
+                    next_unallocated_canister_index = next_unallocated_canister_index.max(end + 1);
                 }
             }
         }
 
         next_unallocated_canister_index
+    }
+}
+
+/// The part of `pb::RoutingTable` needed to find the end of each range, in every encoding that the
+/// registry has ever stored.
+///
+/// Today, `CanisterIdRange` encodes its end as a `CanisterId` (field 4). Very old versions encoded
+/// it as a plain `uint64` canister index instead (field 2, now reserved). `pb::RoutingTable` drops
+/// field 2 when decoding, so the history is decoded with these messages instead, which keep both.
+#[derive(Clone, PartialEq, prost::Message)]
+struct HistoricalRoutingTable {
+    #[prost(message, repeated, tag = "1")]
+    entries: Vec<HistoricalRoutingTableEntry>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+struct HistoricalRoutingTableEntry {
+    #[prost(message, optional, tag = "1")]
+    range: Option<HistoricalCanisterIdRange>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+struct HistoricalCanisterIdRange {
+    /// The end in the very old encoding. As in proto3, 0 is not encoded, so `None` means 0.
+    #[prost(uint64, optional, tag = "2")]
+    legacy_end: Option<u64>,
+
+    #[prost(message, optional, tag = "4")]
+    end_canister_id: Option<pb_types::CanisterId>,
+}
+
+impl HistoricalCanisterIdRange {
+    /// Returns the canister index of the (inclusive) end of this range, in either encoding.
+    fn try_get_end_canister_index(self) -> Result<u64, String> {
+        let Some(end_canister_id) = self.end_canister_id else {
+            return Ok(self.legacy_end.unwrap_or(0));
+        };
+        let end_canister_id =
+            CanisterId::try_from(end_canister_id).map_err(|err| err.to_string())?;
+        Ok(canister_id_into_u64(end_canister_id))
     }
 }
 
