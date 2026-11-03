@@ -17,7 +17,7 @@ use ic_nns_common::{
 use ic_nns_constants::EXCHANGE_RATE_CANISTER_ID;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
-    canister_state::{CanisterEnv, governance, governance_mut, governance_ref, set_governance},
+    canister_state::{CanisterEnv, governance_ref, legacy_governance_mut, set_governance},
     encode_metrics,
     governance::Governance,
     neuron_data_validation::NeuronDataValidationSummary,
@@ -55,7 +55,9 @@ use std::{boxed::Box, time::Duration};
 #[cfg(feature = "test")]
 use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
 
-use ic_nns_governance::canister_state::{CanisterRandomnessGenerator, with_governance};
+use ic_nns_governance::canister_state::{
+    CanisterRandomnessGenerator, with_governance, with_governance_mut,
+};
 
 #[cfg(feature = "tla")]
 mod tla_ledger;
@@ -84,7 +86,7 @@ fn schedule_timers() {
 const SPAWN_NEURONS_INTERVAL: Duration = Duration::from_secs(60);
 fn schedule_spawn_neurons() {
     ic_cdk_timers::set_timer_interval(SPAWN_NEURONS_INTERVAL, async || {
-        governance_mut().maybe_spawn_neurons().await;
+        legacy_governance_mut().maybe_spawn_neurons().await;
     });
 }
 
@@ -93,7 +95,9 @@ const VOTE_PROCESSING_INTERVAL: Duration = Duration::from_secs(3);
 
 fn schedule_vote_processing() {
     ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, async || {
-        governance_mut().process_voting_state_machines().await;
+        legacy_governance_mut()
+            .process_voting_state_machines()
+            .await;
     });
 }
 
@@ -142,7 +146,7 @@ fn canister_pre_upgrade() {
     println!("{}Executing pre upgrade", LOG_PREFIX);
 
     with_upgrades_memory(|memory| {
-        let governance_proto = governance_mut().take_heap_proto();
+        let governance_proto = with_governance_mut(|governance| governance.take_heap_proto());
         store_protobuf(memory, &governance_proto).expect("Failed to encode protobuf pre_upgrade");
     });
 }
@@ -189,7 +193,8 @@ fn canister_post_upgrade() {
 #[cfg(feature = "test")]
 #[update(hidden = true)]
 fn set_time_warp(new_time_warp: TimeWarp) {
-    governance_mut().set_time_warp(GovTimeWarp::from(new_time_warp));
+    let new_time_warp = GovTimeWarp::from(new_time_warp);
+    with_governance_mut(|governance| governance.set_time_warp(new_time_warp));
 }
 
 /// DEPRECATED: Use manage_neuron directly instead.
@@ -262,7 +267,9 @@ fn claim_gtc_neurons(
 ) -> Result<(), GovernanceError> {
     debug_log("claim_gtc_neurons");
     check_caller_is_gtc();
-    Ok(governance_mut().claim_gtc_neurons(&caller(), new_controller, neuron_ids)?)
+    Ok(with_governance_mut(|governance| {
+        governance.claim_gtc_neurons(&caller(), new_controller, neuron_ids)
+    })?)
 }
 
 #[update]
@@ -272,7 +279,7 @@ async fn transfer_gtc_neuron(
 ) -> Result<(), GovernanceError> {
     debug_log("transfer_gtc_neuron");
     check_caller_is_gtc();
-    Ok(governance_mut()
+    Ok(legacy_governance_mut()
         .transfer_gtc_neuron(&caller(), &donor_neuron_id, &recipient_neuron_id)
         .await?)
 }
@@ -280,7 +287,7 @@ async fn transfer_gtc_neuron(
 #[update]
 async fn manage_neuron(_manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("manage_neuron");
-    governance_mut()
+    legacy_governance_mut()
         .manage_neuron(&caller(), &(gov_pb::ManageNeuron::from(_manage_neuron)))
         .await
 }
@@ -292,8 +299,7 @@ async fn manage_neuron(_manage_neuron: ManageNeuronRequest) -> ManageNeuronRespo
 /// *_voting_power fields are ignored, because the value in those fields is derived.
 fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
     debug_log("update_neuron");
-    governance_mut()
-        .update_neuron(neuron)
+    with_governance_mut(|governance| governance.update_neuron(neuron))
         .err()
         .map(GovernanceError::from)
 }
@@ -301,7 +307,9 @@ fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
 #[update]
 fn simulate_manage_neuron(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("simulate_manage_neuron");
-    governance().simulate_manage_neuron(&caller(), gov_pb::ManageNeuron::from(manage_neuron))
+    let caller = caller();
+    let manage_neuron = gov_pb::ManageNeuron::from(manage_neuron);
+    with_governance(|governance| governance.simulate_manage_neuron(&caller, manage_neuron))
 }
 
 #[update]
@@ -317,27 +325,27 @@ fn get_full_neuron_by_id_or_subaccount(
     by: NeuronIdOrSubaccount,
 ) -> Result<Neuron, GovernanceError> {
     debug_log("get_full_neuron_by_id_or_subaccount");
-    governance()
-        .get_full_neuron_by_id_or_subaccount(
-            &(gov_pb::manage_neuron::NeuronIdOrSubaccount::from(by)),
-            &caller(),
-        )
+    let by = gov_pb::manage_neuron::NeuronIdOrSubaccount::from(by);
+    let caller = caller();
+    with_governance(|governance| governance.get_full_neuron_by_id_or_subaccount(&by, &caller))
         .map_err(GovernanceError::from)
 }
 
 #[query]
 fn get_full_neuron(neuron_id: NeuronId) -> Result<Neuron, GovernanceError> {
     debug_log("get_full_neuron");
-    governance()
-        .get_full_neuron(&NeuronIdProto::from(neuron_id), &caller())
+    let neuron_id = NeuronIdProto::from(neuron_id);
+    let caller = caller();
+    with_governance(|governance| governance.get_full_neuron(&neuron_id, &caller))
         .map_err(GovernanceError::from)
 }
 
 #[query]
 fn get_neuron_info(neuron_id: NeuronId) -> Result<NeuronInfo, GovernanceError> {
     debug_log("get_neuron_info");
-    governance()
-        .get_neuron_info(&NeuronIdProto::from(neuron_id), caller())
+    let neuron_id = NeuronIdProto::from(neuron_id);
+    let caller = caller();
+    with_governance(|governance| governance.get_neuron_info(&neuron_id, caller))
         .map_err(GovernanceError::from)
 }
 
@@ -346,11 +354,9 @@ fn get_neuron_info_by_id_or_subaccount(
     by: NeuronIdOrSubaccount,
 ) -> Result<NeuronInfo, GovernanceError> {
     debug_log("get_neuron_info_by_subaccount");
-    governance()
-        .get_neuron_info_by_id_or_subaccount(
-            &(gov_pb::manage_neuron::NeuronIdOrSubaccount::from(by)),
-            caller(),
-        )
+    let by = gov_pb::manage_neuron::NeuronIdOrSubaccount::from(by);
+    let caller = caller();
+    with_governance(|governance| governance.get_neuron_info_by_id_or_subaccount(&by, caller))
         .map_err(GovernanceError::from)
 }
 
@@ -365,7 +371,8 @@ fn get_neurons_fund_audit_info(
     request: GetNeuronsFundAuditInfoRequest,
 ) -> GetNeuronsFundAuditInfoResponse {
     debug_log("get_neurons_fund_audit_info");
-    let response = governance().get_neurons_fund_audit_info(request.into());
+    let response =
+        with_governance(|governance| governance.get_neurons_fund_audit_info(request.into()));
     let intermediate = gov_pb::GetNeuronsFundAuditInfoResponse::from(response);
     GetNeuronsFundAuditInfoResponse::from(intermediate)
 }
@@ -385,22 +392,21 @@ fn list_proposals(req: ListProposalInfoRequest) -> ListProposalInfoResponse {
 #[query]
 fn list_neurons(req: ListNeurons) -> ListNeuronsResponse {
     debug_log("list_neurons");
-    governance().list_neurons(&req, caller())
+    with_governance(|governance| governance.list_neurons(&req, caller()))
 }
 
 #[query]
 fn get_neuron_index(req: GetNeuronIndexRequest) -> Result<NeuronIndexData, GovernanceError> {
     debug_log("get_neuron_index");
-    governance()
-        .get_neuron_index(req, caller())
+    let caller = caller();
+    with_governance(|governance| governance.get_neuron_index(req, caller))
         .map_err(GovernanceError::from)
 }
 
 #[query]
 fn get_metrics() -> Result<GovernanceCachedMetrics, GovernanceError> {
     debug_log("get_metrics");
-    governance()
-        .get_metrics()
+    with_governance(|governance| governance.get_metrics())
         .map(GovernanceCachedMetrics::from)
         .map_err(GovernanceError::from)
 }
@@ -409,14 +415,18 @@ fn get_metrics() -> Result<GovernanceCachedMetrics, GovernanceError> {
 async fn get_monthly_node_provider_rewards() -> Result<MonthlyNodeProviderRewards, GovernanceError>
 {
     debug_log("get_monthly_node_provider_rewards");
-    let rewards = governance_mut().get_monthly_node_provider_rewards().await?;
+    let rewards = legacy_governance_mut()
+        .get_monthly_node_provider_rewards()
+        .await?;
     Ok(MonthlyNodeProviderRewards::from(rewards))
 }
 
 #[update(hidden = true)]
 async fn get_node_provider_rewards() -> Result<MonthlyNodeProviderRewards, GovernanceError> {
     debug_log("get_node_provider_rewards");
-    let rewards = governance().get_node_providers_rewards_cached().await?;
+    let rewards = legacy_governance_mut()
+        .get_node_providers_rewards_cached()
+        .await?;
     Ok(MonthlyNodeProviderRewards::from(rewards))
 }
 
@@ -425,8 +435,8 @@ fn list_node_provider_rewards(
     req: ListNodeProviderRewardsRequest,
 ) -> ListNodeProviderRewardsResponse {
     debug_log("list_node_provider_rewards");
-    let rewards = governance()
-        .list_node_provider_rewards(req.date_filter.map(|d| d.into()))
+    let date_filter = req.date_filter.map(|d| d.into());
+    let rewards = with_governance(|governance| governance.list_node_provider_rewards(date_filter))
         .into_iter()
         .map(MonthlyNodeProviderRewards::from)
         .collect();
@@ -437,7 +447,7 @@ fn list_node_provider_rewards(
 #[query]
 fn list_known_neurons() -> ListKnownNeuronsResponse {
     debug_log("list_known_neurons");
-    let response = governance().list_known_neurons();
+    let response = with_governance(|governance| governance.list_known_neurons());
     ListKnownNeuronsResponse::from(response)
 }
 
@@ -463,7 +473,7 @@ fn execute_eligible_proposals() {
 #[query]
 fn get_latest_reward_event() -> RewardEvent {
     debug_log("get_latest_reward_event");
-    let response = governance().latest_reward_event().clone();
+    let response = with_governance(|governance| governance.latest_reward_event().clone());
     RewardEvent::from(response)
 }
 
@@ -475,40 +485,47 @@ fn get_latest_reward_event() -> RewardEvent {
 #[query]
 fn get_neuron_ids() -> Vec<NeuronId> {
     debug_log("get_neuron_ids");
-    let votable = governance()
-        .get_neuron_ids_by_principal(&caller())
-        .into_iter()
-        .collect();
+    with_governance(|governance| {
+        let votable = governance
+            .get_neuron_ids_by_principal(&caller())
+            .into_iter()
+            .collect();
 
-    governance()
-        .get_managed_neuron_ids_for(votable)
-        .into_iter()
-        .map(NeuronId::from)
-        .collect()
+        governance
+            .get_managed_neuron_ids_for(votable)
+            .into_iter()
+            .map(NeuronId::from)
+            .collect()
+    })
 }
 
 #[query]
 fn get_network_economics_parameters() -> NetworkEconomics {
     debug_log("get_network_economics_parameters");
-    let response = governance()
-        .heap_data
-        .economics
-        .as_ref()
-        .expect("Governance must have network economics.")
-        .clone();
+    let response = with_governance(|governance| {
+        governance
+            .heap_data
+            .economics
+            .as_ref()
+            .expect("Governance must have network economics.")
+            .clone()
+    });
     NetworkEconomics::from(response)
 }
 
 #[heartbeat]
 async fn heartbeat() {
-    governance_mut().run_periodic_tasks().await
+    legacy_governance_mut().run_periodic_tasks().await
 }
 
 // Protobuf interface.
 #[update]
 fn update_node_provider(req: UpdateNodeProvider) -> Result<(), GovernanceError> {
     debug_log("update_node_provider");
-    Ok(governance_mut().update_node_provider(&caller(), gov_pb::UpdateNodeProvider::from(req))?)
+    let caller = caller();
+    let req = gov_pb::UpdateNodeProvider::from(req);
+    with_governance_mut(|governance| governance.update_node_provider(&caller, req))?;
+    Ok(())
 }
 
 /// Obsolete, so always returns an error. Please use `settle_neurons_fund_participation`
@@ -531,7 +548,7 @@ async fn settle_neurons_fund_participation(
     request: SettleNeuronsFundParticipationRequest,
 ) -> SettleNeuronsFundParticipationResponse {
     debug_log("settle_neurons_fund_participation");
-    let response = governance_mut()
+    let response = legacy_governance_mut()
         .settle_neurons_fund_participation(caller(), request.into())
         .await;
     let intermediate = gov_pb::SettleNeuronsFundParticipationResponse::from(response);
@@ -543,8 +560,8 @@ async fn settle_neurons_fund_participation(
 #[query]
 fn get_node_provider_by_caller(_: ()) -> Result<NodeProvider, GovernanceError> {
     debug_log("get_node_provider_by_caller");
-    governance()
-        .get_node_provider(&caller())
+    let caller = caller();
+    with_governance(|governance| governance.get_node_provider(&caller))
         .map(NodeProvider::from)
         .map_err(GovernanceError::from)
 }
@@ -552,29 +569,28 @@ fn get_node_provider_by_caller(_: ()) -> Result<NodeProvider, GovernanceError> {
 #[query]
 fn list_node_providers() -> ListNodeProvidersResponse {
     debug_log("list_node_providers");
-    let node_providers = governance()
-        .get_node_providers()
-        .iter()
-        .map(|np| NodeProvider::from(np.clone()))
-        .collect::<Vec<_>>();
+    let node_providers = with_governance(|governance| governance.get_node_providers().to_vec())
+        .into_iter()
+        .map(NodeProvider::from)
+        .collect();
     ListNodeProvidersResponse { node_providers }
 }
 
 #[query]
 fn get_most_recent_monthly_node_provider_rewards() -> Option<MonthlyNodeProviderRewards> {
-    governance()
-        .get_most_recent_monthly_node_provider_rewards()
+    with_governance(|governance| governance.get_most_recent_monthly_node_provider_rewards())
         .map(MonthlyNodeProviderRewards::from)
 }
 
 #[query(hidden = true)]
 fn get_neuron_data_validation_summary() -> NeuronDataValidationSummary {
-    governance().neuron_data_validation_summary()
+    with_governance(|governance| governance.neuron_data_validation_summary())
 }
 
 #[query]
 fn get_restore_aging_summary() -> RestoreAgingSummary {
-    let response = governance().get_restore_aging_summary().unwrap_or_default();
+    let response =
+        with_governance(|governance| governance.get_restore_aging_summary().unwrap_or_default());
     RestoreAgingSummary::from(response)
 }
 
@@ -589,11 +605,8 @@ fn get_maturity_modulation(
 
 #[query]
 fn list_neuron_votes(request: ListNeuronVotesRequest) -> ListNeuronVotesResponse {
-    with_governance(|governance| {
-        governance
-            .list_neuron_votes(request)
-            .map_err(GovernanceError::from)
-    })
+    with_governance(|governance| governance.list_neuron_votes(request))
+        .map_err(GovernanceError::from)
 }
 
 #[query(
@@ -602,7 +615,9 @@ fn list_neuron_votes(request: ListNeuronVotesRequest) -> ListNeuronVotesResponse
 )]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
-        "/metrics" => serve_metrics(|encoder| encode_metrics(governance(), encoder)),
+        "/metrics" => serve_metrics(|encoder| {
+            with_governance(|governance| encode_metrics(governance, encoder))
+        }),
         _ => HttpResponseBuilder::not_found().build(),
     }
 }
