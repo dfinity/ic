@@ -24,6 +24,7 @@ expression: out
   (global (;0;) (mut i64) i64.const 0)
   (global (;1;) (mut i64) i64.const 0)
   (global (;2;) (mut i64) i64.const 0)
+  (global (;3;) (mut i64) i64.const 0)
   (export "fizzbuzz" (func 6))
   (export "memory" (memory 0))
   (export "stable_memory" (memory 1))
@@ -31,6 +32,7 @@ expression: out
   (export "canister counter_instructions" (global 0))
   (export "canister counter_dirty_pages" (global 1))
   (export "canister counter_accessed_pages" (global 2))
+  (export "canister heap_page_budget" (global 3))
   (func (;6;) (type 1) (param i32)
     (local i32 i32 i32)
     global.get 0
