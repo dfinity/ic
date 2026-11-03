@@ -4,6 +4,7 @@ use ic_recovery::{
     cli::wait_for_confirmation,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::read_file,
+    registry_helper::RegistryHelper,
     util::subnet_id_from_str,
 };
 use ic_registry_routing_table::CanisterIdRange;
@@ -31,6 +32,41 @@ pub fn get_batch_time_from_cup(cup_path: &Path) -> RecoveryResult<Time> {
 
 fn cup_error(message: impl Display, cup_path: &Path, error: impl Display) -> RecoveryError {
     RecoveryError::UnexpectedError(format!("{} ({}): {}", message, cup_path.display(), error))
+}
+
+/// The readonly keys to propose for a subnet in order to add `key` to them.
+///
+/// A proposal setting the readonly keys of a subnet replaces its entire list
+/// of them, so the list proposed is the one the subnet has in the latest
+/// registry version, with `key` added, lest the readonly access of everyone
+/// else be revoked. Without a `key`, the list is empty, which leaves the keys
+/// of the subnet untouched.
+pub fn readonly_keys_adding(
+    registry_helper: &RegistryHelper,
+    subnet_id: SubnetId,
+    key: &Option<String>,
+) -> RecoveryResult<Vec<String>> {
+    let Some(key) = key else {
+        return Ok(Vec::new());
+    };
+
+    let (registry_version, subnet_record) = registry_helper.get_subnet_record(subnet_id)?;
+    let subnet_record = subnet_record.ok_or_else(|| {
+        RecoveryError::RegistryError(format!(
+            "No record of subnet {subnet_id} at registry version {registry_version}"
+        ))
+    })?;
+
+    Ok(with_readonly_key(subnet_record.ssh_readonly_access, key))
+}
+
+/// The readonly keys `existing_keys` of a subnet with `key` added, unless the
+/// subnet has it already.
+fn with_readonly_key(mut existing_keys: Vec<String>, key: &str) -> Vec<String> {
+    if !existing_keys.iter().any(|existing_key| existing_key == key) {
+        existing_keys.push(key.to_string());
+    }
+    existing_keys
 }
 
 /// Computes the state hash of the given checkpoint.
@@ -127,6 +163,27 @@ mod tests {
 
     use ic_recovery::file_sync_helper::write_file;
     use ic_test_utilities_tmpdir::tmpdir;
+
+    #[test]
+    fn readonly_key_is_added_to_the_existing_keys() {
+        assert_eq!(
+            with_readonly_key(vec!["a".to_string(), "b".to_string()], "c"),
+            vec!["a", "b", "c"]
+        );
+    }
+
+    #[test]
+    fn readonly_key_the_subnet_has_already_is_not_duplicated() {
+        assert_eq!(
+            with_readonly_key(vec!["a".to_string(), "b".to_string()], "a"),
+            vec!["a", "b"]
+        );
+    }
+
+    #[test]
+    fn readonly_key_is_the_only_one_of_a_subnet_without_keys() {
+        assert_eq!(with_readonly_key(Vec::new(), "a"), vec!["a"]);
+    }
 
     #[test]
     fn find_expected_state_hash_for_subnet_id_test() {

@@ -31,7 +31,7 @@ use ic_subnet_tools::{
         get_propose_to_reroute_canister_ranges_command,
     },
     steps::ReadRegistryStep,
-    utils::{get_state_hash, print_url_and_ask_for_confirmation},
+    utils::{get_state_hash, print_url_and_ask_for_confirmation, readonly_keys_adding},
 };
 use ic_types::Height;
 use serde::{Deserialize, Serialize};
@@ -530,7 +530,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 ic_admin_cmd: get_halt_subnet_at_cup_height_command(
                     &self.recovery.admin_helper,
                     self.params.source_subnet_id,
-                    &self.params.readonly_pub_key,
+                    &readonly_keys_adding(
+                        &self.recovery.registry_helper,
+                        self.params.source_subnet_id,
+                        &self.params.readonly_pub_key,
+                    )?,
                 ),
             }
             .into(),

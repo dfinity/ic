@@ -17,11 +17,13 @@ const SUBNET_ARG: &str = "subnet";
 
 /// Propose to make the subnet halt after reaching the next CUP height.
 ///
-/// Optionally adds a ssh-readonly-access key to the subnet.
+/// Optionally sets the ssh-readonly-access keys of the subnet: if
+/// `readonly_keys` is not empty, it replaces the subnet's entire list of
+/// readonly keys, so it has to include any existing key that is to be kept.
 pub fn get_halt_subnet_at_cup_height_command(
     admin_helper: &AdminHelper,
     subnet_id: SubnetId,
-    key: &Option<String>,
+    readonly_keys: &[String],
 ) -> IcAdmin {
     let mut ic_admin = admin_helper.get_ic_admin_cmd_base();
 
@@ -36,8 +38,8 @@ pub fn get_halt_subnet_at_cup_height_command(
         )
         .add_argument("halt-at-cup-height", true);
 
-    if let Some(key) = key {
-        ic_admin.add_argument(SSH_READONLY_ACCESS_ARG, quote(key));
+    if !readonly_keys.is_empty() {
+        ic_admin.add_arguments(SSH_READONLY_ACCESS_ARG, readonly_keys.iter().map(quote));
     }
 
     admin_helper.add_proposer_args(&mut ic_admin);
@@ -151,7 +153,7 @@ mod tests {
         let result = get_halt_subnet_at_cup_height_command(
             &fake_admin_helper(),
             subnet_id_from_str(FAKE_SUBNET_ID_1),
-            &Some(SSH_KEY.to_string()),
+            &[SSH_KEY.to_string()],
         )
         .join(" ");
 
