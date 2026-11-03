@@ -171,23 +171,20 @@ fn count_guest_vm_relaunches(host: &NestedVm) -> Result<usize> {
         .with_context(|| format!("Unexpected relaunch count output: {out:?}"))
 }
 
-fn guestos_panic_relaunch_inner(env: &TestEnv, host: &NestedVm) -> Result<()> {
-    let logger = env.logger();
-    let guest = host.get_guest_ssh()?;
+/// Reads `/proc/cmdline` and the five panic/lockup sysctls, in the order
+/// `ensure_kernel_panic_params` checks them.
+const PANIC_PARAMS_SCRIPT: &str = "cat /proc/cmdline; cd /proc/sys/kernel && \
+     cat panic_on_oops panic softlockup_panic watchdog_thresh soft_watchdog";
 
-    // 1. The kernel took the parameters on the direct-boot path; remember the boot id.
-    let out = guest.block_on_bash_script(
-        "cat /proc/cmdline; cd /proc/sys/kernel && \
-         cat panic_on_oops panic softlockup_panic watchdog_thresh soft_watchdog random/boot_id",
-    )?;
-    info!(
-        logger,
-        "GuestOS kernel cmdline, panic/lockup sysctls and boot id:\n{out}"
-    );
+/// Assert on `PANIC_PARAMS_SCRIPT`'s output that the `os` kernel took `oops=panic panic=10
+/// softlockup_panic=1 watchdog_thresh=60` from its command line
+/// (ic-os/bootloader/{host,guest}os_boot_args.template): an OS that hits a kernel Oops, panic
+/// or soft lockup must reboot instead of hanging.
+fn ensure_kernel_panic_params(os: &str, out: &str) -> Result<()> {
     let mut lines = out.lines();
     let cmdline: Vec<&str> = lines
         .next()
-        .context("Missing /proc/cmdline")?
+        .with_context(|| format!("Missing /proc/cmdline on {os}"))?
         .split_whitespace()
         .collect();
     for param in [
@@ -198,17 +195,51 @@ fn guestos_panic_relaunch_inner(env: &TestEnv, host: &NestedVm) -> Result<()> {
     ] {
         ensure!(
             cmdline.contains(&param),
-            "GuestOS did not boot with {param}: {out}"
+            "{os} did not boot with {param}: {out}"
         );
     }
     // kernel.panic_on_oops, kernel.panic, kernel.softlockup_panic, kernel.watchdog_thresh and
     // kernel.soft_watchdog (the soft-lockup detector is enabled), in the order read above.
-    let sysctls: Vec<&str> = lines.by_ref().take(5).collect();
+    let sysctls: Vec<&str> = lines.take(5).collect();
     ensure!(
         sysctls == ["1", "10", "1", "60", "1"],
-        "Unexpected panic/lockup sysctls {sysctls:?}: {out}"
+        "{os}: unexpected panic/lockup sysctls {sysctls:?}: {out}"
     );
-    let boot_id_before = lines.next().context("Missing boot id")?.to_string();
+    Ok(())
+}
+
+/// Check that the HostOS kernel took the panic/lockup parameters: a HostOS that panics must
+/// reboot (and relaunch its GuestOS) instead of hanging silently. Shares `registration`'s
+/// nested VM to avoid a dedicated target.
+pub fn hostos_kernel_panic_params(env: TestEnv) {
+    let logger = env.logger();
+    let host = env
+        .get_nested_vm(HOST_VM_NAME)
+        .expect("Unable to find HostOS node.");
+    let out = host
+        .block_on_bash_script(PANIC_PARAMS_SCRIPT)
+        .expect("Failed to read the kernel cmdline and panic/lockup sysctls on the HostOS");
+    info!(
+        logger,
+        "HostOS kernel cmdline and panic/lockup sysctls:\n{out}"
+    );
+    ensure_kernel_panic_params("HostOS", &out).expect("HostOS kernel panic-parameter check failed");
+}
+
+fn guestos_panic_relaunch_inner(env: &TestEnv, host: &NestedVm) -> Result<()> {
+    let logger = env.logger();
+    let guest = host.get_guest_ssh()?;
+
+    // 1. The kernel took the parameters on the direct-boot path; remember the boot id.
+    let out = guest.block_on_bash_script(&format!(
+        "{PANIC_PARAMS_SCRIPT}; cat /proc/sys/kernel/random/boot_id"
+    ))?;
+    info!(
+        logger,
+        "GuestOS kernel cmdline, panic/lockup sysctls and boot id:\n{out}"
+    );
+    ensure_kernel_panic_params("GuestOS", &out)?;
+    let boot_id_before = out.lines().nth(6).context("Missing boot id")?.to_string();
     let relaunches_before = count_guest_vm_relaunches(host)?;
 
     // 2. Trigger the panic detached, with all fds redirected, so the SSH channel closes before
