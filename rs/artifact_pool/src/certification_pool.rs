@@ -1018,7 +1018,6 @@ mod tests {
     #[test]
     fn test_validated_artifacts_are_kept_across_replica_versions() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let pool_path = pool_config.persistent_pool_db_path();
             let new_pool = || {
                 CertificationPoolImpl::new(
                     node_test_id(0),
@@ -1028,8 +1027,10 @@ mod tests {
                 )
             };
             crate::ensure_persistent_pool_replica_version_compatibility(
-                pool_path.clone(),
+                &pool_config,
                 &ReplicaVersion::try_from("old_version").unwrap(),
+                Height::from(0),
+                &no_op_logger(),
             );
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
@@ -1039,8 +1040,10 @@ mod tests {
             ]);
 
             crate::ensure_persistent_pool_replica_version_compatibility(
-                pool_path,
+                &pool_config,
                 &ReplicaVersion::try_from("new_version").unwrap(),
+                Height::from(8),
+                &no_op_logger(),
             );
 
             let pool = new_pool();
@@ -1048,6 +1051,57 @@ mod tests {
                 pool.certification_at_height(Height::from(8)),
                 Some(msg_to_cert(cert_msg))
             );
+            assert_eq!(
+                pool.validated_shares().collect::<Vec<CertificationShare>>(),
+                vec![msg_to_share(share_msg)]
+            );
+        });
+    }
+
+    #[test]
+    fn test_validated_artifacts_above_cup_height_are_purged_on_replica_version_change() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let new_pool = || {
+                CertificationPoolImpl::new(
+                    node_test_id(0),
+                    pool_config.clone(),
+                    no_op_logger(),
+                    MetricsRegistry::new(),
+                )
+            };
+            crate::ensure_persistent_pool_replica_version_compatibility(
+                &pool_config,
+                &ReplicaVersion::try_from("old_version").unwrap(),
+                Height::from(0),
+                &no_op_logger(),
+            );
+            let share_msg = fake_share(7, 0);
+            let cert_msg = fake_cert(8);
+            let purged_share_msg = fake_share(9, 0);
+            let purged_cert_msg = fake_cert(10);
+            new_pool().apply(vec![
+                ChangeAction::AddToValidated(share_msg.clone()),
+                ChangeAction::AddToValidated(cert_msg.clone()),
+                ChangeAction::AddToValidated(purged_share_msg.clone()),
+                ChangeAction::AddToValidated(purged_cert_msg.clone()),
+            ]);
+
+            // When the rest of the pool is deleted, the chain above the CUP height may be
+            // re-built with different state hashes, so certifications and shares above it
+            // must not survive the version change.
+            crate::ensure_persistent_pool_replica_version_compatibility(
+                &pool_config,
+                &ReplicaVersion::try_from("new_version").unwrap(),
+                Height::from(8),
+                &no_op_logger(),
+            );
+
+            let pool = new_pool();
+            assert_eq!(
+                pool.certification_at_height(Height::from(8)),
+                Some(msg_to_cert(cert_msg))
+            );
+            assert_eq!(pool.certification_at_height(Height::from(10)), None);
             assert_eq!(
                 pool.validated_shares().collect::<Vec<CertificationShare>>(),
                 vec![msg_to_share(share_msg)]

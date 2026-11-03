@@ -141,8 +141,10 @@ pub fn construct_ic_stack(
     let artifact_pool_config = ArtifactPoolConfig::from(config.artifact_pool.clone());
     create_consensus_pool_dir(&config);
     ensure_persistent_pool_replica_version_compatibility(
-        artifact_pool_config.persistent_pool_db_path(),
+        &artifact_pool_config,
         &platform_version.replica_version,
+        catch_up_package.height(),
+        log,
     );
 
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
