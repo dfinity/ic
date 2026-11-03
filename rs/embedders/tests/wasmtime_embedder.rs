@@ -2427,13 +2427,13 @@ fn wasm_heap_oob_access() {
     let err = instance
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
-    // The function index accounts for the five functions imported by the
-    // instrumentation (the heap page limit is disabled by default).
+    // The function index accounts for the six functions imported by the
+    // instrumentation (the heap page limit is enabled by default).
     assert_eq!(
         err,
         HypervisorError::Trapped {
             trap_code: TrapCode::HeapOutOfBounds,
-            backtrace: Some(CanisterBacktrace(vec![(5, Some("foo".to_string()))]))
+            backtrace: Some(CanisterBacktrace(vec![(6, Some("foo".to_string()))]))
         }
     );
 }
