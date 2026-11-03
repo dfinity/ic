@@ -15,6 +15,25 @@ use tracing::instrument;
 /// and can be set to any reasonable duration from 1ms to 1000ms.
 pub(crate) const DEFAULT_QUERY_DURATION: Duration = Duration::from_millis(5);
 
+/// Capacity that the query scheduler's collections keep when shrinking. It
+/// prevents freeing and re-allocating the collections whenever they become
+/// (nearly) empty, e.g., when a single canister is queried repeatedly, while still
+/// bounding the memory retained after a burst of many distinct canisters.
+const MIN_RETAINED_CAPACITY: usize = 64;
+
+/// Returns the capacity to shrink a collection with the given length and
+/// capacity to, or `None` if it should not be shrunk. A collection is shrunk to
+/// twice its length once it is at most a quarter full, but never below
+/// `MIN_RETAINED_CAPACITY`. Shrinking only kicks in above twice that minimum so
+/// that a collection already at (rounded-up) minimum size is left alone.
+fn shrink_target(len: usize, capacity: usize) -> Option<usize> {
+    if capacity > 2 * MIN_RETAINED_CAPACITY && len <= capacity / 4 {
+        Some((len * 2).max(MIN_RETAINED_CAPACITY))
+    } else {
+        None
+    }
+}
+
 pub(crate) struct QuerySchedulerMetrics {
     pub queue_length: Histogram,
 }
@@ -236,6 +255,18 @@ impl QuerySchedulerCore {
             self.scheduled.push_back(canister_id);
         }
 
+        // Keep execution statistics only while this canister has work in flight.
+        if !canister.has_queries() && canister.active_threads == 0 {
+            debug_assert!(!canister.has_been_scheduled);
+            self.canisters.remove(&canister_id);
+            if let Some(target) = shrink_target(self.canisters.len(), self.canisters.capacity()) {
+                self.canisters.shrink_to(target);
+            }
+            if let Some(target) = shrink_target(self.scheduled.len(), self.scheduled.capacity()) {
+                self.scheduled.shrink_to(target);
+            }
+        }
+
         #[cfg(debug_assertions)]
         self.verify_invariants();
     }
@@ -375,5 +406,102 @@ mod tests {
         let core = scheduler.core.lock().unwrap();
         assert_eq!(2, core.metrics.queue_length.get_sample_count());
         assert_eq!(1 + 2, core.metrics.queue_length.get_sample_sum() as usize);
+    }
+
+    #[test]
+    fn completed_canisters_are_removed() {
+        let metrics_registry = MetricsRegistry::new();
+        let scheduler =
+            QuerySchedulerInternal::new(2, Duration::from_millis(100), &metrics_registry);
+
+        let num_canisters: usize = 1000;
+        // Ensure the collections grow beyond the capacity retained on shrinking.
+        assert!(num_canisters > 2 * MIN_RETAINED_CAPACITY);
+
+        for id in 0..num_canisters {
+            scheduler.push(
+                canister_test_id(id as u64),
+                Query(Box::new(|| DEFAULT_QUERY_DURATION)),
+            );
+        }
+        assert_eq!(
+            scheduler.core.lock().unwrap().canisters.len(),
+            num_canisters
+        );
+
+        for _ in 0..num_canisters {
+            let (id, _) = scheduler.try_pop().unwrap();
+            scheduler.notify_finished_execution(id, DEFAULT_QUERY_DURATION, vec![]);
+        }
+
+        let core = scheduler.core.lock().unwrap();
+        assert!(core.canisters.is_empty());
+        assert!(core.canisters.capacity() <= 2 * MIN_RETAINED_CAPACITY);
+        assert!(core.scheduled.is_empty());
+        assert!(core.scheduled.capacity() <= 2 * MIN_RETAINED_CAPACITY);
+    }
+
+    #[test]
+    fn small_collections_are_not_deallocated() {
+        let metrics_registry = MetricsRegistry::new();
+        let scheduler =
+            QuerySchedulerInternal::new(2, Duration::from_millis(100), &metrics_registry);
+
+        for _ in 0..3 {
+            scheduler.push(
+                canister_test_id(1),
+                Query(Box::new(|| DEFAULT_QUERY_DURATION)),
+            );
+            let (id, _) = scheduler.try_pop().unwrap();
+            scheduler.notify_finished_execution(id, DEFAULT_QUERY_DURATION, vec![]);
+
+            let core = scheduler.core.lock().unwrap();
+            assert!(core.canisters.is_empty());
+            assert!(core.canisters.capacity() > 0);
+            assert!(core.scheduled.is_empty());
+            assert!(core.scheduled.capacity() > 0);
+        }
+    }
+
+    #[test]
+    fn shrink_target_respects_minimum() {
+        // Small collections are never shrunk.
+        assert_eq!(shrink_target(0, 0), None);
+        assert_eq!(shrink_target(0, 4), None);
+        assert_eq!(shrink_target(0, 2 * MIN_RETAINED_CAPACITY), None);
+        // Large, mostly empty collections are shrunk, but not below the minimum.
+        assert_eq!(
+            shrink_target(0, 4 * MIN_RETAINED_CAPACITY),
+            Some(MIN_RETAINED_CAPACITY)
+        );
+        let len: usize = 1000;
+        assert!(len > 2 * MIN_RETAINED_CAPACITY);
+        assert_eq!(shrink_target(len, 4 * len), Some(2 * len));
+        // Collections more than a quarter full are not shrunk.
+        assert_eq!(shrink_target(len + 1, 4 * len), None);
+    }
+
+    #[test]
+    fn canister_is_kept_until_all_executing_queries_finish() {
+        let metrics_registry = MetricsRegistry::new();
+        let scheduler = QuerySchedulerInternal::new(2, Duration::from_millis(5), &metrics_registry);
+        let id = canister_test_id(1);
+        for _ in 0..2 {
+            scheduler.push(id, Query(Box::new(|| DEFAULT_QUERY_DURATION)));
+        }
+
+        let first = scheduler.try_pop().unwrap();
+        let second = scheduler.try_pop().unwrap();
+        assert_eq!(first.0, id);
+        assert_eq!(second.0, id);
+        scheduler.notify_finished_execution(id, DEFAULT_QUERY_DURATION, vec![]);
+        assert!(scheduler.core.lock().unwrap().canisters.contains_key(&id));
+        scheduler.notify_finished_execution(id, DEFAULT_QUERY_DURATION, vec![]);
+        assert!(!scheduler.core.lock().unwrap().canisters.contains_key(&id));
+
+        scheduler.push(id, Query(Box::new(|| DEFAULT_QUERY_DURATION)));
+        assert_eq!(scheduler.try_pop().unwrap().0, id);
+        scheduler.notify_finished_execution(id, DEFAULT_QUERY_DURATION, vec![]);
+        assert!(!scheduler.core.lock().unwrap().canisters.contains_key(&id));
     }
 }
