@@ -6819,6 +6819,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-boundary-smoke-test"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "clap",
+ "ic-agent",
+ "serde",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "ic-btc-adapter"
 version = "0.9.0"
 dependencies = [
