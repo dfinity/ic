@@ -79,7 +79,8 @@ pub trait ValidatedPoolReader<T: IdentifiableArtifact>: Send + Sync {
     /// Get a validated artifact by its identifier
     ///
     /// #Returns:
-    /// - 'Some`: Artifact from the validated pool.
+   /// # Returns
+   /// - `Some`: Artifact from the validated pool.
     /// - `None`: Artifact does not exist in the validated pool.
     fn get(&self, id: &T::Id) -> Option<T>;
 }
