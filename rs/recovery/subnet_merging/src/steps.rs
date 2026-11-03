@@ -5,24 +5,26 @@ use crate::{
 };
 
 use ic_base_types::SubnetId;
+use ic_protobuf::state::v1 as pb_state;
 use ic_recovery::{
-    CUPS_DIR, IC_DATA_PATH,
+    CUPS_DIR, IC_DATA_PATH, IC_STATE, STATES_METADATA,
     error::{RecoveryError, RecoveryResult},
-    get_node_metrics,
+    file_sync_helper::read_bytes,
     registry_helper::RegistryHelper,
     ssh_helper::SshHelper,
     steps::Step,
-    util::block_on,
 };
+use ic_state_manager::{manifest::manifest_hash, state_sync::types::Manifest};
 use ic_subnet_tools::utils::get_cup;
 use ic_types::{
-    Height,
-    consensus::{CatchUpContent, CatchUpPackage, HasHeight},
+    CryptoHashOfState, Height,
+    consensus::{CatchUpPackage, HasHeight},
+    crypto::CryptoHash,
 };
+use prost::Message;
 use slog::{Logger, info};
-use url::Url;
 
-use std::{net::IpAddr, path::PathBuf, time::Duration};
+use std::{fmt::Display, net::IpAddr, path::PathBuf, time::Duration};
 
 /// Waits until the record of the subnet that is being merged away is labeled
 /// "cooling down" and persists the registry version `V` it was read at (not
@@ -120,7 +122,8 @@ impl Step for CheckMergeReadinessStep {
 
 /// Waits until the node the state is downloaded from holds the CUP its subnet
 /// halts at, i.e. the first one whose summary is created at a registry version
-/// carrying the `halt_at_cup_height` flag.
+/// carrying the `halt_at_cup_height` flag, together with a complete checkpoint
+/// of the state that CUP names.
 ///
 /// Waiting for the CUP rather than for the subnet to report that it is halted:
 /// the CUP is what names the state the subnet came to rest in, and it exists
@@ -130,10 +133,18 @@ impl Step for CheckMergeReadinessStep {
 /// its latest checkpoint then yields the previous one, a whole DKG interval
 /// before the state the merge is supposed to be assembled from.
 ///
-/// The CUP the node serves over HTTP is not enough: the orchestrator writes the
-/// CUP to disk asynchronously, and it is the on-disk copy that is downloaded
-/// with the state (by a later step) and validated against it. So this waits for both, and for
-/// them to agree.
+/// The CUP is the copy the orchestrator has written to disk: that is the one
+/// that is downloaded with the state (by a later step) and validated against
+/// it.
+///
+/// Holding the CUP does not mean that the node holds the checkpoint, though:
+/// the CUP may have been assembled by the rest of the subnet and gossiped to
+/// the node while the node is still writing, validating, or hashing its own
+/// checkpoint at that height, all of which the state manager does
+/// asynchronously to execution and certification. So this also waits until the
+/// node has published the manifest of that checkpoint, which the state manager
+/// does only once the checkpoint is verified, and until the manifest's root
+/// hash is the state hash the CUP names.
 pub(crate) struct WaitForHaltingCupStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) node_ip: IpAddr,
@@ -148,14 +159,14 @@ pub(crate) struct WaitForHaltingCupStep {
 impl Step for WaitForHaltingCupStep {
     fn descr(&self) -> String {
         format!(
-            "Wait until node {} holds the CUP subnet {} halts at, both at its public endpoint and \
-             on disk, and until it has certified the state that CUP names.",
+            "Wait until node {} holds the CUP subnet {} halts at on disk, together with a \
+             verified checkpoint of the state that CUP names.",
             self.node_ip, self.subnet_id,
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        // A node that is not answering yet, or a CUP that cannot be pulled off
+        // A node that is not answering yet, or a file that cannot be pulled off
         // it yet, is the normal state of affairs while the subnet is still
         // running towards its halting CUP, so every error is retried.
         let height = wait_for(
@@ -166,7 +177,7 @@ impl Step for WaitForHaltingCupStep {
             || {
                 self.check()?.ok_or_else(|| {
                     RecoveryError::UnexpectedError(format!(
-                        "node {} does not hold the CUP subnet {} halts at yet",
+                        "node {} does not hold the CUP subnet {} halts at and its checkpoint yet",
                         self.node_ip, self.subnet_id,
                     ))
                 })
@@ -181,17 +192,19 @@ impl Step for WaitForHaltingCupStep {
 }
 
 impl WaitForHaltingCupStep {
-    /// Returns the height of the halting CUP if the node has reached it, `None`
-    /// if it has not yet, and an error if the node could not be asked.
+    /// Returns the height of the halting CUP if the node holds it and a
+    /// verified checkpoint of the state it names, `None` if it does not yet,
+    /// and an error if the node could not be asked.
     fn check(&self) -> RecoveryResult<Option<Height>> {
-        let cup_content = self.served_cup_content()?;
-        let cup_height = cup_content.height();
-        let cup_registry_version = cup_content.registry_version();
+        let cup = self.on_disk_cup()?;
+        let cup_height = cup.height();
+        let cup_registry_version = cup.content.registry_version();
 
         // The `halt_at_cup_height` flag is read at the registry version of the
         // summary block active at a height, and that version only changes at a
         // summary, so batch delivery stops exactly when the summary carrying the
-        // flag becomes active.
+        // flag becomes active. No CUP follows the one carrying the flag, so the
+        // first such CUP on disk is the one the subnet halts at.
         let halting = get_subnet_record_at_version(
             &self.registry_helper,
             self.subnet_id,
@@ -201,90 +214,34 @@ impl WaitForHaltingCupStep {
         if !halting {
             info!(
                 self.logger,
-                "Subnet {} is at the CUP at height {cup_height}, whose registry version \
-                 {cup_registry_version} does not carry the `halt_at_cup_height` flag yet",
+                "Node {} holds the CUP at height {cup_height} on disk, whose registry version \
+                 {cup_registry_version} does not carry the `halt_at_cup_height` flag of subnet {} \
+                 yet",
+                self.node_ip,
                 self.subnet_id,
             );
             return Ok(None);
         }
 
-        // The node has to have caught up with the CUP itself: it is its state
-        // that is downloaded, and a node can hold a CUP that the rest of the
-        // subnet assembled before it got there.
-        let metrics = block_on(get_node_metrics(&self.logger, &self.node_ip)).ok_or_else(|| {
-            RecoveryError::UnexpectedError(format!(
-                "Failed to get the metrics of node {}",
-                self.node_ip
-            ))
-        })?;
-        if metrics.certification_height > cup_height {
+        let Some(root_hash) = self.published_root_hash(cup_height)? else {
+            info!(
+                self.logger,
+                "Node {} holds the CUP at height {cup_height} subnet {} halts at, but has not \
+                 published a verified checkpoint at that height yet",
+                self.node_ip,
+                self.subnet_id,
+            );
+            return Ok(None);
+        };
+        if root_hash != cup.content.state_hash {
             return Err(RecoveryError::ValidationFailed(format!(
-                "Subnet {} certified height {}, past the CUP at height {cup_height} it should \
-                 have halted at",
-                self.subnet_id, metrics.certification_height,
+                "The checkpoint of node {} at height {cup_height} has root hash {root_hash:?}, \
+                 not the state hash {:?} of the CUP subnet {} halts at",
+                self.node_ip, cup.content.state_hash, self.subnet_id,
             )));
-        }
-        if metrics.certification_height < cup_height {
-            info!(
-                self.logger,
-                "Subnet {} holds the CUP at height {cup_height} but node {} has only certified up \
-                 to height {}",
-                self.subnet_id,
-                self.node_ip,
-                metrics.certification_height,
-            );
-            return Ok(None);
-        }
-
-        // The CUP the orchestrator has written to disk is the one that is
-        // downloaded with the state and validated against it by later steps, so
-        // it has to be the halting CUP, too.
-        let on_disk_cup = self.on_disk_cup()?;
-        if on_disk_cup.height() != cup_height
-            || on_disk_cup.content.state_hash != cup_content.state_hash
-        {
-            info!(
-                self.logger,
-                "Node {} still holds the CUP at height {} on disk, not the one at height \
-                 {cup_height} it serves",
-                self.node_ip,
-                on_disk_cup.height(),
-            );
-            return Ok(None);
         }
 
         Ok(Some(cup_height))
-    }
-
-    /// The content of the CUP the node serves at its public endpoint.
-    ///
-    /// Only the content, which is all that is checked here; the signature of
-    /// the CUP the state is downloaded with is verified once it is downloaded.
-    fn served_cup_content(&self) -> RecoveryResult<CatchUpContent> {
-        let url = Url::parse(&format!("http://[{}]:8080/", self.node_ip)).map_err(|err| {
-            RecoveryError::UnexpectedError(format!(
-                "Could not parse the URL of node {}: {err}",
-                self.node_ip
-            ))
-        })?;
-
-        let content_proto = block_on(ic_cup_explorer::get_catchup_content(&url))
-            .map_err(|err| {
-                RecoveryError::UnexpectedError(format!(
-                    "Failed to get the CUP of node {}: {err}",
-                    self.node_ip
-                ))
-            })?
-            .ok_or_else(|| {
-                RecoveryError::UnexpectedError(format!("Node {} serves no CUP", self.node_ip))
-            })?;
-
-        CatchUpContent::try_from(content_proto).map_err(|err| {
-            RecoveryError::UnexpectedError(format!(
-                "Failed to deserialize the CUP of node {}: {err}",
-                self.node_ip
-            ))
-        })
     }
 
     /// The CUP the orchestrator of the node has written to disk, pulled off the
@@ -300,5 +257,50 @@ impl WaitForHaltingCupStep {
         self.ssh_helper.rsync(remote_cup, &local_cup)?;
 
         get_cup(&local_cup)
+    }
+
+    /// The root hash of the manifest the state manager of the node has
+    /// published for its checkpoint at `height`, or `None` if it has not
+    /// published one yet.
+    ///
+    /// The state manager persists the manifest of a checkpoint to
+    /// `states_metadata.pbuf` only once that checkpoint has been verified,
+    /// whether it created the checkpoint itself or fetched it via state sync. A
+    /// manifest there thus means that the checkpoint is complete and ready to be
+    /// downloaded.
+    fn published_root_hash(&self, height: Height) -> RecoveryResult<Option<CryptoHashOfState>> {
+        let remote_states_metadata = self.ssh_helper.remote_path(
+            PathBuf::from(IC_DATA_PATH)
+                .join(IC_STATE)
+                .join(STATES_METADATA),
+        );
+        let local_states_metadata = self.layout.states_metadata_file(self.subnet_id);
+
+        self.ssh_helper
+            .rsync(remote_states_metadata, &local_states_metadata)?;
+
+        let states_metadata_error = |err: &dyn Display| {
+            RecoveryError::UnexpectedError(format!(
+                "Failed to decode the states metadata of node {} ({}): {err}",
+                self.node_ip,
+                local_states_metadata.display(),
+            ))
+        };
+        let mut states_metadata =
+            pb_state::StatesMetadata::decode(read_bytes(&local_states_metadata)?.as_slice())
+                .map_err(|err| states_metadata_error(&err))?;
+
+        let Some(manifest) = states_metadata
+            .by_height
+            .remove(&height.get())
+            .and_then(|metadata| metadata.manifest)
+        else {
+            return Ok(None);
+        };
+        let manifest = Manifest::try_from(manifest).map_err(|err| states_metadata_error(&err))?;
+
+        Ok(Some(CryptoHashOfState::from(CryptoHash(
+            manifest_hash(&manifest).to_vec(),
+        ))))
     }
 }
