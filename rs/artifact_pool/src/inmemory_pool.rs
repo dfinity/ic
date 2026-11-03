@@ -335,12 +335,17 @@ pub mod test {
         let mut pool = InMemoryPoolSection::new();
         let height = Height::from(5);
         let beacon = fake_random_beacon(height);
-        pool.insert(make_artifact(beacon.clone()));
-        pool.insert(make_artifact(beacon));
-
+        let first = make_artifact(beacon.clone());
+        let mut second = make_artifact(beacon);
+        second.timestamp += std::time::Duration::from_secs(1);
+        pool.insert(first.clone());
+        pool.insert(second);
         assert_eq!(pool.artifacts.len(), 1);
         assert_eq!(pool.indexes.random_beacon.size(), 1);
         assert_eq!(pool.random_beacon().get_by_height(height).count(), 1);
+        // The first copy is kept.
+        let hash = first.msg.get_cm_hash();
+        assert_eq!(pool.get_by_hash(hash.digest()), Some(first));
     }
 
     #[test]
