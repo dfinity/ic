@@ -4,7 +4,7 @@
 
 use candid::{Decode, Encode, Principal};
 use canister_test::Wasm;
-use ic_base_types::{CanisterId, SnapshotId};
+use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
 use ic_management_canister_types::CanisterStatusType;
 use ic_nervous_system_agent::sns::Sns;
 use ic_nervous_system_integration_tests::{
