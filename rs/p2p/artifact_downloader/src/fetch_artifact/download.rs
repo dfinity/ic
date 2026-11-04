@@ -39,9 +39,11 @@ pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {
     Artifact::NAME.to_lowercase()
 }
 
-fn build_axum_router<Artifact: PbArtifact>(
-    pool: Arc<RwLock<dyn ValidatedPoolReader<Artifact>>>,
-) -> Router {
+fn build_axum_router<Artifact, Pool>(pool: Arc<RwLock<Pool>>) -> Router
+where
+    Artifact: PbArtifact,
+    Pool: ValidatedPoolReader<Artifact> + 'static,
+{
     Router::new()
         .route(
             &format!("/{}/rpc", uri_prefix::<Artifact>()),
@@ -52,10 +54,14 @@ fn build_axum_router<Artifact: PbArtifact>(
         .layer(DefaultBodyLimit::disable())
 }
 
-async fn rpc_handler<Artifact: PbArtifact>(
-    State(pool): State<Arc<RwLock<dyn ValidatedPoolReader<Artifact>>>>,
+async fn rpc_handler<Artifact, Pool>(
+    State(pool): State<Arc<RwLock<Pool>>>,
     payload: Bytes,
-) -> Result<Bytes, StatusCode> {
+) -> Result<Bytes, StatusCode>
+where
+    Artifact: PbArtifact,
+    Pool: ValidatedPoolReader<Artifact> + 'static,
+{
     let jh = tokio::task::spawn_blocking(move || {
         let id: Artifact::Id =
             Artifact::PbId::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
@@ -115,15 +121,16 @@ impl<Artifact: PbArtifact> ArtifactAssembler<Artifact, Artifact> for FetchArtifa
 }
 
 impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
-    pub fn new<Pool>(
+    pub fn new<Pool, Factory>(
         log: ReplicaLogger,
         rt: Handle,
         pool: Arc<RwLock<Pool>>,
-        bouncer_factory: Arc<dyn BouncerFactory<Artifact::Id, Pool>>,
+        bouncer_factory: Factory,
         metrics_registry: MetricsRegistry,
-    ) -> (impl Fn(Arc<dyn Transport>) -> Self, Router)
+    ) -> (impl FnOnce(Arc<dyn Transport>) -> Self, Router)
     where
         Pool: ValidatedPoolReader<Artifact> + 'static,
+        Factory: BouncerFactory<Artifact::Id, Pool> + 'static,
     {
         let pool_clone = pool.clone();
         (
@@ -133,24 +140,21 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
                     bouncer_factory.new_bouncer(&p)
                 };
                 let (bouncer_tx, bouncer_rx) = watch::channel(bouncer);
-                let pool_clone = pool.clone();
-                let bouncer_factory_clone = bouncer_factory.clone();
-                let log_clone = log.clone();
                 let jh = rt.spawn(async move {
                     loop {
                         let bouncer = {
-                            let p = pool_clone.read().unwrap();
-                            bouncer_factory_clone.new_bouncer(&p)
+                            let p = pool.read().unwrap();
+                            bouncer_factory.new_bouncer(&p)
                         };
                         if bouncer_tx.send(bouncer).is_err() {
                             break;
                         }
 
-                        tokio::time::sleep(bouncer_factory_clone.refresh_period()).await
+                        tokio::time::sleep(bouncer_factory.refresh_period()).await
                     }
                 });
                 Self {
-                    log: log_clone,
+                    log,
                     transport,
                     bouncer_rx,
                     metrics: FetchArtifactMetrics::new::<Artifact>(&metrics_registry),
