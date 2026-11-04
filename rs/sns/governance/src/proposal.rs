@@ -1150,11 +1150,11 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
 
     // Inspect take_canister_snapshot.
     if let Some(TakeSnapshotBeforeUpgrade { replace_snapshot }) = take_canister_snapshot {
-        if !crate::are_canister_snapshot_proposals_enabled() {
+        if !are_canister_snapshot_proposals_enabled() {
             defects.push("take_canister_snapshot is not yet enabled.".to_string());
         }
         if let (Some(replace_snapshot), Some(canister_id)) = (replace_snapshot, canister_id)
-            && let Err(err) = validate_snapshot_id_of_canister(
+            && let Err(err) = validate_snapshot_id(
                 "take_canister_snapshot.replace_snapshot",
                 replace_snapshot,
                 canister_id,
