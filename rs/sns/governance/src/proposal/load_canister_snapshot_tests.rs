@@ -157,7 +157,10 @@ fn test_load_canister_snapshot_classification() {
         Some(crate::pb::v1::Topic::DappCanisterManagement),
     );
 
-    // Serialized with other upgrades.
+    // Counts as an upgrade proposal. That is what makes it wait for any upgrade that is in
+    // progress (and vice versa); see test_load_canister_snapshot_waits_for_upgrade_in_progress
+    // and test_load_canister_snapshot_in_progress_blocks_upgrades in
+    // governance/load_canister_snapshot_tests.rs, which show that.
     let proposal_data = ProposalData {
         action: u64::from(&action),
         ..Default::default()
