@@ -54,7 +54,7 @@ pub(crate) fn wait_for_unless_fatal<T>(
     loop {
         let err = match check() {
             Ok(value) => return Ok(value),
-            Err(CheckError::Fatal(err)) => return Err(err),
+            Err(CheckError::Fatal(err)) => return Err(RecoveryError::Fatal(Box::new(err))),
             Err(CheckError::Retry(err)) => err,
         };
         info!(logger, "Waiting until {what}: {err}");
@@ -136,7 +136,10 @@ mod tests {
                 )))
             },
         );
-        assert!(matches!(result, Err(RecoveryError::ValidationFailed(_))));
+        let Err(RecoveryError::Fatal(err)) = result else {
+            panic!("expected a fatal recovery error, got {result:?}");
+        };
+        assert!(matches!(*err, RecoveryError::ValidationFailed(_)));
         assert_eq!(polls, 1);
     }
 }

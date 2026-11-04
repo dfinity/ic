@@ -3,7 +3,7 @@ use crate::{
     DataLocation, NeuronArgs, RecoveryArgs,
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs},
     args_merger::merge,
-    error::GracefulExpect,
+    error::{GracefulExpect, RecoveryError, RecoveryResult},
     get_available_nodes_heights_from_metrics,
     nns_recovery_failover_nodes::{NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs},
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
@@ -90,7 +90,7 @@ pub fn app_subnet_recovery(
         subnet_recovery_args,
     );
 
-    execute_steps(&logger, args.skip_prompts, subnet_recovery);
+    execute_steps(&logger, args.skip_prompts, subnet_recovery).expect_graceful("Recovery stopped");
 }
 
 /// NNS is recovered on same nodes by:
@@ -119,7 +119,7 @@ pub fn nns_recovery_same_nodes(
 
     let nns_recovery = NNSRecoverySameNodes::new(logger.clone(), args.clone(), nns_recovery_args);
 
-    execute_steps(&logger, args.skip_prompts, nns_recovery);
+    execute_steps(&logger, args.skip_prompts, nns_recovery).expect_graceful("Recovery stopped");
 }
 
 /// NNS is recovered on failover nodes by:
@@ -154,9 +154,10 @@ pub fn nns_recovery_failover_nodes(
     let nns_recovery =
         NNSRecoveryFailoverNodes::new(logger.clone(), args.clone(), neuron_args, nns_recovery_args);
 
-    execute_steps(&logger, args.skip_prompts, nns_recovery);
+    execute_steps(&logger, args.skip_prompts, nns_recovery).expect_graceful("Recovery stopped");
 }
 
+/// Runs recovery steps, returning fatal errors before saving progress past the failed step.
 pub fn execute_steps<
     StepType: Copy + Debug + PartialEq + EnumMessage,
     SubcommandArgsType: Serialize + DeserializeOwned,
@@ -168,29 +169,35 @@ pub fn execute_steps<
     logger: &Logger,
     skip_prompts: bool,
     mut steps: Steps,
-) {
+) -> RecoveryResult<()> {
     if let Some(next_step) = steps.get_next_step() {
         steps.resume(next_step);
     }
 
     while let Some((_step_type, step)) = steps.next() {
-        execute_step_after_consent(logger, skip_prompts, step);
+        execute_step_after_consent(logger, skip_prompts, step)?;
 
         if let Err(e) = steps.get_state().and_then(|state| state.save()) {
             warn!(logger, "Failed to save the recovery state: {}", e);
         }
     }
+    Ok(())
 }
 
-fn execute_step_after_consent(logger: &Logger, skip_prompts: bool, step: Box<dyn Step>) {
+fn execute_step_after_consent(
+    logger: &Logger,
+    skip_prompts: bool,
+    step: Box<dyn Step>,
+) -> RecoveryResult<()> {
     info!(logger, "{}", step.descr());
     if !skip_prompts && !consent_given(logger, "Execute now?") {
-        return;
+        return Ok(());
     }
 
     loop {
         match step.exec() {
             Ok(()) => break,
+            Err(err @ RecoveryError::Fatal(_)) => return Err(err),
             Err(e) => {
                 warn!(logger, "Error: {}", e);
                 if !skip_prompts && !consent_given(logger, "Retry now?") {
@@ -199,6 +206,7 @@ fn execute_step_after_consent(logger: &Logger, skip_prompts: bool, step: Box<dyn
             }
         }
     }
+    Ok(())
 }
 
 fn print_summary(logger: &Logger, args: &RecoveryArgs, subnet_id: SubnetId) {
@@ -420,5 +428,171 @@ fn maybe_update_state<T: Serialize + DeserializeOwned + Clone + PartialEq>(
         updated_recovery_state
     } else {
         recovery_state
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_test_utilities_tmpdir::tmpdir;
+    use serde::Deserialize;
+    use std::{cell::Cell, iter::Peekable, rc::Rc, vec::IntoIter};
+
+    #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, strum_macros::EnumMessage)]
+    enum TestStep {
+        Success,
+        Fatal,
+        MustNotRun,
+    }
+
+    struct FatalStep {
+        attempts: Rc<Cell<usize>>,
+    }
+
+    impl Step for FatalStep {
+        fn descr(&self) -> String {
+            "A checkpoint that requires operator intervention".to_string()
+        }
+
+        fn exec(&self) -> RecoveryResult<()> {
+            self.attempts.set(self.attempts.get() + 1);
+            // Fail promptly if the runner regresses to retrying fatal errors.
+            assert_eq!(self.attempts.get(), 1, "fatal error was retried");
+            Err(RecoveryError::Fatal(Box::new(
+                RecoveryError::ValidationFailed("checkpoint is not verified".to_string()),
+            )))
+        }
+    }
+
+    impl Step for TestStep {
+        fn descr(&self) -> String {
+            format!("{self:?}")
+        }
+
+        fn exec(&self) -> RecoveryResult<()> {
+            assert_eq!(*self, TestStep::Success);
+            Ok(())
+        }
+    }
+
+    struct TestRecovery {
+        logger: Logger,
+        steps: Peekable<IntoIter<TestStep>>,
+        state: RecoveryState<Option<TestStep>>,
+        fatal_attempts: Rc<Cell<usize>>,
+    }
+
+    impl HasRecoveryState for TestRecovery {
+        type StepType = TestStep;
+        type SubcommandArgsType = Option<TestStep>;
+
+        fn get_next_step(&self) -> Option<TestStep> {
+            self.state.subcommand_args
+        }
+
+        fn get_state(&self) -> RecoveryResult<RecoveryState<Option<TestStep>>> {
+            Ok(self.state.clone())
+        }
+    }
+
+    impl RecoveryIterator<TestStep, IntoIter<TestStep>> for TestRecovery {
+        fn get_step_iterator(&mut self) -> &mut Peekable<IntoIter<TestStep>> {
+            &mut self.steps
+        }
+
+        fn get_step_impl(&self, step_type: TestStep) -> RecoveryResult<Box<dyn Step>> {
+            match step_type {
+                TestStep::Success => Ok(step_type.into()),
+                TestStep::Fatal => Ok(FatalStep {
+                    attempts: self.fatal_attempts.clone(),
+                }
+                .into()),
+                TestStep::MustNotRun => panic!("advanced past a fatal step"),
+            }
+        }
+
+        fn store_next_step(&mut self, step: Option<TestStep>) {
+            self.state.subcommand_args = step;
+        }
+
+        fn interactive(&self) -> bool {
+            false
+        }
+
+        fn read_step_params(&mut self, _: TestStep) {
+            panic!("noninteractive recovery requested input");
+        }
+
+        fn get_logger(&self) -> &Logger {
+            &self.logger
+        }
+    }
+
+    impl Iterator for TestRecovery {
+        type Item = (TestStep, Box<dyn Step>);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.next_step()
+        }
+    }
+
+    #[test]
+    fn fatal_error_stops_noninteractive_recovery_without_advancing_saved_progress() {
+        let dir = tmpdir("fatal-recovery");
+        std::fs::create_dir(dir.path().join(crate::RECOVERY_DIRECTORY_NAME)).unwrap();
+        let logger = Logger::root(slog::Discard, slog::o!());
+        let attempts = Rc::new(Cell::new(0));
+        let recovery = TestRecovery {
+            logger: logger.clone(),
+            steps: vec![TestStep::Success, TestStep::Fatal, TestStep::MustNotRun]
+                .into_iter()
+                .peekable(),
+            state: RecoveryState {
+                recovery_args: RecoveryArgs {
+                    dir: dir.path().to_path_buf(),
+                    nns_url: "http://localhost".parse().unwrap(),
+                    replica_version: None,
+                    admin_key_file: None,
+                    test_mode: true,
+                    skip_prompts: true,
+                },
+                subcommand_args: None,
+                neuron_args: None,
+            },
+            fatal_attempts: attempts.clone(),
+        };
+
+        let result = execute_steps(&logger, true, recovery);
+        assert!(matches!(result, Err(RecoveryError::Fatal(_))));
+        assert_eq!(attempts.get(), 1);
+        let saved = RecoveryState::<Option<TestStep>>::read(dir.path())
+            .unwrap()
+            .unwrap();
+        assert_eq!(saved.subcommand_args, Some(TestStep::Fatal));
+    }
+
+    #[test]
+    fn noninteractive_recovery_still_retries_nonfatal_errors() {
+        struct RetryStep(Rc<Cell<usize>>);
+
+        impl Step for RetryStep {
+            fn descr(&self) -> String {
+                "A transient failure".to_string()
+            }
+
+            fn exec(&self) -> RecoveryResult<()> {
+                self.0.set(self.0.get() + 1);
+                if self.0.get() == 1 {
+                    Err(RecoveryError::UnexpectedError("try again".to_string()))
+                } else {
+                    Ok(())
+                }
+            }
+        }
+
+        let logger = Logger::root(slog::Discard, slog::o!());
+        let attempts = Rc::new(Cell::new(0));
+        execute_step_after_consent(&logger, true, RetryStep(attempts.clone()).into()).unwrap();
+        assert_eq!(attempts.get(), 2);
     }
 }
