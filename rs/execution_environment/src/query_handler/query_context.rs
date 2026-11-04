@@ -827,7 +827,7 @@ impl<'a> QueryContext<'a> {
         let canister_id = request.receiver;
 
         info!(
-            every_n_seconds => 10,
+            every_n_seconds => 5,
             self.log,
             "Composite query: canister {} calls method {} of canister {}{}",
             request.sender,
