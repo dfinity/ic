@@ -2,7 +2,6 @@ use crate::{
     admin_helper::get_propose_to_cool_down_subnet_command,
     layout::Layout,
     steps::{CheckCoolingDownStep, CheckMergeReadinessStep, WaitForHaltingCupStep},
-    target_subnet::TargetSubnet,
 };
 
 use clap::Parser;
@@ -129,6 +128,17 @@ pub struct SubnetMergingArgs {
     /// Which steps to skip
     #[clap(long)]
     pub skip: Option<Vec<StepType>>,
+}
+
+/// The two subnets a subnet merge works with.
+#[derive(Copy, Clone, PartialEq, Debug)]
+enum TargetSubnet {
+    /// The subnet that is cooling down, whose canisters are merged away and
+    /// which is deleted afterwards.
+    Source,
+    /// The subnet that hosts the canisters of the source subnet after the merge
+    /// and that is recovered at the merged state.
+    Destination,
 }
 
 pub struct SubnetMerging {
