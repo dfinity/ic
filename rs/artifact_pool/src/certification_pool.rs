@@ -282,7 +282,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
                 let share_hash = crypto_hash(&share);
                 // Don't overwrite existing artifacts.
                 if let Entry::Vacant(entry) = self.unvalidated_shares.entry(share_hash.clone()) {
-                    self.unvalidated_shares_index.insert(height, share_hash);
+                    self.unvalidated_share_index.insert(height, share_hash);
                     entry.insert(share);
                 }
             }
@@ -643,8 +643,9 @@ mod tests {
             pool.insert(to_unvalidated(cert.clone()));
             pool.insert(to_unvalidated(cert));
 
-            assert_eq!(pool.unvalidated.len(), 2);
+            assert_eq!(pool.unvalidated_shares.len(), 1);
             assert_eq!(pool.unvalidated_share_index.size(), 1);
+            assert_eq!(pool.unvalidated_certs.len(), 1);
             assert_eq!(pool.unvalidated_cert_index.size(), 1);
             assert_eq!(pool.unvalidated_shares_at_height(height).count(), 1);
             assert_eq!(pool.unvalidated_certifications_at_height(height).count(), 1);

@@ -411,11 +411,11 @@ mod tests {
     #[test]
     fn test_remove_all_below() {
         let mut index = HeightIndex::new();
-        index.insert(Height::from(1), &10);
-        index.insert(Height::from(2), &20);
-        index.insert(Height::from(5), &50);
-        index.insert(Height::from(5), &51);
-        index.insert(Height::from(8), &80);
+        index.insert(Height::from(1), 10);
+        index.insert(Height::from(2), 20);
+        index.insert(Height::from(5), 50);
+        index.insert(Height::from(5), 51);
+        index.insert(Height::from(8), 80);
 
         // The bound is exclusive: elements at exactly the given height stay.
         let removed: Vec<_> = index.remove_all_below(Height::from(5)).collect();
@@ -457,21 +457,21 @@ mod tests {
         assert_eq!(index.min_height(), None);
         assert_eq!(index.max_height(), None);
 
-        index.insert(Height::from(66), &1);
+        index.insert(Height::from(66), 1);
         assert_eq!(index.min_height(), Some(Height::from(66)));
         assert_eq!(index.max_height(), Some(Height::from(66)));
 
-        index.insert(Height::from(15), &2);
-        index.insert(Height::from(100), &3);
+        index.insert(Height::from(15), 2);
+        index.insert(Height::from(100), 3);
         assert_eq!(index.min_height(), Some(Height::from(15)));
         assert_eq!(index.max_height(), Some(Height::from(100)));
 
-        index.remove(Height::from(15), &2);
-        index.remove(Height::from(100), &3);
+        index.remove(&Height::from(15), &2);
+        index.remove(&Height::from(100), &3);
         assert_eq!(index.min_height(), Some(Height::from(66)));
         assert_eq!(index.max_height(), Some(Height::from(66)));
 
-        index.remove(Height::from(66), &1);
+        index.remove(&Height::from(66), &1);
         assert_eq!(index.min_height(), None);
         assert_eq!(index.max_height(), None);
     }
@@ -479,10 +479,10 @@ mod tests {
     #[test]
     fn test_get_by_range() {
         let mut index = HeightIndex::new();
-        index.insert(Height::from(1), &10);
-        index.insert(Height::from(3), &30);
-        index.insert(Height::from(3), &31);
-        index.insert(Height::from(7), &70);
+        index.insert(Height::from(1), 10);
+        index.insert(Height::from(3), 30);
+        index.insert(Height::from(3), 31);
+        index.insert(Height::from(7), 70);
 
         assert_eq!(
             index.get_by_range(..).copied().collect::<Vec<_>>(),

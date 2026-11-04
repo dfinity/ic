@@ -415,7 +415,7 @@ pub mod test {
         assert_eq!(pool.random_beacon().get_by_height(height).count(), 1);
         // The first copy is kept.
         let hash = first.msg.get_cm_hash();
-        assert_eq!(pool.get_by_hash(hash.digest()), Some(first));
+        assert_eq!(pool.get_by_hash(hash.digest()), Some(&first));
     }
 
     #[test]
