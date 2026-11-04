@@ -247,8 +247,8 @@ impl CertificationPoolImpl {
 
         let mut heights: Vec<Height> = self
             .unvalidated
-            .iter()
-            .map(|(_hash, msg)| msg.height())
+            .values()
+            .map(|msg| msg.height())
             .chain(self.validated_shares().map(|share| share.height))
             .chain(
                 self.validated_certifications()
