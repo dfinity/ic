@@ -20,6 +20,10 @@ message GetDiskEncryptionKeyResponse {
 
   // The detached LUKS header for the Store partition.
   optional bytes luks_header = 3;
+
+  // The GuestOS version the server booted from. The launch measurement in the
+  // server's attestation report belongs to this version.
+  optional string guestos_version = 4;
 }
 
 message SignalStatusRequest {

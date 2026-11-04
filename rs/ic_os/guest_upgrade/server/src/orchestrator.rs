@@ -4,6 +4,7 @@ use attestation::attestation_package::SevRootCertificateVerification;
 use guest_disk::DEFAULT_STORE_LUKS_HEADER_PATH;
 use guest_upgrade_shared::{DEFAULT_SERVER_PORT, STORE_DEVICE};
 use ic_interfaces_registry::RegistryClient;
+use ic_types::ReplicaVersion;
 use std::sync::Arc;
 use tokio::runtime::Handle;
 
@@ -17,11 +18,13 @@ use {
 };
 
 /// Creates a new DiskEncryptionKeyExchangeServerAgent to be used by the Orchestrator.
+/// `guestos_version` is the GuestOS version the node booted from.
 /// Returns None if SEV is not active or if the GuestOS config cannot be read.
 #[cfg(target_os = "linux")]
 pub fn new_disk_encryption_key_exchange_server_agent_for_orchestrator(
     handle: Handle,
     registry_client: Arc<dyn RegistryClient>,
+    guestos_version: ReplicaVersion,
 ) -> Option<DiskEncryptionKeyExchangeServerAgent> {
     let is_tee_enabled = is_tee_enabled().unwrap_or_else(|err| {
         eprintln!("Failed to check if SEV is active, assuming it is not active: {err:?}");
@@ -72,6 +75,7 @@ pub fn new_disk_encryption_key_exchange_server_agent_for_orchestrator(
         sev_firmware_factory,
         SevRootCertificateVerification::Verify,
         trusted_execution_config,
+        guestos_version,
         registry_client,
         STORE_DEVICE.into(),
         DEFAULT_STORE_LUKS_HEADER_PATH.into(),
@@ -85,6 +89,7 @@ pub fn new_disk_encryption_key_exchange_server_agent_for_orchestrator(
 pub fn new_disk_encryption_key_exchange_server_agent_for_orchestrator(
     _handle: Handle,
     _registry_client: Arc<dyn RegistryClient>,
+    _guestos_version: ReplicaVersion,
 ) -> Option<DiskEncryptionKeyExchangeServerAgent> {
     None
 }
