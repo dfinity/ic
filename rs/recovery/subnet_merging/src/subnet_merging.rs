@@ -131,21 +131,6 @@ pub struct SubnetMergingArgs {
     pub skip: Option<Vec<StepType>>,
 }
 
-/// Whether the tool, when resumed at `next_step`, checks that neither subnet is
-/// halted nor scheduled to halt at its next CUP.
-///
-/// Not when it is resumed past `HaltSourceSubnetAtCupHeight`, i.e. after it has
-/// started halting the subnets itself, nor when it is resumed at that step:
-/// progress is saved only after a step is executed, so a run that stops after
-/// the proposal to halt the source subnet has been adopted, but before that is
-/// saved, resumes at that step, with the source subnet scheduled to halt.
-/// Proposing to halt it again does no harm.
-fn checks_not_halted(next_step: Option<StepType>) -> bool {
-    next_step.is_none_or(|next_step| {
-        (next_step as usize) < StepType::HaltSourceSubnetAtCupHeight as usize
-    })
-}
-
 pub struct SubnetMerging {
     step_iterator: Peekable<StepTypeIter>,
     params: SubnetMergingArgs,
@@ -176,7 +161,6 @@ impl SubnetMerging {
             &recovery,
             subnet_merging_args.source_subnet_id,
             subnet_merging_args.destination_subnet_id,
-            subnet_merging_args.next_step,
         )
         .expect("Subnets should satisfy all the preconditions");
 
@@ -195,17 +179,13 @@ impl SubnetMerging {
     /// 1) They are two different subnets;
     /// 2) Both are `Application` (or `VerifiedApplication`) subnets;
     /// 3) Neither holds any chain keys;
-    /// 4) Neither is halted nor scheduled to halt at its next CUP, unless the
-    ///    tool is resumed at or past `HaltSourceSubnetAtCupHeight` (see
-    ///    `checks_not_halted`);
-    /// 5) The destination subnet is not cooling down;
-    /// 6) Both have the same subnet type, cycles cost schedule, subnet admins
+    /// 4) The destination subnet is not cooling down;
+    /// 5) Both have the same subnet type, cycles cost schedule, subnet admins
     ///    and SEV setting.
     fn check_subnets_preconditions(
         recovery: &Recovery,
         source_subnet_id: SubnetId,
         destination_subnet_id: SubnetId,
-        next_step: Option<StepType>,
     ) -> RecoveryResult<()> {
         if source_subnet_id == destination_subnet_id {
             return Err(RecoveryError::ValidationFailed(format!(
@@ -213,14 +193,9 @@ impl SubnetMerging {
             )));
         }
 
-        let check_not_halted = checks_not_halted(next_step);
-        let source =
-            Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id, check_not_halted)?;
-        let destination = Self::get_and_pre_validate_subnet_record(
-            recovery,
-            destination_subnet_id,
-            check_not_halted,
-        )?;
+        let source = Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id)?;
+        let destination =
+            Self::get_and_pre_validate_subnet_record(recovery, destination_subnet_id)?;
 
         Self::ensure_compatible_subnet_records(
             source_subnet_id,
@@ -339,7 +314,6 @@ impl SubnetMerging {
     fn get_and_pre_validate_subnet_record(
         recovery: &Recovery,
         subnet_id: SubnetId,
-        check_not_halted: bool,
     ) -> RecoveryResult<SubnetRecord> {
         let validation_error = |error_message| {
             Err(RecoveryError::ValidationFailed(format!(
@@ -368,12 +342,6 @@ impl SubnetMerging {
         if !SUBNET_TYPE_ALLOW_LIST.contains(&subnet_type) {
             return validation_error(format!(
                 "Subnet's type ({subnet_type:?}) is not allowed for subnet merging. Allowlist: {SUBNET_TYPE_ALLOW_LIST:?}",
-            ));
-        }
-
-        if check_not_halted && (subnet_record.is_halted || subnet_record.halt_at_cup_height) {
-            return validation_error(String::from(
-                "Subnet should neither be halted nor scheduled to halt at its next CUP",
             ));
         }
 
@@ -629,22 +597,6 @@ mod tests {
             next_step: Some(StepType::CheckMergeReadiness),
             skip: None,
         }
-    }
-
-    #[test]
-    fn not_halted_is_checked_only_before_the_tool_halts_the_subnets() {
-        assert!(checks_not_halted(None));
-        for step in StepType::iter() {
-            let before_halting = (step as usize) < StepType::HaltSourceSubnetAtCupHeight as usize;
-            assert_eq!(checks_not_halted(Some(step)), before_halting, "{step:?}");
-        }
-        assert!(checks_not_halted(Some(StepType::CheckMergeReadiness)));
-        assert!(!checks_not_halted(Some(
-            StepType::HaltSourceSubnetAtCupHeight
-        )));
-        assert!(!checks_not_halted(Some(
-            StepType::HaltDestinationSubnetAtCupHeight
-        )));
     }
 
     #[test]
