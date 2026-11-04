@@ -19,12 +19,13 @@
 //! budget.
 
 use crate::driver::{
+    config::NODES_INFO,
     constants::{COLOCATE_CONTAINER_NAME, GROUP_SETUP_DIR},
     context::GroupContext,
     local_backend::{LocalBackend, sanitize_name},
     resource::AllocatedVm,
     test_env::{TestEnv, TestEnvAttribute},
-    test_env_api::{HasTopologySnapshot, IcNodeContainer},
+    test_env_api::{HasTopologySnapshot, NodesInfo},
     test_setup::{GroupSetup, SystemTestBackend},
     universal_vm::UNIVERSAL_VMS_DIR,
 };
@@ -213,28 +214,17 @@ pub(crate) fn logs_stream_task(group_ctx: GroupContext) -> () {
             // binding to the dedicated source on Local and letting the kernel
             // pick it on Farm.
             if ic_node_logs_resolved {
-                match discover_ic_nodes(&setup_env) {
-                    Ok(discovered_nodes) => process_discovered(
-                        discovered_nodes,
-                        "node",
-                        &node_logs_dir,
-                        &mut streamed_nodes,
-                        &mut skipped_nodes,
-                        &group_ctx.exclude_logs,
-                        ic_node_logs_source,
-                        &rt,
-                        &logger,
-                    ),
-                    Err(err) => {
-                        // Until the setup function has written the prep directory
-                        // the topology is not yet available; this is expected
-                        // early in the run, so we only log it at debug level.
-                        debug!(
-                            logger,
-                            "Discovering IC nodes failed (setup likely not ready yet): {err}"
-                        );
-                    }
-                }
+                process_discovered(
+                    discover_ic_nodes(&setup_env, &logger),
+                    "node",
+                    &node_logs_dir,
+                    &mut streamed_nodes,
+                    &mut skipped_nodes,
+                    &group_ctx.exclude_logs,
+                    ic_node_logs_source,
+                    &rt,
+                    &logger,
+                );
             }
         }
 
@@ -301,27 +291,54 @@ fn process_discovered(
     }
 }
 
-/// Discovers all IC nodes (assigned, unassigned and API boundary nodes) of the
-/// no-name Internet Computer by reading the topology snapshot from the setup
-/// environment's registry local store. Returns a map from node id to its IPv6
-/// address.
-fn discover_ic_nodes(env: &TestEnv) -> Result<HashMap<String, Ipv6Addr>> {
-    let topology = env.safe_topology_snapshot()?;
+/// Discovers the IC nodes (assigned, unassigned and API boundary nodes) of
+/// every Internet Computer of the group, named or not, that the group deployed
+/// (`nodes_info.json`; tests importing mainnet state have registry-only nodes),
+/// by reading the topology snapshots from the setup environment's registry
+/// local stores; an IC whose store is not readable yet is skipped until the
+/// next poll. Returns a map from node id to its IPv6 address.
+fn discover_ic_nodes(env: &TestEnv, logger: &Logger) -> HashMap<String, Ipv6Addr> {
+    // Written once the first IC starts its node VMs; nothing to stream before.
+    let deployed: NodesInfo = if env.get_json_path(NODES_INFO).exists() {
+        match env.read_json_object(NODES_INFO) {
+            Ok(deployed) => deployed,
+            Err(err) => {
+                warn!(
+                    logger,
+                    "Not streaming any IC node: could not read {NODES_INFO}: {err:?}"
+                );
+                return HashMap::new();
+            }
+        }
+    } else {
+        NodesInfo::new()
+    };
     let mut nodes: HashMap<String, Ipv6Addr> = HashMap::new();
-    for node in topology
-        .subnets()
-        .flat_map(|subnet| subnet.nodes())
-        .chain(topology.unassigned_nodes())
-        .chain(topology.api_boundary_nodes())
-    {
-        // IC nodes in the system-test infra are addressed via IPv6; an
-        // IPv4-only node would not be reachable on the journald gateway port,
-        // so we simply skip any such (in practice non-existent) node.
-        if let IpAddr::V6(ipv6) = node.get_ip_addr() {
-            nodes.insert(node.node_id.to_string(), ipv6);
+    for (ic_name, topology) in env.safe_topology_snapshots() {
+        let topology = match topology {
+            Ok(topology) => topology,
+            Err(err) => {
+                // Until ic-prep has written the registry the topology is not
+                // available; this is expected early in the run.
+                debug!(
+                    logger,
+                    "Not streaming the nodes of IC {ic_name:?} yet: could not read its topology snapshot: {err}"
+                );
+                continue;
+            }
+        };
+        for node in topology.all_nodes() {
+            // IC nodes in the system-test infra are addressed via IPv6; an
+            // IPv4-only node would not be reachable on the journald gateway port,
+            // so we simply skip any such (in practice non-existent) node.
+            if deployed.contains_key(&node.node_id)
+                && let IpAddr::V6(ipv6) = node.get_ip_addr()
+            {
+                nodes.insert(node.node_id.to_string(), ipv6);
+            }
         }
     }
-    Ok(nodes)
+    nodes
 }
 
 fn discover_uvms(root_path: PathBuf) -> Result<HashMap<String, Ipv6Addr>> {
@@ -713,8 +730,18 @@ async fn stream_journald_from_cursor(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::driver::test_env::HasIcPrepDir;
+    use ic_prep_lib::{
+        internet_computer::{IcConfig, TopologyConfig},
+        node::NodeConfiguration,
+        subnet_configuration::{SubnetConfig, SubnetRunningState},
+    };
+    use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
+    use ic_registry_subnet_type::SubnetType;
+    use ic_types::ReplicaVersion;
     use nix::sys::socket::getsockopt;
     use slog::o;
+    use std::collections::BTreeMap;
     use std::io::{BufRead, Read};
     use std::sync::mpsc::{Sender, channel};
 
@@ -844,6 +871,92 @@ mod tests {
             journald_log_path(&journald_uvm_logs_dir(group_dir), "my vm/1"),
             PathBuf::from("/g/journald_logs/uvms/my-vm-1.jsonl")
         );
+    }
+
+    /// Initializes a one-node IC named `name` with ic-prep, the way
+    /// `bootstrap::init_ic` does, and returns the IPv6 address of its node.
+    fn init_named_ic(env: &TestEnv, name: &str) -> Ipv6Addr {
+        let ip: Ipv6Addr = "2001:db8::1".parse().unwrap();
+        let node = NodeConfiguration {
+            xnet_api: SocketAddr::new(ip.into(), 2497),
+            public_api: SocketAddr::new(ip.into(), 8080),
+            node_operator_principal_id: None,
+            secret_key_store: None,
+            domain: None,
+            node_reward_type: None,
+        };
+        let replica_version = ReplicaVersion::try_from("0.8.0").unwrap();
+        let mut topology = TopologyConfig::default();
+        topology.insert_subnet(
+            0,
+            SubnetConfig::new(
+                0,
+                BTreeMap::from([(0, node)]),
+                replica_version.clone(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                SubnetType::System,
+                CanisterCyclesCostSchedule::Normal,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                vec![],
+                vec![],
+                SubnetRunningState::Active,
+                None,
+            ),
+        );
+        let prep_dir = env.create_prep_dir(name).unwrap();
+        IcConfig::new(
+            prep_dir.path(),
+            topology,
+            replica_version,
+            true,
+            Some(0),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            vec![],
+        )
+        .initialize()
+        .unwrap();
+        ip
+    }
+
+    #[test]
+    fn discover_ic_nodes_finds_the_nodes_of_named_ics() {
+        let dir = tempfile::tempdir().unwrap();
+        let env =
+            TestEnv::new_without_duplicating_logger(dir.path(), Logger::root(slog::Discard, o!()));
+        let ip = init_named_ic(&env, "named");
+        // An IC whose registry is not written yet is skipped.
+        env.create_prep_dir("pending").unwrap();
+        // Only nodes the group deployed (`nodes_info.json`) are streamed.
+        assert!(discover_ic_nodes(&env, &env.logger()).is_empty());
+        let node_id = env
+            .safe_topology_snapshot_by_name("named")
+            .unwrap()
+            .all_nodes()
+            .next()
+            .unwrap()
+            .node_id;
+        env.write_json_object(NODES_INFO, &NodesInfo::from([(node_id, None)]))
+            .unwrap();
+        let nodes = discover_ic_nodes(&env, &env.logger());
+        assert_eq!(nodes.values().collect::<Vec<_>>(), vec![&ip]);
     }
 
     #[test]

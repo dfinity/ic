@@ -287,6 +287,12 @@ pub trait HasIcPrepDir {
     /// Return `None` if the underlying path does not exist or is not a
     /// directory.
     fn prep_dir(&self, name: &str) -> Option<IcPrepStateDir>;
+
+    /// The names of all internet computers that have an ic-prep working
+    /// directory in this environment (`""` for the no-name one), the no-name
+    /// one first. The directory exists from `create_prep_dir` on, i.e. before
+    /// ic-prep has written the registry into it.
+    fn ic_names(&self) -> Vec<String>;
 }
 
 impl HasIcPrepDir for TestEnv {
@@ -309,15 +315,43 @@ impl HasIcPrepDir for TestEnv {
         }
         Some(IcPrepStateDir::new(p))
     }
+
+    fn ic_names(&self) -> Vec<String> {
+        let Ok(entries) = fs::read_dir(self.base_path()) else {
+            return vec![];
+        };
+        let mut names: Vec<String> = entries
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().is_dir())
+            .filter_map(|entry| ic_name_from_prep_dir_name(&entry.file_name().to_string_lossy()))
+            .collect();
+        names.sort();
+        names
+    }
 }
+
+const IC_PREP_DIR: &str = "ic_prep";
+const IC_PREP_DIR_PREFIX: &str = "ic_prep_";
 
 fn ic_prep_path(base_path: PathBuf, name: &str) -> PathBuf {
     let dir_name = if name.is_empty() {
-        "ic_prep".to_string()
+        IC_PREP_DIR.to_string()
     } else {
-        format!("ic_prep_{name}")
+        format!("{IC_PREP_DIR_PREFIX}{name}")
     };
     base_path.join(dir_name)
+}
+
+/// Inverse of `ic_prep_path` on the directory name: `ic_prep` is the no-name
+/// IC, `ic_prep_<name>` is the IC `<name>`, anything else is not a prep dir.
+fn ic_name_from_prep_dir_name(dir_name: &str) -> Option<String> {
+    if dir_name == IC_PREP_DIR {
+        return Some(String::new());
+    }
+    match dir_name.strip_prefix(IC_PREP_DIR_PREFIX) {
+        Some(name) if !name.is_empty() => Some(name.to_string()),
+        _ => None,
+    }
 }
 
 pub trait SshKeyGen {
@@ -375,5 +409,47 @@ impl SshKeyGen for TestEnv {
             .get_path(SSH_AUTHORIZED_PUB_KEYS_DIR)
             .join(SSH_USERNAME);
         fs::read_to_string(pub_key_path).context("Could not read SSH public key")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn env(dir: &Path) -> TestEnv {
+        TestEnv::new_without_duplicating_logger(dir, Logger::root(slog::Discard, o!()))
+    }
+
+    #[test]
+    fn ic_name_from_prep_dir_name_inverts_ic_prep_path() {
+        for name in ["", "broken", "a_b", "ic_prep"] {
+            let path = ic_prep_path(PathBuf::from("/base"), name);
+            let dir_name = path.file_name().unwrap().to_str().unwrap();
+            assert_eq!(ic_name_from_prep_dir_name(dir_name).as_deref(), Some(name));
+        }
+        for dir_name in [
+            "ic_prepx",
+            "ic_prep_",
+            "prep",
+            "universal_vms",
+            "nodes_info.json",
+        ] {
+            assert_eq!(ic_name_from_prep_dir_name(dir_name), None);
+        }
+    }
+
+    #[test]
+    fn ic_names_lists_prep_dirs_unnamed_first() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(env(&dir.path().join("missing")).ic_names().is_empty());
+        let env = env(dir.path());
+        assert!(env.ic_names().is_empty());
+        for d in ["ic_prep_foo", "ic_prep", "ic_prep_bar", "universal_vms"] {
+            fs::create_dir(dir.path().join(d)).unwrap();
+        }
+        fs::write(dir.path().join("ic_prep_file"), b"").unwrap();
+        assert_eq!(env.ic_names(), ["", "bar", "foo"]);
+        env.create_prep_dir("late").unwrap();
+        assert_eq!(env.ic_names(), ["", "bar", "foo", "late"]);
     }
 }
