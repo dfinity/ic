@@ -104,12 +104,9 @@ pub(crate) fn decode_next_unallocated_canister_index(
 /// * If present, every range in the routing table ends below it, i.e., every canister ID hosted
 ///   by a subnet has been accounted for as allocated.
 ///
-/// It is written by the post-upgrade backfill (`backfill_canister_id_allocation`) and by every
-/// allocation of canister IDs to a new subnet. So it is only absent if no canister IDs have been
-/// allocated yet, or if the registry was installed with an initial routing table and has not been
-/// upgraded since; in the latter case, the next allocation computes the value from the history of
-/// the routing table. Either way, there is nothing to check while it is absent (and was absent
-/// before).
+/// While it is absent (and was absent before), there is nothing to check: it has simply not been
+/// written yet, neither by the post-upgrade backfill (`backfill_canister_id_allocation`) nor by an
+/// allocation of canister IDs to a new subnet.
 pub(crate) fn check_canister_id_allocation_invariants(
     snapshot: &RegistrySnapshot,
     previous_next_unallocated_canister_index: Option<u64>,

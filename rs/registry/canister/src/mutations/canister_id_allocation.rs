@@ -61,10 +61,13 @@ impl Registry {
                 if value.version > version {
                     break;
                 }
-                // Deletion markers carry no ranges; large values live in the chunk store.
+                // A value without content holds no routing table, hence no ranges to account for.
                 let Some(content) = value.content.clone() else {
                     continue;
                 };
+                // Large values live in the chunk store, so they are reassembled first. `None` means
+                // that the key was deleted in this version, so this version holds no ranges either
+                // (the ranges it held before are accounted for by the earlier versions).
                 let Some(bytes) = with_chunks(|chunks| dechunkify_registry_value(content, chunks))
                 else {
                     continue;
@@ -79,6 +82,8 @@ impl Registry {
                         )
                     });
                 for entry in routing_table.entries {
+                    // An entry without a range assigns no canister IDs to its subnet, so there is
+                    // nothing to account for.
                     let Some(range) = entry.range else {
                         continue;
                     };

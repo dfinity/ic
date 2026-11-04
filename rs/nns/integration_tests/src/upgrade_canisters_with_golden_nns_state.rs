@@ -377,7 +377,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 
     let is_registry_upgraded = nns_canister_upgrade_sequence
         .iter()
-        .any(|nns_canister_upgrade| nns_canister_upgrade.nns_canister_name == "registry");
+        .any(|nns_canister_upgrade| nns_canister_upgrade.canister_id == REGISTRY_CANISTER_ID);
     if is_registry_upgraded {
         check_canister_id_allocation_covers_mainnet_history(&state_machine);
     }
