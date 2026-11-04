@@ -82,9 +82,9 @@ Runbook::
    flag of `M` and `T` (and give the test's ssh key readonly access to their
    nodes), and `WaitForHaltingCupOnSourceSubnet` and
    `WaitForHaltingCupOnDestinationSubnet`, which wait until the node of each
-   subnet that its state would be downloaded from holds the CUP the subnet
-   halts at: served at its public endpoint, written to its disk, and with the
-   state it names certified.
+   subnet that its state would be downloaded from holds the halting CUP on
+   disk, a published manifest whose root hash matches the CUP's state hash,
+   and an accessible checkpoint without either unverified marker.
 13. After `WaitForHaltingCupOnDestinationSubnet`: check that both subnets are
    halted, i.e. that every one of their nodes certifies the height its subnet
    halts at and none goes past it.
