@@ -68,7 +68,7 @@ use ic_types::{
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
     signature::BasicSignature,
-    time::UNIX_EPOCH,
+    time::{CoarseTime, UNIX_EPOCH},
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use rand::Rng;
@@ -4340,6 +4340,139 @@ fn flexible_error_timeout_invalid_non_flexible_request() {
                 )
             )) if id == callback_id
         );
+    });
+}
+
+/// Turns `context` into one for a bounded-wait call with the given deadline.
+fn with_deadline(
+    mut context: CanisterHttpRequestContext,
+    deadline: CoarseTime,
+) -> CanisterHttpRequestContext {
+    Arc::make_mut(&mut context.request).deadline = deadline;
+    context
+}
+
+/// A bounded-wait request times out once its deadline has passed, long before the
+/// protocol timeout that still applies to a guaranteed-response request.
+#[test]
+fn bounded_wait_request_times_out_at_its_deadline() {
+    let deadline = CoarseTime::from_secs_since_unix_epoch(10);
+    let contexts = vec![
+        (
+            CallbackId::new(0),
+            request_context(Replication::FullyReplicated),
+        ),
+        (
+            CallbackId::new(1),
+            with_deadline(request_context(Replication::FullyReplicated), deadline),
+        ),
+    ];
+
+    setup_test_with_contexts(4, contexts, |payload_builder, _pool| {
+        let validation_context = ValidationContext {
+            registry_version: RegistryVersion::new(1),
+            certified_height: Height::new(0),
+            time: UNIX_EPOCH + Duration::from_secs(11),
+        };
+        assert!(validation_context.time < UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL);
+
+        let payload = payload_builder.build_payload(
+            Height::new(1),
+            TEST_MAX_PAYLOAD_BYTES,
+            &[],
+            &validation_context,
+        );
+        let parsed = bytes_to_payload(&payload).expect("Failed to parse payload");
+        assert_eq!(parsed.timeouts, vec![CallbackId::new(1)]);
+
+        payload_builder
+            .validate_payload(
+                Height::new(1),
+                &test_proposal_context(&validation_context),
+                &payload,
+                &[],
+            )
+            .unwrap();
+    });
+}
+
+/// A bounded-wait request has not timed out at its deadline itself.
+#[test]
+fn bounded_wait_request_timeout_invalid_at_deadline() {
+    let callback_id = CallbackId::new(1);
+    let contexts = vec![(
+        callback_id,
+        with_deadline(
+            request_context(Replication::FullyReplicated),
+            CoarseTime::from_secs_since_unix_epoch(10),
+        ),
+    )];
+
+    setup_test_with_contexts(4, contexts, |pb, _pool| {
+        let validation_context = ValidationContext {
+            registry_version: RegistryVersion::new(1),
+            certified_height: Height::new(0),
+            time: UNIX_EPOCH + Duration::from_secs(10),
+        };
+        let payload = CanisterHttpPayload {
+            timeouts: vec![callback_id],
+            ..Default::default()
+        };
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&validation_context),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::NotTimedOut(id)
+                )
+            )) if id == callback_id
+        );
+    });
+}
+
+/// A flexible bounded-wait request may be timed out once its deadline has passed.
+#[test]
+fn flexible_bounded_wait_request_times_out_at_its_deadline() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+    let context = with_deadline(
+        flexible_request_context(committee, 2, 4),
+        CoarseTime::from_secs_since_unix_epoch(10),
+    );
+
+    setup_test_with_contexts(num_nodes, vec![(callback_id, context)], |pb, _pool| {
+        let validate_at = |secs| {
+            let validation_context = ValidationContext {
+                registry_version: RegistryVersion::new(1),
+                certified_height: Height::new(0),
+                time: UNIX_EPOCH + Duration::from_secs(secs),
+            };
+            let payload = CanisterHttpPayload {
+                flexible_errors: vec![FlexibleCanisterHttpError::Timeout { callback_id }],
+                ..Default::default()
+            };
+            pb.validate_payload(
+                Height::new(1),
+                &test_proposal_context(&validation_context),
+                &payload_to_bytes_max_4mb(payload),
+                &[],
+            )
+        };
+        assert_matches!(
+            validate_at(10),
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::NotTimedOut(id)
+                )
+            )) if id == callback_id
+        );
+        assert_matches!(validate_at(11), Ok(()));
     });
 }
 

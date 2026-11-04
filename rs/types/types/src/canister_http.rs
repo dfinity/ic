@@ -46,7 +46,7 @@ use crate::{
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
     consensus::get_faults_tolerated,
     crypto::{BasicSigOf, CryptoHashOf},
-    messages::{CallbackId, RejectContext, Request},
+    messages::{CallbackId, NO_DEADLINE, RejectContext, Request},
     node_id_into_protobuf, node_id_try_from_protobuf,
     signature::*,
 };
@@ -686,6 +686,17 @@ impl CanisterHttpRequestContext {
         NumBytes::from(request_size as u64)
     }
 
+    /// The time after which consensus times the request out: the protocol timeout
+    /// or, for a bounded-wait call, the caller's deadline if that comes first.
+    pub fn timeout_time(&self) -> Time {
+        let protocol_timeout = self.time + CANISTER_HTTP_TIMEOUT_INTERVAL;
+        if self.request.deadline == NO_DEADLINE {
+            protocol_timeout
+        } else {
+            protocol_timeout.min(self.request.deadline.into())
+        }
+    }
+
     pub fn generate_from_args(
         time: Time,
         request: &Request,
@@ -995,6 +1006,8 @@ pub struct CanisterHttpRequest {
     /// The addresses should be sent in the following format: `socks5://[<ip>]:<port>`, for example:
     /// `socks5://[2602:fb2b:110:10:506f:cff:feff:fe69]:1080`
     pub socks_proxy_addrs: Vec<String>,
+    /// The time of the replicated state the request was dispatched from.
+    pub dispatch_time: Time,
 }
 
 /// The content of a response after the transformation
@@ -1462,7 +1475,7 @@ mod tests {
         CanisterId,
         crypto::{CryptoHash, SignedBytesWithoutDomainSeparator},
         messages::NO_DEADLINE,
-        time::UNIX_EPOCH,
+        time::{CoarseTime, UNIX_EPOCH},
     };
 
     use super::*;
@@ -1651,6 +1664,43 @@ mod tests {
             context.variable_parts_size(),
             NumBytes::from(expected_size as u64)
         );
+    }
+
+    #[test]
+    fn timeout_time_is_the_earlier_of_protocol_timeout_and_deadline() {
+        let time = UNIX_EPOCH + Duration::from_secs(100);
+        let with_deadline = |deadline| CanisterHttpRequestContext {
+            url: "https://example.com".to_string(),
+            headers: Arc::new(vec![]),
+            body: None,
+            max_response_bytes: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            request: Arc::new(Request {
+                receiver: CanisterId::ic_00(),
+                sender: CanisterId::ic_00(),
+                sender_reply_callback: CallbackId::from(3),
+                payment: Cycles::new(10),
+                method_name: "http_request".to_string(),
+                method_payload: Vec::new(),
+                metadata: Default::default(),
+                deadline,
+            }),
+            time,
+            replication: Replication::FullyReplicated,
+            pricing_version: PricingVersion::Legacy,
+            refund_status: RefundStatus::default(),
+            registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
+        };
+        let protocol_timeout = time + CANISTER_HTTP_TIMEOUT_INTERVAL;
+
+        assert_eq!(with_deadline(NO_DEADLINE).timeout_time(), protocol_timeout);
+        let early = CoarseTime::from_secs_since_unix_epoch(105);
+        assert_eq!(with_deadline(early).timeout_time(), Time::from(early));
+        let late = CoarseTime::from_secs_since_unix_epoch(1_000);
+        assert_eq!(with_deadline(late).timeout_time(), protocol_timeout);
     }
 
     #[test]
