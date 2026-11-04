@@ -42,6 +42,8 @@ pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {
 /// A pool shared with the components writing to it, read by taking its lock on each access.
 pub(crate) struct SharedPool<Pool>(pub(crate) Arc<RwLock<Pool>>);
 
+// Cannot derive `Clone` because the macro would add a `Clone` bound on `Pool`, which does not
+// necessarily hold (see https://github.com/rust-lang/rust/issues/41481)
 impl<Pool> Clone for SharedPool<Pool> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
