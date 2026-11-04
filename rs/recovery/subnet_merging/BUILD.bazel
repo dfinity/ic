@@ -8,7 +8,6 @@ DEPENDENCIES = [
     "//rs/recovery/subnet_tools",
     "//rs/registry/helpers",
     "//rs/registry/subnet_type",
-    "//rs/state_layout",
     "//rs/state_manager",
     "//rs/types/base_types",
     "//rs/types/types",
@@ -58,5 +57,5 @@ rust_test(
     name = "subnet_merging_test",
     crate = ":subnet_merging",
     proc_macro_deps = DEPENDENCIES_MACROS,
-    deps = DEPENDENCIES + ["//rs/test_utilities/tmpdir"],
+    deps = DEPENDENCIES,
 )

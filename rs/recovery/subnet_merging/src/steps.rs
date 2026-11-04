@@ -15,9 +15,6 @@ use ic_recovery::{
     ssh_helper::SshHelper,
     steps::Step,
 };
-use ic_state_layout::{
-    CHECKPOINTS_DIR, STATE_SYNC_CHECKPOINT_MARKER, StateLayout, UNVERIFIED_CHECKPOINT_MARKER,
-};
 use ic_state_manager::{manifest::manifest_hash, state_sync::types::Manifest};
 use ic_subnet_tools::utils::get_cup;
 use ic_types::{
@@ -28,12 +25,7 @@ use ic_types::{
 use prost::Message;
 use slog::{Logger, info};
 
-use std::{
-    fmt::Display,
-    net::IpAddr,
-    path::{Path, PathBuf},
-    time::Duration,
-};
+use std::{fmt::Display, net::IpAddr, path::PathBuf, time::Duration};
 
 /// Waits until the record of the subnet that is being merged away is labeled
 /// "cooling down" and persists the registry version `V` it was read at (not
@@ -151,10 +143,15 @@ impl Step for CheckMergeReadinessStep {
 /// the node while the node is still writing, validating, or hashing its own
 /// checkpoint at that height, all of which the state manager does
 /// asynchronously to execution and certification. So this also waits until the
-/// node has published the manifest of that checkpoint, until the manifest's
-/// root hash is the state hash the CUP names, and until the checkpoint exists
-/// without either unverified marker. State sync can publish a manifest without
-/// verifying the checkpoint, so the manifest alone is not sufficient.
+/// node has published the manifest of that checkpoint and until the
+/// manifest's root hash is the state hash the CUP names.
+///
+/// A published manifest implies that the checkpoint is complete: the state
+/// manager publishes the manifest of a checkpoint it created itself only after
+/// verifying the checkpoint, and that of a checkpoint it state synced only
+/// after all its chunks, each checked against the manifest, have been
+/// assembled. The latter may not have been verified (i.e., loaded) by the
+/// replica yet, but its files are the state the CUP names all the same.
 pub(crate) struct WaitForHaltingCupStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) node_ip: IpAddr,
@@ -174,7 +171,7 @@ impl Step for WaitForHaltingCupStep {
     fn descr(&self) -> String {
         format!(
             "Wait until node {} holds the CUP subnet {} halts at on disk, together with a \
-             verified checkpoint of the state that CUP names.",
+             checkpoint of the state that CUP names.",
             self.node_ip, self.subnet_id,
         )
     }
@@ -183,9 +180,8 @@ impl Step for WaitForHaltingCupStep {
         if self.ssh_confirmation {
             info!(
                 self.logger,
-                "About to poll node {} every {:?}, for up to {:?}, via ssh and rsync as {}: pulling \
-                 its CUP and states metadata, and checking the markers of its checkpoint at the \
-                 CUP's height. You will not be asked to confirm each access.",
+                "About to poll node {} every {:?}, for up to {:?}, via rsync as {}: pulling \
+                 its CUP and states metadata. You will not be asked to confirm each access.",
                 self.node_ip,
                 self.poll_interval,
                 self.timeout,
@@ -221,7 +217,7 @@ impl Step for WaitForHaltingCupStep {
 
 impl WaitForHaltingCupStep {
     /// Returns the height of the halting CUP if the node holds it and a
-    /// verified checkpoint of the state it names, `None` if it does not yet,
+    /// checkpoint of the state it names, `None` if it does not yet,
     /// and an error if the node could not be asked or its checkpoint does not
     /// match the halting CUP.
     fn check(&self) -> RecoveryResult<Option<Height>> {
@@ -270,34 +266,7 @@ impl WaitForHaltingCupStep {
             )));
         }
 
-        let checkpoint_dir = PathBuf::from(IC_DATA_PATH)
-            .join(IC_STATE)
-            .join(CHECKPOINTS_DIR)
-            .join(StateLayout::checkpoint_name(cup_height));
-        let output = self
-            .ssh_helper
-            .ssh(checkpoint_status_command(&checkpoint_dir))?;
-        match parse_checkpoint_status(output.as_deref().unwrap_or_default())? {
-            CheckpointStatus::Verified => Ok(Some(cup_height)),
-            CheckpointStatus::UnverifiedRegular => {
-                info!(
-                    self.logger,
-                    "Node {} has not finished verifying its checkpoint at height {cup_height} yet",
-                    self.node_ip,
-                );
-                Ok(None)
-            }
-            // State sync publishes the manifest only after it has either
-            // verified the checkpoint, removing both markers, or decided not to,
-            // in which case the checkpoint stays unverified: a halted subnet
-            // creates no later checkpoint that would supersede it.
-            CheckpointStatus::UnverifiedStateSync => Err(RecoveryError::ValidationFailed(format!(
-                "The checkpoint of node {} at height {cup_height} was state synced and is not \
-                 verified; select another download node of subnet {} with a verified checkpoint \
-                 at the halting height",
-                self.node_ip, self.subnet_id,
-            ))),
-        }
+        Ok(Some(cup_height))
     }
 
     /// The CUP the orchestrator of the node has written to disk, pulled off the
@@ -318,10 +287,6 @@ impl WaitForHaltingCupStep {
     /// The root hash of the manifest the state manager of the node has
     /// published for its checkpoint at `height`, or `None` if it has not
     /// published one yet.
-    ///
-    /// Locally created checkpoints publish their manifest after verification.
-    /// State-synced checkpoints may publish it without verification, so the
-    /// caller must also check the checkpoint's markers on the node.
     fn published_root_hash(&self, height: Height) -> RecoveryResult<Option<CryptoHashOfState>> {
         let remote_states_metadata = self.ssh_helper.remote_path(
             PathBuf::from(IC_DATA_PATH)
@@ -356,114 +321,5 @@ impl WaitForHaltingCupStep {
         Ok(Some(CryptoHashOfState::from(CryptoHash(
             manifest_hash(&manifest).to_vec(),
         ))))
-    }
-}
-
-/// The status of a checkpoint on a node, as determined by its markers.
-#[derive(Copy, Clone, PartialEq, Debug)]
-enum CheckpointStatus {
-    Verified,
-    /// Locally created, and not verified yet.
-    UnverifiedRegular,
-    /// Created by state sync, and not verified.
-    UnverifiedStateSync,
-}
-
-impl CheckpointStatus {
-    fn as_str(&self) -> &'static str {
-        match self {
-            CheckpointStatus::Verified => "verified",
-            CheckpointStatus::UnverifiedRegular => "unverified_regular",
-            CheckpointStatus::UnverifiedStateSync => "unverified_state_sync",
-        }
-    }
-}
-
-/// A shell command printing the status of the remote checkpoint, using the
-/// same marker rules as `CheckpointLayout::checkpoint_status`: the state sync
-/// marker takes precedence, as it is removed last when a checkpoint is
-/// verified. Directory access is checked before the markers so that an
-/// inaccessible or missing checkpoint fails rather than looks verified merely
-/// because its markers cannot be found.
-fn checkpoint_status_command(checkpoint_dir: &Path) -> String {
-    let checkpoint_dir = checkpoint_dir.display().to_string().replace('\'', "'\\''");
-    format!(
-        "cd '{checkpoint_dir}' && test -r . && test -x . && \
-         if test -e {STATE_SYNC_CHECKPOINT_MARKER}; then echo {state_sync}; \
-         elif test -e {UNVERIFIED_CHECKPOINT_MARKER}; then echo {regular}; \
-         else echo {verified}; fi",
-        state_sync = CheckpointStatus::UnverifiedStateSync.as_str(),
-        regular = CheckpointStatus::UnverifiedRegular.as_str(),
-        verified = CheckpointStatus::Verified.as_str(),
-    )
-}
-
-/// Parses the output of `checkpoint_status_command`.
-fn parse_checkpoint_status(output: &str) -> RecoveryResult<CheckpointStatus> {
-    [
-        CheckpointStatus::Verified,
-        CheckpointStatus::UnverifiedRegular,
-        CheckpointStatus::UnverifiedStateSync,
-    ]
-    .into_iter()
-    .find(|status| status.as_str() == output.trim())
-    .ok_or_else(|| {
-        RecoveryError::UnexpectedError(format!(
-            "Unexpected output of the checkpoint status check: {output:?}"
-        ))
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use ic_test_utilities_tmpdir::tmpdir;
-    use std::{fs, process::Command};
-
-    #[test]
-    fn remote_checkpoint_status_follows_the_markers() {
-        let root = tmpdir("halting-checkpoint");
-        // Exercise shell quoting too: checkpoint paths must be treated as data.
-        let checkpoint = root.path().join("checkpoint with 'quotes'");
-        fs::create_dir(&checkpoint).unwrap();
-        let status = || {
-            let output = Command::new("sh")
-                .arg("-c")
-                .arg(checkpoint_status_command(&checkpoint))
-                .output()
-                .unwrap();
-            output
-                .status
-                .success()
-                .then(|| parse_checkpoint_status(&String::from_utf8(output.stdout).unwrap()))
-                .map(Result::unwrap)
-        };
-
-        assert_eq!(status(), Some(CheckpointStatus::Verified));
-        fs::write(checkpoint.join(UNVERIFIED_CHECKPOINT_MARKER), []).unwrap();
-        assert_eq!(status(), Some(CheckpointStatus::UnverifiedRegular));
-
-        // A state-synced checkpoint has both markers. Verifying it removes the
-        // state sync marker last, so it stays unverified until both are gone.
-        fs::write(checkpoint.join(STATE_SYNC_CHECKPOINT_MARKER), []).unwrap();
-        assert_eq!(status(), Some(CheckpointStatus::UnverifiedStateSync));
-        fs::remove_file(checkpoint.join(UNVERIFIED_CHECKPOINT_MARKER)).unwrap();
-        assert_eq!(status(), Some(CheckpointStatus::UnverifiedStateSync));
-        fs::remove_file(checkpoint.join(STATE_SYNC_CHECKPOINT_MARKER)).unwrap();
-        assert_eq!(status(), Some(CheckpointStatus::Verified));
-
-        // Stale metadata is not proof that the checkpoint still exists.
-        fs::remove_dir(&checkpoint).unwrap();
-        assert_eq!(status(), None);
-    }
-
-    #[test]
-    fn unexpected_checkpoint_status_output_is_rejected() {
-        assert!(parse_checkpoint_status("").is_err());
-        assert!(parse_checkpoint_status("verified but not really").is_err());
-        assert_eq!(
-            parse_checkpoint_status("verified\n").unwrap(),
-            CheckpointStatus::Verified
-        );
     }
 }

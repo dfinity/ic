@@ -83,8 +83,8 @@ Runbook::
    nodes), and `WaitForHaltingCupOnSourceSubnet` and
    `WaitForHaltingCupOnDestinationSubnet`, which wait until the node of each
    subnet that its state would be downloaded from holds the halting CUP on
-   disk, a published manifest whose root hash matches the CUP's state hash,
-   and an accessible checkpoint without either unverified marker.
+   disk and a published manifest whose root hash matches the CUP's state
+   hash.
 13. After `WaitForHaltingCupOnDestinationSubnet`: check that both subnets are
    halted, i.e. that every one of their nodes certifies the height its subnet
    halts at and none goes past it.
