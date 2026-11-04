@@ -1,5 +1,5 @@
 use clap::Parser;
-use ic_recovery::{NeuronArgs, RecoveryArgs, cli, error::GracefulExpect, util};
+use ic_recovery::{NeuronArgs, RecoveryArgs, cli, util};
 use ic_subnet_merging::subnet_merging::{SubnetMerging, SubnetMergingArgs};
 use ic_types::ReplicaVersion;
 use slog::{Logger, info, warn};
@@ -91,8 +91,7 @@ fn subnet_merging(
         subnet_merging_args,
     );
 
-    cli::execute_steps(&logger, recovery_args.skip_prompts, subnet_merging)
-        .expect_graceful("Subnet merging stopped");
+    cli::execute_steps(&logger, recovery_args.skip_prompts, subnet_merging);
 }
 
 fn do_merge(args: MergeArgs, logger: Logger) {

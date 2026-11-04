@@ -26,11 +26,11 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_tools::{
     admin_helper::{
-        get_propose_to_complete_canister_migration_command,
+        get_halt_subnet_at_cup_height_command, get_propose_to_complete_canister_migration_command,
         get_propose_to_prepare_canister_migration_command,
         get_propose_to_reroute_canister_ranges_command,
     },
-    steps::{HaltSubnetAtCupHeightStep, ReadRegistryStep},
+    steps::ReadRegistryStep,
     utils::{get_state_hash, print_url_and_ask_for_confirmation},
 };
 use ic_types::Height;
@@ -93,6 +93,9 @@ pub struct SubnetSplittingArgs {
     pub destination_subnet_id: SubnetId,
 
     /// Public ssh key to be deployed to the subnet for read only access.
+    ///
+    /// The proposal halting the subnet sets this key as the subnet's only
+    /// readonly key: it replaces the subnet's entire list of readonly keys.
     #[clap(long)]
     pub readonly_pub_key: Option<String>,
 
@@ -428,6 +431,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                     self.params.readonly_pub_key = read_optional(
                         &self.logger,
                         "Enter public key to add readonly SSH access to subnet. Ensure the right format.\n\
+                        Note: it replaces all existing readonly keys of the subnet.\n\
                         Format:   ssh-ed25519 <pubkey> <identity>\n\
                         Example:  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwS/0S6xH0g/xLDV0Tz7VeMZE9AKPeSbLmCsq9bY3F1 foo@dfinity.org\n\
                         Enter your key: ",
@@ -525,13 +529,14 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 .into()
             }
 
-            StepType::HaltSourceSubnetAtCupHeight => HaltSubnetAtCupHeightStep::new(
-                self.recovery.logger.clone(),
-                self.recovery.admin_helper.clone(),
-                self.recovery.registry_helper.clone(),
-                self.params.source_subnet_id,
-                self.params.readonly_pub_key.clone(),
-            )
+            StepType::HaltSourceSubnetAtCupHeight => AdminStep {
+                logger: self.recovery.logger.clone(),
+                ic_admin_cmd: get_halt_subnet_at_cup_height_command(
+                    &self.recovery.admin_helper,
+                    self.params.source_subnet_id,
+                    &self.params.readonly_pub_key,
+                ),
+            }
             .into(),
 
             StepType::RerouteCanisterRanges => AdminStep {

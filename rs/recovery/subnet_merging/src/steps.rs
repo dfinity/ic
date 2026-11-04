@@ -1,7 +1,7 @@
 use crate::{
     layout::{CUP_FILE_NAME, Layout},
     readiness,
-    utils::{CheckError, get_subnet_record_at_version, wait_for, wait_for_unless_fatal},
+    utils::{get_subnet_record_at_version, wait_for},
 };
 
 use ic_base_types::SubnetId;
@@ -155,10 +155,6 @@ impl Step for CheckMergeReadinessStep {
 /// root hash is the state hash the CUP names, and until the checkpoint exists
 /// without either unverified marker. State sync can publish a manifest without
 /// verifying the checkpoint, so the manifest alone is not sufficient.
-///
-/// Waiting is given up right away, rather than at the timeout, if the node's
-/// checkpoint can never match the CUP: if its root hash differs from the CUP's
-/// state hash, or if it was state synced without being verified.
 pub(crate) struct WaitForHaltingCupStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) node_ip: IpAddr,
@@ -200,19 +196,18 @@ impl Step for WaitForHaltingCupStep {
 
         // A node that is not answering yet, or a file that cannot be pulled off
         // it yet, is the normal state of affairs while the subnet is still
-        // running towards its halting CUP, so errors are retried unless they
-        // show that the node's checkpoint can never match the halting CUP.
-        let height = wait_for_unless_fatal(
+        // running towards its halting CUP, so errors are retried.
+        let height = wait_for(
             &format!("subnet {} reaches the CUP it halts at", self.subnet_id),
             self.timeout,
             self.poll_interval,
             &self.logger,
             || {
                 self.check()?.ok_or_else(|| {
-                    CheckError::Retry(RecoveryError::UnexpectedError(format!(
+                    RecoveryError::UnexpectedError(format!(
                         "node {} does not hold the CUP subnet {} halts at and its checkpoint yet",
                         self.node_ip, self.subnet_id,
-                    )))
+                    ))
                 })
             },
         )?;
@@ -227,9 +222,9 @@ impl Step for WaitForHaltingCupStep {
 impl WaitForHaltingCupStep {
     /// Returns the height of the halting CUP if the node holds it and a
     /// verified checkpoint of the state it names, `None` if it does not yet,
-    /// a retryable error if the node could not be asked, and a fatal error if
-    /// its checkpoint can never match the halting CUP.
-    fn check(&self) -> Result<Option<Height>, CheckError> {
+    /// and an error if the node could not be asked or its checkpoint does not
+    /// match the halting CUP.
+    fn check(&self) -> RecoveryResult<Option<Height>> {
         let cup = self.on_disk_cup()?;
         let cup_height = cup.height();
         let cup_registry_version = cup.content.registry_version();
@@ -268,11 +263,11 @@ impl WaitForHaltingCupStep {
             return Ok(None);
         };
         if root_hash != cup.content.state_hash {
-            return Err(CheckError::Fatal(RecoveryError::ValidationFailed(format!(
+            return Err(RecoveryError::ValidationFailed(format!(
                 "The checkpoint of node {} at height {cup_height} has root hash {root_hash:?}, \
                  not the state hash {:?} of the CUP subnet {} halts at",
                 self.node_ip, cup.content.state_hash, self.subnet_id,
-            ))));
+            )));
         }
 
         let checkpoint_dir = PathBuf::from(IC_DATA_PATH)
@@ -296,14 +291,12 @@ impl WaitForHaltingCupStep {
             // verified the checkpoint, removing both markers, or decided not to,
             // in which case the checkpoint stays unverified: a halted subnet
             // creates no later checkpoint that would supersede it.
-            CheckpointStatus::UnverifiedStateSync => {
-                Err(CheckError::Fatal(RecoveryError::ValidationFailed(format!(
-                    "The checkpoint of node {} at height {cup_height} was state synced and is \
-                     not verified; select another download node of subnet {} with a verified \
-                     checkpoint at the halting height",
-                    self.node_ip, self.subnet_id,
-                ))))
-            }
+            CheckpointStatus::UnverifiedStateSync => Err(RecoveryError::ValidationFailed(format!(
+                "The checkpoint of node {} at height {cup_height} was state synced and is not \
+                 verified; select another download node of subnet {} with a verified checkpoint \
+                 at the halting height",
+                self.node_ip, self.subnet_id,
+            ))),
         }
     }
 

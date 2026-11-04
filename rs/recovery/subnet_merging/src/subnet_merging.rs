@@ -21,7 +21,7 @@ use ic_recovery::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_tools::{
-    steps::HaltSubnetAtCupHeightStep, utils::print_url_and_ask_for_confirmation,
+    admin_helper::get_halt_subnet_at_cup_height_command, utils::print_url_and_ask_for_confirmation,
 };
 use serde::{Deserialize, Serialize};
 use slog::{Logger, warn};
@@ -81,6 +81,9 @@ pub struct SubnetMergingArgs {
     pub destination_subnet_id: SubnetId,
 
     /// Public ssh key to be deployed to both subnets for read only access.
+    ///
+    /// The proposals halting the subnets set this key as each subnet's only
+    /// readonly key: it replaces the subnet's entire list of readonly keys.
     #[clap(long)]
     pub readonly_pub_key: Option<String>,
 
@@ -102,11 +105,7 @@ pub struct SubnetMergingArgs {
     pub merge_ready_timeout_secs: u64,
 
     /// How long to wait for a subnet to reach the CUP it halts at, in seconds.
-    ///
-    /// Defaulted when deserializing, too, so that the arguments saved by a
-    /// version of the tool that predates this option can still be loaded.
-    #[clap(long, default_value_t = default_halt_timeout_secs())]
-    #[serde(default = "default_halt_timeout_secs")]
+    #[clap(long, default_value = "900")]
     pub halt_timeout_secs: u64,
 
     /// How long to wait, in seconds, for the proposal labeling the source
@@ -145,10 +144,6 @@ fn checks_not_halted(next_step: Option<StepType>) -> bool {
     next_step.is_none_or(|next_step| {
         (next_step as usize) < StepType::HaltSourceSubnetAtCupHeight as usize
     })
-}
-
-fn default_halt_timeout_secs() -> u64 {
-    900
 }
 
 pub struct SubnetMerging {
@@ -385,17 +380,15 @@ impl SubnetMerging {
         Ok(subnet_record)
     }
 
-    fn halt_subnet_at_cup_height_step(
-        &self,
-        target_subnet: TargetSubnet,
-    ) -> HaltSubnetAtCupHeightStep {
-        HaltSubnetAtCupHeightStep::new(
-            self.recovery.logger.clone(),
-            self.recovery.admin_helper.clone(),
-            self.recovery.registry_helper.clone(),
-            self.subnet_id(target_subnet),
-            self.params.readonly_pub_key.clone(),
-        )
+    fn halt_subnet_at_cup_height_step(&self, target_subnet: TargetSubnet) -> AdminStep {
+        AdminStep {
+            logger: self.recovery.logger.clone(),
+            ic_admin_cmd: get_halt_subnet_at_cup_height_command(
+                &self.recovery.admin_helper,
+                self.subnet_id(target_subnet),
+                &self.params.readonly_pub_key,
+            ),
+        }
     }
 
     fn wait_for_halting_cup_step(
@@ -515,6 +508,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                     self.params.readonly_pub_key = read_optional(
                         &self.logger,
                         "Enter public key to add readonly SSH access to both subnets. Ensure the right format.\n\
+                        Note: it replaces all existing readonly keys of both subnets.\n\
                         Format:   ssh-ed25519 <pubkey> <identity>\n\
                         Example:  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwS/0S6xH0g/xLDV0Tz7VeMZE9AKPeSbLmCsq9bY3F1 foo@dfinity.org\n\
                         Enter your key: ",
@@ -661,49 +655,5 @@ mod tests {
             serde_json::from_str::<SubnetMergingArgs>(&json).unwrap(),
             args
         );
-    }
-
-    #[test]
-    fn args_saved_by_the_first_phase_of_the_tool_are_loaded() {
-        // The arguments the tool saved before it learned to halt the subnets
-        // lack every option that came with halting.
-        let mut json = serde_json::to_value(args()).unwrap();
-        let fields = json.as_object_mut().unwrap();
-        for field in [
-            "readonly_pub_key",
-            "readonly_key_file",
-            "download_node_source",
-            "download_node_destination",
-            "halt_timeout_secs",
-        ] {
-            assert!(fields.remove(field).is_some(), "no field {field}");
-        }
-
-        let loaded: SubnetMergingArgs = serde_json::from_value(json).unwrap();
-
-        assert_eq!(
-            loaded,
-            SubnetMergingArgs {
-                readonly_pub_key: None,
-                readonly_key_file: None,
-                download_node_source: None,
-                download_node_destination: None,
-                halt_timeout_secs: 900,
-                ..args()
-            }
-        );
-    }
-
-    #[test]
-    fn halt_timeout_defaults_to_the_same_value_on_the_command_line() {
-        let parsed = SubnetMergingArgs::try_parse_from([
-            "subnet-merging",
-            "--source-subnet-id",
-            &args().source_subnet_id.to_string(),
-            "--destination-subnet-id",
-            &args().destination_subnet_id.to_string(),
-        ])
-        .unwrap();
-        assert_eq!(parsed.halt_timeout_secs, default_halt_timeout_secs());
     }
 }

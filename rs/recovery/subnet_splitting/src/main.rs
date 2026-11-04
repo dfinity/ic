@@ -1,7 +1,7 @@
 use anyhow::Context;
 use clap::Parser;
 use ic_base_types::SubnetId;
-use ic_recovery::{NeuronArgs, RecoveryArgs, cli, error::GracefulExpect, util};
+use ic_recovery::{NeuronArgs, RecoveryArgs, cli, util};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_subnet_splitting::{
     post_split_estimations,
@@ -162,8 +162,7 @@ fn subnet_splitting(
         subnet_splitting_args,
     );
 
-    cli::execute_steps(&logger, recovery_args.skip_prompts, subnet_splitting)
-        .expect_graceful("Subnet splitting stopped");
+    cli::execute_steps(&logger, recovery_args.skip_prompts, subnet_splitting);
 }
 
 fn do_split(args: SplitArgs, logger: Logger) -> anyhow::Result<()> {

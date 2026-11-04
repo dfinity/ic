@@ -14,8 +14,6 @@ pub type RecoveryResult<T> = Result<T, RecoveryError>;
 #[derive(Debug)]
 #[allow(clippy::enum_variant_names)]
 pub enum RecoveryError {
-    /// A step cannot succeed by retrying. Stop execution without advancing saved progress.
-    Fatal(Box<RecoveryError>),
     IoError(String, io::Error),
     CommandError(Option<i32>, String),
     OutputError(String),
@@ -65,7 +63,6 @@ impl RecoveryError {
 impl fmt::Display for RecoveryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RecoveryError::Fatal(err) => write!(f, "Fatal recovery error: {err}"),
             RecoveryError::IoError(msg, e) => {
                 write!(f, "IO error: {msg}\nError: {e}")
             }
