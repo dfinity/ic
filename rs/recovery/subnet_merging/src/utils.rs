@@ -12,6 +12,21 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Why a check polled by `wait_for_unless_fatal` did not succeed.
+pub(crate) enum CheckError {
+    /// The check may succeed when polled again.
+    Retry(RecoveryError),
+    /// The check cannot succeed any more, so waiting is given up right away.
+    Fatal(RecoveryError),
+}
+
+/// Errors are retried unless they are explicitly marked as fatal.
+impl From<RecoveryError> for CheckError {
+    fn from(err: RecoveryError) -> Self {
+        CheckError::Retry(err)
+    }
+}
+
 /// Retries `check` until it succeeds, returning its value, or `timeout`
 /// elapses.
 pub(crate) fn wait_for<T>(
@@ -21,11 +36,26 @@ pub(crate) fn wait_for<T>(
     logger: &Logger,
     mut check: impl FnMut() -> RecoveryResult<T>,
 ) -> RecoveryResult<T> {
+    wait_for_unless_fatal(what, timeout, poll_interval, logger, || {
+        check().map_err(CheckError::Retry)
+    })
+}
+
+/// Like `wait_for`, but gives up right away when `check` fails with a
+/// `CheckError::Fatal`.
+pub(crate) fn wait_for_unless_fatal<T>(
+    what: &str,
+    timeout: Duration,
+    poll_interval: Duration,
+    logger: &Logger,
+    mut check: impl FnMut() -> Result<T, CheckError>,
+) -> RecoveryResult<T> {
     let deadline = Instant::now() + timeout;
     loop {
         let err = match check() {
             Ok(value) => return Ok(value),
-            Err(err) => err,
+            Err(CheckError::Fatal(err)) => return Err(err),
+            Err(CheckError::Retry(err)) => err,
         };
         info!(logger, "Waiting until {what}: {err}");
 
@@ -60,4 +90,53 @@ pub(crate) fn get_subnet_record_at_version(
                  {registry_version}: {err}"
             ))
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use slog::o;
+
+    fn logger() -> Logger {
+        Logger::root(slog::Discard, o!())
+    }
+
+    #[test]
+    fn retryable_errors_are_retried_until_the_check_succeeds() {
+        let mut polls = 0;
+        let result = wait_for_unless_fatal(
+            "the third poll",
+            Duration::from_secs(60),
+            Duration::ZERO,
+            &logger(),
+            || {
+                polls += 1;
+                if polls < 3 {
+                    Err(CheckError::Retry(RecoveryError::StepSkipped))
+                } else {
+                    Ok(polls)
+                }
+            },
+        );
+        assert_eq!(result.unwrap(), 3);
+    }
+
+    #[test]
+    fn a_fatal_error_is_returned_without_waiting_any_longer() {
+        let mut polls = 0;
+        let result: RecoveryResult<()> = wait_for_unless_fatal(
+            "nothing",
+            Duration::from_secs(60),
+            Duration::ZERO,
+            &logger(),
+            || {
+                polls += 1;
+                Err(CheckError::Fatal(RecoveryError::ValidationFailed(
+                    "fatal".to_string(),
+                )))
+            },
+        );
+        assert!(matches!(result, Err(RecoveryError::ValidationFailed(_))));
+        assert_eq!(polls, 1);
+    }
 }

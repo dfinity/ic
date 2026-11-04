@@ -411,14 +411,17 @@ impl SubnetMerging {
             node_ip,
             registry_helper: self.recovery.registry_helper.clone(),
             layout: self.layout.clone(),
-            ssh_helper: self.ssh_helper(node_ip),
+            // The step accesses the node on every poll, so it asks for
+            // confirmation once, before polling, rather than on every access.
+            ssh_helper: self.ssh_helper(node_ip, /*require_confirmation=*/ false),
+            ssh_confirmation: self.recovery.ssh_confirmation,
             timeout: Duration::from_secs(self.params.halt_timeout_secs),
             poll_interval: Duration::from_secs(self.params.poll_interval_secs),
             logger: self.recovery.logger.clone(),
         })
     }
 
-    fn ssh_helper(&self, node_ip: IpAddr) -> SshHelper {
+    fn ssh_helper(&self, node_ip: IpAddr, require_confirmation: bool) -> SshHelper {
         let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {
             (SshUser::Readonly, self.params.readonly_key_file.clone())
         } else {
@@ -429,7 +432,7 @@ impl SubnetMerging {
             self.recovery.logger.clone(),
             ssh_user,
             node_ip,
-            self.recovery.ssh_confirmation,
+            require_confirmation,
             key_file,
         )
     }
