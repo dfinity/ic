@@ -68,8 +68,8 @@ const MIN_REFETCH_DELAY: Duration = Duration::from_secs(5);
 /// Maximum delay before fetching another copy of a message after an invalid one.
 const MAX_REFETCH_DELAY: Duration = Duration::from_secs(120);
 
-struct BouncerFactoryWrapper<Pool: ValidatedPoolReader<ConsensusMessage>> {
-    bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
+struct BouncerFactoryWrapper<Factory> {
+    bouncer_factory: Factory,
 }
 
 struct ConsensusPoolWrapper<Pool: ValidatedPoolReader<ConsensusMessage>> {
@@ -91,9 +91,11 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrip
     }
 }
 
-impl<Pool: ValidatedPoolReader<ConsensusMessage>>
-    BouncerFactory<StrippedConsensusMessageId, ConsensusPoolWrapper<Pool>>
-    for BouncerFactoryWrapper<Pool>
+impl<Pool, Factory> BouncerFactory<StrippedConsensusMessageId, ConsensusPoolWrapper<Pool>>
+    for BouncerFactoryWrapper<Factory>
+where
+    Pool: ValidatedPoolReader<ConsensusMessage>,
+    Factory: BouncerFactory<ConsensusMessageId, Pool>,
 {
     fn new_bouncer(
         &self,
@@ -123,17 +125,21 @@ pub struct FetchStrippedConsensusArtifact {
 }
 
 impl FetchStrippedConsensusArtifact {
-    pub fn new<ConsensusPool: ValidatedPoolReader<ConsensusMessage> + 'static>(
+    pub fn new<ConsensusPool, Factory>(
         log: ReplicaLogger,
         rt: tokio::runtime::Handle,
         consensus_pool: Arc<RwLock<ConsensusPool>>,
         ingress_pool: Arc<RwLock<dyn ValidatedPoolReader<SignedIngress>>>,
         idkg_pool: Arc<RwLock<dyn ValidatedPoolReader<IDkgMessage>>>,
         canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
-        bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, ConsensusPool>>,
+        bouncer_factory: Factory,
         metrics_registry: MetricsRegistry,
         node_id: NodeId,
-    ) -> (impl Fn(Arc<dyn Transport>) -> Self, axum::Router) {
+    ) -> (impl FnOnce(Arc<dyn Transport>) -> Self, axum::Router)
+    where
+        ConsensusPool: ValidatedPoolReader<ConsensusMessage> + 'static,
+        Factory: BouncerFactory<ConsensusMessageId, ConsensusPool> + 'static,
+    {
         let ingress_pool_clone = ingress_pool.clone();
         let idkg_pool_clone = idkg_pool.clone();
         let canister_http_pool_clone = canister_http_pool.clone();
@@ -151,7 +157,7 @@ impl FetchStrippedConsensusArtifact {
             log.clone(),
             rt,
             Arc::new(RwLock::new(ConsensusPoolWrapper { consensus_pool })),
-            Arc::new(BouncerFactoryWrapper { bouncer_factory }),
+            BouncerFactoryWrapper { bouncer_factory },
             metrics_registry.clone(),
         );
 
@@ -161,10 +167,10 @@ impl FetchStrippedConsensusArtifact {
             let fetch_stripped = fetch_stripped_fn(transport.clone());
 
             Self {
-                log: log.clone(),
-                ingress_pool: ingress_pool.clone(),
-                idkg_pool: idkg_pool.clone(),
-                canister_http_pool: canister_http_pool.clone(),
+                log,
+                ingress_pool,
+                idkg_pool,
+                canister_http_pool,
                 fetch_stripped,
                 transport,
                 node_id,
@@ -1285,7 +1291,7 @@ mod tests {
                 MockValidatedPoolReader::<IDkgMessage>::default(),
             )),
             Arc::new(RwLock::new(canister_http_pool)),
-            Arc::new(bouncer_factory),
+            bouncer_factory,
             MetricsRegistry::new(),
             NODE_1,
         )
@@ -1704,10 +1710,7 @@ mod tests {
             .expect_refresh_period()
             .times(1)
             .return_const(refresh_period);
-        let wrapper: BouncerFactoryWrapper<MockValidatedPoolReader<ConsensusMessage>> =
-            BouncerFactoryWrapper {
-                bouncer_factory: Arc::new(bouncer_factory),
-            };
+        let wrapper = BouncerFactoryWrapper { bouncer_factory };
 
         assert_eq!(wrapper.refresh_period(), refresh_period);
     }
