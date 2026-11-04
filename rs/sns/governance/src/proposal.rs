@@ -1,4 +1,5 @@
 use crate::{
+    are_canister_snapshot_proposals_enabled,
     cached_upgrade_steps::render_two_versions_as_markdown_table,
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     extensions::{
@@ -1214,14 +1215,21 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
     ))
 }
 
-/// Parses `snapshot_id` and makes sure that it is the ID of a snapshot of `canister_id`.
+/// Parses `snapshot_id`, and makes sure that the snapshot belongs to `canister_id`.
 ///
-/// A snapshot ID embeds the ID of the canister whose snapshot it is. This check matters because
-/// SNS Root controls all dapp canisters, and the Management canister would otherwise let it load
-/// a snapshot of one dapp canister into another.
-pub(crate) fn validate_snapshot_id_of_canister(
+/// The main requirement enforced here is that the snapshot belongs to the canister. Lower layers
+/// allow a snapshot of one canister to be loaded into another (and SNS Root controls all dapp
+/// canisters).
+///
+/// This relies on the fact that (currently) a snapshot ID embeds the ID of the canister that the
+/// snapshot belongs to. Officially though, snapshot IDs are opaque. The supported way to find out
+/// whether a snapshot belongs to a canister is to list the canister's snapshots, which would
+/// require a call to the Management canister (via SNS Root).
+pub(crate) fn validate_snapshot_id(
     field_name: &str,
     snapshot_id: &[u8],
+    // We require that the snapshot belong to this canister (e.g. the one that the snapshot will
+    // be loaded into).
     canister_id: CanisterId,
 ) -> Result<SnapshotId, String> {
     let snapshot_id = SnapshotId::try_from(snapshot_id)
@@ -1265,33 +1273,62 @@ pub(crate) async fn validate_registered_dapp_canister(
     Ok(())
 }
 
+impl LoadCanisterSnapshot {
+    /// Returns the (parsed) target canister ID and snapshot ID, if this is valid.
+    ///
+    /// This is done when the proposal is submitted, and again when it is executed (by then, the
+    /// target might no longer be a registered dapp canister).
+    pub(crate) async fn validate(
+        &self,
+        env: &dyn Environment,
+        root_canister_id: CanisterId,
+    ) -> Result<(CanisterId, SnapshotId), GovernanceError> {
+        let Self {
+            canister_id,
+            snapshot_id,
+        } = self;
+
+        let invalid = |err: String| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("LoadCanisterSnapshot was invalid: {err}"),
+            )
+        };
+
+        // Validate canister_id (the one where the snapshot will be loaded into).
+        let canister_id = validate_required_field("canister_id", canister_id).map_err(invalid)?;
+        let canister_id = CanisterId::try_from_principal_id(*canister_id)
+            .map_err(|err| invalid(format!("canister_id is invalid: {err:?}")))?;
+        validate_registered_dapp_canister(env, root_canister_id, canister_id)
+            .await
+            .map_err(invalid)?;
+
+        // Validate snapshot_id.
+        let snapshot_id = validate_required_field("snapshot_id", snapshot_id).map_err(invalid)?;
+        let snapshot_id =
+            validate_snapshot_id("snapshot_id", snapshot_id, canister_id).map_err(invalid)?;
+
+        Ok((canister_id, snapshot_id))
+    }
+}
+
 /// Validates and renders a proposal with action LoadCanisterSnapshot.
 async fn validate_and_render_load_canister_snapshot(
     load_canister_snapshot: &LoadCanisterSnapshot,
     env: &dyn Environment,
     root_canister_id: CanisterId,
 ) -> Result<String, String> {
-    let LoadCanisterSnapshot {
-        canister_id,
-        snapshot_id,
-    } = load_canister_snapshot;
-
-    let invalid = |err: String| format!("LoadCanisterSnapshot was invalid: {err}");
-
-    if !crate::are_canister_snapshot_proposals_enabled() {
-        return Err(invalid(
-            "Canister snapshot proposals are not yet enabled.".to_string(),
-        ));
+    if !are_canister_snapshot_proposals_enabled() {
+        return Err(
+            "LoadCanisterSnapshot was invalid: Canister snapshot proposals are not yet enabled."
+                .to_string(),
+        );
     }
-    let canister_id = validate_required_field("canister_id", canister_id).map_err(invalid)?;
-    let canister_id = CanisterId::try_from_principal_id(*canister_id)
-        .map_err(|err| invalid(format!("canister_id is invalid: {err:?}")))?;
-    let snapshot_id = validate_required_field("snapshot_id", snapshot_id).map_err(invalid)?;
-    let snapshot_id = validate_snapshot_id_of_canister("snapshot_id", snapshot_id, canister_id)
-        .map_err(invalid)?;
-    validate_registered_dapp_canister(env, root_canister_id, canister_id)
+
+    let (canister_id, snapshot_id) = load_canister_snapshot
+        .validate(env, root_canister_id)
         .await
-        .map_err(invalid)?;
+        .map_err(|err| err.error_message)?;
 
     Ok(format!(
         "# Proposal to Load a Snapshot into a Dapp Canister\n\n\
