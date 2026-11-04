@@ -63,6 +63,25 @@ impl<LA: LedgerAccess> LedgerArchivingGuard<LA> {
     }
 }
 
+impl<LA: LedgerAccess> Drop for LedgerArchivingGuard<LA> {
+    fn drop(&mut self) {
+        // Archiving that fails gracefully is counted where it fails, but
+        // archiving that *traps* cannot be: the trap discards everything the
+        // failing message did, including any attempt to record it. Destructors
+        // are the exception. They run while the task is being canceled, in the
+        // cleanup callback, whose state changes are kept — which is how the
+        // archiving lock below gets released as well.
+        //
+        // Without this, a ledger whose archiving keeps trapping looks exactly
+        // like a ledger that is not archiving because it has nothing to
+        // archive. Since archiving no longer holds up the reply, nobody else
+        // would notice either.
+        if ic_cdk::futures::is_recovering_from_trap() {
+            LA::with_ledger_mut(|ledger| ledger.increment_archiving_failure_metric());
+        }
+    }
+}
+
 pub enum ArchivingGuardError {
     /// There is no archive to lock, the archiving is disabled.
     NoArchive,
