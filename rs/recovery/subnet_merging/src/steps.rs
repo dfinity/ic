@@ -177,6 +177,8 @@ impl Step for WaitForHaltingCupStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
+        self.check_node_is_on_subnet()?;
+
         if self.ssh_confirmation {
             info!(
                 self.logger,
@@ -216,6 +218,27 @@ impl Step for WaitForHaltingCupStep {
 }
 
 impl WaitForHaltingCupStep {
+    /// Checks that the node is one of the nodes of the subnet in the latest
+    /// registry version. Otherwise, e.g. if the download nodes of the two
+    /// subnets were swapped, the node may hold the halting CUP of the other
+    /// subnet, together with a matching manifest, and waiting would succeed
+    /// before the subnet itself has halted.
+    fn check_node_is_on_subnet(&self) -> RecoveryResult<()> {
+        let registry_version = self.registry_helper.latest_registry_version()?;
+        let node_ips = readiness::node_ips_on_subnet(
+            self.registry_helper.registry_client().as_ref(),
+            self.subnet_id,
+            registry_version,
+        )?;
+        if !node_ips.contains(&self.node_ip) {
+            return Err(RecoveryError::ValidationFailed(format!(
+                "Node {} is not a node of subnet {} at registry version {registry_version}",
+                self.node_ip, self.subnet_id,
+            )));
+        }
+        Ok(())
+    }
+
     /// Returns the height of the halting CUP if the node holds it and a
     /// checkpoint of the state it names, `None` if it does not yet,
     /// and an error if the node could not be asked or its checkpoint does not
