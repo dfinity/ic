@@ -429,7 +429,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
 impl From<&UpgradeState> for pb_metadata::UpgradeState {
     fn from(item: &UpgradeState) -> Self {
         Self {
-            upgrade_requests: item
+            unauthorized_upgrade_requests: item
                 .unauthorized_upgrade_requests
                 .iter()
                 .map(
@@ -439,7 +439,7 @@ impl From<&UpgradeState> for pb_metadata::UpgradeState {
                     },
                 )
                 .collect(),
-            authorized_nodes: item
+            rebooting_nodes: item
                 .rebooting_nodes
                 .iter()
                 .map(|node| node_id_into_protobuf(*node))
@@ -452,18 +452,18 @@ impl TryFrom<pb_metadata::UpgradeState> for UpgradeState {
     type Error = ProxyDecodeError;
 
     fn try_from(item: pb_metadata::UpgradeState) -> Result<Self, Self::Error> {
-        let mut upgrade_requests = BTreeMap::new();
-        for entry in item.upgrade_requests {
+        let mut unauthorized_upgrade_requests = BTreeMap::new();
+        for entry in item.unauthorized_upgrade_requests {
             let node = node_id_try_from_option(entry.node)?;
-            upgrade_requests.insert(node, Height::from(entry.request_height));
+            unauthorized_upgrade_requests.insert(node, Height::from(entry.request_height));
         }
-        let mut authorized_nodes = BTreeSet::new();
-        for node in item.authorized_nodes {
-            authorized_nodes.insert(node_id_try_from_option(Some(node))?);
+        let mut rebooting_nodes = BTreeSet::new();
+        for node in item.rebooting_nodes {
+            rebooting_nodes.insert(node_id_try_from_option(Some(node))?);
         }
         Ok(UpgradeState {
-            unauthorized_upgrade_requests: upgrade_requests,
-            rebooting_nodes: authorized_nodes,
+            unauthorized_upgrade_requests,
+            rebooting_nodes,
         })
     }
 }

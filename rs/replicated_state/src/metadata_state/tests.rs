@@ -3774,8 +3774,8 @@ fn upgrade_state_proto_roundtrip() {
         rebooting_nodes: BTreeSet::from([node_test_id(3)]),
     };
     let proto = pb_metadata::UpgradeState::from(&state);
-    assert_eq!(proto.upgrade_requests.len(), 2);
-    assert_eq!(proto.authorized_nodes.len(), 1);
+    assert_eq!(proto.unauthorized_upgrade_requests.len(), 2);
+    assert_eq!(proto.rebooting_nodes.len(), 1);
 
     assert_eq!(UpgradeState::try_from(proto).unwrap(), state);
 }
@@ -3790,11 +3790,11 @@ fn upgrade_state_proto_default_roundtrip() {
 #[test]
 fn upgrade_state_proto_rejects_missing_node() {
     let proto = pb_metadata::UpgradeState {
-        upgrade_requests: vec![pb_metadata::upgrade_state::UpgradePermitRequest {
+        unauthorized_upgrade_requests: vec![pb_metadata::upgrade_state::UpgradePermitRequest {
             node: None,
             request_height: 1,
         }],
-        authorized_nodes: vec![],
+        rebooting_nodes: vec![],
     };
     assert!(UpgradeState::try_from(proto).is_err());
 }

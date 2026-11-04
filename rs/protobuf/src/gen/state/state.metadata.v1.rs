@@ -623,9 +623,10 @@ pub struct SystemMetadata {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpgradeState {
     #[prost(message, repeated, tag = "1")]
-    pub upgrade_requests: ::prost::alloc::vec::Vec<upgrade_state::UpgradePermitRequest>,
+    pub unauthorized_upgrade_requests:
+        ::prost::alloc::vec::Vec<upgrade_state::UpgradePermitRequest>,
     #[prost(message, repeated, tag = "2")]
-    pub authorized_nodes: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
+    pub rebooting_nodes: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
 }
 /// Nested message and enum types in `UpgradeState`.
 pub mod upgrade_state {
