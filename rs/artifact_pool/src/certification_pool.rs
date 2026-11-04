@@ -282,7 +282,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
     }
 
     fn remove(&mut self, id: &CertificationMessageId) {
-        let CertificationMessageId { height, hash } = id;
+        let CertificationMessageId { hash, height } = id;
 
         let artifact = self.unvalidated.remove(hash.digest());
         if artifact.is_some() {
