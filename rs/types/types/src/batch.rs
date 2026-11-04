@@ -219,7 +219,8 @@ pub struct BatchSummary {
     pub current_interval_length: Height,
 }
 
-/// Return ingress messages, xnet messages, and responses from the bitcoin adapter.
+/// The contents of a block that the DSM consumes directly: messages to induct and data to record in the state.
+/// Responses to subnet calls that require consensus' involvement are delivered as `ConsensusResponse`s.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct BatchMessages {
     pub signed_ingress_msgs: Vec<SignedIngress>,
@@ -238,7 +239,7 @@ pub enum IntoMessagesError {
 }
 
 impl BatchPayload {
-    /// Extract and return the set of ingress and xnet messages in a
+    /// Extract and return the set of `BatchMessages` in a
     /// BatchPayload.
     /// Return error if deserialization of ingress payload fails.
     #[allow(clippy::result_large_err)]
@@ -253,8 +254,8 @@ impl BatchPayload {
             query_stats: QueryStatsPayload::deserialize(&self.query_stats)
                 .map_err(IntoMessagesError::QueryStatsPayloadError)?,
             upgrade_actions: UpgradePayload::deserialize(&self.upgrade)
-                .map_err(IntoMessagesError::UpgradePayloadError)
-                .map(|v| v.actions)?,
+                .map_err(IntoMessagesError::UpgradePayloadError)?
+                .actions,
         })
     }
 
