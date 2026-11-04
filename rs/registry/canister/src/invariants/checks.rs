@@ -28,6 +28,7 @@ use dfn_core::println;
 use ic_nervous_system_string::clamp_debug_len;
 use ic_registry_canister_chunkify::dechunkify;
 use ic_registry_keys::make_canister_id_allocation_key;
+use ic_registry_routing_table::RoutingTable;
 use ic_registry_transport::pb::v1::{
     RegistryMutation, high_capacity_registry_value, registry_mutation::Type,
 };
@@ -92,11 +93,22 @@ impl Registry {
         // Node assignment invariants
         result = result.and(check_node_assignment_invariants(&snapshot));
 
-        // Routing Table invariants
-        result = result.and(check_routing_table_invariants(&snapshot));
+        // Routing Table invariants. The checks below that need the routing table reuse it, rather
+        // than decoding it again, since decoding it is expensive.
+        let routing_table = match check_routing_table_invariants(&snapshot) {
+            Ok(routing_table) => routing_table,
+            Err(err) => {
+                result = result.and(Err(err));
+                // `result` already holds an error, so the checks below cannot turn it into a pass.
+                RoutingTable::default()
+            }
+        };
 
         // Canister migrations invariants
-        result = result.and(check_canister_migrations_invariants(&snapshot));
+        result = result.and(check_canister_migrations_invariants(
+            &snapshot,
+            &routing_table,
+        ));
 
         // Canister ID allocation invariants. The value before the mutations passed these checks
         // when it was written, so it decodes.
@@ -112,6 +124,7 @@ impl Registry {
             });
         result = result.and(check_canister_id_allocation_invariants(
             &snapshot,
+            &routing_table,
             previous_next_unallocated_canister_index,
         ));
 

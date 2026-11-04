@@ -2,129 +2,129 @@ benches:
   get_subnet_for_canister_100_times_100:
     total:
       calls: 1
-      instructions: 28075703
+      instructions: 28041683
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   get_subnet_for_canister_100_times_10k:
     total:
       calls: 1
-      instructions: 679490596
+      instructions: 679458844
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   get_subnet_for_canister_100_times_1k:
     total:
       calls: 1
-      instructions: 87458165
+      instructions: 87427337
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   measure_routing_table_invariant_checks_shards_and_unsharded:
     total:
       calls: 1
-      instructions: 222733115
+      instructions: 222312143
       heap_increase: 138
       stable_memory_increase: 0
     scopes: {}
   measure_snapshot_creation_with_1000_individual_entries:
     total:
       calls: 1
-      instructions: 20643760
+      instructions: 20645760
       heap_increase: 2
       stable_memory_increase: 0
     scopes: {}
   measure_snapshot_creation_with_100_000_individual_entries:
     total:
       calls: 1
-      instructions: 3577056090
+      instructions: 3577256090
       heap_increase: 177
       stable_memory_increase: 0
     scopes: {}
   measure_snapshot_creation_with_100_segments_of_1000_entries:
     total:
       calls: 1
-      instructions: 6403993
+      instructions: 6404193
       heap_increase: 30
       stable_memory_increase: 0
     scopes: {}
   measure_snapshot_creation_with_1_segment_of_1000_entries:
     total:
       calls: 1
-      instructions: 53490
+      instructions: 53492
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   migrate_canisters_10_times_100:
     total:
       calls: 1
-      instructions: 133824879
+      instructions: 131542436
       heap_increase: 1
       stable_memory_increase: 0
     scopes: {}
   migrate_canisters_10_times_10k:
     total:
       calls: 1
-      instructions: 8419939698
+      instructions: 8405874105
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   migrate_canisters_10_times_1k:
     total:
       calls: 1
-      instructions: 854964869
+      instructions: 851412503
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   upgrade_with_routing_table_100:
     total:
       calls: 1
-      instructions: 189011145
+      instructions: 188761545
       heap_increase: 8
       stable_memory_increase: 0
     scopes:
       post_upgrade:
         calls: 1
-        instructions: 188091160
+        instructions: 187841817
         heap_increase: 4
         stable_memory_increase: 0
       pre_upgrade:
         calls: 1
-        instructions: 681312
+        instructions: 681309
         heap_increase: 4
         stable_memory_increase: 0
   upgrade_with_routing_table_10k:
     total:
       calls: 1
-      instructions: 5484616217
+      instructions: 5483880639
       heap_increase: 349
       stable_memory_increase: 0
     scopes:
       post_upgrade:
         calls: 1
-        instructions: 5462363679
+        instructions: 5461625318
         heap_increase: 224
         stable_memory_increase: 0
       pre_upgrade:
         calls: 1
-        instructions: 16616323
+        instructions: 16616320
         heap_increase: 125
         stable_memory_increase: 0
   upgrade_with_routing_table_1k:
     total:
       calls: 1
-      instructions: 676142430
+      instructions: 675885057
       heap_increase: 40
       stable_memory_increase: 0
     scopes:
       post_upgrade:
         calls: 1
-        instructions: 673213946
+        instructions: 672956282
         heap_increase: 25
         stable_memory_increase: 0
       pre_upgrade:
         calls: 1
-        instructions: 2218595
+        instructions: 2218592
         heap_increase: 15
         stable_memory_increase: 0
 version: 0.6.0

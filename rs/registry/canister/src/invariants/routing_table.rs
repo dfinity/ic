@@ -2,7 +2,7 @@ use crate::invariants::common::{InvariantCheckError, RegistrySnapshot};
 
 use std::convert::TryFrom;
 
-use ic_base_types::{CanisterId, SubnetId};
+use ic_base_types::CanisterId;
 use ic_protobuf::registry::routing_table::v1::{
     CanisterIdAllocation as pbCanisterIdAllocation, CanisterMigrations as pbCanisterMigrations,
     RoutingTable as pbRoutingTable,
@@ -10,17 +10,17 @@ use ic_protobuf::registry::routing_table::v1::{
 use ic_registry_keys::{
     make_canister_id_allocation_key, make_canister_migrations_record_key, make_canister_ranges_key,
 };
-use ic_registry_routing_table::{
-    CanisterIdRange, CanisterMigrations, RoutingTable, canister_id_into_u64,
-};
+use ic_registry_routing_table::{CanisterMigrations, RoutingTable, canister_id_into_u64};
 use prost::Message;
 
 /// Routing table invariants hold if reading and conversion succeed.
+///
+/// Returns the routing table, so that other checks that need it (e.g.,
+/// `check_canister_migrations_invariants`) do not have to decode it again.
 pub(crate) fn check_routing_table_invariants(
     snapshot: &RegistrySnapshot,
-) -> Result<(), InvariantCheckError> {
-    get_routing_table(snapshot);
-    Ok(())
+) -> Result<RoutingTable, InvariantCheckError> {
+    Ok(get_routing_table(snapshot))
 }
 
 // Return routing table from snapshot
@@ -45,6 +45,7 @@ fn get_routing_table_shards(snapshot: &RegistrySnapshot) -> Vec<pbRoutingTable> 
 /// Iff `canister_migrations` is present, check that its invariants hold if reading and conversion succeed.
 pub(crate) fn check_canister_migrations_invariants(
     snapshot: &RegistrySnapshot,
+    routing_table: &RoutingTable,
 ) -> Result<(), InvariantCheckError> {
     if let Some(canister_migrations_bytes) =
         snapshot.get(make_canister_migrations_record_key().as_bytes())
@@ -54,7 +55,6 @@ pub(crate) fn check_canister_migrations_invariants(
             pbCanisterMigrations::decode(canister_migrations_bytes.as_slice()).unwrap();
         let canister_migrations = CanisterMigrations::try_from(canister_migrations_proto).unwrap();
 
-        let routing_table = get_routing_table(snapshot);
         // Check if each canister range is assigned to one of the subnets on the migration trace.
         // The subnet could be either the source before the migration or the destination after migration.
         for (canister_migrations_range, trace) in canister_migrations.iter() {
@@ -103,14 +103,15 @@ pub(crate) fn decode_next_unallocated_canister_index(
 /// * Once present, it is never deleted.
 /// * It never decreases. `previous_next_unallocated_canister_index` is its value before the
 ///   mutations being checked, if it was present.
-/// * If present, every range in the routing table ends below it, i.e., every canister ID hosted
-///   by a subnet has been accounted for as allocated.
+/// * If present, every range in `routing_table` (the routing table in `snapshot`) ends below it,
+///   i.e., every canister ID hosted by a subnet has been accounted for as allocated.
 ///
 /// While it is absent (and was absent before), there is nothing to check: it has simply not been
 /// written yet, neither by the post-upgrade backfill (`backfill_canister_id_allocation`) nor by an
 /// allocation of canister IDs to a new subnet.
 pub(crate) fn check_canister_id_allocation_invariants(
     snapshot: &RegistrySnapshot,
+    routing_table: &RoutingTable,
     previous_next_unallocated_canister_index: Option<u64>,
 ) -> Result<(), InvariantCheckError> {
     let Some(bytes) = snapshot.get(make_canister_id_allocation_key().as_bytes()) else {
@@ -140,8 +141,8 @@ pub(crate) fn check_canister_id_allocation_invariants(
         });
     }
 
-    // It suffices to check the last range of the routing table, since the ranges are sorted.
-    let Some((last_range, last_subnet_id)) = get_last_routing_table_entry(snapshot) else {
+    // It suffices to check the last range, since the ranges of a `RoutingTable` are sorted.
+    let Some((last_range, last_subnet_id)) = routing_table.iter().last() else {
         return Ok(());
     };
     if canister_id_into_u64(last_range.end) >= next_unallocated_canister_index {
@@ -156,30 +157,6 @@ pub(crate) fn check_canister_id_allocation_invariants(
     }
 
     Ok(())
-}
-
-/// Returns the last (i.e., highest) range of the routing table and its subnet, or `None` if the
-/// routing table is empty.
-///
-/// Only the last non-empty shard is decoded, rather than the whole routing table, because this runs
-/// on every registry mutation. This relies on the shards being sorted and disjoint, which
-/// `check_routing_table_invariants` ensures.
-fn get_last_routing_table_entry(
-    snapshot: &RegistrySnapshot,
-) -> Option<(CanisterIdRange, SubnetId)> {
-    let start = make_canister_ranges_key(CanisterId::from_u64(0)).into_bytes();
-    let end = make_canister_ranges_key(CanisterId::from_u64(u64::MAX)).into_bytes();
-    let last_shard = snapshot
-        .range(start..=end)
-        .rev()
-        .map(|(_, value)| pbRoutingTable::decode(value.as_slice()).unwrap())
-        .find(|shard| !shard.entries.is_empty())?;
-
-    let last_shard = RoutingTable::try_from(vec![last_shard]).unwrap();
-    last_shard
-        .iter()
-        .last()
-        .map(|(range, subnet_id)| (*range, *subnet_id))
 }
 
 #[cfg(test)]
@@ -222,7 +199,9 @@ mod tests {
         insert_routing_table_to_snapshot(routing_table, &mut snapshot);
 
         assert!(check_routing_table_invariants(&snapshot).is_ok());
-        assert!(check_canister_migrations_invariants(&snapshot).is_ok());
+        assert!(
+            check_canister_migrations_invariants(&snapshot, &get_routing_table(&snapshot)).is_ok()
+        );
     }
 
     #[test]
@@ -240,7 +219,9 @@ mod tests {
         );
 
         assert!(check_routing_table_invariants(&snapshot).is_ok());
-        assert!(check_canister_migrations_invariants(&snapshot).is_ok());
+        assert!(
+            check_canister_migrations_invariants(&snapshot, &get_routing_table(&snapshot)).is_ok()
+        );
     }
 
     #[test]
@@ -254,7 +235,9 @@ mod tests {
         }).unwrap();
         insert_routing_table_to_snapshot(routing_table, &mut snapshot);
         assert!(check_routing_table_invariants(&snapshot).is_ok());
-        assert!(check_canister_migrations_invariants(&snapshot).is_ok());
+        assert!(
+            check_canister_migrations_invariants(&snapshot, &get_routing_table(&snapshot)).is_ok()
+        );
 
         // Prepare canister migrations by adding entries.
         let canister_migrations = CanisterMigrations::try_from(btreemap! {
@@ -267,7 +250,9 @@ mod tests {
             canister_migrations.encode_to_vec(),
         );
         assert!(check_routing_table_invariants(&snapshot).is_ok());
-        assert!(check_canister_migrations_invariants(&snapshot).is_ok());
+        assert!(
+            check_canister_migrations_invariants(&snapshot, &get_routing_table(&snapshot)).is_ok()
+        );
 
         // Reassign ranges in routing table.
         let routing_table = RoutingTable::try_from(btreemap! {
@@ -277,7 +262,9 @@ mod tests {
 
         insert_routing_table_to_snapshot(routing_table, &mut snapshot);
         assert!(check_routing_table_invariants(&snapshot).is_ok());
-        assert!(check_canister_migrations_invariants(&snapshot).is_ok());
+        assert!(
+            check_canister_migrations_invariants(&snapshot, &get_routing_table(&snapshot)).is_ok()
+        );
 
         // Complete canister migrations by removing entries.
         snapshot.insert(
@@ -285,7 +272,9 @@ mod tests {
             PbCanisterMigrations { entries: vec![] }.encode_to_vec(),
         );
         assert!(check_routing_table_invariants(&snapshot).is_ok());
-        assert!(check_canister_migrations_invariants(&snapshot).is_ok());
+        assert!(
+            check_canister_migrations_invariants(&snapshot, &get_routing_table(&snapshot)).is_ok()
+        );
     }
 
     #[test]
@@ -301,7 +290,9 @@ mod tests {
 
         insert_routing_table_to_snapshot(routing_table, &mut snapshot);
         assert!(check_routing_table_invariants(&snapshot).is_ok());
-        assert!(check_canister_migrations_invariants(&snapshot).is_ok());
+        assert!(
+            check_canister_migrations_invariants(&snapshot, &get_routing_table(&snapshot)).is_ok()
+        );
 
         // Prepare canister migrations by adding entries.
         // The canister ID range {0x200:0x2ff} in `canister_migrations` is hosted by subnet_3.
@@ -317,7 +308,9 @@ mod tests {
         );
 
         assert!(check_routing_table_invariants(&snapshot).is_ok());
-        assert!(check_canister_migrations_invariants(&snapshot).is_err());
+        assert!(
+            check_canister_migrations_invariants(&snapshot, &get_routing_table(&snapshot)).is_err()
+        );
     }
 
     #[test]
@@ -344,7 +337,9 @@ mod tests {
             canister_migrations.encode_to_vec(),
         );
         assert!(check_routing_table_invariants(&snapshot).is_ok());
-        assert!(check_canister_migrations_invariants(&snapshot).is_ok());
+        assert!(
+            check_canister_migrations_invariants(&snapshot, &get_routing_table(&snapshot)).is_ok()
+        );
 
         // The new routing table after reassigning ranges.
 
@@ -358,7 +353,9 @@ mod tests {
         insert_routing_table_to_snapshot(new_routing_table_1, &mut snapshot);
 
         assert!(check_routing_table_invariants(&snapshot).is_ok());
-        assert!(check_canister_migrations_invariants(&snapshot).is_err());
+        assert!(
+            check_canister_migrations_invariants(&snapshot, &get_routing_table(&snapshot)).is_err()
+        );
 
         // Case 2: find the entry containing `range.start` but the entry cannot fully cover the canister migration range {0x0:0xff}.
         let new_routing_table_2 = RoutingTable::try_from(btreemap! {
@@ -370,7 +367,9 @@ mod tests {
         insert_routing_table_to_snapshot(new_routing_table_2, &mut snapshot);
 
         assert!(check_routing_table_invariants(&snapshot).is_ok());
-        assert!(check_canister_migrations_invariants(&snapshot).is_err());
+        assert!(
+            check_canister_migrations_invariants(&snapshot, &get_routing_table(&snapshot)).is_err()
+        );
     }
 
     fn insert_canister_id_allocation_to_snapshot(
@@ -401,7 +400,10 @@ mod tests {
     fn test_absent_canister_id_allocation_passes_invariants_check() {
         let snapshot = new_snapshot_with_routing_table_up_to_0x1ff();
 
-        assert!(check_canister_id_allocation_invariants(&snapshot, None).is_ok());
+        assert!(
+            check_canister_id_allocation_invariants(&snapshot, &get_routing_table(&snapshot), None)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -410,9 +412,26 @@ mod tests {
         // Above the routing table, e.g., because the subnet that held 0x200..=0x2ff was deleted.
         insert_canister_id_allocation_to_snapshot(0x300, &mut snapshot);
 
-        assert!(check_canister_id_allocation_invariants(&snapshot, None).is_ok());
-        assert!(check_canister_id_allocation_invariants(&snapshot, Some(0x200)).is_ok());
-        assert!(check_canister_id_allocation_invariants(&snapshot, Some(0x300)).is_ok());
+        assert!(
+            check_canister_id_allocation_invariants(&snapshot, &get_routing_table(&snapshot), None)
+                .is_ok()
+        );
+        assert!(
+            check_canister_id_allocation_invariants(
+                &snapshot,
+                &get_routing_table(&snapshot),
+                Some(0x200)
+            )
+            .is_ok()
+        );
+        assert!(
+            check_canister_id_allocation_invariants(
+                &snapshot,
+                &get_routing_table(&snapshot),
+                Some(0x300)
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -420,7 +439,9 @@ mod tests {
         let mut snapshot = new_snapshot_with_routing_table_up_to_0x1ff();
         insert_canister_id_allocation_to_snapshot(0x1ff, &mut snapshot);
 
-        let error = check_canister_id_allocation_invariants(&snapshot, None).unwrap_err();
+        let error =
+            check_canister_id_allocation_invariants(&snapshot, &get_routing_table(&snapshot), None)
+                .unwrap_err();
 
         assert!(error.msg.contains("at or above"), "{}", error.msg);
         assert!(
@@ -431,11 +452,56 @@ mod tests {
     }
 
     #[test]
+    fn test_routing_table_beyond_canister_id_allocation_in_earlier_shard_fails_invariants_check() {
+        // Step 1: Prepare the world. The shard with the larger key holds the lower range, which
+        // the routing table invariants do not rule out. So the highest range, 0x200..=0x2ff, is in
+        // the shard with the smaller key, and the last shard ends at 0x1ff.
+        let mut snapshot = RegistrySnapshot::new();
+        let shards = [
+            (0x000, 0x200, 0x2ff, subnet_test_id(1)),
+            (0x100, 0x100, 0x1ff, subnet_test_id(2)),
+        ];
+        for (shard_key, start, end, subnet_id) in shards {
+            let range = CanisterIdRange {
+                start: CanisterId::from(start),
+                end: CanisterId::from(end),
+            };
+            let shard = RoutingTable::try_from(btreemap! { range => subnet_id }).unwrap();
+            snapshot.insert(
+                make_canister_ranges_key(CanisterId::from(shard_key)).into_bytes(),
+                PbRoutingTable::from(shard).encode_to_vec(),
+            );
+        }
+        insert_canister_id_allocation_to_snapshot(0x200, &mut snapshot);
+
+        // Step 2: Run the code under test.
+        let result = check_canister_id_allocation_invariants(
+            &snapshot,
+            &get_routing_table(&snapshot),
+            /* previous_next_unallocated_canister_index = */ None,
+        );
+
+        // Step 3: Verify result. The range 0x200..=0x2ff of subnet 1 must be detected.
+        let error = result.unwrap_err();
+        assert!(error.msg.contains("at or above"), "{}", error.msg);
+        assert!(
+            error.msg.contains(&subnet_test_id(1).to_string()),
+            "{}",
+            error.msg
+        );
+    }
+
+    #[test]
     fn test_decreasing_canister_id_allocation_fails_invariants_check() {
         let mut snapshot = new_snapshot_with_routing_table_up_to_0x1ff();
         insert_canister_id_allocation_to_snapshot(0x200, &mut snapshot);
 
-        let error = check_canister_id_allocation_invariants(&snapshot, Some(0x300)).unwrap_err();
+        let error = check_canister_id_allocation_invariants(
+            &snapshot,
+            &get_routing_table(&snapshot),
+            Some(0x300),
+        )
+        .unwrap_err();
 
         assert!(error.msg.contains("never decrease"), "{}", error.msg);
     }
@@ -448,7 +514,9 @@ mod tests {
             b"not a protobuf".to_vec(),
         );
 
-        let error = check_canister_id_allocation_invariants(&snapshot, None).unwrap_err();
+        let error =
+            check_canister_id_allocation_invariants(&snapshot, &get_routing_table(&snapshot), None)
+                .unwrap_err();
 
         assert!(error.msg.contains("Unable to decode"), "{}", error.msg);
         assert!(error.source.is_some());
@@ -458,7 +526,12 @@ mod tests {
     fn test_deleting_canister_id_allocation_fails_invariants_check() {
         let snapshot = new_snapshot_with_routing_table_up_to_0x1ff();
 
-        let error = check_canister_id_allocation_invariants(&snapshot, Some(0x200)).unwrap_err();
+        let error = check_canister_id_allocation_invariants(
+            &snapshot,
+            &get_routing_table(&snapshot),
+            Some(0x200),
+        )
+        .unwrap_err();
 
         assert!(error.msg.contains("must not be deleted"), "{}", error.msg);
     }
