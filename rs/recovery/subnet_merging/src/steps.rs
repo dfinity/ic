@@ -14,6 +14,9 @@ use ic_recovery::{
     ssh_helper::SshHelper,
     steps::Step,
 };
+use ic_state_layout::{
+    CHECKPOINTS_DIR, STATE_SYNC_CHECKPOINT_MARKER, StateLayout, UNVERIFIED_CHECKPOINT_MARKER,
+};
 use ic_state_manager::{manifest::manifest_hash, state_sync::types::Manifest};
 use ic_subnet_tools::utils::get_cup;
 use ic_types::{
@@ -24,7 +27,12 @@ use ic_types::{
 use prost::Message;
 use slog::{Logger, info};
 
-use std::{fmt::Display, net::IpAddr, path::PathBuf, time::Duration};
+use std::{
+    fmt::Display,
+    net::IpAddr,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 /// Waits until the record of the subnet that is being merged away is labeled
 /// "cooling down" and persists the registry version `V` it was read at (not
@@ -142,9 +150,10 @@ impl Step for CheckMergeReadinessStep {
 /// the node while the node is still writing, validating, or hashing its own
 /// checkpoint at that height, all of which the state manager does
 /// asynchronously to execution and certification. So this also waits until the
-/// node has published the manifest of that checkpoint, which the state manager
-/// does only once the checkpoint is verified, and until the manifest's root
-/// hash is the state hash the CUP names.
+/// node has published the manifest of that checkpoint, until the manifest's
+/// root hash is the state hash the CUP names, and until the checkpoint exists
+/// without either unverified marker. State sync can publish a manifest without
+/// verifying the checkpoint, so the manifest alone is not sufficient.
 pub(crate) struct WaitForHaltingCupStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) node_ip: IpAddr,
@@ -227,7 +236,7 @@ impl WaitForHaltingCupStep {
             info!(
                 self.logger,
                 "Node {} holds the CUP at height {cup_height} subnet {} halts at, but has not \
-                 published a verified checkpoint at that height yet",
+                 published a manifest at that height yet",
                 self.node_ip,
                 self.subnet_id,
             );
@@ -240,6 +249,13 @@ impl WaitForHaltingCupStep {
                 self.node_ip, cup.content.state_hash, self.subnet_id,
             )));
         }
+
+        let checkpoint_dir = PathBuf::from(IC_DATA_PATH)
+            .join(IC_STATE)
+            .join(CHECKPOINTS_DIR)
+            .join(StateLayout::checkpoint_name(cup_height));
+        self.ssh_helper
+            .ssh(verified_checkpoint_command(&checkpoint_dir))?;
 
         Ok(Some(cup_height))
     }
@@ -263,11 +279,9 @@ impl WaitForHaltingCupStep {
     /// published for its checkpoint at `height`, or `None` if it has not
     /// published one yet.
     ///
-    /// The state manager persists the manifest of a checkpoint to
-    /// `states_metadata.pbuf` only once that checkpoint has been verified,
-    /// whether it created the checkpoint itself or fetched it via state sync. A
-    /// manifest there thus means that the checkpoint is complete and ready to be
-    /// downloaded.
+    /// Locally created checkpoints publish their manifest after verification.
+    /// State-synced checkpoints may publish it without verification, so the
+    /// caller must also check the checkpoint's markers on the node.
     fn published_root_hash(&self, height: Height) -> RecoveryResult<Option<CryptoHashOfState>> {
         let remote_states_metadata = self.ssh_helper.remote_path(
             PathBuf::from(IC_DATA_PATH)
@@ -302,5 +316,71 @@ impl WaitForHaltingCupStep {
         Ok(Some(CryptoHashOfState::from(CryptoHash(
             manifest_hash(&manifest).to_vec(),
         ))))
+    }
+}
+
+/// Check the remote checkpoint using the same marker rules as
+/// `CheckpointLayout::checkpoint_status`. Check directory access first so an
+/// inaccessible or missing checkpoint cannot look verified merely because its
+/// markers cannot be found. State sync can leave its marker indefinitely, even
+/// after publishing the manifest, so give the operator a way to proceed.
+fn verified_checkpoint_command(checkpoint_dir: &Path) -> String {
+    let checkpoint_dir = checkpoint_dir.display().to_string().replace('\'', "'\\''");
+    format!(
+        "cd '{checkpoint_dir}' && test -r . && test -x . && \
+         if test -e {STATE_SYNC_CHECKPOINT_MARKER}; then \
+             echo 'Checkpoint is unverified after state sync; select another download node with a verified checkpoint at the halting height.' >&2; \
+             exit 1; \
+         elif test -e {UNVERIFIED_CHECKPOINT_MARKER}; then \
+             echo 'Checkpoint verification is not complete yet.' >&2; \
+             exit 1; \
+         fi"
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_test_utilities_tmpdir::tmpdir;
+    use std::{fs, process::Command};
+
+    #[test]
+    fn remote_checkpoint_check_rejects_both_unverified_markers() {
+        let root = tmpdir("halting-checkpoint");
+        // Exercise shell quoting too: checkpoint paths must be treated as data.
+        let checkpoint = root.path().join("checkpoint with 'quotes'");
+        fs::create_dir(&checkpoint).unwrap();
+        let check = || {
+            Command::new("sh")
+                .arg("-c")
+                .arg(verified_checkpoint_command(&checkpoint))
+                .output()
+                .unwrap()
+        };
+
+        assert!(check().status.success());
+        fs::write(checkpoint.join(UNVERIFIED_CHECKPOINT_MARKER), []).unwrap();
+        assert!(!check().status.success());
+
+        // A state-synced checkpoint can have a published, matching manifest
+        // while both markers remain. Removing just the regular marker during
+        // finalization must not make the checkpoint look verified either.
+        fs::write(checkpoint.join(STATE_SYNC_CHECKPOINT_MARKER), []).unwrap();
+        let result = check();
+        assert!(!result.status.success());
+        assert!(
+            String::from_utf8(result.stderr)
+                .unwrap()
+                .contains("select another download node")
+        );
+        fs::remove_file(checkpoint.join(UNVERIFIED_CHECKPOINT_MARKER)).unwrap();
+        assert!(!check().status.success());
+
+        fs::remove_file(checkpoint.join(STATE_SYNC_CHECKPOINT_MARKER)).unwrap();
+        assert!(check().status.success());
+
+        // Stale metadata is not proof that the checkpoint still exists.
+        fs::remove_dir(&checkpoint).unwrap();
+        assert!(!check().status.success());
     }
 }
