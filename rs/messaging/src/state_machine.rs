@@ -2,8 +2,7 @@ use crate::canister_http_spent::{
     deliver_canister_http_spent, refund_timed_out_canister_http_contexts,
 };
 use crate::message_routing::{
-    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, CRITICAL_ERROR_UPGRADE_PERMIT_EXPIRED,
-    MessageRoutingMetrics,
+    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics, UPGRADE_PERMIT_EXPIRED,
 };
 use crate::routing::demux::Demux;
 use crate::routing::stream_builder::{
@@ -13,7 +12,7 @@ use ic_interfaces::execution_environment::{
     ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
 use ic_interfaces::time_source::system_time_now;
-use ic_logger::{ReplicaLogger, error, fatal};
+use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_query_stats::deliver_query_stats;
 use ic_replicated_state::{NetworkTopology, OwnSubnetInfo, ReplicatedState};
 use ic_types::batch::{Batch, BatchContent};
@@ -172,14 +171,14 @@ impl StateMachine for StateMachineImpl {
             batch.batch_number,
             &registry_settings.node_ids,
         ) {
-            error!(
+            info!(
                 self.log,
                 "{}: Upgrade permit request from '{}' expired at height '{}'",
-                CRITICAL_ERROR_UPGRADE_PERMIT_EXPIRED,
+                UPGRADE_PERMIT_EXPIRED,
                 node,
                 batch.batch_number,
             );
-            self.metrics.critical_error_upgrade_permit_expired.inc();
+            self.metrics.upgrade_permit_expired.inc();
         }
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
