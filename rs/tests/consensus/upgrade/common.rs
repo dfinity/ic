@@ -31,7 +31,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::create_agent;
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
-    util::{JournalStreamer, MessageCanister, block_on},
+    util::{CYCLES_LIMIT_PER_CANISTER, JournalStreamer, MessageCanister, block_on},
 };
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use slog::{Logger, info};
@@ -76,9 +76,11 @@ pub fn get_chain_key_canister_and_public_key<'a>(
     key_ids: Vec<MasterPublicKeyId>,
 ) -> (MessageCanister<'a>, BTreeMap<MasterPublicKeyId, Vec<u8>>) {
     let logger = env.logger();
-    let nns_canister = block_on(MessageCanister::new(
+    let nns_canister = block_on(MessageCanister::new_with_cycles_with_retries(
         agent,
         nns_node.effective_canister_id(),
+        CYCLES_LIMIT_PER_CANISTER,
+        &logger,
     ));
     let subnet_id = env
         .topology_snapshot()
