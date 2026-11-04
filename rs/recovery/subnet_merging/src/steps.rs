@@ -122,36 +122,23 @@ impl Step for CheckMergeReadinessStep {
 }
 
 /// Waits until the node the state is downloaded from holds the CUP its subnet
-/// halts at, i.e. the first one whose summary is created at a registry version
-/// carrying the `halt_at_cup_height` flag, together with a complete checkpoint
-/// of the state that CUP names.
+/// halts at, together with a complete checkpoint of the state that CUP names.
 ///
-/// Waiting for the CUP rather than for the subnet to report that it is halted:
-/// the CUP is what names the state the subnet came to rest in, and it exists
-/// only once that state has been certified and its hash agreed upon. A subnet
-/// that has just stopped delivering batches, on the other hand, may not have
-/// finished writing and hashing the checkpoint it stopped at, and downloading
-/// its latest checkpoint then yields the previous one, a whole DKG interval
-/// before the state the merge is supposed to be assembled from.
+/// This waits for the CUP rather than for the subnet to report that it is
+/// halted, because the CUP names the agreed-upon state the subnet halted at,
+/// while a subnet that has just stopped may not have finished writing its
+/// checkpoint yet.
 ///
 /// The CUP is the copy the orchestrator has written to disk: that is the one
 /// that is downloaded with the state (by a later step) and validated against
 /// it.
 ///
-/// Holding the CUP does not mean that the node holds the checkpoint, though:
-/// the CUP may have been assembled by the rest of the subnet and gossiped to
-/// the node while the node is still writing, validating, or hashing its own
-/// checkpoint at that height, all of which the state manager does
-/// asynchronously to execution and certification. So this also waits until the
-/// node has published the manifest of that checkpoint and until the
-/// manifest's root hash is the state hash the CUP names.
+/// A node may hold the CUP before it has finished its own checkpoint at that
+/// height, so this also waits until the node has published the manifest of
+/// that checkpoint and its root hash is the state hash the CUP names.
 ///
-/// A published manifest implies that the checkpoint is complete: the state
-/// manager publishes the manifest of a checkpoint it created itself only after
-/// verifying the checkpoint, and that of a checkpoint it state synced only
-/// after all its chunks, each checked against the manifest, have been
-/// assembled. The latter may not have been verified (i.e., loaded) by the
-/// replica yet, but its files are the state the CUP names all the same.
+/// A published manifest implies that the checkpoint is complete, whether the
+/// node computed it or state synced it.
 pub(crate) struct WaitForHaltingCupStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) node_ip: IpAddr,
@@ -219,10 +206,7 @@ impl Step for WaitForHaltingCupStep {
 
 impl WaitForHaltingCupStep {
     /// Checks that the node is one of the nodes of the subnet in the latest
-    /// registry version. Otherwise, e.g. if the download nodes of the two
-    /// subnets were swapped, the node may hold the halting CUP of the other
-    /// subnet, together with a matching manifest, and waiting would succeed
-    /// before the subnet itself has halted.
+    /// registry version.
     fn check_node_is_on_subnet(&self) -> RecoveryResult<()> {
         let registry_version = self.registry_helper.latest_registry_version()?;
         let node_ips = readiness::node_ips_on_subnet(

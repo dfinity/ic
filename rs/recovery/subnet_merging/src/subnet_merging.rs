@@ -104,7 +104,7 @@ pub struct SubnetMergingArgs {
     pub merge_ready_timeout_secs: u64,
 
     /// How long to wait for a subnet to reach the CUP it halts at, in seconds.
-    #[clap(long, default_value = "900")]
+    #[clap(long, default_value = "3600")]
     pub halt_timeout_secs: u64,
 
     /// How long to wait, in seconds, for the proposal labeling the source

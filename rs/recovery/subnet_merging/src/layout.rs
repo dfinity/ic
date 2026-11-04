@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use std::path::PathBuf;
 
-/// The name the orchestrator stores the latest CUP of a subnet under.
+/// The name under which the orchestrator stores the latest CUP of a subnet.
 pub(crate) const CUP_FILE_NAME: &str = "cup.types.v1.CatchUpPackage.pb";
 
 /// The file in which the tool records a registry version at which the subnet

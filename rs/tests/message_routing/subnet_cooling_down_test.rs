@@ -8,7 +8,7 @@ condition the subnet merging tool waits for before merging such a subnet away
 is one that the subnet does not satisfy to begin with; and that once the tool
 (`rs/recovery/subnet_merging`) has labeled the subnet "cooling down", the
 subnet rejects ingress messages and query calls, the tool eventually finds the
-condition to hold, and it then halts both subnets of the merge at their next
+condition to hold, and it then halts both subnets at their next
 CUP. The subnet also holds calls waiting
 for responses that never arrive: they are not drained, but make it possible to
 assert that a subnet merge populates the ingress history properly.
@@ -87,7 +87,7 @@ Runbook::
    hash.
 13. After `WaitForHaltingCupOnDestinationSubnet`: check that both subnets are
    halted, i.e. that every one of their nodes certifies the height its subnet
-   halts at and none goes past it.
+   halts at and none goes past it, even after `HALT_OBSERVATION_PERIOD`.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -220,6 +220,10 @@ const HALT_TIMEOUT: Duration = Duration::from_secs(900);
 
 /// How long `UT`'s loop is observed to be stalled (step 11).
 const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
+
+/// How long the certified heights of the nodes of `M` and `T` are observed to
+/// stay at the height their subnet halts at (step 13).
+const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 
 /// Timeouts of the test itself, above the sum of the timeouts of its steps
 /// (dominated by `MERGE_READY_TIMEOUT` and `HALT_TIMEOUT`), so that a stuck
@@ -608,15 +612,18 @@ fn download_node(subnet: &SubnetSnapshot) -> IpAddr {
 }
 
 /// Step 13: check that `M` and `T` are halted, i.e. that every one of their
-/// nodes certifies the height its subnet halts at, and none goes past it.
+/// nodes certifies the height its subnet halts at, and that it still does so
+/// after `HALT_OBSERVATION_PERIOD`.
 ///
 /// The tool only waits for the node of each subnet the state would be
 /// downloaded from, so the other nodes are waited for to catch up with the
 /// halting height.
 async fn check_subnets_halted(context: &Context<'_>) {
     let logger = &context.logger;
+    let subnets = [&context.m_subnet, &context.t_subnet];
+    let mut halting_heights = Vec::new();
 
-    for subnet in [&context.m_subnet, &context.t_subnet] {
+    for subnet in subnets {
         let subnet_id = subnet.subnet_id;
         // The tool has checked that the download node holds the CUP the subnet
         // halts at, and no CUP follows that one.
@@ -666,6 +673,29 @@ async fn check_subnets_halted(context: &Context<'_>) {
             "Step 13: every node of subnet {subnet_id} has certified the height {halting_height} \
              it halts at"
         );
+        halting_heights.push(halting_height);
+    }
+
+    info!(
+        logger,
+        "Step 13: Checking that the certified heights stay put over {HALT_OBSERVATION_PERIOD:?}"
+    );
+    tokio::time::sleep(HALT_OBSERVATION_PERIOD).await;
+    for (subnet, halting_height) in subnets.into_iter().zip(halting_heights) {
+        let subnet_id = subnet.subnet_id;
+        for node in subnet.nodes() {
+            let ip = node.get_ip_addr();
+            let height = get_node_metrics(logger, &ip)
+                .await
+                .unwrap_or_else(|| panic!("failed to get the metrics of node {ip}"))
+                .certification_height;
+            assert_eq!(
+                height, halting_height,
+                "node {ip} of subnet {subnet_id} certified height {height} rather than the \
+                 height {halting_height} the subnet halts at, {HALT_OBSERVATION_PERIOD:?} after \
+                 reaching it"
+            );
+        }
     }
 
     info!(logger, "Step 13 done: subnets M and T are halted");
