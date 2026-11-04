@@ -15,11 +15,10 @@ use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_types::NodeId;
 use ic_types::consensus::IsShare;
-use ic_types::crypto::{CryptoHashOf, crypto_hash};
+use ic_types::crypto::{CryptoHash, CryptoHashOf, crypto_hash};
 use ic_types::{
     Height,
     artifact::CertificationMessageId,
-    consensus::HasHeight,
     consensus::certification::{
         Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
     },
@@ -108,7 +107,7 @@ pub struct CertificationPoolImpl {
 
     unvalidated_share_index: HeightIndex<CryptoHashOf<CertificationShare>>,
     unvalidated_cert_index: HeightIndex<CryptoHashOf<Certification>>,
-    unvalidated: BTreeMap<CertificationMessageHash, CertificationMessage>,
+    unvalidated: BTreeMap<CryptoHash, CertificationMessage>,
 
     pub validated: Box<dyn MutablePoolSection + Send + Sync>,
 
@@ -191,19 +190,11 @@ impl CertificationPoolImpl {
 
     /// Removes all unvalidated artifacts below the given height
     fn remove_all_unvalidated_below(&mut self, height: Height) {
-        // purge indices
-        let shares = self
-            .unvalidated_share_index
-            .remove_all_below(height)
-            .map(|(_height, hash)| CertificationMessageHash::CertificationShare(hash));
-        let certs = self
-            .unvalidated_cert_index
-            .remove_all_below(height)
-            .map(|(_height, hash)| CertificationMessageHash::Certification(hash));
-
-        // remove from unvalidated pool
-        for id in shares.chain(certs) {
-            self.unvalidated.remove(&id);
+        for (_height, share_hash) in self.unvalidated_share_index.remove_all_below(height) {
+            self.unvalidated.remove(share_hash.get_ref());
+        }
+        for (_height, cert_hash) in self.unvalidated_cert_index.remove_all_below(height) {
+            self.unvalidated.remove(cert_hash.get_ref());
         }
     }
 
@@ -252,6 +243,8 @@ impl CertificationPoolImpl {
 
     #[cfg(test)]
     fn all_heights_with_artifacts(&self) -> Vec<Height> {
+        use ic_types::consensus::HasHeight;
+
         let mut heights: Vec<Height> = self
             .unvalidated
             .iter()
@@ -272,12 +265,11 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
     type Mutations = Mutations;
 
     fn insert(&mut self, msg: UnvalidatedArtifact<CertificationMessage>) {
-        let height = msg.message.height();
-        let msg_hash = CertificationMessageHash::from(&msg.message);
+        let CertificationMessageId { hash, height } = CertificationMessageId::from(&msg.message);
 
         // Don't overwrite existing artifacts.
-        if let Entry::Vacant(entry) = self.unvalidated.entry(msg_hash.clone()) {
-            match msg_hash {
+        if let Entry::Vacant(entry) = self.unvalidated.entry(hash.digest().clone()) {
+            match hash {
                 CertificationMessageHash::Certification(cert_hash) => {
                     self.unvalidated_cert_index.insert(height, cert_hash);
                 }
@@ -292,7 +284,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
     fn remove(&mut self, id: &CertificationMessageId) {
         let CertificationMessageId { height, hash } = id;
 
-        let artifact = self.unvalidated.remove(hash);
+        let artifact = self.unvalidated.remove(hash.digest());
         if artifact.is_some() {
             match hash {
                 CertificationMessageHash::Certification(cert_hash) => {
@@ -412,7 +404,7 @@ impl CertificationPool for CertificationPoolImpl {
         Box::new(self.unvalidated_share_index.lookup(height).map(|id| {
             let CertificationMessage::CertificationShare(share) = self
                 .unvalidated
-                .get(&CertificationMessageHash::CertificationShare(id.clone()))
+                .get(id.get_ref())
                 .expect("value must exist if hash exists")
             else {
                 panic!("hash is share, but value is not");
@@ -428,7 +420,7 @@ impl CertificationPool for CertificationPoolImpl {
         Box::new(self.unvalidated_cert_index.lookup(height).map(|id| {
             let CertificationMessage::Certification(cert) = self
                 .unvalidated
-                .get(&CertificationMessageHash::Certification(id.clone()))
+                .get(id.get_ref())
                 .expect("value must exist if hash exists")
             else {
                 panic!("hash is certification, but value is not");
@@ -515,6 +507,7 @@ mod tests {
     use ic_test_utilities_consensus::fake::{Fake, FakeSigner};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::artifact::IdentifiableArtifact;
+    use ic_types::consensus::HasHeight;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{
         CryptoHashOfPartialState, Height,
@@ -706,9 +699,9 @@ mod tests {
             );
 
             for id in [id1, id2, id3, id4] {
-                assert!(pool.unvalidated.contains_key(&id.hash));
+                assert!(pool.unvalidated.contains_key(id.hash.digest()));
                 pool.remove(&id);
-                assert!(!pool.unvalidated.contains_key(&id.hash));
+                assert!(!pool.unvalidated.contains_key(id.hash.digest()));
             }
         })
     }
@@ -995,24 +988,24 @@ mod tests {
             assert!(
                 !pool
                     .unvalidated
-                    .contains_key(&CertificationMessageId::from(&share_msg).hash)
+                    .contains_key(CertificationMessageHash::from(&share_msg).digest())
             );
             assert!(
                 !pool
                     .unvalidated
-                    .contains_key(&CertificationMessageId::from(&cert_msg).hash)
+                    .contains_key(CertificationMessageHash::from(&cert_msg).digest())
             );
 
             pool.insert(to_unvalidated(share_msg.clone()));
 
             assert!(
                 pool.unvalidated
-                    .contains_key(&CertificationMessageId::from(&share_msg).hash)
+                    .contains_key(CertificationMessageHash::from(&share_msg).digest())
             );
             assert!(
                 !pool
                     .unvalidated
-                    .contains_key(&CertificationMessageId::from(&cert_msg).hash)
+                    .contains_key(CertificationMessageHash::from(&cert_msg).digest())
             );
         });
     }
