@@ -78,7 +78,6 @@ use crate::{
         ValidGenericNervousSystemFunction, get_action_auxiliary,
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
         validate_and_render_proposal, validate_and_render_set_topics_for_custom_proposals,
-        validate_registered_dapp_canister, validate_snapshot_id_of_canister,
     },
     sns_upgrade::{
         SnsCanisterType, UpgradeSnsParams, canister_type_and_wasm_hash_for_upgrade,
@@ -2747,27 +2746,13 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         self.check_no_upgrades_in_progress(Some(proposal_id))?;
 
-        // These were already checked when the proposal was submitted, but they are cheap enough
-        // to check again (the dapp might have been deregistered since then).
-        let LoadCanisterSnapshot {
-            canister_id,
-            snapshot_id,
-        } = load_canister_snapshot;
-        let canister_id = get_canister_id(&canister_id)?;
-        let snapshot_id = snapshot_id.unwrap_or_default();
-        validate_snapshot_id_of_canister("snapshot_id", &snapshot_id, canister_id)
-            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
-        validate_registered_dapp_canister(
-            &*self.env,
-            self.proto.root_canister_id_or_panic(),
-            canister_id,
-        )
-        .await
-        .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
+        let (canister_id, snapshot_id) = load_canister_snapshot
+            .validate(&*self.env, self.proto.root_canister_id_or_panic())
+            .await?;
 
         let request = Encode!(&LoadCanisterSnapshotRequest {
             canister_id: canister_id.get(),
-            snapshot_id,
+            snapshot_id: snapshot_id.to_vec(),
         })
         .map_err(|err| {
             GovernanceError::new_with_message(
