@@ -84,9 +84,9 @@ impl NNSDelegationReader {
     }
 
     /// Returns the most recent NNS delegation known to the replica together with some metadata.
-    /// TODO: Make this method also verify the delegation against a given replicated state
     /// Consecutive calls might return different delegations.
     /// Note: on the NNS subnet this always returns `None`.
+    /// TODO: Make this method also verify the delegation against a given replicated state
     pub fn get_delegation_with_metadata(
         &self,
         canister_ranges_filter: CanisterRangesFilter,
