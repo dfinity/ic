@@ -335,7 +335,7 @@ async fn test_load_canister_snapshot() {
         url: "".to_string(),
         action: Some(Action::LoadCanisterSnapshot(LoadCanisterSnapshot {
             canister_id: Some(dapp_canister_id.get()),
-            snapshot_id: Some(snapshot_id),
+            snapshot_id: Some(snapshot_id.clone()),
         })),
     };
     let proposal_data = propose_and_wait(
@@ -348,27 +348,55 @@ async fn test_load_canister_snapshot() {
     .await
     .unwrap();
 
-    // Step 3: Verify that the state written after the snapshot is gone, and the dapp runs.
+    // Step 3: Verify that the proposal was executed successfully, that the state written after
+    // the snapshot is gone, and that the dapp runs.
+    assert!(
+        proposal_data.executed_timestamp_seconds > 0,
+        "{proposal_data:#?}"
+    );
     assert_eq!(proposal_data.failure_reason, None);
     assert_eq!(get(&pocket_ic, dapp_canister_id).await, 3);
     inc(&pocket_ic, dapp_canister_id).await;
     assert_eq!(get(&pocket_ic, dapp_canister_id).await, 4);
 
     // Only SNS Governance may call SNS Root's snapshot methods.
+    let not_governance = PrincipalId::new_user_test_id(42).0;
     let err = pocket_ic
         .update_call(
             sns.root.canister_id.0,
-            PrincipalId::new_user_test_id(42).0,
+            not_governance,
             "load_canister_snapshot",
-            Encode!(
-                &ic_nervous_system_root::load_canister_snapshot::LoadCanisterSnapshotRequest {
-                    canister_id: dapp_canister_id.get(),
-                    snapshot_id: vec![],
-                }
-            )
+            Encode!(&LoadCanisterSnapshotRequest {
+                canister_id: dapp_canister_id.get(),
+                snapshot_id,
+            })
             .unwrap(),
         )
         .await
         .unwrap_err();
     assert!(err.reject_message.contains("assertion"), "{err:?}");
+    let err = pocket_ic
+        .update_call(
+            sns.root.canister_id.0,
+            not_governance,
+            "take_canister_snapshot",
+            Encode!(&TakeCanisterSnapshotRequest {
+                canister_id: dapp_canister_id.get(),
+                replace_snapshot: None,
+            })
+            .unwrap(),
+        )
+        .await
+        .unwrap_err();
+    assert!(err.reject_message.contains("assertion"), "{err:?}");
+    // Neither call had any effect.
+    assert_eq!(get(&pocket_ic, dapp_canister_id).await, 4);
+    assert_eq!(
+        pocket_ic
+            .list_canister_snapshots(dapp_canister_id.into(), Some(sns.root.canister_id.0))
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 }
