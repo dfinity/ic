@@ -1,9 +1,11 @@
+use backon::{BackoffBuilder, ExponentialBuilder};
 use std::{
     collections::BTreeMap,
     sync::{Arc, RwLock},
     time::Duration,
 };
 use thiserror::Error;
+use tokio::time::sleep;
 
 use ic_interfaces::{
     canister_http::CanisterHttpPool,
@@ -60,6 +62,11 @@ use super::{
         },
     },
 };
+
+/// Minimum delay before fetching another copy of a message after an invalid one.
+const MIN_REFETCH_DELAY: Duration = Duration::from_secs(5);
+/// Maximum delay before fetching another copy of a message after an invalid one.
+const MAX_REFETCH_DELAY: Duration = Duration::from_secs(120);
 
 struct BouncerFactoryWrapper<Pool: ValidatedPoolReader<ConsensusMessage>> {
     bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
@@ -181,9 +188,48 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
     async fn assemble_message<P: Peers + Clone + Send + 'static>(
         &self,
         id: <MaybeStrippedConsensusMessage as IdentifiableArtifact>::Id,
-        artifact: Option<(MaybeStrippedConsensusMessage, NodeId)>,
+        mut artifact: Option<(MaybeStrippedConsensusMessage, NodeId)>,
         peer_rx: P,
     ) -> AssembleResult<ConsensusMessage> {
+        let mut refetch_backoff = ExponentialBuilder::new()
+            .with_min_delay(MIN_REFETCH_DELAY)
+            .with_max_delay(MAX_REFETCH_DELAY)
+            .with_factor(1.5)
+            .with_jitter()
+            .without_max_times()
+            .build();
+
+        loop {
+            match self
+                .try_assemble_message(id.clone(), artifact.take(), peer_rx.clone())
+                .await
+            {
+                Ok(result) => return result,
+                Err((peer_id, err)) => {
+                    self.metrics.report_invalid_copy();
+                    warn!(
+                        self.log,
+                        "Peer {} sent an invalid copy of {:?}, fetching another one: {}",
+                        peer_id,
+                        id.as_ref(),
+                        err
+                    );
+                }
+            }
+            sleep(refetch_backoff.next().unwrap_or(MAX_REFETCH_DELAY)).await;
+        }
+    }
+}
+
+impl FetchStrippedConsensusArtifact {
+    /// Tries to assemble the message from the pushed copy, or from one downloaded from a peer.
+    /// Fails with the peer that served the copy if the copy is invalid.
+    async fn try_assemble_message<P: Peers + Clone + Send + 'static>(
+        &self,
+        id: StrippedConsensusMessageId,
+        artifact: Option<(MaybeStrippedConsensusMessage, NodeId)>,
+        peer_rx: P,
+    ) -> Result<AssembleResult<ConsensusMessage>, (NodeId, AssemblyError)> {
         let total_timer = self.metrics.total_block_assembly_duration.start_timer();
         // Download the Stripped message if it hasn't been pushed.
         let (stripped_artifact, peer) = match self
@@ -191,7 +237,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             .assemble_message(id.clone(), artifact, peer_rx.clone())
             .await
         {
-            AssembleResult::Unwanted => return AssembleResult::Unwanted,
+            AssembleResult::Unwanted => return Ok(AssembleResult::Unwanted),
             AssembleResult::Done { message, peer_id } => (message, peer_id),
         };
 
@@ -199,10 +245,13 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) => stripped,
             MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
                 total_timer.stop_and_discard();
-                return AssembleResult::Done {
+                if !is_intact(&unstripped) {
+                    return Err((peer, AssemblyError::IntegrityCheckFailed));
+                }
+                return Ok(AssembleResult::Done {
                     message: unstripped,
                     peer_id: peer,
-                };
+                });
             }
         };
 
@@ -243,7 +292,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             let join_result = tokio::select! {
                 _ = bouncer.wait_for(|bouncer| matches!(bouncer(&id), BouncerValue::Unwanted)) => {
                     self.metrics.report_aborted_block_assembly();
-                    return AssembleResult::Unwanted;
+                    return Ok(AssembleResult::Unwanted);
                 }
                 join_result = join_set.join_next() => join_result,
             };
@@ -253,7 +302,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             };
 
             let Ok((message, peer_id)) = join_result else {
-                return AssembleResult::Unwanted;
+                return Ok(AssembleResult::Unwanted);
             };
 
             let message_type = StrippedMessageType::from(&message);
@@ -274,7 +323,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
                     err
                 );
 
-                return AssembleResult::Unwanted;
+                return Ok(AssembleResult::Unwanted);
             }
         }
 
@@ -301,19 +350,29 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         }
 
         match assembler.try_assemble() {
-            Ok(reconstructed_block_proposal) => AssembleResult::Done {
+            Ok(reconstructed_block_proposal) => Ok(AssembleResult::Done {
                 message: ConsensusMessage::BlockProposal(reconstructed_block_proposal),
                 peer_id: peer,
-            },
-            Err(err) => {
-                warn!(
-                    self.log,
-                    "Failed to reassemble the block {}. This is a bug.", err
-                );
-
-                AssembleResult::Unwanted
-            }
+            }),
+            Err(err) => Err((peer, err)),
         }
+    }
+}
+
+fn is_intact(message: &ConsensusMessage) -> bool {
+    match message {
+        ConsensusMessage::BlockProposal(_)
+        | ConsensusMessage::CatchUpPackage(_)
+        | ConsensusMessage::CatchUpPackageShare(_) => message.check_integrity(),
+        ConsensusMessage::RandomBeacon(_)
+        | ConsensusMessage::Finalization(_)
+        | ConsensusMessage::Notarization(_)
+        | ConsensusMessage::RandomBeaconShare(_)
+        | ConsensusMessage::NotarizationShare(_)
+        | ConsensusMessage::FinalizationShare(_)
+        | ConsensusMessage::RandomTape(_)
+        | ConsensusMessage::RandomTapeShare(_)
+        | ConsensusMessage::EquivocationProof(_) => true,
     }
 }
 
@@ -419,6 +478,8 @@ pub(crate) enum AssemblyError {
         claimed: ConsensusMessageId,
         assembled: ConsensusMessageId,
     },
+    #[error("The content of the message does not match its hash")]
+    IntegrityCheckFailed,
 }
 
 /// A trait keeps track of the missing artifacts in a stripped payload,
@@ -702,8 +763,9 @@ impl BlockProposalAssembler {
     /// Tries to reassemble a block.
     ///
     /// Fails if there are still some stripped messages missing,
-    /// the assembled proposal can't be deserialized, or if the
-    /// assembled proposal has an ID that doesn't match the claimed ID.
+    /// the assembled proposal can't be deserialized, has an ID
+    /// that doesn't match the claimed ID, or a block that doesn't
+    /// match its hash.
     pub(crate) fn try_assemble(self) -> Result<BlockProposal, AssemblyError> {
         let BlockProposalAssembler {
             pruned_block_proposal_proto: mut reconstructed_block_proposal_proto,
@@ -734,6 +796,9 @@ impl BlockProposalAssembler {
                 assembled: assembled_id,
             });
         }
+        if !reconstructed_block_proposal.check_integrity() {
+            return Err(AssemblyError::IntegrityCheckFailed);
+        }
 
         Ok(reconstructed_block_proposal)
     }
@@ -749,7 +814,8 @@ mod tests {
         fake_canister_http_stripped_message, fake_canister_http_timeout_message,
         fake_flexible_canister_http_responses_message, fake_idkg_dealing,
         fake_idkg_payload_with_dealings, fake_ingress_message, fake_ingress_message_with_arg_size,
-        fake_ingress_message_with_sig, fake_stripped_block_proposal_with_messages, rpc_response,
+        fake_ingress_message_with_sig, fake_stripped_block_proposal_with_messages,
+        fake_summary_block_proposal, rpc_response,
     };
     use crate::fetch_stripped_artifact::types::stripped::StrippedCanisterHttpResponses;
     use assert_matches::assert_matches;
@@ -761,8 +827,15 @@ mod tests {
     use ic_p2p_test_utils::mocks::MockTransport;
     use ic_p2p_test_utils::mocks::MockValidatedPoolReader;
     use ic_protobuf::proxy::ProtoProxy;
-    use ic_test_utilities_consensus::fake::FakeContentSigner;
+    use ic_test_utilities_consensus::{
+        fake::{Fake, FakeContentSigner, FakeSigner},
+        make_genesis,
+    };
     use ic_types::consensus::idkg::IDkgObject;
+    use ic_types::{
+        consensus::{CatchUpPackageShare, CatchUpShareContent, dkg::DkgSummary},
+        signature::ThresholdSignatureShare,
+    };
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_2};
     use std::collections::BTreeSet;
 
@@ -1661,5 +1734,135 @@ mod tests {
             AssemblyError::MismatchedConsensusMessageId { claimed, assembled }
                 if claimed == mismatched_claimed_id && assembled == assembled_id
         );
+    }
+
+    #[test]
+    fn try_assemble_rejects_reconstructed_block_failing_integrity_check() {
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
+            ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![])).strip()
+        else {
+            unreachable!();
+        };
+        // Changing the block leaves the hash it claims, and thus the claimed id, as is.
+        stripped_block_proposal
+            .pruned_block_proposal_proto
+            .value
+            .as_mut()
+            .unwrap()
+            .time += 1;
+        let assembler = BlockProposalAssembler::new(stripped_block_proposal);
+
+        assert_matches!(
+            assembler.try_assemble(),
+            Err(AssemblyError::IntegrityCheckFailed)
+        );
+    }
+
+    /// The assembler of `NODE_1`, whose peer `NODE_2` serves `message` once.
+    fn set_up_assembler_with_peer_serving(
+        message: MaybeStrippedConsensusMessage,
+    ) -> FetchStrippedConsensusArtifact {
+        let response = bytes::Bytes::from(pb::StrippedConsensusMessage::proxy_encode(message));
+        let mut mock_transport = MockTransport::new();
+        mock_transport
+            .expect_rpc()
+            .times(1)
+            .returning(move |peer, _| {
+                assert_eq!(*peer, NODE_2);
+                Ok(axum::response::Response::builder()
+                    .body(response.clone())
+                    .unwrap())
+            });
+
+        build_assembler(
+            MockValidatedPoolReader::<SignedIngress>::default(),
+            FakeCanisterHttpPool::empty(),
+            wanting_bouncer_factory(),
+            mock_transport,
+        )
+    }
+
+    /// Checks that `invalid_copy` of `message`, pushed by `NODE_1`, is dropped, and that
+    /// `message` is fetched from `NODE_2` instead.
+    async fn assert_refetched_after_invalid_copy(
+        invalid_copy: MaybeStrippedConsensusMessage,
+        message: ConsensusMessage,
+    ) {
+        assert_eq!(invalid_copy.id().as_ref(), &message.id());
+        let assembler = set_up_assembler_with_peer_serving(message.clone().strip());
+
+        let result = assembler
+            .assemble_message(
+                invalid_copy.id(),
+                Some((invalid_copy, NODE_1)),
+                MockPeers(NODE_2),
+            )
+            .await;
+
+        // Copies with the same id are equal, only their integrity tells them apart.
+        assert_matches!(
+            result,
+            AssembleResult::Done { message: assembled, peer_id }
+                if peer_id == NODE_2 && assembled == message && assembled.check_integrity()
+        );
+        assert_eq!(assembler.metrics.invalid_copies.get(), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn assemble_refetches_unstripped_block_proposal_failing_integrity_check() {
+        let message = fake_summary_block_proposal();
+        let ConsensusMessage::BlockProposal(block_proposal) = message.clone() else {
+            unreachable!();
+        };
+        let mut proto = pb::BlockProposal::from(block_proposal);
+        proto.value.as_mut().unwrap().time += 1;
+        let invalid_copy = ConsensusMessage::BlockProposal(proto.try_into().unwrap());
+
+        assert_refetched_after_invalid_copy(
+            MaybeStrippedConsensusMessage::Unstripped(invalid_copy),
+            message,
+        )
+        .await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn assemble_refetches_stripped_block_proposal_failing_integrity_check() {
+        let message = ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![]));
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut invalid_copy) =
+            message.clone().strip()
+        else {
+            unreachable!();
+        };
+        invalid_copy
+            .pruned_block_proposal_proto
+            .value
+            .as_mut()
+            .unwrap()
+            .time += 1;
+
+        assert_refetched_after_invalid_copy(
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(invalid_copy),
+            message,
+        )
+        .await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn assemble_refetches_catch_up_package_share_failing_integrity_check() {
+        let cup = make_genesis(DkgSummary::fake());
+        let share = CatchUpPackageShare {
+            content: CatchUpShareContent::from(&cup.content),
+            signature: ThresholdSignatureShare::fake(NODE_2),
+        };
+        let mut proto = pb::CatchUpPackageShare::from(share.clone());
+        // Changing the random beacon leaves the hash it claims, and thus the id, as is.
+        proto.random_beacon.as_mut().unwrap().parent = vec![1; 32];
+        let invalid_copy = ConsensusMessage::CatchUpPackageShare(proto.try_into().unwrap());
+
+        assert_refetched_after_invalid_copy(
+            MaybeStrippedConsensusMessage::Unstripped(invalid_copy),
+            ConsensusMessage::CatchUpPackageShare(share),
+        )
+        .await;
     }
 }
