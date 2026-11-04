@@ -2,7 +2,7 @@ use crate::invariants::common::{InvariantCheckError, RegistrySnapshot};
 
 use std::convert::TryFrom;
 
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, SubnetId};
 use ic_protobuf::registry::routing_table::v1::{
     CanisterIdAllocation as pbCanisterIdAllocation, CanisterMigrations as pbCanisterMigrations,
     RoutingTable as pbRoutingTable,
@@ -10,7 +10,9 @@ use ic_protobuf::registry::routing_table::v1::{
 use ic_registry_keys::{
     make_canister_id_allocation_key, make_canister_migrations_record_key, make_canister_ranges_key,
 };
-use ic_registry_routing_table::{CanisterMigrations, RoutingTable, canister_id_into_u64};
+use ic_registry_routing_table::{
+    CanisterIdRange, CanisterMigrations, RoutingTable, canister_id_into_u64,
+};
 use prost::Message;
 
 /// Routing table invariants hold if reading and conversion succeed.
@@ -138,25 +140,46 @@ pub(crate) fn check_canister_id_allocation_invariants(
         });
     }
 
-    let routing_table = get_routing_table(snapshot);
-    let ranges_beyond_allocation = routing_table
-        .iter()
-        .filter(|(range, _)| canister_id_into_u64(range.end) >= next_unallocated_canister_index)
-        .map(|(range, subnet_id)| format!("{range:?} (subnet {subnet_id})"))
-        .collect::<Vec<String>>();
-    if !ranges_beyond_allocation.is_empty() {
+    // It suffices to check the last range of the routing table, since the ranges are sorted.
+    let Some((last_range, last_subnet_id)) = get_last_routing_table_entry(snapshot) else {
+        return Ok(());
+    };
+    if canister_id_into_u64(last_range.end) >= next_unallocated_canister_index {
         return Err(InvariantCheckError {
             msg: format!(
                 "The routing table hosts canister IDs at or above the \
                  next_unallocated_canister_index {next_unallocated_canister_index} of the \
-                 CanisterIdAllocation: {}",
-                ranges_beyond_allocation.join(", ")
+                 CanisterIdAllocation: its last range is {last_range:?} (subnet {last_subnet_id})."
             ),
             source: None,
         });
     }
 
     Ok(())
+}
+
+/// Returns the last (i.e., highest) range of the routing table and its subnet, or `None` if the
+/// routing table is empty.
+///
+/// Only the last non-empty shard is decoded, rather than the whole routing table, because this runs
+/// on every registry mutation. This relies on the shards being sorted and disjoint, which
+/// `check_routing_table_invariants` ensures.
+fn get_last_routing_table_entry(
+    snapshot: &RegistrySnapshot,
+) -> Option<(CanisterIdRange, SubnetId)> {
+    let start = make_canister_ranges_key(CanisterId::from_u64(0)).into_bytes();
+    let end = make_canister_ranges_key(CanisterId::from_u64(u64::MAX)).into_bytes();
+    let last_shard = snapshot
+        .range(start..=end)
+        .rev()
+        .map(|(_, value)| pbRoutingTable::decode(value.as_slice()).unwrap())
+        .find(|shard| !shard.entries.is_empty())?;
+
+    let last_shard = RoutingTable::try_from(vec![last_shard]).unwrap();
+    last_shard
+        .iter()
+        .last()
+        .map(|(range, subnet_id)| (*range, *subnet_id))
 }
 
 #[cfg(test)]
