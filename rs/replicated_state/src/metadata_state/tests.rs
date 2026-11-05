@@ -3671,37 +3671,6 @@ fn upgrade_state_return_removes_authorization() {
 }
 
 #[test]
-fn upgrade_state_expires_stale_requests() {
-    let members = upgrade_state_members(&[1, 2, 3]);
-    let mut state = UpgradeState::default();
-
-    state.apply(
-        &[upgrade_request_action(node_test_id(1))],
-        Height::new(1),
-        &members,
-    );
-
-    // A request survives until UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS have passed...
-    state.apply(
-        &[],
-        Height::new(1 + UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS.get()),
-        &members,
-    );
-    assert_eq!(
-        state.unauthorized_upgrade_requests.get(&node_test_id(1)),
-        Some(&Height::new(1))
-    );
-
-    // ... and expires one block later.
-    state.apply(
-        &[],
-        Height::new(2 + UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS.get()),
-        &members,
-    );
-    assert!(state.unauthorized_upgrade_requests.is_empty());
-}
-
-#[test]
 fn upgrade_state_prunes_departed_members() {
     let old_members = upgrade_state_members(&[1, 2, 3, 7]);
     let mut state = UpgradeState::default();

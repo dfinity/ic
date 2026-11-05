@@ -114,7 +114,6 @@ const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
 const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
 const BLOCKS_NOT_PROPOSED_BY_BLOCKMAKER_TOTAL: &str = "mr_blocks_not_proposed_by_blockmaker_total";
 const METRIC_NEXT_CHECKPOINT_HEIGHT: &str = "mr_next_checkpoint_height";
-pub const UPGRADE_PERMIT_EXPIRED: &str = "mr_upgrade_permit_expired";
 
 const METRIC_SUBNET_INFO: &str = "mr_subnet_info";
 const METRIC_SUBNET_SIZE: &str = "mr_subnet_size";
@@ -370,9 +369,6 @@ pub(crate) struct MessageRoutingMetrics {
 
     /// Metrics for the `next_checkpoint_height` passed to `process_batch`.
     next_checkpoint_height: IntGauge,
-
-    /// Number of upgrade permit requests that have expired.
-    pub upgrade_permit_expired: IntCounter,
 }
 
 impl MessageRoutingMetrics {
@@ -517,11 +513,6 @@ impl MessageRoutingMetrics {
             next_checkpoint_height: metrics_registry.int_gauge(
                 METRIC_NEXT_CHECKPOINT_HEIGHT,
                 "Next checkpoint height passed to process_batch."
-            ),
-
-            upgrade_permit_expired: metrics_registry.int_counter(
-                UPGRADE_PERMIT_EXPIRED,
-                "Upgrade permit request has expired"
             ),
         }
     }

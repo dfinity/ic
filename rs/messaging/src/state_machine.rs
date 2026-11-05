@@ -1,9 +1,7 @@
 use crate::canister_http_spent::{
     deliver_canister_http_spent, refund_timed_out_canister_http_contexts,
 };
-use crate::message_routing::{
-    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics, UPGRADE_PERMIT_EXPIRED,
-};
+use crate::message_routing::{CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics};
 use crate::routing::demux::Demux;
 use crate::routing::stream_builder::{
     StreamBuilder, generate_reject_responses_for_deleted_subnets,
@@ -173,12 +171,8 @@ impl StateMachine for StateMachineImpl {
         ) {
             info!(
                 self.log,
-                "{}: Upgrade permit request from '{}' expired at height '{}'",
-                UPGRADE_PERMIT_EXPIRED,
-                node,
-                batch.batch_number,
+                "Upgrade permit request from '{}' expired at height '{}'", node, batch.batch_number,
             );
-            self.metrics.upgrade_permit_expired.inc();
         }
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.

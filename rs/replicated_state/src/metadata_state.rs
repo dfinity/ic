@@ -2422,8 +2422,8 @@ impl UnflushedCheckpointOps {
     }
 }
 
-/// If a permit request is not authorized within this many blocks, it expires
-/// and the slot is freed for the next block maker to issue a new request.
+/// If a permit request is not authorized within this many blocks, something
+/// has likely gone wrong. This timeout is used to log for monitoring.
 pub const UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS: Height = Height::new(100);
 
 /// The Phase 2 state during fast GuestOS upgrades, stored in `SystemMetadata`.
@@ -2437,9 +2437,9 @@ pub struct UpgradeState {
 }
 
 impl UpgradeState {
-    /// Apply a block's upgrade actions at `height`, pruning expired
-    /// requests and permits of departed members. Any nodes with expired
-    /// requests are returned for logging.
+    /// Apply a block's upgrade actions at `height`, pruning  permits of
+    /// departed members. Any nodes with long running requests are returned for
+    /// logging.
     pub fn apply(
         &mut self,
         actions: &[UpgradePermitAction],
@@ -2463,24 +2463,21 @@ impl UpgradeState {
             }
         }
 
-        // Expire stale requests and prune departed members.
-        let mut expired = Vec::new();
-        self.unauthorized_upgrade_requests
-            .retain(|node, req_height| {
-                let retain = *req_height + UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS >= height
-                    && subnet_members.contains(node);
-                if !retain {
-                    expired.push(*node);
-                }
-
-                retain
-            });
-
         // Prune departed members.
+        self.unauthorized_upgrade_requests
+            .retain(|node, _req_height| subnet_members.contains(node));
+
         self.rebooting_nodes
             .retain(|node| subnet_members.contains(node));
 
-        expired
+        // Collect any nodes that have been sitting with an open request for
+        // more than UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS blocks.
+        self.unauthorized_upgrade_requests
+            .iter()
+            .filter_map(|(node, req_height)| {
+                (*req_height + UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS >= height).then_some(*node)
+            })
+            .collect()
     }
 }
 
