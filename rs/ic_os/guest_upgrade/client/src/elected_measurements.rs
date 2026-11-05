@@ -46,9 +46,8 @@ pub trait ElectedMeasurementsSource: Send + Sync {
     ) -> Result<Vec<Vec<u8>>>;
 
     /// Returns the launch measurements of all GuestOS versions elected at the latest registry
-    /// version.
-    ///
-    /// TODO: Remove once all GuestOSes are upgraded.
+    /// version. It is a worst-case fallback in case the NNS subnet itself is NNS and self-upgrades.
+    /// In this case it halts and is unable to execute update calls required for get_version_measurements() above.
     async fn get_all_elected_measurements(&self) -> Result<Vec<Vec<u8>>>;
 }
 

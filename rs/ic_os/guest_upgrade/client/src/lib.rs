@@ -1,5 +1,8 @@
-use crate::elected_measurements::ElectedMeasurementsSource;
-use crate::tls::SkipServerCertificateCheck;
+use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
 use anyhow::{Context, Error, Result, anyhow, bail};
 use attestation::attestation_package::{
     AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
@@ -22,16 +25,15 @@ use rustls::version::TLS13;
 use sev::firmware::guest::AttestationReport;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
-use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use tokio::net::TcpStream;
 use tonic::transport::{Channel, Endpoint};
 use tower::{Service, service_fn};
 use x509_parser::certificate::X509Certificate;
 use x509_parser::nom::AsBytes;
 use x509_parser::prelude::FromDer;
+
+use crate::elected_measurements::ElectedMeasurementsSource;
+use crate::tls::SkipServerCertificateCheck;
 
 pub mod elected_measurements;
 mod tls;
@@ -269,9 +271,6 @@ impl DiskEncryptionKeyExchangeClientAgent {
     /// server's measurement, we fall back to the old approach of checking against all elected
     /// GuestOS versions. Any other verification failure is final, since other measurements
     /// cannot fix it.
-    ///
-    /// TODO: Remove the fallback once everything is upgraded.
-    /// Also remove the returned note since it would make no sense.
     async fn verify_server(
         &self,
         server_attestation_package: SevAttestationPackage,
