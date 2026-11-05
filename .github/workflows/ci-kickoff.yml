@@ -109,7 +109,14 @@ jobs:
           n_lines_nocache=$(cat execlogs-nocache/execlogs.csv | wc -l)
           echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
 
+          warn_if_low_coverage() { # <number of artifacts present in both>
+            if [ "${{ github.event_name }}" != "pull_request" ] && [ "$1" -lt $((n_lines_nocache / 2)) ]; then
+              echo "::warning title=RBE Build Determinism::only $1 of the $n_lines_nocache artifacts built by build-ic are in the execution log of the RBE build"
+            fi
+          }
+
           if [ "$n_lines_cache" -eq 0 ] || [ "$n_lines_nocache" -eq 0 ]; then
+            warn_if_low_coverage 0
             echo "No lines to compare"
             exit 0
           fi
@@ -126,9 +133,7 @@ jobs:
 
           n_joined=$(join -t, -12 -22 execlogs-cache/execlogs.csv execlogs-nocache/execlogs.csv | wc -l)
           echo "comparing $n_joined artifacts present in both"
-          if [ "${{ github.event_name }}" != "pull_request" ] && [ "$n_joined" -lt $((n_lines_nocache / 2)) ]; then
-            echo "::warning title=RBE Build Determinism::only $n_joined of the $n_lines_nocache artifacts built by build-ic are in the execution log of the RBE build"
-          fi
+          warn_if_low_coverage "$n_joined"
 
           join \
             -t, -o 1.1,1.2,1.3,2.3 -12 -22 \

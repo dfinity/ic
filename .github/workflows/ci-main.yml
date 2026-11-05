@@ -735,9 +735,21 @@ jobs:
           n_lines_nocache=$(cat execlogs-nocache/execlogs.csv | wc -l)
           echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
 
+          # Outside pull requests both jobs build everything, so every artifact of the nocache side
+          # should be in the cache side. But the cache side can be incomplete: when bazel retries a
+          # build after a remote-cache eviction (--experimental_remote_cache_eviction_retries), its
+          # compact execution log only covers the last attempt, and this check would silently compare
+          # less. So warn when many artifacts are missing from it, also when it is empty.
+          warn_if_low_coverage() { # <number of artifacts present in both>
+            if [ "$CI_EVENT_NAME" != "pull_request" ] && [ "$1" -lt $((n_lines_nocache / 2)) ]; then
+              echo "::warning title=Build Determinism::only $1 of the $n_lines_nocache artifacts built by build-ic are in the execution log of bazel-test-all"
+            fi
+          }
+
           # running tests may not pull all targets locally. If that's the case,
           # there will be 0 lines and nothing to compare.
           if [ "$n_lines_cache" -eq 0 ] || [ "$n_lines_nocache" -eq 0 ]; then
+            warn_if_low_coverage 0
             echo "No lines to compare"
             exit 0
           fi
@@ -753,16 +765,10 @@ jobs:
 
           rm "$sponge"
 
-          # How many artifacts the comparison covers. The cache side can be incomplete: when bazel retries
-          # a build after a remote-cache eviction (--experimental_remote_cache_eviction_retries), its
-          # compact execution log only covers the last attempt, and this check would silently compare
-          # less. Outside pull requests both jobs build everything, so every artifact of the nocache
-          # side should be in the cache side: warn when many aren't.
+          # How many artifacts the comparison covers, see warn_if_low_coverage above.
           n_joined=$(join -t, -12 -22 execlogs-cache/execlogs.csv execlogs-nocache/execlogs.csv | wc -l)
           echo "comparing $n_joined artifacts present in both"
-          if [ "$CI_EVENT_NAME" != "pull_request" ] && [ "$n_joined" -lt $((n_lines_nocache / 2)) ]; then
-            echo "::warning title=Build Determinism::only $n_joined of the $n_lines_nocache artifacts built by build-ic are in the execution log of bazel-test-all"
-          fi
+          warn_if_low_coverage "$n_joined"
 
           # join the CSVs (separator ',') and compare the hashes. This creates a table with the following columns:
           #   //rs/foo,bazel-out/path/to-artifact,deadbeef,deafb33f
