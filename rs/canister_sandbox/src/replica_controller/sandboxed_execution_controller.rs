@@ -154,8 +154,8 @@ struct SandboxedExecutionMetrics {
     mprotect_count: HistogramVec,
     copy_page_count: HistogramVec,
     sigsegv_handler_duration: HistogramVec,
-    wasm_page_limit_exceeded: IntCounterVec,
-    wasm_bulk_check_slow_path_calls: IntCounterVec,
+    wasm_page_limit_exceeded: HistogramVec,
+    wasm_bulk_check_slow_path_calls: HistogramVec,
 }
 
 impl SandboxedExecutionMetrics {
@@ -395,22 +395,26 @@ impl SandboxedExecutionMetrics {
                 decimal_buckets_with_zero(-4, 1),
                 &["api_type", "memory_type"],
             ),
-            wasm_page_limit_exceeded: metrics_registry.int_counter_vec(
-                "sandboxed_execution_wasm_page_limit_exceeded_total",
-                "Number of executions that exceeded the limit for accessed Wasm \
-                    heap pages, by api type and by the check that detected it \
-                    (handler: Wasm loads and stores, host_accessor: host \
-                    functions, bulk_check: bulk memory operations and stable \
-                    memory copies). While the feature is disabled nothing is refused and \
-                    the executions that would have been refused are counted.",
+            wasm_page_limit_exceeded: metrics_registry.histogram_vec(
+                "sandboxed_execution_wasm_page_limit_exceeded",
+                "Number of accesses beyond the limit for accessed Wasm heap \
+                    pages detected during the execution, by api type and by \
+                    the check that detected them (handler: Wasm loads and \
+                    stores, host_accessor: host functions, bulk_check: bulk \
+                    memory operations and stable memory copies). With the \
+                    feature enabled the first detection fails the execution; \
+                    with the feature disabled nothing is refused and every \
+                    access that would have been refused is counted.",
+                decimal_buckets_with_zero(0, 8),
                 &["api_type", "detector"],
             ),
-            wasm_bulk_check_slow_path_calls: metrics_registry.int_counter_vec(
-                "sandboxed_execution_wasm_bulk_check_slow_path_calls_total",
+            wasm_bulk_check_slow_path_calls: metrics_registry.histogram_vec(
+                "sandboxed_execution_wasm_bulk_check_slow_path_calls",
                 "Number of bulk memory operations and stable memory copies \
-                    whose pages had to be counted exactly by the host because \
-                    they might not fit the remaining accessed heap page \
-                    budget, by api type.",
+                    during the execution whose pages had to be counted exactly \
+                    by the host because they might not fit the remaining \
+                    accessed heap page budget, by api type.",
+                decimal_buckets_with_zero(0, 8),
                 &["api_type"],
             ),
         }
@@ -470,11 +474,11 @@ impl SandboxedExecutionMetrics {
         ] {
             self.wasm_page_limit_exceeded
                 .with_label_values(&[api_type_label, detector])
-                .inc_by(count as u64);
+                .observe(count as f64);
         }
         self.wasm_bulk_check_slow_path_calls
             .with_label_values(&[api_type_label])
-            .inc_by(instance_stats.wasm_bulk_check_slow_path_calls as u64);
+            .observe(instance_stats.wasm_bulk_check_slow_path_calls as f64);
 
         // Additional metrics for the stable memory.
         self.accessed_pages
@@ -2774,7 +2778,6 @@ mod tests {
     #[test]
     fn wasm_page_limit_metrics_are_reported() {
         use ic_config::embedders::MemoryPageLimit;
-        use ic_test_utilities_metrics::fetch_int_counter_vec;
 
         const WASM_PAGE: usize = 65536;
         const OS_PAGES_PER_WASM_PAGE: u64 = WASM_PAGE as u64 / 4096;
@@ -2821,29 +2824,29 @@ mod tests {
         let canister_id = test.canister_from_wat(wat).unwrap();
         let payload = vec![7_u8; 3 * WASM_PAGE];
 
+        // The histograms observe one value per execution; the sum is the
+        // number of detections or calls over all executions so far.
         let exceeded = |test: &ExecutionTest, detector: &str| {
-            fetch_int_counter_vec(
+            fetch_histogram_vec_stats(
                 test.metrics_registry(),
-                "sandboxed_execution_wasm_page_limit_exceeded_total",
+                "sandboxed_execution_wasm_page_limit_exceeded",
             )
             .get(&BTreeMap::from([
                 ("api_type".to_string(), "update".to_string()),
                 ("detector".to_string(), detector.to_string()),
             ]))
-            .copied()
-            .unwrap_or(0)
+            .map_or(0, |stats| stats.sum as u64)
         };
         let slow_path_calls = |test: &ExecutionTest| {
-            fetch_int_counter_vec(
+            fetch_histogram_vec_stats(
                 test.metrics_registry(),
-                "sandboxed_execution_wasm_bulk_check_slow_path_calls_total",
+                "sandboxed_execution_wasm_bulk_check_slow_path_calls",
             )
             .get(&BTreeMap::from([(
                 "api_type".to_string(),
                 "update".to_string(),
             )]))
-            .copied()
-            .unwrap_or(0)
+            .map_or(0, |stats| stats.sum as u64)
         };
 
         for (method, detector) in [
