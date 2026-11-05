@@ -673,6 +673,15 @@ impl ExecutionTest {
         );
     }
 
+    pub fn set_available_wasm_custom_sections_memory(&mut self, wasm_custom_sections_memory: i64) {
+        self.subnet_available_memory = SubnetAvailableMemory::new_for_testing(
+            self.subnet_available_memory.get_execution_memory(),
+            self.subnet_available_memory
+                .get_guaranteed_response_message_memory(),
+            wasm_custom_sections_memory,
+        );
+    }
+
     fn set_available_guaranteed_response_message_memory(
         &mut self,
         guaranteed_response_message_memory: i64,
