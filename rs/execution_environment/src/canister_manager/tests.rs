@@ -80,7 +80,7 @@ use ic_test_utilities_execution_environment::{
     get_routing_table_with_specified_ids_allocation_range, wasm_compilation_cost, wat_canister,
     wat_compilation_cost, wat_fn,
 };
-use ic_test_utilities_metrics::fetch_int_counter_vec;
+use ic_test_utilities_metrics::{fetch_int_counter_vec, labels};
 use ic_test_utilities_state::{
     CallContextBuilder, CanisterStateBuilder, ReplicatedStateBuilder, get_running_canister,
     get_stopped_canister, get_stopped_canister_with_controller, get_stopping_canister,
@@ -5916,6 +5916,279 @@ fn update_settings_fails_when_heap_delta_rate_limited() {
             ErrorCode::CanisterHeapDeltaRateLimited,
             &format!("Canister {canister_id} is heap delta rate limited: current delta debit is 10485760, but limit is 10485760"),
         );
+}
+
+// Regression test: an `update_settings` call that runs a `log_memory_limit`
+// resize and then fails must still charge the resize instructions to the
+// canister, instead of refunding them when the failed call is rolled back.
+// Before the fix the charge was reverted together with the rest of the call, so
+// a canister could run unbounded worst-case log resizes per round without ever
+// being charged for them.
+#[test]
+fn update_settings_charges_log_resize_instructions_when_the_call_fails() {
+    const LOG_LIMIT: u64 = 8 * 1024;
+    // A large freezing threshold, so the freezing cost of the small memory that
+    // the `controllers_change` history entry adds (the failure trigger) far
+    // exceeds the resize charge, making the funding window below wide.
+    const FREEZE_SECS: u64 = 1_000_000_000_000;
+
+    let mut test = ExecutionTestBuilder::new().build();
+
+    // A canister with a non-empty log buffer, so the resize does real work.
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::new(100_000_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(LOG_LIMIT)
+                .build(),
+        )
+        .unwrap();
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(&[b'x'; 2100]).reply().build(),
+    )
+    .unwrap();
+    let log_bytes_used = test
+        .canister_state(canister_id)
+        .system_state
+        .log_memory_store
+        .bytes_used();
+    assert!(log_bytes_used > 0);
+
+    test.update_freezing_threshold(canister_id, NumSeconds::from(FREEZE_SECS))
+        .unwrap();
+
+    // The cycle cost of the resize instructions.
+    let resize_instructions = NumInstructions::new(
+        log_bytes_used as u64
+            * SchedulerConfig::application_subnet()
+                .canister_log_resize_instructions_per_byte
+                .get(),
+    );
+    let resize_cost = test
+        .cycles_account_manager()
+        .management_canister_cost(resize_instructions, test.get_own_subnet_cycles_config())
+        .real();
+
+    // Park the balance just inside the freezing window: enough to afford the
+    // resize (freezing threshold + resize charge) plus a small margin, but not
+    // enough to also afford the memory that the `controllers_change` entry adds
+    // — which, with the huge freezing threshold, costs far more than the margin.
+    let target_balance =
+        test.freezing_threshold(canister_id) + resize_cost + Cycles::new(1_000_000);
+    let balance = test.canister_state(canister_id).system_state.balance();
+    assert!(balance > target_balance);
+    test.consume_cycles(canister_id, balance - target_balance);
+
+    let expected_charge = test
+        .cycles_account_manager()
+        .management_canister_cost(resize_instructions, test.get_own_subnet_cycles_config())
+        .nominal();
+    assert_ne!(expected_charge, NominalCycles::zero());
+    let (gauge_before, counter_before) = consumed_instruction_cycles(&test, canister_id);
+
+    // Resize the log (`LOG_LIMIT - 1`) and change the controllers. The resize
+    // runs and is charged; recording the `controllers_change` history entry then
+    // fails the freezing-threshold check, and the whole call is rolled back.
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(LOG_LIMIT - 1)
+            .with_controllers(vec![canister_test_id(1).get(), canister_test_id(2).get()])
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    let err = test
+        .subnet_message(Method::UpdateSettings, args)
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+
+    // The failed call is rolled back: the log buffer is unchanged.
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .log_memory_store
+            .bytes_used(),
+        log_bytes_used
+    );
+
+    // The resize instructions are charged despite the failure. Before the fix
+    // they were refunded on rollback, leaving these deltas at zero.
+    let (gauge_after, counter_after) = consumed_instruction_cycles(&test, canister_id);
+    assert_eq!(gauge_after - gauge_before, expected_charge);
+    assert_eq!(counter_after - counter_before, expected_charge);
+
+    // The round instruction budget is debited too: this is what bounds the
+    // number of log resizes a canister can trigger within a single round.
+    assert_eq!(test.subnet_message_instructions(), resize_instructions);
+
+    // The re-charge on the rolled-back canister must succeed, i.e. the inline
+    // charge and the re-charge must be computed against the same state.
+    assert_eq!(failed_subnet_message_charges(&test), 0);
+}
+
+/// The number of times a rolled-back management operation failed to re-charge
+/// the cycles it had already consumed, i.e. the value of the
+/// `execution_environment_failed_subnet_message_charge` critical error counter.
+fn failed_subnet_message_charges(test: &ExecutionTest) -> u64 {
+    fetch_int_counter_vec(test.metrics_registry(), "critical_errors")
+        .get(&labels(&[(
+            "error",
+            "execution_environment_failed_subnet_message_charge",
+        )]))
+        .copied()
+        .unwrap_or(0)
+}
+
+// A `log_memory_limit` resize is validated and charged against the *pre-update*
+// canister state, because `ConsumedCyclesForInstructions::apply` re-charges it
+// against the rolled-back (i.e. pre-update) canister on the failure path. An
+// `update_settings` that lowers the freezing threshold while growing the log
+// therefore has its grow validated against the *old* threshold: either the
+// canister can afford it there — in which case the re-charge on the
+// rolled-back canister is guaranteed to succeed as well — or the grow is
+// refused and nothing is charged.
+//
+// This pins the ordering of `validate_and_update_canister_settings` and the
+// trade-off it implies. On `master` the grow is validated after the requested
+// threshold has been applied, so the call below succeeds; here it is refused.
+// Were it validated against the requested threshold while the accumulator is
+// threaded through, a call that failed for any later reason would charge a
+// grow that the re-charge could not re-apply, losing the charge and raising the
+// `execution_environment_failed_subnet_message_charge` critical error.
+#[test]
+fn update_settings_validates_log_resize_against_the_pre_update_freezing_threshold() {
+    const LOG_LIMIT: u64 = 8 * 1024;
+    const GROWN_LOG_LIMIT: u64 = 2 * LOG_LIMIT;
+    // The threshold the call requests, ...
+    const FREEZE_SECS_AFTER: u64 = 500_000_000_000;
+    // ... and the one the canister has, which the call would lower.
+    const FREEZE_SECS_BEFORE: u64 = 2 * FREEZE_SECS_AFTER;
+    const INITIAL_BALANCE: Cycles = Cycles::new(100_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+
+    // A canister with a non-empty log buffer, so the resize does real work.
+    let new_canister_with_log = |test: &mut ExecutionTest| {
+        let canister_id = test
+            .create_canister_with_settings(
+                INITIAL_BALANCE,
+                CanisterSettingsArgsBuilder::new()
+                    .with_log_memory_limit(LOG_LIMIT)
+                    .build(),
+            )
+            .unwrap();
+        test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+            .unwrap();
+        test.ingress(
+            canister_id,
+            "update",
+            wasm().debug_print(&[b'x'; 2100]).reply().build(),
+        )
+        .unwrap();
+        canister_id
+    };
+
+    // Read off the freezing thresholds of the state the call is asking for --
+    // the grown log under either threshold -- from a twin that is rich enough
+    // to actually reach it.
+    let twin = new_canister_with_log(&mut test);
+    let args = UpdateSettingsArgs {
+        canister_id: twin.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(GROWN_LOG_LIMIT)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args).unwrap();
+    test.update_freezing_threshold(twin, NumSeconds::from(FREEZE_SECS_AFTER))
+        .unwrap();
+    let grown_threshold_after = test.freezing_threshold(twin);
+    test.update_freezing_threshold(twin, NumSeconds::from(FREEZE_SECS_BEFORE))
+        .unwrap();
+    let grown_threshold_before = test.freezing_threshold(twin);
+    assert!(grown_threshold_before > grown_threshold_after);
+
+    let canister_id = new_canister_with_log(&mut test);
+    let log_bytes_used = test
+        .canister_state(canister_id)
+        .system_state
+        .log_memory_store
+        .bytes_used();
+    assert!(log_bytes_used > 0);
+    let log_memory_usage_before = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage();
+    test.update_freezing_threshold(canister_id, NumSeconds::from(FREEZE_SECS_BEFORE))
+        .unwrap();
+
+    // The cycle cost of the resize instructions.
+    let resize_instructions = NumInstructions::new(
+        log_bytes_used as u64
+            * SchedulerConfig::application_subnet()
+                .canister_log_resize_instructions_per_byte
+                .get(),
+    );
+    let resize_cost = test
+        .cycles_account_manager()
+        .management_canister_cost(resize_instructions, test.get_own_subnet_cycles_config())
+        .real();
+
+    // Park the balance between the two: enough to afford the grown log against
+    // the requested threshold, nowhere near enough against the current one. The
+    // call therefore succeeds if the grow is validated against the requested
+    // threshold, and fails because it is not.
+    let target_balance = grown_threshold_after + resize_cost + Cycles::new(1_000_000);
+    assert!(target_balance < grown_threshold_before);
+    let balance = test.canister_state(canister_id).system_state.balance();
+    assert!(balance > target_balance);
+    test.consume_cycles(canister_id, balance - target_balance);
+
+    let (gauge_before, counter_before) = consumed_instruction_cycles(&test, canister_id);
+
+    // Lower the freezing threshold and grow the log in one call.
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(FREEZE_SECS_AFTER)
+            .with_log_memory_limit(GROWN_LOG_LIMIT)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    let err = test
+        .subnet_message(Method::UpdateSettings, args)
+        .unwrap_err();
+    // The grow is refused against the pre-update freezing threshold.
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+
+    // Nothing was applied: neither the log store nor the freezing threshold.
+    assert_eq!(
+        test.canister_state(canister_id)
+            .log_memory_store_memory_usage(),
+        log_memory_usage_before
+    );
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .freeze_threshold,
+        NumSeconds::from(FREEZE_SECS_BEFORE)
+    );
+
+    // The resize never ran, so neither the canister nor the round is charged
+    // for it, ...
+    let (gauge_after, counter_after) = consumed_instruction_cycles(&test, canister_id);
+    assert_eq!(gauge_after, gauge_before);
+    assert_eq!(counter_after, counter_before);
+    assert_eq!(test.subnet_message_instructions(), NumInstructions::new(0));
+
+    // ... and no charge was left behind for the rollback to fail to re-apply.
+    assert_eq!(failed_subnet_message_charges(&test), 0);
 }
 
 // Canister creation without log_memory_limit → first-time log store allocation
