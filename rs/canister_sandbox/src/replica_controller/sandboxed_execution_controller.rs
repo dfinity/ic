@@ -466,15 +466,16 @@ impl SandboxedExecutionMetrics {
         self.sigsegv_handler_duration
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_sigsegv_handler_duration.as_secs_f64());
-        // The stats count every detection. With the feature enabled that is at
-        // most one, since the first detection fails the execution.
+        // Count the execution once per detector that saw an access beyond the
+        // limit. With the feature enabled that is at most one detector, since
+        // the detection fails the execution.
         let refusals = &instance_stats.wasm_page_limit_refusals;
-        for (detector, count) in [
+        for (detector, detected) in [
             ("handler", refusals.handler),
             ("host_accessor", refusals.host_accessor),
             ("bulk_check", refusals.bulk_check),
         ] {
-            if count > 0 {
+            if detected {
                 self.wasm_page_limit_exceeded
                     .with_label_values(&[api_type_label, detector])
                     .inc();

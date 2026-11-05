@@ -101,27 +101,22 @@ pub struct InstanceStats {
     pub stable_sigsegv_handler_duration: Duration,
 }
 
-/// Refusals of heap accesses because of the accessed page limit, by detector.
+/// Which checks detected a heap access beyond the accessed page limit during
+/// an execution.
 ///
-/// A message that exceeds the limit is refused once; the detector tells
-/// which check caught it. While the `wasm_memory_accessed_page_limit` feature
-/// is disabled, nothing is refused and the counts tell what would have been
-/// refused.
+/// With the `wasm_memory_accessed_page_limit` feature enabled the first
+/// detection refuses the access and fails the execution, so at most one
+/// detector is set. With the feature disabled nothing is refused and every
+/// detector that would have refused an access is set.
 #[derive(Clone, Copy, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct HeapPageLimitRefusals {
-    /// Wasm loads and stores, refused by the memory tracker's signal handler.
-    pub handler: usize,
-    /// Heap ranges touched by host functions, refused by the heap accessor.
-    pub host_accessor: usize,
-    /// Bulk memory operations and stable memory copies, refused by the
+    /// A Wasm load or store, detected by the memory tracker's signal handler.
+    pub handler: bool,
+    /// A heap range touched by a host function, detected by the heap accessor.
+    pub host_accessor: bool,
+    /// A bulk memory operation or stable memory copy, detected by the
     /// pre-check injected into the Wasm code.
-    pub bulk_check: usize,
-}
-
-impl HeapPageLimitRefusals {
-    pub fn total(&self) -> usize {
-        self.handler + self.host_accessor + self.bulk_check
-    }
+    pub bulk_check: bool,
 }
 
 impl InstanceStats {

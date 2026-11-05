@@ -45,12 +45,12 @@ pub struct TrackerHeapAccess {
     limits: MemoryPageLimit,
     /// Whether accesses beyond the limit are refused (the feature flag).
     enforced: bool,
-    /// Accesses beyond the limit detected by the heap accessor, i.e. through
-    /// [`HeapAccessCheck::check`]. Refused only if the limit is enforced.
-    host_accessor_refusals: AtomicUsize,
-    /// Accesses beyond the limit detected by the bulk pre-check, i.e. through
-    /// [`Self::check_bulk`]. Refused only if the limit is enforced.
-    bulk_check_refusals: AtomicUsize,
+    /// Whether the heap accessor, i.e. [`HeapAccessCheck::check`], detected an
+    /// access beyond the limit. Refused only if the limit is enforced.
+    host_accessor_refusals: AtomicBool,
+    /// Whether the bulk pre-check, i.e. [`Self::check_bulk`], detected an
+    /// access beyond the limit. Refused only if the limit is enforced.
+    bulk_check_refusals: AtomicBool,
     /// Calls of the `__.check_heap_bulk_access` import.
     bulk_check_slow_path_calls: AtomicUsize,
 }
@@ -64,8 +64,8 @@ impl TrackerHeapAccess {
             page_limit_exceeded: Arc::new(AtomicBool::new(false)),
             limits,
             enforced: false,
-            host_accessor_refusals: AtomicUsize::new(0),
-            bulk_check_refusals: AtomicUsize::new(0),
+            host_accessor_refusals: AtomicBool::new(false),
+            bulk_check_refusals: AtomicBool::new(false),
             bulk_check_slow_path_calls: AtomicUsize::new(0),
         }
     }
@@ -83,8 +83,8 @@ impl TrackerHeapAccess {
             page_limit_exceeded,
             limits,
             enforced: enforce == FlagStatus::Enabled,
-            host_accessor_refusals: AtomicUsize::new(0),
-            bulk_check_refusals: AtomicUsize::new(0),
+            host_accessor_refusals: AtomicBool::new(false),
+            bulk_check_refusals: AtomicBool::new(false),
             bulk_check_slow_path_calls: AtomicUsize::new(0),
         }
     }
@@ -100,12 +100,12 @@ impl TrackerHeapAccess {
         self.page_limit_exceeded.load(Ordering::Relaxed)
     }
 
-    /// The accesses beyond the limit detected by this check so far, refused
-    /// only if the limit is enforced. The handler's are counted
-    /// by the tracker and filled in by the caller.
+    /// Which of this check's detectors saw an access beyond the limit so far,
+    /// refused only if the limit is enforced. The handler's detection is
+    /// recorded by the tracker and filled in by the caller.
     pub fn refusals(&self) -> HeapPageLimitRefusals {
         HeapPageLimitRefusals {
-            handler: 0,
+            handler: false,
             host_accessor: self.host_accessor_refusals.load(Ordering::Relaxed),
             bulk_check: self.bulk_check_refusals.load(Ordering::Relaxed),
         }
@@ -162,13 +162,13 @@ impl TrackerHeapAccess {
         if fits {
             return Ok(());
         }
-        // Count the detection even if the limit is only observed, so that
+        // Record the detection even if the limit is only observed, so that
         // the metrics show what would have been refused.
         match detector {
             Detector::HostAccessor => &self.host_accessor_refusals,
             Detector::BulkCheck => &self.bulk_check_refusals,
         }
-        .fetch_add(1, Ordering::Relaxed);
+        .store(true, Ordering::Relaxed);
         if self.enforced {
             self.page_limit_exceeded.store(true, Ordering::Relaxed);
             Err(self.limit_exceeded_error())

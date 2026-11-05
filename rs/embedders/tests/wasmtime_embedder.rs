@@ -1240,27 +1240,27 @@ fn heap_page_limit_stats_report_detector_and_slow_path() {
 
     let (result, detected, slow_path_calls) = run("load_pages_0_to_2");
     assert_matches!(result, Err(HypervisorError::MemoryAccessLimitExceeded(_)));
-    assert_eq!(detected, refusals(1, 0, 0));
+    assert_eq!(detected, refusals(true, false, false));
     assert_eq!(slow_path_calls, 0);
 
     let (result, detected, slow_path_calls) = run("host_write_pages_0_to_2");
     assert_matches!(result, Err(HypervisorError::MemoryAccessLimitExceeded(_)));
-    assert_eq!(detected, refusals(0, 1, 0));
+    assert_eq!(detected, refusals(false, true, false));
     assert_eq!(slow_path_calls, 0);
 
     let (result, detected, slow_path_calls) = run("fill_pages_0_to_2");
     assert_matches!(result, Err(HypervisorError::MemoryAccessLimitExceeded(_)));
-    assert_eq!(detected, refusals(0, 0, 1));
+    assert_eq!(detected, refusals(false, false, true));
     assert_eq!(slow_path_calls, 1);
 
     let (result, detected, slow_path_calls) = run("fill_pages_0_1");
     assert_matches!(result, Ok(_));
-    assert_eq!(detected, refusals(0, 0, 0));
+    assert_eq!(detected, refusals(false, false, false));
     assert_eq!(slow_path_calls, 1);
 
     let (result, detected, slow_path_calls) = run("fill_page_0");
     assert_matches!(result, Ok(_));
-    assert_eq!(detected, refusals(0, 0, 0));
+    assert_eq!(detected, refusals(false, false, false));
     assert_eq!(slow_path_calls, 0);
 }
 
@@ -1298,9 +1298,9 @@ fn heap_page_limit_stats_are_reported_when_the_feature_is_disabled() {
     };
 
     for (method, expected) in [
-        ("load_pages_0_to_2", refusals(1, 0, 0)),
-        ("host_write_pages_0_to_2", refusals(1, 1, 0)),
-        ("fill_pages_0_to_2", refusals(1, 0, 0)),
+        ("load_pages_0_to_2", refusals(true, false, false)),
+        ("host_write_pages_0_to_2", refusals(true, true, false)),
+        ("fill_pages_0_to_2", refusals(true, false, false)),
     ] {
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config.clone())

@@ -56,7 +56,7 @@
 //!
 //! Optionally, the tracker limits the number of distinct Wasm pages that may
 //! be accessed (`AccessedWasmPagesLimit`). Once the limit is reached, a signal
-//! for an unaccessed page is counted in `page_limit_exceeded_count` and, if
+//! for an unaccessed page is recorded in the `page_limit_exceeded` metric and, if
 //! the limit is enforced, refused (`SigsegvOutcome::Refused`): the page is not
 //! mapped and the `page_limit_exceeded` flag is set. If the limit is only
 //! observed, the page is mapped like any other page. Writes to already
@@ -514,8 +514,8 @@ impl DeterministicMemoryTracker {
         // From here on the faulting page is unaccessed and about to be mapped.
         if state.exceeds_limit_if_accessed(faulting_wasm_page_idx) {
             self.metrics
-                .page_limit_exceeded_count
-                .fetch_add(1, Ordering::Relaxed);
+                .page_limit_exceeded
+                .store(true, Ordering::Relaxed);
             if state.accessed_wasm_pages_limit.is_enforced() {
                 self.page_limit_exceeded.store(true, Ordering::Relaxed);
                 return SigsegvOutcome::Refused;
