@@ -4216,6 +4216,8 @@ struct CallInFlight {
     /// A cycles account manager matching that configuration, used to compute what
     /// executing a number of instructions costs.
     cycles_account_manager: CyclesAccountManager,
+    /// The cost schedule of the subnet.
+    cost_schedule: CanisterCyclesCostSchedule,
 }
 
 impl CallInFlight {
@@ -4223,11 +4225,24 @@ impl CallInFlight {
     /// balance, sends it an ingress message triggering the call and executes the
     /// round in which the caller performs that call.
     fn new(wasm64: bool, initial_cycles: Cycles) -> Self {
+        Self::new_with_cost_schedule(wasm64, initial_cycles, CanisterCyclesCostSchedule::Normal)
+    }
+
+    /// Like `new`, but on a subnet with the given cost schedule.
+    fn new_with_cost_schedule(
+        wasm64: bool,
+        initial_cycles: Cycles,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Self {
         let subnet_config = SubnetConfig::new(SubnetType::Application);
-        let env = StateMachine::new_with_config(StateMachineConfig::new(
-            subnet_config.clone(),
-            HypervisorConfig::default(),
-        ));
+        let env = StateMachineBuilder::new()
+            .with_config(Some(StateMachineConfig::new(
+                subnet_config.clone(),
+                HypervisorConfig::default(),
+            )))
+            .with_subnet_type(SubnetType::Application)
+            .with_cost_schedule(cost_schedule)
+            .build();
         let cycles_account_manager = CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,
             SubnetType::Application,
@@ -4266,6 +4281,7 @@ impl CallInFlight {
             msg_id,
             subnet_config,
             cycles_account_manager,
+            cost_schedule,
         };
         call.assert_in_flight();
         // The cycles are prepaid for the whole instruction limit using the instruction
@@ -4273,6 +4289,10 @@ impl CallInFlight {
         assert_eq!(
             call.prepayments().0,
             call.execution_cost(call.instruction_limit(), wasm64)
+        );
+        assert_eq!(
+            call.nominal_prepayment_for_execution(),
+            call.nominal_execution_cost(call.instruction_limit(), wasm64)
         );
         call
     }
@@ -4298,6 +4318,37 @@ impl CallInFlight {
                 },
             )
             .real()
+    }
+
+    /// Returns the nominal cost of executing the given number of instructions in the
+    /// given Wasm execution mode, i.e., the cost under the `Normal` cost schedule,
+    /// which is reported in the consumed cycles metrics independently of the subnet's
+    /// actual cost schedule.
+    fn nominal_execution_cost(&self, instructions: NumInstructions, wasm64: bool) -> Cycles {
+        Cycles::new(
+            self.cycles_account_manager
+                .execution_cost(
+                    instructions,
+                    self.env.get_latest_state().get_own_subnet_cycles_config(),
+                    if wasm64 {
+                        WasmExecutionMode::Wasm64
+                    } else {
+                        WasmExecutionMode::Wasm32
+                    },
+                )
+                .nominal()
+                .get(),
+        )
+    }
+
+    /// Returns the nominal cycles prepaid for the execution of the response.
+    fn nominal_prepayment_for_execution(&self) -> Cycles {
+        let state = self.env.get_latest_state();
+        let system_state = &state.canister_state(&self.caller_id).unwrap().system_state;
+        let callbacks = system_state.call_context_manager().unwrap().callbacks();
+        assert_eq!(callbacks.len(), 1);
+        let callback = callbacks.values().next().unwrap();
+        Cycles::new(callback.prepayment_for_response_execution.nominal().get())
     }
 
     /// Returns the caller's Wasm execution mode, or `None` if it has no execution
@@ -4493,6 +4544,75 @@ fn response_execution_prepayment_excess_is_refunded_after_upgrade_to_wasm32() {
     // The consumed cycles of the caller reflect the charge.
     assert_eq!(counter_after, counter_before + charged);
     assert_eq!(gauge_after + prepaid_for_execution, gauge_before + charged);
+}
+
+/// Under the `Free` cost schedule, the caller is charged no real cycles, but the
+/// nominal cycles prepaid for the response execution must still be adjusted to the
+/// caller's current Wasm execution mode: the consumed cycles metrics must report the
+/// nominal cost of the instructions executed in the new Wasm execution mode, after
+/// an upgrade in either direction while a call is in flight.
+#[test]
+fn response_execution_nominal_prepayment_is_adjusted_after_upgrade_on_free_cost_schedule() {
+    for wasm64_before in [false, true] {
+        let wasm64_after = !wasm64_before;
+        let call = CallInFlight::new_with_cost_schedule(
+            wasm64_before,
+            INITIAL_CYCLES_BALANCE,
+            CanisterCyclesCostSchedule::Free,
+        );
+        assert_eq!(call.cost_schedule, CanisterCyclesCostSchedule::Free);
+        // No real cycles are prepaid, but the nominal prepayment is not zero.
+        assert_eq!(call.prepayments(), (Cycles::zero(), Cycles::zero()));
+        let nominal_prepaid = call.nominal_prepayment_for_execution();
+        assert_gt!(nominal_prepaid, Cycles::zero());
+        call.upgrade(wasm64_after);
+
+        let balance_before = call.balance();
+        let instructions_before = call.instructions_executed();
+        let (gauge_before, counter_before) = call.consumed_instructions_cycles();
+        call.tick_until_response_execution_paused();
+        assert_eq!(
+            call.wasm_execution_mode(),
+            Some(if wasm64_after {
+                WasmExecutionMode::Wasm64
+            } else {
+                WasmExecutionMode::Wasm32
+            })
+        );
+        let reply = call.await_response().unwrap();
+        let instructions_used = call.instructions_executed() - instructions_before;
+        let (gauge_after, counter_after) = call.consumed_instructions_cycles();
+
+        assert_eq!(reply, WasmResult::Reply(vec![]));
+        // No real cycles are charged.
+        assert_eq!(call.balance(), balance_before);
+
+        // The consumed cycles of the caller reflect the nominal cost of the executed
+        // instructions in the new Wasm execution mode.
+        let nominal_charged = call.nominal_execution_cost(instructions_used, wasm64_after);
+        if wasm64_after {
+            // The nominal charge exceeds the nominal prepayment, which is only possible
+            // because the nominal prepayment has been topped up.
+            assert_gt!(nominal_charged, nominal_prepaid);
+        } else {
+            // The nominal prepayment exceeds what executing the whole instruction limit
+            // in Wasm32 costs, i.e., the excess must have been refunded.
+            assert_gt!(
+                nominal_prepaid,
+                call.nominal_execution_cost(call.instruction_limit(), false)
+            );
+        }
+        assert_eq!(
+            counter_after,
+            counter_before + nominal_charged,
+            "wasm64_before: {wasm64_before}"
+        );
+        assert_eq!(
+            gauge_after + nominal_prepaid,
+            gauge_before + nominal_charged,
+            "wasm64_before: {wasm64_before}"
+        );
+    }
 }
 
 /// If the caller is not upgraded, then the prepayment is neither topped up nor
