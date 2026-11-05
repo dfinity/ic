@@ -36,7 +36,7 @@ use ic_test_utilities_types::ids::user_test_id;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{CanisterMessage, CanisterMessageOrTask, MessageId};
 use ic_types::{
-    CanisterId, CryptoHashOfPartialState, NumBytes, NumInstructions, Time, ingress::WasmResult,
+    CanisterId, CryptoHashOfPartialState, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions, Time, ingress::WasmResult,
     messages::NO_DEADLINE,
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
@@ -737,6 +737,211 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
         ),
     )
     .unwrap();
+}
+
+/// Regression test for the subnet available memory being handed out twice
+/// within an execution round.
+///
+/// The memory consumed by an inner round iteration's parallel execution threads
+/// is never subtracted from `SchedulerRoundLimits::subnet_available_memory`; it
+/// is recomputed from the state at the beginning of the next iteration instead.
+/// That recomputation used to happen only after the subnet messages of the next
+/// iteration had already been drained, so those subnet messages still saw the
+/// subnet available memory as it was *before* the canister executions of the
+/// previous iteration and could allocate the very same memory a second time.
+///
+/// The scenario below uses the production configuration of an application
+/// subnet and production APIs only:
+///
+///  1. One canister is given a long-running (DTS) message, so that it has a
+///     paused execution at the beginning of the round below.
+///  2. In that round, an `update_settings` message for that canister cannot be
+///     executed in the first inner round iteration (subnet messages are never
+///     executed against a canister with a paused execution), so it is deferred.
+///  3. Still in the first iteration, every execution thread runs one canister
+///     growing its stable memory by as much as the thread is allowed to, which
+///     exhausts the subnet available memory.
+///  4. In the second iteration, `update_settings` is executed. It must observe
+///     that the subnet memory is exhausted and fail, rather than hand out the
+///     subnet available memory of the first iteration a second time.
+#[test]
+fn subnet_memory_is_not_handed_out_twice_across_inner_round_iterations() {
+    /// The size of a Wasm (and hence stable memory) page.
+    const PAGE_SIZE: u64 = 64 * 1024;
+    /// Room left in every thread's share of the subnet available memory for the
+    /// memory that a canister uses on top of its stable memory.
+    const SLACK: u64 = 16 * MIB;
+    /// Enough cycles to cover the freezing threshold and the storage
+    /// reservation of a canister holding hundreds of GiB of memory.
+    const CYCLES_BALANCE: Cycles = Cycles::new(1_000_000 * T);
+
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let scheduler_cores = subnet_config.scheduler_config.scheduler_cores as u64;
+    // A message that needs more than one but less than two slices: it is paused
+    // at the end of the round in which it starts and completes in the next one.
+    let slice_instructions = subnet_config.scheduler_config.max_instructions_per_slice;
+    let long_message_instructions = slice_instructions + slice_instructions / 2;
+    let hypervisor_config = HypervisorConfig::default();
+    let subnet_memory_capacity = hypervisor_config.subnet_memory_capacity.get();
+    let subnet_memory_reservation = hypervisor_config.subnet_memory_reservation.get();
+    let env =
+        StateMachine::new_with_config(StateMachineConfig::new(subnet_config, hypervisor_config));
+
+    // A canister holding hundreds of GiB of memory has to reserve a lot of
+    // cycles for that storage, way beyond the default reserved cycles limit.
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_reserved_cycles_limit(CYCLES_BALANCE.get())
+        .build();
+    // One canister per execution thread.
+    let canisters: Vec<CanisterId> = (0..scheduler_cores)
+        .map(|_| {
+            create_universal_canister_with_cycles(&env, Some(settings.clone()), CYCLES_BALANCE)
+        })
+        .collect();
+
+    // The subnet available memory that each execution thread sees in the round
+    // that grows the canisters' stable memory below.
+    let memory_taken_before = env.get_latest_state().memory_taken().execution().get();
+    let available_memory_per_core =
+        (subnet_memory_capacity - subnet_memory_reservation - memory_taken_before)
+            / scheduler_cores;
+    // Every canister grows its stable memory by as much as its thread allows.
+    let pages_per_canister = std::cmp::min(
+        available_memory_per_core - SLACK,
+        MAX_STABLE_MEMORY_IN_BYTES,
+    ) / PAGE_SIZE;
+    let grown_bytes_per_canister = pages_per_canister * PAGE_SIZE;
+    // The memory that the deferred `update_settings` asks for on top of what the
+    // canisters grow into: as much as the stale subnet available memory of the
+    // first iteration would allow it to hand out.
+    let extra_allocated_bytes = available_memory_per_core - 2 * SLACK;
+    // The test is only meaningful if handing out the subnet available memory a
+    // second time pushes the state beyond the subnet memory capacity.
+    assert_gt!(
+        memory_taken_before + scheduler_cores * grown_bytes_per_canister + extra_allocated_bytes,
+        subnet_memory_capacity
+    );
+
+    // Start a long-running (DTS) message on the first canister. It is paused at
+    // the end of this round and resumed (and completed) in the round below,
+    // where it also grows the canister's stable memory.
+    let long_canister = canisters[0];
+    let long_message_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        long_canister,
+        "update",
+        wasm()
+            .instruction_counter_is_at_least(long_message_instructions.get())
+            .stable64_grow(pages_per_canister)
+            .reply()
+            .build(),
+    );
+    // The long message is still running, i.e. the canister has a paused
+    // execution at the beginning of the next round.
+    assert_matches!(
+        env.ingress_status(&long_message_id),
+        IngressStatus::Known {
+            state: IngressState::Processing,
+            ..
+        }
+    );
+    // A paused execution has not committed anything to the replicated state, so
+    // the subnet available memory computed above still holds.
+    assert_eq!(
+        env.get_latest_state().memory_taken().execution().get(),
+        memory_taken_before
+    );
+
+    // An `update_settings` message that would give the first canister a memory
+    // allocation on top of the memory that all canisters are about to grow
+    // into. Because that canister has a paused execution, this subnet message
+    // cannot be executed in the first inner round iteration; it is deferred to
+    // the second iteration, by which time the subnet memory is exhausted.
+    let memory_allocation = env
+        .get_latest_state()
+        .canister_state(&long_canister)
+        .unwrap()
+        .memory_usage()
+        .get()
+        + grown_bytes_per_canister
+        + extra_allocated_bytes;
+    let update_settings_args = UpdateSettingsArgs::new(
+        long_canister,
+        CanisterSettingsArgsBuilder::new()
+            .with_memory_allocation(memory_allocation)
+            .build(),
+    );
+
+    let mut payload = ic_state_machine_tests::PayloadBuilder::new().with_nonce(0);
+    for canister_id in canisters.iter().skip(1) {
+        payload = payload.ingress(
+            PrincipalId::new_anonymous(),
+            *canister_id,
+            "update",
+            wasm().stable64_grow(pages_per_canister).reply().build(),
+        );
+    }
+    let grow_message_ids = payload.ingress_ids();
+    payload = payload.ingress(
+        PrincipalId::new_anonymous(),
+        CanisterId::ic_00(),
+        Method::UpdateSettings.to_string(),
+        Encode!(&update_settings_args).unwrap(),
+    );
+    let update_settings_message_id = payload.ingress_ids().pop().unwrap();
+
+    // A single execution round: the canisters consume all of the subnet
+    // available memory in the first inner round iteration and the
+    // `update_settings` subnet message is executed in the second iteration.
+    env.execute_payload(payload);
+
+    // The long message and all the memory growing messages succeeded, ...
+    for message_id in grow_message_ids.iter().chain([&long_message_id]) {
+        assert_matches!(
+            env.ingress_status(message_id),
+            IngressStatus::Known {
+                state: IngressState::Completed(_),
+                ..
+            }
+        );
+    }
+    // ... i.e. every canister did grow its stable memory.
+    let state = env.get_latest_state();
+    for canister_id in canisters.iter() {
+        let canister = state.canister_state(canister_id).unwrap();
+        assert_eq!(
+            canister.stable_memory_usage().get(),
+            grown_bytes_per_canister
+        );
+    }
+
+    // The `update_settings` message, on the other hand, must have failed: the
+    // memory it asked for was already consumed in the previous iteration.
+    let update_settings_error = match env.ingress_status(&update_settings_message_id) {
+        IngressStatus::Known {
+            state: IngressState::Failed(error),
+            ..
+        } => error,
+        status => panic!("Unexpected ingress status: {status:?}"),
+    };
+    assert_eq!(
+        update_settings_error.code(),
+        ErrorCode::SubnetOversubscribed
+    );
+    assert_eq!(
+        state
+            .canister_state(&long_canister)
+            .unwrap()
+            .memory_allocated_bytes(),
+        state.canister_state(&long_canister).unwrap().memory_usage()
+    );
+
+    // And the execution memory taken by the replicated state stays within the
+    // subnet memory capacity.
+    assert_le!(
+        state.memory_taken().execution().get(),
+        subnet_memory_capacity
+    );
 }
 
 #[test]
