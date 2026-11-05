@@ -423,6 +423,17 @@ impl From<BlockProposal> for Block {
     }
 }
 
+/// [`StrippedBlockProposalProtobufBytes`] holds the protobuf encoding of a block proposal
+/// with the messages stripped that peers fetch separately.
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub struct StrippedBlockProposalProtobufBytes(Vec<u8>);
+
+impl From<&pb::StrippedBlockProposal> for StrippedBlockProposalProtobufBytes {
+    fn from(proto: &pb::StrippedBlockProposal) -> Self {
+        Self(prost::Message::encode_to_vec(proto))
+    }
+}
+
 impl AsRef<Block> for BlockProposal {
     fn as_ref(&self) -> &Block {
         self.content.as_ref()

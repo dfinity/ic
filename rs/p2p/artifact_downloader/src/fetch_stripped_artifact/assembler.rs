@@ -229,6 +229,13 @@ impl FetchStrippedConsensusArtifact {
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) => stripped,
             MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
                 total_timer.stop_and_discard();
+                if !self.is_sent_as(&unstripped, id) {
+                    return self.fetch_stripped.invalid_artifact(
+                        id,
+                        peer,
+                        AssemblyError::MismatchedStrippedArtifact,
+                    );
+                }
                 return Attempt::Done {
                     message: unstripped,
                     peer_id: peer,
@@ -331,12 +338,26 @@ impl FetchStrippedConsensusArtifact {
         }
 
         match assembler.try_assemble() {
-            Ok(message) => Attempt::Done {
-                message,
-                peer_id: peer,
-            },
+            Ok(message) => {
+                if !self.is_sent_as(&message, id) {
+                    return self.fetch_stripped.invalid_artifact(
+                        id,
+                        peer,
+                        AssemblyError::MismatchedStrippedArtifact,
+                    );
+                }
+                Attempt::Done {
+                    message,
+                    peer_id: peer,
+                }
+            }
             Err(err) => self.fetch_stripped.invalid_artifact(id, peer, err),
         }
+    }
+
+    /// Whether `id` is the id of the artifact that peers send of `message`.
+    fn is_sent_as(&self, message: &ConsensusMessage, id: &StrippedConsensusMessageId) -> bool {
+        self.disassemble_message(message.clone()).id() == *id
     }
 }
 
@@ -437,6 +458,8 @@ pub(crate) enum AssemblyError {
     DeserializationFailed(ProxyDecodeError),
     #[error("The reassembled block proposal fails the integrity check")]
     IntegrityCheckFailed,
+    #[error("The stripped artifact is not the one that peers send of the assembled message")]
+    MismatchedStrippedArtifact,
 }
 
 /// A trait keeps track of the missing artifacts in a stripped payload,
@@ -1337,8 +1360,8 @@ mod tests {
         )
     }
 
-    /// A content that goes back into several slots is fetched only once, even if
-    /// the stripped proposal declares it once for each of them.
+    /// A content that goes back into several slots is fetched only once, even if a stripped
+    /// proposal declares it once for each of them. Peers declare it once, so that one is rejected.
     #[tokio::test]
     async fn assemble_canister_http_response_of_several_slots_test() {
         let response = fake_canister_http_response(1, 1024);
@@ -1354,7 +1377,7 @@ mod tests {
         else {
             panic!("Didn't properly strip the block proposal");
         };
-        // We declare each content once, but a peer need not.
+        // Peers declare each content once, but a forged proposal need not.
         stripped
             .stripped_canister_http_responses
             .stripped_responses
@@ -1372,11 +1395,25 @@ mod tests {
             /*peer=*/ Some(response),
         );
         let stripped = MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped);
-        let reassembled = assembler
-            .assemble_message(stripped.id(), Some((stripped, NODE_1)), MockPeers(NODE_1))
+        let id = stripped.id();
+        let result = assembler
+            .try_assemble_message(
+                &id,
+                Some((stripped, NODE_1)),
+                MockPeers(NODE_1),
+                Instant::now(),
+            )
             .await;
 
-        assert_assembled(reassembled, &block_proposal);
+        assert!(matches!(result, Attempt::Retry));
+        assert_eq!(
+            assembler
+                .fetch_stripped
+                .metrics
+                .download_task_invalid_artifacts_total
+                .get(),
+            1
+        );
     }
 
     /// A payload is not put back together while the content of one of its stripped
@@ -1790,24 +1827,112 @@ mod tests {
         .await;
     }
 
-    #[tokio::test(start_paused = true)]
-    async fn assemble_refetches_stripped_block_proposal_failing_integrity_check() {
+    /// The assembler of `NODE_1`, which finds the given ingress messages in its pool.
+    fn set_up_assembler_with_ingress_pool(
+        ingress_messages: Vec<SignedIngress>,
+    ) -> FetchStrippedConsensusArtifact {
+        let mut ingress_pool = MockValidatedPoolReader::<SignedIngress>::default();
+        ingress_pool.expect_get().returning(move |id| {
+            ingress_messages
+                .iter()
+                .find(|message| IngressMessageId::from(*message) == *id)
+                .cloned()
+        });
+
+        build_assembler(
+            ingress_pool,
+            FakeCanisterHttpPool::empty(),
+            wanting_bouncer_factory(),
+            MockTransport::new(),
+        )
+    }
+
+    /// Checks that `artifact`, pushed by `NODE_1`, is counted as invalid instead of assembled.
+    async fn assert_artifact_rejected(
+        assembler: &FetchStrippedConsensusArtifact,
+        artifact: MaybeStrippedConsensusMessage,
+    ) {
+        let id = artifact.id();
+        let result = assembler
+            .try_assemble_message(
+                &id,
+                Some((artifact, NODE_1)),
+                MockPeers(NODE_2),
+                Instant::now(),
+            )
+            .await;
+
+        assert!(matches!(result, Attempt::Retry));
+        assert_eq!(
+            assembler
+                .fetch_stripped
+                .metrics
+                .download_task_invalid_artifacts_total
+                .get(),
+            1
+        );
+    }
+
+    /// A stripped proposal whose block doesn't match its hash has an id of its own, and is rejected.
+    #[tokio::test]
+    async fn assemble_rejects_stripped_block_proposal_failing_integrity_check() {
         let message = ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![]));
         let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut invalid_artifact) =
             message.clone().strip()
         else {
             unreachable!();
         };
+        // Changing the block leaves the hash it claims as is.
         invalid_artifact
             .pruned_block_proposal_proto
             .value
             .as_mut()
             .unwrap()
             .time += 1;
+        let invalid_artifact =
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(invalid_artifact);
+        assert_eq!(invalid_artifact.id().as_ref(), &message.id());
+        assert_ne!(invalid_artifact.id(), message.strip().id());
 
-        assert_refetched_after_invalid_artifact(
-            MaybeStrippedConsensusMessage::StrippedBlockProposal(invalid_artifact),
-            message,
+        assert_artifact_rejected(
+            &set_up_assembler_with_ingress_pool(vec![]),
+            invalid_artifact,
+        )
+        .await;
+    }
+
+    /// A stripped proposal that lists the stripped messages in another order assembles into the
+    /// same block, but is not what peers send.
+    #[tokio::test]
+    async fn assemble_rejects_stripped_block_proposal_with_permuted_ingress_messages() {
+        let ingress_messages = vec![
+            fake_ingress_message_with_arg_size("fake_1", 8).0,
+            fake_ingress_message_with_arg_size("fake_2", 8).0,
+        ];
+        let message = ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(
+            ingress_messages.clone(),
+        ));
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut permuted) = message.strip()
+        else {
+            unreachable!();
+        };
+        permuted.stripped_ingress_payload.ingress_messages.reverse();
+
+        assert_artifact_rejected(
+            &set_up_assembler_with_ingress_pool(ingress_messages),
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(permuted),
+        )
+        .await;
+    }
+
+    /// Peers strip data blocks, so an unstripped data block is not what peers send.
+    #[tokio::test]
+    async fn assemble_rejects_unstripped_data_block_proposal() {
+        let message = ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![]));
+
+        assert_artifact_rejected(
+            &set_up_assembler_with_ingress_pool(vec![]),
+            MaybeStrippedConsensusMessage::Unstripped(message),
         )
         .await;
     }
