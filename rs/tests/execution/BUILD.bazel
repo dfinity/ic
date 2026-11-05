@@ -118,6 +118,31 @@ system_test(
 )
 
 system_test(
+    name = "ingress_induction_debit",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs * 6 vCPUs.
+    tags = [
+        "long_test",
+    ],
+    test_timeout = "long",
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | NNS_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test(
     name = "max_number_of_canisters_test",
     cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,

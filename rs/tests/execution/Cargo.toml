@@ -52,6 +52,10 @@ name = "compute_allocation_test"
 path = "compute_allocation_test.rs"
 
 [[bin]]
+name = "ingress_induction_debit"
+path = "ingress_induction_debit.rs"
+
+[[bin]]
 name = "cycles_restrictions_test"
 path = "cycles_restrictions_test.rs"
 
