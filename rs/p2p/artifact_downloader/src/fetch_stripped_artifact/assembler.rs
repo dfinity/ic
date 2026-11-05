@@ -230,7 +230,11 @@ impl FetchStrippedConsensusArtifact {
             MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
                 total_timer.stop_and_discard();
                 if !is_intact(&unstripped) {
-                    return self.invalid_copy(id, peer, AssemblyError::IntegrityCheckFailed);
+                    return self.fetch_stripped.invalid_copy(
+                        id,
+                        peer,
+                        AssemblyError::IntegrityCheckFailed,
+                    );
                 }
                 return Attempt::Done {
                     message: unstripped,
@@ -338,26 +342,8 @@ impl FetchStrippedConsensusArtifact {
                 message: ConsensusMessage::BlockProposal(reconstructed_block_proposal),
                 peer_id: peer,
             },
-            Err(err) => self.invalid_copy(id, peer, err),
+            Err(err) => self.fetch_stripped.invalid_copy(id, peer, err),
         }
-    }
-
-    /// Counts and logs an invalid copy of a message sent by `peer`.
-    fn invalid_copy(
-        &self,
-        id: &StrippedConsensusMessageId,
-        peer: NodeId,
-        err: AssemblyError,
-    ) -> Attempt<ConsensusMessage> {
-        self.metrics.report_invalid_copy();
-        warn!(
-            self.log,
-            "Peer {} sent an invalid copy of {:?}, fetching another one: {}",
-            peer,
-            id.as_ref(),
-            err
-        );
-        Attempt::Retry
     }
 }
 
@@ -1804,7 +1790,14 @@ mod tests {
             AssembleResult::Done { message: assembled, peer_id }
                 if peer_id == NODE_2 && assembled == message && assembled.check_integrity()
         );
-        assert_eq!(assembler.metrics.invalid_copies.get(), 1);
+        assert_eq!(
+            assembler
+                .fetch_stripped
+                .metrics
+                .download_task_invalid_copies_total
+                .get(),
+            1
+        );
     }
 
     #[tokio::test(start_paused = true)]

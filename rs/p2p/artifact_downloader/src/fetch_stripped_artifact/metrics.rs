@@ -15,7 +15,6 @@ pub(super) struct FetchStrippedConsensusArtifactMetrics {
     pub(super) active_stripped_message_downloads: IntGaugeVec,
     pub(super) total_stripped_message_download_errors: IntCounterVec,
     pub(super) aborted_block_assemblies: IntCounter,
-    pub(super) invalid_copies: IntCounter,
 }
 
 #[derive(Copy, Clone)]
@@ -76,11 +75,6 @@ impl FetchStrippedConsensusArtifactMetrics {
                     "The total number of block assemblies aborted because the block proposal \
                     became unwanted before all of its missing stripped messages were downloaded",
             ),
-            invalid_copies: metrics_registry.int_counter(
-                    "ic_stripped_consensus_artifact_invalid_copies_total",
-                    "The total number of invalid copies of consensus messages received from peers, \
-                    which were dropped and fetched again",
-            ),
         }
     }
 
@@ -107,10 +101,6 @@ impl FetchStrippedConsensusArtifactMetrics {
 
     pub(super) fn report_aborted_block_assembly(&self) {
         self.aborted_block_assemblies.inc()
-    }
-
-    pub(super) fn report_invalid_copy(&self) {
-        self.invalid_copies.inc()
     }
 
     pub(super) fn report_download_error(&self, label: &str, message_type: StrippedMessageType) {

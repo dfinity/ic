@@ -10,6 +10,7 @@ pub(crate) struct FetchArtifactMetrics {
     pub download_task_stashed_total: IntCounter,
     pub download_task_artifact_download_duration: Histogram,
     pub download_task_artifact_download_errors_total: IntCounter,
+    pub download_task_invalid_copies_total: IntCounter,
 }
 
 impl FetchArtifactMetrics {
@@ -39,6 +40,14 @@ impl FetchArtifactMetrics {
                 IntCounter::with_opts(opts!(
                     "ic_artifact_downloader_download_task_artifact_download_errors_total",
                     "Error occurred when downloading artifact.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
+            ),
+            download_task_invalid_copies_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_artifact_downloader_download_task_invalid_copies_total",
+                    "Invalid copies of artifacts that peers sent, which were dropped.",
                     const_labels.clone(),
                 ))
                 .unwrap(),

@@ -197,7 +197,7 @@ impl From<MaybeStrippedConsensusMessage> for pb::StrippedConsensusMessage {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct StrippedConsensusMessageId(ConsensusMessageId);
 
 impl AsRef<ConsensusMessageId> for StrippedConsensusMessageId {

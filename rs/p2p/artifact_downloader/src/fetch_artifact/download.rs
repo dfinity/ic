@@ -1,4 +1,5 @@
 use std::{
+    fmt::{Debug, Display},
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -81,7 +82,7 @@ pub struct FetchArtifact<Artifact: PbArtifact> {
     log: ReplicaLogger,
     transport: Arc<dyn Transport>,
     bouncer_rx: watch::Receiver<Bouncer<Artifact::Id>>,
-    metrics: FetchArtifactMetrics,
+    pub(crate) metrics: FetchArtifactMetrics,
     jh: Arc<JoinHandle<()>>,
 }
 
@@ -97,7 +98,11 @@ impl<Artifact: PbArtifact> Clone for FetchArtifact<Artifact> {
     }
 }
 
-impl<Artifact: PbArtifact> ArtifactAssembler<Artifact, Artifact> for FetchArtifact<Artifact> {
+impl<Artifact> ArtifactAssembler<Artifact, Artifact> for FetchArtifact<Artifact>
+where
+    Artifact: PbArtifact,
+    Artifact::Id: Debug,
+{
     fn disassemble_message(&self, msg: Artifact) -> Artifact {
         msg
     }
@@ -226,6 +231,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             .with_jitter()
             .without_max_times()
             .build();
+        // Records the download time when dropped.
         let mut download_timer = None;
 
         loop {
@@ -242,11 +248,10 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             }
 
             let deadline = Instant::now() + backoff.next().unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT);
+            // Only the first attempt gets the pushed copy, so that a failed one is followed by
+            // downloading a copy from a random peer.
             match attempt(artifact.take(), deadline).await {
                 Attempt::Done { message, peer_id } => {
-                    if let Some(timer) = download_timer {
-                        timer.stop_and_record();
-                    }
                     return AssembleResult::Done { message, peer_id };
                 }
                 Attempt::Unwanted => return AssembleResult::Unwanted,
@@ -264,7 +269,10 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         artifact: Option<(Artifact, NodeId)>,
         peers: Vec<NodeId>,
         deadline: Instant,
-    ) -> Attempt<Artifact> {
+    ) -> Attempt<Artifact>
+    where
+        Artifact::Id: Debug,
+    {
         // Artifact was pushed by peer. In this case we don't need check that the artifact ID corresponds
         // to the artifact because we earlier derived the ID from the artifact.
         if let Some((message, peer_id)) = artifact {
@@ -281,19 +289,14 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             .unwrap();
         match timeout_at(deadline, self.transport.rpc(&peer, request)).await {
             Ok(Ok(response)) if response.status() == StatusCode::OK => {
-                let body = response.into_body();
-                if let Ok(message) = Artifact::PbMessage::proxy_decode(&body) {
-                    if message.id() == *id {
-                        return Attempt::Done {
-                            message,
-                            peer_id: peer,
-                        };
-                    }
-                    warn!(
-                        self.log,
-                        "Peer {} responded with wrong artifact for advert", peer
-                    );
-                }
+                return match Artifact::PbMessage::proxy_decode(&response.into_body()) {
+                    Ok(message) if message.id() == *id => Attempt::Done {
+                        message,
+                        peer_id: peer,
+                    },
+                    Ok(_) => self.invalid_copy(id, peer, "the copy has a different id"),
+                    Err(err) => self.invalid_copy(id, peer, err),
+                };
             }
             _ => {
                 self.metrics
@@ -301,6 +304,24 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
                     .inc();
             }
         }
+        Attempt::Retry
+    }
+
+    /// Counts and logs an invalid copy of the artifact that `peer` sent.
+    pub(crate) fn invalid_copy<T>(
+        &self,
+        id: &Artifact::Id,
+        peer: NodeId,
+        err: impl Display,
+    ) -> Attempt<T>
+    where
+        Artifact::Id: Debug,
+    {
+        self.metrics.download_task_invalid_copies_total.inc();
+        warn!(
+            self.log,
+            "Peer {} sent an invalid copy of {:?}, fetching another one: {}", peer, id, err
+        );
         Attempt::Retry
     }
 }
