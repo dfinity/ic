@@ -3619,6 +3619,7 @@ fn upgrade_state_applies_request() {
         &[upgrade_request_action(node_test_id(1))],
         Height::new(3),
         &upgrade_state_members(&[1, 2, 3]),
+        &no_op_logger(),
     );
     assert_eq!(
         state.unauthorized_upgrade_requests,
@@ -3636,11 +3637,13 @@ fn upgrade_state_authorize_moves_request_to_authorized() {
         &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
         &members,
+        &no_op_logger(),
     );
     state.apply(
         &[upgrade_authorize_action(node_test_id(1))],
         Height::new(5),
         &members,
+        &no_op_logger(),
     );
     assert!(state.unauthorized_upgrade_requests.is_empty());
     assert_eq!(state.rebooting_nodes, BTreeSet::from([node_test_id(1)]));
@@ -3655,16 +3658,19 @@ fn upgrade_state_return_removes_authorization() {
         &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
         &members,
+        &no_op_logger(),
     );
     state.apply(
         &[upgrade_authorize_action(node_test_id(1))],
         Height::new(2),
         &members,
+        &no_op_logger(),
     );
     state.apply(
         &[upgrade_return_action(node_test_id(1))],
         Height::new(3),
         &members,
+        &no_op_logger(),
     );
     assert!(state.unauthorized_upgrade_requests.is_empty());
     assert!(state.rebooting_nodes.is_empty());
@@ -3679,20 +3685,28 @@ fn upgrade_state_prunes_departed_members() {
         &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
         &old_members,
+        &no_op_logger(),
     );
     state.apply(
         &[upgrade_request_action(node_test_id(7))],
         Height::new(2),
         &old_members,
+        &no_op_logger(),
     );
     state.apply(
         &[upgrade_authorize_action(node_test_id(7))],
         Height::new(3),
         &old_members,
+        &no_op_logger(),
     );
 
     // Node 7 leaves the subnet; its request and permit are pruned.
-    state.apply(&[], Height::new(4), &upgrade_state_members(&[1, 2, 3]));
+    state.apply(
+        &[],
+        Height::new(4),
+        &upgrade_state_members(&[1, 2, 3]),
+        &no_op_logger(),
+    );
     assert_eq!(
         state.unauthorized_upgrade_requests,
         BTreeMap::from([(node_test_id(1), Height::new(1))])
@@ -3710,11 +3724,13 @@ fn upgrade_state_applies_multiple_actions_per_block() {
         &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
         &members,
+        &no_op_logger(),
     );
     state.apply(
         &[upgrade_request_action(node_test_id(2))],
         Height::new(2),
         &members,
+        &no_op_logger(),
     );
     assert_eq!(state.unauthorized_upgrade_requests.len(), 2);
 
@@ -3726,6 +3742,7 @@ fn upgrade_state_applies_multiple_actions_per_block() {
         ],
         Height::new(5),
         &members,
+        &no_op_logger(),
     );
     assert!(state.unauthorized_upgrade_requests.is_empty());
     assert_eq!(

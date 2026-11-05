@@ -10,7 +10,7 @@ use ic_interfaces::execution_environment::{
     ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
 use ic_interfaces::time_source::system_time_now;
-use ic_logger::{ReplicaLogger, error, fatal, info};
+use ic_logger::{ReplicaLogger, error, fatal};
 use ic_query_stats::deliver_query_stats;
 use ic_replicated_state::{NetworkTopology, OwnSubnetInfo, ReplicatedState};
 use ic_types::batch::{Batch, BatchContent};
@@ -164,16 +164,12 @@ impl StateMachine for StateMachineImpl {
             }
         };
 
-        for node in state.metadata.upgrade_state.apply(
+        state.metadata.upgrade_state.apply(
             &batch_messages.upgrade_actions,
             batch.batch_number,
             &registry_settings.node_ids,
-        ) {
-            info!(
-                self.log,
-                "Upgrade permit request from '{}' expired at height '{}'", node, batch.batch_number,
-            );
-        }
+            &self.log,
+        );
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
         if let Some(query_stats) = &batch_messages.query_stats {

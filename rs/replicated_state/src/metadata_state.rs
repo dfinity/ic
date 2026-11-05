@@ -14,6 +14,7 @@ use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
+use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{
     IC_00, MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse,
 };
@@ -2438,14 +2439,14 @@ pub struct UpgradeState {
 
 impl UpgradeState {
     /// Apply a block's upgrade actions at `height`, pruning  permits of
-    /// departed members. Any nodes with long running requests are returned for
-    /// logging.
+    /// departed members.
     pub fn apply(
         &mut self,
         actions: &[UpgradePermitAction],
         height: Height,
         subnet_members: &BTreeSet<NodeId>,
-    ) -> Vec<NodeId> {
+        logger: &ReplicaLogger,
+    ) {
         for action in actions {
             match action {
                 UpgradePermitAction::RequestPermit(request) => {
@@ -2458,6 +2459,8 @@ impl UpgradeState {
                     self.rebooting_nodes.insert(node);
                 }
                 UpgradePermitAction::ReturnPermit { node } => {
+                    debug_assert!(!self.unauthorized_upgrade_requests.contains_key(node));
+                    self.unauthorized_upgrade_requests.remove(&node);
                     self.rebooting_nodes.remove(node);
                 }
             }
@@ -2470,14 +2473,20 @@ impl UpgradeState {
         self.rebooting_nodes
             .retain(|node| subnet_members.contains(node));
 
-        // Collect any nodes that have been sitting with an open request for
+        // Log about any nodes that have been sitting with an open request for
         // more than UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS blocks.
-        self.unauthorized_upgrade_requests
+        for node in self
+            .unauthorized_upgrade_requests
             .iter()
             .filter_map(|(node, req_height)| {
                 (*req_height + UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS >= height).then_some(*node)
             })
-            .collect()
+        {
+            info!(
+                logger,
+                "Upgrade permit request from '{}' expired at height '{}'", node, height,
+            );
+        }
     }
 }
 
