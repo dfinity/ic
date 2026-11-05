@@ -7,8 +7,8 @@ use ic_config::{
     flag_status::FlagStatus,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
-use ic_cycles_account_manager::CyclesAccountManager;
 use ic_crypto_tree_hash::{MixedHashTree, Path as LabeledTreePath, sparse_labeled_tree_from_paths};
+use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_execution_environment::units::{GIB, MIB};
 use ic_interfaces_state_manager::StateReader;
@@ -36,8 +36,8 @@ use ic_test_utilities_types::ids::user_test_id;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{CanisterMessage, CanisterMessageOrTask, MessageId};
 use ic_types::{
-    CanisterId, CryptoHashOfPartialState, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions, Time, ingress::WasmResult,
-    messages::NO_DEADLINE,
+    CanisterId, CryptoHashOfPartialState, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
+    Time, ingress::WasmResult, messages::NO_DEADLINE,
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
