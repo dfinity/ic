@@ -14606,6 +14606,7 @@ dependencies = [
  "anyhow",
  "candid",
  "clap",
+ "colored",
  "csv",
  "ic-base-types",
  "ic-management-canister-types-private",
