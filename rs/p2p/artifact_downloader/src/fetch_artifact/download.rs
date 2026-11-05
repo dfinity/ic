@@ -107,17 +107,23 @@ impl<Artifact: PbArtifact> ArtifactAssembler<Artifact, Artifact> for FetchArtifa
         artifact: Option<(Artifact, NodeId)>,
         peers: P,
     ) -> AssembleResult<Artifact> {
-        Self::download_artifact(
-            self.log.clone(),
-            id,
-            artifact,
-            peers,
-            self.bouncer_rx.clone(),
-            self.transport.clone(),
-            self.metrics.clone(),
-        )
+        let id = &id;
+        self.assemble_with_retries(id, artifact, move |artifact, deadline| {
+            self.try_fetch(id, artifact, peers.peers(), deadline)
+        })
         .await
     }
+}
+
+/// The outcome of one attempt to assemble a message.
+pub(crate) enum Attempt<T> {
+    Done {
+        message: T,
+        peer_id: NodeId,
+    },
+    Unwanted,
+    /// The attempt failed, and another one has to be made.
+    Retry,
 }
 
 impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
@@ -195,100 +201,106 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         BouncerValue::Unwanted != bouncer_value
     }
 
-    /// Downloads a given artifact.
+    /// Makes attempts to assemble the message until one succeeds or the message is unwanted.
     ///
-    /// The download will be scheduled based on the given bouncer function, `bouncer_watcher`.
-    ///
-    /// The download fails iff:
-    /// - The bouncer function evaluates the advert to [`BouncerValue::Unwanted`] -> [`AssembleResult::Unwanted`]
+    /// Before each attempt, waits until the bouncer wants the message. The attempt gets the pushed
+    /// artifact, if still there, and a deadline for its request that backs off exponentially. After
+    /// a failed attempt, the next one starts once that deadline has passed.
     #[instrument(skip_all)]
-    async fn download_artifact(
-        log: ReplicaLogger,
-        id: Artifact::Id,
+    pub(crate) async fn assemble_with_retries<T, F, Fut>(
+        &self,
+        id: &Artifact::Id,
         // Only first peer for specific artifact ID is considered for push
         mut artifact: Option<(Artifact, NodeId)>,
-        peer_rx: impl Peers + Send + 'static,
-        mut bouncer_watcher: watch::Receiver<Bouncer<Artifact::Id>>,
-        transport: Arc<dyn Transport>,
-        metrics: FetchArtifactMetrics,
-    ) -> AssembleResult<Artifact> {
-        // Evaluate bouncer and wait until we should fetch.
-        if !Self::should_download(&id, &mut artifact, &metrics, &mut bouncer_watcher).await {
-            return AssembleResult::Unwanted;
-        }
-
-        let mut artifact_download_backoff = ExponentialBuilder::new()
+        mut attempt: F,
+    ) -> AssembleResult<T>
+    where
+        F: FnMut(Option<(Artifact, NodeId)>, Instant) -> Fut,
+        Fut: Future<Output = Attempt<T>>,
+    {
+        let mut bouncer_watcher = self.bouncer_rx.clone();
+        let mut backoff = ExponentialBuilder::new()
             .with_min_delay(MIN_ARTIFACT_RPC_TIMEOUT)
             .with_max_delay(MAX_ARTIFACT_RPC_TIMEOUT)
             .with_factor(1.5)
             .with_jitter()
             .without_max_times()
             .build();
+        let mut download_timer = None;
 
-        match artifact {
-            // Artifact was pushed by peer. In this case we don't need check that the artifact ID corresponds
-            // to the artifact because we earlier derived the ID from the artifact.
-            Some((artifact, peer_id)) => AssembleResult::Done {
-                message: artifact,
-                peer_id,
-            },
+        loop {
+            if !Self::should_download(id, &mut artifact, &self.metrics, &mut bouncer_watcher).await
+            {
+                return AssembleResult::Unwanted;
+            }
+            if artifact.is_none() && download_timer.is_none() {
+                download_timer = Some(
+                    self.metrics
+                        .download_task_artifact_download_duration
+                        .start_timer(),
+                );
+            }
 
-            // Fetch artifact
-            None => {
-                let timer = metrics
-                    .download_task_artifact_download_duration
-                    .start_timer();
-                let mut rng = SmallRng::from_entropy();
-
-                let result = loop {
-                    let next_request_at = Instant::now()
-                        + artifact_download_backoff
-                            .next()
-                            .unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT);
-                    if let Some(peer) = peer_rx.peers().into_iter().choose(&mut rng) {
-                        let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));
-                        let request = Request::builder()
-                            .uri(format!("/{}/rpc", uri_prefix::<Artifact>()))
-                            .body(bytes)
-                            .unwrap();
-
-                        match timeout_at(next_request_at, transport.rpc(&peer, request)).await {
-                            Ok(Ok(response)) if response.status() == StatusCode::OK => {
-                                let body = response.into_body();
-                                if let Ok(message) = Artifact::PbMessage::proxy_decode(&body) {
-                                    if message.id() == id {
-                                        break AssembleResult::Done {
-                                            message,
-                                            peer_id: peer,
-                                        };
-                                    } else {
-                                        warn!(
-                                            log,
-                                            "Peer {} responded with wrong artifact for advert",
-                                            peer
-                                        );
-                                    }
-                                }
-                            }
-                            _ => {
-                                metrics.download_task_artifact_download_errors_total.inc();
-                            }
-                        }
+            let deadline = Instant::now() + backoff.next().unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT);
+            match attempt(artifact.take(), deadline).await {
+                Attempt::Done { message, peer_id } => {
+                    if let Some(timer) = download_timer {
+                        timer.stop_and_record();
                     }
-
-                    // Wait before checking the bouncer so we might be able to avoid an unnecessary download.
-                    sleep_until(next_request_at).await;
-                    if !Self::should_download(&id, &mut artifact, &metrics, &mut bouncer_watcher)
-                        .await
-                    {
-                        return AssembleResult::Unwanted;
-                    }
-                };
-
-                timer.stop_and_record();
-
-                result
+                    return AssembleResult::Done { message, peer_id };
+                }
+                Attempt::Unwanted => return AssembleResult::Unwanted,
+                // Wait before checking the bouncer so we might be able to avoid an unnecessary download.
+                Attempt::Retry => sleep_until(deadline).await,
             }
         }
+    }
+
+    /// Returns the pushed artifact, if any, or tries once to download the artifact from a random one
+    /// of the `peers` advertising it, giving up at `deadline`.
+    pub(crate) async fn try_fetch(
+        &self,
+        id: &Artifact::Id,
+        artifact: Option<(Artifact, NodeId)>,
+        peers: Vec<NodeId>,
+        deadline: Instant,
+    ) -> Attempt<Artifact> {
+        // Artifact was pushed by peer. In this case we don't need check that the artifact ID corresponds
+        // to the artifact because we earlier derived the ID from the artifact.
+        if let Some((message, peer_id)) = artifact {
+            return Attempt::Done { message, peer_id };
+        }
+        let Some(peer) = peers.into_iter().choose(&mut SmallRng::from_entropy()) else {
+            return Attempt::Retry;
+        };
+
+        let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));
+        let request = Request::builder()
+            .uri(format!("/{}/rpc", uri_prefix::<Artifact>()))
+            .body(bytes)
+            .unwrap();
+        match timeout_at(deadline, self.transport.rpc(&peer, request)).await {
+            Ok(Ok(response)) if response.status() == StatusCode::OK => {
+                let body = response.into_body();
+                if let Ok(message) = Artifact::PbMessage::proxy_decode(&body) {
+                    if message.id() == *id {
+                        return Attempt::Done {
+                            message,
+                            peer_id: peer,
+                        };
+                    }
+                    warn!(
+                        self.log,
+                        "Peer {} responded with wrong artifact for advert", peer
+                    );
+                }
+            }
+            _ => {
+                self.metrics
+                    .download_task_artifact_download_errors_total
+                    .inc();
+            }
+        }
+        Attempt::Retry
     }
 }

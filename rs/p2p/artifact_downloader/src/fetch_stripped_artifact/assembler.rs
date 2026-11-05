@@ -1,11 +1,10 @@
-use backon::{BackoffBuilder, ExponentialBuilder};
 use std::{
     collections::BTreeMap,
     sync::{Arc, RwLock},
     time::Duration,
 };
 use thiserror::Error;
-use tokio::time::sleep;
+use tokio::time::Instant;
 
 use ic_interfaces::{
     canister_http::CanisterHttpPool,
@@ -40,6 +39,7 @@ use ic_types::{
 
 use crate::{
     FetchArtifact,
+    fetch_artifact::Attempt,
     fetch_stripped_artifact::{
         canister_http::{CanisterHttpPayloadError, reinsert_responses},
         types::{
@@ -62,11 +62,6 @@ use super::{
         },
     },
 };
-
-/// Minimum delay before fetching another copy of a message after an invalid one.
-const MIN_REFETCH_DELAY: Duration = Duration::from_secs(5);
-/// Maximum delay before fetching another copy of a message after an invalid one.
-const MAX_REFETCH_DELAY: Duration = Duration::from_secs(120);
 
 struct BouncerFactoryWrapper<Factory> {
     bouncer_factory: Factory,
@@ -194,57 +189,40 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
     async fn assemble_message<P: Peers + Clone + Send + 'static>(
         &self,
         id: <MaybeStrippedConsensusMessage as IdentifiableArtifact>::Id,
-        mut artifact: Option<(MaybeStrippedConsensusMessage, NodeId)>,
+        artifact: Option<(MaybeStrippedConsensusMessage, NodeId)>,
         peer_rx: P,
     ) -> AssembleResult<ConsensusMessage> {
-        let mut refetch_backoff = ExponentialBuilder::new()
-            .with_min_delay(MIN_REFETCH_DELAY)
-            .with_max_delay(MAX_REFETCH_DELAY)
-            .with_factor(1.5)
-            .with_jitter()
-            .without_max_times()
-            .build();
-
-        loop {
-            match self
-                .try_assemble_message(id.clone(), artifact.take(), peer_rx.clone())
-                .await
-            {
-                Ok(result) => return result,
-                Err((peer_id, err)) => {
-                    self.metrics.report_invalid_copy();
-                    warn!(
-                        self.log,
-                        "Peer {} sent an invalid copy of {:?}, fetching another one: {}",
-                        peer_id,
-                        id.as_ref(),
-                        err
-                    );
-                }
-            }
-            sleep(refetch_backoff.next().unwrap_or(MAX_REFETCH_DELAY)).await;
-        }
+        let id = &id;
+        self.fetch_stripped
+            .assemble_with_retries(id, artifact, move |artifact, deadline| {
+                self.try_assemble_message(id, artifact, peer_rx.clone(), deadline)
+            })
+            .await
     }
 }
 
 impl FetchStrippedConsensusArtifact {
     /// Tries to assemble the message from the pushed copy, or from one downloaded from a peer.
-    /// Fails with the peer that served the copy if the copy is invalid.
     async fn try_assemble_message<P: Peers + Clone + Send + 'static>(
         &self,
-        id: StrippedConsensusMessageId,
+        id: &StrippedConsensusMessageId,
         artifact: Option<(MaybeStrippedConsensusMessage, NodeId)>,
         peer_rx: P,
-    ) -> Result<AssembleResult<ConsensusMessage>, (NodeId, AssemblyError)> {
+        deadline: Instant,
+    ) -> Attempt<ConsensusMessage> {
         let total_timer = self.metrics.total_block_assembly_duration.start_timer();
         // Download the Stripped message if it hasn't been pushed.
         let (stripped_artifact, peer) = match self
             .fetch_stripped
-            .assemble_message(id.clone(), artifact, peer_rx.clone())
+            .try_fetch(id, artifact, peer_rx.peers(), deadline)
             .await
         {
-            AssembleResult::Unwanted => return Ok(AssembleResult::Unwanted),
-            AssembleResult::Done { message, peer_id } => (message, peer_id),
+            Attempt::Done { message, peer_id } => (message, peer_id),
+            Attempt::Unwanted => return Attempt::Unwanted,
+            Attempt::Retry => {
+                total_timer.stop_and_discard();
+                return Attempt::Retry;
+            }
         };
 
         let stripped_block_proposal = match stripped_artifact {
@@ -252,12 +230,12 @@ impl FetchStrippedConsensusArtifact {
             MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
                 total_timer.stop_and_discard();
                 if !is_intact(&unstripped) {
-                    return Err((peer, AssemblyError::IntegrityCheckFailed));
+                    return self.invalid_copy(id, peer, AssemblyError::IntegrityCheckFailed);
                 }
-                return Ok(AssembleResult::Done {
+                return Attempt::Done {
                     message: unstripped,
                     peer_id: peer,
-                });
+                };
             }
         };
 
@@ -296,9 +274,9 @@ impl FetchStrippedConsensusArtifact {
 
         loop {
             let join_result = tokio::select! {
-                _ = bouncer.wait_for(|bouncer| matches!(bouncer(&id), BouncerValue::Unwanted)) => {
+                _ = bouncer.wait_for(|bouncer| matches!(bouncer(id), BouncerValue::Unwanted)) => {
                     self.metrics.report_aborted_block_assembly();
-                    return Ok(AssembleResult::Unwanted);
+                    return Attempt::Unwanted;
                 }
                 join_result = join_set.join_next() => join_result,
             };
@@ -308,7 +286,7 @@ impl FetchStrippedConsensusArtifact {
             };
 
             let Ok((message, peer_id)) = join_result else {
-                return Ok(AssembleResult::Unwanted);
+                return Attempt::Retry;
             };
 
             let message_type = StrippedMessageType::from(&message);
@@ -329,7 +307,7 @@ impl FetchStrippedConsensusArtifact {
                     err
                 );
 
-                return Ok(AssembleResult::Unwanted);
+                return Attempt::Retry;
             }
         }
 
@@ -356,12 +334,30 @@ impl FetchStrippedConsensusArtifact {
         }
 
         match assembler.try_assemble() {
-            Ok(reconstructed_block_proposal) => Ok(AssembleResult::Done {
+            Ok(reconstructed_block_proposal) => Attempt::Done {
                 message: ConsensusMessage::BlockProposal(reconstructed_block_proposal),
                 peer_id: peer,
-            }),
-            Err(err) => Err((peer, err)),
+            },
+            Err(err) => self.invalid_copy(id, peer, err),
         }
+    }
+
+    /// Counts and logs an invalid copy of a message sent by `peer`.
+    fn invalid_copy(
+        &self,
+        id: &StrippedConsensusMessageId,
+        peer: NodeId,
+        err: AssemblyError,
+    ) -> Attempt<ConsensusMessage> {
+        self.metrics.report_invalid_copy();
+        warn!(
+            self.log,
+            "Peer {} sent an invalid copy of {:?}, fetching another one: {}",
+            peer,
+            id.as_ref(),
+            err
+        );
+        Attempt::Retry
     }
 }
 
