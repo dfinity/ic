@@ -22,7 +22,8 @@ use ic_types::messages::MessageId;
 use ic_types::{CryptoHashOfState, NumInstructions};
 use ic_types_cycles::Cycles;
 use ic_universal_canister::{
-    CallArgs, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, call_args, wasm,
+    CallArgs, CallInterface, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM,
+    call_args, management, wasm,
 };
 use std::sync::OnceLock;
 
@@ -3030,4 +3031,258 @@ fn yield_for_dirty_pages_copy_works_for_install_code_and_many_canisters() {
 
     // Two heavy install code messages must be completed in five rounds.
     assert_eq!(num_completed(), 2);
+}
+
+#[test]
+fn dts_stop_and_delete_canister_with_concurrent_long_execution() {
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let user_id = PrincipalId::new_anonymous();
+    let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
+
+    // Canister `a` is a controller of canisters `b` and `c`.
+    let a = env
+        .install_canister_with_cycles(binary.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+    let controlled_by_a = Some(
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![user_id, a.get()])
+            .build(),
+    );
+    // Canister `b`'s `canister_init` burns 100B instructions, i.e. it takes ~50
+    // install code slices to install and leaves `b` install code rate limited for
+    // ~50 rounds afterwards.
+    let b = env
+        .install_canister_with_cycles(
+            binary.clone(),
+            wasm()
+                .instruction_counter_is_at_least(100_000_000_000)
+                .build(),
+            controlled_by_a.clone(),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+    let c = env
+        .install_canister_with_cycles(binary, vec![], controlled_by_a, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    // Start a long execution on canister `c`: at 2B instructions per slice, 38B
+    // instructions take ~19 rounds to execute.
+    let long_execution = env.send_ingress(
+        user_id,
+        c,
+        "update",
+        wasm()
+            .instruction_counter_is_at_least(38_000_000_000)
+            .reply_data(&[42])
+            .build(),
+    );
+    env.tick();
+    assert_eq!(
+        env.get_latest_state()
+            .canister_state(&c)
+            .unwrap()
+            .next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    // Canister `a` stops canister `b`.
+    let stop = env.send_ingress(
+        user_id,
+        a,
+        "update",
+        wasm()
+            .call_simple(
+                IC_00,
+                Method::StopCanister,
+                call_args().other_side(CanisterIdRecord::from(b).encode()),
+            )
+            .build(),
+    );
+    env.await_ingress(stop, 100).unwrap();
+
+    // The long execution on canister `c` is still running.
+    assert_eq!(
+        ingress_state(env.ingress_status(&long_execution)),
+        Some(IngressState::Processing)
+    );
+    assert_eq!(
+        env.get_latest_state()
+            .canister_state(&c)
+            .unwrap()
+            .next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    // Canister `a` requests the status of canister `c` (which has a long execution)
+    // and deletes canister `b`. Only the reply to the last call (`delete_canister`)
+    // is passed on to the ingress message's caller.
+    let status_and_delete = env.send_ingress(
+        user_id,
+        a,
+        "update",
+        wasm()
+            .call_simple(
+                IC_00,
+                Method::CanisterStatus,
+                call_args()
+                    .other_side(CanisterIdRecord::from(c).encode())
+                    .on_reply(wasm().noop())
+                    .on_reject(wasm().noop()),
+            )
+            .call_simple(
+                IC_00,
+                Method::DeleteCanister,
+                call_args().other_side(CanisterIdRecord::from(b).encode()),
+            )
+            .build(),
+    );
+    env.await_ingress(status_and_delete, 100).unwrap();
+
+    // Canister `b` is gone and the long execution on canister `c` eventually completes.
+    assert!(env.get_latest_state().canister_state(&b).is_none());
+    assert_eq!(
+        env.await_ingress(long_execution, 100).unwrap(),
+        WasmResult::Reply(vec![42])
+    );
+}
+
+// Blob that releases canister `B`'s looping update call: the loop only replies
+// once `B`'s global data is set to this blob. Nothing in this test sets it, so
+// the reply is held back until `B`'s call context is closed by `uninstall_code`.
+const LOOP_TRIGGER_BLOB: &[u8] = b"dts-uninstall-code-loop-trigger";
+// The reply that canister `B`'s looping update call would produce if it were
+// ever released (it never is in this test).
+const LOOP_REPLY_BLOB: &[u8] = b"dts-uninstall-code-loop-reply";
+// The reply that canister `A` produces once its last call (`uninstall_code` on
+// `B`) replies.
+const UNINSTALL_CODE_REPLY_BLOB: &[u8] = b"dts-uninstall-code-completed";
+// The number of instructions executed by canister `C`'s update call. It is above
+// the default `max_instructions_per_slice` (`2B`) so the call runs in DTS across
+// multiple rounds, and below the default `max_instructions_per_message` (`40B`)
+// so it eventually completes.
+const LONG_EXECUTION_INSTRUCTIONS: u64 = 38_000_000_000;
+
+// The following test executes the following scenario:
+// - three universal canisters `A`, `B`, and `C` are deployed, with `A` being the
+//   sole controller of `B` and `C`;
+// - `C` starts a long-running update call which runs in DTS (i.e., it is paused
+//   and resumed over multiple rounds);
+// - `B`'s `update` method is invoked via an ingress message running a loop that
+//   keeps calling `canister_status` on `B`, i.e., `B` holds the reply to that
+//   ingress message back indefinitely;
+// - `A` fires two concurrent calls: `canister_status` on the canister `C` running
+//   in DTS, and `uninstall_code` on the looping canister `B`;
+// - `A` replies to its ingress message from the callbacks of its last call
+//   (`uninstall_code` on `B`), which is what the test waits for.
+#[test]
+fn dts_uninstall_code_of_looping_canister_with_concurrent_canister_status() {
+    // The default application subnet configuration allows `40B` instructions per
+    // message and `2B` instructions per slice, i.e., DTS is in effect for the
+    // long-running update call of canister `C` below.
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let user_id = PrincipalId::new_anonymous();
+
+    // Deploy three universal canisters (without heartbeat so that they do not
+    // execute anything in the background).
+    let deploy = || {
+        env.install_canister_with_cycles(
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap()
+    };
+    let canister_a = deploy();
+    let canister_b = deploy();
+    let canister_c = deploy();
+
+    // Make `B` and `C` controlled by `A` so that `A` may call `canister_status`
+    // on `C` and `uninstall_code` on `B`. Note that this makes `B` lose the
+    // permission to call `canister_status` on itself, but the loop in `B` also
+    // iterates on rejected calls, so it keeps looping either way.
+    for canister_id in [canister_b, canister_c] {
+        env.update_settings(
+            &canister_id,
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![canister_a.get()])
+                .build(),
+        )
+        .unwrap();
+    }
+
+    // Start a long-running update call on `C`, which runs in DTS.
+    let long_execution_id = env.send_ingress(
+        user_id,
+        canister_c,
+        "update",
+        wasm()
+            .instruction_counter_is_at_least(LONG_EXECUTION_INSTRUCTIONS)
+            .reply_data(&[42])
+            .build(),
+    );
+
+    // Invoke `B`'s `update` method running the loop via an ingress message: `B`
+    // keeps calling `canister_status` on itself and only replies once its global
+    // data is set to `LOOP_TRIGGER_BLOB`, which never happens in this test.
+    let loop_id = env.send_ingress(
+        user_id,
+        canister_b,
+        "update",
+        wasm()
+            .loop_until_global_data_set(LOOP_TRIGGER_BLOB, LOOP_REPLY_BLOB)
+            .build(),
+    );
+
+    // Execute a couple of rounds so that `C`'s execution is paused (i.e., `C`
+    // runs in DTS) and `B` is looping.
+    for _ in 0..2 {
+        env.tick();
+    }
+    assert_eq!(
+        ingress_state(env.ingress_status(&long_execution_id)),
+        Some(IngressState::Processing)
+    );
+    assert_eq!(
+        ingress_state(env.ingress_status(&loop_id)),
+        Some(IngressState::Processing)
+    );
+
+    let payload = wasm()
+        // 1. Call `canister_status` on `C`, which is running in DTS.
+        .call(
+            management::canister_status(canister_c)
+                .on_reply(wasm().noop())
+                .on_reject(wasm().noop()),
+        )
+        // 2. Call `uninstall_code` on the looping canister `B`. This is the last
+        //    call by `A` and thus `A` replies to its ingress message from its
+        //    callbacks.
+        .call(
+            management::uninstall_code(canister_b)
+                .on_reply(wasm().reply_data(UNINSTALL_CODE_REPLY_BLOB))
+                .on_reject(wasm().reject_message().reply_data_append().reply()),
+        )
+        .build();
+    let msg_id = env.send_ingress(user_id, canister_a, "update", payload);
+
+    // Wait until the last call by `A` completes. The number of rounds is an
+    // arbitrary value high enough for the calls to complete.
+    assert_eq!(
+        env.await_ingress(msg_id, 100).unwrap(),
+        WasmResult::Reply(UNINSTALL_CODE_REPLY_BLOB.to_vec())
+    );
+    // Canister `B` has indeed been uninstalled and thus the ingress message
+    // whose reply `B` was holding back has been rejected.
+    assert!(env.module_hash(canister_b).is_none());
+    assert_matches!(
+        ingress_state(env.ingress_status(&loop_id)),
+        Some(IngressState::Failed(_))
+    );
 }
