@@ -741,7 +741,7 @@ jobs:
           # compact execution log only covers the last attempt, and this check would silently compare
           # less. So warn when many artifacts are missing from it, also when it is empty.
           warn_if_low_coverage() { # <number of artifacts present in both>
-            if [ "$CI_EVENT_NAME" != "pull_request" ] && [ "$1" -lt $((n_lines_nocache / 2)) ]; then
+            if [ "$CI_EVENT_NAME" != "pull_request" ] && [ "$1" -lt $(((n_lines_nocache + 1) / 2)) ]; then
               echo "::warning title=Build Determinism::only $1 of the $n_lines_nocache artifacts built by build-ic are in the execution log of bazel-test-all"
             fi
           }

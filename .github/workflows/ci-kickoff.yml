@@ -110,7 +110,7 @@ jobs:
           echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
 
           warn_if_low_coverage() { # <number of artifacts present in both>
-            if [ "${{ github.event_name }}" != "pull_request" ] && [ "$1" -lt $((n_lines_nocache / 2)) ]; then
+            if [ "${{ github.event_name }}" != "pull_request" ] && [ "$1" -lt $(((n_lines_nocache + 1) / 2)) ]; then
               echo "::warning title=RBE Build Determinism::only $1 of the $n_lines_nocache artifacts built by build-ic are in the execution log of the RBE build"
             fi
           }
