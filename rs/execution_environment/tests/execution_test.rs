@@ -7,6 +7,7 @@ use ic_config::{
     flag_status::FlagStatus,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
+use ic_cycles_account_manager::CyclesAccountManager;
 use ic_crypto_tree_hash::{MixedHashTree, Path as LabeledTreePath, sparse_labeled_tree_from_paths};
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_execution_environment::units::{GIB, MIB};
@@ -21,6 +22,9 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::ExecutionTask;
+use ic_replicated_state::canister_state::NextExecution;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
@@ -30,12 +34,12 @@ use ic_test_utilities_metrics::{
 };
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::messages::MessageId;
+use ic_types::messages::{CanisterMessage, CanisterMessageOrTask, MessageId};
 use ic_types::{
-    CanisterId, CryptoHashOfPartialState, NumBytes, Time, ingress::WasmResult,
+    CanisterId, CryptoHashOfPartialState, NumBytes, NumInstructions, Time, ingress::WasmResult,
     messages::NO_DEADLINE,
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, NominalCycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
@@ -3875,4 +3879,773 @@ fn large_zipped_wasm() {
 
     let canister_id = env.install_canister(compressed_wasm, vec![], None).unwrap();
     assert_eq!(env.module_hash(canister_id), Some(compressed_hash));
+}
+
+/// The number of instructions executed by the reply callback of the canister built
+/// by `call_and_reply_wat` before replying to the ingress message.
+const REPLY_CALLBACK_INSTRUCTIONS: u64 = 30 * B as u64;
+
+/// Returns the WAT of a canister whose `call` update method performs a call to the
+/// `update` method of another canister and only replies to the ingress message
+/// triggering that call from within the reply callback.
+///
+/// The ingress argument consists of the 10-byte callee canister ID followed by the
+/// payload to be passed to the callee.
+///
+/// The reply callback executes at least `REPLY_CALLBACK_INSTRUCTIONS` instructions
+/// before replying with an empty payload.
+///
+/// The Wasm32 and the Wasm64 variant only differ in the type used for pointers and
+/// sizes (`i32` vs. `i64`) and in the declaration of the main memory. In particular,
+/// both variants have the reply and reject callbacks at the table indices 0 and 1
+/// and thus the callbacks of a call performed by one variant can be executed by the
+/// other variant after an upgrade.
+fn call_and_reply_wat(wasm64: bool) -> String {
+    // The index type of the main memory: empty (i.e., `i32`) for Wasm32.
+    let memory = if wasm64 { "i64" } else { "" };
+    // The type of pointers and sizes in the System API.
+    let ptr = if wasm64 { "i64" } else { "i32" };
+    format!(
+        r#"
+        (module
+            (import "ic0" "msg_arg_data_size"
+                (func $msg_arg_data_size (result {ptr})))
+            (import "ic0" "msg_arg_data_copy"
+                (func $msg_arg_data_copy (param {ptr}) (param {ptr}) (param {ptr})))
+            (import "ic0" "call_new"
+                (func $call_new
+                    (param $callee_src {ptr})   (param $callee_size {ptr})
+                    (param $name_src {ptr})     (param $name_size {ptr})
+                    (param $reply_fun {ptr})    (param $reply_env {ptr})
+                    (param $reject_fun {ptr})   (param $reject_env {ptr})))
+            (import "ic0" "call_data_append"
+                (func $call_data_append (param {ptr}) (param {ptr})))
+            (import "ic0" "call_perform" (func $call_perform (result i32)))
+            (import "ic0" "performance_counter"
+                (func $performance_counter (param i32) (result i64)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "trap" (func $trap (param {ptr}) (param {ptr})))
+
+            (func $call
+                ;; Copy the ingress argument to offset 32 of the heap.
+                (call $msg_arg_data_copy
+                    ({ptr}.const 32) ({ptr}.const 0) (call $msg_arg_data_size))
+                (call $call_new
+                    ({ptr}.const 32) ({ptr}.const 10)  ;; the callee canister ID
+                    ({ptr}.const 0)  ({ptr}.const 6)   ;; the method name "update"
+                    ({ptr}.const 0)  ({ptr}.const 0)   ;; reply closure: table index 0
+                    ({ptr}.const 1)  ({ptr}.const 0))  ;; reject closure: table index 1
+                ;; Everything past the callee canister ID is the callee's payload.
+                (call $call_data_append
+                    ({ptr}.const 42)
+                    ({ptr}.sub (call $msg_arg_data_size) ({ptr}.const 10)))
+                (if (call $call_perform)
+                    (then (call $trap ({ptr}.const 0) ({ptr}.const 6))))
+            )
+
+            ;; Loops until the instruction counter is at least the given amount.
+            ;; The inner loop amortizes the cost of the `performance_counter` calls.
+            (func $instruction_counter_is_at_least (param $amount i64)
+                (local $delay i32)
+                (loop $outer
+                    (local.set $delay (i32.const 100))
+                    (loop $inner
+                        (local.set $delay (i32.sub (local.get $delay) (i32.const 1)))
+                        (br_if $inner (local.get $delay))
+                    )
+                    (br_if $outer
+                        (i64.lt_u
+                            (call $performance_counter (i32.const 0))
+                            (local.get $amount)))
+                )
+            )
+
+            (func $on_reply (param {ptr})
+                (call $instruction_counter_is_at_least (i64.const {instructions}))
+                (call $msg_reply)
+            )
+
+            (func $on_reject (param {ptr})
+                (call $trap ({ptr}.const 0) ({ptr}.const 6))
+            )
+
+            (export "canister_update call" (func $call))
+            (memory {memory} 1)
+            (data ({ptr}.const 0) "update")
+            (table 2 2 funcref)
+            (elem (i32.const 0) $on_reply $on_reject)
+        )"#,
+        instructions = REPLY_CALLBACK_INSTRUCTIONS,
+    )
+}
+
+/// The reply callback reads the instruction counter before replying and hence a few
+/// more instructions are executed than the callback reports.
+/// Returns the cycles that the caller was charged for executing the response, given
+/// the cycles prepaid for the response and its balance before and after.
+///
+/// The response payload is empty, hence the cycles prepaid for the response
+/// transmission are refunded in full and cancel out.
+fn charged_for_response_execution(
+    prepaid_for_execution: Cycles,
+    prepaid_for_transmission: Cycles,
+    balance_before: u128,
+    balance_after: u128,
+) -> Cycles {
+    let refundable = prepaid_for_execution.get() + prepaid_for_transmission.get() + balance_before;
+    // Guard against a saturating subtraction hiding a negative charge.
+    assert_ge!(refundable, balance_after);
+    Cycles::new(refundable - balance_after)
+}
+
+/// A caller canister with a call in flight to a canister that only replies after
+/// having used 30B instructions. Since a single execution slice is limited to 2B
+/// instructions, the callee's execution spans many rounds, which leaves enough time
+/// to act on the caller before the response arrives.
+struct CallInFlight {
+    env: StateMachine,
+    caller_id: CanisterId,
+    msg_id: MessageId,
+    /// The subnet configuration the state machine was created with.
+    subnet_config: SubnetConfig,
+    /// A cycles account manager matching that configuration, used to compute what
+    /// executing a number of instructions costs.
+    cycles_account_manager: CyclesAccountManager,
+}
+
+impl CallInFlight {
+    /// Installs a caller canister using the given Wasm execution mode and cycles
+    /// balance, sends it an ingress message triggering the call and executes the
+    /// round in which the caller performs that call.
+    fn new(wasm64: bool, initial_cycles: Cycles) -> Self {
+        let subnet_config = SubnetConfig::new(SubnetType::Application);
+        let env = StateMachine::new_with_config(StateMachineConfig::new(
+            subnet_config.clone(),
+            HypervisorConfig::default(),
+        ));
+        let cycles_account_manager = CyclesAccountManager::new(
+            subnet_config.scheduler_config.max_instructions_per_message,
+            SubnetType::Application,
+            env.get_subnet_id(),
+            subnet_config.cycles_account_manager_config,
+        );
+        // The sender of the ingress message is a controller of the caller, so that an
+        // out-of-cycles error for the caller reveals the missing amount.
+        let caller_id = create_canister_with_cycles(
+            &env,
+            wat::parse_str(call_and_reply_wat(wasm64)).unwrap(),
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![PrincipalId::new_anonymous(), user_test_id(0).get()])
+                    .build(),
+            ),
+            initial_cycles,
+        );
+        let callee_id = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
+
+        let mut ingress_payload = callee_id.get().as_slice().to_vec();
+        assert_eq!(ingress_payload.len(), 10);
+        ingress_payload.extend(
+            wasm()
+                .instruction_counter_is_at_least((30 * B) as u64)
+                .reply()
+                .build(),
+        );
+        let msg_id = env.send_ingress(user_test_id(0).get(), caller_id, "call", ingress_payload);
+
+        // A single round suffices for the caller to perform the call to the callee.
+        env.tick();
+        let call = Self {
+            env,
+            caller_id,
+            msg_id,
+            subnet_config,
+            cycles_account_manager,
+        };
+        call.assert_in_flight();
+        // The cycles are prepaid for the whole instruction limit using the instruction
+        // costs of the caller's Wasm execution mode.
+        assert_eq!(
+            call.prepayments().0,
+            call.execution_cost(call.instruction_limit(), wasm64)
+        );
+        call
+    }
+
+    /// Returns the maximum number of instructions that a single message may execute.
+    fn instruction_limit(&self) -> NumInstructions {
+        self.subnet_config
+            .scheduler_config
+            .max_instructions_per_message
+    }
+
+    /// Returns the cost of executing the given number of instructions in the given
+    /// Wasm execution mode.
+    fn execution_cost(&self, instructions: NumInstructions, wasm64: bool) -> Cycles {
+        self.cycles_account_manager
+            .execution_cost(
+                instructions,
+                self.env.get_latest_state().get_own_subnet_cycles_config(),
+                if wasm64 {
+                    WasmExecutionMode::Wasm64
+                } else {
+                    WasmExecutionMode::Wasm32
+                },
+            )
+            .real()
+    }
+
+    /// Returns the caller's Wasm execution mode, or `None` if it has no execution
+    /// state.
+    fn wasm_execution_mode(&self) -> Option<WasmExecutionMode> {
+        self.env
+            .get_latest_state()
+            .canister_state(&self.caller_id)
+            .unwrap()
+            .execution_state
+            .as_ref()
+            .map(|state| state.wasm_execution_mode)
+    }
+
+    /// Asserts that the response to the call has not been processed yet.
+    fn assert_in_flight(&self) {
+        assert_matches!(
+            self.env.ingress_status(&self.msg_id),
+            IngressStatus::Known {
+                state: IngressState::Processing,
+                ..
+            }
+        );
+    }
+
+    /// Returns the caller's cycles balance.
+    fn balance(&self) -> u128 {
+        self.env.cycle_balance(self.caller_id)
+    }
+
+    /// Returns the cycles prepaid for the execution and for the transmission of the
+    /// response to the call.
+    fn prepayments(&self) -> (Cycles, Cycles) {
+        let state = self.env.get_latest_state();
+        let system_state = &state.canister_state(&self.caller_id).unwrap().system_state;
+        let callbacks = system_state.call_context_manager().unwrap().callbacks();
+        assert_eq!(callbacks.len(), 1);
+        let callback = callbacks.values().next().unwrap();
+        (
+            callback.prepayment_for_response_execution.real(),
+            callback.prepayment_for_response_transmission.real(),
+        )
+    }
+
+    /// Returns the total number of instructions the caller has executed so far.
+    fn instructions_executed(&self) -> NumInstructions {
+        self.env
+            .get_latest_state()
+            .canister_state(&self.caller_id)
+            .unwrap()
+            .system_state
+            .canister_metrics()
+            .instructions_executed()
+    }
+
+    /// Returns the cycles consumed by the caller for the `Instructions` use case,
+    /// both on the gauge and on the monotonic counter.
+    fn consumed_instructions_cycles(&self) -> (Cycles, Cycles) {
+        let state = self.env.get_latest_state();
+        let metrics = state
+            .canister_state(&self.caller_id)
+            .unwrap()
+            .system_state
+            .canister_metrics();
+        let get = |m: &std::collections::BTreeMap<CyclesUseCase, NominalCycles>| {
+            Cycles::new(
+                m.get(&CyclesUseCase::Instructions)
+                    .copied()
+                    .unwrap_or_else(NominalCycles::zero)
+                    .get(),
+            )
+        };
+        (
+            get(metrics.consumed_cycles_by_use_cases()),
+            get(metrics.consumed_cycles_by_use_cases_as_counters()),
+        )
+    }
+
+    /// Upgrades the caller to the given Wasm execution mode.
+    fn upgrade(&self, wasm64: bool) {
+        self.env
+            .upgrade_canister(
+                self.caller_id,
+                wat::parse_str(call_and_reply_wat(wasm64)).unwrap(),
+                vec![],
+            )
+            .unwrap();
+        self.assert_in_flight();
+    }
+
+    /// Ticks until the response has been processed.
+    fn await_response(&self) -> Result<WasmResult, UserError> {
+        self.env.await_ingress(self.msg_id.clone(), 300)
+    }
+
+    /// Ticks until the caller has a paused response execution.
+    fn tick_until_response_execution_paused(&self) {
+        for _ in 0..300 {
+            let state = self.env.get_latest_state();
+            let canister = state.canister_state(&self.caller_id).unwrap();
+            if canister.next_execution() == NextExecution::ContinueLong {
+                return;
+            }
+            drop(state);
+            self.env.tick();
+        }
+        panic!("the response execution was never paused");
+    }
+}
+
+/// If the caller is upgraded from Wasm32 to Wasm64 while a call is in flight, then
+/// the cycles prepaid for the response execution (using the Wasm32 instruction costs)
+/// do not cover executing the response in Wasm64 and are topped up before the reply
+/// callback is executed. As a result, the caller is charged the Wasm64 cost of the
+/// instructions that the reply callback executed.
+#[test]
+fn response_execution_prepayment_is_topped_up_after_upgrade_to_wasm64() {
+    let call = CallInFlight::new(false, INITIAL_CYCLES_BALANCE);
+    let (prepaid_for_execution, prepaid_for_transmission) = call.prepayments();
+    call.upgrade(true);
+
+    let balance_before = call.balance();
+    let instructions_before = call.instructions_executed();
+    let (gauge_before, counter_before) = call.consumed_instructions_cycles();
+    // The response is processed by the Wasm64 canister.
+    call.tick_until_response_execution_paused();
+    assert_eq!(call.wasm_execution_mode(), Some(WasmExecutionMode::Wasm64));
+    let reply = call.await_response().unwrap();
+    let instructions_used = call.instructions_executed() - instructions_before;
+    let charged = charged_for_response_execution(
+        prepaid_for_execution,
+        prepaid_for_transmission,
+        balance_before,
+        call.balance(),
+    );
+    let (gauge_after, counter_after) = call.consumed_instructions_cycles();
+
+    assert_eq!(reply, WasmResult::Reply(vec![]));
+
+    // The caller is charged exactly the Wasm64 cost of the executed instructions.
+    assert_eq!(charged, call.execution_cost(instructions_used, true));
+    // The charge exceeds the cycles prepaid when the call was performed, which is
+    // only possible because the prepayment has been topped up. Note that the charge
+    // would have been clamped to (and thus fully refunded from) the prepayment
+    // without the top-up.
+    assert_gt!(charged, prepaid_for_execution);
+    // The consumed cycles of the caller reflect the charge: the gauge was raised by
+    // the prepayment when the call was performed and by the additional prepayment
+    // before the response was executed, and lowered by the refund afterwards.
+    assert_eq!(counter_after, counter_before + charged);
+    assert_eq!(gauge_after + prepaid_for_execution, gauge_before + charged);
+}
+
+/// If the caller is upgraded from Wasm64 to Wasm32 while a call is in flight, then
+/// the cycles prepaid for the response execution (using the Wasm64 instruction costs)
+/// exceed what executing the response in Wasm32 requires and the excess is refunded.
+/// As a result, the caller is charged the Wasm32 cost of the instructions that the
+/// reply callback executed and no cycles are lost.
+#[test]
+fn response_execution_prepayment_excess_is_refunded_after_upgrade_to_wasm32() {
+    let call = CallInFlight::new(true, INITIAL_CYCLES_BALANCE);
+    let (prepaid_for_execution, prepaid_for_transmission) = call.prepayments();
+    call.upgrade(false);
+
+    let balance_before = call.balance();
+    let instructions_before = call.instructions_executed();
+    let (gauge_before, counter_before) = call.consumed_instructions_cycles();
+    // The response is processed by the Wasm32 canister.
+    call.tick_until_response_execution_paused();
+    assert_eq!(call.wasm_execution_mode(), Some(WasmExecutionMode::Wasm32));
+    let reply = call.await_response().unwrap();
+    let instructions_used = call.instructions_executed() - instructions_before;
+    let charged = charged_for_response_execution(
+        prepaid_for_execution,
+        prepaid_for_transmission,
+        balance_before,
+        call.balance(),
+    );
+    let (gauge_after, counter_after) = call.consumed_instructions_cycles();
+
+    assert_eq!(reply, WasmResult::Reply(vec![]));
+
+    // Executing the response in Wasm32 costs less than what was prepaid for it, i.e.,
+    // there is an excess prepayment to be refunded.
+    assert_gt!(
+        prepaid_for_execution,
+        call.execution_cost(call.instruction_limit(), false)
+    );
+    // The caller is charged the Wasm32 cost of the executed instructions only: the
+    // Wasm64 instruction costs prepaid for the instructions it did not execute are
+    // refunded in full.
+    assert_eq!(charged, call.execution_cost(instructions_used, false));
+    // The consumed cycles of the caller reflect the charge.
+    assert_eq!(counter_after, counter_before + charged);
+    assert_eq!(gauge_after + prepaid_for_execution, gauge_before + charged);
+}
+
+/// If the caller is not upgraded, then the prepayment is neither topped up nor
+/// partially refunded and the caller is charged the cost of the instructions it
+/// executed in its own Wasm execution mode.
+#[test]
+fn response_execution_prepayment_is_unchanged_without_upgrade() {
+    for (wasm64, mode) in [
+        (false, WasmExecutionMode::Wasm32),
+        (true, WasmExecutionMode::Wasm64),
+    ] {
+        let call = CallInFlight::new(wasm64, INITIAL_CYCLES_BALANCE);
+        let (prepaid_for_execution, prepaid_for_transmission) = call.prepayments();
+
+        let balance_before = call.balance();
+        let instructions_before = call.instructions_executed();
+        call.tick_until_response_execution_paused();
+        assert_eq!(call.wasm_execution_mode(), Some(mode));
+        let reply = call.await_response().unwrap();
+        let instructions_used = call.instructions_executed() - instructions_before;
+        let charged = charged_for_response_execution(
+            prepaid_for_execution,
+            prepaid_for_transmission,
+            balance_before,
+            call.balance(),
+        );
+
+        assert_eq!(reply, WasmResult::Reply(vec![]));
+        assert_eq!(charged, call.execution_cost(instructions_used, wasm64));
+        // No adjustment was necessary, i.e., the prepayment covers the charge.
+        assert_lt!(charged, prepaid_for_execution);
+    }
+}
+
+/// If the caller is uninstalled while a call is in flight, then its call context is
+/// deleted, the reply callback is not executed at all and the caller is charged the
+/// fixed per-message execution fee only, independently of the Wasm execution mode
+/// whose instruction costs the cycles for the response execution were prepaid with.
+#[test]
+fn response_execution_charges_base_fee_only_if_canister_is_uninstalled() {
+    for wasm64 in [false, true] {
+        let call = CallInFlight::new(wasm64, INITIAL_CYCLES_BALANCE);
+        let (prepaid_for_execution, prepaid_for_transmission) = call.prepayments();
+
+        call.env.uninstall_code(call.caller_id).unwrap();
+        let balance_before = call.balance();
+        let instructions_before = call.instructions_executed();
+
+        // Uninstalling the caller rejects the ingress message that triggered the call.
+        let err = call.await_response().unwrap_err();
+        assert_eq!(err.code(), ErrorCode::CanisterRejectedMessage);
+
+        // Tick until the response has been delivered to the uninstalled caller, i.e.
+        // until its callback is gone.
+        for _ in 0..300 {
+            let state = call.env.get_latest_state();
+            let empty = state
+                .canister_state(&call.caller_id)
+                .unwrap()
+                .system_state
+                .call_context_manager()
+                .unwrap()
+                .callbacks()
+                .is_empty();
+            drop(state);
+            if empty {
+                break;
+            }
+            call.env.tick();
+        }
+
+        // The reply callback was not executed and the caller is charged the fixed
+        // per-message execution fee only, i.e. no cycles are lost to a Wasm execution
+        // mode mismatch.
+        assert_eq!(call.instructions_executed(), instructions_before);
+        // The uninstalled caller has no execution state anymore.
+        assert_eq!(call.wasm_execution_mode(), None);
+        let charged = charged_for_response_execution(
+            prepaid_for_execution,
+            prepaid_for_transmission,
+            balance_before,
+            call.balance(),
+        );
+        assert_eq!(
+            charged,
+            call.execution_cost(NumInstructions::from(0), false)
+        );
+    }
+}
+
+/// An aborted response execution starts over, where the prepayment is adjusted
+/// afresh, no matter how often it is aborted. The instructions executed by the
+/// aborted slices are not charged for.
+#[test]
+fn response_execution_prepayment_is_adjusted_after_dts_abort() {
+    let call = CallInFlight::new(false, INITIAL_CYCLES_BALANCE);
+    let (prepaid_for_execution, prepaid_for_transmission) = call.prepayments();
+    call.upgrade(true);
+
+    let balance_before = call.balance();
+    // Asserts that the caller has an aborted response execution which starts over
+    // from the same state as the execution that was aborted first: the adjustment of
+    // the prepayment is rolled back with the rest of the aborted execution and hence
+    // it is redone when the execution starts over.
+    let assert_aborted = || {
+        // The response execution has been aborted and is pending to start over.
+        assert!(call.has_aborted_execution());
+        assert_eq!(
+            call.env
+                .get_latest_state()
+                .canister_state(&call.caller_id)
+                .unwrap()
+                .next_execution(),
+            NextExecution::ContinueLong
+        );
+        // The aborted execution did not change the caller's cycles balance, i.e., the
+        // cycles withdrawn to top up the prepayment were given back.
+        assert_eq!(call.balance(), balance_before);
+        // Accordingly, the persisted context of the aborted execution records the
+        // prepayment made when the call was performed (and no cycles prepaid by the
+        // aborted execution itself): the response execution starts over with the
+        // prepayment that has yet to be topped up.
+        assert_eq!(
+            call.aborted_response_execution_state(),
+            (
+                prepaid_for_execution,
+                prepaid_for_transmission,
+                Cycles::zero()
+            )
+        );
+    };
+
+    // Let the callee reply and the caller start executing the response, then abort the
+    // paused response execution by writing a checkpoint.
+    call.tick_until_response_execution_paused();
+    call.env.checkpointed_tick();
+    assert_aborted();
+
+    // The aborted response execution starts over and is paused again in the round
+    // below, so that the next checkpoint aborts it one more time.
+    call.env.tick();
+    assert!(call.has_paused_execution());
+    call.env.checkpointed_tick();
+    assert_aborted();
+
+    // The instructions executed before the aborts are not charged for.
+    let instructions_before = call.instructions_executed();
+    let reply = call.await_response().unwrap();
+    let instructions_used = call.instructions_executed() - instructions_before;
+    let charged = charged_for_response_execution(
+        prepaid_for_execution,
+        prepaid_for_transmission,
+        balance_before,
+        call.balance(),
+    );
+
+    assert_eq!(reply, WasmResult::Reply(vec![]));
+    // The restarted execution topped up the prepayment again and hence the caller is
+    // charged exactly the Wasm64 cost of the instructions it executed after the last
+    // abort.
+    assert_eq!(charged, call.execution_cost(instructions_used, true));
+}
+
+impl CallInFlight {
+    /// Advances time so that charging the caller for its resource usage drains its
+    /// cycles balance to just above the given target.
+    ///
+    /// The caller is given a compute allocation so that it is charged enough per
+    /// second for its balance to drain within a few rounds. Its freezing threshold is
+    /// left untouched, so the compute allocation has to be small enough for the
+    /// resulting freezing threshold to be covered by the current balance.
+    ///
+    /// Canisters are only charged for their resource usage every
+    /// `CHARGE_INTERVAL_ROUNDS` rounds or in a checkpoint round (see
+    /// `SchedulerImpl::charge_canisters_for_resource_allocation_and_usage`), hence
+    /// checkpoint rounds are executed to trigger the charging.
+    /// Returns the caller's freezing threshold, which is observed before draining
+    /// because reading the canister status fails once the caller is frozen.
+    fn drain_balance_to(&self, compute_allocation_percent: u64, target: u128) -> Cycles {
+        self.env
+            .update_settings(
+                &self.caller_id,
+                CanisterSettingsArgsBuilder::new()
+                    .with_compute_allocation(compute_allocation_percent)
+                    .build(),
+            )
+            .unwrap();
+        let cycles_per_second = self.idle_cycles_burned_per_second();
+        assert_gt!(cycles_per_second, 0);
+        let freezing_threshold = self.freezing_threshold();
+
+        for _ in 0..5 {
+            let balance = self.balance();
+            assert_gt!(balance, target);
+            let seconds = (balance - target) / cycles_per_second;
+            if seconds == 0 {
+                break;
+            }
+            self.env
+                .advance_time(std::time::Duration::from_secs(seconds as u64));
+            self.env.checkpointed_tick();
+            self.assert_in_flight();
+        }
+        assert_gt!(self.balance(), 0);
+        freezing_threshold
+    }
+
+    /// Returns the cycles the caller is charged per second for its resource usage.
+    fn idle_cycles_burned_per_second(&self) -> u128 {
+        self.env
+            .canister_status(self.caller_id)
+            .unwrap()
+            .unwrap()
+            .idle_cycles_burned_per_day()
+            / 86_400
+    }
+
+    /// Returns whether the caller has an aborted execution.
+    fn has_aborted_execution(&self) -> bool {
+        self.env
+            .get_latest_state()
+            .canister_state(&self.caller_id)
+            .unwrap()
+            .has_aborted_execution()
+    }
+
+    /// Returns whether the caller has a paused execution.
+    fn has_paused_execution(&self) -> bool {
+        self.env
+            .get_latest_state()
+            .canister_state(&self.caller_id)
+            .unwrap()
+            .has_paused_execution()
+    }
+
+    /// Returns the state that the caller's aborted response execution carries over
+    /// to the round in which it starts over: the cycles prepaid for the execution
+    /// and for the transmission of the response as recorded in the callback of the
+    /// aborted response, and the cycles that the aborted execution reports as
+    /// already prepaid for it (which the restarted execution does not pay again).
+    ///
+    /// Panics if the caller has no aborted response execution.
+    fn aborted_response_execution_state(&self) -> (Cycles, Cycles, Cycles) {
+        let state = self.env.get_latest_state();
+        let task = state
+            .canister_state(&self.caller_id)
+            .unwrap()
+            .system_state
+            .task_queue
+            .paused_or_aborted_task();
+        let Some(ExecutionTask::AbortedExecution {
+            input,
+            prepaid_execution_cycles,
+        }) = task
+        else {
+            panic!("the caller has no aborted execution: {task:?}");
+        };
+        let CanisterMessageOrTask::Message(CanisterMessage::Response { callback, .. }) = input
+        else {
+            panic!("the caller's aborted execution is not a response execution: {input:?}");
+        };
+        (
+            callback.prepayment_for_response_execution.real(),
+            callback.prepayment_for_response_transmission.real(),
+            prepaid_execution_cycles.real(),
+        )
+    }
+
+    /// Returns the cycles the caller must retain in order not to be frozen.
+    fn freezing_threshold(&self) -> Cycles {
+        let status = self.env.canister_status(self.caller_id).unwrap().unwrap();
+        Cycles::new(self.idle_cycles_burned_per_second() * status.freezing_threshold() as u128)
+    }
+}
+
+/// The additional prepayment required after an upgrade from Wasm32 to Wasm64 is
+/// withdrawn without applying the freezing threshold: the caller already committed to
+/// executing the response when it performed the corresponding call.
+#[test]
+fn response_execution_prepayment_top_up_ignores_freezing_threshold() {
+    let call = CallInFlight::new(false, INITIAL_CYCLES_BALANCE);
+    let (prepaid_for_execution, prepaid_for_transmission) = call.prepayments();
+    call.upgrade(true);
+
+    // Charging the caller for its resource usage drains its cycles balance below its
+    // (untouched) freezing threshold, i.e. it could not pay for the additional
+    // prepayment if the freezing threshold were applied to it. The balance is left
+    // above the additional prepayment, which the caller thus can and does pay.
+    let required = call.execution_cost(call.instruction_limit(), true);
+    assert_gt!(required, prepaid_for_execution);
+    let additional = (required - prepaid_for_execution).get();
+    let freezing_threshold = call.drain_balance_to(3, 2 * additional);
+    assert_lt!(Cycles::new(call.balance()), freezing_threshold);
+    assert_gt!(call.balance(), additional);
+    call.assert_in_flight();
+
+    let balance_before = call.balance();
+    let instructions_before = call.instructions_executed();
+    let reply = call.await_response().unwrap();
+    let instructions_used = call.instructions_executed() - instructions_before;
+    let charged = charged_for_response_execution(
+        prepaid_for_execution,
+        prepaid_for_transmission,
+        balance_before,
+        call.balance(),
+    );
+
+    // The reply callback was executed and the caller was charged the Wasm64 cost of
+    // the executed instructions even though it was frozen.
+    assert_eq!(reply, WasmResult::Reply(vec![]));
+    assert_eq!(charged, call.execution_cost(instructions_used, true));
+    assert_gt!(charged, prepaid_for_execution);
+}
+
+/// If the caller's balance does not cover the additional prepayment required after an
+/// upgrade from Wasm32 to Wasm64, then the response execution fails without executing
+/// the reply callback and all prepaid cycles except the fixed per-message fee are refunded.
+#[test]
+fn response_execution_fails_if_prepayment_cannot_be_topped_up() {
+    let call = CallInFlight::new(false, INITIAL_CYCLES_BALANCE);
+    let (prepaid_for_execution, prepaid_for_transmission) = call.prepayments();
+    call.upgrade(true);
+
+    // Charging the caller for its resource usage drains its cycles balance below the
+    // additional prepayment required for executing the response in Wasm64.
+    let required = call.execution_cost(call.instruction_limit(), true);
+    assert_gt!(required, prepaid_for_execution);
+    let additional = (required - prepaid_for_execution).get();
+    call.drain_balance_to(3, additional / 2);
+    assert_lt!(call.balance(), additional);
+
+    let balance_before = call.balance();
+    let instructions_before = call.instructions_executed();
+
+    // The ingress message that triggered the call fails because the response could
+    // not be executed.
+    let err = call.await_response().unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    // The error reveals the missing amount because the sender is a controller.
+    assert!(
+        err.description()
+            .contains("is out of cycles: please top up"),
+        "unexpected error description: {}",
+        err.description()
+    );
+
+    // The reply callback was not executed, hence the caller is charged the fixed
+    // per-message execution fee only and the rest of the cycles prepaid for the
+    // response execution is refunded to it.
+    assert_eq!(call.instructions_executed(), instructions_before);
+    let charged = charged_for_response_execution(
+        prepaid_for_execution,
+        prepaid_for_transmission,
+        balance_before,
+        call.balance(),
+    );
+    assert_eq!(
+        charged,
+        call.execution_cost(NumInstructions::from(0), false)
+    );
 }
