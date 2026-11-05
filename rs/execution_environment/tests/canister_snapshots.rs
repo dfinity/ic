@@ -619,7 +619,7 @@ fn load_snapshot_rejected_when_wasm_memory_exceeds_module_mode_limit() {
     // The load must be rejected rather than committing an invalid state.
     let load_args = LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
     let err = env.load_canister_snapshot(load_args).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
     assert!(
         err.description().contains("exceeds the") && err.description().contains("execution mode"),
         "unexpected error: {err}"

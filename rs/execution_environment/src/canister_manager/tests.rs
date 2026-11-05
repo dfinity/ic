@@ -6165,7 +6165,7 @@ fn update_settings_validates_log_resize_against_the_pre_update_freezing_threshol
         .subnet_message(Method::UpdateSettings, args)
         .unwrap_err();
     // The grow is refused against the pre-update freezing threshold.
-    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
 
     // Nothing was applied: neither the log store nor the freezing threshold.
     assert_eq!(
