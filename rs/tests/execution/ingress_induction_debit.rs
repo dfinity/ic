@@ -4,7 +4,7 @@ end::catalog[] */
 use anyhow::Result;
 use candid::{Decode, Encode, Principal};
 use futures::future::join_all;
-use ic_agent::Agent;
+use ic_agent::{Agent, AgentError};
 use ic_management_canister_types_private::{CanisterIdRecord, CanisterStatusResultV2};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -52,6 +52,10 @@ const REPLY_CALLBACK_TRAP_MESSAGE: &str = "trapping-in-reply-callback";
 
 /// How often we keep submitting update calls to `C` during the concurrent phase.
 const SUBMIT_INTERVAL: Duration = Duration::from_millis(500);
+
+/// Upper bound on the time to wait for all background update calls to complete
+/// after the self-call update on `C` has returned.
+const BACKGROUND_CALLS_TIMEOUT: Duration = Duration::from_secs(300);
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -264,6 +268,9 @@ pub fn test(env: TestEnv) {
             let stop = stop.clone();
             let submitted = submitted.clone();
             tokio::spawn(async move {
+                // The handles of the detached background calls. Each of them resolves
+                // to whether its call was inducted into `C`.
+                let mut calls = Vec::new();
                 while !stop.load(Ordering::Relaxed) {
                     // Submit an update call without blocking on its result: the
                     // agent's `call()` uses the synchronous call endpoint, which
@@ -272,13 +279,21 @@ pub fn test(env: TestEnv) {
                     // fire it off in a detached task and never await it.
                     let call_agent = submitter_agent.clone();
                     let call_payload = submitter_payload.clone();
-                    tokio::spawn(async move {
-                        let _ = call_agent
+                    calls.push(tokio::spawn(async move {
+                        // A call was inducted into `C` iff its outcome is certified:
+                        // a reply, or a reject produced while executing it. A call
+                        // refused before induction (e.g., because `C` cannot pay for
+                        // its induction) yields an uncertified reject instead.
+                        match call_agent
                             .update(&submitter_canister_id, "update")
                             .with_arg(call_payload)
                             .call()
-                            .await;
-                    });
+                            .await
+                        {
+                            Ok(_) | Err(AgentError::CertifiedReject { .. }) => true,
+                            Err(_) => false,
+                        }
+                    }));
                     let count = submitted.fetch_add(1, Ordering::Relaxed) + 1;
                     // Emit a log every 10 submitted calls (~5s) so that
                     // progress can be monitored while the self-call update blocks.
@@ -290,6 +305,7 @@ pub fn test(env: TestEnv) {
                     }
                     tokio::time::sleep(SUBMIT_INTERVAL).await;
                 }
+                calls
             })
         };
 
@@ -307,11 +323,36 @@ pub fn test(env: TestEnv) {
 
         // Stop the background submitter.
         stop.store(true, Ordering::Relaxed);
-        submitter.await.expect("background submitter panicked");
+        let calls = submitter.await.expect("background submitter panicked");
         info!(
             log,
             "Submitted {} background update calls to canister C",
             submitted.load(Ordering::Relaxed)
+        );
+
+        // All background calls were submitted while the self-call update was in
+        // progress, i.e., mostly while C's long cleanup callback was paused. Any of
+        // them that was inducted into C was hence (most likely) inducted during that
+        // cleanup and its induction cost was added to C's ingress induction cycles
+        // debit, which is the behavior under test. Without such an induction, the
+        // assertions below would also hold for a cleanup without a pending debit.
+        let outcomes = tokio::time::timeout(BACKGROUND_CALLS_TIMEOUT, join_all(calls))
+            .await
+            .expect("timed out waiting for the background update calls to complete");
+        let inducted = outcomes
+            .into_iter()
+            .map(|outcome| outcome.expect("background update call panicked"))
+            .filter(|inducted| *inducted)
+            .count();
+        info!(
+            log,
+            "{inducted} background update calls were inducted into canister C"
+        );
+        assert!(
+            inducted > 0,
+            "none of the background update calls was inducted into C while its cleanup \
+             callback was running, i.e., the test did not exercise the ingress induction \
+             cycles debit"
         );
 
         // The update call is rejected because the reply callback traps. Note that
