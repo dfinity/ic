@@ -41,8 +41,8 @@ pub enum UpgradePermitAction {
     ReturnPermit { node: NodeId },
 }
 
-/// UpgradePermitRequest holds the values that are signed in an
-/// upgrade permit authorization share.
+/// UpgradePermitRequest holds the values that are used in creating an upgrade
+/// permit authorization share.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Serialize)]
 pub struct UpgradePermitRequest {
     pub requestor: NodeId,
