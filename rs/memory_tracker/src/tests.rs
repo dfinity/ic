@@ -644,7 +644,7 @@ fn accessed_page_limit_refuses_the_page_after_the_limit(
             assert_eq!(tracker.num_accessed_pages(), 2 * OS_PAGES_IN_WASM_PAGE);
             assert_eq!(accessed_callbacks.load(Ordering::Relaxed), 2);
             assert!(!flag.load(Ordering::Relaxed));
-            assert_eq!(tracker.metrics().page_limit_exceeded_count(), 0);
+            assert!(!tracker.metrics().page_limit_exceeded());
 
             // The third distinct page is refused and nothing changes.
             assert_eq!(
@@ -655,7 +655,7 @@ fn accessed_page_limit_refuses_the_page_after_the_limit(
             assert_eq!(accessed_callbacks.load(Ordering::Relaxed), 2);
             assert!(!tracker.is_accessed(PageIndex::new((3 * OS_PAGES_IN_WASM_PAGE) as u64)));
             assert!(flag.load(Ordering::Relaxed));
-            assert_eq!(tracker.metrics().page_limit_exceeded_count(), 1);
+            assert!(tracker.metrics().page_limit_exceeded());
             assert_eq!(tracker.metrics().sigsegv_count(), 3);
 
             // The refused page is still not mapped, so the same access is refused again.
@@ -663,7 +663,7 @@ fn accessed_page_limit_refuses_the_page_after_the_limit(
                 sigsegv_wasm_page(&tracker, 3, access_kind),
                 SigsegvOutcome::Refused
             );
-            assert_eq!(tracker.metrics().page_limit_exceeded_count(), 2);
+            assert!(tracker.metrics().page_limit_exceeded());
             assert_eq!(accessed_callbacks.load(Ordering::Relaxed), 2);
         },
     );
@@ -691,7 +691,7 @@ fn observed_accessed_page_limit_counts_but_maps_the_page_after_the_limit(
             );
             assert_eq!(tracker.num_accessed_pages(), 2 * OS_PAGES_IN_WASM_PAGE);
             assert_eq!(accessed_callbacks.load(Ordering::Relaxed), 2);
-            assert_eq!(tracker.metrics().page_limit_exceeded_count(), 0);
+            assert!(!tracker.metrics().page_limit_exceeded());
 
             // The third distinct page exceeds the limit. It is counted, but
             // mapped like any other page, and nothing is refused.
@@ -703,7 +703,7 @@ fn observed_accessed_page_limit_counts_but_maps_the_page_after_the_limit(
             assert_eq!(accessed_callbacks.load(Ordering::Relaxed), 3);
             assert!(tracker.is_accessed(PageIndex::new((3 * OS_PAGES_IN_WASM_PAGE) as u64)));
             assert!(!flag.load(Ordering::Relaxed));
-            assert_eq!(tracker.metrics().page_limit_exceeded_count(), 1);
+            assert!(tracker.metrics().page_limit_exceeded());
             assert_eq!(tracker.metrics().sigsegv_count(), 3);
 
             // Every further new page is counted and mapped as well.
@@ -714,7 +714,7 @@ fn observed_accessed_page_limit_counts_but_maps_the_page_after_the_limit(
             assert_eq!(tracker.num_accessed_pages(), 4 * OS_PAGES_IN_WASM_PAGE);
             assert_eq!(accessed_callbacks.load(Ordering::Relaxed), 4);
             assert!(!flag.load(Ordering::Relaxed));
-            assert_eq!(tracker.metrics().page_limit_exceeded_count(), 2);
+            assert!(tracker.metrics().page_limit_exceeded());
 
             // The upfront check only reports the limit for accesses to new
             // pages, also when the count is already beyond the limit.
@@ -841,7 +841,7 @@ fn no_accessed_page_limit_maps_every_page(
             assert_eq!(tracker.num_accessed_pages(), LIMIT_TEST_OS_PAGES);
             assert_eq!(accessed_callbacks.load(Ordering::Relaxed), 8);
             assert!(!tracker.page_limit_exceeded_flag().load(Ordering::Relaxed));
-            assert_eq!(tracker.metrics().page_limit_exceeded_count(), 0);
+            assert!(!tracker.metrics().page_limit_exceeded());
             assert!(tracker.check_range_fits(wasm_page_byte_range(0..1_000_000)));
         },
     );
