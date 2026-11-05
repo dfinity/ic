@@ -154,7 +154,7 @@ struct SandboxedExecutionMetrics {
     mprotect_count: HistogramVec,
     copy_page_count: HistogramVec,
     sigsegv_handler_duration: HistogramVec,
-    wasm_page_limit_exceeded: HistogramVec,
+    wasm_page_limit_exceeded: IntCounterVec,
     wasm_bulk_check_slow_path_calls: HistogramVec,
 }
 
@@ -395,17 +395,17 @@ impl SandboxedExecutionMetrics {
                 decimal_buckets_with_zero(-4, 1),
                 &["api_type", "memory_type"],
             ),
-            wasm_page_limit_exceeded: metrics_registry.histogram_vec(
+            wasm_page_limit_exceeded: metrics_registry.int_counter_vec(
                 "sandboxed_execution_wasm_page_limit_exceeded",
-                "Number of accesses beyond the limit for accessed Wasm heap \
-                    pages detected during the execution, by api type and by \
-                    the check that detected them (handler: Wasm loads and \
-                    stores, host_accessor: host functions, bulk_check: bulk \
-                    memory operations and stable memory copies). With the \
-                    feature enabled the first detection fails the execution; \
-                    with the feature disabled nothing is refused and every \
-                    access that would have been refused is counted.",
-                decimal_buckets_with_zero(0, 8),
+                "Number of executions in which an access beyond the limit for \
+                    accessed Wasm heap pages was detected, by api type and by \
+                    the check that detected it (handler: Wasm loads and stores, \
+                    host_accessor: host functions, bulk_check: bulk memory \
+                    operations and stable memory copies). With the feature \
+                    enabled the detection fails the execution; with the feature \
+                    disabled nothing is refused and an execution is counted \
+                    under every check that would have refused one of its \
+                    accesses.",
                 &["api_type", "detector"],
             ),
             wasm_bulk_check_slow_path_calls: metrics_registry.histogram_vec(
@@ -466,15 +466,19 @@ impl SandboxedExecutionMetrics {
         self.sigsegv_handler_duration
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_sigsegv_handler_duration.as_secs_f64());
+        // The stats count every detection. With the feature enabled that is at
+        // most one, since the first detection fails the execution.
         let refusals = &instance_stats.wasm_page_limit_refusals;
         for (detector, count) in [
             ("handler", refusals.handler),
             ("host_accessor", refusals.host_accessor),
             ("bulk_check", refusals.bulk_check),
         ] {
-            self.wasm_page_limit_exceeded
-                .with_label_values(&[api_type_label, detector])
-                .observe(count as f64);
+            if count > 0 {
+                self.wasm_page_limit_exceeded
+                    .with_label_values(&[api_type_label, detector])
+                    .inc();
+            }
         }
         self.wasm_bulk_check_slow_path_calls
             .with_label_values(&[api_type_label])
@@ -2824,10 +2828,10 @@ mod tests {
         let canister_id = test.canister_from_wat(wat).unwrap();
         let payload = vec![7_u8; 3 * WASM_PAGE];
 
-        // The histograms observe one value per execution; the sum is the
-        // number of detections or calls over all executions so far.
+        // The counter counts executions; the histogram observes one value per
+        // execution, so its sum is the number of calls over all executions.
         let exceeded = |test: &ExecutionTest, detector: &str| {
-            fetch_histogram_vec_stats(
+            ic_test_utilities_metrics::fetch_int_counter_vec(
                 test.metrics_registry(),
                 "sandboxed_execution_wasm_page_limit_exceeded",
             )
@@ -2835,7 +2839,8 @@ mod tests {
                 ("api_type".to_string(), "update".to_string()),
                 ("detector".to_string(), detector.to_string()),
             ]))
-            .map_or(0, |stats| stats.sum as u64)
+            .copied()
+            .unwrap_or(0)
         };
         let slow_path_calls = |test: &ExecutionTest| {
             fetch_histogram_vec_stats(
