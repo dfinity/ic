@@ -23,7 +23,7 @@ const NNS_PUBLIC_KEY_PATH: &str = "/run/config/nns_public_key.pem";
 /// Upper bound on the time spent reading the record of a single GuestOS version. It leaves room
 /// for the fallback to all elected versions within the systemd timeout (see
 /// guest-upgrade-client.service)
-const VERSION_RECORD_TIMEOUT: Duration = Duration::from_secs(60);
+const VERSION_RECORD_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Upper bound on a single attempt to read the record of a GuestOS version from one NNS
 /// endpoint. An update call normally completes within a few seconds, but by default the agent
@@ -87,23 +87,31 @@ impl NnsElectedMeasurementsSource {
     }
 
     /// Reads the latest value of `key`, retrying on errors other than that the key is missing.
-    /// Each attempt goes to a randomly chosen NNS endpoint, and the agent gives up on it after
-    /// VERSION_RECORD_ATTEMPT_TIMEOUT
+    /// Each attempt goes to a randomly chosen NNS endpoint.
     async fn get_certified_value(&self, key: &str) -> Result<Option<Vec<u8>>> {
         loop {
-            let result = self
-                .registry_canister
-                .get_value_with_update(key.as_bytes().to_vec(), None)
-                .await;
+            let result = tokio::time::timeout(
+                VERSION_RECORD_ATTEMPT_TIMEOUT,
+                self.registry_canister
+                    .get_value_with_update(key.as_bytes().to_vec(), None),
+            )
+            .await;
 
             match result {
-                Ok((value, _version)) => return Ok(Some(value)),
-                Err(ic_registry_transport::Error::KeyNotPresent(_)) => return Ok(None),
-                Err(err) => {
+                Ok(Ok((value, _version))) => return Ok(Some(value)),
+                Ok(Err(ic_registry_transport::Error::KeyNotPresent(_))) => return Ok(None),
+                Ok(Err(err)) => {
                     eprintln!("Failed to read {key} from the NNS registry, retrying: {err}");
-                    tokio::time::sleep(VERSION_RECORD_RETRY_DELAY).await;
+                }
+                Err(_elapsed) => {
+                    eprintln!(
+                        "Timed out reading {key} from the NNS registry after \
+                         {VERSION_RECORD_ATTEMPT_TIMEOUT:?}, retrying"
+                    );
                 }
             }
+
+            tokio::time::sleep(VERSION_RECORD_RETRY_DELAY).await;
         }
     }
 }

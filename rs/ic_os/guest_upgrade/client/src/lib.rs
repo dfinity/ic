@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Error, Result, anyhow, bail};
+use attestation::SevAttestationPackage;
 use attestation::attestation_package::{
     AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
-use attestation::{SevAttestationPackage, VerificationError, VerificationErrorDetail};
 use config_types::GuestOSConfig;
 use der::asn1::OctetStringRef;
 use guest_disk::crypt::LuksHeaderLocation;
@@ -265,12 +265,12 @@ impl DiskEncryptionKeyExchangeClientAgent {
 
     /// Verifies the server's attestation package and returns a note on how it was verified.
     ///
-    /// The server's launch measurement is checked against the elected measurements of the
-    /// GuestOS version that the server reports.
+    /// Everything except the server's launch measurement is verified first, since no elected
+    /// measurements can fix a failure there. The launch measurement is then checked against the
+    /// elected measurements of the GuestOS version that the server reports.
     /// If the measurements of the reported version cannot be fetched or do not include the
     /// server's measurement, we fall back to the old approach of checking against all elected
-    /// GuestOS versions. Any other verification failure is final, since other measurements
-    /// cannot fix it.
+    /// GuestOS versions.
     async fn verify_server(
         &self,
         server_attestation_package: SevAttestationPackage,
@@ -278,6 +278,13 @@ impl DiskEncryptionKeyExchangeClientAgent {
         my_attestation_report: &AttestationReport,
         custom_data: &GetDiskEncryptionKeyTokenCustomData<'_>,
     ) -> Result<String> {
+        let server_attestation_package = verify_server_attestation_package_except_measurement(
+            server_attestation_package,
+            my_attestation_report,
+            custom_data,
+            self.sev_root_certificate_verification,
+        )?;
+
         let version_verification = async {
             let server_guestos_version =
                 server_guestos_version.context("Server did not report its GuestOS version")?;
@@ -290,12 +297,10 @@ impl DiskEncryptionKeyExchangeClientAgent {
                 .get_version_measurements(&server_guestos_version)
                 .await?;
 
-            verify_server_attestation_package(
-                server_attestation_package.clone(),
+            verify_server_measurement(
+                &server_attestation_package,
                 my_attestation_report,
-                custom_data,
                 elected_measurements,
-                self.sev_root_certificate_verification,
             )?;
 
             Ok::<_, Error>(server_guestos_version)
@@ -310,20 +315,6 @@ impl DiskEncryptionKeyExchangeClientAgent {
             }
             Err(err) => err,
         };
-
-        // Other measurements cannot fix a server attestation package that fails verification for
-        // another reason than its launch measurement
-        if version_verification_error
-            .downcast_ref::<VerificationError>()
-            .is_some_and(|verification_error| {
-                !matches!(
-                    verification_error.detail,
-                    Some(VerificationErrorDetail::InvalidMeasurement(_))
-                )
-            })
-        {
-            return Err(version_verification_error);
-        }
 
         println!(
             "Could not verify the server against the GuestOS version it reported, \
@@ -341,12 +332,10 @@ impl DiskEncryptionKeyExchangeClientAgent {
                 )
             })?;
 
-        verify_server_attestation_package(
-            server_attestation_package,
+        verify_server_measurement(
+            &server_attestation_package,
             my_attestation_report,
-            custom_data,
             elected_measurements,
-            self.sev_root_certificate_verification,
         )
         .with_context(|| {
             format!(
@@ -453,12 +442,30 @@ impl DiskEncryptionKeyExchangeClientAgent {
     }
 }
 
-pub fn verify_server_attestation_package(
+/// Verifies everything in the server's attestation package except its launch measurement, which
+/// is checked separately by `verify_server_measurement`.
+pub fn verify_server_attestation_package_except_measurement(
     server_attestation_package: SevAttestationPackage,
     my_attestation_report: &AttestationReport,
     custom_data: &GetDiskEncryptionKeyTokenCustomData<'_>,
-    mut elected_measurements: Vec<Vec<u8>>,
     sev_root_certificate_verification: SevRootCertificateVerification,
+) -> Result<ParsedSevAttestationPackage> {
+    ParsedSevAttestationPackage::parse(
+        server_attestation_package,
+        sev_root_certificate_verification,
+    )
+    .verify_custom_data(custom_data)
+    .verify_chip_id(&[my_attestation_report.chip_id])
+    .verify_guest_policy()
+    .context("Server attestation report verification failed")
+}
+
+/// Verifies that the launch measurement of the server's attestation package, otherwise verified
+/// by `verify_server_attestation_package_except_measurement`, is one of `elected_measurements`.
+pub fn verify_server_measurement(
+    server_attestation_package: &ParsedSevAttestationPackage,
+    my_attestation_report: &AttestationReport,
+    mut elected_measurements: Vec<Vec<u8>>,
 ) -> Result<()> {
     // Our own launch measurement is not eligible: without this check, an attacker
     // occupying the server endpoint could reflect our own attestation package back to us.
@@ -466,15 +473,9 @@ pub fn verify_server_attestation_package(
         measurement.as_slice() != my_attestation_report.measurement.as_slice()
     });
 
-    ParsedSevAttestationPackage::parse(
-        server_attestation_package,
-        sev_root_certificate_verification,
-    )
-    .verify_measurement(&elected_measurements)
-    .verify_custom_data(custom_data)
-    .verify_chip_id(&[my_attestation_report.chip_id])
-    .verify_guest_policy()
-    .context("Server attestation report verification failed")?;
+    server_attestation_package
+        .verify_measurement(&elected_measurements)
+        .context("Server attestation report verification failed")?;
 
     Ok(())
 }

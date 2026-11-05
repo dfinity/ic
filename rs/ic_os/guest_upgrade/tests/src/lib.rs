@@ -22,7 +22,9 @@ use guest_upgrade_client::MockDiskCryptoOps;
 use guest_upgrade_client::elected_measurements::{
     ElectedMeasurementsSource, launch_measurements_from_registry_value,
 };
-use guest_upgrade_client::verify_server_attestation_package;
+use guest_upgrade_client::{
+    verify_server_attestation_package_except_measurement, verify_server_measurement,
+};
 use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
 use guest_upgrade_shared::DEFAULT_SERVER_PORT;
 use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
@@ -622,13 +624,10 @@ async fn test_server_wrong_custom_data() {
 
     assert_status_contains_error(&server_result, "Debug info from Upgrade VM");
     assert_statuses_contain_errors((server_result, client_result), "InvalidCustomData");
-    // Other measurements cannot fix wrong custom data, so the client does not fall back.
-    assert_eq!(
-        fixture
-            .elected_measurements_source
-            .all_elected_measurements_request_count(),
-        0
-    );
+    // No elected measurements can fix wrong custom data, so the client does not read any.
+    let source = &fixture.elected_measurements_source;
+    assert_eq!(source.requested_versions(), Vec::<String>::new());
+    assert_eq!(source.all_elected_measurements_request_count(), 0);
 }
 
 #[tokio::test]
@@ -704,13 +703,10 @@ async fn test_server_attestation_report_not_signed() {
 
     assert_status_contains_error(&server_result, "Debug info from Upgrade VM");
     assert_statuses_contain_errors((server_result, client_result), "InvalidSignature");
-    // Other measurements cannot fix a missing signature, so the client does not fall back.
-    assert_eq!(
-        fixture
-            .elected_measurements_source
-            .all_elected_measurements_request_count(),
-        0
-    );
+    // No elected measurements can fix a missing signature, so the client does not read any.
+    let source = &fixture.elected_measurements_source;
+    assert_eq!(source.requested_versions(), Vec::<String>::new());
+    assert_eq!(source.all_elected_measurements_request_count(), 0);
 }
 
 #[tokio::test]
@@ -867,6 +863,28 @@ async fn test_client_falls_back_if_server_does_not_report_guestos_version() {
     fixture.verify_store_artifacts_populated();
 }
 
+/// A server that does not report its GuestOS version cannot make the client fall back to all
+/// elected GuestOS versions with an attestation package that no elected measurements could fix.
+#[tokio::test]
+async fn test_client_does_not_fall_back_if_server_package_is_invalid() {
+    let config = TestConfig {
+        server_custom_data_override: Some(BOGUS_CUSTOM_DATA),
+        // Without its own version in its local registry, the server cannot report it.
+        server_registry_versions: vec![(REPLICA_VERSION, vec![DEFAULT_CLIENT_MEASUREMENT])],
+        ..Default::default()
+    };
+    let mut fixture = DiskEncryptionKeyExchangeTestFixture::new(config);
+    fixture.expect_can_open(false);
+
+    let (server_result, client_result) = fixture.run_key_exchange_test().await;
+
+    assert_statuses_contain_errors((server_result, client_result), "InvalidCustomData");
+    let source = &fixture.elected_measurements_source;
+    assert_eq!(source.requested_versions(), Vec::<String>::new());
+    assert_eq!(source.all_elected_measurements_request_count(), 0);
+    fixture.verify_no_artifacts_persisted();
+}
+
 /// If the GuestOS version that the server reports is not elected, the client falls back to all
 /// elected GuestOS versions.
 #[tokio::test]
@@ -1010,22 +1028,33 @@ fn test_server_package_verification_rejects_own_launch_measurement() {
         generate_attestation_package(&mut server_firmware, &tee_config, &custom_data)
             .unwrap()
             .into();
-    verify_server_attestation_package(
+    let server_package = verify_server_attestation_package_except_measurement(
         server_package,
         &my_attestation_report,
         &custom_data,
-        elected_measurements.clone(),
         SevRootCertificateVerification::TestOnlySkipVerification,
     )
     .unwrap();
+    verify_server_measurement(
+        &server_package,
+        &my_attestation_report,
+        elected_measurements.clone(),
+    )
+    .unwrap();
 
-    // The client's own package, reflected back by an attacker, must be rejected.
-    let error = verify_server_attestation_package(
+    // The client's own package, reflected back by an attacker, passes every check except the
+    // launch measurement one, which must reject it.
+    let reflected_package = verify_server_attestation_package_except_measurement(
         client_package.into(),
         &my_attestation_report,
         &custom_data,
-        elected_measurements,
         SevRootCertificateVerification::TestOnlySkipVerification,
+    )
+    .unwrap();
+    let error = verify_server_measurement(
+        &reflected_package,
+        &my_attestation_report,
+        elected_measurements,
     )
     .unwrap_err();
     assert!(
