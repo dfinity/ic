@@ -257,10 +257,7 @@ fn do_estimate(args: EstimateArgs, _logger: Logger) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Prints one row per estimate, with the labels, the source column and the destination
-/// column aligned. The source column is cyan and the destination column magenta, so the two
-/// sides of the split are easy to tell apart. `colored` drops the styling when stdout is not a
-/// terminal or when `NO_COLOR` is set.
+/// Prints one row per estimate with pretty colors, weight, and alignment
 fn print_estimates(rows: &[(&str, &Estimates)]) {
     let label_width = rows
         .iter()
