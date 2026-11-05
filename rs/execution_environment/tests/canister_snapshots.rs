@@ -549,17 +549,20 @@ fn upload_and_load_snapshot_with_wasm_memory() {
 }
 
 // A snapshot's declared `wasm_memory_size` is validated at metadata-upload time
-// against the *live* canister's execution mode (Wasm64: 6 GiB), but the snapshot's
-// own module -- uploaded separately -- may run in Wasm32 mode (4 GiB limit). When
-// module and memory are finally paired at load time, `load_canister_snapshot`
-// re-checks the declared memory sizes against the loaded module's mode and rejects
-// the load rather than committing a state that exceeds the mode's limit.
+// only against the global cap `MAX_WASM64_MEMORY_IN_BYTES`, independently of any
+// Wasm execution mode, because the snapshot's own module is uploaded separately
+// and may run in Wasm32 mode (4 GiB limit). When module and memory are finally
+// paired at load time, the Wasm memory is validated against the loaded module's
+// Wasm execution mode (by `create_execution_state`) and the load is rejected
+// rather than committing a state that exceeds the mode's limit.
 #[test]
 fn load_snapshot_rejected_when_wasm_memory_exceeds_module_mode_limit() {
     let env = StateMachineBuilder::new().build();
 
-    // A valid Wasm64 module: installing it puts the live canister in Wasm64 mode,
-    // so the snapshot-metadata validator permits a `wasm_memory_size` up to 6 GiB.
+    // A valid Wasm64 module for the live canister. The metadata upload below does
+    // not depend on the live canister's Wasm execution mode, but a Wasm64 canister
+    // shows that the load is rejected based on the mode of the snapshot's module,
+    // not on the mode of the module currently installed.
     let wasm64_module = wat::parse_str(
         r#"
         (module
@@ -592,8 +595,8 @@ fn load_snapshot_rejected_when_wasm_memory_exceeds_module_mode_limit() {
         .unwrap();
 
     // Declare a snapshot whose Wasm heap is just above the 4 GiB Wasm32 limit
-    // (page-aligned: 4 GiB + one 64 KiB Wasm page) but within the 6 GiB Wasm64
-    // limit checked against the live (Wasm64) canister.
+    // (page-aligned: 4 GiB + one 64 KiB Wasm page), but within the global cap
+    // `MAX_WASM64_MEMORY_IN_BYTES` checked at metadata-upload time.
     let wasm_memory_size = (1_u64 << 32) + 65536;
     let metadata = UploadCanisterSnapshotMetadataArgs::new(
         canister_id,
