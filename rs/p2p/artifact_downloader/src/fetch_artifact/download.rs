@@ -248,8 +248,8 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             }
 
             let deadline = Instant::now() + backoff.next().unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT);
-            // Only the first attempt gets the pushed copy, so that a failed one is followed by
-            // downloading a copy from a random peer.
+            // Only the first attempt gets the pushed artifact, so that a failed one is followed by
+            // downloading the artifact from a random peer.
             match attempt(artifact.take(), deadline).await {
                 Attempt::Done { message, peer_id } => {
                     return AssembleResult::Done { message, peer_id };
@@ -262,7 +262,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
     }
 
     /// Returns the pushed artifact, if any, or tries once to download the artifact from a random one
-    /// of the `peers` advertising it, giving up at `deadline`.
+    /// of the `peers` advertising it, giving up at `deadline`, if it passes the integrity check.
     pub(crate) async fn try_fetch(
         &self,
         id: &Artifact::Id,
@@ -273,42 +273,46 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
     where
         Artifact::Id: Debug,
     {
-        // Artifact was pushed by peer. In this case we don't need check that the artifact ID corresponds
-        // to the artifact because we earlier derived the ID from the artifact.
-        if let Some((message, peer_id)) = artifact {
-            return Attempt::Done { message, peer_id };
-        }
-        let Some(peer) = peers.into_iter().choose(&mut SmallRng::from_entropy()) else {
-            return Attempt::Retry;
+        let (message, peer) = match artifact {
+            Some(pushed) => pushed,
+            None => {
+                let Some(peer) = peers.into_iter().choose(&mut SmallRng::from_entropy()) else {
+                    return Attempt::Retry;
+                };
+                let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));
+                let request = Request::builder()
+                    .uri(format!("/{}/rpc", uri_prefix::<Artifact>()))
+                    .body(bytes)
+                    .unwrap();
+                match timeout_at(deadline, self.transport.rpc(&peer, request)).await {
+                    Ok(Ok(response)) if response.status() == StatusCode::OK => {
+                        match Artifact::PbMessage::proxy_decode(&response.into_body()) {
+                            Ok(message) => (message, peer),
+                            Err(err) => return self.invalid_artifact(id, peer, err),
+                        }
+                    }
+                    _ => {
+                        self.metrics
+                            .download_task_artifact_download_errors_total
+                            .inc();
+                        return Attempt::Retry;
+                    }
+                }
+            }
         };
 
-        let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));
-        let request = Request::builder()
-            .uri(format!("/{}/rpc", uri_prefix::<Artifact>()))
-            .body(bytes)
-            .unwrap();
-        match timeout_at(deadline, self.transport.rpc(&peer, request)).await {
-            Ok(Ok(response)) if response.status() == StatusCode::OK => {
-                return match Artifact::PbMessage::proxy_decode(&response.into_body()) {
-                    Ok(message) if message.id() == *id => Attempt::Done {
-                        message,
-                        peer_id: peer,
-                    },
-                    Ok(_) => self.invalid_copy(id, peer, "the copy has a different id"),
-                    Err(err) => self.invalid_copy(id, peer, err),
-                };
-            }
-            _ => {
-                self.metrics
-                    .download_task_artifact_download_errors_total
-                    .inc();
-            }
+        // Even a pushed artifact, whose id was derived from it, may fail the integrity check.
+        if !message.check_integrity(id) {
+            return self.invalid_artifact(id, peer, "it fails the integrity check");
         }
-        Attempt::Retry
+        Attempt::Done {
+            message,
+            peer_id: peer,
+        }
     }
 
-    /// Counts and logs an invalid copy of the artifact that `peer` sent.
-    pub(crate) fn invalid_copy<T>(
+    /// Counts and logs an invalid artifact that `peer` sent.
+    pub(crate) fn invalid_artifact<T>(
         &self,
         id: &Artifact::Id,
         peer: NodeId,
@@ -317,10 +321,10 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
     where
         Artifact::Id: Debug,
     {
-        self.metrics.download_task_invalid_copies_total.inc();
+        self.metrics.download_task_invalid_artifacts_total.inc();
         warn!(
             self.log,
-            "Peer {} sent an invalid copy of {:?}, fetching another one: {}", peer, id, err
+            "Peer {} sent an invalid artifact {:?}, fetching it again: {}", peer, id, err
         );
         Attempt::Retry
     }

@@ -965,6 +965,25 @@ impl PbArtifact for ConsensusMessage {
     type PbIdError = ProxyDecodeError;
     type PbMessage = ic_protobuf::types::v1::ConsensusMessage;
     type PbMessageError = ProxyDecodeError;
+
+    fn check_integrity(&self, id: &Self::Id) -> bool {
+        // The id of these messages covers only the hash of some of their content.
+        let has_hashed_content = match self {
+            ConsensusMessage::BlockProposal(_)
+            | ConsensusMessage::CatchUpPackage(_)
+            | ConsensusMessage::CatchUpPackageShare(_) => true,
+            ConsensusMessage::RandomBeacon(_)
+            | ConsensusMessage::Finalization(_)
+            | ConsensusMessage::Notarization(_)
+            | ConsensusMessage::RandomBeaconShare(_)
+            | ConsensusMessage::NotarizationShare(_)
+            | ConsensusMessage::FinalizationShare(_)
+            | ConsensusMessage::RandomTape(_)
+            | ConsensusMessage::RandomTapeShare(_)
+            | ConsensusMessage::EquivocationProof(_) => false,
+        };
+        self.id() == *id && (!has_hashed_content || ConsensusMessageHashable::check_integrity(self))
+    }
 }
 
 impl From<ConsensusMessage> for pb::ConsensusMessage {

@@ -22,11 +22,11 @@ use ic_protobuf::{proxy::try_from_option_field, types::v1 as pb};
 use ic_quic_transport::Transport;
 use ic_types::{
     CountBytes, NodeId, NodeIndex,
-    artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
+    artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId, PbArtifact},
     batch::IngressPayload,
     canister_http::CanisterHttpResponse,
     consensus::{
-        BlockProposal, ConsensusMessage, ConsensusMessageHashable,
+        BlockProposal, ConsensusMessage,
         idkg::{IDkgArtifactId, IDkgMessage},
     },
     crypto::{
@@ -202,7 +202,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
 }
 
 impl FetchStrippedConsensusArtifact {
-    /// Tries to assemble the message from the pushed copy, or from one downloaded from a peer.
+    /// Tries to assemble the message from the pushed artifact, or from one downloaded from a peer.
     async fn try_assemble_message<P: Peers + Clone + Send + 'static>(
         &self,
         id: &StrippedConsensusMessageId,
@@ -229,13 +229,6 @@ impl FetchStrippedConsensusArtifact {
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) => stripped,
             MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
                 total_timer.stop_and_discard();
-                if !is_intact(&unstripped) {
-                    return self.fetch_stripped.invalid_copy(
-                        id,
-                        peer,
-                        AssemblyError::IntegrityCheckFailed,
-                    );
-                }
                 return Attempt::Done {
                     message: unstripped,
                     peer_id: peer,
@@ -338,29 +331,12 @@ impl FetchStrippedConsensusArtifact {
         }
 
         match assembler.try_assemble() {
-            Ok(reconstructed_block_proposal) => Attempt::Done {
-                message: ConsensusMessage::BlockProposal(reconstructed_block_proposal),
+            Ok(message) => Attempt::Done {
+                message,
                 peer_id: peer,
             },
-            Err(err) => self.fetch_stripped.invalid_copy(id, peer, err),
+            Err(err) => self.fetch_stripped.invalid_artifact(id, peer, err),
         }
-    }
-}
-
-fn is_intact(message: &ConsensusMessage) -> bool {
-    match message {
-        ConsensusMessage::BlockProposal(_)
-        | ConsensusMessage::CatchUpPackage(_)
-        | ConsensusMessage::CatchUpPackageShare(_) => message.check_integrity(),
-        ConsensusMessage::RandomBeacon(_)
-        | ConsensusMessage::Finalization(_)
-        | ConsensusMessage::Notarization(_)
-        | ConsensusMessage::RandomBeaconShare(_)
-        | ConsensusMessage::NotarizationShare(_)
-        | ConsensusMessage::FinalizationShare(_)
-        | ConsensusMessage::RandomTape(_)
-        | ConsensusMessage::RandomTapeShare(_)
-        | ConsensusMessage::EquivocationProof(_) => true,
     }
 }
 
@@ -459,14 +435,7 @@ pub(crate) enum AssemblyError {
     CanisterHttpPayload(#[from] CanisterHttpPayloadError),
     #[error("The block proposal cannot be deserialized {0}")]
     DeserializationFailed(ProxyDecodeError),
-    #[error(
-        "The reconstructed block proposal id {assembled:?} does not match the claimed id {claimed:?}"
-    )]
-    MismatchedConsensusMessageId {
-        claimed: ConsensusMessageId,
-        assembled: ConsensusMessageId,
-    },
-    #[error("The content of the message does not match its hash")]
+    #[error("The reassembled block proposal fails the integrity check")]
     IntegrityCheckFailed,
 }
 
@@ -751,10 +720,9 @@ impl BlockProposalAssembler {
     /// Tries to reassemble a block.
     ///
     /// Fails if there are still some stripped messages missing,
-    /// the assembled proposal can't be deserialized, has an ID
-    /// that doesn't match the claimed ID, or a block that doesn't
-    /// match its hash.
-    pub(crate) fn try_assemble(self) -> Result<BlockProposal, AssemblyError> {
+    /// the assembled proposal can't be deserialized, or it fails
+    /// the integrity check against the claimed ID.
+    pub(crate) fn try_assemble(self) -> Result<ConsensusMessage, AssemblyError> {
         let BlockProposalAssembler {
             pruned_block_proposal_proto: mut reconstructed_block_proposal_proto,
             unstripped_consensus_message_id: claimed_id,
@@ -777,18 +745,12 @@ impl BlockProposalAssembler {
         let reconstructed_block_proposal: BlockProposal = reconstructed_block_proposal_proto
             .try_into()
             .map_err(AssemblyError::DeserializationFailed)?;
-        let assembled_id = reconstructed_block_proposal.get_id();
-        if assembled_id != claimed_id {
-            return Err(AssemblyError::MismatchedConsensusMessageId {
-                claimed: claimed_id,
-                assembled: assembled_id,
-            });
-        }
-        if !reconstructed_block_proposal.check_integrity() {
+        let message = ConsensusMessage::BlockProposal(reconstructed_block_proposal);
+        if !message.check_integrity(&claimed_id) {
             return Err(AssemblyError::IntegrityCheckFailed);
         }
 
-        Ok(reconstructed_block_proposal)
+        Ok(message)
     }
 }
 
@@ -816,12 +778,18 @@ mod tests {
     use ic_p2p_test_utils::mocks::MockValidatedPoolReader;
     use ic_protobuf::proxy::ProtoProxy;
     use ic_test_utilities_consensus::{
-        fake::{Fake, FakeContentSigner, FakeSigner},
+        fake::{Fake, FakeContent, FakeContentSigner, FakeSigner},
         make_genesis,
     };
-    use ic_types::consensus::idkg::IDkgObject;
+    use ic_test_utilities_types::ids::test_replica_version;
+    use ic_types::consensus::{ConsensusMessageHashable, idkg::IDkgObject};
     use ic_types::{
-        consensus::{CatchUpPackageShare, CatchUpShareContent, dkg::DkgSummary},
+        Height,
+        consensus::{
+            CatchUpPackageShare, CatchUpShareContent, Finalization, FinalizationContent,
+            dkg::DkgSummary,
+        },
+        crypto::{CryptoHash, CryptoHashOf},
         signature::ThresholdSignatureShare,
     };
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_2};
@@ -914,7 +882,10 @@ mod tests {
         }
 
         // try to reassemble the block
-        let assembled_block = assembler.try_assemble().unwrap();
+        let ConsensusMessage::BlockProposal(assembled_block) = assembler.try_assemble().unwrap()
+        else {
+            panic!("Didn't reassemble a block proposal");
+        };
 
         assert_same_block(&assembled_block, &block_proposal);
     }
@@ -956,7 +927,10 @@ mod tests {
         }
 
         // try to reassemble the block
-        let assembled_block = assembler.try_assemble().unwrap();
+        let ConsensusMessage::BlockProposal(assembled_block) = assembler.try_assemble().unwrap()
+        else {
+            panic!("Didn't reassemble a block proposal");
+        };
 
         assert_same_block(&assembled_block, &block_proposal);
     }
@@ -1700,24 +1674,22 @@ mod tests {
     #[test]
     fn try_assemble_rejects_reconstructed_block_with_mismatched_id() {
         let block_proposal = fake_block_proposal_with_ingresses(vec![]);
-        let assembled_id = block_proposal.get_id();
-        let mismatched_claimed_id = fake_block_proposal_with_ingresses(vec![
-            fake_ingress_message_with_arg_size("fake_1", 8).0,
-        ])
-        .get_id();
+        let mismatched_claimed_id =
+            ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![
+                fake_ingress_message_with_arg_size("fake_1", 8).0,
+            ]))
+            .id();
         let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
             ConsensusMessage::BlockProposal(block_proposal).strip()
         else {
             unreachable!();
         };
-        stripped_block_proposal.unstripped_consensus_message_id = mismatched_claimed_id.clone();
+        stripped_block_proposal.unstripped_consensus_message_id = mismatched_claimed_id;
         let assembler = BlockProposalAssembler::new(stripped_block_proposal);
-        let assembly_error = assembler.try_assemble().unwrap_err();
 
         assert_matches!(
-            assembly_error,
-            AssemblyError::MismatchedConsensusMessageId { claimed, assembled }
-                if claimed == mismatched_claimed_id && assembled == assembled_id
+            assembler.try_assemble(),
+            Err(AssemblyError::IntegrityCheckFailed)
         );
     }
 
@@ -1767,34 +1739,35 @@ mod tests {
         )
     }
 
-    /// Checks that `invalid_copy` of `message`, pushed by `NODE_1`, is dropped, and that
-    /// `message` is fetched from `NODE_2` instead.
-    async fn assert_refetched_after_invalid_copy(
-        invalid_copy: MaybeStrippedConsensusMessage,
+    /// Checks that `invalid_artifact`, pushed by `NODE_1` with the id of `message`, is dropped,
+    /// and that `message` is fetched from `NODE_2` instead.
+    async fn assert_refetched_after_invalid_artifact(
+        invalid_artifact: MaybeStrippedConsensusMessage,
         message: ConsensusMessage,
     ) {
-        assert_eq!(invalid_copy.id().as_ref(), &message.id());
+        assert_eq!(invalid_artifact.id().as_ref(), &message.id());
         let assembler = set_up_assembler_with_peer_serving(message.clone().strip());
 
         let result = assembler
             .assemble_message(
-                invalid_copy.id(),
-                Some((invalid_copy, NODE_1)),
+                invalid_artifact.id(),
+                Some((invalid_artifact, NODE_1)),
                 MockPeers(NODE_2),
             )
             .await;
 
-        // Copies with the same id are equal, only their integrity tells them apart.
+        // Artifacts with the same id are equal, only their integrity tells them apart.
         assert_matches!(
             result,
             AssembleResult::Done { message: assembled, peer_id }
-                if peer_id == NODE_2 && assembled == message && assembled.check_integrity()
+                if peer_id == NODE_2 && assembled == message
+                    && PbArtifact::check_integrity(&assembled, &message.id())
         );
         assert_eq!(
             assembler
                 .fetch_stripped
                 .metrics
-                .download_task_invalid_copies_total
+                .download_task_invalid_artifacts_total
                 .get(),
             1
         );
@@ -1808,10 +1781,10 @@ mod tests {
         };
         let mut proto = pb::BlockProposal::from(block_proposal);
         proto.value.as_mut().unwrap().time += 1;
-        let invalid_copy = ConsensusMessage::BlockProposal(proto.try_into().unwrap());
+        let invalid_artifact = ConsensusMessage::BlockProposal(proto.try_into().unwrap());
 
-        assert_refetched_after_invalid_copy(
-            MaybeStrippedConsensusMessage::Unstripped(invalid_copy),
+        assert_refetched_after_invalid_artifact(
+            MaybeStrippedConsensusMessage::Unstripped(invalid_artifact),
             message,
         )
         .await;
@@ -1820,20 +1793,20 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn assemble_refetches_stripped_block_proposal_failing_integrity_check() {
         let message = ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![]));
-        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut invalid_copy) =
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut invalid_artifact) =
             message.clone().strip()
         else {
             unreachable!();
         };
-        invalid_copy
+        invalid_artifact
             .pruned_block_proposal_proto
             .value
             .as_mut()
             .unwrap()
             .time += 1;
 
-        assert_refetched_after_invalid_copy(
-            MaybeStrippedConsensusMessage::StrippedBlockProposal(invalid_copy),
+        assert_refetched_after_invalid_artifact(
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(invalid_artifact),
             message,
         )
         .await;
@@ -1849,12 +1822,39 @@ mod tests {
         let mut proto = pb::CatchUpPackageShare::from(share.clone());
         // Changing the random beacon leaves the hash it claims, and thus the id, as is.
         proto.random_beacon.as_mut().unwrap().parent = vec![1; 32];
-        let invalid_copy = ConsensusMessage::CatchUpPackageShare(proto.try_into().unwrap());
+        let invalid_artifact = ConsensusMessage::CatchUpPackageShare(proto.try_into().unwrap());
 
-        assert_refetched_after_invalid_copy(
-            MaybeStrippedConsensusMessage::Unstripped(invalid_copy),
+        assert_refetched_after_invalid_artifact(
+            MaybeStrippedConsensusMessage::Unstripped(invalid_artifact),
             ConsensusMessage::CatchUpPackageShare(share),
         )
         .await;
+    }
+
+    /// The id of a finalization covers all of its content, so a pushed one is accepted as is.
+    #[tokio::test]
+    async fn assemble_accepts_unstripped_finalization() {
+        let message = ConsensusMessage::Finalization(Finalization::fake(FinalizationContent::new(
+            Height::new(100),
+            CryptoHashOf::from(CryptoHash(vec![])),
+            test_replica_version(),
+        )));
+        let stripped = message.clone().strip();
+        let assembler = build_assembler(
+            MockValidatedPoolReader::<SignedIngress>::default(),
+            FakeCanisterHttpPool::empty(),
+            wanting_bouncer_factory(),
+            MockTransport::new(),
+        );
+
+        let result = assembler
+            .assemble_message(stripped.id(), Some((stripped, NODE_1)), MockPeers(NODE_2))
+            .await;
+
+        assert_matches!(
+            result,
+            AssembleResult::Done { message: assembled, peer_id }
+                if peer_id == NODE_1 && assembled == message
+        );
     }
 }
