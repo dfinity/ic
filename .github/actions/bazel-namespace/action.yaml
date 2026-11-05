@@ -9,8 +9,9 @@ description: |
     --bazelrc=bazel/conf/.bazelrc.build
     --bazelrc=/tmp/bazel-rbe.bazelrc
     --bazelrc=.github/actions/bazel-namespace/rbe.bazelrc
-  (rbe.bazelrc holds the RBE options, including the worker image) and gives every build, test,
-  run and coverage command its own Build Event Protocol (BEP) file and execution profile.
+  (rbe.bazelrc holds the RBE options, including the worker image) and gives every build, test and
+  coverage command its own Build Event Protocol (BEP) file and execution profile. `bazel run` gets
+  none: a BEP file records the environment of the bazel client, see the artifact upload of ci-main.yml.
 
   Afterwards, also when `run` failed or ran out of timeout-minutes, but not when the job was
   cancelled, these artifacts are uploaded to GitHub, where any signed-in user can download them,
@@ -21,7 +22,10 @@ description: |
     <artifact-name>-logs: the logs of the tests that `run` ran, laid out like bazel-testlogs:
                           <package>/<name>/test.log, <package>/<name>/test_attempts/attempt_<n>.log
                           and so on. Tests whose passing result came from the remote cache are
-                          left out. Only uploaded when there are any.
+                          left out. Only uploaded when there are any;
+    <execlogs-artifact-name>: only when that input is set: execlogs.csv, the compact execution logs of
+                          the build and test commands of `run` converted to CSV by
+                          ./.github/actions/upload-execlogs, for the build-determinism job of ci-main.yml.
 
   Before using this action the job must:
     * run namespacelabs/nscloud-setup and
@@ -65,6 +69,14 @@ inputs:
       Passphrase to encrypt the BEP files with for the public <artifact-name>-bep artifact on
       GitHub: pass secrets.BEP_GPG_PASSPHRASE, with which github-stats decrypts them. BEP files
       contain the options and environment of the bazel client, so they are only uploaded encrypted.
+  execlogs-artifact-name:
+    required: false
+    default: ''
+    description: |
+      When set, the build and test commands of `run` write Bazel's compact execution log, which is
+      converted to execlogs.csv and uploaded as the GitHub artifact of this name by
+      ./.github/actions/upload-execlogs, like the input of the same name of ./.github/actions/bazel.
+      The build-determinism job of ci-main.yml compares it with the one of its build-ic job.
 
 runs:
   using: composite
@@ -82,8 +94,16 @@ runs:
         # Read by bin/bazel.
         BAZEL_NAMESPACE_OUT: ${{ steps.out.outputs.dir }}
         TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+        # Read by bin/bazel, see the execlogs-artifact-name input.
+        BAZEL_NAMESPACE_EXECLOG: ${{ inputs.execlogs-artifact-name != '' && '1' || '' }}
       run: |
         set -euo pipefail
+
+        # Keep the job's OIDC token request credentials out of the environment of the bazel client,
+        # which the BEP files record and which `nsc bazel setup` streams to Namespace's Build Event
+        # Service, like ./.github/actions/bazel does: bazel-test-all in ci-main.yml has id-token: write
+        # for its Configure AWS credentials and Attest steps, and nothing `run` starts uses OIDC.
+        unset ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL
 
         # Local actions live in the workspace (github.action_path expands to the host path in
         # container jobs). PATH is exported, so processes started by `run` find the wrapper too.
@@ -271,3 +291,12 @@ runs:
         path: ${{ steps.out.outputs.dir }}/test-logs/
         if-no-files-found: ignore
         retention-days: 14
+
+    - name: Convert and upload the execution logs
+      # For the build-determinism job of ci-main.yml, which fails loudly without the artifact: so this
+      # step is not continue-on-error like the uploads above.
+      if: ${{ !cancelled() && inputs.execlogs-artifact-name != '' }}
+      uses: ./.github/actions/upload-execlogs
+      with:
+        execlogs-dir: ${{ steps.out.outputs.dir }}
+        artifact-name: ${{ inputs.execlogs-artifact-name }}
