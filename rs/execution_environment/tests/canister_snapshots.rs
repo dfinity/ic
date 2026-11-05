@@ -548,6 +548,84 @@ fn upload_and_load_snapshot_with_wasm_memory() {
     ));
 }
 
+// A snapshot's declared `wasm_memory_size` is validated at metadata-upload time
+// against the *live* canister's execution mode (Wasm64: 6 GiB), but the snapshot's
+// own module -- uploaded separately -- may run in Wasm32 mode (4 GiB limit). When
+// module and memory are finally paired at load time, `load_canister_snapshot`
+// re-checks the declared memory sizes against the loaded module's mode and rejects
+// the load rather than committing a state that exceeds the mode's limit.
+#[test]
+fn load_snapshot_rejected_when_wasm_memory_exceeds_module_mode_limit() {
+    let env = StateMachineBuilder::new().build();
+
+    // A valid Wasm64 module: installing it puts the live canister in Wasm64 mode,
+    // so the snapshot-metadata validator permits a `wasm_memory_size` up to 6 GiB.
+    let wasm64_module = wat::parse_str(
+        r#"
+        (module
+            (func (export "canister_query foo"))
+            (memory i64 1)
+        )"#,
+    )
+    .unwrap();
+
+    // A small valid Wasm32 module with no exported globals -- the module actually
+    // loaded from the snapshot. Being Wasm32 it is subject to the 4 GiB limit.
+    let wasm32_module = wat::parse_str(
+        r#"
+        (module
+            (func (export "canister_query foo"))
+            (memory 1)
+        )"#,
+    )
+    .unwrap();
+
+    // Install the Wasm64 module with a large cycles balance so the canister can
+    // afford reserving the (> 4 GiB) snapshot memory.
+    let canister_id = env
+        .install_canister_with_cycles(
+            wasm64_module,
+            vec![],
+            None,
+            Cycles::new(1_000_000_000_000_000_000),
+        )
+        .unwrap();
+
+    // Declare a snapshot whose Wasm heap is just above the 4 GiB Wasm32 limit
+    // (page-aligned: 4 GiB + one 64 KiB Wasm page) but within the 6 GiB Wasm64
+    // limit checked against the live (Wasm64) canister.
+    let wasm_memory_size = (1_u64 << 32) + 65536;
+    let metadata = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,                       /* replace_snapshot */
+        wasm32_module.len() as u64, /* wasm_module_size */
+        vec![],                     /* globals */
+        wasm_memory_size,           /* wasm_memory_size */
+        0,                          /* stable_memory_size */
+        vec![],                     /* certified_data */
+        None,                       /* global_timer */
+        None,                       /* on_low_wasm_memory_hook_status */
+    );
+    let snapshot_id = env
+        .upload_canister_snapshot_metadata(&metadata)
+        .unwrap()
+        .snapshot_id;
+
+    // Fill in the snapshot's Wasm module with the small Wasm32 module.
+    env.upload_snapshot_module(canister_id, snapshot_id, &wasm32_module, None, None)
+        .unwrap();
+
+    // Loading the snapshot would leave a Wasm32 canister with a > 4 GiB Wasm heap.
+    // The load must be rejected rather than committing an invalid state.
+    let load_args = LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    let err = env.load_canister_snapshot(load_args).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
+    assert!(
+        err.description().contains("exceeds the") && err.description().contains("execution mode"),
+        "unexpected error: {err}"
+    );
+}
+
 // Once a metadata-upload snapshot has been loaded onto a canister it becomes
 // immutable and rejects further `upload_canister_snapshot_data`, no matter
 // whether it was loaded onto the canister owning it or onto another one.
