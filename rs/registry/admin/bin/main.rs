@@ -181,6 +181,7 @@ use std::{
     sync::Arc,
     time::SystemTime,
 };
+use subnet_replica_version::try_get_subnet_replica_version;
 use types::{
     LogVisibility, NodeDetails, ProposalAction, ProposalMetadata, ProposalPayload,
     ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SnapshotVisibility,
@@ -197,6 +198,7 @@ extern crate chrono;
 mod create_subnet;
 mod helpers;
 mod recover_subnet;
+mod subnet_replica_version;
 mod types;
 mod update_subnet;
 
@@ -377,6 +379,11 @@ enum SubCommand {
 
     /// Get the last version of a subnet from the registry.
     GetSubnet(GetSubnetCmd),
+
+    /// Get the replica version that a subnet runs. Unlike `get-subnet`, this
+    /// also resolves Cloud Engines whose `replica_version_id` is blank, i.e.
+    /// that follow the standard engine replica version.
+    GetSubnetReplicaVersion(GetSubnetReplicaVersionCmd),
 
     /// Get the last version of the subnet list from the registry.
     GetSubnetList,
@@ -743,6 +750,13 @@ struct GetRoutingTableCmd {
 #[derive(Parser)]
 struct GetSubnetCmd {
     /// The subnet to get.
+    subnet: SubnetDescriptor,
+}
+
+/// Sub-command to work out the replica version that a subnet runs.
+#[derive(Parser)]
+struct GetSubnetReplicaVersionCmd {
+    /// The subnet whose replica version to get.
     subnet: SubnetDescriptor,
 }
 
@@ -5055,6 +5069,24 @@ async fn main() {
                 opts.json,
             )
             .await;
+        }
+        SubCommand::GetSubnetReplicaVersion(get_subnet_replica_version_cmd) => {
+            let subnet_id = get_subnet_replica_version_cmd
+                .subnet
+                .get_id(&registry_canister)
+                .await;
+            let subnet_replica_version =
+                try_get_subnet_replica_version(&registry_canister, subnet_id)
+                    .await
+                    .unwrap_or_else(|err| panic!("{err}"));
+            if opts.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&subnet_replica_version).unwrap()
+                );
+            } else {
+                println!("{subnet_replica_version}");
+            }
         }
         SubCommand::GetSubnetList => {
             let value: Vec<_> = registry_canister

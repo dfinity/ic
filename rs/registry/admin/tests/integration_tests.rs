@@ -361,3 +361,40 @@ async fn test_get_standard_engine_replica_version_when_absent() {
         }),
     );
 }
+
+/// The subnet in a freshly installed NNS pins its replica version, so
+/// `get-subnet-replica-version` must report exactly what `get-subnet` shows.
+/// (The Cloud Engine paths are covered by unit tests in
+/// `bin/subnet_replica_version.rs`.)
+#[tokio::test]
+async fn test_get_subnet_replica_version_of_pinned_subnet() {
+    // Step 1: Prepare the world.
+    let (_pocket_ic, nns_url) = setup().await;
+    let subnet_json = call_ic_admin(&nns_url, &["--json", "get-subnet", "0"]);
+    let subnet_json = serde_json::from_str::<serde_json::Value>(&subnet_json).unwrap();
+    let pinned_replica_version_id = subnet_json["records"][0]["value"]["replica_version_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(!pinned_replica_version_id.is_empty(), "{subnet_json:#?}");
+
+    // Step 2: Call code under test, in both output modes.
+    let plain = call_ic_admin(&nns_url, &["get-subnet-replica-version", "0"]);
+    let json = call_ic_admin(&nns_url, &["--json", "get-subnet-replica-version", "0"]);
+
+    // Step 3: Verify result(s).
+
+    // Step 3.1: Plain mode leads with the version, and says it is pinned.
+    assert!(
+        plain.contains(&format!(
+            "runs replica version {pinned_replica_version_id}."
+        )),
+        "{plain:?}"
+    );
+    assert!(plain.contains("pins this version"), "{plain:?}");
+
+    // Step 3.2: JSON mode reports the same version, and where it came from.
+    let json = serde_json::from_str::<serde_json::Value>(&json).unwrap();
+    assert_eq!(json["replica_version_id"], pinned_replica_version_id);
+    assert_eq!(json["source"], "subnet_record");
+}
