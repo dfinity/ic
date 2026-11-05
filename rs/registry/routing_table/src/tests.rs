@@ -681,16 +681,23 @@ fn canister_migrations_can_remove_ranges() {
 }
 
 #[test]
-fn test_routing_table_insert_subnet_reuses_canister_ids_of_deleted_last_subnet() {
+fn test_routing_table_insert_subnet_with_stale_index_reuses_canister_ids_of_deleted_last_subnet() {
     // Step 1: Prepare the world: subnet 2 held the last range and was deleted.
     const N: u64 = CANISTER_IDS_PER_SUBNET;
     let mut routing_table = new_routing_table(vec![((0, N - 1), 1), ((N, 2 * N - 1), 2)]);
     routing_table.remove_subnet(subnet_test_id(2));
 
-    // Step 2: Run the code under test.
-    routing_table_insert_subnet(&mut routing_table, subnet_test_id(3)).unwrap();
+    // Step 2: Run the code under test, passing a `next_unallocated_canister_index`
+    // that does not account for subnet 2.
+    let result = routing_table_insert_subnet(
+        &mut routing_table,
+        subnet_test_id(3),
+        /* next_unallocated_canister_index = */ 0,
+    );
 
-    // Step 3: Verify result: subnet 3 got exactly the canister IDs of subnet 2.
+    // Step 3: Verify results: subnet 3 got exactly the canister IDs of subnet 2,
+    // which is why callers must pass the correct `next_unallocated_canister_index`.
+    assert_eq!(result, Ok(2 * N));
     assert_eq!(
         routing_table,
         new_routing_table(vec![((0, N - 1), 1), ((N, 2 * N - 1), 3)])
@@ -698,7 +705,7 @@ fn test_routing_table_insert_subnet_reuses_canister_ids_of_deleted_last_subnet()
 }
 
 #[test]
-fn test_routing_table_insert_subnet_after_allocated_canister_ids_skips_deleted_subnet() {
+fn test_routing_table_insert_subnet_skips_deleted_subnet() {
     // Step 1: Prepare the world: subnet 2 held the last range and was deleted,
     // so canister IDs up to 2 * N - 1 have been allocated.
     const N: u64 = CANISTER_IDS_PER_SUBNET;
@@ -706,7 +713,7 @@ fn test_routing_table_insert_subnet_after_allocated_canister_ids_skips_deleted_s
     routing_table.remove_subnet(subnet_test_id(2));
 
     // Step 2: Run the code under test.
-    let result = routing_table_insert_subnet_after_allocated_canister_ids(
+    let result = routing_table_insert_subnet(
         &mut routing_table,
         subnet_test_id(3),
         /* next_unallocated_canister_index = */ 2 * N,
@@ -721,13 +728,13 @@ fn test_routing_table_insert_subnet_after_allocated_canister_ids_skips_deleted_s
 }
 
 #[test]
-fn test_routing_table_insert_subnet_after_allocated_canister_ids_never_overlaps_last_range() {
+fn test_routing_table_insert_subnet_never_overlaps_last_range() {
     // Step 1: Prepare the world: the passed-in index lags behind the routing table.
     const N: u64 = CANISTER_IDS_PER_SUBNET;
     let mut routing_table = new_routing_table(vec![((0, N - 1), 1), ((N, 2 * N - 1), 2)]);
 
     // Step 2: Run the code under test.
-    let result = routing_table_insert_subnet_after_allocated_canister_ids(
+    let result = routing_table_insert_subnet(
         &mut routing_table,
         subnet_test_id(3),
         /* next_unallocated_canister_index = */ N,

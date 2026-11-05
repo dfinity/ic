@@ -153,14 +153,26 @@ impl TopologyConfig {
     /// `RoutingTable`
     fn get_routing_table(&self, nns_subnet_index: Option<&u64>) -> RoutingTable {
         let mut routing_table = RoutingTable::default();
+        // At genesis, no subnet has been deleted, so canister IDs are allocated
+        // starting from 0.
+        let mut next_unallocated_canister_index = 0;
         // make sure nns subnet is inserted first
         if let Some(subnet_index) = nns_subnet_index {
-            routing_table_insert_subnet(&mut routing_table, self.subnet_ids[subnet_index]).unwrap();
+            next_unallocated_canister_index = routing_table_insert_subnet(
+                &mut routing_table,
+                self.subnet_ids[subnet_index],
+                next_unallocated_canister_index,
+            )
+            .unwrap();
         }
         for subnet_index in self.subnets.keys() {
             if Some(subnet_index) != nns_subnet_index {
-                routing_table_insert_subnet(&mut routing_table, self.subnet_ids[subnet_index])
-                    .unwrap();
+                next_unallocated_canister_index = routing_table_insert_subnet(
+                    &mut routing_table,
+                    self.subnet_ids[subnet_index],
+                    next_unallocated_canister_index,
+                )
+                .unwrap();
             }
         }
         routing_table

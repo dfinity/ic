@@ -17,8 +17,7 @@ use ic_registry_keys::{
 };
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable,
-    routing_table_insert_subnet_after_allocated_canister_ids,
-    routing_table_insert_subnet_and_reroute_or_panic,
+    routing_table_insert_subnet, routing_table_insert_subnet_and_reroute_or_panic,
 };
 use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 use ic_registry_transport::{delete, upsert};
@@ -338,13 +337,12 @@ impl Registry {
     ) -> Vec<RegistryMutation> {
         let mut next_unallocated_canister_index = self.get_next_unallocated_canister_index(version);
         let mut mutations = self.modify_routing_table(version, |routing_table| {
-            next_unallocated_canister_index =
-                routing_table_insert_subnet_after_allocated_canister_ids(
-                    routing_table,
-                    subnet_id_to_add,
-                    next_unallocated_canister_index,
-                )
-                .unwrap();
+            next_unallocated_canister_index = routing_table_insert_subnet(
+                routing_table,
+                subnet_id_to_add,
+                next_unallocated_canister_index,
+            )
+            .unwrap();
         });
         mutations.push(make_canister_id_allocation_mutation(
             next_unallocated_canister_index,

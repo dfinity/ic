@@ -89,8 +89,14 @@ fn test_add_subnet_without_canister_id_allocation_uses_history() {
     // before its introduction), in which subnet 2 (holding the last range) is then deleted.
     let mut registry = Registry::new();
     let mut routing_table = RoutingTable::new();
-    routing_table_insert_subnet(&mut routing_table, subnet_test_id(1)).unwrap();
-    routing_table_insert_subnet(&mut routing_table, subnet_test_id(2)).unwrap();
+    let next_unallocated_canister_index =
+        routing_table_insert_subnet(&mut routing_table, subnet_test_id(1), 0).unwrap();
+    routing_table_insert_subnet(
+        &mut routing_table,
+        subnet_test_id(2),
+        next_unallocated_canister_index,
+    )
+    .unwrap();
     set_routing_table_without_canister_id_allocation(&mut registry, routing_table.clone());
     routing_table.remove_subnet(subnet_test_id(2));
     set_routing_table_without_canister_id_allocation(&mut registry, routing_table);
@@ -118,10 +124,16 @@ fn test_compute_next_unallocated_canister_index_from_history() {
     // contains subnet 2.
     let mut registry = Registry::new();
     let mut routing_table = RoutingTable::new();
-    routing_table_insert_subnet(&mut routing_table, subnet_test_id(1)).unwrap();
+    let next_unallocated_canister_index =
+        routing_table_insert_subnet(&mut routing_table, subnet_test_id(1), 0).unwrap();
     set_routing_table_without_canister_id_allocation(&mut registry, routing_table.clone());
     let version_with_subnet_1 = registry.latest_version();
-    routing_table_insert_subnet(&mut routing_table, subnet_test_id(2)).unwrap();
+    routing_table_insert_subnet(
+        &mut routing_table,
+        subnet_test_id(2),
+        next_unallocated_canister_index,
+    )
+    .unwrap();
     set_routing_table_without_canister_id_allocation(&mut registry, routing_table.clone());
     routing_table.remove_subnet(subnet_test_id(2));
     set_routing_table_without_canister_id_allocation(&mut registry, routing_table);
@@ -227,8 +239,14 @@ fn test_backfill_canister_id_allocation() {
     // introduced, subnet 2 (holding the last range) has been deleted.
     let mut registry = Registry::new();
     let mut routing_table = RoutingTable::new();
-    routing_table_insert_subnet(&mut routing_table, subnet_test_id(1)).unwrap();
-    routing_table_insert_subnet(&mut routing_table, subnet_test_id(2)).unwrap();
+    let next_unallocated_canister_index =
+        routing_table_insert_subnet(&mut routing_table, subnet_test_id(1), 0).unwrap();
+    routing_table_insert_subnet(
+        &mut routing_table,
+        subnet_test_id(2),
+        next_unallocated_canister_index,
+    )
+    .unwrap();
     set_routing_table_without_canister_id_allocation(&mut registry, routing_table.clone());
     routing_table.remove_subnet(subnet_test_id(2));
     set_routing_table_without_canister_id_allocation(&mut registry, routing_table);
