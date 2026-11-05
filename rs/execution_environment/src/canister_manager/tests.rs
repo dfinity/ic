@@ -2056,7 +2056,7 @@ fn subnet_available_memory_error_reports_the_memory_type_that_does_not_fit() {
 
     // Requested Wasm custom sections memory that does not fit.
     assert_matches!(
-        CanisterManagerError::from_subnet_available_memory_error(
+        CanisterManagerError::from(
             insufficient_memory(42, 11, 100, 10)
         ),
         CanisterManagerError::SubnetWasmCustomSectionCapacityOverSubscribed { requested, available }
@@ -2068,7 +2068,7 @@ fn subnet_available_memory_error_reports_the_memory_type_that_does_not_fit() {
     // custom sections capacity is over-subscribed), so the execution memory is the
     // memory type that does not fit.
     assert_matches!(
-        CanisterManagerError::from_subnet_available_memory_error(
+        CanisterManagerError::from(
             insufficient_memory(42, 0, 7, -13)
         ),
         CanisterManagerError::SubnetMemoryCapacityOverSubscribed { requested, available }
@@ -2077,14 +2077,14 @@ fn subnet_available_memory_error_reports_the_memory_type_that_does_not_fit() {
 
     // A negative amount of available memory is reported as no available memory.
     assert_matches!(
-        CanisterManagerError::from_subnet_available_memory_error(
+        CanisterManagerError::from(
             insufficient_memory(42, 0, -7, -13)
         ),
         CanisterManagerError::SubnetMemoryCapacityOverSubscribed { requested, available }
             if requested == NumBytes::new(42) && available == NumBytes::new(0)
     );
     assert_matches!(
-        CanisterManagerError::from_subnet_available_memory_error(
+        CanisterManagerError::from(
             insufficient_memory(42, 11, 100, -13)
         ),
         CanisterManagerError::SubnetWasmCustomSectionCapacityOverSubscribed { requested, available }
@@ -10436,18 +10436,6 @@ fn failed_update_settings_still_charges_for_the_log_store_resize() {
     // The resize is performed before the failure and its charge is recorded in
     // `ConsumedCyclesForInstructions`, so it survives the rollback.
     assert_eq!(charge_with_resize - charge_without_resize, resize_cost);
-}
-
-/// The number of times `ConsumedCyclesForInstructions::apply` failed to charge
-/// the cycles a failed management operation had recorded, i.e. the number of
-/// `[EXC-BUG]`s it reported.
-fn failed_subnet_message_charges(test: &ExecutionTest) -> u64 {
-    fetch_int_counter_vec(test.metrics_registry(), "critical_errors")
-        .get(&btreemap! {
-            "error".into() => "execution_environment_failed_subnet_message_charge".into(),
-        })
-        .copied()
-        .unwrap_or(0)
 }
 
 /// Tests that `update_settings` does not charge for a `log_memory_limit` resize

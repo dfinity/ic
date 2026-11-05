@@ -4372,7 +4372,7 @@ impl CallInFlight {
         };
         (
             get(metrics.consumed_cycles_by_use_cases()),
-            get(metrics.consumed_cycles_by_use_cases_as_counters()),
+            get(metrics.consumed_cycles_by_use_cases_monotonic()),
         )
     }
 
