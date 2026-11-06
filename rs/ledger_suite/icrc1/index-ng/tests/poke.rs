@@ -341,7 +341,7 @@ fn scheduled_fatal_error_blocks_ingress_and_notifications() {
     assert_eq!(count(&env, ledger), 1);
     assert_eq!(status(&env, index).num_blocks_synced, Nat::from(1_u64));
     for _ in 0..3 {
-        assert!(ingress(&env, index, PrincipalId::new_anonymous()));
+        assert!(!ingress(&env, index, PrincipalId::new_anonymous()));
         notify(&env, ledger, index);
         advance_time_and_run_rounds(&env, 100);
     }
@@ -393,7 +393,7 @@ fn fatal_poke_discards_pending_work_and_recovers_on_upgrade() {
         1,
         "fatal reply discards the pending pass"
     );
-    assert!(ingress(&env, index, listed));
+    assert!(!ingress(&env, index, listed));
     notify(&env, ledger, index);
     advance_time_and_run_rounds(&env, 100); // already queued ordinary callback
     advance_time_and_run_rounds(&env, 300);

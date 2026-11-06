@@ -819,7 +819,8 @@ fn is_poke_caller_allowed(caller: &Principal) -> bool {
 #[ic_cdk::inspect_message]
 fn inspect_message() {
     if ic_cdk::api::msg_method_name() != "poke"
-        || is_poke_caller_allowed(&ic_cdk::api::msg_caller())
+        || (is_poke_caller_allowed(&ic_cdk::api::msg_caller())
+            && !CACHE.with(|cache| cache.borrow().indexing_halted))
     {
         ic_cdk::api::accept_message();
     }
