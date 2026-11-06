@@ -191,6 +191,13 @@ The Bitcoin payload builder integrates with the IC consensus layer to produce se
 - **WHEN** the payload builder is initialized
 - **THEN** it holds separate adapter clients for Bitcoin mainnet, Bitcoin testnet, Dogecoin mainnet, and Dogecoin testnet
 
+#### Scenario: Payload validation rejects unmatched or duplicate responses
+- **WHEN** a replica validates another block maker's self-validating payload of adapter responses
+- **THEN** every response must answer a request of the matching type (`GetSuccessors*` -> `bitcoin_get_successors_contexts`, `SendTransaction*` -> `bitcoin_send_transaction_internal_contexts`) that is pending in the state at the validation context's certified height, otherwise the payload is invalid with `InvalidSelfValidatingPayloadReason::NonMatchingResponse(callback_id)`
+- **AND** each callback ID may be answered only once across the payload and the past payloads since the certified height, otherwise the payload is invalid with `DuplicateResponse(callback_id)`
+- **AND** if the state at the certified height is unavailable, validation fails with `SelfValidatingPayloadValidationFailure::StateUnavailable` (a transient failure rather than an invalid payload)
+- **AND** these are the same checks the replicated state applies when inducting responses (below), now also applied at validation
+
 #### Scenario: Only adapter responses matching a pending request are inducted
 - **WHEN** demux inducts an adapter response from a block's self-validating payload into the replicated state (`ReplicatedState::push_response_bitcoin`)
 - **THEN** the response is first matched by callback ID to a pending request of the corresponding type: `GetSuccessorsResponse`/`GetSuccessorsReject` to a `bitcoin_get_successors_contexts` entry and `SendTransactionResponse`/`SendTransactionReject` to a `bitcoin_send_transaction_internal_contexts` entry
