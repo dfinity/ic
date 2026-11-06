@@ -197,6 +197,12 @@ Provides certified state data to clients via the read_state API.
 - **WHEN** a read_state request includes a path that exceeds the maximum allowed depth
 - **THEN** HTTP 400 Bad Request is returned with message "Failed to parse requested paths: path is too long."
 
+#### Scenario: Private custom sections in read_state
+- **WHEN** a read_state request asks for `/canister/<id>/metadata/<name>` and the canister's custom section `<name>` is private (`icp:private`)
+- **THEN** the request is allowed only if the sender is a controller of the canister or, when the replica's own subnet is a `CloudEngine` subnet, one of that subnet's subnet admins, matching what `canister_metadata` allows
+- **AND** any other sender gets HTTP 403 Forbidden with "Custom section <name> can only be requested by the controllers of the canister." On a cloud engine the message ends with "... controllers of the canister or subnet admins of its cloud engine."
+- **AND** subnet admins of other subnets, including other cloud engines, are not allowed, and public or nonexistent sections remain readable by anyone
+
 #### Scenario: NNS delegation verified against the certified state before it is served
 - **WHEN** a non-NNS replica builds a read_state response, or a v3/v4 synchronous call response carrying a certificate
 - **THEN** the NNS delegation attached to the certificate is first checked (`NNSDelegationReader::get_delegation`, which takes a `CanisterRangesCheck` and the certified state the certificate is built from) against that state: the delegated subnet's public key must match the subnet's public key in the state's network topology, and the certified canister ranges must agree with the state's routing table on the effective canister ID
