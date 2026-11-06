@@ -68,7 +68,7 @@ impl RequestInPrep {
         callee_size: usize,
         method_name_src: usize,
         method_name_len: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
         on_reply: WasmClosure,
         on_reject: WasmClosure,
         max_size_remote_subnet: NumBytes,
@@ -151,7 +151,7 @@ impl RequestInPrep {
         &mut self,
         src: usize,
         size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()> {
         let current_size = self.method_name.len() + self.method_payload.len();
         let max_size_local_subnet =

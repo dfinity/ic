@@ -248,7 +248,8 @@ impl EntryValue {
         let ignore_batch_time = system_api_call_counters.time == 0;
         // It's safe to ignore `canister_balance` changes if the query never checks the balance.
         let ignore_canister_balances = system_api_call_counters.canister_cycle_balance == 0
-            && system_api_call_counters.canister_cycle_balance128 == 0;
+            && system_api_call_counters.canister_cycle_balance128 == 0
+            && system_api_call_counters.canister_liquid_cycle_balance128 == 0;
         EntryValue {
             env,
             result,

@@ -4,5 +4,5 @@ mod webauthn;
 
 pub use ingress_validation::{
     AuthenticationError, CanisterIdSet, CanisterIdSetInstantiationError, HttpRequestVerifier,
-    HttpRequestVerifierImpl, RequestValidationError,
+    HttpRequestVerifierImpl, MAXIMUM_NUMBER_OF_BYTES_IN_SENDER_INFO, RequestValidationError,
 };

@@ -154,6 +154,8 @@ struct SandboxedExecutionMetrics {
     mprotect_count: HistogramVec,
     copy_page_count: HistogramVec,
     sigsegv_handler_duration: HistogramVec,
+    wasm_page_limit_exceeded: IntCounterVec,
+    wasm_bulk_check_slow_path_calls: HistogramVec,
 }
 
 impl SandboxedExecutionMetrics {
@@ -393,6 +395,28 @@ impl SandboxedExecutionMetrics {
                 decimal_buckets_with_zero(-4, 1),
                 &["api_type", "memory_type"],
             ),
+            wasm_page_limit_exceeded: metrics_registry.int_counter_vec(
+                "sandboxed_execution_wasm_page_limit_exceeded",
+                "Number of executions in which an access beyond the limit for \
+                    accessed Wasm heap pages was detected, by api type and by \
+                    the check that detected it (handler: Wasm loads and stores, \
+                    host_accessor: host functions, bulk_check: bulk memory \
+                    operations and stable memory copies). With the feature \
+                    enabled the detection fails the execution; with the feature \
+                    disabled nothing is refused and an execution is counted \
+                    under every check that would have refused one of its \
+                    accesses.",
+                &["api_type", "detector"],
+            ),
+            wasm_bulk_check_slow_path_calls: metrics_registry.histogram_vec(
+                "sandboxed_execution_wasm_bulk_check_slow_path_calls",
+                "Number of bulk memory operations and stable memory copies \
+                    during the execution whose pages had to be counted exactly \
+                    by the host because they might not fit the remaining \
+                    accessed heap page budget, by api type.",
+                decimal_buckets_with_zero(0, 8),
+                &["api_type"],
+            ),
         }
     }
 
@@ -442,6 +466,24 @@ impl SandboxedExecutionMetrics {
         self.sigsegv_handler_duration
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_sigsegv_handler_duration.as_secs_f64());
+        // Count the execution once per detector that saw an access beyond the
+        // limit. With the feature enabled that is at most one detector, since
+        // the detection fails the execution.
+        let refusals = &instance_stats.wasm_page_limit_refusals;
+        for (detector, detected) in [
+            ("handler", refusals.handler),
+            ("host_accessor", refusals.host_accessor),
+            ("bulk_check", refusals.bulk_check),
+        ] {
+            if detected {
+                self.wasm_page_limit_exceeded
+                    .with_label_values(&[api_type_label, detector])
+                    .inc();
+            }
+        }
+        self.wasm_bulk_check_slow_path_calls
+            .with_label_values(&[api_type_label])
+            .observe(instance_stats.wasm_bulk_check_slow_path_calls as f64);
 
         // Additional metrics for the stable memory.
         self.accessed_pages
@@ -2207,7 +2249,7 @@ mod tests {
     use ic_error_types::ErrorCode;
     use ic_logger::{new_replica_logger, replica_logger::no_op_logger};
     use ic_test_utilities::state_manager::FakeStateManager;
-    use ic_test_utilities_execution_environment::ExecutionTestBuilder;
+    use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
     use ic_test_utilities_metrics::fetch_histogram_vec_stats;
     use ic_test_utilities_types::ids::canister_test_id;
     use libc::kill;
@@ -2736,6 +2778,107 @@ mod tests {
         let value = metrics.get(&api_memory_key("update", "stable")).unwrap();
         assert_eq!(value.count, 2);
         assert!(value.sum > SOME_TINY_NON_ZERO_DURATION_SECONDS);
+    }
+
+    #[test]
+    fn wasm_page_limit_metrics_are_reported() {
+        use ic_config::embedders::MemoryPageLimit;
+
+        const WASM_PAGE: usize = 65536;
+        const OS_PAGES_PER_WASM_PAGE: u64 = WASM_PAGE as u64 / 4096;
+        let limit = ic_types::NumOsPages::new(2 * OS_PAGES_PER_WASM_PAGE);
+        let mut test = ExecutionTestBuilder::new()
+            .with_wasm_memory_accessed_page_limit(MemoryPageLimit {
+                message: limit,
+                upgrade: limit,
+                query: limit,
+            })
+            .build();
+        let wat = format!(
+            r#"
+            (module
+                (import "ic0" "msg_arg_data_copy"
+                    (func $msg_arg_data_copy (param i32 i32 i32)))
+                (import "ic0" "msg_reply" (func $msg_reply))
+                (func (export "canister_update load_pages_0_to_2")
+                    (drop (i32.load (i32.const 0)))
+                    (drop (i32.load (i32.const {page1})))
+                    (drop (i32.load (i32.const {page2})))
+                    (call $msg_reply)
+                )
+                (func (export "canister_update host_write_pages_0_to_2")
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const {three_pages}))
+                    (call $msg_reply)
+                )
+                (func (export "canister_update fill_pages_0_to_2")
+                    (memory.fill (i32.const 0) (i32.const 1) (i32.const {three_pages}))
+                    (call $msg_reply)
+                )
+                ;; bound (len >> 16) + 2 = 3 pages > budget 2: slow path, fits
+                (func (export "canister_update fill_pages_0_1")
+                    (memory.fill (i32.const 0) (i32.const 1) (i32.const {two_pages}))
+                    (call $msg_reply)
+                )
+                (memory 4)
+            )"#,
+            page1 = WASM_PAGE,
+            page2 = 2 * WASM_PAGE,
+            two_pages = 2 * WASM_PAGE,
+            three_pages = 3 * WASM_PAGE,
+        );
+        let canister_id = test.canister_from_wat(wat).unwrap();
+        let payload = vec![7_u8; 3 * WASM_PAGE];
+
+        // The counter counts executions; the histogram observes one value per
+        // execution, so its sum is the number of calls over all executions.
+        let exceeded = |test: &ExecutionTest, detector: &str| {
+            ic_test_utilities_metrics::fetch_int_counter_vec(
+                test.metrics_registry(),
+                "sandboxed_execution_wasm_page_limit_exceeded",
+            )
+            .get(&BTreeMap::from([
+                ("api_type".to_string(), "update".to_string()),
+                ("detector".to_string(), detector.to_string()),
+            ]))
+            .copied()
+            .unwrap_or(0)
+        };
+        let slow_path_calls = |test: &ExecutionTest| {
+            fetch_histogram_vec_stats(
+                test.metrics_registry(),
+                "sandboxed_execution_wasm_bulk_check_slow_path_calls",
+            )
+            .get(&BTreeMap::from([(
+                "api_type".to_string(),
+                "update".to_string(),
+            )]))
+            .map_or(0, |stats| stats.sum as u64)
+        };
+
+        for (method, detector) in [
+            ("load_pages_0_to_2", "handler"),
+            ("host_write_pages_0_to_2", "host_accessor"),
+            ("fill_pages_0_to_2", "bulk_check"),
+        ] {
+            let err = test
+                .ingress(canister_id, method, payload.clone())
+                .unwrap_err();
+            assert_eq!(
+                err.code(),
+                ErrorCode::CanisterMemoryAccessLimitExceeded,
+                "{method}"
+            );
+            assert_eq!(exceeded(&test, detector), 1, "{method}");
+        }
+        assert_eq!(exceeded(&test, "handler"), 1);
+        assert_eq!(exceeded(&test, "host_accessor"), 1);
+        assert_eq!(exceeded(&test, "bulk_check"), 1);
+        assert_eq!(slow_path_calls(&test), 1);
+
+        test.ingress(canister_id, "fill_pages_0_1", payload)
+            .unwrap();
+        assert_eq!(exceeded(&test, "bulk_check"), 1);
+        assert_eq!(slow_path_calls(&test), 2);
     }
 
     #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]

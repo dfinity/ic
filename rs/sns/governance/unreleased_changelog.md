@@ -17,4 +17,7 @@ on the process that this file is part of, see
 
 ## Fixed
 
+* The rendered text of `UpgradeSnsControlledCanister` proposals now shows the SHA256 of the
+  upgrade argument. Before, it showed the argument bytes as hex.
+
 ## Security

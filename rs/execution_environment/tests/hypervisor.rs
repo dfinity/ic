@@ -8783,6 +8783,76 @@ fn set_reserved_cycles_limit_below_existing_fails() {
     assert_eq!(err.code(), ErrorCode::ReservedCyclesLimitIsTooLow);
 }
 
+/// Multiple grows in one slice reserve exactly the total allocation's cost.
+/// The final state application must not reserve any additional cycles.
+#[test]
+fn memory_grows_without_pausing_need_no_storage_reservation_top_up() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(1_000_000_000)
+        .with_subnet_memory_threshold(500_000_000)
+        .with_subnet_memory_reservation(0)
+        .with_resource_saturation_scaling(2)
+        .with_instruction_limit(1_000_000_000)
+        .with_slice_instruction_limit(100_000_000)
+        .with_manual_execution()
+        .build();
+    let canister_id = test
+        .canister_from_wat(
+            r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+            (memory 1)
+            (func (export "canister_update update")
+                (if (i32.eq (memory.grow (i32.const 100)) (i32.const -1))
+                    (then (unreachable)))
+                (if (i64.eq (call $stable64_grow (i64.const 200)) (i64.const -1))
+                    (then (unreachable)))
+                (if (i32.eq (memory.grow (i32.const 300)) (i32.const -1))
+                    (then (unreachable)))
+                (call $msg_reply)))
+    "#,
+        )
+        .unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+        .unwrap();
+    // Start above the subnet memory threshold so every grow reserves a nonzero
+    // amount.
+    test.set_available_execution_memory(125_000_000);
+    let allocated_bytes = NumBytes::new(600 * WASM_PAGE_SIZE_IN_BYTES as u64);
+    let expected_reservation =
+        test.expected_storage_reservation_cycles(&test.subnet_memory_saturation(), allocated_bytes);
+    assert_gt!(expected_reservation, Cycles::zero());
+    let reserved_before = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+    let memory_before = test.canister_state(canister_id).execution_memory_usage();
+
+    let (message_id, _) = test.ingress_raw(canister_id, "update", vec![]);
+    test.execute_slice(canister_id);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .has_paused_execution_or_install_code()
+    );
+    assert_eq!(
+        test.ingress_result(&message_id),
+        Ok(WasmResult::Reply(vec![]))
+    );
+    assert_eq!(
+        test.canister_state(canister_id).execution_memory_usage() - memory_before,
+        allocated_bytes
+    );
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .reserved_balance()
+            - reserved_before,
+        expected_reservation
+    );
+}
+
 #[test]
 fn upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
     let mut test: ExecutionTest = ExecutionTestBuilder::new().build();

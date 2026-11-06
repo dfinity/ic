@@ -1,5 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_config::embedders::{MeteringType, StableMemoryPageLimit};
+use ic_config::embedders::{MemoryPageLimit, MeteringType};
 use ic_config::{
     embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
     execution_environment::Config,
@@ -298,6 +298,10 @@ pub struct ExecutionTest {
     // executions that were paused and did not finish (yet). Subnet messages
     // other than `install_code` are not accounted for at all.
     executed_instructions: HashMap<CanisterId, NumInstructions>,
+    // The round instructions consumed by the most recent `execute_subnet_message`,
+    // including those of subnet messages that `executed_instructions` does not
+    // account for.
+    subnet_message_instructions: NumInstructions,
     // The total cost of execution so far per canister. Unlike
     // `executed_instructions`, this is accumulated only once a message execution
     // finishes because the cost of a message must include its base fee exactly
@@ -481,6 +485,14 @@ impl ExecutionTest {
 
     pub fn ingress_memory_capacity(&self) -> NumBytes {
         self.ingress_memory_capacity
+    }
+
+    /// Returns the round instructions consumed by the most recent
+    /// `execute_subnet_message()`, i.e. the amount deducted from the round
+    /// instruction budget. Unlike `canister_executed_instructions()`, this
+    /// covers subnet messages other than `install_code`.
+    pub fn subnet_message_instructions(&self) -> NumInstructions {
+        self.subnet_message_instructions
     }
 
     pub fn canister_executed_instructions(&self, canister_id: CanisterId) -> NumInstructions {
@@ -670,6 +682,15 @@ impl ExecutionTest {
                 .get_guaranteed_response_message_memory(),
             self.subnet_available_memory
                 .get_wasm_custom_sections_memory(),
+        );
+    }
+
+    pub fn set_available_wasm_custom_sections_memory(&mut self, wasm_custom_sections_memory: i64) {
+        self.subnet_available_memory = SubnetAvailableMemory::new_for_testing(
+            self.subnet_available_memory.get_execution_memory(),
+            self.subnet_available_memory
+                .get_guaranteed_response_message_memory(),
+            wasm_custom_sections_memory,
         );
     }
 
@@ -1799,6 +1820,8 @@ impl ExecutionTest {
         );
         let slice_instructions_used =
             remaining_round_instructions_before - round_limits.instructions;
+        self.subnet_message_instructions =
+            NumInstructions::from(slice_instructions_used.get() as u64);
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.state = Some(new_state);
@@ -2925,7 +2948,7 @@ impl ExecutionTestBuilder {
 
     pub fn with_stable_memory_dirty_page_limit(
         mut self,
-        stable_memory_dirty_page_limit: StableMemoryPageLimit,
+        stable_memory_dirty_page_limit: MemoryPageLimit,
     ) -> Self {
         self.execution_config
             .embedders_config
@@ -2936,11 +2959,27 @@ impl ExecutionTestBuilder {
 
     pub fn with_stable_memory_access_limit(
         mut self,
-        stable_memory_access_limit: StableMemoryPageLimit,
+        stable_memory_access_limit: MemoryPageLimit,
     ) -> Self {
         self.execution_config
             .embedders_config
             .stable_memory_accessed_page_limit = stable_memory_access_limit;
+
+        self
+    }
+
+    pub fn with_wasm_memory_accessed_page_limit(
+        mut self,
+        wasm_memory_accessed_page_limit: MemoryPageLimit,
+    ) -> Self {
+        self.execution_config
+            .embedders_config
+            .wasm_memory_accessed_page_limit = wasm_memory_accessed_page_limit;
+        // Lowering the limit is only observable if the feature is enabled.
+        self.execution_config
+            .embedders_config
+            .feature_flags
+            .wasm_memory_accessed_page_limit = FlagStatus::Enabled;
 
         self
     }
@@ -3288,6 +3327,7 @@ impl ExecutionTestBuilder {
             state: Some(state),
             message_id: 0,
             executed_instructions: HashMap::new(),
+            subnet_message_instructions: NumInstructions::new(0),
             execution_cost: HashMap::new(),
             paused_subnet_messages: HashMap::new(),
             xnet_messages: vec![],
