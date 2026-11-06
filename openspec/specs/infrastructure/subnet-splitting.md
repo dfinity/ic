@@ -236,7 +236,7 @@ The tool provides estimation capabilities to plan subnet splits based on caniste
 - **WHEN** load sample CSVs and a baseline are provided along with canister ID ranges
 - **THEN** per-canister metrics (instructions, ingress, remote/local subnet messages, HTTP outcalls, heartbeats) are aggregated
 - **AND** the baseline is subtracted from the samples
-- **AND** totals are partitioned into source and destination estimates based on canister ranges
+- **AND** the tool prints every estimate, source and destination side by side: state sizes, canisters installed, instructions executed, ingress messages executed, remote-subnet messages executed (lower bound), local-subnet messages executed (upper bound), HTTP outcalls executed, and heartbeats and global timers executed, formatted with colours and aligned columns (previously the canister, message and heartbeat estimates were computed but not printed)
 
 ---
 
