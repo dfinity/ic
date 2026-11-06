@@ -202,7 +202,7 @@ service : (index_arg : opt IndexArg) -> {
   ledger_id : () -> (principal) query;
   list_subaccounts : (ListSubaccountsArgs) -> (vec SubAccount) query;
   // Best-effort notification; does not acknowledge indexing completion.
-  // Use a one-way/notify call, e.g. Call::unbounded_wait(index, "poke").oneway().
+  // Use a one-way/notify call, e.g. Call::bounded_wait(index, "poke").oneway().
   // A normal two-way call may receive a no-reply rejection even if work started.
   // Authorized pokes received while busy coalesce into a follow-up pass.
   // Ordinary polling remains the fallback unless a non-retriable error has
