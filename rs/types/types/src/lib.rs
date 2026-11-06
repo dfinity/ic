@@ -292,6 +292,10 @@ impl InvalidComputeAllocationError {
     pub fn given(&self) -> candid::Nat {
         self.given.clone()
     }
+
+    pub fn given_ref(&self) -> &candid::Nat {
+        &self.given
+    }
 }
 
 impl TryFrom<u64> for ComputeAllocation {

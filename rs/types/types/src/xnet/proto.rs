@@ -76,18 +76,20 @@ impl From<SignedCertificationContent> for pb::SignedCertificationContent {
         }
     }
 }
-/// Sets the signer's NI-DKG tag to `HighThreshold`, as the signature does not
-/// cover it.
-///
-/// TODO: Reject other NI-DKG tags instead, once all subnets validate the signer
-/// (see `CertifierImpl::validate_certification()`).
+/// Rejects signers other than high-threshold NI-DKG IDs, as the signature does
+/// not cover the signer (see `CertifierImpl::validate_certification()`).
 impl TryFrom<pb::SignedCertificationContent> for SignedCertificationContent {
     type Error = ProxyDecodeError;
 
     fn try_from(value: pb::SignedCertificationContent) -> Result<Self, Self::Error> {
-        let mut signature: ThresholdSignature<CertificationContent> =
+        let signature: ThresholdSignature<CertificationContent> =
             try_from_option_field(value.signature, "SignedCertificationContent::signature")?;
-        signature.signer.dkg_tag = NiDkgTag::HighThreshold;
+        if signature.signer.dkg_tag != NiDkgTag::HighThreshold {
+            return Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "SignedCertificationContent",
+                err: "Signer is not a high-threshold NI-DKG ID".to_string(),
+            });
+        }
         Ok(Signed {
             content: try_from_option_field(value.content, "SignedCertificationContent::content")?,
             signature,
