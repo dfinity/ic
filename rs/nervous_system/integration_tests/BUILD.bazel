@@ -64,7 +64,6 @@ BASE_DEPENDENCIES = [
         "//rs/test_utilities",
         "@crate_index//:maplit",
         "@crate_index//:num-traits",
-        "@crate_index//:rustc-hash",
         "@crate_index//:serde",
         "@crate_index//:wat",
     ],
