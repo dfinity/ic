@@ -3,6 +3,10 @@ from typing import Dict, Tuple
 
 import pandas as pd
 
+# A load type which isn't a column of the load data: every canister contributes one unit of load,
+# so balancing it balances the number of canisters on both post-split subnets.
+CANISTERS_INSTALLED = "canisters_installed"
+
 
 def load_subnet_data(
     load_path: Path,
@@ -75,7 +79,12 @@ def load_subnet_data(
         receiver_index = canister_id_to_index[receiver_id]
         edges[(sender_index, receiver_index)] = count
 
-    load = canister_data[load_type].tolist()
+    if load_type == CANISTERS_INSTALLED:
+        # This can't be a constant column of the load data: subtracting the baseline would zero it
+        # out for every canister which is present in both samples.
+        load = [1] * len(canister_data)
+    else:
+        load = canister_data[load_type].tolist()
 
     return {
         "edges": edges,
