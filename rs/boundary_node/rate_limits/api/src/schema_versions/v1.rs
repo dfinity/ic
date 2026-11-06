@@ -15,6 +15,28 @@ use serde::{
 
 pub const SCHEMA_VERSION: u64 = 1;
 
+/// Serializes an optional regex as its pattern string (or null).
+mod optional_regex {
+    use regex::Regex;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
+    use std::borrow::Cow;
+
+    pub fn serialize<S: Serializer>(
+        value: &Option<Regex>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        value.as_ref().map(Regex::as_str).serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<Regex>, D::Error> {
+        Option::<Cow<str>>::deserialize(deserializer)?
+            .map(|pattern| Regex::new(&pattern).map_err(D::Error::custom))
+            .transpose()
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RequestType {
@@ -154,7 +176,7 @@ pub struct RateLimitRule {
     pub canister_id: Option<Principal>,
     pub subnet_id: Option<Principal>,
     pub sender_id: Option<Principal>,
-    #[serde(default, with = "serde_regex")]
+    #[serde(default, with = "optional_regex")]
     pub methods_regex: Option<Regex>,
     pub ip: Option<IpNet>,
     pub request_types: Option<Vec<RequestType>>,
