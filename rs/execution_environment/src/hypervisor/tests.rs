@@ -11,6 +11,9 @@
 //! `wasm_memory_persistence: opt keep` upgrade option (which keeps the
 //! canister's Wasm memory) and loading a canister snapshot uploaded via its
 //! metadata (which restores the snapshot's Wasm memory).
+//!
+//! Metadata upload is also checked at and above the global Wasm memory cap,
+//! independently of the execution mode of the currently installed module.
 
 use candid::{Decode, Encode};
 use ic_error_types::{ErrorCode, UserError};
@@ -329,6 +332,50 @@ fn upload_snapshot_from_metadata(
     test.subnet_message("upload_canister_snapshot_data", Encode!(&args).unwrap())
         .unwrap();
     snapshot_id
+}
+
+#[test]
+fn snapshot_metadata_validates_global_wasm_memory_cap() {
+    for wasm_mode in [WasmMode::Wasm32, WasmMode::Wasm64] {
+        let mut test = ExecutionTestBuilder::new().build();
+        let canister_id = test.create_canister(CYCLES);
+        let wasm_module = DeclaredWasmMemory::Min(0).wasm_module(wasm_mode);
+        test.install_canister(canister_id, wasm_module.clone())
+            .unwrap();
+
+        // A page-aligned size one page above the global cap must be rejected
+        // during metadata upload, before any snapshot data is uploaded or loaded.
+        let args = UploadCanisterSnapshotMetadataArgs::new(
+            canister_id,
+            None,                               /* replace_snapshot */
+            wasm_module.len() as u64,           /* wasm_module_size */
+            vec![],                             /* globals */
+            bytes(MAX_WASM64_MEMORY_PAGES + 1), /* wasm_memory_size */
+            0,                                  /* stable_memory_size */
+            vec![],                             /* certified_data */
+            None,                               /* global_timer */
+            None,                               /* on_low_wasm_memory_hook_status */
+        );
+        let error = test
+            .subnet_message("upload_canister_snapshot_metadata", args.encode())
+            .expect_err("metadata above the global Wasm memory cap must be rejected");
+        assert_eq!(
+            error.code(),
+            ErrorCode::InvalidManagementPayload,
+            "{wasm_mode:?}"
+        );
+        assert_eq!(
+            error.description(),
+            "Snapshot Metadata contains invalid data: WasmMemoryTooLarge",
+            "{wasm_mode:?}"
+        );
+        assert_eq!(test.canister_state(canister_id).canister_snapshots.len(), 0);
+
+        // The global cap itself is accepted, even if the current module is
+        // Wasm32. Compatibility with the snapshot's module is checked on load.
+        upload_snapshot_from_metadata(&mut test, canister_id, wasm_module, MAX_WASM64_MEMORY_PAGES);
+        assert_eq!(test.canister_state(canister_id).canister_snapshots.len(), 1);
+    }
 }
 
 /// The operations installing an existing Wasm memory into a new execution state.

@@ -784,8 +784,13 @@ fn subnet_memory_is_not_handed_out_twice_across_inner_round_iterations() {
     let hypervisor_config = HypervisorConfig::default();
     let subnet_memory_capacity = hypervisor_config.subnet_memory_capacity.get();
     let subnet_memory_reservation = hypervisor_config.subnet_memory_reservation.get();
-    let env =
-        StateMachine::new_with_config(StateMachineConfig::new(subnet_config, hypervisor_config));
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            hypervisor_config,
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .build();
 
     // A canister holding hundreds of GiB of memory has to reserve a lot of
     // cycles for that storage, way beyond the default reserved cycles limit.
