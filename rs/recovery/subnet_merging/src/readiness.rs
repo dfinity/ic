@@ -221,6 +221,16 @@ fn reports_nothing(
     }
 }
 
+/// Whether a replica reports a registry version of at least `registry_version`.
+/// A replica that reports no registry version has not reached it.
+fn reaches_registry_version(registry_version: u64) -> impl Fn(&ReplicaMetrics) -> bool {
+    move |metrics| {
+        metrics_helper::replica_values(metrics, METRIC_REGISTRY_VERSION, |_| true)
+            .reduce(f64::min)
+            .is_some_and(|version| version >= registry_version as f64)
+    }
+}
+
 /// Evaluates the terms on the metrics that `fetch_readiness_metrics` fetched,
 /// which hold an entry for every subnet of `subnets`, the cooling down one
 /// included.
@@ -237,12 +247,7 @@ fn evaluate(
         |satisfies: &dyn Fn(&ReplicaMetrics) -> bool| holds_on(&source_subnet_id, satisfies);
 
     let source_subnet = source_subnet_id.to_string();
-    // A replica that reports no registry version has not reached `V`.
-    let registry_version_reached_on = |metrics: &ReplicaMetrics| {
-        metrics_helper::replica_values(metrics, METRIC_REGISTRY_VERSION, |_| true)
-            .reduce(f64::min)
-            .is_some_and(|version| version >= registry_version as f64)
-    };
+    let registry_version_reached_on = reaches_registry_version(registry_version);
     let incoming_streams_empty_on = reports_nothing(METRIC_STREAM_MESSAGES, |labels| {
         labels.get("remote") == Some(&source_subnet)
     });
@@ -415,6 +420,78 @@ pub fn await_merge_readiness(
                     terms.len()
                 )));
             }
+            Ok(())
+        },
+    )
+}
+
+/// Waits until every subnet other than `skipped` has reached `registry_version`
+/// on a quorum of its replicas, logging the subnets that have not after every
+/// round.
+///
+/// `skipped` is the subnet that was merged away: its replicas are stopped by
+/// the time this runs, so it reports no metrics anymore, and it is about to be
+/// deleted. What matters is that every *other* subnet already routes its
+/// canisters to the destination subnet.
+pub fn await_registry_version_on_all_subnets(
+    registry_helper: &RegistryHelper,
+    skipped: SubnetId,
+    registry_version: u64,
+    timeout: Duration,
+    poll_interval: Duration,
+    logger: &Logger,
+) -> RecoveryResult<()> {
+    wait_for(
+        &format!(
+            "every subnet other than {skipped} has reached registry version {registry_version}"
+        ),
+        timeout,
+        poll_interval,
+        logger,
+        || {
+            let latest_version = registry_helper.latest_registry_version()?;
+            let mut subnets = subnet_node_ips(&*registry_helper.registry_client(), latest_version)?;
+            subnets.remove(&skipped);
+            if let Some((&subnet_id, _)) = subnets.iter().find(|(_, node_ips)| node_ips.is_empty())
+            {
+                return Err(RecoveryError::UnexpectedError(
+                    ReadinessError::NoNodes(subnet_id).to_string(),
+                ));
+            }
+
+            let groups = subnets.iter().map(|(&subnet_id, node_ips)| {
+                (
+                    subnet_id,
+                    node_ips.as_slice(),
+                    &[METRIC_REGISTRY_VERSION][..],
+                )
+            });
+            let metrics = block_on(metrics_helper::fetch_available_metrics_by_group(groups));
+
+            let mut behind = Vec::new();
+            for (subnet_id, (metrics, scrape_failures)) in &metrics {
+                if let Some(err) = scrape_failures {
+                    warn!(logger, "Subnet {subnet_id}: {err}");
+                }
+                if !holds_on_quorum(
+                    &subnets[subnet_id],
+                    metrics,
+                    reaches_registry_version(registry_version),
+                ) {
+                    behind.push(subnet_id.to_string());
+                }
+            }
+
+            if !behind.is_empty() {
+                return Err(RecoveryError::UnexpectedError(format!(
+                    "a quorum of the replicas of the subnets {} has not reached it yet",
+                    behind.join(", ")
+                )));
+            }
+            info!(
+                logger,
+                "Every subnet other than {skipped} has reached registry version {registry_version}"
+            );
             Ok(())
         },
     )
