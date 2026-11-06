@@ -145,6 +145,12 @@ The stream handler processes incoming XNet stream slices from remote subnets and
 - **WHEN** there is a gap between the stream header's end and the last message in the slice
 - **THEN** the backlog is reported as a metric per remote subnet
 
+#### Scenario: Dropped engine-boundary messages are not recorded as lost cycles
+- **WHEN** the stream handler drops a message that crosses an engine boundary (a cross-subnet message where the sending or the receiving subnet is a `CloudEngine` subnet), e.g. an illegal refund, a response whose cycles were stripped at the boundary, or a response with a sender subnet mismatch
+- **THEN** the cycles it carried are not recorded as lost (`DroppedMessages`) in `ReplicatedState`, since no cycles may legitimately be attached to such messages
+- **AND** the decision uses `StreamHandlerImpl::is_at_engine_boundary`, the same check that rejects requests with cycles crossing an engine boundary, and the debug-only cycle balance assertion in `induct_stream_slices` uses it too: an accepted message crossing an engine boundary leaves the subnet's cycle balance unchanged
+- **AND** messages dropped by the stream builder on an engine subnet are still recorded as lost, since their cycles were deducted from the engine's own canisters
+
 ---
 
 ### Requirement: Demux (Message Induction)
