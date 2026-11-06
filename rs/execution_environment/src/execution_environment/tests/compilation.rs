@@ -553,8 +553,9 @@ mod state_machine_tests {
     //! `expected_compiled_wasms` set at checkpoints. These tests are running a
     //! full scheduler so they exercise the actual checkpoint logic.
 
-    use crate::CompilationCostHandling;
+    use crate::{CompilationCostHandling, subnet_message_payload_instructions};
     use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
+    use ic_management_canister_types_private::{CanisterInstallMode, InstallCodeArgs, Payload};
     use ic_state_machine_tests::StateMachine;
     use ic_test_utilities_execution_environment::wat_compilation_cost;
 
@@ -572,6 +573,28 @@ mod state_machine_tests {
               (export "canister_update write" (func $write))
 			)"#;
 
+    /// Creates a canister and installs `TEST_CANISTER` into it. Returns the
+    /// round instructions consumed by the installation, excluding the
+    /// instructions charged for the payload size of the `install_code` message.
+    fn install_test_canister(env: &StateMachine) -> f64 {
+        let canister_id = env.create_canister(None);
+        let wasm = wat::parse_str(TEST_CANISTER).unwrap();
+        let payload_instructions = subnet_message_payload_instructions(
+            InstallCodeArgs::new(
+                CanisterInstallMode::Install,
+                canister_id,
+                wasm.clone(),
+                vec![],
+            )
+            .encode()
+            .len(),
+        );
+        let instructions_before = env.subnet_message_instructions();
+        env.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, wasm, vec![])
+            .unwrap();
+        env.subnet_message_instructions() - instructions_before - payload_instructions.get() as f64
+    }
+
     #[test]
     fn compilation_cost_ignored_from_install_to_install() {
         let env = StateMachine::new();
@@ -580,18 +603,16 @@ mod state_machine_tests {
         let base_cost = DEFAULT_CREATE_EXECUTION_STATE_BASE_COST.get() as f64;
 
         // Installing first canister takes some instructions.
-        let _canister_id1 = env.install_canister_wat(TEST_CANISTER, vec![], None);
         assert_eq!(
-            env.subnet_message_instructions(),
+            install_test_canister(&env),
             base_cost + expected_compilation_instructions.get() as f64,
         );
 
-        // Installing another canister with the same Wasm doesn't take instructions.
-        let _canister_id2 = env.install_canister_wat(TEST_CANISTER, vec![], None);
+        // Installing another canister with the same Wasm only takes the reduced
+        // compilation instructions.
         assert_eq!(
-            env.subnet_message_instructions(),
-            2.0 * base_cost
-                + expected_compilation_instructions.get() as f64
+            install_test_canister(&env),
+            base_cost
                 + CompilationCostHandling::CountReducedAmount
                     .adjusted_compilation_cost(expected_compilation_instructions)
                     .get() as f64
@@ -608,18 +629,16 @@ mod state_machine_tests {
         let expected_compilation_instructions = wat_compilation_cost(TEST_CANISTER).get() as f64;
 
         // Installing first canister takes some instructions.
-        let _canister_id1 = env.install_canister_wat(TEST_CANISTER, vec![], None);
         assert_eq!(
-            env.subnet_message_instructions(),
+            install_test_canister(&env),
             base_cost + expected_compilation_instructions,
         );
 
         // Installing another canister with the same Wasm uses instructions because
         // there was a checkpoint since the last install.
-        let _canister_id2 = env.install_canister_wat(TEST_CANISTER, vec![], None);
         assert_eq!(
-            env.subnet_message_instructions(),
-            2.0 * (base_cost + expected_compilation_instructions),
+            install_test_canister(&env),
+            base_cost + expected_compilation_instructions,
         );
     }
 }

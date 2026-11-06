@@ -72,7 +72,10 @@ use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use std::{collections::BTreeSet, time::Duration};
 
-use crate::{ExecutionServicesForTesting, RoundLimits, as_round_instructions};
+use crate::{
+    ExecutionServicesForTesting, RoundLimits, as_round_instructions,
+    subnet_message_payload_instructions,
+};
 
 use super::{SUBNET_MESSAGES_LIMIT_FRACTION, SchedulerImpl};
 use crate::metrics::MeasurementScope;
@@ -482,8 +485,6 @@ impl SchedulerTest {
         target: CanisterId,
         install_code: TestInstallCode,
     ) {
-        let wasm_module = wat::parse_str("(module)").unwrap();
-
         let (mode, test_message) = match install_code {
             TestInstallCode::Install { init } => (CanisterInstallMode::Install, init),
             TestInstallCode::Reinstall { init } => (CanisterInstallMode::Reinstall, init),
@@ -497,13 +498,7 @@ impl SchedulerTest {
             wasm_executor.push_install_code(test_message)
         };
 
-        let message_payload = InstallCodeArgs {
-            mode,
-            canister_id: target.get(),
-            wasm_module,
-            arg: encode_message_id_as_payload(message_id),
-            sender_canister_version: None,
-        };
+        let message_payload = install_code_call_to_ic00_payload(mode, target, message_id);
 
         let caller = self.xnet_canister_id();
         self.state_mut()
@@ -513,7 +508,7 @@ impl SchedulerTest {
                     .sender(caller)
                     .receiver(CanisterId::ic_00())
                     .method_name(Method::InstallCode)
-                    .method_payload(message_payload.encode())
+                    .method_payload(message_payload)
                     .build()
                     .into(),
                 InputQueueType::RemoteSubnet,
@@ -1699,6 +1694,34 @@ impl PausedWasmExecution for TestPausedWasmExecution {
 
 fn decode_message_id_from_payload(payload: Vec<u8>) -> u32 {
     u32::from_le_bytes(payload.try_into().unwrap())
+}
+
+/// Returns the payload of an `install_code` call to IC00 injected by
+/// `SchedulerTest::inject_install_code_call_to_ic00`.
+fn install_code_call_to_ic00_payload(
+    mode: CanisterInstallMode,
+    target: CanisterId,
+    message_id: u32,
+) -> Vec<u8> {
+    InstallCodeArgs {
+        mode,
+        canister_id: target.get(),
+        wasm_module: wat::parse_str("(module)").unwrap(),
+        arg: encode_message_id_as_payload(message_id),
+        sender_canister_version: None,
+    }
+    .encode()
+}
+
+/// Returns the number of round instructions charged for the payload size of
+/// an `install_code` call to IC00 injected by
+/// `SchedulerTest::inject_install_code_call_to_ic00` (the payload size does not
+/// depend on the install mode, message ID, or target canister ID).
+pub(crate) fn install_code_call_to_ic00_payload_instructions() -> NumInstructions {
+    subnet_message_payload_instructions(
+        install_code_call_to_ic00_payload(CanisterInstallMode::Install, canister_test_id(0), 0)
+            .len(),
+    )
 }
 
 fn encode_message_id_as_payload(message_id: u32) -> Vec<u8> {

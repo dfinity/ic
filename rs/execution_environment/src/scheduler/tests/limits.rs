@@ -1,7 +1,8 @@
 //! Tests for instruction, memory, callback, heap delta and other limits.
 
 use super::super::test_utilities::{
-    SchedulerTestBuilder, TestInstallCode, ingress, instructions, on_response, other_side,
+    SchedulerTestBuilder, TestInstallCode, ingress, install_code_call_to_ic00_payload_instructions,
+    instructions, on_response, other_side,
 };
 use super::super::*;
 use super::zero_instruction_overhead_config;
@@ -512,17 +513,23 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
 #[test]
 fn subnet_messages_respect_instruction_limit_per_round() {
     // In this test we have a canister with 10 input messages and 20 subnet
-    // messages. Each message execution consumes 10 instructions and the round
-    // limit is set to 400 instructions.
+    // messages. Each message execution consumes 10 instructions and every subnet
+    // message is additionally charged `payload_instructions` for its payload
+    // size. The round limit is set to `16 * 3 * subnet_message_instructions`.
     // The test expects that subnet messages use about a 1/16 of the round limit
     // and the input messages get the full round limit. More specifically:
-    // - 3 subnet messages should run (using 30 out of 400 instructions).
-    // - 10 input messages should run (using 100 out of 400 instructions).
+    // - 3 subnet messages should run (using up the subnet messages' 1/16 share
+    //   of the round limit).
+    // - 10 input messages should run (using 100 instructions).
+    let payload_instructions = install_code_call_to_ic00_payload_instructions();
+    let subnet_message_instructions = payload_instructions + NumInstructions::new(10);
 
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::new(400),
+            max_instructions_per_round: subnet_message_instructions
+                * SUBNET_MESSAGES_LIMIT_FRACTION
+                * 3,
             max_instructions_per_message: NumInstructions::new(10),
             max_instructions_per_slice: NumInstructions::new(10),
             max_instructions_per_install_code: NumInstructions::new(10),

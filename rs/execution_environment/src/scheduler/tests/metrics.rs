@@ -1,8 +1,8 @@
 //! Tests for scheduler metrics.
 
 use super::super::test_utilities::{
-    SchedulerTest, SchedulerTestBuilder, TestInstallCode, ingress, instructions, on_response,
-    other_side,
+    SchedulerTest, SchedulerTestBuilder, TestInstallCode, ingress,
+    install_code_call_to_ic00_payload_instructions, instructions, on_response, other_side,
 };
 use super::super::*;
 use super::{
@@ -339,10 +339,16 @@ fn execution_round_metrics_are_recorded() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+    // Every subnet message is additionally charged for its payload size.
+    let payload_instructions = install_code_call_to_ic00_payload_instructions().get();
+
     let metrics = &test.scheduler().metrics;
     assert_eq!(1, metrics.round.duration.get_sample_count(),);
     assert_eq!(1, metrics.round.instructions.get_sample_count(),);
-    assert_eq!(130, metrics.round.instructions.get_sample_sum() as u64);
+    assert_eq!(
+        130 + 3 * payload_instructions,
+        metrics.round.instructions.get_sample_sum() as u64
+    );
     assert_eq!(1, metrics.round.messages.get_sample_count());
     assert_eq!(13, metrics.round.messages.get_sample_sum() as u64);
     assert_eq!(
@@ -379,7 +385,7 @@ fn execution_round_metrics_are_recorded() {
             .get_sample_count()
     );
     assert_eq!(
-        30,
+        30 + 3 * payload_instructions,
         metrics
             .round_inner_subnet_queue
             .instructions
@@ -396,8 +402,9 @@ fn execution_round_metrics_are_recorded() {
     assert_eq!(1, metrics.round_inner.duration.get_sample_count());
     assert_eq!(1, metrics.round_inner.instructions.get_sample_count());
     // (3 subnet messages + 10 canister messages) * 10 instructions
+    // + 3 subnet messages * payload instructions
     assert_eq!(
-        130,
+        130 + 3 * payload_instructions,
         metrics.round_inner.instructions.get_sample_sum() as u64,
     );
     assert_eq!(1, metrics.round_inner.messages.get_sample_count());

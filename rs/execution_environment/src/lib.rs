@@ -26,8 +26,9 @@ pub use canister_manager::types::WasmSource;
 use canister_manager::{CanisterManager, types::CanisterMgrConfig};
 pub use execution_environment::{
     CompilationCostHandling, ExecuteMessageResult, ExecuteSubnetMessageResultType,
-    ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits, as_num_instructions,
-    as_round_instructions, execute_canister,
+    ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits,
+    SUBNET_MESSAGE_INSTRUCTIONS_PER_PAYLOAD_BYTE, as_num_instructions, as_round_instructions,
+    execute_canister, subnet_message_payload_instructions,
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{
