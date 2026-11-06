@@ -121,6 +121,8 @@ The XNet payload builder constructs and validates cross-subnet message payloads 
 - **WHEN** the state manager encodes a `CertifiedStreamSlice`
 - **THEN** its certification is a `SignedCertificationContent` (the certified hash and its threshold signature) without the certification's `height` and `height_witness`, which the signature does not cover and the receiving subnet never uses
 - **AND** the receiving subnet verifies the slice by checking the threshold signature on that content and that the recomputed digest of the slice's Merkle proof matches the certified hash
+- **AND** decoding a `CertifiedStreamSlice` rejects (`ProxyDecodeError::ValueOutOfRange`, "Signer is not a high-threshold NI-DKG ID") a certification whose signer is not a high-threshold NI-DKG ID, since the signature does not cover the signer and all subnets now validate that certifications are signed by the subnet's high-threshold NI-DKG ID; decoding no longer rewrites the signer's tag to `HighThreshold`
+- **AND** wire compatibility with replica versions that sent a full `Certification` in stream slices is no longer maintained, since no subnet runs such a version
 
 #### Scenario: Payload validation
 - **WHEN** a proposed XNet payload is validated
