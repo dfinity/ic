@@ -127,6 +127,12 @@ IC-OS includes tools for collecting system-level metrics including filesystem tr
 - **THEN** it collects system-level metrics from the operating system
 - **AND** exposes them for scraping by the monitoring infrastructure
 
+#### Scenario: GuestOS node_exporter exports memory reclaim counters and buddyinfo
+- **WHEN** node_exporter runs on GuestOS
+- **THEN** it uses its own GuestOS options file (`ic-os/components/monitoring/node_exporter/guestos/node_exporter`): HostOS's options plus `--collector.buddyinfo` (free blocks per order, per zone) and a wider `--collector.vmstat.fields` filter that also exports the kernel's `pgsteal_*`, `pgscan_*`, `allocstall_*`, `compact_*`, `workingset_*` and `kswapd_*` counters on top of the default fields
+- **AND** this makes it possible to diagnose page cache reclaim (e.g. compaction for physically contiguous allocations) that evicts overlay merge inputs and stalls checkpoints; the extra cost is negligible on the node and about 71 more series per GuestOS node
+- **AND** HostOS keeps the shared options file, unchanged
+
 ### Requirement: Vsock Host-Guest Communication
 IC-OS uses vsock for secure communication between the HostOS and GuestOS.
 
