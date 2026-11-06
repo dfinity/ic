@@ -689,3 +689,6 @@ impl Hypervisor {
         &self.metrics
     }
 }
+
+#[cfg(test)]
+mod tests;
