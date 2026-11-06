@@ -48,6 +48,12 @@ DTS uses two levels of instruction limits: message-level and slice-level.
 - **THEN** the reported count is capped at the instructions left for the message (the message instruction limit minus the instructions already executed in previous slices), in addition to the existing floor of zero
 - **AND** this keeps the instructions accounted for the round consistent with the instructions charged for the message
 
+#### Scenario: A slice cannot consume more than the message budget left
+- **WHEN** the sandbox's DTS state (`canister_sandbox` `dts.rs`) computes the instructions a slice executed (`State::newly_executed`), e.g. after a system API call charged a huge fee before failing with an out-of-instructions error
+- **THEN** the count saturates and is capped at the instructions left in the message's total budget, so the message's `instructions_executed` never exceeds the total instruction limit (debug-asserted)
+- **AND** the next slice's limit is computed from the budget left after the current slice
+- **AND** when the current slice has exhausted the message budget, `try_pause` fails the execution with `InstructionLimitExceeded` instead of pausing it or reporting a `SliceOverrun`; `SliceOverrun` ("exceeded the slice limit") is reported only when the slice's carry-over leaves no instructions for the next slice while the message budget is not exhausted
+
 #### Scenario: Deductions from the round instruction limit saturate
 - **WHEN** executed instructions (of a slice, Wasm compilation or assembly, canister logs fetching, or a management canister operation) are deducted from the round's remaining instruction budget, or instructions executed are computed from the round limits before and after
 - **THEN** the subtraction saturates instead of overflowing, since instructions reported by untrusted Wasm execution could in principle exceed the remaining round budget
