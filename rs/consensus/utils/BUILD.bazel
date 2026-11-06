@@ -45,11 +45,13 @@ rust_test(
         # Keep sorted.
         "//rs/consensus/mocks",
         "//rs/crypto/prng",
+        "//rs/crypto/tree_hash",
         "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/protobuf",
+        "//rs/registry/fake",
         "//rs/registry/helpers",
         "//rs/registry/keys",
         "//rs/replicated_state",

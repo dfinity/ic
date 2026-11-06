@@ -38,6 +38,7 @@ use ic_consensus_utils::{
 };
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
+    certification::CertificationPool,
     consensus_pool::{
         ChangeAction, ConsensusPool, ConsensusPoolCache, Mutations, ValidatedConsensusArtifact,
     },
@@ -139,6 +140,7 @@ impl ConsensusImpl {
         upgrade_payload_builder: Arc<dyn BatchPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
+        certification_pool: Arc<RwLock<dyn CertificationPool + Send + Sync>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
         message_routing: Arc<dyn MessageRouting>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -202,6 +204,7 @@ impl ConsensusImpl {
                 crypto.clone(),
                 message_routing.clone(),
                 ingress_selector.clone(),
+                certification_pool.clone(),
                 logger.clone(),
                 metrics_registry.clone(),
             ),
@@ -225,6 +228,7 @@ impl ConsensusImpl {
                 state_manager.clone(),
                 message_routing.clone(),
                 registry_client.clone(),
+                certification_pool,
                 logger.clone(),
             ),
             block_maker: BlockMaker::new(
@@ -643,8 +647,20 @@ mod tests {
             dkg_pool,
             idkg_pool,
             ..
-        } = DependenciesBuilder::single_subnet(pool_config, subnet_test_id(0), vec![(1, record)])
-            .build();
+        } = DependenciesBuilder::single_subnet(
+            pool_config.clone(),
+            subnet_test_id(0),
+            vec![(1, record)],
+        )
+        .build();
+        let certification_pool = Arc::new(RwLock::new(
+            ic_artifact_pool::certification_pool::CertificationPoolImpl::new(
+                replica_config.node_id,
+                pool_config,
+                no_op_logger(),
+                MetricsRegistry::new(),
+            ),
+        ));
         state_manager
             .get_mut()
             .expect_latest_certified_height()
@@ -674,6 +690,7 @@ mod tests {
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             dkg_pool,
             idkg_pool,
+            certification_pool,
             Arc::new(Mutex::new(DkgKeyManager::new(
                 metrics_registry.clone(),
                 crypto,

@@ -102,6 +102,7 @@ enum ValidationFailure {
     SubnetSplittingStatusError(subnet_splitting::StatusError),
     CatchUpPackageTypeError(String),
     SubnetSplittingError(String),
+    RecoveryError(String),
 }
 
 /// Possible reasons for invalid artifacts.
@@ -1869,6 +1870,7 @@ impl Validator {
         let (block, beacon, state_height) = match catchup_package_maker::get_catch_up_package_type(
             self.registry_client.as_ref(),
             self.replica_config.node_id,
+            self.replica_config.subnet_id,
             &dkg_summary_block,
         )
         .map_err(ValidationFailure::CatchUpPackageTypeError)?
@@ -1884,12 +1886,16 @@ impl Validator {
                 .map_err(ValidationFailure::SubnetSplittingError)?;
 
                 let post_split_random_beacon =
-                    catchup_package_maker::create_post_split_random_beacon(&post_split_block)
+                    catchup_package_maker::create_synthetic_random_beacon(&post_split_block)
                         .map_err(ValidationFailure::SubnetSplittingError)?;
 
                 let state_height = dkg_summary.height;
 
-                (post_split_block, post_split_random_beacon, state_height)
+                (
+                    post_split_block,
+                    post_split_random_beacon,
+                    Some(state_height),
+                )
             }
             // We don't produce CUPs for the height at which a subnet splitting is happening.
             CatchUpPackageType::PostSplit { .. } if dkg_summary.height == share_height => {
@@ -1901,10 +1907,43 @@ impl Validator {
                     .into(),
                 );
             }
-            // It could be that, in our view, the latest summary indicates a subnet-split but
-            // we receive an old CUP share or a future CUP share (i.e. that does not correspond to
-            // the expected post-split height). In that case, validate it like normally.
-            CatchUpPackageType::PostSplit { .. } | CatchUpPackageType::Normal => {
+            // Keep the expected height in sync with `CatchUpPackageMaker::get_cup_height`.
+            CatchUpPackageType::Recovery { scheduled_at }
+                if dkg_summary.get_next_start_height()
+                    + dkg_summary.next_interval_length
+                    + Height::from(1)
+                    == share_height =>
+            {
+                let recovery_block = catchup_package_maker::create_recovery_summary_block(
+                    &dkg_summary_block,
+                    scheduled_at,
+                    self.replica_config.subnet_id,
+                    self.registry_client.as_ref(),
+                )
+                .map_err(ValidationFailure::RecoveryError)?;
+
+                let recovery_random_beacon =
+                    catchup_package_maker::create_synthetic_random_beacon(&recovery_block)
+                        .map_err(ValidationFailure::RecoveryError)?;
+
+                // The state hash of a recovery CUP share is the hash of the share creator's
+                // checkpoint right above its own view of the recovery target, which this node
+                // cannot recompute (the target is derived from the creator's certification pool,
+                // and this node may not even hold a checkpoint at that height). It is therefore
+                // *not* validated — like the contents of a full CUP, it is trusted once enough
+                // nodes sign the exact same content: aggregation requires a high threshold of
+                // identical contents, so any aggregated recovery CUP's state hash was produced by
+                // at least one honest node. Shares built for a different target simply never
+                // aggregate with each other.
+                (recovery_block, recovery_random_beacon, None)
+            }
+            // It could be that, in our view, the latest summary indicates a subnet split or a
+            // pending recovery, but we receive an old CUP share or a future CUP share (i.e. one
+            // that does not correspond to the expected post-split/recovery height). In that case,
+            // validate it like normally.
+            CatchUpPackageType::PostSplit { .. }
+            | CatchUpPackageType::Recovery { .. }
+            | CatchUpPackageType::Normal => {
                 let block = pool_reader
                     .get_finalized_block(share_height)
                     .ok_or(ValidationFailure::FinalizedBlockNotFound(share_height))?;
@@ -1915,7 +1954,7 @@ impl Validator {
 
                 let state_height = share_height;
 
-                (block, beacon, state_height)
+                (block, beacon, Some(state_height))
             }
         };
 
@@ -1931,24 +1970,30 @@ impl Validator {
             return Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare.into());
         }
 
-        let state_hash = self
-            .state_manager
-            .get_state_hash_at(state_height)
-            .map_err(ValidationFailure::StateHashError)?;
-        if state_hash != share_content.state_hash {
-            return Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare.into());
-        }
+        // `state_height` is `None` for recovery CUP shares, whose state hash cannot be
+        // recomputed by the validator — see above.
+        if let Some(state_height) = state_height {
+            let state_hash = self
+                .state_manager
+                .get_state_hash_at(state_height)
+                .map_err(ValidationFailure::StateHashError)?;
+            if state_hash != share_content.state_hash {
+                return Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare.into());
+            }
 
-        // Should succeed as we already got the hash above
-        let state = self
-            .state_manager
-            .get_state_at(state_height)
-            .map_err(ValidationFailure::StateManagerError)?;
-        let registry_version = get_oldest_state_registry_version(state.get_ref());
-        if registry_version != share_content.oldest_registry_version_in_use_by_replicated_state {
-            return Err(
-                InvalidArtifactReason::MismatchedOldestRegistryVersionInCatchUpPackageShare.into(),
-            );
+            // Should succeed as we already got the hash above
+            let state = self
+                .state_manager
+                .get_state_at(state_height)
+                .map_err(ValidationFailure::StateManagerError)?;
+            let registry_version = get_oldest_state_registry_version(state.get_ref());
+            if registry_version != share_content.oldest_registry_version_in_use_by_replicated_state
+            {
+                return Err(
+                    InvalidArtifactReason::MismatchedOldestRegistryVersionInCatchUpPackageShare
+                        .into(),
+                );
+            }
         }
 
         Ok(block)
@@ -5571,7 +5616,7 @@ pub mod test {
                     state_manager,
                     ..
                 } = ValidatorAndDependenciesBuilder::multiple_subnets(
-                    pool_config,
+                    pool_config.clone(),
                     vec![
                         (
                             INITIAL_REGISTRY_VERSION.get(),
@@ -5625,6 +5670,11 @@ pub mod test {
                 *message_routing.next_batch_height.write().unwrap() = Height::from(2);
                 let message_routing = Arc::new(message_routing);
 
+                let certification_pool =
+                    crate::consensus::catchup_package_maker::tests::test_certification_pool(
+                        cup_share_node_id,
+                        pool_config.clone(),
+                    );
                 let cup_maker = CatchUpPackageMaker::new(
                     ReplicaConfig {
                         node_id: cup_share_node_id,
@@ -5636,6 +5686,7 @@ pub mod test {
                     state_manager,
                     message_routing,
                     registry,
+                    certification_pool,
                     log,
                 );
 
@@ -5744,6 +5795,162 @@ pub mod test {
                         InvalidArtifactReason::SignerNotInThresholdCommittee(invalid_signer),
                     ),
                 };
+
+                let expected_change_action = match expected_validation_result {
+                    Ok(()) => {
+                        ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackageShare(share))
+                    }
+                    Err(err) => ChangeAction::HandleInvalid(
+                        ConsensusMessage::CatchUpPackageShare(share),
+                        format!("{err:?}"),
+                    ),
+                };
+
+                assert_eq!(change_set, vec![expected_change_action]);
+            })
+        })
+    }
+
+    /// Tests the checks performed when validating a recovery CUP share: the synthetic block and
+    /// the dummy random beacon are recomputed and must match, and the signer must be in the
+    /// recovery block's high-threshold committee — but the state hash (and the oldest registry
+    /// version in use, which is derived from the same state) is *not* validated: it references
+    /// the share creator's checkpoint right above its own view of the recovery target, which the
+    /// validator cannot recompute. It is trusted once a high threshold of nodes signs the exact
+    /// same content, like the contents of a full CUP.
+    #[rstest]
+    #[case::well_formed(None, Ok(()))]
+    #[case::foreign_state_hash(Some(MalformShare::StateHash), Ok(()))]
+    #[case::foreign_oldest_registry_version(Some(MalformShare::RegistryVersion), Ok(()))]
+    #[case::wrong_random_beacon(
+        Some(MalformShare::RandomBeacon),
+        Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare)
+    )]
+    #[case::wrong_signer(
+        Some(MalformShare::Signer),
+        Err(InvalidArtifactReason::SignerNotInThresholdCommittee(NODE_5))
+    )]
+    fn validate_recovery_cup_share_test(
+        #[case] malform_share: Option<MalformShare>,
+        #[case] expected_validation_result: Result<(), InvalidArtifactReason>,
+    ) {
+        const DKG_INTERVAL_LENGTH: u64 = 9;
+
+        with_test_replica_logger(|log| {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                let committee = [NODE_1, NODE_2, NODE_3, NODE_4];
+                let subnet_record = || {
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                };
+
+                let ValidatorAndDependencies {
+                    mut pool,
+                    membership,
+                    registry,
+                    registry_data_provider,
+                    crypto,
+                    validator,
+                    state_manager,
+                    ..
+                } = ValidatorAndDependenciesBuilder::single_subnet(
+                    pool_config.clone(),
+                    SUBNET_1,
+                    vec![(INITIAL_REGISTRY_VERSION.get(), subnet_record().build())],
+                )
+                .with_replica_config(ReplicaConfig {
+                    node_id: NODE_1,
+                    subnet_id: SUBNET_1,
+                    platform_version: test_platform_version(),
+                })
+                .build();
+
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
+                state_manager
+                    .get_mut()
+                    .expect_get_state_hash_at()
+                    .return_const(Ok(fake_state_hash.clone()));
+
+                let message_routing = FakeMessageRouting::new();
+                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+                let message_routing = Arc::new(message_routing);
+
+                pool.advance_round_normal_operation_n(3);
+
+                // Schedule a recovery at a fresh registry version.
+                ic_test_utilities_registry::add_subnet_record(
+                    &registry_data_provider,
+                    /*version=*/ 2,
+                    SUBNET_1,
+                    subnet_record().with_is_in_recovery_mode(true).build(),
+                );
+                registry.reload();
+
+                // Create a recovery CUP share by NODE_2, whose recovery target (height 2) is
+                // supported by f + 1 certification shares.
+                let certification_pool =
+                    crate::consensus::catchup_package_maker::tests::test_certification_pool(
+                        NODE_2,
+                        pool_config.clone(),
+                    );
+                for node in [NODE_1, NODE_2] {
+                    certification_pool.read().unwrap().validated.insert(
+                        crate::consensus::catchup_package_maker::tests::fake_certification_share(
+                            2, node,
+                        ),
+                    );
+                }
+                let cup_maker = CatchUpPackageMaker::new(
+                    ReplicaConfig {
+                        node_id: NODE_2,
+                        subnet_id: SUBNET_1,
+                        platform_version: test_platform_version(),
+                    },
+                    membership,
+                    crypto,
+                    state_manager,
+                    message_routing,
+                    registry,
+                    certification_pool,
+                    log,
+                );
+
+                let mut share = cup_maker
+                    .on_state_change(&PoolReader::new(&pool))
+                    .expect("Should create a recovery CUP share");
+
+                match &malform_share {
+                    Some(MalformShare::StateHash) => {
+                        share.content.state_hash =
+                            CryptoHashOfState::from(CryptoHash(vec![3, 1, 4]));
+                    }
+                    Some(MalformShare::RegistryVersion) => {
+                        share
+                            .content
+                            .oldest_registry_version_in_use_by_replicated_state =
+                            Some(RegistryVersion::new(42));
+                    }
+                    Some(MalformShare::RandomBeacon) => {
+                        let mut invalid_beacon = share.content.random_beacon.into_inner();
+                        invalid_beacon.content.version =
+                            ReplicaVersion::from_str("invalid_replica_version").unwrap();
+
+                        share.content.random_beacon =
+                            HashedRandomBeacon::new(ic_types::crypto::crypto_hash, invalid_beacon);
+                    }
+                    Some(MalformShare::Signer) => {
+                        // A node outside of the subnet, and thus outside of the recovery block's
+                        // high-threshold committee.
+                        share.signature.signer = NODE_5;
+                    }
+                    Some(MalformShare::Height) => unreachable!("not covered by this test"),
+                    None => {}
+                }
+
+                pool.insert_unvalidated(share.clone());
+
+                let change_set =
+                    validator.validate_catch_up_package_shares(&PoolReader::new(&pool));
 
                 let expected_change_action = match expected_validation_result {
                     Ok(()) => {
