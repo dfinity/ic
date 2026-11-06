@@ -35,6 +35,7 @@ rust_fuzz_test_binary_afl(
         "//rs/crypto/tls_interfaces",
         "//rs/crypto/tls_interfaces/mocks",
         "//rs/crypto/tree_hash",
+        "//rs/crypto/utils/threshold_sig_der",
         "//rs/http_endpoints/nns_delegation_manager",
         "//rs/http_endpoints/public",
         "//rs/http_endpoints/test_agent",

@@ -1181,7 +1181,7 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
             format!(
                 "Upgrade argument with {} bytes and SHA256 `{}`.",
                 arg.len(),
-                format_full_hash(arg),
+                format_full_hash(&Sha256::hash(arg)),
             )
         })
         .unwrap_or_else(|| "No upgrade argument.".to_string());
@@ -3419,7 +3419,7 @@ Embedded module with 8 bytes and SHA256 `93a44bbb96c751218e4c00d479e4c14358122a3
 
 ## Argument info
 
-Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
+Upgrade argument with 8 bytes and SHA256 `73f1171adc7e49b09423da2515a1077e3cc63e3fabcb9846cac437d044ac57ec`."#
                 .to_string()
         );
     }

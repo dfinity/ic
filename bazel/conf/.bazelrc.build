@@ -47,6 +47,13 @@ build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
 build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
+# Don't generate empty __init__.py files in the runfiles of other modules' Python executables (rules_pkg's
+# build_tar, rules_foreign_cc's meson, rules_python's py_console_script_gen_py, @bazel_tools' sha256 and
+# proguard_allowlister) either: explicit_init_py in MODULE.bazel only covers this module's targets.
+# rules_python's MODULE.bazel aliases this flag to its
+# @rules_python//python/config_settings:incompatible_default_to_explicit_init_py.
+build --incompatible_default_to_explicit_init_py
+
 # Build everything ic-os without sandbox
 build --strategy_regexp=ic-os[:/].*=local
 

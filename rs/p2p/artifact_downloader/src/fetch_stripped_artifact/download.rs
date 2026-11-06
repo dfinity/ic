@@ -51,8 +51,6 @@ use super::{
     },
 };
 
-type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
-
 const INGRESS_URI: &str = "/block/ingress/rpc";
 const IDKG_DEALING_URI: &str = "/block/idkg_dealing/rpc";
 const CANISTER_HTTP_RESPONSE_URI: &str = "/block/canister_http_response/rpc";
@@ -61,9 +59,9 @@ const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Clone)]
 pub(super) struct Pools {
-    pub(super) consensus_pool: ValidatedPoolReaderRef<ConsensusMessage>,
-    pub(super) ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
-    pub(super) idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
+    pub(super) consensus_pool: Arc<RwLock<dyn ValidatedPoolReader<ConsensusMessage>>>,
+    pub(super) ingress_pool: Arc<RwLock<dyn ValidatedPoolReader<SignedIngress>>>,
+    pub(super) idkg_pool: Arc<RwLock<dyn ValidatedPoolReader<IDkgMessage>>>,
     pub(super) canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
     pub(super) metrics: StrippedMessageSenderMetrics,
 }
@@ -414,7 +412,8 @@ pub(crate) async fn download_stripped_message<P: Peers>(
     peer_rx: P,
 ) -> (StrippedMessage, NodeId) {
     let message_type = StrippedMessageType::from(&stripped_message_id);
-    metrics.report_started_stripped_message_download(message_type);
+    // Stops counting the download as active when dropped, also if the download is aborted.
+    let _active_download = metrics.start_stripped_message_download(message_type);
     let mut artifact_download_timeout = ExponentialBuilder::new()
         .with_min_delay(MIN_ARTIFACT_RPC_TIMEOUT)
         .with_max_delay(MAX_ARTIFACT_RPC_TIMEOUT)
@@ -470,10 +469,7 @@ pub(crate) async fn download_stripped_message<P: Peers>(
             match timeout_at(next_request_at, transport.rpc(&peer, request.clone())).await {
                 Ok(Ok(response)) if response.status() == StatusCode::OK => {
                     match parse_response(&stripped_message_id, response.into_body()) {
-                        Ok(stripped_message) => {
-                            metrics.report_finished_stripped_message_download(message_type);
-                            return (stripped_message, peer);
-                        }
+                        Ok(stripped_message) => return (stripped_message, peer),
                         Err(ParseResponseError::MessageIdMismatch) => {
                             metrics.report_download_error(
                                 "mismatched_stripped_message_id",
@@ -1260,6 +1256,45 @@ mod tests {
         .await;
 
         assert_eq!(downloaded, (wanted, NODE_1));
+    }
+
+    /// A download that is dropped before it is done, as when its block proposal becomes
+    /// unwanted, no longer counts as active.
+    #[tokio::test(start_paused = true)]
+    async fn dropped_download_is_no_longer_active_test() {
+        let block = fake_block_proposal(vec![]);
+        let [wanted, other] = [1, 2].map(fake_canister_http_stripped_message);
+        let log = no_op_logger();
+        let metrics = FetchStrippedConsensusArtifactMetrics::new(&MetricsRegistry::new());
+        let active_downloads = metrics
+            .active_stripped_message_downloads
+            .with_label_values(&[StrippedMessageType::from(&wanted.id()).as_str()]);
+
+        let mut mock_transport = MockTransport::new();
+        let mut mock_peers = MockPeers::default();
+        mock_peers.expect_peers().return_const(vec![NODE_1]);
+        // The peer never answers with the wanted response, so the download goes on.
+        mock_transport
+            .expect_rpc()
+            .returning(move |_, _| Ok(rpc_response(other.clone())));
+
+        let mut download = Box::pin(download_stripped_message(
+            Arc::new(mock_transport),
+            wanted.id(),
+            ConsensusMessageId::from(&block),
+            &log,
+            &metrics,
+            mock_peers,
+        ));
+        assert!(
+            tokio::time::timeout(Duration::from_secs(60), &mut download)
+                .await
+                .is_err()
+        );
+        assert_eq!(active_downloads.get(), 1);
+
+        drop(download);
+        assert_eq!(active_downloads.get(), 0);
     }
 
     #[tokio::test]

@@ -8,6 +8,7 @@ on:
     paths:
       - '.github/workflows/api-bn-recovery-test.yml'
       - 'ic-os/api-bn-recovery/**'
+      - 'rs/boundary_node/smoke_test/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -36,11 +37,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/netrc
-
-      - name: Install dfx
-        run: |
-          DFXVM_INIT_YES=1 sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
-          echo "$HOME/.local/share/dfx/bin" >> "$GITHUB_PATH"
 
       - name: Run smoke test
         uses: ./.github/actions/bazel

@@ -61,7 +61,14 @@ impl<'a> Heap<'a> {
     /// Fails with the bounds error of [`valid_subslice`] if the range is not
     /// inside the heap, and with the error of the [`HeapAccessCheck`] if the
     /// range may not be touched. `ctx` names the caller in the error message.
-    pub fn get(&self, ctx: &str, start: usize, len: usize) -> HypervisorResult<&[u8]> {
+    ///
+    /// This takes a mutable reference to prevent time-of-check/time-of-use
+    /// problems. The returned slice is checked to fit on the heap and to
+    /// fit in the accessed page limit. But that guarantee has a lifetime
+    /// that is bound to the lifetime of self. If we accepted &self here, then
+    /// we could obtain two different &[u8] which individually fit, but together
+    /// might not. &mut self prevents that.
+    pub fn get(&mut self, ctx: &str, start: usize, len: usize) -> HypervisorResult<&[u8]> {
         let range = self.checked_range(ctx, start, len)?;
         Ok(&self.bytes[range])
     }

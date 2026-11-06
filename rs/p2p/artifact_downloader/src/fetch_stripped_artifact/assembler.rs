@@ -4,6 +4,7 @@ use std::{
     time::Duration,
 };
 use thiserror::Error;
+use tokio::time::Instant;
 
 use ic_interfaces::{
     canister_http::CanisterHttpPool,
@@ -25,7 +26,7 @@ use ic_types::{
     batch::IngressPayload,
     canister_http::CanisterHttpResponse,
     consensus::{
-        BlockProposal, ConsensusMessage, ConsensusMessageHashable,
+        BlockProposal, ConsensusMessage,
         idkg::{IDkgArtifactId, IDkgMessage},
     },
     crypto::{
@@ -38,6 +39,7 @@ use ic_types::{
 
 use crate::{
     FetchArtifact,
+    fetch_artifact::{Attempt, SharedPool, check_id_and_integrity},
     fetch_stripped_artifact::{
         canister_http::{CanisterHttpPayloadError, reinsert_responses},
         types::{
@@ -61,41 +63,37 @@ use super::{
     },
 };
 
-type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
-
-struct BouncerFactoryWrapper<Pool: ValidatedPoolReader<ConsensusMessage>> {
-    bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
+struct BouncerFactoryWrapper<Factory> {
+    bouncer_factory: Factory,
 }
 
-struct ConsensusPoolWrapper<Pool: ValidatedPoolReader<ConsensusMessage>> {
-    consensus_pool: Arc<RwLock<Pool>>,
+/// Serves the messages of `pool` by first stripping them
+#[derive(Clone)]
+struct StrippingPoolWrapper<Pool> {
+    pool: Pool,
 }
 
 impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrippedConsensusMessage>
-    for ConsensusPoolWrapper<Pool>
+    for StrippingPoolWrapper<Pool>
 {
     fn get(
         &self,
         id: &<MaybeStrippedConsensusMessage as IdentifiableArtifact>::Id,
     ) -> Option<MaybeStrippedConsensusMessage> {
-        // The pool hands out a block proposal with its payload already loaded.
-        let message = self.consensus_pool.read().unwrap().get(id.as_ref());
-        // Stripping a block can take milliseconds, so it is done once the lock on the
-        // pool is released.
-        message.map(Strippable::strip)
+        self.pool.get(id.as_ref()).map(Strippable::strip)
     }
 }
 
-impl<Pool: ValidatedPoolReader<ConsensusMessage>>
-    BouncerFactory<StrippedConsensusMessageId, ConsensusPoolWrapper<Pool>>
-    for BouncerFactoryWrapper<Pool>
+impl<Pool, Factory> BouncerFactory<StrippedConsensusMessageId, Pool>
+    for BouncerFactoryWrapper<Factory>
+where
+    Factory: BouncerFactory<ConsensusMessageId, Pool>,
 {
     fn new_bouncer(
         &self,
-        pool: &ConsensusPoolWrapper<Pool>,
+        pool: &Pool,
     ) -> ic_interfaces::p2p::consensus::Bouncer<StrippedConsensusMessageId> {
-        let pool = pool.consensus_pool.read().unwrap();
-        let nested = self.bouncer_factory.new_bouncer(&pool);
+        let nested = self.bouncer_factory.new_bouncer(pool);
 
         Box::new(move |id| nested(id.as_ref()))
     }
@@ -108,8 +106,8 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>>
 #[derive(Clone)]
 pub struct FetchStrippedConsensusArtifact {
     log: ReplicaLogger,
-    ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
-    idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
+    ingress_pool: Arc<RwLock<dyn ValidatedPoolReader<SignedIngress>>>,
+    idkg_pool: Arc<RwLock<dyn ValidatedPoolReader<IDkgMessage>>>,
     canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
     fetch_stripped: FetchArtifact<MaybeStrippedConsensusMessage>,
     transport: Arc<dyn Transport>,
@@ -118,17 +116,21 @@ pub struct FetchStrippedConsensusArtifact {
 }
 
 impl FetchStrippedConsensusArtifact {
-    pub fn new<Pool: ValidatedPoolReader<ConsensusMessage> + Send + Sync + 'static>(
+    pub fn new<ConsensusPool, Factory>(
         log: ReplicaLogger,
         rt: tokio::runtime::Handle,
-        consensus_pool: Arc<RwLock<Pool>>,
-        ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
-        idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
+        consensus_pool: Arc<RwLock<ConsensusPool>>,
+        ingress_pool: Arc<RwLock<dyn ValidatedPoolReader<SignedIngress>>>,
+        idkg_pool: Arc<RwLock<dyn ValidatedPoolReader<IDkgMessage>>>,
         canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
-        bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
+        bouncer_factory: Factory,
         metrics_registry: MetricsRegistry,
         node_id: NodeId,
-    ) -> (impl Fn(Arc<dyn Transport>) -> Self, axum::Router) {
+    ) -> (impl FnOnce(Arc<dyn Transport>) -> Self, axum::Router)
+    where
+        ConsensusPool: ValidatedPoolReader<ConsensusMessage> + 'static,
+        Factory: BouncerFactory<ConsensusMessageId, ConsensusPool> + 'static,
+    {
         let ingress_pool_clone = ingress_pool.clone();
         let idkg_pool_clone = idkg_pool.clone();
         let canister_http_pool_clone = canister_http_pool.clone();
@@ -142,13 +144,16 @@ impl FetchStrippedConsensusArtifact {
             metrics: StrippedMessageSenderMetrics::new(&metrics_registry),
         });
 
-        let (fetch_stripped_fn, subrouter) = FetchArtifact::new(
+        let fetch_stripped_fn = FetchArtifact::downloader(
             log.clone(),
             rt,
-            Arc::new(RwLock::new(ConsensusPoolWrapper { consensus_pool })),
-            Arc::new(BouncerFactoryWrapper { bouncer_factory }),
+            consensus_pool.clone(),
+            BouncerFactoryWrapper { bouncer_factory },
             metrics_registry.clone(),
         );
+        let subrouter = FetchArtifact::router(StrippingPoolWrapper {
+            pool: SharedPool(consensus_pool),
+        });
 
         let router = axum::Router::new().merge(router).merge(subrouter);
 
@@ -156,10 +161,10 @@ impl FetchStrippedConsensusArtifact {
             let fetch_stripped = fetch_stripped_fn(transport.clone());
 
             Self {
-                log: log.clone(),
-                ingress_pool: ingress_pool.clone(),
-                idkg_pool: idkg_pool.clone(),
-                canister_http_pool: canister_http_pool.clone(),
+                log,
+                ingress_pool,
+                idkg_pool,
+                canister_http_pool,
                 fetch_stripped,
                 transport,
                 node_id,
@@ -186,22 +191,44 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         artifact: Option<(MaybeStrippedConsensusMessage, NodeId)>,
         peer_rx: P,
     ) -> AssembleResult<ConsensusMessage> {
+        let id = &id;
+        self.fetch_stripped
+            .assemble_with_retries(id, artifact, move |artifact, deadline| {
+                self.try_assemble_message(id, artifact, peer_rx.clone(), deadline)
+            })
+            .await
+    }
+}
+
+impl FetchStrippedConsensusArtifact {
+    /// Tries to assemble the message from the pushed artifact, or from one downloaded from a peer.
+    async fn try_assemble_message<P: Peers + Clone + Send + 'static>(
+        &self,
+        id: &StrippedConsensusMessageId,
+        artifact: Option<(MaybeStrippedConsensusMessage, NodeId)>,
+        peer_rx: P,
+        deadline: Instant,
+    ) -> Attempt<ConsensusMessage> {
         let total_timer = self.metrics.total_block_assembly_duration.start_timer();
         // Download the Stripped message if it hasn't been pushed.
         let (stripped_artifact, peer) = match self
             .fetch_stripped
-            .assemble_message(id.clone(), artifact, peer_rx.clone())
+            .try_fetch(id, artifact, peer_rx.peers(), deadline)
             .await
         {
-            AssembleResult::Unwanted => return AssembleResult::Unwanted,
-            AssembleResult::Done { message, peer_id } => (message, peer_id),
+            Attempt::Done { message, peer_id } => (message, peer_id),
+            Attempt::Unwanted => return Attempt::Unwanted,
+            Attempt::Retry => {
+                total_timer.stop_and_discard();
+                return Attempt::Retry;
+            }
         };
 
         let stripped_block_proposal = match stripped_artifact {
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) => stripped,
             MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
                 total_timer.stop_and_discard();
-                return AssembleResult::Done {
+                return Attempt::Done {
                     message: unstripped,
                     peer_id: peer,
                 };
@@ -243,9 +270,9 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
 
         loop {
             let join_result = tokio::select! {
-                _ = bouncer.wait_for(|bouncer| matches!(bouncer(&id), BouncerValue::Unwanted)) => {
+                _ = bouncer.wait_for(|bouncer| matches!(bouncer(id), BouncerValue::Unwanted)) => {
                     self.metrics.report_aborted_block_assembly();
-                    return AssembleResult::Unwanted;
+                    return Attempt::Unwanted;
                 }
                 join_result = join_set.join_next() => join_result,
             };
@@ -255,7 +282,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             };
 
             let Ok((message, peer_id)) = join_result else {
-                return AssembleResult::Unwanted;
+                return Attempt::Retry;
             };
 
             let message_type = StrippedMessageType::from(&message);
@@ -276,7 +303,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
                     err
                 );
 
-                return AssembleResult::Unwanted;
+                return Attempt::Retry;
             }
         }
 
@@ -303,18 +330,11 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         }
 
         match assembler.try_assemble() {
-            Ok(reconstructed_block_proposal) => AssembleResult::Done {
-                message: ConsensusMessage::BlockProposal(reconstructed_block_proposal),
+            Ok(message) => Attempt::Done {
+                message,
                 peer_id: peer,
             },
-            Err(err) => {
-                warn!(
-                    self.log,
-                    "Failed to reassemble the block {}. This is a bug.", err
-                );
-
-                AssembleResult::Unwanted
-            }
+            Err(err) => self.fetch_stripped.invalid_artifact(id, peer, err),
         }
     }
 }
@@ -323,8 +343,8 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
 /// it.
 async fn get_or_fetch<P: Peers>(
     stripped_message_id: StrippedMessageId,
-    ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
-    idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
+    ingress_pool: Arc<RwLock<dyn ValidatedPoolReader<SignedIngress>>>,
+    idkg_pool: Arc<RwLock<dyn ValidatedPoolReader<IDkgMessage>>>,
     canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
     transport: Arc<dyn Transport>,
     // Id of the *full* artifact which should contain the missing data
@@ -414,13 +434,8 @@ pub(crate) enum AssemblyError {
     CanisterHttpPayload(#[from] CanisterHttpPayloadError),
     #[error("The block proposal cannot be deserialized {0}")]
     DeserializationFailed(ProxyDecodeError),
-    #[error(
-        "The reconstructed block proposal id {assembled:?} does not match the claimed id {claimed:?}"
-    )]
-    MismatchedConsensusMessageId {
-        claimed: ConsensusMessageId,
-        assembled: ConsensusMessageId,
-    },
+    #[error("The reassembled block proposal fails the integrity check")]
+    IntegrityCheckFailed,
 }
 
 /// A trait keeps track of the missing artifacts in a stripped payload,
@@ -704,9 +719,9 @@ impl BlockProposalAssembler {
     /// Tries to reassemble a block.
     ///
     /// Fails if there are still some stripped messages missing,
-    /// the assembled proposal can't be deserialized, or if the
-    /// assembled proposal has an ID that doesn't match the claimed ID.
-    pub(crate) fn try_assemble(self) -> Result<BlockProposal, AssemblyError> {
+    /// the assembled proposal can't be deserialized, or it fails
+    /// the integrity check against the claimed ID.
+    pub(crate) fn try_assemble(self) -> Result<ConsensusMessage, AssemblyError> {
         let BlockProposalAssembler {
             pruned_block_proposal_proto: mut reconstructed_block_proposal_proto,
             unstripped_consensus_message_id: claimed_id,
@@ -729,15 +744,12 @@ impl BlockProposalAssembler {
         let reconstructed_block_proposal: BlockProposal = reconstructed_block_proposal_proto
             .try_into()
             .map_err(AssemblyError::DeserializationFailed)?;
-        let assembled_id = reconstructed_block_proposal.get_id();
-        if assembled_id != claimed_id {
-            return Err(AssemblyError::MismatchedConsensusMessageId {
-                claimed: claimed_id,
-                assembled: assembled_id,
-            });
+        let message = ConsensusMessage::BlockProposal(reconstructed_block_proposal);
+        if !check_id_and_integrity(&message, &claimed_id) {
+            return Err(AssemblyError::IntegrityCheckFailed);
         }
 
-        Ok(reconstructed_block_proposal)
+        Ok(message)
     }
 }
 
@@ -751,10 +763,12 @@ mod tests {
         fake_canister_http_stripped_message, fake_canister_http_timeout_message,
         fake_flexible_canister_http_responses_message, fake_idkg_dealing,
         fake_idkg_payload_with_dealings, fake_ingress_message, fake_ingress_message_with_arg_size,
-        fake_ingress_message_with_sig, fake_stripped_block_proposal_with_messages, rpc_response,
+        fake_ingress_message_with_sig, fake_stripped_block_proposal_with_messages,
+        fake_summary_block_proposal, rpc_response,
     };
     use crate::fetch_stripped_artifact::types::stripped::StrippedCanisterHttpResponses;
     use assert_matches::assert_matches;
+    use axum::http::{Request, StatusCode};
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
     use ic_interfaces::p2p::consensus::BouncerValue;
     use ic_logger::no_op_logger;
@@ -763,10 +777,25 @@ mod tests {
     use ic_p2p_test_utils::mocks::MockTransport;
     use ic_p2p_test_utils::mocks::MockValidatedPoolReader;
     use ic_protobuf::proxy::ProtoProxy;
-    use ic_test_utilities_consensus::fake::FakeContentSigner;
-    use ic_types::consensus::idkg::IDkgObject;
+    use ic_test_utilities_consensus::{
+        fake::{Fake, FakeContent, FakeContentSigner, FakeSigner},
+        make_genesis,
+    };
+    use ic_test_utilities_types::ids::test_replica_version;
+    use ic_types::consensus::{ConsensusMessageHashable, idkg::IDkgObject};
+    use ic_types::{
+        Height,
+        artifact::PbArtifact,
+        consensus::{
+            CatchUpPackageShare, CatchUpShareContent, Finalization, FinalizationContent,
+            dkg::DkgSummary,
+        },
+        crypto::{CryptoHash, CryptoHashOf},
+        signature::ThresholdSignatureShare,
+    };
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_2};
     use std::collections::BTreeSet;
+    use tower::ServiceExt;
 
     use super::*;
 
@@ -855,7 +884,10 @@ mod tests {
         }
 
         // try to reassemble the block
-        let assembled_block = assembler.try_assemble().unwrap();
+        let ConsensusMessage::BlockProposal(assembled_block) = assembler.try_assemble().unwrap()
+        else {
+            panic!("Didn't reassemble a block proposal");
+        };
 
         assert_same_block(&assembled_block, &block_proposal);
     }
@@ -897,7 +929,10 @@ mod tests {
         }
 
         // try to reassemble the block
-        let assembled_block = assembler.try_assemble().unwrap();
+        let ConsensusMessage::BlockProposal(assembled_block) = assembler.try_assemble().unwrap()
+        else {
+            panic!("Didn't reassemble a block proposal");
+        };
 
         assert_same_block(&assembled_block, &block_proposal);
     }
@@ -1214,13 +1249,94 @@ mod tests {
                 MockValidatedPoolReader::<IDkgMessage>::default(),
             )),
             Arc::new(RwLock::new(canister_http_pool)),
-            Arc::new(bouncer_factory),
+            bouncer_factory,
             MetricsRegistry::new(),
             NODE_1,
         )
         .0;
 
         (f)(Arc::new(transport))
+    }
+
+    /// The router of `NODE_1`, which serves the messages of `consensus_pool` to its peers.
+    fn build_router(consensus_pool: MockValidatedPoolReader<ConsensusMessage>) -> axum::Router {
+        FetchStrippedConsensusArtifact::new(
+            no_op_logger(),
+            tokio::runtime::Handle::current(),
+            Arc::new(RwLock::new(consensus_pool)),
+            Arc::new(RwLock::new(
+                MockValidatedPoolReader::<SignedIngress>::default(),
+            )),
+            Arc::new(RwLock::new(
+                MockValidatedPoolReader::<IDkgMessage>::default(),
+            )),
+            Arc::new(RwLock::new(FakeCanisterHttpPool::empty())),
+            MockBouncerFactory::default(),
+            MetricsRegistry::new(),
+            NODE_1,
+        )
+        .1
+    }
+
+    /// Requests the consensus message `id` from `router`, the way the peers' [`FetchArtifact`]
+    /// do.
+    async fn request_consensus_message(
+        router: axum::Router,
+        id: StrippedConsensusMessageId,
+    ) -> Result<MaybeStrippedConsensusMessage, StatusCode> {
+        let request = Request::builder()
+            .uri("/strippedconsensus/rpc")
+            .body(axum::body::Body::from(
+                pb::StrippedConsensusMessageId::proxy_encode(id),
+            ))
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        if response.status() != StatusCode::OK {
+            return Err(response.status());
+        }
+
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        Ok(pb::StrippedConsensusMessage::proxy_decode(&bytes).unwrap())
+    }
+
+    #[tokio::test]
+    async fn serves_stripped_block_proposal_test() {
+        let (ingress, _ingress_id) = fake_ingress_message_with_sig("fake_1", vec![1, 2, 3]);
+        let block_proposal =
+            ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![ingress]));
+        let stripped_block_proposal = block_proposal.clone().strip();
+        assert_matches!(
+            stripped_block_proposal,
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(_)
+        );
+        let mut consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();
+        consensus_pool
+            .expect_get()
+            .with(mockall::predicate::eq(block_proposal.id()))
+            .once()
+            .return_const(block_proposal);
+
+        let response =
+            request_consensus_message(build_router(consensus_pool), stripped_block_proposal.id())
+                .await;
+
+        assert_eq!(response, Ok(stripped_block_proposal));
+    }
+
+    #[tokio::test]
+    async fn serves_no_content_for_missing_consensus_message_test() {
+        let block_proposal =
+            ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![]));
+        let mut consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();
+        consensus_pool.expect_get().once().return_const(None);
+
+        let response =
+            request_consensus_message(build_router(consensus_pool), block_proposal.strip().id())
+                .await;
+
+        assert_eq!(response, Err(StatusCode::NO_CONTENT));
     }
 
     fn set_up_assembler_with_fake_dependencies(
@@ -1633,10 +1749,7 @@ mod tests {
             .expect_refresh_period()
             .times(1)
             .return_const(refresh_period);
-        let wrapper: BouncerFactoryWrapper<MockValidatedPoolReader<ConsensusMessage>> =
-            BouncerFactoryWrapper {
-                bouncer_factory: Arc::new(bouncer_factory),
-            };
+        let wrapper = BouncerFactoryWrapper { bouncer_factory };
 
         assert_eq!(wrapper.refresh_period(), refresh_period);
     }
@@ -1644,24 +1757,191 @@ mod tests {
     #[test]
     fn try_assemble_rejects_reconstructed_block_with_mismatched_id() {
         let block_proposal = fake_block_proposal_with_ingresses(vec![]);
-        let assembled_id = block_proposal.get_id();
-        let mismatched_claimed_id = fake_block_proposal_with_ingresses(vec![
-            fake_ingress_message_with_arg_size("fake_1", 8).0,
-        ])
-        .get_id();
+        let mismatched_claimed_id =
+            ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![
+                fake_ingress_message_with_arg_size("fake_1", 8).0,
+            ]))
+            .id();
         let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
             ConsensusMessage::BlockProposal(block_proposal).strip()
         else {
             unreachable!();
         };
-        stripped_block_proposal.unstripped_consensus_message_id = mismatched_claimed_id.clone();
+        stripped_block_proposal.unstripped_consensus_message_id = mismatched_claimed_id;
         let assembler = BlockProposalAssembler::new(stripped_block_proposal);
-        let assembly_error = assembler.try_assemble().unwrap_err();
 
         assert_matches!(
-            assembly_error,
-            AssemblyError::MismatchedConsensusMessageId { claimed, assembled }
-                if claimed == mismatched_claimed_id && assembled == assembled_id
+            assembler.try_assemble(),
+            Err(AssemblyError::IntegrityCheckFailed)
+        );
+    }
+
+    #[test]
+    fn try_assemble_rejects_reconstructed_block_failing_integrity_check() {
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
+            ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![])).strip()
+        else {
+            unreachable!();
+        };
+        // Changing the block leaves the hash it claims, and thus the claimed id, as is.
+        stripped_block_proposal
+            .pruned_block_proposal_proto
+            .value
+            .as_mut()
+            .unwrap()
+            .time += 1;
+        let assembler = BlockProposalAssembler::new(stripped_block_proposal);
+
+        assert_matches!(
+            assembler.try_assemble(),
+            Err(AssemblyError::IntegrityCheckFailed)
+        );
+    }
+
+    /// The assembler of `NODE_1`, whose peer `NODE_2` serves `message` once.
+    fn set_up_assembler_with_peer_serving(
+        message: MaybeStrippedConsensusMessage,
+    ) -> FetchStrippedConsensusArtifact {
+        let response = bytes::Bytes::from(pb::StrippedConsensusMessage::proxy_encode(message));
+        let mut mock_transport = MockTransport::new();
+        mock_transport
+            .expect_rpc()
+            .times(1)
+            .returning(move |peer, _| {
+                assert_eq!(*peer, NODE_2);
+                Ok(axum::response::Response::builder()
+                    .body(response.clone())
+                    .unwrap())
+            });
+
+        build_assembler(
+            MockValidatedPoolReader::<SignedIngress>::default(),
+            FakeCanisterHttpPool::empty(),
+            wanting_bouncer_factory(),
+            mock_transport,
+        )
+    }
+
+    /// Checks that `invalid_artifact`, pushed by `NODE_1` with the id of `message`, is dropped,
+    /// and that `message` is fetched from `NODE_2` instead, right away.
+    async fn assert_refetched_after_invalid_artifact(
+        invalid_artifact: MaybeStrippedConsensusMessage,
+        message: ConsensusMessage,
+    ) {
+        assert_eq!(invalid_artifact.id().as_ref(), &message.id());
+        let assembler = set_up_assembler_with_peer_serving(message.clone().strip());
+        let start = Instant::now();
+
+        let result = assembler
+            .assemble_message(
+                invalid_artifact.id(),
+                Some((invalid_artifact, NODE_1)),
+                MockPeers(NODE_2),
+            )
+            .await;
+
+        // Checking the pushed artifact needs no request, so there is no backoff to wait for
+        // before downloading the artifact, whose first step takes at least 5 s.
+        assert!(start.elapsed() < Duration::from_secs(1));
+        // Artifacts with the same id are equal, only their integrity tells them apart.
+        assert_matches!(
+            result,
+            AssembleResult::Done { message: assembled, peer_id }
+                if peer_id == NODE_2 && assembled == message
+                    && PbArtifact::check_integrity(&assembled)
+        );
+        assert_eq!(
+            assembler
+                .fetch_stripped
+                .metrics
+                .download_task_invalid_artifacts_total
+                .get(),
+            1
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn assemble_refetches_unstripped_block_proposal_failing_integrity_check() {
+        let message = fake_summary_block_proposal();
+        let ConsensusMessage::BlockProposal(block_proposal) = message.clone() else {
+            unreachable!();
+        };
+        let mut proto = pb::BlockProposal::from(block_proposal);
+        proto.value.as_mut().unwrap().time += 1;
+        let invalid_artifact = ConsensusMessage::BlockProposal(proto.try_into().unwrap());
+
+        assert_refetched_after_invalid_artifact(
+            MaybeStrippedConsensusMessage::Unstripped(invalid_artifact),
+            message,
+        )
+        .await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn assemble_refetches_stripped_block_proposal_failing_integrity_check() {
+        let message = ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![]));
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut invalid_artifact) =
+            message.clone().strip()
+        else {
+            unreachable!();
+        };
+        invalid_artifact
+            .pruned_block_proposal_proto
+            .value
+            .as_mut()
+            .unwrap()
+            .time += 1;
+
+        assert_refetched_after_invalid_artifact(
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(invalid_artifact),
+            message,
+        )
+        .await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn assemble_refetches_catch_up_package_share_failing_integrity_check() {
+        let cup = make_genesis(DkgSummary::fake());
+        let share = CatchUpPackageShare {
+            content: CatchUpShareContent::from(&cup.content),
+            signature: ThresholdSignatureShare::fake(NODE_2),
+        };
+        let mut proto = pb::CatchUpPackageShare::from(share.clone());
+        // Changing the random beacon leaves the hash it claims, and thus the id, as is.
+        proto.random_beacon.as_mut().unwrap().parent = vec![1; 32];
+        let invalid_artifact = ConsensusMessage::CatchUpPackageShare(proto.try_into().unwrap());
+
+        assert_refetched_after_invalid_artifact(
+            MaybeStrippedConsensusMessage::Unstripped(invalid_artifact),
+            ConsensusMessage::CatchUpPackageShare(share),
+        )
+        .await;
+    }
+
+    /// The id of a finalization covers all of its content, so a pushed one is accepted as is.
+    #[tokio::test]
+    async fn assemble_accepts_unstripped_finalization() {
+        let message = ConsensusMessage::Finalization(Finalization::fake(FinalizationContent::new(
+            Height::new(100),
+            CryptoHashOf::from(CryptoHash(vec![])),
+            test_replica_version(),
+        )));
+        let stripped = message.clone().strip();
+        let assembler = build_assembler(
+            MockValidatedPoolReader::<SignedIngress>::default(),
+            FakeCanisterHttpPool::empty(),
+            wanting_bouncer_factory(),
+            MockTransport::new(),
+        );
+
+        let result = assembler
+            .assemble_message(stripped.id(), Some((stripped, NODE_1)), MockPeers(NODE_2))
+            .await;
+
+        assert_matches!(
+            result,
+            AssembleResult::Done { message: assembled, peer_id }
+                if peer_id == NODE_1 && assembled == message
         );
     }
 }
