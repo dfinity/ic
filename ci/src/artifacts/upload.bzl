@@ -16,30 +16,34 @@ def _upload_artifact_impl(ctx):
     uploader = ctx.file._artifacts_uploader
     exe = ctx.actions.declare_file("run-upload-" + ctx.attr.name)
     cmds = ["$UPLOADER " + bundle.short_path for bundle in ctx.files.inputs]
+
+    # The shebang must be on the first line: the script that `bazel run --script_path`
+    # writes (used by .github/actions/upload-artifacts) execs this file through `env`,
+    # whose execvp falls back to /bin/sh (no `pipefail`) when the kernel reports
+    # ENOEXEC for a file without one. A plain `bazel run` hides this, since it runs
+    # the target through `bash -c` and bash interprets such files itself.
     ctx.actions.write(
         output = exe,
-        content = """
-        #!/usr/bin/env bash
+        content = """#!/usr/bin/env bash
 
-        set -euo pipefail
+set -euo pipefail
 
-        UPLOADER={uploader}
-        VERSION_FILE={version_file}
-        export RCLONE={rclone}
-        export VERSION=$(cat $VERSION_FILE)
+UPLOADER={uploader}
+VERSION_FILE={version_file}
+export RCLONE={rclone}
+export VERSION=$(cat $VERSION_FILE)
 
-        # upload any artifacts specified on the command line
-        while [[ $# -gt 0 ]]
-        do
-            p=$(cd "$BUILD_WORKSPACE_DIRECTORY"; realpath "$1")
-            shift
-            $UPLOADER "$p"
-        done
+# upload any artifacts specified on the command line
+while [[ $# -gt 0 ]]
+do
+    p=$(cd "$BUILD_WORKSPACE_DIRECTORY"; realpath "$1")
+    shift
+    $UPLOADER "$p"
+done
 
-        # upload any artifacts baked into the uploader (for local bazel targets)
-        {cmds}
-
-        """.format(uploader = uploader.path, cmds = "\n".join(cmds), version_file = version_file.short_path, rclone = rclone.short_path),
+# upload any artifacts baked into the uploader (for local bazel targets)
+{cmds}
+""".format(uploader = uploader.path, cmds = "\n".join(cmds), version_file = version_file.short_path, rclone = rclone.short_path),
         is_executable = True,
     )
 
