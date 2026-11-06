@@ -94,9 +94,10 @@ Query results are cached to improve performance for repeated identical queries.
 - **THEN** the cached entry is invalidated
 
 #### Scenario: Cache invalidation by balance change
-- **WHEN** a cached query entry exists and the query called `ic0.canister_cycle_balance*`
+- **WHEN** a cached query entry exists and the query called `ic0.canister_cycle_balance`, `ic0.canister_cycle_balance128` or `ic0.canister_liquid_cycle_balance128`
 - **AND** the canister's cycles balance has changed
 - **THEN** the cached entry is invalidated
+- **AND** balance changes are ignored when validating an entry only if the query called none of these three system API functions (previously `ic0.canister_liquid_cycle_balance128` was not considered, so a query reading only the liquid balance could be served a stale result)
 
 #### Scenario: Cache invalidation by transient error
 - **WHEN** a cached query entry was produced with transient errors (e.g., query call failed due to transient issue)
