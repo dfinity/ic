@@ -2460,7 +2460,7 @@ impl UpgradeState {
                 }
                 UpgradePermitAction::ReturnPermit { node } => {
                     debug_assert!(!self.unauthorized_upgrade_requests.contains_key(node));
-                    self.unauthorized_upgrade_requests.remove(&node);
+                    self.unauthorized_upgrade_requests.remove(node);
                     self.rebooting_nodes.remove(node);
                 }
             }
