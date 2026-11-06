@@ -145,6 +145,12 @@ Operations like install and upgrade have multiple stages that each may be sliced
 - **THEN** if the response callback traps after resumption, the cleanup callback may also be sliced
 - **AND** the execution transitions: `PausedResponseExecution` -> response completes (with error) -> `PausedCleanupExecution`
 
+#### Scenario: Canister log of a failed response callback survives a paused cleanup callback
+- **WHEN** a response callback fails (e.g. traps), so its canister log (including the `[TRAP]` record) is persisted on the canister state the cleanup callback then runs on, and that cleanup callback is paused
+- **THEN** the response callback's canister log is kept in `ResponseHelper::response_callback_log` (carried in `PausedResponseHelper`) and replayed on the clean canister state when `ResponseHelper::resume()` re-creates it, as `InstallCodeHelper::resume()` replays already finished install steps
+- **AND** so the response callback's log records are not lost, and the cleanup callback's records, whose indices follow them, no longer cause `LogMemoryStore::append_delta_log()` to clear the whole canister log
+- **AND** for a paused response callback itself, the kept log is empty and replaying it is a no-op
+
 ### Requirement: DTS Slice Counter
 
 A secondary safeguard limits the number of execution slices.
