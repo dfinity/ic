@@ -1142,6 +1142,8 @@ http_archive(
         # Remove everything except ./proto/
         "find . -mindepth 1 -maxdepth 1 ! -name proto -exec rm -rf {} +",
         "find ./proto -name BUILD -delete",
+        # Make the generated Python modules regular packages, see :buildbuddy_py in the BUILD file above
+        "touch proto/__init__.py proto/api/__init__.py proto/api/v1/__init__.py",
     ],
     sha256 = "eff54923b6afdf4507f9b07fc9906f06580fdba72d96e9d58d8e6ea8ac4f71cd",
     strip_prefix = "buildbuddy-89d510c91a18ec0469043a50750145ac51983f74",
