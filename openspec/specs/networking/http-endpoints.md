@@ -66,6 +66,11 @@ Handles submission of update calls (ingress messages) to canisters.
 - **WHEN** a POST request is received at `/api/v4/canister/{effective_canister_id}/call`
 - **THEN** behavior is identical to v3 except the NNS delegation uses tree format for canister ranges
 
+#### Scenario: Synchronous call whose delegation does not match the certified state
+- **WHEN** a v3/v4 synchronous call finds the message's status in the certified state, either before submitting it (an already known message) or after waiting for certification, but the NNS delegation fails verification against that state
+- **THEN** no certificate is returned; the call is answered with HTTP 202 Accepted, because the message has been or may already have been submitted, with the reason "This replica's delegation is inconsistent with its certified state. Please try /read_state." or "This replica has an invalid delegation. Please try /read_state."
+- **AND** the `query` endpoint does not verify the delegation yet
+
 #### Scenario: Duplicate synchronous call detection
 - **WHEN** a v3/v4 call request is received for a message ID already in certified state
 - **THEN** the certificate is returned immediately without re-submitting the message
@@ -191,6 +196,18 @@ Provides certified state data to clients via the read_state API.
 #### Scenario: Path too long
 - **WHEN** a read_state request includes a path that exceeds the maximum allowed depth
 - **THEN** HTTP 400 Bad Request is returned with message "Failed to parse requested paths: path is too long."
+
+#### Scenario: NNS delegation verified against the certified state before it is served
+- **WHEN** a non-NNS replica builds a read_state response, or a v3/v4 synchronous call response carrying a certificate
+- **THEN** the NNS delegation attached to the certificate is first checked (`NNSDelegationReader::get_delegation`, which takes a `CanisterRangesCheck` and the certified state the certificate is built from) against that state: the delegated subnet's public key must match the subnet's public key in the state's network topology, and the certified canister ranges must agree with the state's routing table on the effective canister ID
+- **AND** the canister-ranges check depends on the endpoint: v2 canister read_state and v3 sync calls check that the flat ranges (`/subnet/<id>/canister_ranges`) cover the effective canister ID if and only if the state assigns it to the subnet (`CanisterInFlat`); v3 canister read_state and v4 sync calls check the tree ranges (`/canister_ranges/<id>`) the same way (`CanisterInTree`); subnet read_state and subnet v4 calls check only the public key (`NoCheck`)
+- **AND** this catches a delegation that the delegation manager fetched ahead of, or behind, the certified state, e.g. while a subnet's key or canister ranges change during canister migration, subnet recovery or subnet splitting, which agents would otherwise reject as `CertificateVerificationFailed` or `CertificateNotAuthorized`
+- **AND** every failure is logged (rate-limited to once every 10 seconds) and counted in `replica_http_delegation_verification_failures_total` by endpoint
+
+#### Scenario: read_state returns 503 when the delegation does not match the state
+- **WHEN** the NNS delegation fails that check for a read_state request
+- **THEN** HTTP 503 Service Unavailable is returned instead of a certificate, so the client retries later, as for unavailable certified state
+- **AND** the message is "This replica's delegation is inconsistent with its state. Please try again." when the delegation contradicts the state, or "This replica has an invalid delegation. Please try again." when its consistency could not be determined (an unexpected tree shape, malformed canister ranges, or a subnet unknown to the state)
 
 ### Requirement: Status Endpoint
 
