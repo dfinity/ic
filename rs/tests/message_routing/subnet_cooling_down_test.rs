@@ -631,10 +631,8 @@ async fn check_ingress_and_queries_rejected(context: &Context<'_>) {
 /// iteration counter, read via a query to `T`, does not advance. `UM`'s counter
 /// cannot be read, as `M` rejects query calls.
 ///
-/// The loop may keep going round without `UM` though: `UT`'s call to `UM` may
-/// be held in `UT`'s output queue, where it times out after 5 minutes, and the
-/// reject resumes the loop with a new call that is held in turn. Such
-/// iterations get no reply from `UM` and therefore do not count (see
+/// The loop may still go round on rejects, e.g. whenever its call to `UM` times
+/// out in `UT`'s output queue, but such iterations do not count (see
 /// `start_call_loop`).
 async fn check_ut_loop_stalled(context: &Context<'_>) {
     let logger = &context.logger;
@@ -782,15 +780,17 @@ fn term(terms: &[Term], condition: Condition) -> &Term {
 /// The iteration counter (the global counter of `canister`) only counts the
 /// iterations whose call to `peer` was replied to, i.e. the completed round
 /// trips to `peer`. A rejected call continues the loop too, but is not counted,
-/// as a reject does not imply that any message got through to `peer`: e.g.
-/// while either subnet is cooling down, the call is held in `canister`'s output
-/// queue, and rejected once it times out there.
+/// as a reject does not imply that any message got through to `peer`: e.g. a
+/// call to a subnet that is cooling down is held in `canister`'s output queue
+/// until it times out there (after `REQUEST_LIFETIME` = 5 minutes), whereupon
+/// the loop makes a new call that is held in turn.
 async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
-    // A callback of the call to `peer`: execute `ops`, then continue the loop,
-    // i.e. call `canister` itself with the loop body it holds in its global
-    // data as the payload. Neither callback of that self-call may reply, as the
-    // call context it is made in was already responded by the loop body.
-    let callback = |ops: PayloadBuilder| {
+    // The continuation, executed by the reply and reject callbacks of the call
+    // to `peer` after `ops`: call `canister` itself with the loop body it holds
+    // in its global data as the payload. Neither callback of this call may
+    // reply, as the call context it is made in was already responded by the
+    // loop body.
+    let continuation = |ops: PayloadBuilder| {
         ops.call_simple(
             canister.canister_id(),
             "update",
@@ -801,17 +801,17 @@ async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
         )
         .build()
     };
-    // The loop body: fire a call to `peer` (which merely replies) whose reply
-    // callback bumps the iteration counter before continuing the loop and whose
-    // reject callback just continues it, then reply.
+    // The loop body: fire a call to `peer` (which merely replies) with the
+    // continuation as both callbacks, the reply callback bumping the iteration
+    // counter first, then reply.
     let loop_body = wasm()
         .call_simple(
             peer,
             "update",
             call_args()
                 .other_side(wasm().reply_data(&[]))
-                .on_reply(callback(wasm().inc_global_counter()))
-                .on_reject(callback(wasm())),
+                .on_reply(continuation(wasm().inc_global_counter()))
+                .on_reject(continuation(wasm())),
         )
         .reply_data(&[])
         .build();
