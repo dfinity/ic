@@ -91,6 +91,10 @@ GuestOS is the environment where the replica process runs.
 - **WHEN** a manual recovery is needed
 - **THEN** the `recovery_config` field contains the hash of recovery artifacts to be used
 
+#### Scenario: Text editors are available on production GuestOS
+- **WHEN** a production GuestOS image is built
+- **THEN** it includes the `nano` and `vim-tiny` (which provides `vi`) packages from `packages.common`, so an operator can edit files during a manual intervention such as a recovery; `nano` was previously only in dev images (`packages.dev`)
+
 ### Requirement: Network Settings
 IC-OS manages both IPv6 (primary) and optional IPv4 network configuration.
 
