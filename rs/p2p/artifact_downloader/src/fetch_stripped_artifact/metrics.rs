@@ -1,5 +1,5 @@
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets_with_zero};
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGaugeVec};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 
 use crate::fetch_stripped_artifact::types::StrippedMessageType;
 
@@ -109,22 +109,27 @@ impl FetchStrippedConsensusArtifactMetrics {
             .inc()
     }
 
-    pub(super) fn report_started_stripped_message_download(
+    /// Counts a download of a missing stripped message as active until the returned guard is
+    /// dropped, which happens even if the download is aborted.
+    pub(super) fn start_stripped_message_download(
         &self,
         message_type: StrippedMessageType,
-    ) {
-        self.active_stripped_message_downloads
-            .with_label_values(&[message_type.as_str()])
-            .inc()
+    ) -> ActiveStrippedMessageDownload {
+        let active_downloads = self
+            .active_stripped_message_downloads
+            .with_label_values(&[message_type.as_str()]);
+        active_downloads.inc();
+        ActiveStrippedMessageDownload(active_downloads)
     }
+}
 
-    pub(super) fn report_finished_stripped_message_download(
-        &self,
-        message_type: StrippedMessageType,
-    ) {
-        self.active_stripped_message_downloads
-            .with_label_values(&[message_type.as_str()])
-            .dec()
+/// Counts a download of a missing stripped message as active for as long as it exists.
+#[must_use]
+pub(super) struct ActiveStrippedMessageDownload(IntGauge);
+
+impl Drop for ActiveStrippedMessageDownload {
+    fn drop(&mut self) {
+        self.0.dec();
     }
 }
 

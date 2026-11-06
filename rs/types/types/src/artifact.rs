@@ -41,10 +41,9 @@ pub trait PbArtifact: IdentifiableArtifact + Send + Sized + 'static {
         + Default;
     type PbMessageError: std::error::Error + Into<ProxyDecodeError>;
 
-    /// Checks the integrity of this artifact against the given `id`, which by default means
-    /// that it has that id.
-    fn check_integrity(&self, id: &Self::Id) -> bool {
-        self.id() == *id
+    /// Checks the integrity of the content of this artifact.
+    fn check_integrity(&self) -> bool {
+        true
     }
 }
 

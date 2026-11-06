@@ -22,7 +22,7 @@ use ic_protobuf::{proxy::try_from_option_field, types::v1 as pb};
 use ic_quic_transport::Transport;
 use ic_types::{
     CountBytes, NodeId, NodeIndex,
-    artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId, PbArtifact},
+    artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
     batch::IngressPayload,
     canister_http::CanisterHttpResponse,
     consensus::{
@@ -39,7 +39,7 @@ use ic_types::{
 
 use crate::{
     FetchArtifact,
-    fetch_artifact::Attempt,
+    fetch_artifact::{Attempt, check_id_and_integrity},
     fetch_stripped_artifact::{
         canister_http::{CanisterHttpPayloadError, reinsert_responses},
         types::{
@@ -746,7 +746,7 @@ impl BlockProposalAssembler {
             .try_into()
             .map_err(AssemblyError::DeserializationFailed)?;
         let message = ConsensusMessage::BlockProposal(reconstructed_block_proposal);
-        if !message.check_integrity(&claimed_id) {
+        if !check_id_and_integrity(&message, &claimed_id) {
             return Err(AssemblyError::IntegrityCheckFailed);
         }
 
@@ -785,6 +785,7 @@ mod tests {
     use ic_types::consensus::{ConsensusMessageHashable, idkg::IDkgObject};
     use ic_types::{
         Height,
+        artifact::PbArtifact,
         consensus::{
             CatchUpPackageShare, CatchUpShareContent, Finalization, FinalizationContent,
             dkg::DkgSummary,
@@ -1740,13 +1741,14 @@ mod tests {
     }
 
     /// Checks that `invalid_artifact`, pushed by `NODE_1` with the id of `message`, is dropped,
-    /// and that `message` is fetched from `NODE_2` instead.
+    /// and that `message` is fetched from `NODE_2` instead, right away.
     async fn assert_refetched_after_invalid_artifact(
         invalid_artifact: MaybeStrippedConsensusMessage,
         message: ConsensusMessage,
     ) {
         assert_eq!(invalid_artifact.id().as_ref(), &message.id());
         let assembler = set_up_assembler_with_peer_serving(message.clone().strip());
+        let start = Instant::now();
 
         let result = assembler
             .assemble_message(
@@ -1756,12 +1758,15 @@ mod tests {
             )
             .await;
 
+        // Checking the pushed artifact needs no request, so there is no backoff to wait for
+        // before downloading the artifact, whose first step takes at least 5 s.
+        assert!(start.elapsed() < Duration::from_secs(1));
         // Artifacts with the same id are equal, only their integrity tells them apart.
         assert_matches!(
             result,
             AssembleResult::Done { message: assembled, peer_id }
                 if peer_id == NODE_2 && assembled == message
-                    && PbArtifact::check_integrity(&assembled, &message.id())
+                    && PbArtifact::check_integrity(&assembled)
         );
         assert_eq!(
             assembler

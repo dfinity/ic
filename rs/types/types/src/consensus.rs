@@ -966,23 +966,8 @@ impl PbArtifact for ConsensusMessage {
     type PbMessage = ic_protobuf::types::v1::ConsensusMessage;
     type PbMessageError = ProxyDecodeError;
 
-    fn check_integrity(&self, id: &Self::Id) -> bool {
-        // The id of these messages covers only the hash of some of their content.
-        let has_hashed_content = match self {
-            ConsensusMessage::BlockProposal(_)
-            | ConsensusMessage::CatchUpPackage(_)
-            | ConsensusMessage::CatchUpPackageShare(_) => true,
-            ConsensusMessage::RandomBeacon(_)
-            | ConsensusMessage::Finalization(_)
-            | ConsensusMessage::Notarization(_)
-            | ConsensusMessage::RandomBeaconShare(_)
-            | ConsensusMessage::NotarizationShare(_)
-            | ConsensusMessage::FinalizationShare(_)
-            | ConsensusMessage::RandomTape(_)
-            | ConsensusMessage::RandomTapeShare(_)
-            | ConsensusMessage::EquivocationProof(_) => false,
-        };
-        self.id() == *id && (!has_hashed_content || ConsensusMessageHashable::check_integrity(self))
+    fn check_integrity(&self) -> bool {
+        ConsensusMessageHashable::check_integrity(self)
     }
 }
 
@@ -1506,11 +1491,11 @@ pub trait ConsensusMessageHashable: Clone {
     fn assert(msg: &ConsensusMessage) -> Option<&Self>;
     fn into_message(self) -> ConsensusMessage;
 
-    /// Check integrity of a message. Default is false.
+    /// Check integrity of a message. Default is true.
     /// This should be implemented for those that have `Hashed<H, V>`.
     /// Note that if lazy loading is also used, it will force evaluation.
     fn check_integrity(&self) -> bool {
-        false
+        true
     }
 }
 
