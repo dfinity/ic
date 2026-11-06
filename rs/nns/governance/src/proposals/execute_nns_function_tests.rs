@@ -177,7 +177,7 @@ service : {
 
     // Test through ValidProposalAction::to_self_describing
     let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
-    let result = proposal_action.to_self_describing(env).await.unwrap();
+    let result = proposal_action.to_self_describing(env).await;
 
     // Verify the type name and description
     assert_eq!(result.type_name, "Update Subnet Type");
@@ -222,7 +222,7 @@ async fn test_to_self_describing_uninstall_code() {
     let env = Arc::new(MockEnvironment::new(vec![], 0));
 
     let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
-    let result = proposal_action.to_self_describing(env).await.unwrap();
+    let result = proposal_action.to_self_describing(env).await;
 
     assert_eq!(result.type_name, "Uninstall Code");
     assert!(
@@ -257,7 +257,7 @@ async fn test_to_self_describing_bitcoin_set_config() {
     let env = Arc::new(MockEnvironment::new(vec![], 0));
 
     let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
-    let result = proposal_action.to_self_describing(env).await.unwrap();
+    let result = proposal_action.to_self_describing(env).await;
 
     assert_eq!(result.type_name, "Set Bitcoin Config");
     assert!(
@@ -295,7 +295,7 @@ async fn test_to_self_describing_subnet_rental_request() {
     let env = Arc::new(MockEnvironment::new(vec![], 0));
 
     let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
-    let result = proposal_action.to_self_describing(env).await.unwrap();
+    let result = proposal_action.to_self_describing(env).await;
 
     assert_eq!(result.type_name, "Subnet Rental Request");
     assert!(
@@ -338,7 +338,7 @@ async fn test_to_self_describing_add_sns_wasm() {
     let env = Arc::new(MockEnvironment::new(vec![], 0));
 
     let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
-    let result = proposal_action.to_self_describing(env).await.unwrap();
+    let result = proposal_action.to_self_describing(env).await;
 
     assert_eq!(
         SelfDescribingValue::from(result.value.unwrap()),
@@ -463,7 +463,7 @@ async fn test_to_self_describing_nns_canister_install() {
     ));
 
     let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
-    let result = proposal_action.to_self_describing(env).await.unwrap();
+    let result = proposal_action.to_self_describing(env).await;
 
     let wasm_hash = Sha256::hash(&wasm_module).to_vec();
     let arg_hash = Sha256::hash(&arg).to_vec();
@@ -521,7 +521,7 @@ async fn test_to_self_describing_hard_reset_nns_root_to_version() {
     ));
 
     let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
-    let result = proposal_action.to_self_describing(env).await.unwrap();
+    let result = proposal_action.to_self_describing(env).await;
 
     let wasm_hash = Sha256::hash(&wasm_module).to_vec();
     let init_arg_hash = Sha256::hash(&init_arg).to_vec();

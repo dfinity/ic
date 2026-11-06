@@ -122,7 +122,7 @@ impl ValidExecuteNnsFunction {
     pub async fn to_self_describing_action(
         &self,
         env: Arc<dyn Environment>,
-    ) -> Result<SelfDescribingProposalAction, GovernanceError> {
+    ) -> SelfDescribingProposalAction {
         let value = self
             .convert_payload_to_self_describing_value(env)
             .await
@@ -145,11 +145,11 @@ impl ValidExecuteNnsFunction {
             }
         };
 
-        Ok(SelfDescribingProposalAction {
+        SelfDescribingProposalAction {
             type_name: self.nns_function.type_name().to_string(),
             type_description: self.nns_function.type_description().to_string(),
             value,
-        })
+        }
     }
 
     async fn get_candid_source(&self, env: Arc<dyn Environment>) -> Result<String, String> {
