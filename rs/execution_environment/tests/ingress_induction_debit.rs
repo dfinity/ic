@@ -9,9 +9,8 @@ use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{CanisterId, PrincipalId};
 use ic_types_cycles::Cycles;
 
-// This is the `StateMachine` counterpart of the system test
-// `rs/tests/execution/ingress_induction_debit.rs`. Both exercise the same
-// scenario; keep them in sync.
+// Regression test for charging the ingress induction debit after a long-running
+// cleanup callback grows memory and burns the remaining liquid cycles balance.
 
 const T: u128 = 1_000_000_000_000;
 

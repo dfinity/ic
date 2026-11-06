@@ -6054,8 +6054,8 @@ fn failed_subnet_message_charges(test: &ExecutionTest) -> u64 {
 // refused and nothing is charged.
 //
 // This pins the ordering of `validate_and_update_canister_settings` and the
-// trade-off it implies. On `master` the grow is validated after the requested
-// threshold has been applied, so the call below succeeds; here it is refused.
+// trade-off it implies. Before the fix, the grow was validated after the requested
+// threshold had been applied, so the call below succeeded; now it is refused.
 // Were it validated against the requested threshold while the accumulator is
 // threaded through, a call that failed for any later reason would charge a
 // grow that the re-charge could not re-apply, losing the charge and raising the
