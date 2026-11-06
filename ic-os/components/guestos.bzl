@@ -116,7 +116,7 @@ def component_files(mode):
         Label("monitoring/node_exporter/node_exporter.key"): "/etc/node_exporter/node_exporter.key",
         Label("monitoring/node_exporter/web.yml"): "/etc/node_exporter/web.yml",
         Label("monitoring/node_exporter/node_exporter.service"): "/etc/systemd/system/node_exporter.service",
-        Label("monitoring/node_exporter/node_exporter"): "/etc/default/node_exporter",
+        Label("monitoring/node_exporter/guestos/node_exporter"): "/etc/default/node_exporter",
         Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys.sh"): "/opt/ic/bin/setup-node_exporter-keys.sh",
         Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys.service"): "/etc/systemd/system/setup-node_exporter-keys.service",
         Label("monitoring/metrics-proxy/guestos/metrics-proxy.yaml"): "/etc/metrics-proxy.yaml",

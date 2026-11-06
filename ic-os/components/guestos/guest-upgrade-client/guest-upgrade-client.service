@@ -10,7 +10,7 @@ ConditionKernelCommandLine=dfinity.tee
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/opt/ic/bin/guest_upgrade_client
-TimeoutSec=300
+TimeoutSec=360
 StandardOutput=journal+console
 StandardError=journal+console
 

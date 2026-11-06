@@ -1837,6 +1837,74 @@ fn dts_response_concurrent_cycles_change_persists_canister_log() {
 }
 
 #[test]
+fn dts_cleanup_callback_persists_canister_log_of_response_callback() {
+    // Test steps:
+    // 1. Canister A logs a message and calls canister B.
+    // 2. Canister B replies to canister A.
+    // 3. The response callback of canister A logs a message and traps.
+    // 4. The cleanup callback of canister A logs a message and runs in
+    //    multiple slices.
+    // 5. The canister logs of all executions are persisted.
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm().message_payload().append_and_reply().build();
+
+    let a = wasm()
+        .debug_print(b"update")
+        .inter_update(
+            b_id,
+            call_args()
+                .other_side(b)
+                .on_reply(wasm().debug_print(b"callback").trap())
+                .on_cleanup(
+                    wasm()
+                        .debug_print(b"cleanup")
+                        .instruction_counter_is_at_least(1_000_000),
+                ),
+        )
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Execute the response callback and the first slice of the cleanup callback.
+    test.execute_slice(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+
+    let logs: Vec<_> = test
+        .canister_log_contents(a_id)
+        .into_iter()
+        .map(|content| String::from_utf8(content).unwrap())
+        .collect();
+    assert_eq!(logs.len(), 4, "{logs:?}");
+    assert_eq!(logs[0], "update");
+    assert_eq!(logs[1], "callback");
+    assert!(logs[2].starts_with("[TRAP]"), "{logs:?}");
+    assert_eq!(logs[3], "cleanup");
+}
+
+#[test]
 fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
     // Test steps:
     // 1. Canister A calls canister B.

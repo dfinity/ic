@@ -43,12 +43,15 @@ docker run -d --rm --name api-bn \
   api-boundary-node:latest
 ```
 
-Test (allow ~3 min for registry sync and replica discovery):
+Test (allow ~3 min for registry sync and replica discovery). From a checkout of this repository,
+query `name` on the ICP ledger through the boundary node. The tool verifies the reply's node
+signatures against the IC mainnet root key compiled into it, and checks that the boundary node's
+`/api/v2/status` serves that same key, so it only works against mainnet:
 
 ```bash
 # HTTP
-dfx canister --network http://localhost:8080 call ryjl3-tyaaa-aaaaa-aaaba-cai name --query
+bazel run //rs/boundary_node/smoke_test:ic-boundary-smoke-test -- --url http://localhost:8080
 
 # HTTPS
-dfx canister --network https://recovery.boundary.dfinity.network call ryjl3-tyaaa-aaaaa-aaaba-cai name --query
+bazel run //rs/boundary_node/smoke_test:ic-boundary-smoke-test -- --url https://recovery.boundary.dfinity.network
 ```
