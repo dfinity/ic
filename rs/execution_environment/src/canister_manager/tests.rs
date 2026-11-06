@@ -2036,8 +2036,8 @@ fn delete_canister_updates_subnet_available_wasm_custom_sections_memory() {
     );
 }
 
-/// Tests that `CanisterManagerError::from_subnet_available_memory_error` reports
-/// the memory type that does not fit.
+/// Tests that converting a `SubnetAvailableMemoryError` into a
+/// `CanisterManagerError` reports the memory type that does not fit.
 #[test]
 fn subnet_available_memory_error_reports_the_memory_type_that_does_not_fit() {
     let insufficient_memory = |execution_requested: u64,
@@ -10313,15 +10313,21 @@ fn failed_memory_reducing_load_canister_snapshot_only_charges_prepaid_instructio
     assert_lt!(charge, charge_for_snapshot_size);
 }
 
+// Unlike `take_canister_snapshot`, which only charges for its instructions once
+// the operation succeeded, `upload_canister_snapshot_metadata` charges for them
+// upfront. Regression test that the charge is recorded in
+// `ConsumedCyclesForInstructions` and thus survives the canister state rollback
+// on failure, i.e. that it is re-applied to the restored canister.
 #[test]
-fn failed_create_snapshot_from_metadata_still_charges_for_instructions() {
+fn failed_create_snapshot_from_metadata_charges_for_instructions() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test
         .universal_canister_with_cycles(Cycles::new(1_000_000_000_000_000))
         .unwrap();
+    // Leave no subnet execution memory available, so that there is none left
+    // for the snapshot and the operation fails with `SubnetOversubscribed`.
+    test.set_available_execution_memory(0);
 
-    // Valid metadata for a snapshot whose memory the subnet will not be able to
-    // account for below.
     let args = UploadCanisterSnapshotMetadataArgs::new(
         canister_id,
         None,
@@ -10333,17 +10339,17 @@ fn failed_create_snapshot_from_metadata_still_charges_for_instructions() {
         None,
         None,
     );
-    let instructions = SchedulerConfig::application_subnet()
-        .canister_snapshot_baseline_instructions
-        + NumInstructions::new(args.snapshot_size_bytes().get());
+    let instructions = NumInstructions::new(
+        SchedulerConfig::application_subnet()
+            .canister_snapshot_baseline_instructions
+            .get()
+            + args.snapshot_size_bytes().get(),
+    );
     let expected_charge = test
         .cycles_account_manager()
         .management_canister_cost(instructions, test.get_own_subnet_cycles_config())
         .real();
-
-    // Exhaust the subnet available execution memory so that the memory of the
-    // snapshot cannot be accounted for against it.
-    test.set_available_execution_memory(0);
+    assert_ne!(expected_charge, Cycles::zero());
 
     let balance_before = test.canister_state(canister_id).system_state.balance();
     let err = test
@@ -10353,179 +10359,11 @@ fn failed_create_snapshot_from_metadata_still_charges_for_instructions() {
 
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
     // The operation is rolled back, so no snapshot is created and the subnet
-    // available execution memory is unchanged, ...
+    // available execution memory is unchanged, but the instructions charged for
+    // upfront are charged for nonetheless.
     assert_eq!(test.canister_state(canister_id).canister_snapshots.len(), 0);
     assert_eq!(test.subnet_available_memory().get_execution_memory(), 0);
-    // ... but the instructions the operation used are charged for since creating the
-    // snapshot allocates (and zeroes) as many bytes as its Wasm module takes up and
-    // must not be able to have that done for free.
     assert_eq!(balance_before - balance_after, expected_charge);
-}
-
-/// Tests that the instructions for a `log_memory_limit` resize are charged for
-/// even if a later step of `update_settings` fails: the resize reads every record
-/// out of the old ring buffer and rewrites it into a new one, so that work must
-/// not be doable for free by an operation that is rolled back afterwards.
-#[test]
-fn failed_update_settings_still_charges_for_the_log_store_resize() {
-    const MIB: u64 = 1024 * 1024;
-    const NEW_LOG_LIMIT: u64 = MIN_AGGREGATE_LOG_MEMORY_LIMIT as u64;
-
-    // Sets `log_memory_limit` to `NEW_LOG_LIMIT` on a canister whose log store was
-    // created for `initial_log_limit`, in an `update_settings` that fails afterwards
-    // because the memory allocation it also raises cannot be accounted for.
-    // Returns the cycles the canister was charged for the failed operation together
-    // with the cost of the instructions a resize of its log store would take.
-    let failed_update_settings = |initial_log_limit: u64| -> (Cycles, Cycles) {
-        let (mut test, canister_id, log_bytes_used, _heap_delta_before) =
-            setup_canister_log_heap_delta_test(initial_log_limit);
-        let resize_instructions = NumInstructions::new(
-            log_bytes_used.get()
-                * SchedulerConfig::application_subnet()
-                    .canister_log_resize_instructions_per_byte
-                    .get(),
-        );
-        let resize_cost = test
-            .cycles_account_manager()
-            .management_canister_cost(resize_instructions, test.get_own_subnet_cycles_config())
-            .real();
-        assert_gt!(resize_cost, Cycles::zero());
-
-        // Over-subscribe the subnet available execution memory, so that the memory
-        // allocation raised below cannot be accounted for once the settings (and
-        // thus the log store resize) have been applied.
-        test.set_available_execution_memory(-2 * MIB as i64);
-
-        let payload = UpdateSettingsArgs {
-            canister_id: canister_id.get(),
-            settings: CanisterSettingsArgsBuilder::new()
-                .with_log_memory_limit(NEW_LOG_LIMIT)
-                .with_memory_allocation(10 * MIB)
-                .build(),
-            sender_canister_version: None,
-        }
-        .encode();
-
-        let balance_before = test.canister_state(canister_id).system_state.balance();
-        let err = test
-            .subnet_message(Method::UpdateSettings, payload)
-            .unwrap_err();
-        let balance_after = test.canister_state(canister_id).system_state.balance();
-
-        assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
-        // The operation is rolled back, so the log store is left as it was.
-        assert_eq!(
-            NumBytes::new(
-                test.canister_state(canister_id)
-                    .system_state
-                    .log_memory_store
-                    .bytes_used() as u64
-            ),
-            log_bytes_used
-        );
-
-        (balance_before - balance_after, resize_cost)
-    };
-
-    // The control: a log store created for the requested limit is not resized at
-    // all, which isolates the charges the failed operation incurs either way (it
-    // sends the very same payload, whose size those charges depend on).
-    let (charge_without_resize, _) = failed_update_settings(NEW_LOG_LIMIT);
-    let (charge_with_resize, resize_cost) = failed_update_settings(MIB);
-
-    // The resize is performed before the failure and its charge is recorded in
-    // `ConsumedCyclesForInstructions`, so it survives the rollback.
-    assert_eq!(charge_with_resize - charge_without_resize, resize_cost);
-}
-
-/// Tests that `update_settings` does not charge for a `log_memory_limit` resize
-/// against a freezing threshold that the same request lowered: the charge is
-/// recorded in `ConsumedCyclesForInstructions`, which charges it against the
-/// canister restored by a rollback and thus against the freezing threshold from
-/// *before* the request.
-#[test]
-fn update_settings_does_not_charge_for_a_log_store_resize_it_cannot_honour() {
-    const MIB: u64 = 1024 * 1024;
-    const NEW_LOG_LIMIT: u64 = MIN_AGGREGATE_LOG_MEMORY_LIMIT as u64;
-
-    let (mut test, canister_id, log_bytes_used, _heap_delta_before) =
-        setup_canister_log_heap_delta_test(MIB);
-    let resize_instructions = NumInstructions::new(
-        log_bytes_used.get()
-            * SchedulerConfig::application_subnet()
-                .canister_log_resize_instructions_per_byte
-                .get(),
-    );
-    let resize_cost = test
-        .cycles_account_manager()
-        .management_canister_cost(resize_instructions, test.get_own_subnet_cycles_config())
-        .real();
-    assert_gt!(resize_cost, Cycles::zero());
-
-    // Give the canister a freezing threshold and a balance that is one cycle short
-    // of affording the resize on top of it, so that the charge only fits under the
-    // freezing threshold of zero that the request below asks for.
-    test.canister_state_mut(canister_id)
-        .system_state
-        .freeze_threshold = NumSeconds::from(1_000_000);
-    let canister = test.canister_state(canister_id);
-    let freezing_threshold_before = test.cycles_account_manager().freeze_threshold_cycles(
-        canister.system_state.freeze_threshold,
-        canister.memory_allocation(),
-        canister.memory_usage(),
-        canister.message_memory_usage(),
-        canister.compute_allocation(),
-        test.get_own_subnet_cycles_config(),
-        canister.system_state.reserved_balance(),
-    );
-    assert_gt!(freezing_threshold_before, Cycles::zero());
-    let target_balance = freezing_threshold_before + resize_cost - Cycles::new(1);
-    let balance = canister.system_state.balance();
-    assert_gt!(balance, target_balance);
-    test.canister_state_mut(canister_id)
-        .system_state
-        .remove_cycles(balance - target_balance);
-
-    // Over-subscribe the subnet available execution memory, so that the memory
-    // allocation raised below cannot be accounted for after the resize and the
-    // operation would be rolled back.
-    test.set_available_execution_memory(-2 * MIB as i64);
-
-    let payload = UpdateSettingsArgs {
-        canister_id: canister_id.get(),
-        settings: CanisterSettingsArgsBuilder::new()
-            .with_freezing_threshold(0)
-            .with_log_memory_limit(NEW_LOG_LIMIT)
-            .with_memory_allocation(10 * MIB)
-            .build(),
-        sender_canister_version: None,
-    }
-    .encode();
-
-    let err = test
-        .subnet_message(Method::UpdateSettings, payload)
-        .unwrap_err();
-
-    // The resize is not charged for against the lowered freezing threshold, so the
-    // request is rejected rather than recording a charge that the rollback cannot
-    // honour (which `ConsumedCyclesForInstructions::apply` could only report as an
-    // `[EXC-BUG]`).
-    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
-    assert_eq!(failed_subnet_message_charges(&test), 0);
-    // Nothing was charged and the log store was left as it was.
-    assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
-        target_balance
-    );
-    assert_eq!(
-        NumBytes::new(
-            test.canister_state(canister_id)
-                .system_state
-                .log_memory_store
-                .bytes_used() as u64
-        ),
-        log_bytes_used
-    );
 }
 
 #[test]

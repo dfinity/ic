@@ -4184,8 +4184,6 @@ fn call_and_reply_wat(wasm64: bool) -> String {
     )
 }
 
-/// The reply callback reads the instruction counter before replying and hence a few
-/// more instructions are executed than the callback reports.
 /// Returns the cycles that the caller was charged for executing the response, given
 /// the cycles prepaid for the response and its balance before and after.
 ///

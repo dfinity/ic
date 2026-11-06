@@ -4,10 +4,10 @@ use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, WasmResult};
-use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{CanisterId, PrincipalId};
 use ic_types_cycles::Cycles;
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 
 // Regression test for charging the ingress induction debit after a long-running
 // cleanup callback grows memory and burns the remaining liquid cycles balance.
