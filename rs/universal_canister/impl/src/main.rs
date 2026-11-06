@@ -499,6 +499,18 @@ fn eval(ops_bytes: OpsBytes) {
                 }
             }
             Ops::LiquidCyclesBalance128 => stack.push_blob(api::liquid_balance128()),
+            Ops::CyclesBurnLiquidBalance => {
+                // Determine the exact amount of liquid cycles via the system API
+                // `ic0.canister_liquid_cycle_balance128` and burn all of it.
+                let liquid = u128::from_le_bytes(
+                    api::liquid_balance128()
+                        .try_into()
+                        .expect("liquid cycles balance should be 16 bytes"),
+                );
+                let amount_high = (liquid >> 64) as u64;
+                let amount_low = (liquid & 0xffff_ffff_ffff_ffff) as u64;
+                stack.push_blob(api::cycles_burn128(amount_high, amount_low))
+            }
             Ops::CallDataAppendCyclesAddMax => {
                 let method_name_size = stack.pop_int64();
                 let payload = stack.pop_blob();
