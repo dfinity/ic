@@ -144,9 +144,13 @@ runs:
         exit "$status"
 
     - name: Report action rewinding
-      # Bazel prints nothing when it recovers from lost inputs by action rewinding (rbe.bazelrc), but
-      # its profile records every rewind plan: report them as a warning annotation, which shows up on
-      # the summary page of the run.
+      # Bazel prints nothing when it rewinds actions to regenerate lost inputs (rbe.bazelrc), but its
+      # profile records every rewind plan: report them as a warning annotation, which shows up on the
+      # summary page of the run. A rewind plan is an attempt: when an action loses the same input
+      # more than 20 times, Bazel gives up and fails it with "lost input too many times" (for a lost
+      # top-level output: "rewinding was ineffective"), which the error annotation below reports.
+      # The count is a lower bound: once a profile has 10,000 events, profile slimming (--slim_profile,
+      # on by default) merges short events, rewind plans included, with their neighbors.
       if: ${{ !cancelled() }}
       continue-on-error: true
       shell: bash
@@ -174,8 +178,12 @@ runs:
           if [ "$n" -gt 3 ]; then
             more="; ..."
           fi
-          echo "::warning title=Action rewinding::Bazel recovered from lost inputs: $n rewind plans in $name, for $first$more"
+          echo "::warning title=Action rewinding::Bazel rewound actions to regenerate lost inputs: $n rewind plans in $name, for $first$more"
         done
+
+        if grep -q -E "lost input too many times|rewinding was ineffective" "$BAZEL_NAMESPACE_OUT/console.log" 2>/dev/null; then
+          echo "::error title=Action rewinding::Rewinding didn't recover lost inputs: Bazel gave up after too many attempts (see 'lost input too many times' or 'rewinding was ineffective' in the log)."
+        fi
 
     - name: Encrypt the BEP files
       # For the GitHub artifact below. The passphrase is only in the env of this step, not in the
