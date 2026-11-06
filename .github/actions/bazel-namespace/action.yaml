@@ -153,7 +153,8 @@ runs:
       env:
         BAZEL_NAMESPACE_OUT: ${{ steps.out.outputs.dir }}
       run: |
-        set -uo pipefail
+        # Not -e, which `shell: bash` sets: grep fails for a profile without rewinds.
+        set +e -uo pipefail
         shopt -s nullglob
 
         for profile in "$BAZEL_NAMESPACE_OUT"/profile-*.json; do
