@@ -40,7 +40,7 @@ pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {
     Artifact::NAME.to_lowercase()
 }
 
-/// Checks that `artifact` has the given `id`, and that the content its id does not cover passes
+/// Checks that `artifact` has the given `id`, and that the content passes
 /// [`PbArtifact::check_integrity`].
 pub(crate) fn check_id_and_integrity<Artifact: PbArtifact>(
     artifact: &Artifact,
