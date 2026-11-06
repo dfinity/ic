@@ -224,6 +224,11 @@ The governance canister supports a comprehensive set of native proposal actions,
 - **AND** truncation shrinks the stored buffer's allocated capacity to fit (`shrink_to_fit`), rather than just shortening its length, so a large reply does not keep holding memory it no longer needs
 - **AND** success or failure is still determined only by whether the call itself succeeded, since the reply's meaning is specific to the target canister and cannot be interpreted generically
 
+#### Scenario: Rendered UpgradeSnsControlledCanister proposal shows the argument's SHA256
+- **WHEN** an `UpgradeSnsControlledCanister` proposal with a canister upgrade argument is rendered as text
+- **THEN** it contains "Upgrade argument with <N> bytes and SHA256 `<hash>`." where `<hash>` is the hex-encoded SHA256 of the argument bytes, so voters can compare it with the hash of the argument they built locally
+- **AND** previously the rendered value was the argument itself hex-encoded, mislabeled as SHA256
+
 #### Scenario: Dapp management proposals scope limit
 - **WHEN** a RegisterDappCanisters, DeregisterDappCanisters, or ManageDappCanisterSettings proposal is submitted
 - **THEN** it can manage at most 1,000 dapp canisters per proposal (MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL)
