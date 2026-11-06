@@ -48,6 +48,16 @@ build --experimental_remote_cache_eviction_retries=10
 
 build --remote_download_minimal
 
+# rules_python (1.9.0) declares the <name>.build_data.txt of every py_binary and py_test with constant
+# metadata, which bazel can't validate from the action cache: it stats the file instead. Under BwoB
+# the file isn't on disk, so every later command on the same server re-runs its PyWriteBuildData
+# action (a remote cache hit), and a `bazel run --check_up_to_date` like the one of the artifact upload
+# fails on the Python tools that build the IC-OS images. Downloading these small files avoids that.
+# Drop this line once rules_python includes https://github.com/bazel-contrib/rules_python/pull/4160
+# (2.4.0): it writes these files as ordinary outputs when a target isn't stamped, and none of ours is
+# (--config=stamped only stamps through workspace_status.sh, it doesn't pass bazel's --stamp).
+build --remote_download_regex=.*[.]build_data[.]txt
+
 # Force the test logs of every test to be downloaded from the remote CAS. Under BwoB
 # (--remote_download_minimal) test outputs stay remote, and --test_output=errors can't even echo
 # the failing logs because multi-MB (system-)test logs exceed --experimental_ui_max_stdouterr_bytes

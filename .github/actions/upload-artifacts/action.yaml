@@ -19,7 +19,7 @@ inputs:
     required: false
     default: ''
     description: |
-      Options for the bazel build and run commands, whitespace separated. Pass the options of the
+      Options for the bazel run, whitespace separated. Pass the options of the
       job's build step (e.g. its --config=stamped): a different --workspace_status_command would
       re-stamp //bazel:version.txt and rebuild everything that depends on it, like the IC-OS images.
   check-up-to-date:
@@ -28,7 +28,9 @@ inputs:
     description: |
       'true' passes --check_up_to_date to the bazel run, so that bazel errors out if the artifacts to be
       uploaded were not built by the job's build step (this ensures that the exact artifacts built there
-      are uploaded).
+      are uploaded). 'false' is meant for uploaders of files that bazel doesn't build, like
+      //:artifact-uploader: under Build-without-the-Bytes (bazel-namespace) bazel would re-run whatever
+      the build step didn't leave up to date, and that would be uploaded.
   program-args:
     required: false
     default: ''
@@ -90,8 +92,9 @@ runs:
         TARGET: ${{ inputs.target }}
         BAZEL_ARGS: ${{ inputs.bazel-args }}
         CHECK_UP_TO_DATE: ${{ inputs.check-up-to-date }}
-        # Build-without-the-Bytes, see build-uploader.sh.
-        MATERIALIZE: '1'
+        # Build-without-the-Bytes: a blob lost by the remote cache must fail the bazel run, see
+        # build-uploader.sh.
+        NO_EVICTION_RETRIES: '1'
       with:
         timeout-minutes: ${{ inputs.timeout-minutes }}
         # Stable name: github.action of a nested composite step is not a stable id.
