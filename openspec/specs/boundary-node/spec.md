@@ -442,3 +442,20 @@ The boundary node optionally enriches requests with geographic information.
 #### Scenario: GeoIP database loaded
 - **WHEN** a GeoIP database path is configured
 - **THEN** the boundary node annotates requests with geographic location data based on client IP
+
+---
+
+### Requirement: API Boundary Node Recovery Smoke Test
+
+The disaster-recovery API boundary node container (`ic-os/api-bn-recovery`, which packages `ic-boundary` and `ic-registry-replicator` outside NNS management) is checked by an in-repo smoke-test client, `ic-boundary-smoke-test` (`rs/boundary_node/smoke_test`), so the CI test of the container depends on no externally fetched tool such as dfx.
+
+#### Scenario: Smoke test verifies a boundary node against the mainnet root key
+- **WHEN** `ic-boundary-smoke-test --url <boundary node URL>` runs
+- **THEN** it builds an `ic-agent` agent with its defaults (anonymous identity, the IC mainnet root key built into `ic-agent`, verified query signatures), never calls `fetch_root_key()`, and never enables dynamic routing to other boundary nodes
+- **AND** it checks that `/api/v2/status` serves the IC mainnet root key, failing if the key differs or is missing (e.g. the registry has not synced yet)
+- **AND** it makes an anonymous, signature-verified query of `name` on the ICP ledger (`ryjl3-tyaaa-aaaaa-aaaba-cai`) and requires the reply `"Internet Computer"`, so a boundary node that forges or alters the reply fails the test
+- **AND** the whole check must complete within 60 seconds
+
+#### Scenario: Recovery container CI test uses the in-repo client
+- **WHEN** `ic-os/api-bn-recovery/test.sh` runs the recovery container smoke test
+- **THEN** it builds `//rs/boundary_node/smoke_test:ic-boundary-smoke-test` with Bazel and uses it for the final query, instead of installing dfx from an unpinned remote installer
