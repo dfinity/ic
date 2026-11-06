@@ -441,6 +441,18 @@ The FetchArtifact assembler downloads artifacts from peers using RPC calls over 
 - **AND** a different random peer may be selected for the retry
 - **AND** after each wait, the bouncer is re-evaluated; if Unwanted, AssembleResult::Unwanted is returned
 
+#### Scenario: Received artifacts are integrity-checked and fetched again on failure
+- **WHEN** an artifact is pushed by a peer or downloaded via RPC
+- **THEN** P2P checks it with `PbArtifact::check_integrity`, which artifacts implement to cover content their ID does not (by default it checks nothing; consensus messages use `ConsensusMessageHashable::check_integrity`; a canister HTTP artifact's response, if present, must hash to its share's content hash)
+- **AND** a downloaded artifact must also have the requested ID, while a pushed artifact's ID was derived from the artifact itself, so only its integrity is checked
+- **AND** an invalid artifact is counted (`ic_artifact_downloader_download_task_invalid_artifacts_total`), logged ("Peer ... sent an invalid artifact ..., fetching it again"), dropped, and the artifact is fetched again from a random peer advertising it, with the same backoff as other downloads
+
+#### Scenario: Retry loop
+- **WHEN** an artifact is assembled (`assemble_with_retries`)
+- **THEN** before each attempt the task waits until the bouncer wants the artifact
+- **AND** only the first attempt uses the pushed artifact, if still there; it makes no request and takes no step of the backoff, so if it fails the next attempt (a download) starts right away without sleeping
+- **AND** every later attempt gets a request deadline that backs off exponentially, and after a failed attempt the task waits until that deadline before checking the bouncer again
+
 #### Scenario: Bouncer-based download scheduling
 - **WHEN** the bouncer function returns a value for an artifact ID
 - **THEN** if `BouncerValue::Wanted`, the download proceeds immediately
@@ -470,6 +482,11 @@ For consensus block proposals, a stripped download protocol reduces bandwidth by
 - **AND** missing ingress messages are fetched from peers via the `/block/ingress/rpc` endpoint
 - **AND** missing iDKG dealings are fetched from peers via the `/block/idkg_dealing/rpc` endpoint
 - **AND** the original full ConsensusMessage is reassembled from the stripped message and fetched components
+
+#### Scenario: Failed block proposal assembly is retried from another peer
+- **WHEN** assembling a consensus message from a (pushed or downloaded) stripped artifact fails, e.g. because the reassembled block proposal fails the integrity check (`AssemblyError::IntegrityCheckFailed`)
+- **THEN** the stripped consensus artifact assembler drops it and fetches the stripped message again from a peer advertising it, using the same retry loop and backoff as other downloads
+- **AND** this happens within P2P, before the message reaches the consensus pools and their validation
 
 #### Scenario: Disassemble message for stripped transmission
 - **WHEN** `disassemble_message` is called on a ConsensusMessage
