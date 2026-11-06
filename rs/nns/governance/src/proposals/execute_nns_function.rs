@@ -1,13 +1,16 @@
 use crate::{
     decoder_config,
-    governance::Environment,
+    governance::{Environment, LOG_PREFIX},
     pb::v1::{
         ExecuteNnsFunction, GovernanceError, NnsFunction, SelfDescribingProposalAction,
         SelfDescribingValue, SelfDescribingValueMap, Topic, governance_error::ErrorType,
         self_describing_value::Value,
     },
     proposals::{
-        decode_candid_args_to_self_describing_value::decode_candid_args_to_self_describing_value,
+        decode_candid_args_to_self_describing_value::{
+            MAX_SELF_DESCRIBING_VALUE_ENCODED_LEN_BYTES,
+            decode_candid_args_to_self_describing_value,
+        },
         self_describing::{SelfDescribingProstEnum, ValueBuilder},
     },
 };
@@ -25,6 +28,7 @@ use ic_nns_constants::{
 use ic_nns_governance_api::bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal};
 use ic_nns_governance_api::subnet_rental::{SubnetRentalProposalPayload, SubnetRentalRequest};
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
+use prost::Message;
 use std::sync::Arc;
 
 /// A partial Candid interface for the management canister (ic_00) that contains the necessary
@@ -99,6 +103,22 @@ impl ValidExecuteNnsFunction {
         Ok(self_describing_value)
     }
 
+    /// Returns a JSON-like ("self-describing") version of self.
+    ///
+    /// To do this, we must ask for the Candid interface of the callee canister,
+    /// the canister that we would pass our `payload` to. Essentially, we ask
+    /// for the callee's `.did` file, which is why this method is `async`. We
+    /// then use the Candid interface to dynamically decode our `payload`.
+    ///
+    /// In the return value, the `type_name` and `type_description` fields are
+    /// always populated. In the happy case, `value` is `Some`.
+    ///
+    /// Reasons that `value` might be `None` include the following:
+    ///
+    /// - Fetching the callee's `.did` file failed.
+    /// - Decoding would be too expensive.
+    ///
+    /// (The reason is logged.)
     pub async fn to_self_describing_action(
         &self,
         env: Arc<dyn Environment>,
@@ -106,19 +126,29 @@ impl ValidExecuteNnsFunction {
         let value = self
             .convert_payload_to_self_describing_value(env)
             .await
-            .map_err(|e| {
-                GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "Failed to convert ExecuteNnsFunction to self-describing value: {}",
-                        e
-                    ),
-                )
-            })?;
+            // Enforce that value be not too large.
+            .and_then(|value| {
+                validate_self_describing_value_size(&value)?;
+                Ok(value)
+            });
+
+        // Convert value from Result to Option, and log if Err.
+        let value = match value {
+            Ok(value) => Some(value),
+            Err(err) => {
+                println!(
+                    "{}Unable to convert the payload of an ExecuteNnsFunction ({:?}) proposal \
+                     to a self-describing value: {}",
+                    LOG_PREFIX, self.nns_function, err,
+                );
+                None
+            }
+        };
+
         Ok(SelfDescribingProposalAction {
             type_name: self.nns_function.type_name().to_string(),
             type_description: self.nns_function.type_description().to_string(),
-            value: Some(value),
+            value,
         })
     }
 
@@ -274,6 +304,20 @@ fn encode_add_wasm_request(
             "Unable to encode AddWasmRequest proposal: {e}",
         )
     })
+}
+
+/// Returns Err if value is larger than MAX_SELF_DESCRIBING_VALUE_ENCODED_LEN_BYTES.
+fn validate_self_describing_value_size(value: &SelfDescribingValue) -> Result<(), String> {
+    let encoded_len_bytes = value.encoded_len();
+    if encoded_len_bytes > MAX_SELF_DESCRIBING_VALUE_ENCODED_LEN_BYTES {
+        return Err(format!(
+            "Self-describing value is too large: {:.1} KB (the maximum is {:.1} KB).",
+            encoded_len_bytes as f64 / 1e3,
+            MAX_SELF_DESCRIBING_VALUE_ENCODED_LEN_BYTES as f64 / 1e3,
+        ));
+    }
+
+    Ok(())
 }
 
 fn maybe_hash_large_blobs(
