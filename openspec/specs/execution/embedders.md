@@ -11,7 +11,7 @@
 All canister Wasm modules must pass validation before they can be compiled and executed. Validation enforces IC-specific constraints beyond the standard Wasm specification.
 
 #### Scenario: Reserved symbol export rejection
-- **WHEN** a Wasm module exports any of the reserved symbols: `canister counter_instructions`, `canister_start`, `canister_counter_dirty_pages`, `canister_counter_accessed_pages`, `stable_memory`, or `stable_bytemap_memory`
+- **WHEN** a Wasm module exports any of the reserved symbols: `canister counter_instructions`, `canister_start`, `canister_counter_dirty_pages`, `canister_counter_accessed_pages`, `canister heap_page_budget`, `stable_memory`, or `stable_bytemap_memory`
 - **THEN** validation fails with a `WasmValidationError`
 - **AND** the module is rejected
 
@@ -79,6 +79,11 @@ After validation, Wasm modules are instrumented to inject IC-specific metering a
 - **WHEN** a Wasm module is instrumented
 - **THEN** mutable globals for dirty page and accessed page counters are inserted
 - **AND** these globals are exported for the runtime to read after execution
+
+#### Scenario: Heap page budget global
+- **WHEN** a Wasm module is instrumented
+- **THEN** a fourth exported mutable global, `canister heap_page_budget`, is inserted
+- **AND** `new_instance` initialises it to the heap page limit of the execution's API type, and the deterministic memory tracker decrements it once for each Wasm page it newly maps (`on_wasm_page_accessed`), so the module itself can tell how many pages it may still touch
 
 ---
 
@@ -191,6 +196,42 @@ The embedder enforces strict memory limits for canister heap and stable memory.
 - **WHEN** a canister either does not export the Motoko async helper or has the `motoko:compiler` section
 - **THEN** zero pages are reserved
 - **AND** the full Wasm32 address space is available
+
+---
+
+### Requirement: Heap Accessed-Page Limit
+
+An execution may be limited in how many distinct Wasm heap pages it accesses. The limit is configured per API type (`EmbeddersConfig::wasm_memory_accessed_page_limit`: message, upgrade, query, in 4 KiB OS pages) and enforced only when the feature flag `FeatureFlags::wasm_memory_accessed_page_limit` is enabled. By default the flag is disabled and the limit equals the maximum Wasm64 heap size, so the limit is never hit; it exists so the limit can later be lowered per API type.
+
+#### Scenario: Flag disabled
+- **WHEN** `FeatureFlags::wasm_memory_accessed_page_limit` is disabled (the default)
+- **THEN** no checks are injected into canister code and no execution fails because of the limit
+- **AND** accesses beyond the limit are only counted in the metrics
+
+#### Scenario: Wasm loads and stores beyond the limit trap
+- **WHEN** the flag is enabled and a Wasm load or store faults on a page that would take the execution past its limit
+- **THEN** the deterministic memory tracker's `handle_sigsegv` returns `SigsegvOutcome::Refused`: it leaves the page unmapped, sets a shared `page_limit_exceeded` flag and counts the refusal, and Wasmtime raises a trap at the faulting instruction
+- **AND** write-protect faults on pages already accessed in this execution are exempt
+- **AND** `run()` rewrites the execution's result to `HypervisorError` with `MemoryAccessLimitExceeded` whenever that flag is set, rather than reporting the underlying `HeapOutOfBounds` trap
+
+#### Scenario: System API calls are pre-checked
+- **WHEN** the flag is enabled and a system API call is about to read or write a heap range
+- **THEN** the heap accessor asks the tracker (`check_range_fits`, a bitmap-based check of whether the byte range can be touched without crossing the limit) first, and the call fails with `MemoryAccessLimitExceeded` before it touches any page past the limit
+
+#### Scenario: Bulk memory operations are pre-checked inside the module
+- **WHEN** the flag is enabled and a module uses `memory.copy`, `memory.fill` or `memory.init`, which Wasmtime cannot unwind after a refused fault
+- **THEN** instrumentation routes each of them through an injected helper that charges instructions as before, computes an upper bound on the pages the operation can touch, and proceeds directly when that bound fits in `canister heap_page_budget` (the fast path)
+- **AND** otherwise calls the injected import `__.check_heap_bulk_access`, whose host side lets out-of-bounds operations proceed to their own `HeapOutOfBounds` trap and otherwise checks the exact ranges with the tracker's `check_ranges_fit` (pages shared by source and destination count once), failing with `MemoryAccessLimitExceeded` before any byte is touched
+
+#### Scenario: Wasm-native stable memory copies are pre-checked
+- **WHEN** the flag is enabled and Wasm-native stable memory is used
+- **THEN** the same fast-path / slow-path check is spliced into the injected `stable_read` / `stable64_read` bodies, before their branch so that both the first-access host call and the `memory.copy` are covered, and before the heap-source `memory.copy` in `stable_write` / `stable64_write`
+- **AND** with this, every heap access path is covered: loads and stores by the signal handler, system API calls by the heap accessor, and bulk operations and stable memory copies by the injected checks
+
+#### Scenario: Refusal metrics
+- **WHEN** an execution finishes
+- **THEN** refusals are counted by detector (signal handler, host accessor, bulk check), together with the number of slow-path `__.check_heap_bulk_access` calls; they are reported via `InstanceStats` (`HeapPageLimitRefusals`)
+- **AND** the sandboxed execution controller exports them as `sandboxed_execution_wasm_page_limit_exceeded{api_type, detector}` and `sandboxed_execution_wasm_bulk_check_slow_path_calls{api_type}`
 
 ---
 

@@ -98,6 +98,13 @@ The `DeterministicMemoryTracker` is the sole missing-page (SIGSEGV/SIGBUS) handl
 - **WHEN** `AccessKind` information is available for a faulting access
 - **THEN** the tracker uses it to optimize the handling of write accesses
 
+#### Scenario: Optional cap on accessed Wasm pages
+- **WHEN** the `DeterministicMemoryTracker` is created with a limit on distinct accessed Wasm pages (all callers pass `None` unless the embedder's heap accessed-page limit is configured, see `execution/embedders.md`)
+- **THEN** `handle_sigsegv` returns a `SigsegvOutcome` rather than a bool: a fault that would map a page beyond the limit leaves the page unmapped, sets a shared `page_limit_exceeded` flag, counts the refusal and returns `Refused`, which the signal handler turns into `false` so Wasmtime traps at the faulting Wasm instruction
+- **AND** write-protect faults on pages that are already accessed are exempt
+- **AND** `check_range_fits` and `check_ranges_fit` (which counts pages shared by two ranges once) report, from the accessed-page bitmap, whether byte ranges can be touched without crossing the limit, for host-side pre-checks
+- **AND** a signal-safe `on_wasm_page_accessed` callback runs once per newly mapped Wasm page, which the embedder uses to decrement the module's `canister heap_page_budget` global
+
 ### Requirement: Memory Tracker Metrics
 
 The `MemoryTrackerMetrics` struct collects performance statistics.
