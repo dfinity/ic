@@ -503,10 +503,22 @@ The `guest_upgrade_client` crate runs inside the Upgrade Guest VM. It retrieves 
 #### Scenario: Verify server attestation report
 - **WHEN** the server's attestation package is received
 - **THEN** the client excludes its own launch measurement from the elected measurements before checking, so a malicious peer cannot pass verification by simply mirroring the client's own attestation package back to it
-- **AND** verifies the server's measurement against the (filtered) blessed measurements from the NNS registry
+- **AND** verifies the server's measurement against the (filtered) blessed measurements from the NNS registry, preferring a single-version lookup (see "Server measurement checked against a single elected GuestOS version") over replicating the whole registry
 - **AND** verifies that the custom data matches (binding both TLS public keys)
 - **AND** verifies that the chip ID matches (same physical machine)
 - **AND** verifies the server's guest policy
+
+#### Scenario: Server measurement checked against a single elected GuestOS version
+- **WHEN** the server's `GetDiskEncryptionKeyResponse` carries `guestos_version`, the GuestOS version whose elected launch measurements (in the server's local registry) include the server's own measurement
+- **THEN** the client reads only that version's `ReplicaVersionRecord` from the NNS registry with an update call, whose response is certified by the NNS subnet and verified against the NNS public key, and checks the server's measurement against that record's launch measurements
+- **AND** each read attempt is bounded at 15 seconds and goes to a randomly chosen NNS endpoint, retrying after 2 seconds, within an overall 30 seconds for the single-version read
+- **AND** this avoids replicating the full registry, which distant nodes (e.g. in Asia/Oceania) could not do within the time allowed, failing SEV upgrades
+
+#### Scenario: Fallback to all elected versions
+- **WHEN** `guestos_version` is missing (e.g. the server runs an older GuestOS) or the single-version check fails for a reason another measurement could fix
+- **THEN** the client falls back to replicating the whole registry and checking the server's measurement against all elected versions, and fails only if both methods fail
+- **AND** failures that no other measurement can fix (an invalid signature, custom data, chip ID or guest policy) fail verification at once, without the fallback
+- **AND** `guest-upgrade-client.service`'s `TimeoutSec` is raised from 300 to 360 seconds to leave room for the fallback; the fallback is to be removed once all GuestOS versions support the new scheme (NODE-1988)
 
 #### Scenario: Adopt retrieved Store artifacts
 - **WHEN** the disk encryption key and detached Store LUKS header are successfully retrieved
@@ -533,6 +545,7 @@ The `guest_upgrade_server` crate runs inside the Default Guest VM and provides t
 - **WHEN** `exchange_keys` is called
 - **THEN** a self-signed TLS certificate is generated
 - **AND** blessed measurements are fetched from the NNS registry
+- **AND** the GuestOS versions elected in its local registry are read, with their launch measurements, so the response can name the version whose measurements include the server's own (`guestos_version`); this is only a hint, so a failure to read them is logged and yields an empty list instead of failing the key exchange
 - **AND** the gRPC server is started on the configured port
 
 #### Scenario: Serve disk encryption key and detached header
