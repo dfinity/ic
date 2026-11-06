@@ -6,11 +6,15 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, WasmResult};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{CanisterId, PrincipalId};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{Cycles, CyclesUseCase};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
+use more_asserts::assert_gt;
 
 // Regression test for charging the ingress induction debit after a long-running
-// cleanup callback grows memory and burns the remaining liquid cycles balance.
+// cleanup callback grows memory and burns the remaining liquid cycles balance:
+// the debit is charged leniently, i.e. the part of it that the burnt balance
+// cannot cover is dropped rather than reported as a bug, and only the part
+// actually charged is reported in the consumed cycles metrics.
 
 const T: u128 = 1_000_000_000_000;
 
@@ -152,13 +156,27 @@ fn ingress_induction_debit() {
 
     // Phase III: submit the self-call update on `C` (without awaiting its result)
     // and then keep submitting further (plain) update calls to `C` in every round
-    // while the self-call update is being processed. Once `C` can no longer pay
-    // the ingress induction cost (its cleanup burns all liquid cycles), the
-    // ingress filter starts rejecting the background calls, which is the ingress
-    // induction debit behavior under test.
+    // while the self-call update is being processed. Their induction cost is
+    // charged to `C`'s balance right away as long as `C` has no paused execution
+    // and postponed into `C`'s ingress induction cycles debit once the long
+    // cleanup callback is paused.
     let anonymous = PrincipalId::new_anonymous();
     let main_msg = env.send_ingress(anonymous, c_id, "update", self_call_payload);
 
+    // The ingress induction cycles consumed by `C` so far, including those of the
+    // self-call update inducted (and charged right away) in the round above.
+    let consumed_ingress_induction = |env: &StateMachine| -> Cycles {
+        env.consumed_cycles_by_use_cases(c_id)
+            .get(&CyclesUseCase::IngressInduction)
+            .map(|cycles| Cycles::new(cycles.get()))
+            .unwrap_or_else(Cycles::zero)
+    };
+    let consumed_before = consumed_ingress_induction(&env);
+
+    // The induction cost of the background update calls charged to `C`'s balance
+    // right away and the induction cost postponed into `C`'s debit, respectively.
+    let mut direct_cost = Cycles::zero();
+    let mut postponed_cost = Cycles::zero();
     // Record C's pending ingress induction cycles debit in every round.
     let mut debits = Vec::new();
     let mut result = None;
@@ -181,10 +199,28 @@ fn ingress_induction_debit() {
             _ => {}
         }
         // Keep submitting background update calls without awaiting their result;
-        // `send_ingress_safe` returns an error once `C` can no longer pay the
-        // ingress induction cost, which we ignore here.
-        let _ = env.send_ingress_safe(anonymous, c_id, "update", background_payload.clone());
-        env.tick();
+        // `send_ingress_safe` returns an error if `C` cannot pay the ingress
+        // induction cost. Submitting a message executes a round, which inducts
+        // the message against the task queue of `C` as of now: if `C` has a paused
+        // execution, the induction cost is postponed into its debit.
+        let paused = env
+            .get_latest_state()
+            .canister_state(&c_id)
+            .expect("C should exist in the latest state")
+            .has_paused_execution();
+        match env.send_ingress_safe(anonymous, c_id, "update", background_payload.clone()) {
+            Ok(_) => {
+                let cost = env
+                    .ingress_message_cost(anonymous, c_id, "update", background_payload.clone())
+                    .cost();
+                if paused {
+                    postponed_cost += cost;
+                } else {
+                    direct_cost += cost;
+                }
+            }
+            Err(_) => env.tick(),
+        }
         debits.push(
             env.get_latest_state()
                 .canister_state(&c_id)
@@ -207,6 +243,7 @@ fn ingress_induction_debit() {
         "expected C's ingress induction cycles debit to grow while the update was being \
          processed, but observed debits: {debits:?}"
     );
+    assert_gt!(postponed_cost, Cycles::zero());
 
     // The update call is rejected because the reply callback traps. Note that this
     // rejection is produced by the reply callback trap regardless of whether the
@@ -274,5 +311,20 @@ fn ingress_induction_debit() {
         Cycles::zero(),
         "C's ingress induction cycles debit should be zero at the end of the test, got \
          {final_debit}"
+    );
+
+    // The debit is charged after the state changes of the cleanup callback have
+    // been applied and before the unused prepaid execution cycles are refunded.
+    // At that point, the cleanup callback has burnt the whole liquid balance,
+    // which is the whole balance given the freezing threshold of zero, so there
+    // is nothing to charge the debit against: the whole debit is dropped rather
+    // than reported as a bug (the lenient charge). Accordingly, only the
+    // induction cost charged right away shows up in the consumed cycles metrics;
+    // the dropped debit must not be reported as consumed.
+    assert_eq!(
+        consumed_ingress_induction(&env) - consumed_before,
+        direct_cost,
+        "the dropped ingress induction cycles debit ({postponed_cost}) must not be reported \
+         as consumed"
     );
 }
