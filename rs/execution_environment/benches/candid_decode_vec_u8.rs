@@ -5,6 +5,10 @@
 //! payload, see `SUBNET_MESSAGE_INSTRUCTIONS_PER_PAYLOAD_BYTE` in
 //! `rs/execution_environment/src/execution_environment.rs`: the constant is
 //! chosen so that 2B instructions correspond to 1 second of decoding time.
+//! This plain `Vec<u8>` benchmark is a conservative calibration proxy for
+//! blob payloads. Production types such as `InstallCodeArgs` and `UploadChunkArgs`
+//! use `serde_bytes`, which follows a different decoding path. This benchmark
+//! does not establish a worst-case bound for all management request payloads.
 //!
 //! Run with:
 //! ```
