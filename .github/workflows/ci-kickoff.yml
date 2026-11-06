@@ -77,8 +77,10 @@ jobs:
 
   # Temporary, until bazel-test-all runs on RBE: the build-determinism check of ci-main.yml for the
   # build of the RBE evaluation, i.e. the execution log of its build step against the one of build-ic
-  # (both reusable workflows upload their artifacts to this run). It shows, before the switch, that the
-  # artifacts built on RBE @ Namespace equal the ones built from scratch on DFINITY's runners.
+  # (both reusable workflows upload their artifacts to this run). It shows, before the switch, whether
+  # the artifacts built on RBE @ Namespace equal the ones built from scratch on DFINITY's runners.
+  # Unlike ci-main's job it never fails: it reports the mismatches in its job summary and as a warning,
+  # since the known cross-runner differences (jemalloc's configure probes the machine) are fixed separately.
   rbe-build-determinism:
     name: RBE Build Determinism (shadow)
     runs-on: ubuntu-latest
@@ -101,7 +103,8 @@ jobs:
           name: execlogs-build-ic
           path: execlogs-nocache
       - name: Build Determinism Test
-        # Same as the Build Determinism Test step of ci-main.yml, keep them in sync.
+        # Like the Build Determinism Test step of ci-main.yml (keep the comparison in sync), but reporting
+        # instead of failing, see above.
         run: |
           set -euo pipefail
 
@@ -135,12 +138,35 @@ jobs:
           echo "comparing $n_joined artifacts present in both"
           warn_if_low_coverage "$n_joined"
 
+          mismatches="$RUNNER_TEMP/mismatches.txt"
           join \
             -t, -o 1.1,1.2,1.3,2.3 -12 -22 \
             execlogs-cache/execlogs.csv \
             execlogs-nocache/execlogs.csv \
-            | awk -F, 'BEGIN { N_BAD=0; } $3 != $4 { print $1 " " $2 ": " $3 " != " $4; N_BAD++; } END { if (N_BAD) { print N_BAD " mismatches found"; exit 1; } else { print "No mismatches"; }; }' \
-            | column -t | sort
+            | awk -F, '$3 != $4 { print $1 " " $2 ": " $3 " != " $4 }' \
+            | column -t | sort >"$mismatches"
+          n_bad=$(wc -l <"$mismatches")
+          {
+            echo "## RBE Build Determinism (shadow)"
+            echo
+            echo "Compared $n_joined artifacts built both by the RBE evaluation and by build-ic: **$n_bad mismatches**."
+            if [ "$n_bad" -gt 0 ]; then
+              echo
+              echo '<details><summary>Mismatching artifacts (label, path: RBE digest != build-ic digest)</summary>'
+              echo
+              echo '```'
+              cat "$mismatches"
+              echo '```'
+              echo
+              echo '</details>'
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"
+          if [ "$n_bad" -gt 0 ]; then
+            cat "$mismatches"
+            echo "::warning title=RBE Build Determinism::$n_bad of the $n_joined artifacts built by both differ between the RBE build and build-ic, see the job summary"
+          else
+            echo "No mismatches"
+          fi
 
 ## Explanation on the below jobs for posting required checks:
 ## For accepting external contributions we need to trigger the workflow from `workflow_dispatch`, not the pull_request directly
