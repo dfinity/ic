@@ -12,6 +12,11 @@ tree_deserializer provides deserialization of IC's labeled tree structure, used 
 - **THEN** it produces a structured representation of the IC state tree
 - **AND** types are defined in the types submodule
 
+#### Scenario: LEB128-encoded numbers in leaves
+- **WHEN** a leaf holding a LEB128-encoded unsigned number (`Leb128EncodedU64`) is decoded
+- **THEN** decoding fails with `LebDecodingError::Overflow` if the number exceeds `u64::MAX`, `TrailingData` if bytes follow a valid number, and `IncompleteInput` ("input did not contain a complete LEB128-encoded number") if the bytes end before the number does, e.g. an empty leaf or a truncated encoding
+- **AND** truncated input is reported as an error rather than reaching an `unreachable!` panic
+
 ### Requirement: ic-sys OS Page Management
 ic-sys provides platform-specific constants and utilities for OS-level memory page management.
 
