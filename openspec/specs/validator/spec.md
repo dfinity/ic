@@ -133,6 +133,21 @@ The validator enforces a maximum nonce size.
 
 ---
 
+### Requirement: Sender Info Size Limit
+
+The validator bounds the size of the `info` payload of a request's `sender_info` field.
+
+#### Scenario: Sender info within size limit
+- **WHEN** a call or query request carries `sender_info` whose `info` payload is at most 1024 bytes (`MAXIMUM_NUMBER_OF_BYTES_IN_SENDER_INFO`, exported from `ic_validator`)
+- **THEN** the sender info proceeds to canister signature verification as before
+
+#### Scenario: Sender info exceeds size limit
+- **WHEN** the `info` payload is larger than 1024 bytes
+- **THEN** `validate_sender_info` rejects the request with `RequestValidationError::InvalidSenderInfo` ("sender_info payload is too big: got N bytes, but at most 1024 are allowed") before the expensive signature verification
+- **AND** because every validation path goes through `HttpRequestVerifierImpl`, the bound applies in the HTTP handler (calls and queries), in the ingress pool, to every node validating ingress messages in a block, and in `ic-validator-ingress-message`
+
+---
+
 ### Requirement: Read State Path Limits
 
 The validator enforces limits on read state request paths.
