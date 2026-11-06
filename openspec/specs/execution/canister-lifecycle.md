@@ -185,6 +185,10 @@ Canister settings can be modified via `update_settings`.
 - **THEN** the canister's environment variables are set
 - **AND** variable names and values must respect configured size limits
 
+#### Scenario: Out-of-range setting values are reported compactly
+- **WHEN** a numeric canister setting (compute allocation, memory allocation, freezing threshold, reserved cycles limit, minimum incoming call cycles, Wasm memory limit, Wasm memory threshold, log memory limit) is outside its allowed range, e.g. "Freezing threshold expected to be in the range of [0..2^64-1], got <value>"
+- **THEN** the given value is printed exactly if it fits in 256 bits, and otherwise summarized as `<nat too large: N bits>`, so a huge candid `nat` cannot blow up the error message
+
 ### Requirement: Wasm Chunk Store
 
 Large Wasm modules can be uploaded in chunks before installation.
