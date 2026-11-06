@@ -26,6 +26,8 @@ description: |
     <execlogs-artifact-name>: only when that input is set: execlogs.csv, the compact execution logs of
                           the build and test commands of `run` converted to CSV by
                           ./.github/actions/upload-execlogs, for the build-determinism job of ci-main.yml.
+  When Bazel recovered from lost inputs by action rewinding (rbe.bazelrc), a warning annotation
+  lists the rewound actions.
 
   Before using this action the job must:
     * run namespacelabs/nscloud-setup and
@@ -140,6 +142,39 @@ runs:
           echo "::error title=Bazel timed out::bazel was stopped after timeout-minutes: $TIMEOUT_MINUTES (exit code $status)."
         fi
         exit "$status"
+
+    - name: Report action rewinding
+      # Bazel prints nothing when it recovers from lost inputs by action rewinding (rbe.bazelrc), but
+      # its profile records every rewind plan: report them as a warning annotation, which shows up on
+      # the summary page of the run.
+      if: ${{ !cancelled() }}
+      continue-on-error: true
+      shell: bash
+      env:
+        BAZEL_NAMESPACE_OUT: ${{ steps.out.outputs.dir }}
+      run: |
+        set -uo pipefail
+        shopt -s nullglob
+
+        for profile in "$BAZEL_NAMESPACE_OUT"/profile-*.json; do
+          # The profile has one event per line, like
+          # {"cat":"prepare action rewind plan","name":"Preparing rewind plan for 2 lost inputs of Testing //a:b",...}
+          plans="$(grep -o '"cat":"prepare action rewind plan","name":"[^"]*"' "$profile" |
+            sed -e 's/.*"name":"Preparing rewind plan for //' -e 's/"$//')"
+          if [ -z "$plans" ]; then
+            continue
+          fi
+          name="$(basename "$profile")"
+          echo "Rewind plans in $name:"
+          echo "$plans"
+          n="$(wc -l <<<"$plans")"
+          first="$(head -n 3 <<<"$plans" | paste -sd ';' - | sed 's/;/; /g')"
+          more=""
+          if [ "$n" -gt 3 ]; then
+            more="; ..."
+          fi
+          echo "::warning title=Action rewinding::Bazel recovered from lost inputs: $n rewind plans in $name, for $first$more"
+        done
 
     - name: Encrypt the BEP files
       # For the GitHub artifact below. The passphrase is only in the env of this step, not in the
