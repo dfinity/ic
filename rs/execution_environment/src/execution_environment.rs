@@ -5044,11 +5044,8 @@ const DESERIALIZATION_SPEED_UP_FACTOR: u64 = 100;
 ///
 /// The constant is calibrated by the benchmark of Candid decoding of a
 /// `Vec<u8>` payload (`rs/execution_environment/benches/candid_decode_vec_u8.rs`)
-/// so that 2B instructions correspond to 1 second of wall-clock time: the
-/// measured throughput was 203-260 MiB/s (3.7-4.7 ns/byte), i.e., 7.3-9.4
-/// instructions/byte. The highest measured cost is rounded up to 10
-/// instructions/byte. This is a conservative calibration proxy for blob
-/// payloads: production types such as `InstallCodeArgs` and `UploadChunkArgs`
+/// so that 2B instructions correspond to 1 second of wall-clock time.
+/// This is a conservative calibration proxy for blob payloads: production types such as `InstallCodeArgs` and `UploadChunkArgs`
 /// use `serde_bytes`, which follows a different decoding path. It is not a
 /// worst-case bound for all management request payloads.
 pub const SUBNET_MESSAGE_INSTRUCTIONS_PER_PAYLOAD_BYTE: u64 = 10;

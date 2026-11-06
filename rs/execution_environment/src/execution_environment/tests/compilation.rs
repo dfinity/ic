@@ -555,7 +555,9 @@ mod state_machine_tests {
 
     use crate::{CompilationCostHandling, subnet_message_payload_instructions};
     use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
-    use ic_management_canister_types_private::{CanisterInstallMode, InstallCodeArgs, Payload};
+    use ic_management_canister_types_private::{
+        CanisterInstallMode, IC_00, InstallCodeArgs, Method, Payload,
+    };
     use ic_state_machine_tests::StateMachine;
     use ic_test_utilities_execution_environment::wat_compilation_cost;
 
@@ -578,19 +580,16 @@ mod state_machine_tests {
     /// instructions charged for the payload size of the `install_code` message.
     fn install_test_canister(env: &StateMachine) -> f64 {
         let canister_id = env.create_canister(None);
-        let wasm = wat::parse_str(TEST_CANISTER).unwrap();
-        let payload_instructions = subnet_message_payload_instructions(
-            InstallCodeArgs::new(
-                CanisterInstallMode::Install,
-                canister_id,
-                wasm.clone(),
-                vec![],
-            )
-            .encode()
-            .len(),
-        );
+        let payload = InstallCodeArgs::new(
+            CanisterInstallMode::Install,
+            canister_id,
+            wat::parse_str(TEST_CANISTER).unwrap(),
+            vec![],
+        )
+        .encode();
+        let payload_instructions = subnet_message_payload_instructions(payload.len());
         let instructions_before = env.subnet_message_instructions();
-        env.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, wasm, vec![])
+        env.execute_ingress(IC_00, Method::InstallCode, payload)
             .unwrap();
         env.subnet_message_instructions() - instructions_before - payload_instructions.get() as f64
     }

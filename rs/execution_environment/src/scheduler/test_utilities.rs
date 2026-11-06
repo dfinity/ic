@@ -1714,14 +1714,15 @@ fn install_code_call_to_ic00_payload(
 }
 
 /// Returns the number of round instructions charged for the payload size of
-/// an `install_code` call to IC00 injected by
-/// `SchedulerTest::inject_install_code_call_to_ic00` (the payload size does not
-/// depend on the install mode, message ID, or target canister ID).
-pub(crate) fn install_code_call_to_ic00_payload_instructions() -> NumInstructions {
-    subnet_message_payload_instructions(
-        install_code_call_to_ic00_payload(CanisterInstallMode::Install, canister_test_id(0), 0)
-            .len(),
-    )
+/// an `install_code` call to IC00 in the given mode targeting the given canister
+/// injected by `SchedulerTest::inject_install_code_call_to_ic00`.
+pub(crate) fn install_code_call_to_ic00_payload_instructions(
+    mode: CanisterInstallMode,
+    target: CanisterId,
+) -> NumInstructions {
+    // The message ID is encoded as a fixed-size (4-byte) payload and thus its
+    // value does not affect the payload size.
+    subnet_message_payload_instructions(install_code_call_to_ic00_payload(mode, target, 0).len())
 }
 
 fn encode_message_id_as_payload(message_id: u32) -> Vec<u8> {

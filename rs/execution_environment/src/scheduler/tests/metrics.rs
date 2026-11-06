@@ -13,6 +13,7 @@ use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_logger::no_op_logger;
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterIdRecord, DerivationPath,
     HttpMethod, MasterPublicKeyId, Method, Payload as _, SignWithECDSAArgs, SignWithSchnorrArgs,
@@ -340,7 +341,9 @@ fn execution_round_metrics_are_recorded() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     // Every subnet message is additionally charged for its payload size.
-    let payload_instructions = install_code_call_to_ic00_payload_instructions().get();
+    let payload_instructions =
+        install_code_call_to_ic00_payload_instructions(CanisterInstallMode::Reinstall, canister)
+            .get();
 
     let metrics = &test.scheduler().metrics;
     assert_eq!(1, metrics.round.duration.get_sample_count(),);

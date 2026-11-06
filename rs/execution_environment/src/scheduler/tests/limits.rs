@@ -8,8 +8,10 @@ use super::super::*;
 use super::zero_instruction_overhead_config;
 use crate::scheduler::test_utilities::EMPTY_WASM;
 use ic_config::subnet_config::SchedulerConfig;
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::{NumWasmPages, num_bytes_try_from};
+use ic_types_test_utils::ids::canister_test_id;
 use proptest::prelude::*;
 
 #[test]
@@ -521,7 +523,11 @@ fn subnet_messages_respect_instruction_limit_per_round() {
     // - 3 subnet messages should run (using up the subnet messages' 1/16 share
     //   of the round limit).
     // - 10 input messages should run (using 100 instructions).
-    let payload_instructions = install_code_call_to_ic00_payload_instructions();
+    // The round limit depends on the payload size which in turn depends on the
+    // target canister ID, i.e., the ID of the first canister created below.
+    let canister_id = canister_test_id(0);
+    let payload_instructions =
+        install_code_call_to_ic00_payload_instructions(CanisterInstallMode::Upgrade, canister_id);
     let subnet_message_instructions = payload_instructions + NumInstructions::new(10);
 
     let mut test = SchedulerTestBuilder::new()
@@ -539,6 +545,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
         .build();
 
     let canister = test.create_canister();
+    assert_eq!(canister, canister_id);
 
     for _ in 0..10 {
         test.send_ingress(canister, ingress(10));
