@@ -40,6 +40,15 @@ pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {
     Artifact::NAME.to_lowercase()
 }
 
+/// Checks that `artifact` has the given `id`, and that the content passes
+/// [`PbArtifact::check_integrity`].
+pub(crate) fn check_id_and_integrity<Artifact: PbArtifact>(
+    artifact: &Artifact,
+    id: &Artifact::Id,
+) -> bool {
+    artifact.id() == *id && artifact.check_integrity()
+}
+
 /// A pool shared with the components writing to it, read by taking its lock on each access.
 pub(crate) struct SharedPool<Pool>(pub(crate) Arc<RwLock<Pool>>);
 
@@ -241,9 +250,10 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
 
     /// Makes attempts to assemble the message until one succeeds or the message is unwanted.
     ///
-    /// Before each attempt, waits until the bouncer wants the message. The attempt gets the pushed
-    /// artifact, if still there, and a deadline for its request that backs off exponentially. After
-    /// a failed attempt, the next one starts once that deadline has passed.
+    /// Before each attempt, waits until the bouncer wants the message. The first attempt gets the
+    /// pushed artifact, if still there, which needs no request, so if it fails, the next attempt
+    /// starts right away. Any other attempt gets a deadline for its request that backs off
+    /// exponentially, and if it fails, the next one starts once that deadline has passed.
     #[instrument(skip_all)]
     pub(crate) async fn assemble_with_retries<T, F, Fut>(
         &self,
@@ -272,18 +282,25 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             {
                 return AssembleResult::Unwanted;
             }
-            if artifact.is_none() && download_timer.is_none() {
-                download_timer = Some(
-                    self.metrics
-                        .download_task_artifact_download_duration
-                        .start_timer(),
-                );
-            }
 
-            let deadline = Instant::now() + backoff.next().unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT);
             // Only the first attempt gets the pushed artifact, so that a failed one is followed by
             // downloading the artifact from a random peer.
-            match attempt(artifact.take(), deadline).await {
+            let pushed = artifact.take();
+            let deadline = if pushed.is_some() {
+                // The attempt makes no request, so it takes no step of the backoff, and if it
+                // fails, its deadline has passed already.
+                Instant::now()
+            } else {
+                if download_timer.is_none() {
+                    download_timer = Some(
+                        self.metrics
+                            .download_task_artifact_download_duration
+                            .start_timer(),
+                    );
+                }
+                Instant::now() + backoff.next().unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT)
+            };
+            match attempt(pushed, deadline).await {
                 Attempt::Done { message, peer_id } => {
                     return AssembleResult::Done { message, peer_id };
                 }
@@ -306,8 +323,14 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
     where
         Artifact::Id: Debug,
     {
-        let (message, peer) = match artifact {
-            Some(pushed) => pushed,
+        match artifact {
+            // The receiver derived the id of a pushed artifact from it, so only its integrity is
+            // left to check.
+            Some((message, peer)) if message.check_integrity() => Attempt::Done {
+                message,
+                peer_id: peer,
+            },
+            Some((_, peer)) => self.invalid_artifact(id, peer, "it fails the integrity check"),
             None => {
                 let Some(peer) = peers.into_iter().choose(&mut SmallRng::from_entropy()) else {
                     return Attempt::Retry;
@@ -320,27 +343,24 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
                 match timeout_at(deadline, self.transport.rpc(&peer, request)).await {
                     Ok(Ok(response)) if response.status() == StatusCode::OK => {
                         match Artifact::PbMessage::proxy_decode(&response.into_body()) {
-                            Ok(message) => (message, peer),
-                            Err(err) => return self.invalid_artifact(id, peer, err),
+                            Ok(message) if check_id_and_integrity(&message, id) => Attempt::Done {
+                                message,
+                                peer_id: peer,
+                            },
+                            Ok(_) => {
+                                self.invalid_artifact(id, peer, "it fails the integrity check")
+                            }
+                            Err(err) => self.invalid_artifact(id, peer, err),
                         }
                     }
                     _ => {
                         self.metrics
                             .download_task_artifact_download_errors_total
                             .inc();
-                        return Attempt::Retry;
+                        Attempt::Retry
                     }
                 }
             }
-        };
-
-        // Even a pushed artifact, whose id was derived from it, may fail the integrity check.
-        if !message.check_integrity(id) {
-            return self.invalid_artifact(id, peer, "it fails the integrity check");
-        }
-        Attempt::Done {
-            message,
-            peer_id: peer,
         }
     }
 

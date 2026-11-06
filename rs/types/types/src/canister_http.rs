@@ -45,7 +45,7 @@ use crate::{
     CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
     consensus::get_faults_tolerated,
-    crypto::{BasicSigOf, CryptoHashOf},
+    crypto::{BasicSigOf, CryptoHashOf, crypto_hash},
     messages::{CallbackId, RejectContext, Request},
     node_id_into_protobuf, node_id_try_from_protobuf,
     signature::*,
@@ -1454,13 +1454,19 @@ impl PbArtifact for CanisterHttpResponseArtifact {
     type PbIdError = ProxyDecodeError;
     type PbMessage = ic_protobuf::types::v1::CanisterHttpArtifact;
     type PbMessageError = ProxyDecodeError;
+
+    fn check_integrity(&self) -> bool {
+        self.response
+            .as_ref()
+            .is_none_or(|response| &crypto_hash(response) == self.share.content.content_hash())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
         CanisterId,
-        crypto::{CryptoHash, SignedBytesWithoutDomainSeparator},
+        crypto::{BasicSig, CryptoHash, Signed, SignedBytesWithoutDomainSeparator},
         messages::NO_DEADLINE,
         time::UNIX_EPOCH,
     };
@@ -1549,6 +1555,51 @@ mod tests {
         ];
         let encodings: BTreeSet<_> = amounts.iter().map(|spent| signed_bytes(*spent)).collect();
         assert_eq!(encodings.len(), amounts.len());
+    }
+
+    /// A share of `response`, as the replica that made the outcall would sign it.
+    fn share_of(response: &CanisterHttpResponse) -> CanisterHttpResponseShare {
+        Signed {
+            content: CanisterHttpResponseReceipt {
+                metadata: CanisterHttpResponseMetadata {
+                    id: response.id,
+                    content_hash: crypto_hash(response),
+                    content_size: response.content.count_bytes() as u32,
+                    is_reject: response.content.is_reject(),
+                    replica_version: ReplicaVersion::from_str("foobar_version").unwrap(),
+                },
+                payment_receipt: CanisterHttpPaymentReceipt {
+                    spent: Cycles::zero(),
+                },
+            },
+            signature: BasicSignature {
+                signature: BasicSigOf::new(BasicSig(vec![])),
+                signer: node_test_id(1),
+            },
+        }
+    }
+
+    /// The share covers the response only by its hash, so an artifact passes the integrity check
+    /// only with the response that hash is of, or without one.
+    #[test]
+    fn artifact_integrity_check_covers_the_response() {
+        let response = CanisterHttpResponse {
+            id: CallbackId::new(1),
+            content: CanisterHttpResponseContent::Success(b"response".to_vec()),
+        };
+        let share = share_of(&response);
+        let artifact = |response| CanisterHttpResponseArtifact {
+            share: share.clone(),
+            response,
+        };
+        let other_response = CanisterHttpResponse {
+            id: CallbackId::new(1),
+            content: CanisterHttpResponseContent::Success(b"other response".to_vec()),
+        };
+
+        assert!(artifact(Some(response)).check_integrity());
+        assert!(artifact(None).check_integrity());
+        assert!(!artifact(Some(other_response)).check_integrity());
     }
 
     #[test]
