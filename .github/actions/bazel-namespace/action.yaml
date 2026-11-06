@@ -26,8 +26,9 @@ description: |
     <execlogs-artifact-name>: only when that input is set: execlogs.csv, the compact execution logs of
                           the build and test commands of `run` converted to CSV by
                           ./.github/actions/upload-execlogs, for the build-determinism job of ci-main.yml.
-  When Bazel recovered from lost inputs by action rewinding (rbe.bazelrc), a warning annotation
-  lists the rewound actions.
+  When Bazel rewinds actions to regenerate lost inputs (rbe.bazelrc), a warning annotation lists
+  the actions that lost them (a lower bound, see the step), and an error annotation reports when
+  Bazel gave up.
 
   Before using this action the job must:
     * run namespacelabs/nscloud-setup and
@@ -150,7 +151,8 @@ runs:
       # more than 20 times, Bazel gives up and fails it with "lost input too many times" (for a lost
       # top-level output: "rewinding was ineffective"), which the error annotation below reports.
       # The count is a lower bound: once a profile has 10,000 events, profile slimming (--slim_profile,
-      # on by default) merges short events, rewind plans included, with their neighbors.
+      # on by default) merges short events, rewind plans included, with their neighbors, and a rerun
+      # of the whole command (--experimental_remote_cache_eviction_retries) overwrites the profile.
       if: ${{ !cancelled() }}
       continue-on-error: true
       shell: bash
@@ -163,7 +165,8 @@ runs:
 
         for profile in "$BAZEL_NAMESPACE_OUT"/profile-*.json; do
           # The profile has one event per line, like
-          # {"cat":"prepare action rewind plan","name":"Preparing rewind plan for 2 lost inputs of Testing //a:b",...}
+          # {"cat":"prepare action rewind plan","name":"Preparing rewind plan for 2 lost inputs of action 'Testing //a:b'",...}
+          # or, for lost top-level outputs, "Preparing rewind plan for 1 lost outputs of //a:b".
           plans="$(grep -o '"cat":"prepare action rewind plan","name":"[^"]*"' "$profile" |
             sed -e 's/.*"name":"Preparing rewind plan for //' -e 's/"$//')"
           if [ -z "$plans" ]; then
@@ -178,7 +181,7 @@ runs:
           if [ "$n" -gt 3 ]; then
             more="; ..."
           fi
-          echo "::warning title=Action rewinding::Bazel rewound actions to regenerate lost inputs: $n rewind plans in $name, for $first$more"
+          echo "::warning title=Action rewinding::Bazel rewound actions to regenerate lost files: $n rewind plans in $name, for $first$more"
         done
 
         if grep -q -E "lost input too many times|rewinding was ineffective" "$BAZEL_NAMESPACE_OUT/console.log" 2>/dev/null; then

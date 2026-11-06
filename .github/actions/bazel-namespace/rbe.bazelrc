@@ -40,8 +40,9 @@ build --jobs=480
 
 # Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action outputs live
 # only in the remote CAS. When a still-needed blob is missing from the CAS, the actions that need it
-# fail with "Lost inputs no longer available remotely" or "Exec failed due to IOException: Missing
-# digest" (under BwoB Bazel has no local copy to re-upload).
+# lose their inputs (under BwoB Bazel has no local copy to re-upload): without action rewinding they
+# fail with "Lost inputs no longer available remotely". Some fail with "Exec failed due to
+# IOException: Missing digest" instead, which neither rewinding nor the retries below handle.
 #
 # Lease extension: while a command runs, Bazel re-issues FindMissingBlobs for the remote blobs it
 # references, so that the CAS extends their lifetime. It does so when the first action of the
@@ -56,8 +57,8 @@ build --experimental_remote_cache_lease_extension
 # of an action is lost more than 20 times, e.g. if the remote action cache keeps returning a result
 # whose outputs are gone. The bazel-namespace action reports the rewinds as a warning annotation.
 build --rewind_lost_inputs
-# Rerun the whole command after remote cache errors that rewinding doesn't handle, e.g. other
-# errors while downloading the inputs of a local action. With rewinding, lost inputs don't count.
+# With rewinding, this reruns the whole command only when downloading the inputs of a local action
+# fails for another reason than lost inputs (exit code 39).
 build --experimental_remote_cache_eviction_retries=10
 
 build --remote_download_minimal
