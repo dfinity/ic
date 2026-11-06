@@ -114,12 +114,6 @@ system_test_nns(
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
 system_test_nns(
     name = "guestos_upgrade_from_latest_release_to_current",
-    # TODO: drop `backend = "farm"` once the NTP-check gate (see
-    # ic-os/components/setupos/check-ntp.sh) has shipped in a release. Unlike
-    # `registration`, this test installs from a prebuilt *mainnet* SetupOS image,
-    # which still halts the installation when it cannot reach an NTP server -- and
-    # on the local backend it never can.
-    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
     enable_uvm = True,
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
@@ -187,12 +181,6 @@ system_test_nns(
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully hostos upgrade to current commit
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current",
-    # TODO: drop `backend = "farm"` once the NTP-check gate (see
-    # ic-os/components/setupos/check-ntp.sh) has shipped in a release. Unlike
-    # `registration`, this test installs from a prebuilt *mainnet* SetupOS image,
-    # which still halts the installation when it cannot reach an NTP server -- and
-    # on the local backend it never can.
-    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
     enable_uvm = True,
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key

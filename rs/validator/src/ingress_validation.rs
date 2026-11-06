@@ -48,6 +48,11 @@ const MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION: usize = 1_000;
 /// and so changing this value might be breaking or result in a deviation from the specification.
 const MAXIMUM_NUMBER_OF_BYTES_IN_NONCE: usize = 32;
 
+/// Maximum number of bytes allowed for the `info` payload of the `sender_info` field
+/// in an `HttpRequest`. Requests having a bigger `sender_info` payload will be declared
+/// invalid without verifying the `sender_info` signature.
+pub const MAXIMUM_NUMBER_OF_BYTES_IN_SENDER_INFO: usize = 1024;
+
 /// Maximum number of paths that can be specified in a read state request. Requests having more paths
 /// will be declared invalid without any further verification.
 /// **Note**: this limit is part of the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#http-read-state)
@@ -506,6 +511,16 @@ where
     let Some(sender_info) = request.sender_info() else {
         return Ok(());
     };
+
+    // Bound the size of the sender_info payload before performing any
+    // (expensive) signature verification.
+    if sender_info.info.len() > MAXIMUM_NUMBER_OF_BYTES_IN_SENDER_INFO {
+        return Err(InvalidSenderInfo(format!(
+            "sender_info payload is too big: got {} bytes, but at most {} are allowed",
+            sender_info.info.len(),
+            MAXIMUM_NUMBER_OF_BYTES_IN_SENDER_INFO
+        )));
+    }
 
     // Per the spec, the sender_info signature must verify using the
     // envelope-level sender_pubkey as a canister signature public key.

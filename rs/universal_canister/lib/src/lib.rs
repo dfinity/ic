@@ -612,6 +612,17 @@ impl PayloadBuilder {
         self
     }
 
+    /// Burns all the liquid cycles balance of the canister.
+    ///
+    /// The exact amount to burn is determined at run time via the system API
+    /// `ic0.canister_liquid_cycle_balance128` and then burned via
+    /// `ic0.cycles_burn128`. The amount of burned cycles is pushed as a blob
+    /// onto the stack.
+    pub fn cycles_burn_liquid_balance(mut self) -> Self {
+        self.0.push(Ops::CyclesBurnLiquidBalance as u8);
+        self
+    }
+
     pub fn call<C: Into<Call>>(mut self, call: C) -> Self {
         let call = call.into();
         let call_args = call.get_call_args();

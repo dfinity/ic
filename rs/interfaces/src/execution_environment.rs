@@ -70,6 +70,15 @@ pub struct InstanceStats {
     /// Total time spent in SIGSEGV handler for heap.
     pub wasm_sigsegv_handler_duration: Duration,
 
+    /// How often a heap access was refused because of the accessed page
+    /// limit, by the component that detected it.
+    pub wasm_page_limit_refusals: HeapPageLimitRefusals,
+
+    /// Number of bulk memory operations and stable memory copies whose
+    /// page bound did not fit into the remaining budget, so that the host had
+    /// to count the pages exactly.
+    pub wasm_bulk_check_slow_path_calls: usize,
+
     /// Number of accessed OS pages (4KiB) in stable memory.
     pub stable_accessed_pages: usize,
 
@@ -90,6 +99,24 @@ pub struct InstanceStats {
 
     /// Total time spent in SIGSEGV handler for stable memory.
     pub stable_sigsegv_handler_duration: Duration,
+}
+
+/// Which checks detected a heap access beyond the accessed page limit during
+/// an execution.
+///
+/// With the `wasm_memory_accessed_page_limit` feature enabled the first
+/// detection refuses the access and fails the execution, so at most one
+/// detector is set. With the feature disabled nothing is refused and every
+/// detector that would have refused an access is set.
+#[derive(Clone, Copy, PartialEq, Debug, Default, Deserialize, Serialize)]
+pub struct HeapPageLimitRefusals {
+    /// A Wasm load or store, detected by the memory tracker's signal handler.
+    pub handler: bool,
+    /// A heap range touched by a host function, detected by the heap accessor.
+    pub host_accessor: bool,
+    /// A bulk memory operation or stable memory copy, detected by the
+    /// pre-check injected into the Wasm code.
+    pub bulk_check: bool,
 }
 
 impl InstanceStats {
@@ -731,7 +758,7 @@ pub trait SystemApi {
         &self,
         name_src: usize,
         name_size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<i32>;
 
     /// Returns the size of the value for the environment variable with the given name.
@@ -747,7 +774,7 @@ pub trait SystemApi {
         &self,
         name_src: usize,
         name_size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<usize>;
 
     /// Copies the value of the environment variable with the given name into memory.
@@ -847,7 +874,7 @@ pub trait SystemApi {
         &mut self,
         src: usize,
         size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Replies to the sender with the data assembled using
@@ -862,7 +889,12 @@ pub trait SystemApi {
     fn ic0_msg_reject_code(&self) -> HypervisorResult<i32>;
 
     /// Replies to sender with an error message
-    fn ic0_msg_reject(&mut self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<()>;
+    fn ic0_msg_reject(
+        &mut self,
+        src: usize,
+        size: usize,
+        heap: &mut Heap<'_>,
+    ) -> HypervisorResult<()>;
 
     /// Returns the length of the reject message in bytes.
     ///
@@ -901,10 +933,11 @@ pub trait SystemApi {
     ) -> HypervisorResult<()>;
 
     /// Outputs the specified bytes on the heap as a string on STDOUT.
-    fn ic0_debug_print(&self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<()>;
+    fn ic0_debug_print(&self, src: usize, size: usize, heap: &mut Heap<'_>)
+    -> HypervisorResult<()>;
 
     /// Traps, with a possibly helpful message
-    fn ic0_trap(&self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<()>;
+    fn ic0_trap(&self, src: usize, size: usize, heap: &mut Heap<'_>) -> HypervisorResult<()>;
 
     /// Begins assembling a call to the canister specified by
     /// callee_src/callee_size at method name_src/name_size. Two mandatory
@@ -926,7 +959,7 @@ pub trait SystemApi {
         reply_env: u64,
         reject_fun: u32,
         reject_env: u64,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Appends the specified bytes to the argument of the call. Initially, the
@@ -936,7 +969,7 @@ pub trait SystemApi {
         &mut self,
         src: usize,
         size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Relaxes the response delivery guarantee to be best effort, asking the system to respond at the
@@ -1210,7 +1243,7 @@ pub trait SystemApi {
         &mut self,
         src: usize,
         size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// If run in non-replicated execution (i.e. query),
@@ -1260,7 +1293,12 @@ pub trait SystemApi {
     /// otherwise a 0 is returned. It can be called multiple times.
     ///
     /// This system call traps if src+size exceeds the size of the WebAssembly memory.
-    fn ic0_is_controller(&self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<u32>;
+    fn ic0_is_controller(
+        &self,
+        src: usize,
+        size: usize,
+        heap: &mut Heap<'_>,
+    ) -> HypervisorResult<u32>;
 
     /// If run in replicated execution (i.e. an update call or a certified
     /// query), returns 1.
