@@ -1,0 +1,3 @@
+# GuestOS options: HostOS's, plus memory reclaim, compaction and workingset counters and free
+# blocks per order (buddyinfo), to diagnose page cache reclaim.
+OPTIONS="--web.config.file='/etc/node_exporter/web.yml' --collector.textfile.directory='/run/node_exporter/collector_textfile' --no-collector.netdev.netlink --no-collector.arp.netlink --collector.buddyinfo --collector.vmstat.fields='^(oom_kill|pgpg|pswp|pg.*fault|pgsteal_.*|pgscan_.*|allocstall_.*|compact_.*|workingset_.*|kswapd_.*)'"

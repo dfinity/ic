@@ -44,6 +44,20 @@ configure_make(
         # recommended for static libs:
         # https://github.com/jemalloc/jemalloc/blob/2a693b83d2d1631b6a856d178125e1c47c12add9/INSTALL.md?plain=1#L102-L107
         "--with-private-namespace=_rjem_",
+        # Pin what configure otherwise detects on the machine that runs the build. The values are compiled
+        # into the library, so without the pins the archive, and every binary that links it, depends on the
+        # build machine:
+        # - LG_VADDR, the number of significant virtual address bits, comes from CPUID leaf 0x80000008: 48 on
+        #   CPUs without 5-level paging (the value our released artifacts were built with), 57 on CPUs with
+        #   it (e.g. AMD EPYC Genoa, Intel Xeon since Ice Lake-SP). 48 is safe on the latter too: Linux maps
+        #   user memory above 47 bits only for an mmap hint address above them, which jemalloc does not pass.
+        # - LG_PAGE comes from sysconf(_SC_PAGESIZE) and LG_HUGEPAGE from the Hugepagesize in /proc/meminfo.
+        #   4 KiB pages and 2 MiB (transparent) huge pages are the x86-64 sizes; this archive is only used for
+        #   x86_64-unknown-linux-gnu (see the tikv-jemalloc-sys annotation in bazel/rust.MODULE.bazel).
+        # https://github.com/jemalloc/jemalloc/blob/5.3.0/INSTALL.md
+        "--with-lg-vaddr=48",
+        "--with-lg-page=12",
+        "--with-lg-hugepage=21",
     ],
     lib_source = ":all",
 

@@ -411,7 +411,7 @@ fn api_availability_test(
         }
         SystemApiCallId::MsgReplyDataAppend => {
             assert_api_availability(
-                |mut api| api.ic0_msg_reply_data_append(0, 0, &Heap::unchecked(&mut [42; 128])),
+                |mut api| api.ic0_msg_reply_data_append(0, 0, &mut Heap::unchecked(&mut [42; 128])),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -431,7 +431,7 @@ fn api_availability_test(
         }
         SystemApiCallId::MsgReject => {
             assert_api_availability(
-                |mut api| api.ic0_msg_reject(0, 0, &Heap::unchecked(&mut [42; 128])),
+                |mut api| api.ic0_msg_reject(0, 0, &mut Heap::unchecked(&mut [42; 128])),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -491,7 +491,7 @@ fn api_availability_test(
         }
         SystemApiCallId::DebugPrint => {
             assert_api_availability(
-                |api| api.ic0_debug_print(0, 0, &Heap::unchecked(&mut [42; 128])),
+                |api| api.ic0_debug_print(0, 0, &mut Heap::unchecked(&mut [42; 128])),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -501,12 +501,12 @@ fn api_availability_test(
         }
         SystemApiCallId::Trap => {
             let api = get_system_api(api_type, &system_state, cycles_account_manager);
-            assert_trap_supported(api.ic0_trap(0, 0, &Heap::unchecked(&mut [42; 128])));
+            assert_trap_supported(api.ic0_trap(0, 0, &mut Heap::unchecked(&mut [42; 128])));
         }
         SystemApiCallId::CallNew => {
             assert_api_availability(
                 |mut api| {
-                    api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &Heap::unchecked(&mut [42; 128]))
+                    api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &mut Heap::unchecked(&mut [42; 128]))
                 },
                 api_type,
                 &system_state,
@@ -518,9 +518,18 @@ fn api_availability_test(
         SystemApiCallId::CallDataAppend => {
             assert_api_availability(
                 |mut api| {
-                    let _ =
-                        api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &Heap::unchecked(&mut [42; 128]));
-                    api.ic0_call_data_append(0, 0, &Heap::unchecked(&mut [42; 128]))
+                    let _ = api.ic0_call_new(
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        &mut Heap::unchecked(&mut [42; 128]),
+                    );
+                    api.ic0_call_data_append(0, 0, &mut Heap::unchecked(&mut [42; 128]))
                 },
                 api_type,
                 &system_state,
@@ -532,8 +541,17 @@ fn api_availability_test(
         SystemApiCallId::CallWithBestEffortResponse => {
             assert_api_availability(
                 |mut api| {
-                    let _ =
-                        api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &Heap::unchecked(&mut [42; 128]));
+                    let _ = api.ic0_call_new(
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        &mut Heap::unchecked(&mut [42; 128]),
+                    );
                     api.ic0_call_with_best_effort_response(0)
                 },
                 api_type,
@@ -546,8 +564,17 @@ fn api_availability_test(
         SystemApiCallId::CallOnCleanup => {
             assert_api_availability(
                 |mut api| {
-                    let _ =
-                        api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &Heap::unchecked(&mut [42; 128]));
+                    let _ = api.ic0_call_new(
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        &mut Heap::unchecked(&mut [42; 128]),
+                    );
                     api.ic0_call_on_cleanup(0, 0)
                 },
                 api_type,
@@ -560,8 +587,17 @@ fn api_availability_test(
         SystemApiCallId::CallCyclesAdd => {
             assert_api_availability(
                 |mut api| {
-                    let _ =
-                        api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &Heap::unchecked(&mut [42; 128]));
+                    let _ = api.ic0_call_new(
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        &mut Heap::unchecked(&mut [42; 128]),
+                    );
                     api.ic0_call_cycles_add(0)
                 },
                 api_type,
@@ -574,8 +610,17 @@ fn api_availability_test(
         SystemApiCallId::CallCyclesAdd128 => {
             assert_api_availability(
                 |mut api| {
-                    let _ =
-                        api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &Heap::unchecked(&mut [42; 128]));
+                    let _ = api.ic0_call_new(
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        &mut Heap::unchecked(&mut [42; 128]),
+                    );
                     api.ic0_call_cycles_add128(Cycles::new(0))
                 },
                 api_type,
@@ -588,8 +633,17 @@ fn api_availability_test(
         SystemApiCallId::CallPerform => {
             assert_api_availability(
                 |mut api| {
-                    let _ =
-                        api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &Heap::unchecked(&mut [42; 128]));
+                    let _ = api.ic0_call_new(
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        &mut Heap::unchecked(&mut [42; 128]),
+                    );
                     api.ic0_call_perform()
                 },
                 api_type,
@@ -796,7 +850,7 @@ fn api_availability_test(
         }
         SystemApiCallId::CertifiedDataSet => {
             assert_api_availability(
-                |mut api| api.ic0_certified_data_set(0, 0, &Heap::unchecked(&mut [42; 128])),
+                |mut api| api.ic0_certified_data_set(0, 0, &mut Heap::unchecked(&mut [42; 128])),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -825,7 +879,7 @@ fn api_availability_test(
         }
         SystemApiCallId::IsController => {
             assert_api_availability(
-                |api| api.ic0_is_controller(0, 0, &Heap::unchecked(&mut [42; 128])),
+                |api| api.ic0_is_controller(0, 0, &mut Heap::unchecked(&mut [42; 128])),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -924,7 +978,7 @@ fn api_availability_test(
                     api.ic0_env_var_name_exists(
                         0,
                         var_name.len(),
-                        &Heap::unchecked(&mut heap.clone()),
+                        &mut Heap::unchecked(&mut heap.clone()),
                     )
                 },
                 api_type,
@@ -943,7 +997,7 @@ fn api_availability_test(
                     api.ic0_env_var_value_size(
                         0,
                         var_name.len(),
-                        &Heap::unchecked(&mut heap.clone()),
+                        &mut Heap::unchecked(&mut heap.clone()),
                     )
                 },
                 api_type,
@@ -1067,7 +1121,7 @@ fn test_discard_cycles_charge_by_new_call() {
 
     // Check ic0_canister_cycle_balance after first ic0_call_new.
     assert_eq!(
-        api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &Heap::unchecked(&mut [])),
+        api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &mut Heap::unchecked(&mut [])),
         Ok(())
     );
     // Check cycles balance.
@@ -1087,7 +1141,7 @@ fn test_discard_cycles_charge_by_new_call() {
 
     // Discard the previous call
     assert_eq!(
-        api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &Heap::unchecked(&mut [])),
+        api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &mut Heap::unchecked(&mut [])),
         Ok(())
     );
     // Check cycles balance -> should be the same as the original as the call was
@@ -1115,7 +1169,7 @@ fn test_fail_add_cycles_when_not_enough_balance() {
 
     // Check ic0_canister_cycle_balance after first ic0_call_new.
     assert_eq!(
-        api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &Heap::unchecked(&mut [])),
+        api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &mut Heap::unchecked(&mut [])),
         Ok(())
     );
     // Check cycles balance.
@@ -1160,7 +1214,7 @@ fn test_fail_adding_more_cycles_when_not_enough_balance() {
 
     // Check ic0_canister_cycle_balance after first ic0_call_new.
     assert_eq!(
-        api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &Heap::unchecked(&mut [])),
+        api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &mut Heap::unchecked(&mut [])),
         Ok(())
     );
     // Check cycles balance.
@@ -1355,18 +1409,18 @@ fn certified_data_set() {
 
     // Setting more than 32 bytes fails.
     assert!(
-        api.ic0_certified_data_set(0, 33, &Heap::unchecked(&mut heap))
+        api.ic0_certified_data_set(0, 33, &mut Heap::unchecked(&mut heap))
             .is_err()
     );
 
     // Setting out of bounds size fails.
     assert!(
-        api.ic0_certified_data_set(30, 10, &Heap::unchecked(&mut heap))
+        api.ic0_certified_data_set(30, 10, &mut Heap::unchecked(&mut heap))
             .is_err()
     );
 
     // Copy the certified data into the system state.
-    api.ic0_certified_data_set(0, 32, &Heap::unchecked(&mut heap))
+    api.ic0_certified_data_set(0, 32, &mut Heap::unchecked(&mut heap))
         .unwrap();
 
     let system_state_modifications = api.take_system_state_modifications();
@@ -1568,8 +1622,18 @@ fn call_perform_not_enough_cycles_does_not_trap() {
         &system_state,
         cycles_account_manager,
     );
-    api.ic0_call_new(0, 10, 0, 10, 0, 0, 0, 0, &Heap::unchecked(&mut [0; 1024]))
-        .unwrap();
+    api.ic0_call_new(
+        0,
+        10,
+        0,
+        10,
+        0,
+        0,
+        0,
+        0,
+        &mut Heap::unchecked(&mut [0; 1024]),
+    )
+    .unwrap();
     api.ic0_call_cycles_add128(Cycles::new(100)).unwrap();
     let res = api.ic0_call_perform();
     match res {
@@ -1969,7 +2033,7 @@ fn ic0_is_controller_test() {
     for i in 1..5 {
         let mut controller = user_test_id(i).get().as_slice().to_vec();
         assert_eq!(
-            api.ic0_is_controller(0, controller.len(), &Heap::unchecked(&mut controller))
+            api.ic0_is_controller(0, controller.len(), &mut Heap::unchecked(&mut controller))
                 .unwrap(),
             (i <= 2) as u32
         );
@@ -1985,7 +2049,7 @@ fn ic0_is_controller_invalid_principal_id() {
     );
     let mut controller = [0_u8; 70];
     assert!(matches!(
-        api.ic0_is_controller(0, controller.len(), &Heap::unchecked(&mut controller)),
+        api.ic0_is_controller(0, controller.len(), &mut Heap::unchecked(&mut controller)),
         Err(HypervisorError::InvalidPrincipalId(
             PrincipalIdBlobParseError(..)
         ))
@@ -2050,7 +2114,7 @@ fn test_save_log_message_adds_canister_log_records() {
     let initial_records_number = api.canister_log().records().len();
     // Save several log messages.
     for message in &messages {
-        api.save_log_message(0, message.len(), &Heap::unchecked(&mut message.clone()));
+        api.save_log_message(0, message.len(), &mut Heap::unchecked(&mut message.clone()));
     }
     let records = api.canister_log().records();
     // Expect increased number of log records and the content to match the messages.
@@ -2074,7 +2138,7 @@ fn test_save_log_message_invalid_message_size() {
     );
     let initial_records_number = api.canister_log().records().len();
     // Save a log message.
-    api.save_log_message(0, invalid_size, &Heap::unchecked(&mut message.to_vec()));
+    api.save_log_message(0, invalid_size, &mut Heap::unchecked(&mut message.to_vec()));
     // Expect added log record with an error message.
     let records = api.canister_log().records();
     assert_eq!(records.len(), initial_records_number + 1);
@@ -2100,7 +2164,7 @@ fn test_save_log_message_invalid_message_offset() {
     api.save_log_message(
         invalid_src,
         message.len(),
-        &Heap::unchecked(&mut message.to_vec()),
+        &mut Heap::unchecked(&mut message.to_vec()),
     );
     // Expect added log record with an error message.
     let records = api.canister_log().records();
@@ -2124,7 +2188,7 @@ fn test_save_log_message_trims_long_message() {
     let initial_records_number = api.canister_log().records().len();
     // Save a long log message.
     let mut bytes = vec![b'x'; long_message_size];
-    api.save_log_message(0, bytes.len(), &Heap::unchecked(&mut bytes));
+    api.save_log_message(0, bytes.len(), &mut Heap::unchecked(&mut bytes));
     // Expect added log record with the content trimmed to the allowed size.
     let records = api.canister_log().records();
     assert_eq!(records.len(), initial_records_number + 1);
@@ -2146,7 +2210,7 @@ fn test_save_log_message_keeps_total_log_size_limited() {
     // Save several long messages.
     for _ in 0..messages_number {
         let mut bytes = vec![b'x'; long_message_size];
-        api.save_log_message(0, bytes.len(), &Heap::unchecked(&mut bytes));
+        api.save_log_message(0, bytes.len(), &mut Heap::unchecked(&mut bytes));
     }
     // Expect only one log record to be kept, staying within the size limit.
     let log = api.canister_log();
@@ -2201,7 +2265,7 @@ fn ic0_call_with_best_effort_response() {
             get_system_api_for_best_effort_response(own_subnet_id, subnet_type, &system_state);
 
         // Make a call to something that isn't `IC_00`.
-        api.ic0_call_new(0, 1, 0, 1, 0, 0, 0, 0, &Heap::unchecked(&mut [42; 128]))
+        api.ic0_call_new(0, 1, 0, 1, 0, 0, 0, 0, &mut Heap::unchecked(&mut [42; 128]))
             .unwrap();
         api.ic0_call_with_best_effort_response(13).unwrap();
         api.ic0_call_perform().unwrap();
@@ -2299,13 +2363,13 @@ fn composite_context_does_not_return_state_changes_on_trap_helper(api_type: ApiT
     );
 
     // Make a call that would add a request in the output queue.
-    api.ic0_call_new(0, 1, 0, 1, 0, 0, 0, 0, &Heap::unchecked(&mut [42; 128]))
+    api.ic0_call_new(0, 1, 0, 1, 0, 0, 0, 0, &mut Heap::unchecked(&mut [42; 128]))
         .unwrap();
     api.ic0_call_perform().unwrap();
 
     // Call trap explicitly to simulate an error in the execution.
     let err = api
-        .ic0_trap(0, 0, &Heap::unchecked(&mut [42; 128]))
+        .ic0_trap(0, 0, &mut Heap::unchecked(&mut [42; 128]))
         .unwrap_err();
     api.set_execution_error(err);
 
@@ -2360,7 +2424,7 @@ fn test_env_var_name_operations() {
         api.ic0_env_var_name_exists(
             0,
             var_name_1.len(),
-            &Heap::unchecked(&mut var_name_1.as_bytes().to_vec())
+            &mut Heap::unchecked(&mut var_name_1.as_bytes().to_vec())
         )
         .unwrap(),
         1
@@ -2369,7 +2433,7 @@ fn test_env_var_name_operations() {
         api.ic0_env_var_name_exists(
             0,
             var_name_2.len(),
-            &Heap::unchecked(&mut var_name_2.as_bytes().to_vec())
+            &mut Heap::unchecked(&mut var_name_2.as_bytes().to_vec())
         )
         .unwrap(),
         1
@@ -2378,7 +2442,7 @@ fn test_env_var_name_operations() {
         api.ic0_env_var_name_exists(
             0,
             non_existing_var.len(),
-            &Heap::unchecked(&mut non_existing_var.as_bytes().to_vec())
+            &mut Heap::unchecked(&mut non_existing_var.as_bytes().to_vec())
         )
         .unwrap(),
         0
@@ -2479,7 +2543,7 @@ fn test_env_var_value_operations() {
         // Test API for the size of the value.
         copy_to_heap(&mut heap, var_name.as_bytes());
         assert_eq!(
-            api.ic0_env_var_value_size(0, var_name.len(), &Heap::unchecked(&mut heap))
+            api.ic0_env_var_value_size(0, var_name.len(), &mut Heap::unchecked(&mut heap))
                 .unwrap(),
             var_value.len(),
         );
@@ -2503,7 +2567,7 @@ fn test_env_var_value_operations() {
     let non_existent = "NON_EXISTENT".to_string();
     copy_to_heap(&mut heap, non_existent.as_bytes());
     assert_eq!(
-        api.ic0_env_var_value_size(0, non_existent.len(), &Heap::unchecked(&mut heap)),
+        api.ic0_env_var_value_size(0, non_existent.len(), &mut Heap::unchecked(&mut heap)),
         Err(HypervisorError::EnvironmentVariableNotFound {
             name: non_existent.clone()
         })
@@ -2525,7 +2589,7 @@ fn test_env_var_value_operations() {
     // Test invalid UTF-8 in variable name
     let invalid_utf8 = &[0xFF, 0xFF];
     copy_to_heap(&mut heap, invalid_utf8);
-    let result = api.ic0_env_var_value_size(0, invalid_utf8.len(), &Heap::unchecked(&mut heap));
+    let result = api.ic0_env_var_value_size(0, invalid_utf8.len(), &mut Heap::unchecked(&mut heap));
     let error = result.unwrap_err();
     assert!(
         error
@@ -2551,7 +2615,7 @@ fn test_env_var_value_operations() {
     // Test name too long
     let long_name = "A".repeat(MAX_ENV_VAR_NAME_SIZE + 1);
     copy_to_heap(&mut heap, long_name.as_bytes());
-    let result = api.ic0_env_var_value_size(0, long_name.len(), &Heap::unchecked(&mut heap));
+    let result = api.ic0_env_var_value_size(0, long_name.len(), &mut Heap::unchecked(&mut heap));
     let error = result.unwrap_err();
     assert!(error.to_string().contains("Variable name is too large."));
 

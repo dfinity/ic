@@ -197,7 +197,7 @@ impl From<MaybeStrippedConsensusMessage> for pb::StrippedConsensusMessage {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct StrippedConsensusMessageId(ConsensusMessageId);
 
 impl AsRef<ConsensusMessageId> for StrippedConsensusMessageId {
@@ -252,6 +252,16 @@ impl PbArtifact for MaybeStrippedConsensusMessage {
     type PbMessage = pb::StrippedConsensusMessage;
 
     type PbMessageError = ProxyDecodeError;
+
+    fn check_integrity(&self, id: &Self::Id) -> bool {
+        match self {
+            MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
+                unstripped.check_integrity(id.as_ref())
+            }
+            // A stripped proposal can only be checked once it is reassembled.
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(_) => self.id() == *id,
+        }
+    }
 }
 
 #[cfg(test)]

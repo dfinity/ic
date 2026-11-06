@@ -135,6 +135,18 @@ fn leb128_decoding_fails_on_integer_overflow() {
 }
 
 #[test]
+#[should_panic(expected = "did not contain a complete LEB128")]
+fn leb128_decoding_fails_on_empty_input() {
+    decode::<'_, Leb128EncodedU64>(&leaf([0_u8; 0])).unwrap();
+}
+
+#[test]
+#[should_panic(expected = "did not contain a complete LEB128")]
+fn leb128_decoding_fails_on_incomplete_input() {
+    decode::<'_, Leb128EncodedU64>(&leaf([0x80])).unwrap();
+}
+
+#[test]
 #[should_panic(expected = "missing field")]
 fn check_error_on_missing_field() {
     decode::<S>(&fork(vec![("int32", leaf([1, 1, 1, 1]))])).unwrap();
