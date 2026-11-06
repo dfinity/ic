@@ -127,6 +127,15 @@ Queries are scheduled and executed on dedicated threads.
 - **WHEN** a canister has been executing queries for longer than `query_scheduling_time_slice_per_canister`
 - **THEN** other canisters are prioritized for execution
 
+#### Scenario: Queries to nonexistent canisters are rejected before scheduling
+- **WHEN** an HTTP query, or an ingress message checked by the ingress filter, targets a receiver that is neither the management canister nor a canister in the latest replicated state
+- **THEN** it is rejected with `CanisterNotFound` ("Canister <id> not found") before it is scheduled, so no query scheduler state is created for it
+
+#### Scenario: Query scheduler state stays bounded
+- **WHEN** a canister has no queued queries and none of its queries are executing
+- **THEN** its per-canister entry is removed from the query scheduler, so the scheduler state does not grow with every distinct canister ID ever queried
+- **AND** once the scheduler's map and queue are at most a quarter full, their capacity is shrunk to twice their length, but never below a minimum retained capacity of 64 entries, so memory is bounded after a burst of many distinct canister IDs without reallocating on every batch
+
 ### Requirement: Query Stats Collection
 
 Query execution statistics are collected for billing purposes.
