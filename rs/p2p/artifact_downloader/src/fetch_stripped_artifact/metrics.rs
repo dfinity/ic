@@ -110,7 +110,7 @@ impl FetchStrippedConsensusArtifactMetrics {
     }
 
     /// Counts a download of a missing stripped message as active until the returned guard is
-    /// dropped, which happens even if the download is aborted.
+    /// dropped.
     pub(super) fn start_stripped_message_download(
         &self,
         message_type: StrippedMessageType,
