@@ -328,3 +328,8 @@ When Wasm execution traps, the embedder attempts to provide a human-readable bac
 - **WHEN** a Wasm trap occurs and the module does not include a `name` section
 - **THEN** no backtrace is produced (returns `None`)
 - **AND** the error is reported without stack trace information
+
+#### Scenario: Backtraces are hidden from callers who may not view the canister's logs, across DTS slices
+- **WHEN** the caller of an execution is not allowed to view the canister's logs (per its log visibility settings)
+- **THEN** the backtrace is removed from the resulting `Trapped`, `CalledTrap` and `Cleanup` (callback and cleanup) errors
+- **AND** this decision is preserved through deterministic time slicing: a paused execution is wrapped (`BacktraceFilteringPausedWasmExecution`) so that the result of every resumed slice is filtered the same way, and an execution that traps only after being paused and resumed cannot return a backtrace to an unauthorized caller
