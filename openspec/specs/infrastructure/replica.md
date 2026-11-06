@@ -133,6 +133,11 @@ The replica exposes metrics and supports CPU profiling for diagnostics.
 - **THEN** jemalloc is used as the global allocator
 - **AND** jemalloc memory statistics are exposed as metrics
 
+#### Scenario: Bundled jemalloc is built independently of the build machine's CPU
+- **WHEN** Bazel builds the jemalloc archive bundled into `tikv-jemalloc-sys` (`@jemalloc//:jemalloc_private`, used by the replica, `ic-boundary`, `pocket-ic-server`, `ic-gateway` and the GuestOS/SetupOS images)
+- **THEN** jemalloc's `configure` is given `--with-lg-vaddr=48 --with-lg-page=12 --with-lg-hugepage=21`, the values the released artifacts were built with, instead of reading the virtual address width, page size and huge page size from the build machine
+- **AND** so every machine builds the same archive; previously a CPU with 5-level paging (57-bit virtual addresses) produced a different radix tree layout and thus different binaries
+
 #### Scenario: CPU profiling
 - **WHEN** the profiler feature is enabled
 - **THEN** a pprof profiler guard is started at 100 Hz sampling frequency
