@@ -69,7 +69,9 @@ pub const IC_STATE_DIR: &str = "data/ic_state";
 pub const CUPS_DIR: &str = "cups";
 pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
 pub const IC_CONSENSUS_POOL_PATH: &str = "ic_consensus_pool";
-pub const IC_CERTIFICATIONS_PATH: &str = "ic_consensus_pool/certification";
+/// The certification pool within the consensus pool, see
+/// [`ic_artifact_pool::CERTIFICATION_POOL_DIR`].
+pub const IC_CERTIFICATIONS_PATH: &str = "ic_consensus_pool/certification_v2";
 pub const IC_JSON5_PATH: &str = "/run/ic-node/config/ic.json5";
 pub const IC_STATE: &str = "ic_state";
 pub const NEW_IC_STATE: &str = "new_ic_state";
@@ -370,7 +372,7 @@ impl Recovery {
             .join(IC_CERTIFICATIONS_PATH)
             .exists()
         {
-            includes.push(consensus_pool_path.join("certification"));
+            includes.push(consensus_pool_path.join(ic_artifact_pool::CERTIFICATION_POOL_DIR));
         }
 
         self.get_download_data_step(
@@ -1280,6 +1282,14 @@ mod tests {
     use super::*;
     use assert_matches::assert_matches;
     use ic_test_utilities_tmpdir::tmpdir;
+
+    #[test]
+    fn certifications_path_matches_certification_pool_dir() {
+        assert_eq!(
+            PathBuf::from(IC_CERTIFICATIONS_PATH),
+            PathBuf::from(IC_CONSENSUS_POOL_PATH).join(ic_artifact_pool::CERTIFICATION_POOL_DIR)
+        );
+    }
 
     #[test]
     fn get_ic_state_includes_test() {
