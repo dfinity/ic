@@ -4957,6 +4957,18 @@ fn test_list_topics() {
                             ),
                         ),
                     },
+                    NervousSystemFunction {
+                        id: 20,
+                        name: "Load canister snapshot".to_string(),
+                        description: Some(
+                            "Proposal to restore a dapp canister's code and memory from one of its snapshots.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
                 ],
                 custom_functions: vec![],
             },
