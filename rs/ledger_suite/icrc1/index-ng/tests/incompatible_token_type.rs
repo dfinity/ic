@@ -61,6 +61,7 @@ fn index_install_and_upgrade_test(index_install_wasm: Vec<u8>, index_upgrade_was
         retrieve_blocks_from_ledger_interval_seconds: None,
         min_retrieve_blocks_from_ledger_interval_seconds: None,
         max_retrieve_blocks_from_ledger_interval_seconds: None,
+        allowed_poke_callers: None,
     });
     let index_id = env
         .install_canister(index_install_wasm, Encode!(&index_init_arg).unwrap(), None)

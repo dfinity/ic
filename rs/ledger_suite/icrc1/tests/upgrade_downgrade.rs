@@ -72,6 +72,7 @@ fn should_upgrade_and_downgrade_ledger_canister_suite() {
         retrieve_blocks_from_ledger_interval_seconds: None,
         min_retrieve_blocks_from_ledger_interval_seconds: None,
         max_retrieve_blocks_from_ledger_interval_seconds: None,
+        allowed_poke_callers: None,
     });
     env.upgrade_canister(
         index_id,
