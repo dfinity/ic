@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from data_io import load_subnet_data
+from data_io import CANISTERS_INSTALLED, load_subnet_data
 from split_finder import find_split
 
 TEST_DATA_DIR = Path(__file__).resolve().parents[1] / "test_data"
@@ -37,6 +37,18 @@ class TestCsvLoading(unittest.TestCase):
         )
         self.assertEqual(result["edges"], FAKE_COMMUNICATION_EDGES)
         self.assertEqual(len(result["index_to_canister_id"]), len(result["load"]))
+
+    def test_canisters_installed_load(self):
+        result = load_subnet_data(
+            FAKE_LOAD_SAMPLE_CSV_PATH,
+            FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
+            CANISTERS_INSTALLED,
+            FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
+            FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+        )
+        # Every canister in "fake_load_sample.csv" counts once, including those in the baseline.
+        self.assertEqual(result["load"], [1] * 20, msg=f"`load_subnet_data` returned {result}")
+        self.assertEqual(result["edges"], FAKE_COMMUNICATION_EDGES)
 
     def test_communication_with_unknown_canisters_is_ignored(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -113,6 +125,31 @@ class TestCsvLoading(unittest.TestCase):
             ],
             msg=f"`find_split` returned unexpected split: {result}",
         )
+
+    def test_solver_balances_canisters_installed(self):
+        result = find_split(
+            FAKE_LOAD_SAMPLE_CSV_PATH,
+            FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
+            FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
+            FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+            CANISTERS_INSTALLED,
+            0.0,
+            100,
+        )
+
+        index_to_canister_id = load_subnet_data(
+            FAKE_LOAD_SAMPLE_CSV_PATH,
+            FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
+            CANISTERS_INSTALLED,
+            FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
+            FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+        )["index_to_canister_id"]
+        canister_id_to_index = {canister_id: index for index, canister_id in index_to_canister_id.items()}
+        canisters_in_ranges = sum(
+            canister_id_to_index[last] - canister_id_to_index[first] + 1 for first, last in result
+        )
+        # With no allowed deviation, the 20 canisters must be split evenly.
+        self.assertEqual(canisters_in_ranges, 10, msg=f"`find_split` returned unbalanced split: {result}")
 
 
 if __name__ == "__main__":
