@@ -17,7 +17,9 @@ const SUBNET_ARG: &str = "subnet";
 
 /// Propose to make the subnet halt after reaching the next CUP height.
 ///
-/// Optionally adds a ssh-readonly-access key to the subnet.
+/// Optionally sets `key` as the ssh-readonly-access key of the subnet. Note
+/// that this replaces the subnet's entire list of readonly keys, i.e., any
+/// existing readonly key of the subnet is removed.
 pub fn get_halt_subnet_at_cup_height_command(
     admin_helper: &AdminHelper,
     subnet_id: SubnetId,

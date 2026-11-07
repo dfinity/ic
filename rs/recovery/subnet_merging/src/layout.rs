@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use std::path::PathBuf;
 
+/// The name under which the orchestrator stores the latest CUP of a subnet.
+pub(crate) const CUP_FILE_NAME: &str = "cup.types.v1.CatchUpPackage.pb";
+
 /// The file in which the tool records a registry version at which the subnet
 /// that is merged away is labeled "cooling down", i.e. the `V` of the merge
 /// readiness condition, together with the id of that subnet.
@@ -25,13 +28,19 @@ struct CoolingDownRegistryVersion {
 ///
 /// |-- root/
 /// |  |-- cooling_down_registry_version.json
+/// |  |-- ${source_subnet_id}.halting_cup.pb
+/// |  |-- ${destination_subnet_id}.halting_cup.pb
+/// |  |-- ${source_subnet_id}.states_metadata.pbuf
+/// |  |-- ${destination_subnet_id}.states_metadata.pbuf
 pub(crate) struct Layout {
+    root: PathBuf,
     cooling_down_registry_version: PathBuf,
 }
 
 impl Layout {
     pub(crate) fn new(recovery: &Recovery) -> Self {
         Self {
+            root: recovery.recovery_dir.clone(),
             cooling_down_registry_version: recovery
                 .recovery_dir
                 .join(COOLING_DOWN_REGISTRY_VERSION_FILE),
@@ -68,6 +77,19 @@ impl Layout {
                 path.display()
             ))
         })
+    }
+
+    /// The copy of the CUP a subnet halted at that is pulled off its node while
+    /// waiting for the halt.
+    pub(crate) fn halting_cup_file(&self, subnet_id: SubnetId) -> PathBuf {
+        self.root.join(format!("{subnet_id}.halting_cup.pb"))
+    }
+
+    /// The copy of the states metadata of the state manager of a subnet's node
+    /// that is pulled off the node while waiting for the halt, to learn whether
+    /// the node has finished its checkpoint at the height the subnet halts at.
+    pub(crate) fn states_metadata_file(&self, subnet_id: SubnetId) -> PathBuf {
+        self.root.join(format!("{subnet_id}.states_metadata.pbuf"))
     }
 }
 
