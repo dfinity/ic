@@ -132,6 +132,15 @@ pub enum CertificationMessageHash {
     CertificationShare(CryptoHashOf<CertificationShare>),
 }
 
+impl CertificationMessageHash {
+    pub fn digest(&self) -> &CryptoHash {
+        match self {
+            CertificationMessageHash::Certification(hash) => hash.get_ref(),
+            CertificationMessageHash::CertificationShare(hash) => hash.get_ref(),
+        }
+    }
+}
+
 impl From<&CertificationMessageHash> for pb::CertificationMessageHash {
     fn from(value: &CertificationMessageHash) -> Self {
         use pb::certification_message_hash::Kind;
