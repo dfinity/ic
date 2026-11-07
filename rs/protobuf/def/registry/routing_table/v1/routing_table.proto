@@ -47,3 +47,15 @@ message CanisterMigrations {
   // Defined as `repeated` instead of `map` in order to preserve ordering.
   repeated Entry entries = 1;
 }
+
+// Tracks which canister IDs have ever been allocated to a subnet, so that
+// subnet creation never hands out canister IDs again after the subnet that
+// owned them has been deleted.
+//
+// Every canister ID whose index (the u64 encoded in its first 8 bytes) is
+// below `next_unallocated_canister_index` has been assigned to some subnet at
+// some point, even if that subnet has since been deleted and its range is no
+// longer in the routing table.
+message CanisterIdAllocation {
+  uint64 next_unallocated_canister_index = 1;
+}

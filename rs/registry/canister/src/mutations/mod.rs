@@ -1,4 +1,5 @@
 pub mod api_boundary_node;
+pub(crate) mod canister_id_allocation;
 pub mod common;
 pub mod complete_canister_migration;
 pub mod do_add_api_boundary_nodes;

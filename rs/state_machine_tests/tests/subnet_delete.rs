@@ -317,9 +317,15 @@ fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: Subnet
 
     // Set up the routing table and global registry records for all three subnets.
     let mut routing_table = RoutingTable::new();
-    routing_table_insert_subnet(&mut routing_table, s_id).unwrap();
-    routing_table_insert_subnet(&mut routing_table, t_id).unwrap();
-    routing_table_insert_subnet(&mut routing_table, c_id).unwrap();
+    let mut next_unallocated_canister_index = 0;
+    for subnet_id in [s_id, t_id, c_id] {
+        next_unallocated_canister_index = routing_table_insert_subnet(
+            &mut routing_table,
+            subnet_id,
+            next_unallocated_canister_index,
+        )
+        .unwrap();
+    }
 
     add_initial_registry_records(registry_data_provider.clone());
     add_global_registry_records(

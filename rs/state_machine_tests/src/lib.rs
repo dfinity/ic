@@ -1718,7 +1718,12 @@ impl StateMachineBuilder {
         let sm = self.build_internal();
         let subnet_id = sm.get_subnet_id();
         if routing_table.is_empty() {
-            routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
+            routing_table_insert_subnet(
+                &mut routing_table,
+                subnet_id,
+                /* next_unallocated_canister_index = */ 0,
+            )
+            .unwrap();
         }
         if let Some(id_range) = extra_canister_range {
             routing_table
@@ -3724,7 +3729,15 @@ impl StateMachine {
             .expect("malformed routing table")
             .expect("missing routing table");
 
-        routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
+        // This test registry does not track the canister ID allocation (unlike the
+        // registry canister), so the new subnet gets the canister IDs directly
+        // after the last range in the routing table.
+        routing_table_insert_subnet(
+            &mut routing_table,
+            subnet_id,
+            /* next_unallocated_canister_index = */ 0,
+        )
+        .unwrap();
         routing_table
             .assign_ranges(ranges.clone(), subnet_id)
             .expect("ranges are not well formed");
@@ -5801,8 +5814,14 @@ pub fn two_subnets_with_config(
     let subnet_id2 = env2.get_subnet_id();
 
     let mut routing_table = RoutingTable::new();
-    routing_table_insert_subnet(&mut routing_table, subnet_id1).unwrap();
-    routing_table_insert_subnet(&mut routing_table, subnet_id2).unwrap();
+    let next_unallocated_canister_index =
+        routing_table_insert_subnet(&mut routing_table, subnet_id1, 0).unwrap();
+    routing_table_insert_subnet(
+        &mut routing_table,
+        subnet_id2,
+        next_unallocated_canister_index,
+    )
+    .unwrap();
 
     // Set up subnet list for registry.
     let subnet_list = vec![subnet_id1, subnet_id2];
