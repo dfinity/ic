@@ -1,0 +1,20 @@
+# Minimal icp-cli project config that just registers the local 4-node
+# network. No canisters defined here — for actual canister projects, copy
+# this `networks:` block into your project's icp.yaml.
+#
+# Usage:
+#   cd dev/local-net
+#   icp network ping local-cluster
+#
+# Or set ICP_ENVIRONMENT=local-cluster in your project to deploy here:
+#   ICP_ENVIRONMENT=local-cluster icp deploy <canister>
+
+networks:
+  - name: local-cluster
+    mode: connected
+    url: http://localhost:8080
+
+environments:
+  - name: local-cluster
+    network: local-cluster
+    canisters: []
