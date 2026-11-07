@@ -1899,8 +1899,6 @@ pub mod upgrade_permit_action {
 pub struct UpgradePermitRequest {
     #[prost(message, optional, tag = "1")]
     pub requestor: ::core::option::Option<NodeId>,
-    #[prost(uint64, tag = "2")]
-    pub request_height: u64,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RequestUpgradePermit {
@@ -1920,9 +1918,16 @@ pub struct ReturnUpgradePermit {
     pub node: ::core::option::Option<NodeId>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradeAuthorizationContent {
+    #[prost(message, optional, tag = "1")]
+    pub requestor: ::core::option::Option<NodeId>,
+    #[prost(uint64, tag = "2")]
+    pub request_height: u64,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct UpgradeAuthorizationShare {
     #[prost(message, optional, tag = "1")]
-    pub request: ::core::option::Option<UpgradePermitRequest>,
+    pub content: ::core::option::Option<UpgradeAuthorizationContent>,
     #[prost(message, optional, tag = "2")]
     pub signature: ::core::option::Option<BasicSignature>,
 }

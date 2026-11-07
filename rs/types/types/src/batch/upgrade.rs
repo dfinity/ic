@@ -128,7 +128,6 @@ fn signature_batch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Height;
     use crate::NodeId;
     use crate::crypto::{BasicSig, BasicSigOf};
     use ic_base_types::PrincipalId;
@@ -148,7 +147,6 @@ mod tests {
         round_trip(UpgradePayload {
             actions: vec![UpgradePermitAction::RequestPermit(UpgradePermitRequest {
                 requestor: node(3),
-                request_height: Height::new(42),
             })],
         });
     }
@@ -157,10 +155,7 @@ mod tests {
     fn test_round_trip_authorize() {
         round_trip(UpgradePayload {
             actions: vec![UpgradePermitAction::AuthorizePermit(Signed {
-                content: UpgradePermitRequest {
-                    requestor: node(5),
-                    request_height: Height::new(3),
-                },
+                content: UpgradePermitRequest { requestor: node(5) },
                 signature: BasicSignatureBatch {
                     signatures_map: BTreeMap::new(),
                 },
@@ -196,10 +191,7 @@ mod tests {
         let payload = UpgradePayload {
             actions: vec![
                 UpgradePermitAction::AuthorizePermit(Signed {
-                    content: UpgradePermitRequest {
-                        requestor: node(1),
-                        request_height: Height::new(4),
-                    },
+                    content: UpgradePermitRequest { requestor: node(1) },
                     signature: BasicSignatureBatch {
                         signatures_map: BTreeMap::from([(
                             node(2),
@@ -227,15 +219,9 @@ mod tests {
     fn test_round_trip_multiple_actions() {
         round_trip(UpgradePayload {
             actions: vec![
-                UpgradePermitAction::RequestPermit(UpgradePermitRequest {
-                    requestor: node(1),
-                    request_height: Height::new(10),
-                }),
+                UpgradePermitAction::RequestPermit(UpgradePermitRequest { requestor: node(1) }),
                 UpgradePermitAction::AuthorizePermit(Signed {
-                    content: UpgradePermitRequest {
-                        requestor: node(2),
-                        request_height: Height::new(4),
-                    },
+                    content: UpgradePermitRequest { requestor: node(2) },
                     signature: BasicSignatureBatch {
                         signatures_map: BTreeMap::new(),
                     },

@@ -30,7 +30,10 @@ pub use self::{
 };
 use crate::{
     Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
-    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
+    consensus::{
+        idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
+        upgrade::UpgradePermitAction,
+    },
     crypto::{
         canister_threshold_sig::{MasterPublicKey, idkg::IDkgTranscript},
         threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId},
@@ -216,13 +219,15 @@ pub struct BatchSummary {
     pub current_interval_length: Height,
 }
 
-/// Return ingress messages, xnet messages, and responses from the bitcoin adapter.
+/// The contents of a block that the DSM consumes directly: messages to induct and data to record in the state.
+/// Responses to subnet calls that require consensus' involvement are delivered as `ConsensusResponse`s.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct BatchMessages {
     pub signed_ingress_msgs: Vec<SignedIngress>,
     pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
     pub bitcoin_adapter_responses: Vec<BitcoinAdapterResponse>,
     pub query_stats: Option<QueryStatsPayload>,
+    pub upgrade_actions: Vec<UpgradePermitAction>,
 }
 
 /// Error type that can occur during an `BatchPayload::into_messages` call
@@ -230,10 +235,11 @@ pub struct BatchMessages {
 pub enum IntoMessagesError {
     IngressPayloadError(IngressPayloadError),
     QueryStatsPayloadError(ProxyDecodeError),
+    UpgradePayloadError(ProxyDecodeError),
 }
 
 impl BatchPayload {
-    /// Extract and return the set of ingress and xnet messages in a
+    /// Extract and return the set of `BatchMessages` in a
     /// BatchPayload.
     /// Return error if deserialization of ingress payload fails.
     #[allow(clippy::result_large_err)]
@@ -247,6 +253,9 @@ impl BatchPayload {
             bitcoin_adapter_responses: self.self_validating.0,
             query_stats: QueryStatsPayload::deserialize(&self.query_stats)
                 .map_err(IntoMessagesError::QueryStatsPayloadError)?,
+            upgrade_actions: UpgradePayload::deserialize(&self.upgrade)
+                .map_err(IntoMessagesError::UpgradePayloadError)?
+                .actions,
         })
     }
 
