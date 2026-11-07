@@ -10,7 +10,7 @@
 #   CHECK_UP_TO_DATE     'true' adds --check_up_to_date: bazel fails if any action would have to run, so
 #                        exactly what the job's build step built gets uploaded
 #   NO_EVICTION_RETRIES  when set (the Namespace RBE jobs), a blob lost by the remote cache fails the
-#                        bazel run right away instead of after a retry, see below
+#                        bazel run right away instead of being recovered, see below
 set -euo pipefail
 
 read -r -a bazel_args <<<"${BAZEL_ARGS:-}"
@@ -23,11 +23,12 @@ fi
 if [ -n "${NO_EVICTION_RETRIES:-}" ]; then
     # Under Build-without-the-Bytes the outputs of the build step may only exist in the remote cache.
     # bazel run downloads the outputs and runfiles of TARGET by the digests that the build step
-    # recorded, and checks them. If the remote cache lost one of them, bazel would rerun the whole
-    # command (rbe.bazelrc allows 10 retries) after dropping the recorded metadata of all remote
-    # outputs, so that --check_up_to_date would then fail on some unrelated action. Without retries
-    # the bazel run fails on the lost output itself.
-    run_args+=(--experimental_remote_cache_eviction_retries=0)
+    # recorded, and checks them. If the remote cache lost one of them, bazel would recover by
+    # rerunning the action that produced it (action rewinding, see rbe.bazelrc) or the whole command
+    # (rbe.bazelrc allows 10 retries) after dropping the recorded metadata of all remote outputs.
+    # Either way --check_up_to_date would then fail with '... is not up-to-date', on that action or
+    # on some unrelated one. Without both the bazel run fails on the lost output itself.
+    run_args+=(--experimental_remote_cache_eviction_retries=0 --norewind_lost_inputs)
 fi
 
 # Builds the target and writes a script that runs it (with BUILD_WORKSPACE_DIRECTORY set, like
