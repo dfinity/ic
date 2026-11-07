@@ -868,6 +868,12 @@ impl ExecutionEnvironment {
             SubnetMessage::Request(msg) => CanisterCall::Request(msg),
         };
 
+        // Charge instructions proportional to the request payload size
+        // (e.g., for decoding the payload) against the round limits.
+        round_limits.deduct_instructions(as_round_instructions(
+            subnet_message_payload_instructions(msg.method_payload().len()),
+        ));
+
         let timestamp_nanos = state.time();
         let method = Ic00Method::from_str(msg.method_name());
         let payload = msg.method_payload();
@@ -5031,6 +5037,26 @@ pub enum CompilationCostHandling {
 
 /// The expected speed up of deserializing a module compared to compiling it.
 const DESERIALIZATION_SPEED_UP_FACTOR: u64 = 100;
+
+/// The number of instructions charged against the round limits per byte of
+/// the payload of every request (ingress message or canister request)
+/// processed by `ExecutionEnvironment::execute_subnet_message`.
+///
+/// The constant is calibrated by the benchmark of Candid decoding of a
+/// `Vec<u8>` payload (`rs/execution_environment/benches/candid_decode_vec_u8.rs`)
+/// so that 2B instructions correspond to 1 second of wall-clock time.
+/// This is a conservative calibration proxy for blob payloads: production types such as `InstallCodeArgs` and `UploadChunkArgs`
+/// use `serde_bytes`, which follows a different decoding path. It is not a
+/// worst-case bound for all management request payloads.
+pub const SUBNET_MESSAGE_INSTRUCTIONS_PER_PAYLOAD_BYTE: u64 = 10;
+
+/// Returns the number of instructions charged against the round limits
+/// for processing a subnet message request with a payload of the given size.
+pub fn subnet_message_payload_instructions(payload_size_bytes: usize) -> NumInstructions {
+    NumInstructions::new(
+        (payload_size_bytes as u64).saturating_mul(SUBNET_MESSAGE_INSTRUCTIONS_PER_PAYLOAD_BYTE),
+    )
+}
 
 impl CompilationCostHandling {
     /// Adjusts the compilation cost based on how it should be handled. Only public for use in tests.

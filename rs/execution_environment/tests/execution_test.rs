@@ -10,6 +10,7 @@ use ic_config::{
 use ic_crypto_tree_hash::{MixedHashTree, Path as LabeledTreePath, sparse_labeled_tree_from_paths};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
+use ic_execution_environment::subnet_message_payload_instructions;
 use ic_execution_environment::units::{GIB, MIB};
 use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types_private::{
@@ -2961,7 +2962,10 @@ fn list_canisters_respects_round_instruction_limit() {
 
     let num_canisters = env.get_latest_state().num_canisters() as u64;
     assert_eq!(num_canisters, 2);
-    let cost_per_call = BASE_INSTRUCTIONS + INSTRUCTIONS_PER_CANISTER * num_canisters;
+    // Every call is also charged for its payload size.
+    let cost_per_call = BASE_INSTRUCTIONS
+        + INSTRUCTIONS_PER_CANISTER * num_canisters
+        + subnet_message_payload_instructions(EmptyBlob.encode().len()).get();
 
     // Build an update that fires `NUM_CALLS` concurrent `list_canisters`
     // inter-canister calls (ignoring their responses) and then replies. After
@@ -3061,10 +3065,10 @@ fn list_canisters_via_inter_canister_call_succeeds() {
 }
 
 // A non-admin canister calling `list_canisters` via an inter-canister call is
-// rejected, and the rejected call must not consume any round instructions:
-// instructions are only deducted from the round limits for a successful call,
-// per the cost model checked by `list_canisters_respects_round_instruction_limit`
-// above.
+// rejected, and the rejected call must only consume the round instructions
+// charged for its payload size: the instructions for listing canisters are only
+// deducted from the round limits for a successful call, per the cost model
+// checked by `list_canisters_respects_round_instruction_limit` above.
 #[test]
 fn list_canisters_via_inter_canister_call_rejected_for_non_admin() {
     let admin = user_test_id(100).get();
@@ -3098,7 +3102,10 @@ fn list_canisters_via_inter_canister_call_rejected_for_non_admin() {
     let reject = get_reject(env.execute_ingress(non_admin_canister, "update", list_canisters));
     assert!(reject.contains("Only the subnet admins can perform certain actions"));
 
-    assert_eq!(env.subnet_message_instructions(), instructions_baseline);
+    assert_eq!(
+        env.subnet_message_instructions() - instructions_baseline,
+        subnet_message_payload_instructions(EmptyBlob.encode().len()).get() as f64
+    );
 }
 
 /// Number of rounds one [`read_subnet_metrics`] takes: the ingress executes in
