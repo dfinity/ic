@@ -886,13 +886,14 @@ fn create_gateway(
     server_url: Url,
     port: Option<u16>,
     forward_to: HttpGatewayBackend,
+    domains: Option<Vec<String>>,
 ) -> Result<u16, String> {
     let endpoint = server_url.join("http_gateway").unwrap();
     let http_gateway_config = HttpGatewayConfig {
         ip_addr: None,
         port,
         forward_to,
-        domains: None,
+        domains,
         https_config: None,
         domain_custom_provider_local_file: None,
     };
@@ -926,6 +927,7 @@ fn test_gateway_address_in_use() {
         server_url.clone(),
         None,
         HttpGatewayBackend::PocketIcInstance(pic.instance_id()),
+        None,
     )
     .unwrap();
 
@@ -934,9 +936,53 @@ fn test_gateway_address_in_use() {
         server_url,
         Some(port),
         HttpGatewayBackend::PocketIcInstance(pic.instance_id()),
+        None,
     )
     .unwrap_err();
     assert!(err.contains(&format!(
         "Failed to bind to address 127.0.0.1:{port}: Address already in use"
     )));
+}
+
+// Test that creating an HTTP gateway with an invalid domain fails gracefully
+// and does not affect browser requests to the IC HTTP API of the PocketIC server.
+#[test]
+fn test_gateway_invalid_domain() {
+    let (server_url, _) = start_server_helper(None, None, false, false);
+    let pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_application_subnet()
+        .build();
+
+    let err = create_gateway(
+        server_url.clone(),
+        None,
+        HttpGatewayBackend::PocketIcInstance(pic.instance_id()),
+        Some(vec![
+            "example.com".to_string(),
+            "invalid domain".to_string(),
+        ]),
+    )
+    .unwrap_err();
+    assert!(
+        err.contains("Invalid HTTP gateway domain `invalid domain`"),
+        "{err}"
+    );
+
+    // No HTTP gateway has been created and thus browser requests
+    // from the (valid) domain are not accepted.
+    let status_url = server_url
+        .join(&format!("instances/{}/api/v2/status", pic.instance_id()))
+        .unwrap();
+    for (origin, expected_status) in [
+        ("https://example.com", StatusCode::FORBIDDEN),
+        ("http://localhost:5173", StatusCode::OK),
+    ] {
+        let response = Client::new()
+            .get(status_url.clone())
+            .header(header::ORIGIN, origin)
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), expected_status, "{origin}");
+    }
 }

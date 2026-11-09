@@ -16,7 +16,7 @@ use pocket_ic::{PocketIc, PocketIcBuilder, PocketIcState, update_candid};
 use reqwest::blocking::Client;
 use reqwest::{Method, StatusCode, header};
 use slog::Level;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
@@ -187,6 +187,25 @@ fn test_control_plane_rejects_browser_requests() {
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // Requests with a non-ASCII `Host` header are rejected.
+    let response = client
+        .get(url.join("instances").unwrap())
+        .header(
+            header::HOST,
+            header::HeaderValue::from_bytes(b"\xff").unwrap(),
+        )
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // Requests without a `Host` header (HTTP/1.0) are rejected.
+    let mut stream = std::net::TcpStream::connect(url.socket_addrs(|| None).unwrap()[0]).unwrap();
+    stream
+        .write_all(b"GET /instances HTTP/1.0\r\n\r\n")
+        .unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    assert!(response.starts_with("HTTP/1."), "{response}");
+    assert!(response.contains(" 403 Forbidden\r\n"), "{response}");
     let port = url.port().unwrap();
     let rebound_origin = format!("http://evil.example:{port}");
     let response = client

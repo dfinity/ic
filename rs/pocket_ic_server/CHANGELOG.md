@@ -17,12 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - The PocketIC server rejects browser requests from arbitrary web pages to protect against malicious websites, including DNS rebinding attacks:
-  - Browser requests to the IC HTTP API (`/instances/<id>/api/...`) are only accepted from local origins,
-    domains of HTTP gateways, and same-origin pages.
+  - Browser requests to the IC HTTP API (`/instances/<id>/api/...`) are only accepted from local origins
+    (`localhost` and loopback IP addresses), domains of HTTP gateways, and same-origin pages.
+    In particular, cross-origin browser requests from pages served on other (e.g., LAN) IP addresses are rejected.
   - The read-only dashboard and topology endpoints (`/instances/<id>/_/dashboard` and `/instances/<id>/_/topology`)
     remain accessible from any origin, including through HTTP gateways.
   - Requests to the remaining endpoints are rejected if they are cross-origin browser requests
-    or if their `Host` header is neither an IP address, `localhost`, nor allowed by `--allowed-host`.
+    or if their `Host` header is missing or neither an IP address, `localhost`, nor allowed by `--allowed-host`.
+- Creating an HTTP gateway with an invalid domain fails with an error
+  instead of creating an HTTP gateway that does not serve any requests.
 
 ### Fixed
 - Requests to the bitcoin and dogecoin adapters (fetching blocks and sending transactions) time out after 1 s instead of 50 ms,

@@ -58,6 +58,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::PathBuf,
+    str::FromStr,
     sync::Arc,
     sync::atomic::AtomicU64,
     time::{Duration, SystemTime},
@@ -148,6 +149,9 @@ struct Instance {
 struct HttpGateway {
     details: HttpGatewayDetails,
     shutdown_handle: Handle,
+    // Domains passed as `domains` when creating the HTTP gateway
+    // (validated when creating the HTTP gateway).
+    domains: Vec<FQDN>,
     // Domains configured through a custom domain provider (e.g., a local file).
     custom_domain_storage: Arc<CustomDomainStorage>,
 }
@@ -156,11 +160,13 @@ impl HttpGateway {
     fn new(
         details: HttpGatewayDetails,
         shutdown_handle: Handle,
+        domains: Vec<FQDN>,
         custom_domain_storage: Arc<CustomDomainStorage>,
     ) -> Self {
         Self {
             details,
             shutdown_handle,
+            domains,
             custom_domain_storage,
         }
     }
@@ -180,7 +186,7 @@ impl HttpGatewayDomains {
     #[cfg(test)]
     pub(crate) fn from_domains(domains: Vec<String>) -> Self {
         Self {
-            domains: domains.iter().map(|domain| fqdn!(domain)).collect(),
+            domains: parse_http_gateway_domains(&domains).unwrap(),
             custom_domain_storages: vec![],
         }
     }
@@ -198,6 +204,18 @@ impl HttpGatewayDomains {
                     .any(|storage| storage.resolve(&fqdn).is_some())
         })
     }
+}
+
+/// Parses the domains passed as `domains` when creating an HTTP gateway,
+/// failing on the first invalid domain.
+fn parse_http_gateway_domains(domains: &[String]) -> Result<Vec<FQDN>, String> {
+    domains
+        .iter()
+        .map(|domain| {
+            FQDN::from_str(domain)
+                .map_err(|e| format!("Invalid HTTP gateway domain `{domain}`: {e}"))
+        })
+        .collect()
 }
 
 impl Drop for HttpGateway {
@@ -826,6 +844,15 @@ impl ApiState {
                 .map_err(|_| ErrorCause(UPSTREAM_ERROR.to_string()))
         }
 
+        // Validate the domains upfront: the HTTP gateway task below would panic
+        // on an invalid domain and the domains are later used to determine
+        // the origins allowed to access the IC HTTP API.
+        let domains = http_gateway_config
+            .domains
+            .as_deref()
+            .map(parse_http_gateway_domains)
+            .transpose()?;
+
         let https_config = if let Some(ref https_config) = http_gateway_config.https_config {
             Some(
                 RustlsConfig::from_pem_file(
@@ -870,19 +897,14 @@ impl ApiState {
         let custom_domain_storage =
             Arc::new(CustomDomainStorage::new(custom_domain_providers, &registry));
         let gateway_custom_domain_storage = custom_domain_storage.clone();
-        let raw_domains = http_gateway_config.domains.clone();
+        let gateway_domains = domains.clone().unwrap_or_default();
         spawn(async move {
             let router = {
                 let mut args = vec!["".to_string()];
-                if raw_domains.is_none() {
+                if domains.is_none() {
                     args.push("--domain-skip-authority-validation".to_string());
                 }
-                let domains: Vec<_> = raw_domains
-                    .clone()
-                    .unwrap_or(vec!["localhost".to_string()])
-                    .iter()
-                    .map(|d| fqdn!(d))
-                    .collect();
+                let domains = domains.unwrap_or(vec![fqdn!("localhost")]);
                 for d in &domains {
                     args.push("--domain".to_string());
                     args.push(d.to_string());
@@ -1026,6 +1048,7 @@ impl ApiState {
         let http_gateway = HttpGateway::new(
             http_gateway_details,
             shutdown_handle,
+            gateway_domains,
             gateway_custom_domain_storage,
         );
         http_gateways.push(Some(http_gateway));
@@ -1180,14 +1203,9 @@ impl ApiState {
     pub async fn http_gateway_domains(&self) -> HttpGatewayDomains {
         let mut gateway_domains = HttpGatewayDomains::default();
         for gateway in self.http_gateways.read().await.iter().flatten() {
-            gateway_domains.domains.extend(
-                gateway
-                    .details
-                    .domains
-                    .iter()
-                    .flatten()
-                    .map(|domain| fqdn!(domain)),
-            );
+            gateway_domains
+                .domains
+                .extend(gateway.domains.iter().cloned());
             gateway_domains
                 .custom_domain_storages
                 .push(gateway.custom_domain_storage.clone());

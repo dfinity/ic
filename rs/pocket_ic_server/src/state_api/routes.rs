@@ -6,8 +6,7 @@
 /// deterministically update the PocketIc state machine.
 ///
 use super::state::{
-    ApiState, DEFAULT_SYNC_WAIT_DURATION, HttpGatewayDomains, OpOut, PocketIcError, StateLabel,
-    UpdateReply,
+    ApiState, DEFAULT_SYNC_WAIT_DURATION, OpOut, PocketIcError, StateLabel, UpdateReply,
 };
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
@@ -27,7 +26,7 @@ use aide::{
 };
 
 use axum::{
-    Json,
+    Extension, Json,
     body::{Body, Bytes},
     extract::{self, Path, Request, State},
     http::{self, HeaderMap, HeaderName, StatusCode},
@@ -324,7 +323,7 @@ where
 /// Host names (without port) in addition to IP addresses and `localhost`
 /// (or a subdomain thereof) that are allowed in the `Host` header of requests
 /// (e.g., the host name of the PocketIC server in a Docker network).
-/// Expected to be provided as a request extension.
+/// Must be provided as a request extension (see [`control_plane_guard`]).
 #[derive(Clone, Debug, Default)]
 pub struct AllowedHosts(pub Vec<String>);
 
@@ -347,13 +346,9 @@ fn is_allowed_host(host: &str, allowed_hosts: &[String]) -> bool {
     }
 }
 
-fn allowed_hosts(req: &Request) -> &[String] {
-    req.extensions()
-        .get::<AllowedHosts>()
-        .map(|allowed_hosts| allowed_hosts.0.as_slice())
-        .unwrap_or_default()
-}
-
+/// Returns the `Host` header of a request or, for HTTP/2 requests
+/// (which carry the host in `:authority` instead), the authority of its URI.
+/// Returns `None` if there is neither or if the `Host` header is not ASCII.
 fn request_host(req: &Request) -> Option<String> {
     match req.headers().get(http::header::HOST) {
         Some(host) => host.to_str().ok().map(|h| h.to_string()),
@@ -379,7 +374,7 @@ fn origin_authority(origin: &str) -> Option<&str> {
 /// - the origin is local, i.e., `localhost` (or a subdomain thereof)
 ///   or a loopback IP address, or
 /// - the origin is a domain served by an HTTP gateway
-///   (see [`HttpGatewayDomains::contains`]).
+///   (see [`super::state::HttpGatewayDomains::contains`]).
 fn is_allowed_ic_api_origin(
     origin: &str,
     host: Option<&str>,
@@ -413,19 +408,21 @@ fn is_allowed_ic_api_origin(
 /// unless [`is_allowed_ic_api_origin`] holds.
 /// This applies to requests proxied by an HTTP gateway, too,
 /// since HTTP gateways forward the `Origin` header.
-/// Expects the [`ApiState`] to be provided as a request extension
-/// to determine the domains served by HTTP gateways.
-async fn ic_api_guard(req: Request, next: Next) -> Response {
+/// The [`ApiState`] (to determine the domains served by HTTP gateways)
+/// and the [`AllowedHosts`] must be provided as request extensions.
+async fn ic_api_guard(
+    Extension(api_state): Extension<Arc<ApiState>>,
+    Extension(allowed_hosts): Extension<AllowedHosts>,
+    req: Request,
+    next: Next,
+) -> Response {
     let Some(origin) = req.headers().get(http::header::ORIGIN) else {
         return next.run(req).await;
     };
-    let gateway_domains = match req.extensions().get::<Arc<ApiState>>() {
-        Some(api_state) => api_state.http_gateway_domains().await,
-        None => HttpGatewayDomains::default(),
-    };
+    let gateway_domains = api_state.http_gateway_domains().await;
     let host = request_host(&req);
     let allowed = origin.to_str().ok().is_some_and(|origin| {
-        is_allowed_ic_api_origin(origin, host.as_deref(), allowed_hosts(&req), |domain| {
+        is_allowed_ic_api_origin(origin, host.as_deref(), &allowed_hosts.0, |domain| {
             gateway_domains.contains(domain)
         })
     });
@@ -444,13 +441,23 @@ async fn ic_api_guard(req: Request, next: Next) -> Response {
 /// - requests with an `Origin` header (i.e., browser requests) are rejected
 ///   unless they are same-origin requests (cross-origin requests that do not
 ///   require a CORS preflight, e.g., HTML form submissions, are rejected, too);
-/// - requests whose `Host` header is not allowed (see [`is_allowed_host`])
+/// - requests whose `Host` header is missing or not allowed (see [`is_allowed_host`])
 ///   are rejected (to prevent DNS rebinding attacks).
-pub async fn control_plane_guard(req: Request, next: Next) -> Response {
-    let host = request_host(&req);
-    if let Some(ref host) = host
-        && !is_allowed_host(host, allowed_hosts(&req))
-    {
+///
+/// The [`AllowedHosts`] must be provided as a request extension.
+pub async fn control_plane_guard(
+    Extension(allowed_hosts): Extension<AllowedHosts>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let Some(host) = request_host(&req) else {
+        return (
+            StatusCode::FORBIDDEN,
+            "Requests to the PocketIC server must have a valid `Host` header.".to_string(),
+        )
+            .into_response();
+    };
+    if !is_allowed_host(&host, &allowed_hosts.0) {
         return (
             StatusCode::FORBIDDEN,
             format!(
@@ -462,16 +469,10 @@ pub async fn control_plane_guard(req: Request, next: Next) -> Response {
             .into_response();
     }
     if let Some(origin) = req.headers().get(http::header::ORIGIN) {
-        let same_origin =
-            origin
-                .to_str()
-                .ok()
-                .is_some_and(|origin| match (origin_authority(origin), &host) {
-                    (Some(origin_authority), Some(host)) => {
-                        origin_authority.eq_ignore_ascii_case(host)
-                    }
-                    _ => false,
-                });
+        let same_origin = origin.to_str().ok().is_some_and(|origin| {
+            origin_authority(origin)
+                .is_some_and(|origin_authority| origin_authority.eq_ignore_ascii_case(&host))
+        });
         if !same_origin {
             return (
                 StatusCode::FORBIDDEN,
@@ -2036,7 +2037,8 @@ pub fn timeout_or_default(header_map: HeaderMap) -> Option<Duration> {
 
 #[cfg(test)]
 mod tests {
-    use super::{HttpGatewayDomains, is_allowed_host, is_allowed_ic_api_origin};
+    use super::{is_allowed_host, is_allowed_ic_api_origin};
+    use crate::state_api::state::HttpGatewayDomains;
 
     fn allowed_hosts() -> Vec<String> {
         vec!["Pocket-IC".to_string()]
