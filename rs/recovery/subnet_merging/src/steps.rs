@@ -138,8 +138,6 @@ impl Step for WaitForHaltingCupStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let node_url = self.node_url()?;
-
         // A node that is not answering yet is the normal state of affairs while
         // the subnet is still running towards its halting CUP, so errors are
         // retried.
@@ -149,7 +147,7 @@ impl Step for WaitForHaltingCupStep {
             self.poll_interval,
             &self.logger,
             || {
-                self.check(&node_url)?.ok_or_else(|| {
+                self.check()?.ok_or_else(|| {
                     RecoveryError::UnexpectedError(format!(
                         "node {} does not serve the CUP subnet {} halts at yet",
                         self.node_ip(),
@@ -191,9 +189,10 @@ impl WaitForHaltingCupStep {
 
     /// Returns the halting CUP if the node serves it, `None` if it does not
     /// yet, and an error if the node could not be asked.
-    fn check(&self, node_url: &Url) -> RecoveryResult<Option<CatchUpPackage>> {
+    fn check(&self) -> RecoveryResult<Option<CatchUpPackage>> {
         let node_ip = self.node_ip();
-        let Some(proto) = block_on(get_cup(node_url)).map_err(|err| {
+        let node_url = self.node_url()?;
+        let Some(proto) = block_on(get_cup(&node_url)).map_err(|err| {
             RecoveryError::UnexpectedError(format!(
                 "Failed to get the CUP of node {node_ip}: {err}"
             ))
