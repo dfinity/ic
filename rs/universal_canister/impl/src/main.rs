@@ -391,6 +391,16 @@ fn eval(ops_bytes: OpsBytes) {
                     api::trap_with_blob(&c)
                 }
             }
+            // Evaluate the ops in the topmost blob (on a fresh stack) if the next
+            // two blobs are equal (`IfEq`) or not equal (`IfNeq`).
+            Ops::IfEq | Ops::IfNeq => {
+                let ops = stack.pop_blob();
+                let b = stack.pop_blob();
+                let a = stack.pop_blob();
+                if (a == b) == (op == Ops::IfEq) {
+                    eval(&ops);
+                }
+            }
             Ops::MintCycles128 => {
                 let amount_low = stack.pop_int64();
                 let amount_high = stack.pop_int64();

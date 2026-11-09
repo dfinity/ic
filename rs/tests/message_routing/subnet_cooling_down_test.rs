@@ -86,6 +86,7 @@ end::catalog[] */
 use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_agent::Agent;
+use ic_agent::agent::RejectCode;
 use ic_recovery::RecoveryArgs;
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_merging::metrics_helper::{
@@ -631,9 +632,9 @@ async fn check_ingress_and_queries_rejected(context: &Context<'_>) {
 /// iteration counter, read via a query to `T`, does not advance. `UM`'s counter
 /// cannot be read, as `M` rejects query calls.
 ///
-/// The loop may still go round on rejects, e.g. whenever its call to `UM` times
-/// out in `UT`'s output queue, but such iterations do not count (see
-/// `start_call_loop`).
+/// The loop may still go round on `SYS_TRANSIENT` rejects, e.g. whenever its
+/// call to `UM` times out in `UT`'s output queue, but such iterations do not
+/// count (see `start_call_loop`).
 async fn check_ut_loop_stalled(context: &Context<'_>) {
     let logger = &context.logger;
     info!(
@@ -777,13 +778,14 @@ fn term(terms: &[Term], condition: Condition) -> &Term {
 /// iteration would have left behind one open call context) and it makes each
 /// iteration consist of one self-call plus one cross-subnet call.
 ///
-/// The iteration counter (the global counter of `canister`) only counts the
-/// iterations whose call to `peer` was replied to, i.e. the completed round
-/// trips to `peer`. A rejected call continues the loop too, but is not counted,
-/// as a reject does not imply that any message got through to `peer`: e.g. a
-/// call to a subnet that is cooling down is held in `canister`'s output queue
-/// until it times out there (after `REQUEST_LIFETIME` = 5 minutes), whereupon
-/// the loop makes a new call that is held in turn.
+/// The iteration counter (the global counter of `canister`) counts the
+/// iterations whose call to `peer` was replied to or rejected with any code
+/// other than `SYS_TRANSIENT`. A call rejected with `SYS_TRANSIENT` continues
+/// the loop too, but is not counted, as such a reject does not imply that any
+/// message got through to `peer`: e.g. a call to a subnet that is cooling down
+/// is held in `canister`'s output queue until it times out there (after
+/// `REQUEST_LIFETIME` = 5 minutes) and is rejected with `SYS_TRANSIENT`,
+/// whereupon the loop makes a new call that is held in turn.
 async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
     // The continuation, executed by the reply and reject callbacks of the call
     // to `peer` after `ops`: call `canister` itself with the loop body it holds
@@ -803,7 +805,8 @@ async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
     };
     // The loop body: fire a call to `peer` (which merely replies) with the
     // continuation as both callbacks, the reply callback bumping the iteration
-    // counter first, then reply.
+    // counter first and the reject callback doing so unless the reject code is
+    // `SYS_TRANSIENT`, then reply.
     let loop_body = wasm()
         .call_simple(
             peer,
@@ -811,7 +814,10 @@ async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
             call_args()
                 .other_side(wasm().reply_data(&[]))
                 .on_reply(continuation(wasm().inc_global_counter()))
-                .on_reject(continuation(wasm())),
+                .on_reject(continuation(wasm().reject_code().int_to_blob().if_neq(
+                    (RejectCode::SysTransient as u32).to_le_bytes(),
+                    wasm().inc_global_counter(),
+                ))),
         )
         .reply_data(&[])
         .build();
