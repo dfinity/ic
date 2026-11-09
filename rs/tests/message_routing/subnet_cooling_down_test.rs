@@ -79,12 +79,9 @@ Runbook::
    `T`. `UM`'s counter cannot be read, as `M` rejects query calls.
 12. The following steps of the tool are executed: `HaltSourceSubnetAtCupHeight`
    and `HaltDestinationSubnetAtCupHeight`, which set the `halt_at_cup_height`
-   flag of `M` and `T` (and give the test's ssh key readonly access to their
-   nodes), and `WaitForHaltingCupOnSourceSubnet` and
+   flag of `M` and `T`, and `WaitForHaltingCupOnSourceSubnet` and
    `WaitForHaltingCupOnDestinationSubnet`, which wait until the node of each
-   subnet that its state would be downloaded from holds the halting CUP on
-   disk and a published manifest whose root hash matches the CUP's state
-   hash.
+   subnet that its state would be downloaded from serves the halting CUP.
 13. After `WaitForHaltingCupOnDestinationSubnet`: check that both subnets are
    halted, i.e. that every one of their nodes certifies the height its subnet
    halts at and none goes past it, even after `HALT_OBSERVATION_PERIOD`.
@@ -100,7 +97,7 @@ end::catalog[] */
 use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_agent::Agent;
-use ic_recovery::{RecoveryArgs, file_sync_helper, get_node_metrics};
+use ic_recovery::{RecoveryArgs, get_node_metrics, util::DataLocation};
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_merging::metrics_helper::{
     Labels, MetricsByReplica, ScrapeError, fetch_available_metrics, replica_values,
@@ -111,9 +108,7 @@ use ic_subnet_merging::readiness::{
 };
 use ic_subnet_merging::subnet_merging::{StepType, SubnetMerging, SubnetMergingArgs};
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
-use ic_system_test_driver::driver::driver_setup::{
-    SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
-};
+use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -521,9 +516,6 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     let ssh_priv_key_path = env
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
-    let readonly_pub_key =
-        file_sync_helper::read_file(&env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME))
-            .expect("Couldn't read public key");
 
     let recovery_args = RecoveryArgs {
         dir: env.get_path(MERGING_DIR),
@@ -534,17 +526,15 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
             .unwrap()
             .get_public_url(),
         replica_version: Some(get_guestos_img_version()),
-        admin_key_file: Some(ssh_priv_key_path.clone()),
+        admin_key_file: Some(ssh_priv_key_path),
         test_mode: true,
         skip_prompts: true,
     };
     let merging_args = SubnetMergingArgs {
         source_subnet_id: context.m_subnet.subnet_id,
         destination_subnet_id: context.t_subnet.subnet_id,
-        readonly_pub_key: Some(readonly_pub_key),
-        readonly_key_file: Some(ssh_priv_key_path),
-        download_node_source: Some(download_node(&context.m_subnet)),
-        download_node_destination: Some(download_node(&context.t_subnet)),
+        download_node_source: Some(DataLocation::Remote(download_node(&context.m_subnet))),
+        download_node_destination: Some(DataLocation::Remote(download_node(&context.t_subnet))),
         merge_ready_timeout_secs: MERGE_READY_TIMEOUT.as_secs(),
         halt_timeout_secs: HALT_TIMEOUT.as_secs(),
         registry_timeout_secs: REGISTRY_TIMEOUT.as_secs(),
@@ -590,7 +580,7 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     exec_next_step(StepType::WaitForHaltingCupOnDestinationSubnet);
     info!(
         logger,
-        "Step 12 done: the nodes of M and T the states would be downloaded from hold the CUPs \
+        "Step 12 done: the nodes of M and T the states would be downloaded from serve the CUPs \
          their subnets halt at"
     );
     runtime.block_on(check_subnets_halted(context));
@@ -625,7 +615,7 @@ async fn check_subnets_halted(context: &Context<'_>) {
 
     for subnet in subnets {
         let subnet_id = subnet.subnet_id;
-        // The tool has checked that the download node holds the CUP the subnet
+        // The tool has checked that the download node serves the CUP the subnet
         // halts at, and no CUP follows that one.
         let download_node = download_node(subnet);
         let halting_height = get_node_metrics(logger, &download_node)

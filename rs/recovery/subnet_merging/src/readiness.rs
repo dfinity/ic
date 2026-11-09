@@ -448,7 +448,7 @@ fn subnet_node_ips(
 }
 
 /// The IP addresses of the nodes of `subnet_id` as of `registry_version`.
-pub(crate) fn node_ips_on_subnet(
+fn node_ips_on_subnet(
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,

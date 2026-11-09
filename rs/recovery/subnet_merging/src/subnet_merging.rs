@@ -9,14 +9,13 @@ use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
     NeuronArgs, Recovery, RecoveryArgs,
-    cli::read_optional,
+    cli::read_optional_data_location,
     error::{RecoveryError, RecoveryResult},
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
-    ssh_helper::SshHelper,
     steps::{AdminStep, Step},
-    util::SshUser,
+    util::DataLocation,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_tools::{
@@ -27,9 +26,7 @@ use slog::{Logger, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 
-use std::{
-    collections::BTreeSet, fmt::Debug, iter::Peekable, net::IpAddr, path::PathBuf, time::Duration,
-};
+use std::{collections::BTreeSet, fmt::Debug, iter::Peekable, time::Duration};
 
 const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
@@ -59,10 +56,10 @@ pub enum StepType {
     /// Submit a proposal to halt the destination subnet at its next CUP.
     HaltDestinationSubnetAtCupHeight,
     /// Wait until the node of the source subnet the state is downloaded from
-    /// holds the CUP the subnet halts at.
+    /// serves the CUP the subnet halts at.
     WaitForHaltingCupOnSourceSubnet,
     /// Wait until the node of the destination subnet the state is downloaded
-    /// from holds the CUP the subnet halts at.
+    /// from serves the CUP the subnet halts at.
     WaitForHaltingCupOnDestinationSubnet,
 }
 
@@ -79,24 +76,15 @@ pub struct SubnetMergingArgs {
     #[clap(long, value_parser=ic_recovery::util::subnet_id_from_str)]
     pub destination_subnet_id: SubnetId,
 
-    /// Public ssh key to be deployed to both subnets for read only access.
-    ///
-    /// The proposals halting the subnets set this key as each subnet's only
-    /// readonly key: it replaces the subnet's entire list of readonly keys.
-    #[clap(long)]
-    pub readonly_pub_key: Option<String>,
+    /// The node of the source subnet to download the state from: its IP
+    /// address, or "local" if the tool runs on that node.
+    #[clap(long, value_parser=ic_recovery::util::data_location_from_str)]
+    pub download_node_source: Option<DataLocation>,
 
-    /// The path to a file containing the private key associated with `readonly_pub_key`.
-    #[clap(long)]
-    pub readonly_key_file: Option<PathBuf>,
-
-    /// IP address of the node of the source subnet to download the state from.
-    #[clap(long)]
-    pub download_node_source: Option<IpAddr>,
-
-    /// IP address of the node of the destination subnet to download the state from.
-    #[clap(long)]
-    pub download_node_destination: Option<IpAddr>,
+    /// The node of the destination subnet to download the state from: its IP
+    /// address, or "local" if the tool runs on that node.
+    #[clap(long, value_parser=ic_recovery::util::data_location_from_str)]
+    pub download_node_destination: Option<DataLocation>,
 
     /// How long to wait for the subnet that is cooling down to become ready to
     /// be merged, in seconds.
@@ -364,7 +352,7 @@ impl SubnetMerging {
             ic_admin_cmd: get_halt_subnet_at_cup_height_command(
                 &self.recovery.admin_helper,
                 self.subnet_id(target_subnet),
-                &self.params.readonly_pub_key,
+                /*key=*/ &None,
             ),
         }
     }
@@ -373,44 +361,23 @@ impl SubnetMerging {
         &self,
         target_subnet: TargetSubnet,
     ) -> RecoveryResult<impl Step + use<>> {
-        let Some(node_ip) = self.download_node(target_subnet) else {
+        let Some(node) = self.download_node(target_subnet) else {
             return Err(RecoveryError::StepSkipped);
         };
 
         Ok(WaitForHaltingCupStep {
             subnet_id: self.subnet_id(target_subnet),
-            node_ip,
+            node,
             registry_helper: self.recovery.registry_helper.clone(),
-            layout: self.layout.clone(),
-            // The step accesses the node on every poll, so it asks for
-            // confirmation once, before polling, rather than on every access.
-            ssh_helper: self.ssh_helper(node_ip, /*require_confirmation=*/ false),
-            ssh_confirmation: self.recovery.ssh_confirmation,
             timeout: Duration::from_secs(self.params.halt_timeout_secs),
             poll_interval: Duration::from_secs(self.params.poll_interval_secs),
             logger: self.recovery.logger.clone(),
         })
     }
 
-    fn ssh_helper(&self, node_ip: IpAddr, require_confirmation: bool) -> SshHelper {
-        let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {
-            (SshUser::Readonly, self.params.readonly_key_file.clone())
-        } else {
-            (SshUser::Admin, self.recovery.admin_key_file.clone())
-        };
-
-        SshHelper::new(
-            self.recovery.logger.clone(),
-            ssh_user,
-            node_ip,
-            require_confirmation,
-            key_file,
-        )
-    }
-
     /// The node of a subnet whose state is merged, i.e. the one the halting CUP
     /// is waited for on.
-    fn download_node(&self, target_subnet: TargetSubnet) -> Option<IpAddr> {
+    fn download_node(&self, target_subnet: TargetSubnet) -> Option<DataLocation> {
         match target_subnet {
             TargetSubnet::Source => self.params.download_node_source,
             TargetSubnet::Destination => self.params.download_node_destination,
@@ -481,32 +448,22 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                  holds. Please check the dashboard as well, to see whether it is safe to merge \
                  the subnet",
             ),
-            StepType::HaltSourceSubnetAtCupHeight => {
-                if self.params.readonly_pub_key.is_none() {
-                    self.params.readonly_pub_key = read_optional(
-                        &self.logger,
-                        "Enter public key to add readonly SSH access to both subnets. Ensure the right format.\n\
-                        Note: it replaces all existing readonly keys of both subnets.\n\
-                        Format:   ssh-ed25519 <pubkey> <identity>\n\
-                        Example:  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwS/0S6xH0g/xLDV0Tz7VeMZE9AKPeSbLmCsq9bY3F1 foo@dfinity.org\n\
-                        Enter your key: ",
-                    )
-                }
-            }
-            StepType::HaltDestinationSubnetAtCupHeight => {}
+            StepType::HaltSourceSubnetAtCupHeight | StepType::HaltDestinationSubnetAtCupHeight => {}
             StepType::WaitForHaltingCupOnSourceSubnet => {
                 if self.params.download_node_source.is_none() {
-                    self.params.download_node_source = read_optional(
+                    self.params.download_node_source = read_optional_data_location(
                         &self.logger,
-                        "Enter the IP of the node of the Source Subnet to download the state from:",
+                        "Enter the IP of the node of the Source Subnet to download the state from \
+                         (or \"local\" if the tool runs on that node):",
                     );
                 }
             }
             StepType::WaitForHaltingCupOnDestinationSubnet => {
                 if self.params.download_node_destination.is_none() {
-                    self.params.download_node_destination = read_optional(
+                    self.params.download_node_destination = read_optional_data_location(
                         &self.logger,
-                        "Enter the IP of the node of the Destination Subnet to download the state from:",
+                        "Enter the IP of the node of the Destination Subnet to download the state \
+                         from (or \"local\" if the tool runs on that node):",
                     );
                 }
             }
@@ -596,10 +553,8 @@ mod tests {
         SubnetMergingArgs {
             source_subnet_id: SubnetId::from(PrincipalId::new_subnet_test_id(1)),
             destination_subnet_id: SubnetId::from(PrincipalId::new_subnet_test_id(2)),
-            readonly_pub_key: Some("ssh-ed25519 new".to_string()),
-            readonly_key_file: Some(PathBuf::from("/fake/key")),
-            download_node_source: Some("::1".parse().unwrap()),
-            download_node_destination: Some("::2".parse().unwrap()),
+            download_node_source: Some(DataLocation::Remote("::1".parse().unwrap())),
+            download_node_destination: Some(DataLocation::Local),
             merge_ready_timeout_secs: 2400,
             halt_timeout_secs: 123,
             registry_timeout_secs: 3600,
