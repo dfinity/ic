@@ -264,8 +264,8 @@ impl WaitForHaltingCupStep {
                 "Failed to decode the CUP of node {node_ip}: {err}"
             ))
         })?;
-        // Checked before reading the registry version, which assumes that the
-        // CUP's block carries a summary payload.
+        // Checked before reading the registry version, which panics if the
+        // CUP's block does not carry a summary payload.
         if !cup.check_integrity() {
             return Err(RecoveryError::ValidationFailed(format!(
                 "The CUP of node {node_ip} does not pass the integrity check"

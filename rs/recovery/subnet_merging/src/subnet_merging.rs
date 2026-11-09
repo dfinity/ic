@@ -360,7 +360,9 @@ impl SubnetMerging {
             ic_admin_cmd: get_halt_subnet_at_cup_height_command(
                 &self.recovery.admin_helper,
                 self.subnet_id(target_subnet),
-                /*key=*/ &None,
+                // No readonly SSH key (`key`) is needed: the halting CUP is
+                // read from the replica's public endpoint rather than over SSH.
+                &None,
             ),
         }
     }
