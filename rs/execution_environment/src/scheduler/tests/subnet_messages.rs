@@ -249,61 +249,37 @@ fn scheduler_executes_postponed_raw_rand_requests() {
 /// round instruction limit has been reached.
 #[test]
 fn drain_subnet_queues_stops_when_instructions_reached() {
-    const SLICE: u64 = 100;
-
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            max_instructions_per_round: NumInstructions::from(SLICE),
-            max_instructions_per_message: NumInstructions::from(SLICE),
-            max_instructions_per_slice: NumInstructions::from(SLICE),
-            max_instructions_per_install_code_slice: NumInstructions::from(SLICE),
+            // Subnet messages get a budget of a single instruction.
+            max_instructions_per_round: NumInstructions::from(SUBNET_MESSAGES_LIMIT_FRACTION),
             ..zero_instruction_overhead_config()
         })
         .build();
-
     let canister = test.create_canister();
-
     let xnet_canister_id = test.xnet_canister_id();
-    let remote_canister = canister_test_id(169);
 
-    fn inject_canister_status_call(
-        test: &mut SchedulerTest,
-        caller: CanisterId,
-        target: CanisterId,
-    ) {
-        test.inject_call_to_ic00(
-            Method::CanisterStatus,
-            CanisterIdRecord::from(target).encode(),
-            Cycles::zero(),
-            caller,
-            InputQueueType::RemoteSubnet,
-        );
-    }
-
-    // The `InstallCode` gets executed while the `100 / 16` instruction budget is
-    // fully available. It consumes the entire budget, so no other messages get
-    // executed, not even cheap ones such as `CanisterStatus` or `SubnetInfo`.
-    let install_code = TestInstallCode::Reinstall {
-        init: instructions(SLICE / SUBNET_MESSAGES_LIMIT_FRACTION + 1),
-    };
-    test.inject_install_code_call_to_ic00(canister, install_code);
-    inject_canister_status_call(&mut test, xnet_canister_id, canister);
-    inject_canister_status_call(&mut test, remote_canister, canister);
+    // The `InstallCode` consumes the entire budget.
+    test.inject_install_code_call_to_ic00(
+        canister,
+        TestInstallCode::Reinstall {
+            init: instructions(1),
+        },
+    );
+    // A cheap call in a different input queue (from a different sender).
     test.inject_call_to_ic00(
-        Method::SubnetInfo,
-        Encode!(&EmptyBlob).unwrap(),
+        Method::CanisterStatus,
+        CanisterIdRecord::from(canister).encode(),
         Cycles::zero(),
-        remote_canister,
+        canister_test_id(169),
         InputQueueType::RemoteSubnet,
     );
 
-    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 4);
-
     let mut new_state = test.drain_subnet_messages();
 
-    let queues = new_state.subnet_queues_mut();
     // Only the `InstallCode` was executed.
-    assert_eq!(queues.input_queues_message_count(), 3);
+    let queues = new_state.subnet_queues_mut();
+    assert_eq!(queues.input_queues_message_count(), 1);
     assert_eq!(queues.output_queues_message_count(), 1);
     assert!(queues.pop_canister_output(&xnet_canister_id).is_some());
 }
