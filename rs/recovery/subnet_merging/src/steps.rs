@@ -5,14 +5,14 @@ use crate::{
 };
 
 use ic_base_types::SubnetId;
-use ic_cup_explorer::get_catchup_content;
+use ic_cup_explorer::get_cup;
 use ic_recovery::{
     error::{RecoveryError, RecoveryResult},
     registry_helper::RegistryHelper,
     steps::Step,
     util::{DataLocation, block_on},
 };
-use ic_types::consensus::{CatchUpContent, HasHeight};
+use ic_types::consensus::{CatchUpPackage, HasHeight};
 use slog::{Logger, info};
 use url::Url;
 
@@ -115,12 +115,10 @@ impl Step for CheckMergeReadinessStep {
     }
 }
 
-/// Waits until the node the state is downloaded from serves the CUP its subnet
-/// halts at.
-///
-/// The CUP is read from the node's public CUP endpoint. Neither the CUP nor the
-/// presence of a checkpoint of the state it names on the node is validated
-/// here: both are validated when the state is downloaded.
+/// Waits until the CUP where the subnet halts appears on the node the state is
+/// downloaded from. At that point, we have the guarantee that the subnet is
+/// halted. The CUP signature is validated together with the checkpoint later
+/// when the state is downloaded.
 pub(crate) struct WaitForHaltingCupStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) node: DataLocation,
@@ -169,8 +167,8 @@ impl Step for WaitForHaltingCupStep {
              {}",
             self.subnet_id,
             cup.height(),
-            cup.registry_version(),
-            hex::encode(&cup.state_hash.get_ref().0),
+            cup.content.registry_version(),
+            hex::encode(&cup.content.state_hash.get_ref().0),
         );
         Ok(())
     }
@@ -193,9 +191,9 @@ impl WaitForHaltingCupStep {
 
     /// Returns the halting CUP if the node serves it, `None` if it does not
     /// yet, and an error if the node could not be asked.
-    fn check(&self, node_url: &Url) -> RecoveryResult<Option<CatchUpContent>> {
+    fn check(&self, node_url: &Url) -> RecoveryResult<Option<CatchUpPackage>> {
         let node_ip = self.node_ip();
-        let Some(cup) = block_on(get_catchup_content(node_url)).map_err(|err| {
+        let Some(proto) = block_on(get_cup(node_url)).map_err(|err| {
             RecoveryError::UnexpectedError(format!(
                 "Failed to get the CUP of node {node_ip}: {err}"
             ))
@@ -203,20 +201,14 @@ impl WaitForHaltingCupStep {
         else {
             return Ok(None);
         };
-        let cup = CatchUpContent::try_from(cup).map_err(|err| {
+        // Also checks the integrity of the CUP.
+        let cup = CatchUpPackage::try_from(&proto).map_err(|err| {
             RecoveryError::UnexpectedError(format!(
                 "Failed to decode the CUP of node {node_ip}: {err}"
             ))
         })?;
-        // Checked before reading the registry version, which panics if the
-        // CUP's block does not carry a summary payload.
-        if !cup.check_integrity() {
-            return Err(RecoveryError::ValidationFailed(format!(
-                "The CUP of node {node_ip} does not pass the integrity check"
-            )));
-        }
         let cup_height = cup.height();
-        let cup_registry_version = cup.registry_version();
+        let cup_registry_version = cup.content.registry_version();
 
         // The `halt_at_cup_height` flag is read at the registry version of the
         // summary block active at a height, and that version only changes at a
