@@ -115,62 +115,6 @@ impl Step for CheckMergeReadinessStep {
     }
 }
 
-/// Waits until the registry sets the `halt_at_cup_height` flag of a subnet,
-/// i.e. until the proposal halting the subnet at its next CUP has been adopted
-/// and executed.
-///
-/// Submitting that proposal does not wait for its adoption, which may take a
-/// while, so this wait is separate from the one for the halting CUP.
-pub(crate) struct CheckHaltAtCupHeightStep {
-    pub(crate) subnet_id: SubnetId,
-    pub(crate) registry_helper: RegistryHelper,
-    pub(crate) timeout: Duration,
-    pub(crate) poll_interval: Duration,
-    pub(crate) logger: Logger,
-}
-
-impl Step for CheckHaltAtCupHeightStep {
-    fn descr(&self) -> String {
-        format!(
-            "Wait until the registry sets the `halt_at_cup_height` flag of subnet {}.",
-            self.subnet_id,
-        )
-    }
-
-    fn exec(&self) -> RecoveryResult<()> {
-        let subnet_id = self.subnet_id;
-        let registry_version = wait_for(
-            &format!("subnet {subnet_id} has the `halt_at_cup_height` flag set"),
-            self.timeout,
-            self.poll_interval,
-            &self.logger,
-            || {
-                let (registry_version, subnet_record) =
-                    self.registry_helper.get_subnet_record(subnet_id)?;
-                let Some(subnet_record) = subnet_record else {
-                    return Err(RecoveryError::RegistryError(format!(
-                        "No record of subnet {subnet_id} at registry version {registry_version}"
-                    )));
-                };
-                if !subnet_record.halt_at_cup_height {
-                    return Err(RecoveryError::RegistryError(format!(
-                        "Subnet {subnet_id} does not have the `halt_at_cup_height` flag set at \
-                         registry version {registry_version} yet"
-                    )));
-                }
-                Ok(registry_version)
-            },
-        )?;
-
-        info!(
-            self.logger,
-            "Subnet {subnet_id} has the `halt_at_cup_height` flag set at registry version \
-             {registry_version}",
-        );
-        Ok(())
-    }
-}
-
 /// Waits until the node the state is downloaded from serves the CUP its subnet
 /// halts at.
 ///

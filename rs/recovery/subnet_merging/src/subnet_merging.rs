@@ -1,10 +1,7 @@
 use crate::{
     admin_helper::get_propose_to_cool_down_subnet_command,
     layout::Layout,
-    steps::{
-        CheckCoolingDownStep, CheckHaltAtCupHeightStep, CheckMergeReadinessStep,
-        WaitForHaltingCupStep,
-    },
+    steps::{CheckCoolingDownStep, CheckMergeReadinessStep, WaitForHaltingCupStep},
 };
 
 use clap::Parser;
@@ -58,12 +55,6 @@ pub enum StepType {
     HaltSourceSubnetAtCupHeight,
     /// Submit a proposal to halt the destination subnet at its next CUP.
     HaltDestinationSubnetAtCupHeight,
-    /// Wait until the registry sets the `halt_at_cup_height` flag of the source
-    /// subnet.
-    CheckRegistryForHaltingFlagOnSourceSubnet,
-    /// Wait until the registry sets the `halt_at_cup_height` flag of the
-    /// destination subnet.
-    CheckRegistryForHaltingFlagOnDestinationSubnet,
     /// Wait until the node of the source subnet the state is downloaded from
     /// serves the CUP the subnet halts at.
     WaitForHaltingCupOnSourceSubnet,
@@ -100,14 +91,15 @@ pub struct SubnetMergingArgs {
     #[clap(long, default_value = "2400")]
     pub merge_ready_timeout_secs: u64,
 
-    /// How long to wait, in seconds, for a subnet to reach the CUP it halts at,
-    /// once the registry has set its `halt_at_cup_height` flag. The next CUP is
-    /// at most a DKG interval away.
+    /// How long to wait, in seconds, for a subnet to reach the CUP it halts at.
+    /// The step waiting for it is meant to be run once the proposal halting the
+    /// subnet has been executed, so the next CUP is at most a DKG interval away.
     #[clap(long, default_value = "600")]
     pub halt_timeout_secs: u64,
 
-    /// How long to wait, in seconds, for a proposal submitted by the tool to be
-    /// adopted, executed and visible in the registry.
+    /// How long to wait, in seconds, for the proposal labeling the source
+    /// subnet as "cooling down" to be adopted, executed and visible in the
+    /// registry.
     #[clap(long, default_value = "3600")]
     pub registry_timeout_secs: u64,
 
@@ -385,16 +377,6 @@ impl SubnetMerging {
         })
     }
 
-    fn check_halt_at_cup_height_step(&self, target_subnet: TargetSubnet) -> impl Step + use<> {
-        CheckHaltAtCupHeightStep {
-            subnet_id: self.subnet_id(target_subnet),
-            registry_helper: self.recovery.registry_helper.clone(),
-            timeout: Duration::from_secs(self.params.registry_timeout_secs),
-            poll_interval: Duration::from_secs(self.params.poll_interval_secs),
-            logger: self.recovery.logger.clone(),
-        }
-    }
-
     /// The node of a subnet whose state is merged, i.e. the one the halting CUP
     /// is waited for on.
     fn download_node(&self, target_subnet: TargetSubnet) -> Option<DataLocation> {
@@ -468,10 +450,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                  holds. Please check the dashboard as well, to see whether it is safe to merge \
                  the subnet",
             ),
-            StepType::HaltSourceSubnetAtCupHeight
-            | StepType::HaltDestinationSubnetAtCupHeight
-            | StepType::CheckRegistryForHaltingFlagOnSourceSubnet
-            | StepType::CheckRegistryForHaltingFlagOnDestinationSubnet => {}
+            StepType::HaltSourceSubnetAtCupHeight | StepType::HaltDestinationSubnetAtCupHeight => {}
             StepType::WaitForHaltingCupOnSourceSubnet => {
                 if self.params.download_node_source.is_none() {
                     self.params.download_node_source = read_optional_data_location(
@@ -530,14 +509,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
 
             StepType::HaltDestinationSubnetAtCupHeight => self
                 .halt_subnet_at_cup_height_step(TargetSubnet::Destination)
-                .into(),
-
-            StepType::CheckRegistryForHaltingFlagOnSourceSubnet => self
-                .check_halt_at_cup_height_step(TargetSubnet::Source)
-                .into(),
-
-            StepType::CheckRegistryForHaltingFlagOnDestinationSubnet => self
-                .check_halt_at_cup_height_step(TargetSubnet::Destination)
                 .into(),
 
             StepType::WaitForHaltingCupOnSourceSubnet => {

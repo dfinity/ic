@@ -77,11 +77,8 @@ Runbook::
    i.e. that its iteration counter does not advance, as read via a query to
    `T`. `UM`'s counter cannot be read, as `M` rejects query calls.
 12. The following steps of the tool are executed: `HaltSourceSubnetAtCupHeight`
-   and `HaltDestinationSubnetAtCupHeight`, which propose to set the
-   `halt_at_cup_height` flag of `M` and `T`,
-   `CheckRegistryForHaltingFlagOnSourceSubnet` and
-   `CheckRegistryForHaltingFlagOnDestinationSubnet`, which wait until the
-   registry sets those flags, and `WaitForHaltingCupOnSourceSubnet` and
+   and `HaltDestinationSubnetAtCupHeight`, which set the `halt_at_cup_height`
+   flag of `M` and `T`, and `WaitForHaltingCupOnSourceSubnet` and
    `WaitForHaltingCupOnDestinationSubnet`, which wait until the node of each
    subnet that its state would be downloaded from serves the halting CUP.
 13. After `WaitForHaltingCupOnDestinationSubnet`: check that both subnets are
@@ -204,15 +201,15 @@ const MERGING_DIR: &str = "subnet_merging";
 /// before the subnet started cooling down are pruned, i.e. at their (up to
 /// `MAX_INGRESS_TTL` = 5 minutes away) expiry times.
 const MERGE_READY_TIMEOUT: Duration = Duration::from_secs(900);
-/// Timeout for the registry to reflect a proposal submitted by the tool, which
-/// the test neuron adopts right away.
+/// Timeout for the registry to reflect a proposal that `ic-admin` reported as
+/// executed.
 const REGISTRY_TIMEOUT: Duration = Duration::from_secs(120);
 /// How long the merging tool waits between two evaluations of a condition it
 /// waits for. Longer than a driver retry because every evaluation scrapes the
 /// metrics of all subnets.
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
-/// Timeout for a subnet to reach the CUP it halts at once the registry has set
-/// its `halt_at_cup_height` flag, which is up to a full DKG interval away.
+/// Timeout for a subnet to reach the CUP it halts at, which is up to a full DKG
+/// interval away.
 const HALT_TIMEOUT: Duration = Duration::from_secs(900);
 
 /// How long `UT`'s loop is observed to be stalled (step 11).
@@ -578,8 +575,6 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     info!(logger, "Step 12: Halting subnets M and T at their next CUP");
     exec_next_step(StepType::HaltSourceSubnetAtCupHeight);
     exec_next_step(StepType::HaltDestinationSubnetAtCupHeight);
-    exec_next_step(StepType::CheckRegistryForHaltingFlagOnSourceSubnet);
-    exec_next_step(StepType::CheckRegistryForHaltingFlagOnDestinationSubnet);
     exec_next_step(StepType::WaitForHaltingCupOnSourceSubnet);
     exec_next_step(StepType::WaitForHaltingCupOnDestinationSubnet);
     info!(
