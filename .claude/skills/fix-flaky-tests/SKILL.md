@@ -52,7 +52,7 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
 
 2. Get the last flaky runs of the test named `label` in the last week by running one of the following commands, replacing `<label>` with the label of the test:
 
-   - For `_farm` system-tests, which run via Farm (in release-testing and the nightly workflows; CI Main only runs the `_local` variants), also download their journald logs from ElasticSearch and their console logs from Farm:
+   - For `_farm` system-tests, which run via Farm, also download their journald logs from ElasticSearch and their console logs from Farm. CI Main only runs the `_local` variants, so only the Farm variants of `system_test_large` tests (release-testing) and of the tests the nightly workflows select still run regularly:
      ```
      bazel --quiet run //ci/githubstats:query -- last --flaky --week --download-ic-logs --download-console-logs <label>
      ```

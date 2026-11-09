@@ -12,6 +12,13 @@ on:
         required: false
         default: ''
         type: string
+      untrusted-code:
+        description: >-
+          'true' when commit-sha contains code that isn't trusted, like a reviewed pull request from a fork
+          (ci-kickoff-manual.yml): jobs then don't run on runners whose caches later runs reuse, see bazel-test-all.
+        required: false
+        default: ''
+        type: string
     secrets:
       BEP_GPG_PASSPHRASE:
         description: Encrypts the build event files that the bazel action uploads
@@ -218,11 +225,15 @@ jobs:
     # Builds and tests on the Remote Build Execution (RBE) cluster @ Namespace: bazel runs in this job's
     # container and the actions and tests run on the RBE workers, except for the ic-os image builds,
     # which bazel/conf/.bazelrc.build forces to run locally, i.e. here. Of the system-tests only the
-    # `_local` variants run (on the workers): the Farm-backed ones run in release-testing.yml
-    # (system_test_large) and in the nightly workflows.
+    # `_local` variants run (on the workers). Of the Farm-backed variants only those of system_test_large
+    # tests (release-testing.yml) and of the tests the nightly workflows select still run.
     # container.mount-scratch gives the runner a real ephemeral filesystem at /namespace/scratch.
     # The ic-os image builds put their scratch there, see the "Prepare the scratch directory" step below.
-    runs-on: namespace-profile-rbe-driver-amd64-linux-16x32;container.mount-scratch=true
+    # The rbe-driver profile has a Namespace cache volume, which runs on master commit and all later
+    # runs, release builds included, start from (see "Mount the Bazel repository cache"). A reviewed PR
+    # from a fork runs as a workflow_dispatch run on master (ci-kickoff-manual.yml), i.e. its code could
+    # commit that volume, so it runs on a copy of the profile without a cache volume.
+    runs-on: ${{ case(inputs.untrusted-code == 'true', 'namespace-profile-rbe-driver-amd64-linux-16x32-no-cache;container.mount-scratch=true', 'namespace-profile-rbe-driver-amd64-linux-16x32;container.mount-scratch=true') }}
     container:
       # The RBE worker image of .github/actions/bazel-namespace/rbe.bazelrc: the
       # update-image-references job of container-autobuild.yml rewrites both.
@@ -249,10 +260,10 @@ jobs:
         # other repository-cache steps are skipped when it is unset.
         NSC_CACHE_PATH: ${{ env.NSC_CACHE_PATH }}
     # A job timeout cancels the job, skipping the uploads of the bazel-namespace action, so this
-    # exceeds the steps' timeout-minutes (35 + 20 + 100 + 60 + 160 = 375) plus all other steps (setup,
+    # exceeds the steps' timeout-minutes (35 + 20 + 100 + 60 + 190 = 405) plus all other steps (setup,
     # AWS credentials, Attest, uploads and reports take a few minutes together). Instances of DFINITY's
     # Namespace (enterprise) plan run for up to 24 hours.
-    timeout-minutes: 385
+    timeout-minutes: 415
     steps:
       - uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0
       - name: Set up Bazel Remote Execution
@@ -291,7 +302,8 @@ jobs:
 
       - name: Mount the Bazel repository cache
         # Only runs on master commit the volume (runner-profile setting); every other run
-        # reads master's last successful commit. A cache outage must not fail the job:
+        # reads master's last successful commit. Runs of untrusted code have no volume (see
+        # runs-on). A cache outage must not fail the job:
         # without the mount the next step is skipped and Bazel keeps its ephemeral default
         # repository cache.
         id: repo-cache
@@ -514,15 +526,16 @@ jobs:
         # which ci/githubstats/query.py recognizes as the tests of this job.
         id: bazel-test
         # Backstop, see "Infer Bazel Targets". The test step of a master run usually takes 25-40 minutes,
-        # and up to about 80 when the cluster is busy; the action's timeout-minutes below leaves room for
-        # a rerun of the test command (rerun-on-remote-error.sh, or the eviction retries of rbe.bazelrc).
-        timeout-minutes: 160
+        # but on a saturated cluster a single attempt took up to 120 (2026-11-03). The action's
+        # timeout-minutes below leaves room for a rerun of what such an attempt didn't complete
+        # (rerun-on-remote-error.sh, or the eviction retries of rbe.bazelrc).
+        timeout-minutes: 190
         env:
           # Same as in the build step, for locally executed tests and actions.
           TMPDIR: /namespace/scratch/tmp
         uses: ./.github/actions/bazel-namespace
         with:
-          timeout-minutes: 150
+          timeout-minutes: 180
           GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
           run: |
             read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
