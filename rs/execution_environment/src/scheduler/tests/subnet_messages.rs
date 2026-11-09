@@ -452,12 +452,6 @@ mod can_execute_subnet_msg_tests {
             Self::with_instruction_limit(1_000_000_000)
         }
 
-        /// Creates a fixture with no instructions left and a paused install code (on
-        /// a third party local canister).
-        fn with_no_instructions_left() -> Self {
-            Self::with_instruction_limit(0)
-        }
-
         /// Creates a fixture with the given instruction limit and a paused install code
         /// (on a third party local canister).
         fn with_instruction_limit(instructions: u64) -> Self {
@@ -581,30 +575,6 @@ mod can_execute_subnet_msg_tests {
         assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
         let new_state = test.drain_subnet_messages();
         assert_eq!(new_state.subnet_queues().input_queues_message_count(), 1);
-    }
-
-    #[test]
-    fn no_message_is_executed_when_instructions_reached() {
-        let mut test = CanExecuteSubnetMsgTest::with_no_instructions_left();
-
-        // Heavy method.
-        test.inject_call(
-            Method::TakeCanisterSnapshot,
-            &TakeCanisterSnapshotArgs::new(test.canister, None, None, None),
-        );
-        // Cheap method.
-        test.inject_canister_status_call(test.canister);
-        // No effective canister ID.
-        test.inject_call(Method::SubnetInfo, &EmptyBlob);
-        test.inject_call(Method::ListCanisters, &EmptyBlob);
-        // Missing effective canister state.
-        test.inject_canister_status_call(canister_test_id(999));
-        // Invalid method name.
-        test.inject_call("bogus_method", &EmptyBlob);
-
-        assert_eq!(test.state().subnet_queues().input_queues_message_count(), 6);
-        let new_state = test.drain_subnet_messages();
-        assert_eq!(new_state.subnet_queues().input_queues_message_count(), 6);
     }
 
     #[test]

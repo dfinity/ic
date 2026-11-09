@@ -1839,16 +1839,14 @@ fn execute_canisters_on_thread(
 ///  - Calls with no effective canister ID.
 ///  - Calls with an effective canister ID, but no matching canister state.
 ///
-/// Never execute calls when the canister has a paused execution.
+/// Never execute calls when the canister has a paused execution, a paused
+/// install code, or an aborted install code.
 ///
 /// Beyond that, invoke `Ic00MethodPermissions::can_be_executed()` to determine
-/// whether the specific call can be executed, based on factors such as whether
-/// there's an ongoing long install code execution, or the canister has an
-/// aborted execution.
-///
-/// Note that the round instruction limit is checked by the caller
-/// (`drain_subnet_queues`) before every message, so no message is executed once
-/// the round instructions are exhausted.
+/// whether the specific call can be executed: calls are not executed if the
+/// method does not run on an aborted canister and the canister has an aborted
+/// execution, or if the method installs code and there is an ongoing long
+/// install code execution.
 fn can_execute_subnet_msg(
     msg: &SubnetMessage,
     ongoing_long_install_code: bool,
