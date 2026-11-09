@@ -1824,7 +1824,7 @@ impl ExecutionEnvironment {
                     }
                 }
                 CanisterCall::Ingress(_) => {
-                    self.reject_unexpected_ingress(Ic00Method::BitcoinGetSuccessors)
+                    self.reject_unexpected_ingress(Ic00Method::BitcoinSendTransactionInternal)
                 }
             },
 

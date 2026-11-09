@@ -786,6 +786,76 @@ fn install_code_succeeds_with_enough_wasm_custom_sections_memory() {
     );
 }
 
+/// Tests that `install_code` only has to fit the *growth* of the canister's Wasm
+/// custom sections memory usage into the subnet's Wasm custom sections capacity,
+/// so that an install that does not grow it succeeds even when that capacity is
+/// already over-subscribed (i.e. its available memory is negative, as happens
+/// when the available memory is recomputed from the replicated state).
+#[test]
+fn install_code_succeeds_when_wasm_custom_sections_do_not_grow() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(1_000_000_000)
+        .with_install_code_slice_instruction_limit(1_000_000_000)
+        .with_subnet_wasm_custom_sections_memory(1024 * 1024) // 1MiB
+        .build();
+    let new_canister = |test: &mut ExecutionTest| {
+        test.create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+            .unwrap()
+    };
+    let wasm = include_bytes!("../../../tests/test-data/custom_sections.wasm").to_vec();
+    // A module without any Wasm custom sections.
+    let wasm_without_custom_sections = wat::parse_str(r#"(module (memory 0 20))"#).unwrap();
+
+    let canister_id = new_canister(&mut test);
+    test.install_canister(canister_id, wasm.clone()).unwrap();
+    let usage = |test: &ExecutionTest| {
+        test.canister_state(canister_id)
+            .wasm_custom_sections_memory_usage()
+            .get() as i64
+    };
+    let wasm_custom_sections_usage = usage(&test);
+    assert_gt!(wasm_custom_sections_usage, 0);
+
+    // Over-subscribe the subnet's Wasm custom sections capacity.
+    test.set_available_wasm_custom_sections_memory(-1);
+
+    // Control: an install that *does* grow the Wasm custom sections memory usage
+    // is rejected, so the negative capacity is genuinely enforced and the
+    // assertions below are not vacuous.
+    let other_canister_id = new_canister(&mut test);
+    let err = test
+        .install_canister(other_canister_id, wasm.clone())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+    assert_eq!(
+        test.subnet_available_memory()
+            .get_wasm_custom_sections_memory(),
+        -1
+    );
+
+    // Reinstalling the same Wasm module does not grow the canister's Wasm custom
+    // sections memory usage, so it requests no additional Wasm custom sections
+    // memory and succeeds despite the negative capacity, which is left unchanged.
+    test.reinstall_canister(canister_id, wasm).unwrap();
+    assert_eq!(usage(&test), wasm_custom_sections_usage);
+    assert_eq!(
+        test.subnet_available_memory()
+            .get_wasm_custom_sections_memory(),
+        -1
+    );
+
+    // Reinstalling a module *without* custom sections shrinks the usage to zero
+    // and returns that memory to the subnet, relieving the over-subscription.
+    test.reinstall_canister(canister_id, wasm_without_custom_sections)
+        .unwrap();
+    assert_eq!(usage(&test), 0);
+    assert_eq!(
+        test.subnet_available_memory()
+            .get_wasm_custom_sections_memory(),
+        -1 + wasm_custom_sections_usage
+    );
+}
+
 #[test]
 fn install_code_respects_wasm_custom_sections_available_memory() {
     // Limit available custom section memory so that we can hit the limit with

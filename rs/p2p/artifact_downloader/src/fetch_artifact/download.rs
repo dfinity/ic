@@ -40,37 +40,48 @@ pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {
     Artifact::NAME.to_lowercase()
 }
 
-fn build_axum_router<Artifact, Pool>(pool: Arc<RwLock<Pool>>) -> Router
+/// Checks that `artifact` has the given `id`, and that the content passes
+/// [`PbArtifact::check_integrity`].
+pub(crate) fn check_id_and_integrity<Artifact: PbArtifact>(
+    artifact: &Artifact,
+    id: &Artifact::Id,
+) -> bool {
+    artifact.id() == *id && artifact.check_integrity()
+}
+
+/// A pool shared with the components writing to it, read by taking its lock on each access.
+pub(crate) struct SharedPool<Pool>(pub(crate) Arc<RwLock<Pool>>);
+
+// Cannot derive `Clone` because the macro would add a `Clone` bound on `Pool`, which does not
+// necessarily hold (see https://github.com/rust-lang/rust/issues/41481)
+impl<Pool> Clone for SharedPool<Pool> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<Artifact, Pool> ValidatedPoolReader<Artifact> for SharedPool<Pool>
 where
-    Artifact: PbArtifact,
-    Pool: ValidatedPoolReader<Artifact> + 'static,
+    Artifact: IdentifiableArtifact,
+    Pool: ValidatedPoolReader<Artifact>,
 {
-    Router::new()
-        .route(
-            &format!("/{}/rpc", uri_prefix::<Artifact>()),
-            any(rpc_handler),
-        )
-        .with_state(pool)
-        // Disable request size limit since consensus might push artifacts larger than limit.
-        .layer(DefaultBodyLimit::disable())
+    fn get(&self, id: &Artifact::Id) -> Option<Artifact> {
+        self.0.read().unwrap().get(id)
+    }
 }
 
 async fn rpc_handler<Artifact, Pool>(
-    State(pool): State<Arc<RwLock<Pool>>>,
+    State(pool): State<Pool>,
     payload: Bytes,
 ) -> Result<Bytes, StatusCode>
 where
     Artifact: PbArtifact,
-    Pool: ValidatedPoolReader<Artifact> + 'static,
+    Pool: ValidatedPoolReader<Artifact> + Clone + 'static,
 {
     let jh = tokio::task::spawn_blocking(move || {
         let id: Artifact::Id =
             Artifact::PbId::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
-        let artifact = pool
-            .read()
-            .unwrap()
-            .get(&id)
-            .ok_or(StatusCode::NO_CONTENT)?;
+        let artifact = pool.get(&id).ok_or(StatusCode::NO_CONTENT)?;
         Ok::<_, StatusCode>(Bytes::from(Artifact::PbMessage::proxy_encode(artifact)))
     });
     let bytes = jh.await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
@@ -132,6 +143,8 @@ pub(crate) enum Attempt<T> {
 }
 
 impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
+    /// Downloads the `Artifact`s wanted by the bouncers built from `pool`, and serves the
+    /// `Artifact`s of `pool` to the peers.
     pub fn new<Pool, Factory>(
         log: ReplicaLogger,
         rt: Handle,
@@ -143,37 +156,66 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         Pool: ValidatedPoolReader<Artifact> + 'static,
         Factory: BouncerFactory<Artifact::Id, Pool> + 'static,
     {
-        let pool_clone = pool.clone();
         (
-            move |transport: Arc<dyn Transport>| {
-                let bouncer = {
-                    let p = pool.read().unwrap();
-                    bouncer_factory.new_bouncer(&p)
-                };
-                let (bouncer_tx, bouncer_rx) = watch::channel(bouncer);
-                let jh = rt.spawn(async move {
-                    loop {
-                        let bouncer = {
-                            let p = pool.read().unwrap();
-                            bouncer_factory.new_bouncer(&p)
-                        };
-                        if bouncer_tx.send(bouncer).is_err() {
-                            break;
-                        }
-
-                        tokio::time::sleep(bouncer_factory.refresh_period()).await
-                    }
-                });
-                Self {
-                    log,
-                    transport,
-                    bouncer_rx,
-                    metrics: FetchArtifactMetrics::new::<Artifact>(&metrics_registry),
-                    jh: Arc::new(jh),
-                }
-            },
-            build_axum_router(pool_clone),
+            Self::downloader(log, rt, pool.clone(), bouncer_factory, metrics_registry),
+            Self::router(SharedPool(pool)),
         )
+    }
+
+    /// Downloads the `Artifact`s wanted by the bouncers built from `pool`.
+    pub(crate) fn downloader<Pool, Factory>(
+        log: ReplicaLogger,
+        rt: Handle,
+        pool: Arc<RwLock<Pool>>,
+        bouncer_factory: Factory,
+        metrics_registry: MetricsRegistry,
+    ) -> impl FnOnce(Arc<dyn Transport>) -> Self
+    where
+        Pool: Send + Sync + 'static,
+        Factory: BouncerFactory<Artifact::Id, Pool> + 'static,
+    {
+        move |transport: Arc<dyn Transport>| {
+            let bouncer = {
+                let p = pool.read().unwrap();
+                bouncer_factory.new_bouncer(&p)
+            };
+            let (bouncer_tx, bouncer_rx) = watch::channel(bouncer);
+            let jh = rt.spawn(async move {
+                loop {
+                    let bouncer = {
+                        let p = pool.read().unwrap();
+                        bouncer_factory.new_bouncer(&p)
+                    };
+                    if bouncer_tx.send(bouncer).is_err() {
+                        break;
+                    }
+
+                    tokio::time::sleep(bouncer_factory.refresh_period()).await
+                }
+            });
+            Self {
+                log,
+                transport,
+                bouncer_rx,
+                metrics: FetchArtifactMetrics::new::<Artifact>(&metrics_registry),
+                jh: Arc::new(jh),
+            }
+        }
+    }
+
+    /// Serves the `Artifact`s of `pool` to the peers' downloaders.
+    pub(crate) fn router<Pool>(pool: Pool) -> Router
+    where
+        Pool: ValidatedPoolReader<Artifact> + Clone + 'static,
+    {
+        Router::new()
+            .route(
+                &format!("/{}/rpc", uri_prefix::<Artifact>()),
+                any(rpc_handler::<Artifact, Pool>),
+            )
+            .with_state(pool)
+            // Disable request size limit since consensus might push artifacts larger than limit.
+            .layer(DefaultBodyLimit::disable())
     }
 
     /// Returns a watcher over the bouncer used by this assembler, so callers can react to the
@@ -208,9 +250,10 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
 
     /// Makes attempts to assemble the message until one succeeds or the message is unwanted.
     ///
-    /// Before each attempt, waits until the bouncer wants the message. The attempt gets the pushed
-    /// artifact, if still there, and a deadline for its request that backs off exponentially. After
-    /// a failed attempt, the next one starts once that deadline has passed.
+    /// Before each attempt, waits until the bouncer wants the message. The first attempt gets the
+    /// pushed artifact, if still there, which needs no request, so if it fails, the next attempt
+    /// starts right away. Any other attempt gets a deadline for its request that backs off
+    /// exponentially, and if it fails, the next one starts once that deadline has passed.
     #[instrument(skip_all)]
     pub(crate) async fn assemble_with_retries<T, F, Fut>(
         &self,
@@ -239,18 +282,25 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             {
                 return AssembleResult::Unwanted;
             }
-            if artifact.is_none() && download_timer.is_none() {
-                download_timer = Some(
-                    self.metrics
-                        .download_task_artifact_download_duration
-                        .start_timer(),
-                );
-            }
 
-            let deadline = Instant::now() + backoff.next().unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT);
             // Only the first attempt gets the pushed artifact, so that a failed one is followed by
             // downloading the artifact from a random peer.
-            match attempt(artifact.take(), deadline).await {
+            let pushed = artifact.take();
+            let deadline = if pushed.is_some() {
+                // The attempt makes no request, so it takes no step of the backoff, and if it
+                // fails, its deadline has passed already.
+                Instant::now()
+            } else {
+                if download_timer.is_none() {
+                    download_timer = Some(
+                        self.metrics
+                            .download_task_artifact_download_duration
+                            .start_timer(),
+                    );
+                }
+                Instant::now() + backoff.next().unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT)
+            };
+            match attempt(pushed, deadline).await {
                 Attempt::Done { message, peer_id } => {
                     return AssembleResult::Done { message, peer_id };
                 }
@@ -273,8 +323,14 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
     where
         Artifact::Id: Debug,
     {
-        let (message, peer) = match artifact {
-            Some(pushed) => pushed,
+        match artifact {
+            // The receiver derived the id of a pushed artifact from it, so only its integrity is
+            // left to check.
+            Some((message, peer)) if message.check_integrity() => Attempt::Done {
+                message,
+                peer_id: peer,
+            },
+            Some((_, peer)) => self.invalid_artifact(id, peer, "it fails the integrity check"),
             None => {
                 let Some(peer) = peers.into_iter().choose(&mut SmallRng::from_entropy()) else {
                     return Attempt::Retry;
@@ -287,27 +343,24 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
                 match timeout_at(deadline, self.transport.rpc(&peer, request)).await {
                     Ok(Ok(response)) if response.status() == StatusCode::OK => {
                         match Artifact::PbMessage::proxy_decode(&response.into_body()) {
-                            Ok(message) => (message, peer),
-                            Err(err) => return self.invalid_artifact(id, peer, err),
+                            Ok(message) if check_id_and_integrity(&message, id) => Attempt::Done {
+                                message,
+                                peer_id: peer,
+                            },
+                            Ok(_) => {
+                                self.invalid_artifact(id, peer, "it fails the integrity check")
+                            }
+                            Err(err) => self.invalid_artifact(id, peer, err),
                         }
                     }
                     _ => {
                         self.metrics
                             .download_task_artifact_download_errors_total
                             .inc();
-                        return Attempt::Retry;
+                        Attempt::Retry
                     }
                 }
             }
-        };
-
-        // Even a pushed artifact, whose id was derived from it, may fail the integrity check.
-        if !message.check_integrity(id) {
-            return self.invalid_artifact(id, peer, "it fails the integrity check");
-        }
-        Attempt::Done {
-            message,
-            peer_id: peer,
         }
     }
 

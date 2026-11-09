@@ -13,7 +13,7 @@ use ic_config::http_handler::Config;
 use ic_crypto_tree_hash::{Label, Path};
 use ic_http_endpoints_public::{query, read_state};
 use ic_http_endpoints_test_agent::{
-    self, Call, CallSubnet, CanisterReadState, IngressMessage, wait_for_status_healthy,
+    self, Call, CallSubnet, IngressMessage, ReadState, wait_for_status_healthy,
 };
 use ic_test_utilities_types::ids::subnet_test_id;
 
@@ -182,7 +182,7 @@ fn test_load_shedding_read_state(
     // This agent's request will be load shedded
     let load_shedded_request = rt.spawn(async move {
         read_state_running.notified().await;
-        let response = CanisterReadState::new(
+        let response = ReadState::new(
             vec![Path::from(Label::from("time"))],
             PrincipalId::default(),
             version,
@@ -197,7 +197,7 @@ fn test_load_shedding_read_state(
         wait_for_status_healthy(&addr).await.unwrap();
         service_is_healthy.store(true, Ordering::Relaxed);
 
-        let response = CanisterReadState::new(
+        let response = ReadState::new(
             vec![Path::from(Label::from("time"))],
             PrincipalId::default(),
             version,
