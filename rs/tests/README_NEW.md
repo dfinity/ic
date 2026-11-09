@@ -105,7 +105,9 @@ One can also access all the test logs by following the Bazel dashboard link, whi
 INFO: Streaming build results to: https://dash.hostname.dfinity.network/invocation/id
 ```
 ## For CI/CD test executions
-CI jobs, which execute Bazel system tests should print links to the Bazel dashboard in the form:
+The `Bazel Test All` job of CI Main runs the `_local` system-tests on Bazel Remote Execution @ Namespace, which doesn't stream to the Bazel dashboard: the logs of the tests that ran are in the job's `bazel-test-all-bazel-test-<attempt>-logs` artifact, which `bazel run //ci/githubstats:query -- last <label>` downloads.
+
+Other CI jobs, which execute Bazel system tests (like the `_farm` ones of release-testing and the nightlies), should print links to the Bazel dashboard in the form:
 ```
 INFO: Streaming build results to: https://dash.hostname.dfinity.network/invocation/id
 ```

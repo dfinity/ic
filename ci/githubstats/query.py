@@ -44,9 +44,10 @@ REPO = "ic"
 FAILED = "FAILED"
 PASSED = "PASSED"
 
-# The tests of CI jobs named like this ran on RBE @ Namespace, which BuildBuddy doesn't know.
+# The tests of CI jobs named like these ran on RBE @ Namespace, which BuildBuddy doesn't know:
+# bazel-test-all of ci-main.yml, and bazel-test-all-rbe of the former ci-rbe-evaluation.yml (until the switch).
 # .github/actions/bazel-namespace uploads the logs of the tests that ran as the GitHub artifact <job_name>-logs.
-RBE_TEST_JOB_PREFIX = "bazel-test-all-rbe-bazel-test-"
+RBE_TEST_JOB_PREFIXES = ("bazel-test-all-bazel-test-", "bazel-test-all-rbe-bazel-test-")
 
 
 def die(*args):
@@ -1569,7 +1570,7 @@ def last(args):
         df = pd.DataFrame(cursor, columns=headers)
 
     # The tests of jobs on RBE @ Namespace have their logs in GitHub artifacts instead of BuildBuddy.
-    df["rbe"] = df["job_name"].str.startswith(RBE_TEST_JOB_PREFIX, na=False)
+    df["rbe"] = df["job_name"].str.startswith(RBE_TEST_JOB_PREFIXES, na=False)
 
     # We need to create links to the cluster-specific BuildBuddy service.
     # To get the cluster-specific BuildBuddy URL we need to resolve the redirect via the BuildBuddy redirect service.
@@ -1713,13 +1714,13 @@ Mutually exclusive with --day/--week/--month""",
         metavar="JOB",
         type=str,
         help="""Filter by CI job SQL LIKE pattern. The job of a bazel invocation is named after the '*-bep' artifact
-it was uploaded in, minus that suffix, like 'bazel-test-all-__self_3' for the tests of bazel-test-all in ci-main.yml
-(whose number shifts when steps are added, so match 'bazel-test-all-__self%%') and 'bazel-test-all-rbe-bazel-test-%%'
-for those of bazel-test-all-rbe in ci-rbe-evaluation.yml, which run on RBE @ Namespace. `last` downloads the logs of the latter
-from the '<job>-logs' artifact of their workflow run on GitHub instead of from BuildBuddy, which needs gh to be logged in
-or GH_TOKEN to be set.
+it was uploaded in, minus that suffix, like 'bazel-test-all-bazel-test-1' for the tests of bazel-test-all in ci-main.yml,
+which run on RBE @ Namespace (match 'bazel-test-all-bazel-test-%%'). `last` downloads their logs from the '<job>-logs'
+artifact of their workflow run on GitHub instead of from BuildBuddy, which needs gh to be logged in or GH_TOKEN to be set.
 GitHub deletes these artifacts after 14 days.
-Note that 'bazel-test-all-%%' matches both, and that of these two only the former runs *_farm system-tests, the latter *_local ones""",
+Older invocations have other job names: 'bazel-test-all-__self_<n>' for bazel-test-all before it moved to RBE (on dind
+runners, logs in BuildBuddy, running the *_farm variants of system-tests where the RBE jobs run the *_local ones), and
+'bazel-test-all-rbe-bazel-test-<n>' for the RBE evaluation job that preceded the move""",
     )
     filter_parser.add_argument(
         "--exclude-job",
@@ -1773,7 +1774,7 @@ Examples:
   bazel --quiet run //ci/githubstats:query -- top 10 impact --since abc123def
 
   # Show the top 10 most flaky tests in the last week on RBE @ Namespace
-  bazel --quiet run //ci/githubstats:query -- top 10 flaky% --week --job 'bazel-test-all-rbe-bazel-test-%'
+  bazel --quiet run //ci/githubstats:query -- top 10 flaky% --week --job 'bazel-test-all-bazel-test-%'
 """,
     )
     top_parser.add_argument(

@@ -524,7 +524,7 @@ def gh_attestation_verify_argv(gh: Path, sums_file: Path, bundle_file: Path, com
     """
     The exact gh invocation the no-token flow was validated with.
 
-    Never add --deny-self-hosted-runners: the release builds run on self-hosted dind runners, so it
+    Never add --deny-self-hosted-runners: the release builds run on self-hosted runners (Namespace's), so it
     would reject every genuine attestation.
     """
     return [
