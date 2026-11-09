@@ -292,7 +292,7 @@ where
         .api_route("/{id}/stop_progress", post(stop_progress))
         .route_layer(axum::middleware::from_fn(control_plane_guard));
 
-    // The IC HTTP API (whose update calls are authenticated by signatures)
+    // The IC HTTP API (whose requests are authenticated by signatures)
     // and read-only endpoints that can be accessed by browsers
     // (e.g., through an HTTP gateway).
     let ic_api_routes = ApiRouter::new()
@@ -305,6 +305,11 @@ where
         //
         // All the api v4 endpoints
         .nest("/{id}/api/v4", instance_api_v4_routes())
+        // If ingress validation (incl. signature checks) is disabled for an instance,
+        // then its IC HTTP API is as powerful as the control plane
+        // (requests can be made on behalf of arbitrary senders)
+        // and thus must be protected in the same way.
+        .route_layer(axum::middleware::from_fn(ic_api_guard))
         //
         // The instance dashboard
         .api_route("/{id}/_/dashboard", get(handler_dashboard))
@@ -358,6 +363,30 @@ fn request_host(req: &Request) -> Option<String> {
     match req.headers().get(http::header::HOST) {
         Some(host) => host.to_str().ok().map(|h| h.to_string()),
         None => req.uri().authority().map(|a| a.as_str().to_string()),
+    }
+}
+
+/// Middleware protecting the IC HTTP API of instances with disabled
+/// ingress validation (incl. signature checks) in the same way
+/// as [`control_plane_guard`].
+/// Expects the [`ApiState`] to be provided as a request extension
+/// and applies [`control_plane_guard`] if the [`ApiState`] is not available.
+async fn ic_api_guard(params: extract::RawPathParams, req: Request, next: Next) -> Response {
+    let instance_id = params
+        .iter()
+        .find(|(key, _)| *key == "id")
+        .and_then(|(_, value)| value.parse::<InstanceId>().ok());
+    let ingress_validation_disabled = match (req.extensions().get::<Arc<ApiState>>(), instance_id) {
+        (Some(api_state), Some(instance_id)) => api_state
+            .ingress_validation_disabled(instance_id)
+            .await
+            .unwrap_or_default(),
+        _ => true,
+    };
+    if ingress_validation_disabled {
+        control_plane_guard(req, next).await
+    } else {
+        next.run(req).await
     }
 }
 

@@ -221,7 +221,7 @@ async fn start(runtime: Arc<Runtime>) {
     // then we validate the `Host` header of control plane requests
     // to prevent DNS rebinding attacks.
     let control_plane_guard_config = ControlPlaneGuardConfig {
-        validate_host: local_addr.ip().is_loopback(),
+        validate_host: local_addr.ip().to_canonical().is_loopback(),
     };
 
     // The shared, mutable state of the PocketIC process.
@@ -304,6 +304,7 @@ async fn start(runtime: Arc<Runtime>) {
         .fallback(|| async { (StatusCode::NOT_FOUND, "") })
         .layer(DefaultBodyLimit::disable())
         .layer(Extension(control_plane_guard_config))
+        .layer(Extension(app_state.api_state.clone()))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             bump_last_request_timestamp,

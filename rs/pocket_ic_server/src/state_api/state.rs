@@ -143,6 +143,10 @@ struct ProgressThread {
 struct Instance {
     progress_thread: Option<ProgressThread>,
     state: InstanceState,
+    // Whether ingress validation (incl. signature checks) is disabled
+    // for the instance (stored here so that it can be retrieved
+    // while the instance is busy).
+    ingress_validation_disabled: bool,
 }
 
 struct HttpGateway {
@@ -230,6 +234,7 @@ impl PocketIcApiStateBuilder {
             .map(|instance| {
                 Mutex::new(Instance {
                     progress_thread: None,
+                    ingress_validation_disabled: instance.ingress_validation_disabled(),
                     state: InstanceState::Available(instance),
                 })
             })
@@ -653,11 +658,13 @@ impl ApiState {
             .await
             .expect("Failed to create PocketIC instance")?;
         let topology = instance.topology();
+        let ingress_validation_disabled = instance.ingress_validation_disabled();
         let mut instances = self.instances.write().await;
         let instance_id = instances.len();
         instances.push(Mutex::new(Instance {
             progress_thread: None,
             state: InstanceState::Available(instance),
+            ingress_validation_disabled,
         }));
         drop(instances);
         if let Some(config) = auto_progress {
@@ -1081,6 +1088,14 @@ impl ApiState {
         } else {
             Err("Auto progress mode has already been enabled.".to_string())
         }
+    }
+
+    /// Returns whether ingress validation (incl. signature checks) is disabled
+    /// for the given instance or `None` if there is no such instance.
+    pub async fn ingress_validation_disabled(&self, instance_id: InstanceId) -> Option<bool> {
+        let instances = self.instances.read().await;
+        let instance = instances.get(instance_id)?.lock().await;
+        Some(instance.ingress_validation_disabled)
     }
 
     pub async fn get_auto_progress(&self, instance_id: InstanceId) -> bool {

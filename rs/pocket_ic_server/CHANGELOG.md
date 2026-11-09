@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - they carry an `Origin` header (set by browsers) that does not match the `Host` header (i.e., cross-origin browser requests), or
   - the PocketIC server is bound to a loopback address and their `Host` header is neither an IP address nor `localhost` (or a subdomain thereof)
     to prevent DNS rebinding attacks.
+- The above restrictions also apply to the IC HTTP API endpoints of instances created with disabled ingress validation
+  (since requests can be made on behalf of arbitrary senders on such instances).
 
 ### Fixed
 - Requests to the bitcoin and dogecoin adapters (fetching blocks and sending transactions) time out after 1 s instead of 50 ms,

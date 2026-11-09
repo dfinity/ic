@@ -3022,6 +3022,10 @@ impl Drop for PocketIc {
 }
 
 impl PocketIc {
+    pub(crate) fn ingress_validation_disabled(&self) -> bool {
+        self.malicious_flags.maliciously_disable_ingress_validation
+    }
+
     pub(crate) fn topology(&self) -> Topology {
         let mut subnet_configs = BTreeMap::new();
         for config in self.subnets.subnet_configs.iter() {

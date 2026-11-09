@@ -250,6 +250,60 @@ fn test_control_plane_rejects_browser_requests() {
 }
 
 #[test]
+fn test_ic_api_rejects_browser_requests_if_ingress_validation_disabled() {
+    let url = start_server();
+    let pic = PocketIcBuilder::new()
+        .with_server_url(url.clone())
+        .with_application_subnet()
+        .disable_ingress_validation()
+        .build();
+    let instance_id = pic.instance_id();
+    let client = Client::new();
+    let port = url.port().unwrap();
+
+    for (method, path) in [
+        (
+            reqwest::Method::GET,
+            format!("instances/{instance_id}/api/v2/status"),
+        ),
+        (
+            reqwest::Method::POST,
+            format!("instances/{instance_id}/api/v4/canister/aaaaa-aa/call"),
+        ),
+    ] {
+        // Cross-origin requests are rejected.
+        let response = client
+            .request(method.clone(), url.join(&path).unwrap())
+            .header(reqwest::header::ORIGIN, "https://evil.example")
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{path}");
+
+        // Requests with a foreign `Host` header (DNS rebinding) are rejected.
+        let response = client
+            .request(method, url.join(&path).unwrap())
+            .header(reqwest::header::HOST, format!("evil.example:{port}"))
+            .header(
+                reqwest::header::ORIGIN,
+                format!("http://evil.example:{port}"),
+            )
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{path}");
+    }
+
+    // Requests from non-browser clients are accepted.
+    let response = client
+        .get(
+            url.join(&format!("instances/{instance_id}/api/v2/status"))
+                .unwrap(),
+        )
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[test]
 fn test_creation_of_instance_extended() {
     let url = start_server();
     let client = Client::new();
