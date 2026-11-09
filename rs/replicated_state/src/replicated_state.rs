@@ -1089,11 +1089,6 @@ impl ReplicatedState {
                 if receiver.get_ref() == subnet_id {
                     match msg {
                         RequestOrResponse::Request(mut request) => {
-                            // Decode the effective canister ID once, upon induction, so that
-                            // the scheduler doesn't need to repeatedly decode it.
-                            //
-                            // Note that if the `Arc` is shared (e.g. with the loopback stream),
-                            // `Arc::make_mut` copies the whole request.
                             if request.effective_canister_id.is_none() {
                                 let effective_canister_id = request.extract_effective_canister_id();
                                 Arc::make_mut(&mut request).effective_canister_id =
