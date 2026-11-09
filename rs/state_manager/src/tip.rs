@@ -1200,7 +1200,11 @@ fn merge(
         .observe(merges_by_storage as f64);
 
     parallel_map(thread_pool, scheduled_merges.iter(), |m| {
-        m.apply(&metrics.storage_metrics)
+        m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
+            // A failed merge may have removed its input files from the tip and left a partial
+            // output behind, so the next checkpoint would include a corrupt `PageMap`.
+            fatal!(log, "Failed to merge PageMap files: {}", err);
+        })
     });
 }
 
