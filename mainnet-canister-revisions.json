@@ -52,8 +52,8 @@
     "sha256": "c5e9adf7c953f1922fd75d502a38aa4c0f1fefb6ce877845a8e374c07ca2f950"
   },
   "cycles_ledger": {
-    "sha256": "ed99402535bb4f58e4ab469acc40c903f2fdeea409be16623d5c6a9131cbf120",
-    "tag": "cycles-ledger-v1.0.6"
+    "sha256": "70f8bd40d022374622b34266d2c182d2a5b711d965f3bef9e505467a84c40bce",
+    "tag": "cycles-ledger-v1.1.0"
   },
   "cycles_ledger_index": {
     "rev": "e446c64d99a97e38166be23ff2bfade997d15ff7",
