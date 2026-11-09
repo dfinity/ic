@@ -208,7 +208,7 @@ fn effective_canister_id_is_cached() {
     assert_eq!(request.effective_canister_id, None);
     assert_eq!(request.effective_canister_id(), Some(target));
 
-    request.populate_effective_canister_id();
+    request.effective_canister_id = request.extract_effective_canister_id();
     assert_eq!(request.effective_canister_id, Some(target));
     assert_eq!(request.effective_canister_id(), Some(target));
 
@@ -219,12 +219,11 @@ fn effective_canister_id_is_cached() {
 }
 
 #[test]
-fn effective_canister_id_not_populated_for_invalid_payload() {
+fn effective_canister_id_of_invalid_payload() {
     let mut request = start_canister_request(canister_test_id(13));
     request.method_payload = vec![1, 2, 3];
 
-    request.populate_effective_canister_id();
-    assert_eq!(request.effective_canister_id, None);
+    assert_eq!(request.extract_effective_canister_id(), None);
     assert_eq!(request.effective_canister_id(), None);
 }
 

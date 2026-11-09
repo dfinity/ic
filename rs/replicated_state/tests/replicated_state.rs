@@ -817,6 +817,39 @@ fn subnet_queue_push_input_request_populates_effective_canister_id() {
 }
 
 #[test]
+fn subnet_queue_push_input_shared_request_without_effective_canister_id_is_not_copied() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    // A request without an effective canister ID, whose `Arc` is shared (as it
+    // would be with the loopback stream).
+    let request = Arc::new(
+        RequestBuilder::default()
+            .sender(CANISTER_ID)
+            .receiver(SUBNET_ID.into())
+            .method_name(Ic00Method::RawRand)
+            .method_payload(EmptyBlob.encode())
+            .build(),
+    );
+
+    assert_eq!(
+        state.push_input(
+            RequestOrResponse::Request(Arc::clone(&request)),
+            &mut SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY.clone()
+        ),
+        Ok(true)
+    );
+
+    // The cache is unchanged, so the request was not copied.
+    match state.pop_subnet_input() {
+        Some(SubnetMessage::Request(inducted)) => {
+            assert!(Arc::ptr_eq(&inducted, &request));
+            assert_eq!(inducted.effective_canister_id, None);
+        }
+        msg => panic!("Expected a subnet request, got {msg:?}"),
+    }
+}
+
+#[test]
 fn insert_bitcoin_response_non_matching() {
     let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 

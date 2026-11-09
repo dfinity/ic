@@ -1091,7 +1091,15 @@ impl ReplicatedState {
                         RequestOrResponse::Request(mut request) => {
                             // Decode the effective canister ID once, upon induction, so that
                             // the scheduler doesn't need to repeatedly decode it.
-                            Arc::make_mut(&mut request).populate_effective_canister_id();
+                            //
+                            // The `Arc` may be shared (e.g. with the loopback stream), in which
+                            // case `Arc::make_mut` copies the whole request. So only call it if
+                            // the cached value actually changes.
+                            let effective_canister_id = request.extract_effective_canister_id();
+                            if request.effective_canister_id != effective_canister_id {
+                                Arc::make_mut(&mut request).effective_canister_id =
+                                    effective_canister_id;
+                            }
                             push_input(
                                 &mut self.subnet_queues,
                                 RequestOrResponse::Request(request),

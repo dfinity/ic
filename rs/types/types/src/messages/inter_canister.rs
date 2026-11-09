@@ -120,10 +120,10 @@ pub struct Request {
     /// Cached effective canister ID of a request addressed to the management
     /// canister, as returned by `extract_effective_canister_id()`.
     ///
-    /// Populated (by calling `populate_effective_canister_id()`) when the
-    /// request is inducted into the subnet queues. `None` if not (yet)
-    /// populated or if the request has no effective canister ID. Not part of
-    /// the canonical (XNet stream) encoding.
+    /// Populated when the request is inducted into the subnet queues (see
+    /// `ReplicatedState::push_input()`). `None` if not (yet) populated or if
+    /// the request has no effective canister ID. Not part of the canonical
+    /// (XNet stream) encoding.
     pub effective_canister_id: Option<CanisterId>,
 }
 
@@ -161,12 +161,6 @@ impl Request {
     pub fn effective_canister_id(&self) -> Option<CanisterId> {
         self.effective_canister_id
             .or_else(|| self.extract_effective_canister_id())
-    }
-
-    /// Decodes the effective canister ID from the payload and caches it in
-    /// `self.effective_canister_id`.
-    pub fn populate_effective_canister_id(&mut self) {
-        self.effective_canister_id = self.extract_effective_canister_id();
     }
 
     /// Helper function to extract the effective canister id from the payload.
