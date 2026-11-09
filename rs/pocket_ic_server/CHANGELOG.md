@@ -11,25 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-### Changed
-- The permissive CORS policy (allowing any origin) only applies to the IC HTTP API endpoints (`/instances/<id>/api/v2|v3|v4/...`)
-  and the read-only endpoints `/instances/<id>/_/dashboard` and `/instances/<id>/_/topology`
-  instead of all endpoints under `/instances`.
-- Requests to all other endpoints of the PocketIC server (the PocketIC control plane) are rejected with status code 403 if
-  - they carry an `Origin` header (set by browsers) that does not match the `Host` header (i.e., cross-origin browser requests), or
-  - their `Host` header is neither an IP address, `localhost` (or a subdomain thereof),
-    nor a host name specified by the new CLI option `--allowed-host` (to prevent DNS rebinding attacks).
-    Use `--allowed-host <HOST>` (can be specified multiple times) to allow additional host names,
-    e.g., the host name of the PocketIC server in a Docker network.
-- Requests to the IC HTTP API endpoints (incl. requests proxied by an HTTP gateway) carrying an `Origin` header (set by browsers)
-  are rejected with status code 403 unless
-  - the origin is `localhost` (or a subdomain thereof) or a loopback IP address, or
-  - the origin is a domain (or a subdomain thereof) of an HTTP gateway
-    or a custom domain of an HTTP gateway (configured through `domain_custom_provider_local_file`), or
-  - the request is a same-origin request to an IP address, `localhost` (or a subdomain thereof),
-    or a host name specified by the CLI option `--allowed-host`.
+### Added
+- New CLI option `--allowed-host <HOST>` (can be specified multiple times) to allow host names other than IP addresses and `localhost`
+  in the `Host` header of requests, e.g., the host name of the PocketIC server in a Docker network.
 
-  This prevents arbitrary web pages from, e.g., making calls on behalf of arbitrary senders to instances with disabled ingress validation.
+### Changed
+- The PocketIC server rejects browser requests from arbitrary web pages to protect against malicious websites, including DNS rebinding attacks:
+  - Browser requests to the IC HTTP API (`/instances/<id>/api/...`) are only accepted from local origins,
+    domains of HTTP gateways, and same-origin pages.
+  - Requests to all other endpoints are rejected if they are cross-origin browser requests
+    or if their `Host` header is neither an IP address, `localhost`, nor allowed by `--allowed-host`.
 
 ### Fixed
 - Requests to the bitcoin and dogecoin adapters (fetching blocks and sending transactions) time out after 1 s instead of 50 ms,
