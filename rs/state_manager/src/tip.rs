@@ -37,6 +37,7 @@ use ic_utils::thread::parallel_map;
 use ic_utils_thread::JoinOnDrop;
 use ic_wasm_types::{CanisterModule, ModuleLoadingStatus};
 use prometheus::HistogramTimer;
+use std::cmp::Reverse;
 use std::collections::BTreeSet;
 use std::convert::identity;
 use std::ops::Deref;
@@ -1199,12 +1200,21 @@ fn merge(
         .with_label_values(&["storage"])
         .observe(merges_by_storage as f64);
 
-    parallel_map(thread_pool, scheduled_merges.iter(), |m| {
-        m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
-            // A failed merge may have removed its input files from the tip and left a partial
-            // output behind, so the next checkpoint would include a corrupt `PageMap`.
-            fatal!(log, "Failed to merge PageMap files: {}", err);
-        })
+    // Hand out merges one at a time, largest first, to whichever thread is free (the pool runs
+    // jobs in submission order). `parallel_map` gives each thread an equal run of consecutive
+    // merges instead, so large merges in the same run would be applied one after another.
+    scheduled_merges.sort_by_key(|m| Reverse(m.write_size_bytes()));
+    thread_pool.scoped(|scope| {
+        for m in &scheduled_merges {
+            scope.execute(move || {
+                m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
+                    // A failed merge may have removed its input files from the tip and left a
+                    // partial output behind, so the next checkpoint would include a corrupt
+                    // `PageMap`.
+                    fatal!(log, "Failed to merge PageMap files: {}", err);
+                })
+            });
+        }
     });
 }
 
