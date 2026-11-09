@@ -258,7 +258,10 @@ where
     S: Clone + Send + Sync + 'static,
     AppState: extract::FromRef<S>,
 {
-    ApiRouter::new()
+    // The PocketIC control plane: these endpoints are unauthenticated and act on
+    // request-supplied principals, file system paths, and bind addresses.
+    // Hence, they must not be reachable by (cross-origin) browser requests.
+    let control_plane_routes = ApiRouter::new()
         //
         // List all IC instances.
         .api_route("/", get(list_instances))
@@ -275,6 +278,24 @@ where
         //
         // All the state-changing endpoints
         .nest("/{id}/update", instance_update_routes())
+        // Configures an IC instance to make progress automatically,
+        // i.e., periodically update the time of the IC instance
+        // to the real time and execute rounds on the subnets.
+        // Only returns after the certified time of the IC instance
+        // has been updated for the first time.
+        .api_route("/{id}/auto_progress", post(auto_progress))
+        // Returns whether automatic progress is enabled for an IC instance.
+        .api_route("/{id}/auto_progress", get(get_auto_progress))
+        //
+        // Stop automatic progress (see endpoint `auto_progress`)
+        // on an IC instance.
+        .api_route("/{id}/stop_progress", post(stop_progress))
+        .route_layer(axum::middleware::from_fn(control_plane_guard));
+
+    // The IC HTTP API (whose update calls are authenticated by signatures)
+    // and read-only endpoints that can be accessed by browsers
+    // (e.g., through an HTTP gateway).
+    let ic_api_routes = ApiRouter::new()
         //
         // All the api v2 endpoints
         .nest("/{id}/api/v2", instance_api_v2_routes())
@@ -289,19 +310,101 @@ where
         .api_route("/{id}/_/dashboard", get(handler_dashboard))
         // The topology to be retrieved via an HTTP gateway that cannot route `/read/topology`.
         .api_route("/{id}/_/topology", get(handler_topology))
-        // Configures an IC instance to make progress automatically,
-        // i.e., periodically update the time of the IC instance
-        // to the real time and execute rounds on the subnets.
-        // Only returns after the certified time of the IC instance
-        // has been updated for the first time.
-        .api_route("/{id}/auto_progress", post(auto_progress))
-        // Returns whether automatic progress is enabled for an IC instance.
-        .api_route("/{id}/auto_progress", get(get_auto_progress))
-        //
-        // Stop automatic progress (see endpoint `auto_progress`)
-        // on an IC instance.
-        .api_route("/{id}/stop_progress", post(stop_progress))
-        .layer(cors_layer())
+        .layer(cors_layer());
+
+    control_plane_routes.merge(ic_api_routes)
+}
+
+/// Configuration of the [`control_plane_guard`] middleware.
+/// Expected to be provided as a request extension.
+#[derive(Clone, Copy, Debug)]
+pub struct ControlPlaneGuardConfig {
+    /// Whether the `Host` header of requests must be `localhost`
+    /// (or a subdomain thereof) or an IP address.
+    /// This should be enabled if the server is bound to a loopback interface
+    /// to prevent DNS rebinding attacks.
+    pub validate_host: bool,
+}
+
+impl Default for ControlPlaneGuardConfig {
+    fn default() -> Self {
+        Self {
+            validate_host: true,
+        }
+    }
+}
+
+fn is_allowed_host(host: &str) -> bool {
+    let Ok(authority) = http::uri::Authority::from_str(host) else {
+        return false;
+    };
+    // Reject authorities with user info.
+    if authority.as_str().contains('@') {
+        return false;
+    }
+    let host_name = authority.host();
+    let host_name = host_name
+        .strip_prefix('[')
+        .and_then(|h| h.strip_suffix(']'))
+        .unwrap_or(host_name);
+    if host_name.parse::<std::net::IpAddr>().is_ok() {
+        return true;
+    }
+    let host_name = host_name.to_ascii_lowercase();
+    host_name == "localhost" || host_name.ends_with(".localhost")
+}
+
+fn request_host(req: &Request) -> Option<String> {
+    match req.headers().get(http::header::HOST) {
+        Some(host) => host.to_str().ok().map(|h| h.to_string()),
+        None => req.uri().authority().map(|a| a.as_str().to_string()),
+    }
+}
+
+/// Middleware protecting the (unauthenticated) PocketIC control plane
+/// against requests from browsers on behalf of arbitrary web pages:
+/// - requests with an `Origin` header (i.e., browser requests) are rejected
+///   unless they are same-origin requests (cross-origin requests that do not
+///   require a CORS preflight, e.g., HTML form submissions, are rejected, too);
+/// - if [`ControlPlaneGuardConfig::validate_host`] holds, requests whose `Host`
+///   header is neither `localhost` (or a subdomain thereof) nor an IP address
+///   are rejected (to prevent DNS rebinding attacks).
+pub async fn control_plane_guard(req: Request, next: Next) -> Response {
+    let config = req
+        .extensions()
+        .get::<ControlPlaneGuardConfig>()
+        .copied()
+        .unwrap_or_default();
+    let host = request_host(&req);
+    if config.validate_host
+        && let Some(ref host) = host
+        && !is_allowed_host(host)
+    {
+        return (
+            StatusCode::FORBIDDEN,
+            format!("The host {host} is not allowed to access the PocketIC server."),
+        )
+            .into_response();
+    }
+    if let Some(origin) = req.headers().get(http::header::ORIGIN) {
+        let same_origin = origin.to_str().ok().is_some_and(|origin| {
+            let origin_authority = origin
+                .strip_prefix("http://")
+                .or_else(|| origin.strip_prefix("https://"));
+            match (origin_authority, &host) {
+                (Some(origin_authority), Some(host)) => origin_authority.eq_ignore_ascii_case(host),
+                _ => false,
+            }
+        });
+        if !same_origin {
+            return (
+                StatusCode::FORBIDDEN,
+                "Cross-origin requests to the PocketIC server are not allowed.".to_string(),
+            )
+                .into_response();
+        }
+    }
+    next.run(req).await
 }
 
 pub fn http_gateway_routes<S>() -> ApiRouter<S>
@@ -317,6 +420,7 @@ where
         .api_route("/", post(create_http_gateway))
         // Stops an HTTP gateway.
         .api_route("/{id}/stop", post(stop_http_gateway))
+        .route_layer(axum::middleware::from_fn(control_plane_guard))
 }
 
 async fn run_operation<T: Serialize + FromOpOut>(

@@ -118,6 +118,138 @@ fn test_status() {
 }
 
 #[test]
+fn test_control_plane_rejects_browser_requests() {
+    let url = start_server();
+    let pic = PocketIcBuilder::new()
+        .with_server_url(url.clone())
+        .with_application_subnet()
+        .build();
+    let instance_id = pic.instance_id();
+    let client = Client::new();
+    let evil_origin = "https://evil.example";
+
+    // CORS preflights for control plane routes from a foreign origin are refused.
+    for path in [
+        "instances".to_string(),
+        "instances/".to_string(),
+        format!("instances/{instance_id}/update/submit_ingress_message"),
+        format!("instances/{instance_id}/read/query"),
+        "http_gateway".to_string(),
+    ] {
+        let response = client
+            .request(reqwest::Method::OPTIONS, url.join(&path).unwrap())
+            .header(reqwest::header::ORIGIN, evil_origin)
+            .header(reqwest::header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+            .header(
+                reqwest::header::ACCESS_CONTROL_REQUEST_HEADERS,
+                "content-type",
+            )
+            .send()
+            .unwrap();
+        assert!(
+            response
+                .headers()
+                .get(reqwest::header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .is_none(),
+            "unexpected CORS header for {path}"
+        );
+    }
+
+    // Cross-origin requests to control plane routes are rejected.
+    for path in [
+        "instances".to_string(),
+        format!("instances/{instance_id}/read/get_time"),
+        "status".to_string(),
+    ] {
+        let response = client
+            .get(url.join(&path).unwrap())
+            .header(reqwest::header::ORIGIN, evil_origin)
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{path}");
+        assert!(
+            response
+                .headers()
+                .get(reqwest::header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .is_none()
+        );
+    }
+    let response = client
+        .post(
+            url.join(&format!("instances/{instance_id}/stop_progress"))
+                .unwrap(),
+        )
+        .header(reqwest::header::ORIGIN, evil_origin)
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    // Requests with a foreign `Host` header (DNS rebinding) are rejected.
+    let response = client
+        .get(url.join("instances").unwrap())
+        .header(reqwest::header::HOST, "evil.example")
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let port = url.port().unwrap();
+    let rebound_origin = format!("http://evil.example:{port}");
+    let response = client
+        .get(url.join("instances").unwrap())
+        .header(reqwest::header::HOST, format!("evil.example:{port}"))
+        .header(reqwest::header::ORIGIN, rebound_origin)
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    // Same-origin requests and requests with a local `Host` header are accepted.
+    let host = format!("127.0.0.1:{port}");
+    let response = client
+        .get(url.join("instances").unwrap())
+        .header(reqwest::header::HOST, host.clone())
+        .header(reqwest::header::ORIGIN, format!("http://{host}"))
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = client
+        .get(url.join("instances").unwrap())
+        .header(reqwest::header::HOST, format!("localhost:{port}"))
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // The IC HTTP API remains accessible to browsers from any origin.
+    let api_status_url = url
+        .join(&format!("instances/{instance_id}/api/v2/status"))
+        .unwrap();
+    let response = client
+        .request(reqwest::Method::OPTIONS, api_status_url.clone())
+        .header(reqwest::header::ORIGIN, evil_origin)
+        .header(reqwest::header::ACCESS_CONTROL_REQUEST_METHOD, "GET")
+        .send()
+        .unwrap();
+    assert_eq!(
+        response
+            .headers()
+            .get(reqwest::header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .unwrap(),
+        "*"
+    );
+    let response = client
+        .get(api_status_url)
+        .header(reqwest::header::ORIGIN, evil_origin)
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(reqwest::header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .unwrap(),
+        "*"
+    );
+}
+
+#[test]
 fn test_creation_of_instance_extended() {
     let url = start_server();
     let client = Client::new();

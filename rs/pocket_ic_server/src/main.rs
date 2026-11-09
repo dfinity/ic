@@ -31,7 +31,9 @@ use ic_types::{RegistryVersion, SubnetId};
 use libc::{RLIMIT_NOFILE, getrlimit, rlimit, setrlimit};
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
 use pocket_ic_server::BlobStore;
-use pocket_ic_server::state_api::routes::{handler_prune_graph, handler_read_graph};
+use pocket_ic_server::state_api::routes::{
+    ControlPlaneGuardConfig, control_plane_guard, handler_prune_graph, handler_read_graph,
+};
 use pocket_ic_server::state_api::{
     routes::{AppState, RouterExt, http_gateway_routes, instances_routes, status},
     state::{ApiState, PocketIcApiStateBuilder},
@@ -213,7 +215,14 @@ async fn start(runtime: Arc<Runtime>) {
     let addr = format!("{}:{}", ip_addr, args.port);
     let listener = std::net::TcpListener::bind(addr.clone())
         .unwrap_or_else(|_| panic!("Failed to bind PocketIC server to address {addr}"));
-    let real_port = listener.local_addr().unwrap().port();
+    let local_addr = listener.local_addr().unwrap();
+    let real_port = local_addr.port();
+    // If the server is only reachable from the local machine,
+    // then we validate the `Host` header of control plane requests
+    // to prevent DNS rebinding attacks.
+    let control_plane_guard_config = ControlPlaneGuardConfig {
+        validate_host: local_addr.ip().is_loopback(),
+    };
 
     // The shared, mutable state of the PocketIC process.
     let api_state = PocketIcApiStateBuilder::default()
@@ -286,6 +295,7 @@ async fn start(runtime: Arc<Runtime>) {
             "/prune_graph/{state_label}/{op_id}",
             delete(handler_prune_graph),
         )
+        .route_layer(middleware::from_fn(control_plane_guard))
         //
         // All instance routes.
         .nest("/instances", instances_routes::<AppState>())
@@ -293,6 +303,7 @@ async fn start(runtime: Arc<Runtime>) {
         .nest("/http_gateway", http_gateway_routes::<AppState>())
         .fallback(|| async { (StatusCode::NOT_FOUND, "") })
         .layer(DefaultBodyLimit::disable())
+        .layer(Extension(control_plane_guard_config))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             bump_last_request_timestamp,

@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+- The permissive CORS policy (allowing any origin) only applies to the IC HTTP API endpoints (`/instances/<id>/api/v2|v3|v4/...`)
+  and the read-only endpoints `/instances/<id>/_/dashboard` and `/instances/<id>/_/topology`
+  instead of all endpoints under `/instances`.
+- Requests to all other endpoints of the PocketIC server (the PocketIC control plane) are rejected with status code 403 if
+  - they carry an `Origin` header (set by browsers) that does not match the `Host` header (i.e., cross-origin browser requests), or
+  - the PocketIC server is bound to a loopback address and their `Host` header is neither an IP address nor `localhost` (or a subdomain thereof)
+    to prevent DNS rebinding attacks.
+
 ### Fixed
 - Requests to the bitcoin and dogecoin adapters (fetching blocks and sending transactions) time out after 1 s instead of 50 ms,
   so that sending a transaction through the bitcoin or dogecoin canister is much less likely to fail spuriously on a loaded machine.
