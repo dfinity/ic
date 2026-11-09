@@ -259,7 +259,6 @@ impl SchedulerImpl {
             .any(|canister| canister.has_long_install_code());
 
         loop {
-            // No subnet message is executed once the round instructions are exhausted.
             if round_limits.instructions_reached() {
                 break;
             }
