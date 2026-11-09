@@ -481,6 +481,16 @@ async fn check_chatting_canisters_metrics(
             metrics_after.requests_sent() > metrics_before.requests_sent(),
             "The canister should be still sending requests to other canisters"
         );
+        // Rejects are expected during the split (see below), but they can only happen between the
+        // moment the other subnets adopt the splitting registry version and the splitting subnet
+        // reaching the splitting block. When the current function is called, the split has already
+        // completed since long (2 DKG intervals), so none are expected to happen anymore.
+        assert_eq!(
+            metrics_after.reject_responses - metrics_before.reject_responses,
+            0,
+            "Canister {canister_id} received some reject responses after the split: {}",
+            metrics_after.log,
+        );
 
         metrics_after
     }))
@@ -502,7 +512,7 @@ async fn check_chatting_canisters_metrics(
         / aggregated_metrics.calls_attempted as f64
         * 100.0;
     assert!(
-        reject_percentage < 10.0,
+        reject_percentage < 15.0,
         "The percentage of reject responses ({reject_percentage}%) is too high. \
         {} calls were attempted, {} failed with reject responses",
         aggregated_metrics.calls_attempted,
