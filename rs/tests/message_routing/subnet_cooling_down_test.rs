@@ -96,6 +96,7 @@ end::catalog[] */
 use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_agent::Agent;
+use ic_consensus_system_test_subnet_recovery::utils::{SshKeys, get_ssh_keys_for_user};
 use ic_recovery::{RecoveryArgs, get_node_metrics, util::DataLocation};
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_merging::metrics_helper::{
@@ -107,7 +108,6 @@ use ic_subnet_merging::readiness::{
 };
 use ic_subnet_merging::subnet_merging::{StepType, SubnetMerging, SubnetMergingArgs};
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
-use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -512,9 +512,11 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     let logger = &context.logger;
     let topology = env.topology_snapshot();
 
-    let ssh_priv_key_path = env
-        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
-        .join(SSH_USERNAME);
+    let SshKeys {
+        ssh_priv_key_path: ssh_admin_priv_key_path,
+        auth: _,
+        ssh_pub_key: _,
+    } = get_ssh_keys_for_user(env, SSH_USERNAME);
 
     let recovery_args = RecoveryArgs {
         dir: env.get_path(MERGING_DIR),
@@ -525,7 +527,7 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
             .unwrap()
             .get_public_url(),
         replica_version: Some(get_guestos_img_version()),
-        admin_key_file: Some(ssh_priv_key_path),
+        admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
     };

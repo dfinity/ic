@@ -13,6 +13,7 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic_consensus_system_test_subnet_recovery = { path = "../consensus/subnet_recovery" }
 ic-management-canister-types = { workspace = true }
 ic-recovery = { path = "../../recovery" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
