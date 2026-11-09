@@ -18,8 +18,7 @@ called `M`; a second Application subnet `T` holds the canisters at the other
 end of `M`'s cross-subnet calls, and is the subnet the tool is told to merge
 `M` into.
 
-The tool submits its proposals (labeling `M` as "cooling down" and halting `M`
-and `T`) through `ic-admin`, with the test neuron.
+The tool submits its proposals through `ic-admin`, with the test neuron.
 
 "Executing" an update call below always means submitting it as an ingress
 message without waiting for it to complete: most of the calls of this test are

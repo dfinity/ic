@@ -106,10 +106,8 @@ pub struct SubnetMergingArgs {
     #[clap(long, default_value = "600")]
     pub halt_timeout_secs: u64,
 
-    /// How long to wait, in seconds, for a proposal submitted by the tool (the
-    /// one labeling the source subnet as "cooling down", and each one halting a
-    /// subnet at its next CUP) to be adopted, executed and visible in the
-    /// registry.
+    /// How long to wait, in seconds, for a proposal submitted by the tool to be
+    /// adopted, executed and visible in the registry.
     #[clap(long, default_value = "3600")]
     pub registry_timeout_secs: u64,
 

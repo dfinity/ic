@@ -174,14 +174,9 @@ impl Step for CheckHaltAtCupHeightStep {
 /// Waits until the node the state is downloaded from serves the CUP its subnet
 /// halts at.
 ///
-/// This waits for the CUP, rather than for the certified height of the subnet
-/// to stop advancing, because the CUP names the agreed-upon state the subnet
-/// halted at.
-///
-/// The CUP is read from the node's public CUP endpoint, so no SSH access is
-/// needed. Neither the CUP nor the presence of a checkpoint of the state it
-/// names on the node is validated here: both are validated when the state is
-/// downloaded.
+/// The CUP is read from the node's public CUP endpoint. Neither the CUP nor the
+/// presence of a checkpoint of the state it names on the node is validated
+/// here: both are validated when the state is downloaded.
 pub(crate) struct WaitForHaltingCupStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) node: DataLocation,
