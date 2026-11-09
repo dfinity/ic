@@ -376,6 +376,8 @@ fn test_ic_api_rejects_non_local_origins() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     // Requests from the domains of HTTP gateways are accepted.
+    // Use a domain unique to this test: the server is shared with tests
+    // running in parallel and trusts the domains of all live HTTP gateways.
     let mut pic = pic;
     let instance_id = pic.instance_id();
     let status_url = url
@@ -383,14 +385,19 @@ fn test_ic_api_rejects_non_local_origins() {
         .unwrap();
     let response = client
         .get(status_url.clone())
-        .header(header::ORIGIN, "https://app.example.com")
+        .header(header::ORIGIN, "https://app.origin-guard.test")
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    pic.make_live_with_params(None, None, Some(vec!["example.com".to_string()]), None);
+    pic.make_live_with_params(
+        None,
+        None,
+        Some(vec!["origin-guard.test".to_string()]),
+        None,
+    );
     let response = client
         .get(status_url)
-        .header(header::ORIGIN, "https://app.example.com")
+        .header(header::ORIGIN, "https://app.origin-guard.test")
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
