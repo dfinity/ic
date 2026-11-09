@@ -1,8 +1,10 @@
 use crate::{
-    pb::v1::{ExecuteNnsFunction, NnsFunction},
+    pb::v1::{ExecuteNnsFunction, NnsFunction, SelfDescribingValue as SelfDescribingValuePb},
     proposals::{
         ValidProposalAction,
-        execute_nns_function::{ValidExecuteNnsFunction, ValidNnsFunction},
+        execute_nns_function::{
+            ValidExecuteNnsFunction, ValidNnsFunction, validate_self_describing_value_size,
+        },
     },
     test_utils::{ExpectedCallCanisterMethodCallArguments, MockEnvironment},
 };
@@ -11,7 +13,9 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
 use ic_nervous_system_root::change_canister::AddCanisterRequest;
-use ic_nns_constants::{BITCOIN_MAINNET_CANISTER_ID, CYCLES_MINTING_CANISTER_ID};
+use ic_nns_constants::{
+    BITCOIN_MAINNET_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, REGISTRY_CANISTER_ID,
+};
 use ic_nns_governance_api::{
     SelfDescribingValue,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
@@ -533,4 +537,102 @@ async fn test_to_self_describing_hard_reset_nns_root_to_version() {
             "init_arg_hash".to_string() => SelfDescribingValue::from(init_arg_hash),
         })
     );
+}
+
+#[test]
+fn test_validate_self_describing_value_size() {
+    let new_blob_value = |len_bytes: usize| SelfDescribingValuePb::from(vec![42_u8; len_bytes]);
+
+    // Small values are fine.
+    assert_eq!(
+        validate_self_describing_value_size(&new_blob_value(30_000)),
+        Ok(())
+    );
+
+    // Large values are not.
+    let err = validate_self_describing_value_size(&new_blob_value(120_000)).unwrap_err();
+    assert!(err.contains("too large"), "{}", err);
+}
+
+#[tokio::test]
+async fn test_to_self_describing_keeps_type_name_and_description_when_payload_is_large() {
+    // Step 1: Prepare the world.
+
+    // Registry interface (partial).
+    let registry_candid = r#"
+        type KeyConfig = record {
+            key_id : opt nat32;
+        };
+
+        type UpdateSubnetRequest = record {
+            key_configs : vec KeyConfig;
+        };
+
+        service : {
+            update_subnet : (UpdateSubnetRequest) -> ();
+        }
+    "#;
+
+    // Corresponding Rust types.
+
+    #[derive(candid::CandidType, Clone)]
+    struct KeyConfig {
+        key_id: Option<u32>,
+    }
+
+    #[derive(candid::CandidType)]
+    struct UpdateSubnetRequest {
+        key_configs: Vec<KeyConfig>,
+    }
+
+    // Prepare `canister_metadata` response from the Management canister for
+    // when Governance requests Registry's interface.
+    let metadata_request =
+        CanisterMetadataRequest::new(REGISTRY_CANISTER_ID, "candid:service".to_string());
+    let metadata_response = CanisterMetadataResponse::new(registry_candid.as_bytes().to_vec());
+    let expected_metadata_call = ExpectedCallCanisterMethodCallArguments::new(
+        CanisterId::ic_00(),
+        "canister_metadata",
+        Encode!(&metadata_request).unwrap(),
+    );
+    let env = Arc::new(MockEnvironment::new(
+        vec![(
+            expected_metadata_call,
+            Ok(Encode!(&metadata_response).unwrap()),
+        )],
+        0,
+    ));
+
+    // Step 2: Run the code under test.
+
+    // Step 2.1: Prepare argument.
+    let payload = Encode!(&UpdateSubnetRequest {
+        key_configs: vec![KeyConfig { key_id: Some(42) }; 12_000],
+    })
+    .unwrap();
+    assert!(
+        payload.len() > 55_000 && payload.len() < 65_000,
+        "{}",
+        payload.len()
+    );
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::UpdateConfigOfSubnet,
+        payload,
+    };
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+
+    // Step 2.2: Call `to_self_describing`.
+    let result = proposal_action.to_self_describing(env).await;
+
+    // Step 3: Verify result(s).
+
+    // Step 3.1: The fields that are supposed to be populated.
+    assert_eq!(result.type_name, "Update Subnet Config");
+    assert_eq!(
+        result.type_description,
+        ValidNnsFunction::UpdateConfigOfSubnet.type_description(),
+    );
+
+    // Step 3.2: The field that's supposed to be NOT populated.
+    assert_eq!(result.value, None);
 }
