@@ -10,8 +10,9 @@
 #
 # The rerun reuses what the first attempt built and the results of the tests that passed (action cache,
 # remote cache), so it repeats the rest. It is skipped:
-# * when the first attempt reported a FAILED test: an exit code 34 outranks test failures (3), and the
-#   rerun would run the failed tests again with all their flaky attempts, which could hide the failure;
+# * when the first attempt reported a test that FAILED or hit its TIMEOUT in all its attempts: an exit
+#   code 34 outranks test failures (3), and the rerun would give those tests a fresh set of attempts,
+#   which could hide the failure;
 # * when less than 15 minutes of the action's timeout-minutes are left (BAZEL_NAMESPACE_DEADLINE), since
 #   bin/bazel interrupts a rerun at that deadline anyway.
 # It starts after a minute (RERUN_DELAY_SECONDS, for tests), so that the outage behind the error has a
@@ -36,9 +37,10 @@ if [ "$status" -ne 34 ]; then
 fi
 
 what="'$1 $2' failed with exit code 34, a remote execution or caching error at Namespace"
-# A failed test in bazel's test summary, e.g. "//rs/foo:bar_test   FAILED in 3 out of 3 in 12.3s".
-if grep -qE '^//[^ ]+ +FAILED in ' "$first_log"; then
-    echo "::warning title=Bazel not rerun::$what, but tests failed too: not running it again."
+# A test that failed in bazel's test summary, e.g. "//rs/foo:bar_test   FAILED in 3 out of 3 in 12.3s"
+# or "//rs/foo:baz_test   TIMEOUT in 300.1s" (runtime/TestSummaryPrinter.java prints the statuses).
+if grep -qE '^//[^ ]+ +(FAILED|TIMEOUT) in ' "$first_log"; then
+    echo "::warning title=Bazel not rerun::$what, but tests failed or timed out too: not running it again."
     exit "$status"
 fi
 if [ -n "${BAZEL_NAMESPACE_DEADLINE:-}" ]; then
