@@ -1,11 +1,14 @@
 //! Defines types used internally by consensus components.
 
 use crate::{
-    artifact::ConsensusMessageId,
+    NodeIndex,
+    artifact::{ConsensusMessageId, IngressMessageId},
     batch::{BatchPayload, ValidationContext},
+    canister_http::CanisterHttpResponse,
     consensus::dkg::DkgPayload,
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag},
     crypto::*,
+    messages::SignedRequestBytes,
     replica_version::ReplicaVersion,
     signature::*,
     *,
@@ -22,6 +25,7 @@ use ic_protobuf::{
 };
 use serde::{Deserialize, Serialize};
 use std::cmp::PartialOrd;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryInto;
 use std::hash::Hash;
 
@@ -423,15 +427,15 @@ impl From<BlockProposal> for Block {
     }
 }
 
-/// [`StrippedBlockProposalProtobufBytes`] holds the protobuf encoding of a block proposal
-/// with the messages stripped that peers fetch separately.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
-pub struct StrippedBlockProposalProtobufBytes(Vec<u8>);
-
-impl From<&pb::StrippedBlockProposal> for StrippedBlockProposalProtobufBytes {
-    fn from(proto: &pb::StrippedBlockProposal) -> Self {
-        Self(prost::Message::encode_to_vec(proto))
-    }
+/// The IDs of the messages that P2P strips from a block proposal before sending it.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
+pub struct StrippedMessageIds {
+    /// The hash of the bytes of each ingress message.
+    pub ingress_messages: BTreeMap<IngressMessageId, CryptoHashOf<SignedRequestBytes>>,
+    /// The ID of each IDKG dealing, together with the index of its dealer.
+    pub idkg_dealings: BTreeSet<(NodeIndex, idkg::IDkgArtifactId)>,
+    /// The content hash of each canister http response.
+    pub canister_http_responses: BTreeSet<CryptoHashOf<CanisterHttpResponse>>,
 }
 
 impl AsRef<Block> for BlockProposal {

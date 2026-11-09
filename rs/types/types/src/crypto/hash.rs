@@ -7,8 +7,8 @@ use crate::canister_http::{
 use crate::consensus::{
     Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
     CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
-    StrippedBlockProposalProtobufBytes, UpgradeAuthorizationShare,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent, StrippedMessageIds,
+    UpgradeAuthorizationShare,
     certification::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
     },
@@ -100,7 +100,7 @@ mod private {
 
     impl CryptoHashDomainSeal for CatchUpContent {}
     impl CryptoHashDomainSeal for CatchUpContentProtobufBytes {}
-    impl CryptoHashDomainSeal for StrippedBlockProposalProtobufBytes {}
+    impl CryptoHashDomainSeal for StrippedMessageIds {}
     impl CryptoHashDomainSeal for Signed<CatchUpContent, ThresholdSignature<CatchUpContent>> {}
 
     impl CryptoHashDomainSeal for CatchUpShareContent {}
@@ -312,9 +312,9 @@ impl CryptoHashDomain for CatchUpContentProtobufBytes {
     }
 }
 
-impl CryptoHashDomain for StrippedBlockProposalProtobufBytes {
+impl CryptoHashDomain for StrippedMessageIds {
     fn domain(&self) -> String {
-        DomainSeparator::StrippedBlockProposalProto.to_string()
+        DomainSeparator::StrippedMessageIds.to_string()
     }
 }
 

@@ -70,6 +70,12 @@ pub(crate) enum CanisterHttpPayloadError {
         MAX_CANISTER_HTTP_PAYLOAD_SIZE
     )]
     TooLarge,
+    #[error("The response with content hash {0:?} is worth stripping, but was left in the payload")]
+    NotStripped(CanisterHttpResponseContentHash),
+    #[error("The response with content hash {0:?} was stripped, but is not worth stripping")]
+    NotWorthStripping(CanisterHttpResponseContentHash),
+    #[error("The response with content hash {0:?} has no slot in the payload")]
+    UnusedResponse(CanisterHttpResponseContentHash),
 }
 
 /// Returns the payload with the content of every response worth stripping removed,
@@ -161,9 +167,14 @@ pub(crate) fn reinsert_responses(
     // Putting a content back grows the payload by more than the content itself, so
     // this is a lower bound on the size of the reassembled payload.
     let mut reassembled_size = payload_bytes.len();
+    let mut reinserted = BTreeSet::new();
     for message in &mut messages {
         for (content_hash, response) in response_slots(message) {
             if response.is_some() {
+                // Peers strip every response worth stripping.
+                if is_worth_stripping(response) {
+                    return Err(CanisterHttpPayloadError::NotStripped(content_hash));
+                }
                 continue;
             }
             let Some(Some(content)) = responses.get(&content_hash) else {
@@ -174,7 +185,18 @@ pub(crate) fn reinsert_responses(
                 return Err(CanisterHttpPayloadError::TooLarge);
             }
             *response = Some(pb::CanisterHttpResponse::from(content.clone()));
+            // Peers strip only responses worth stripping.
+            if !is_worth_stripping(response) {
+                return Err(CanisterHttpPayloadError::NotWorthStripping(content_hash));
+            }
+            reinserted.insert(content_hash);
         }
+    }
+    if let Some(unused) = responses
+        .keys()
+        .find(|content_hash| !reinserted.contains(*content_hash))
+    {
+        return Err(CanisterHttpPayloadError::UnusedResponse(unused.clone()));
     }
 
     Ok(encode(messages))
@@ -479,11 +501,9 @@ mod tests {
     /// A payload with nothing missing needs no contents to reassemble.
     #[test]
     fn reinsert_nothing_test() {
-        let response = fake_canister_http_response(1, 1024);
-        let payload = fake_canister_http_payload(vec![fake_canister_http_response_message(
-            &response,
-            &[NODE_1],
-        )]);
+        let tiny = fake_canister_http_response(1, MIN_STRIPPED_CONTENT_BYTES - 1);
+        let payload =
+            fake_canister_http_payload(vec![fake_canister_http_response_message(&tiny, &[NODE_1])]);
 
         assert_eq!(
             reinsert_responses(&payload, &BTreeMap::new()).unwrap(),
@@ -491,22 +511,63 @@ mod tests {
         );
     }
 
-    /// A slot that already holds its content is left alone, even if the content is
-    /// provided again, so putting the contents back a second time changes nothing.
+    /// Peers strip every response worth stripping, so a payload that still holds one is
+    /// refused, even once it has been put back together.
     #[test]
-    fn reinsert_responses_is_idempotent_test() {
+    fn reinsert_refuses_a_response_left_in_test() {
         let (payload, all) = fake_canister_http_payload_with_every_kind();
         let (stripped, _) = strip_responses(&payload).expect("Should have stripped something");
         let responses = all
             .into_iter()
             .map(|response| (hash_of(&response), Some(response)))
             .collect();
-
         let reinserted = reinsert_responses(&stripped, &responses).unwrap();
 
-        assert_eq!(
-            reinsert_responses(&reinserted, &responses).unwrap(),
-            reinserted
+        for (payload, responses) in [(&payload, BTreeMap::new()), (&reinserted, responses)] {
+            assert_matches!(
+                reinsert_responses(payload, &responses),
+                Err(CanisterHttpPayloadError::NotStripped(_))
+            );
+        }
+    }
+
+    /// Peers strip only responses worth stripping, so one too small to be worth it can't
+    /// be put back.
+    #[test]
+    fn reinsert_refuses_a_response_not_worth_stripping_test() {
+        let tiny = fake_canister_http_response(1, MIN_STRIPPED_CONTENT_BYTES - 1);
+        let stripped =
+            fake_canister_http_payload(vec![fake_stripped_canister_http_response_message(
+                &tiny,
+                &[NODE_1],
+            )]);
+        let responses = BTreeMap::from_iter([(hash_of(&tiny), Some(tiny.clone()))]);
+
+        assert_matches!(
+            reinsert_responses(&stripped, &responses),
+            Err(CanisterHttpPayloadError::NotWorthStripping(hash)) if hash == hash_of(&tiny)
+        );
+    }
+
+    /// Peers declare only the responses they stripped, so every response that is put back
+    /// has to fill a slot.
+    #[test]
+    fn reinsert_refuses_an_unused_response_test() {
+        let response = fake_canister_http_response(1, 1024);
+        let other = fake_canister_http_response(2, 1024);
+        let stripped =
+            fake_canister_http_payload(vec![fake_stripped_canister_http_response_message(
+                &response,
+                &[NODE_1],
+            )]);
+        let responses = BTreeMap::from_iter([
+            (hash_of(&response), Some(response)),
+            (hash_of(&other), Some(other.clone())),
+        ]);
+
+        assert_matches!(
+            reinsert_responses(&stripped, &responses),
+            Err(CanisterHttpPayloadError::UnusedResponse(hash)) if hash == hash_of(&other)
         );
     }
 

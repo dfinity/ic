@@ -63,7 +63,7 @@ pub enum DomainSeparator {
     CanisterHttpResponse,
     CryptoHashOfCanisterHttpResponseMetadata,
     CanisterHttpResponseShare,
-    StrippedBlockProposalProto,
+    StrippedMessageIds,
 }
 
 impl DomainSeparator {
@@ -132,9 +132,7 @@ impl DomainSeparator {
                 "ic-crypto-hash-of-canister-http-response-metadata-domain"
             }
             DomainSeparator::CanisterHttpResponseShare => "ic-canister-http-response-share-domain",
-            DomainSeparator::StrippedBlockProposalProto => {
-                "ic-stripped-block-proposal-proto-domain"
-            }
+            DomainSeparator::StrippedMessageIds => "ic-stripped-message-ids-domain",
         }
     }
 }
@@ -266,10 +264,7 @@ fn domain_separators_are_stable() {
             "CanisterHttpResponseShare",
             "ic-canister-http-response-share-domain",
         ),
-        (
-            "StrippedBlockProposalProto",
-            "ic-stripped-block-proposal-proto-domain",
-        ),
+        ("StrippedMessageIds", "ic-stripped-message-ids-domain"),
     ];
 
     // Build a map from variant name to expected domain string
