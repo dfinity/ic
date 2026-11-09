@@ -378,6 +378,117 @@ fn test_decode_connection_metrics_without_canister_id_fails() {
     ));
 }
 
+/// `CanisterStateBits` as decoded and encoded by the releases before connection
+/// metrics were keyed by sender (e.g. after a rollback). Only the connection metrics
+/// are modeled: all other fields are skipped when decoding, as unknown fields.
+#[derive(Clone, PartialEq, prost::Message)]
+struct LegacyCanisterStateBits {
+    #[prost(message, repeated, tag = "72")]
+    connection_metrics: Vec<LegacyCanisterToCanisterMetrics>,
+}
+
+/// Connection metrics as defined by the releases before they were keyed by sender:
+/// keyed by receiver, recorded on the sender.
+#[derive(Clone, PartialEq, prost::Message)]
+struct LegacyCanisterToCanisterMetrics {
+    #[prost(message, optional, tag = "1")]
+    receiver_canister_id: Option<ic_protobuf::types::v1::CanisterId>,
+    #[prost(uint64, tag = "2")]
+    timestamp_nanos: u64,
+    #[prost(uint64, tag = "3")]
+    count: u64,
+}
+
+/// Returns non-empty connection metrics.
+fn non_empty_connection_metrics() -> BTreeMap<CanisterId, ConnectionMetrics> {
+    BTreeMap::from([
+        (
+            canister_test_id(1),
+            ConnectionMetrics {
+                last_access_timestamp: Time::from_nanos_since_unix_epoch(1_000),
+                count: 7,
+            },
+        ),
+        (
+            canister_test_id(2),
+            ConnectionMetrics {
+                last_access_timestamp: Time::from_nanos_since_unix_epoch(2_000),
+                count: 3,
+            },
+        ),
+    ])
+}
+
+/// Returns the wire encoding of `CanisterStateBits` with the given connection
+/// metrics, as written to a checkpoint.
+fn encode_canister_state_bits(
+    connection_metrics: BTreeMap<CanisterId, ConnectionMetrics>,
+) -> Vec<u8> {
+    use prost::Message;
+
+    pb_canister_state_bits::CanisterStateBits::from(CanisterStateBits {
+        connection_metrics,
+        ..default_canister_state_bits()
+    })
+    .encode_to_vec()
+}
+
+/// Decodes `CanisterStateBits` from their wire encoding, as when loading a
+/// checkpoint.
+fn decode_canister_state_bits(bytes: &[u8]) -> CanisterStateBits {
+    use prost::Message;
+
+    CanisterStateBits::try_from(pb_canister_state_bits::CanisterStateBits::decode(bytes).unwrap())
+        .unwrap()
+}
+
+/// After an upgrade, the current release loads a checkpoint written by a previous
+/// one. Checks that the legacy connection metrics (keyed by receiver) are dropped,
+/// rather than interpreted as keyed by sender.
+#[test]
+fn test_upgrade_drops_legacy_connection_metrics() {
+    use prost::Message;
+
+    let legacy_bits = LegacyCanisterStateBits {
+        connection_metrics: non_empty_connection_metrics()
+            .into_iter()
+            .map(|(receiver, metrics)| LegacyCanisterToCanisterMetrics {
+                receiver_canister_id: Some(receiver.into()),
+                timestamp_nanos: metrics.last_access_timestamp.as_nanos_since_unix_epoch(),
+                count: metrics.count,
+            })
+            .collect(),
+    };
+    // Appending the legacy connection metrics field to the encoding of the other
+    // fields yields `CanisterStateBits` as written by a previous release.
+    let mut bytes = encode_canister_state_bits(BTreeMap::new());
+    legacy_bits.encode(&mut bytes).unwrap();
+    assert_eq!(
+        LegacyCanisterStateBits::decode(bytes.as_slice()).unwrap(),
+        legacy_bits
+    );
+
+    let decoded = decode_canister_state_bits(&bytes);
+    assert_eq!(decoded.connection_metrics, BTreeMap::new());
+}
+
+/// After a rollback, a previous release loads a checkpoint written by the current
+/// one. Checks that it finds no legacy connection metrics, rather than interpreting
+/// the current ones (keyed by sender) as keyed by receiver.
+#[test]
+fn test_rollback_drops_connection_metrics() {
+    use prost::Message;
+
+    let bytes = encode_canister_state_bits(non_empty_connection_metrics());
+    assert_eq!(
+        decode_canister_state_bits(&bytes).connection_metrics,
+        non_empty_connection_metrics()
+    );
+
+    let legacy_bits = LegacyCanisterStateBits::decode(bytes.as_slice()).unwrap();
+    assert_eq!(legacy_bits.connection_metrics, vec![]);
+}
+
 #[test]
 fn test_encode_decode_task_queue() {
     let ingress = Arc::new(IngressBuilder::new().method_name("test_ingress").build());
