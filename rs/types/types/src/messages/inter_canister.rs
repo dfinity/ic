@@ -121,10 +121,9 @@ pub struct Request {
     /// canister, as returned by `extract_effective_canister_id()`.
     ///
     /// Populated (by calling `populate_effective_canister_id()`) when the
-    /// request is inducted into the subnet queues, so that it doesn't need to
-    /// be repeatedly decoded from the payload. `None` if not (yet) populated or
-    /// if the request has no effective canister ID. Not part of the canonical
-    /// (XNet stream) encoding.
+    /// request is inducted into the subnet queues. `None` if not (yet)
+    /// populated or if the request has no effective canister ID. Not part of
+    /// the canonical (XNet stream) encoding.
     pub effective_canister_id: Option<CanisterId>,
 }
 
