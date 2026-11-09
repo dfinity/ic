@@ -579,7 +579,7 @@ fn test_decode_candid_args_to_self_describing_value_does_not_block_prematurely_d
     // Step 3.2: The value is close to, but within, the self-describing size
     // limit. Otherwise, this test would not be testing what it is meant to
     // test. This is more telling us that the test is using a good input, one
-    // tha results in a large (but not too large) output.
+    // that results in a large (but not too large) output.
     let encoded_len_bytes = prost::Message::encoded_len(&value);
     let relative_size =
         encoded_len_bytes as f64 / MAX_SELF_DESCRIBING_VALUE_ENCODED_LEN_BYTES as f64;
