@@ -13,8 +13,8 @@ use ic_utils::interfaces::ManagementCanister;
 use nix::sys::signal::Signal;
 use pocket_ic::common::rest::{InstanceConfig, SubnetConfigSet, SubnetKind};
 use pocket_ic::{PocketIc, PocketIcBuilder, PocketIcState, update_candid};
-use reqwest::StatusCode;
 use reqwest::blocking::Client;
+use reqwest::{Method, StatusCode, header};
 use slog::Level;
 use std::io::Read;
 use std::path::PathBuf;
@@ -139,57 +139,51 @@ fn test_control_plane_rejects_browser_requests() {
         "http_gateway".to_string(),
     ] {
         let response = client
-            .request(reqwest::Method::OPTIONS, url.join(&path).unwrap())
-            .header(reqwest::header::ORIGIN, evil_origin)
-            .header(reqwest::header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
-            .header(
-                reqwest::header::ACCESS_CONTROL_REQUEST_HEADERS,
-                "content-type",
-            )
+            .request(Method::OPTIONS, url.join(&path).unwrap())
+            .header(header::ORIGIN, evil_origin)
+            .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+            .header(header::ACCESS_CONTROL_REQUEST_HEADERS, "content-type")
             .send()
             .unwrap();
         assert!(
             response
                 .headers()
-                .get(reqwest::header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
                 .is_none(),
             "unexpected CORS header for {path}"
         );
     }
 
     // Cross-origin requests to control plane routes are rejected.
-    for path in [
-        "instances".to_string(),
-        format!("instances/{instance_id}/read/get_time"),
-        "status".to_string(),
+    for (method, path) in [
+        (Method::GET, "instances".to_string()),
+        (
+            Method::GET,
+            format!("instances/{instance_id}/read/get_time"),
+        ),
+        (Method::GET, "status".to_string()),
+        (
+            Method::POST,
+            format!("instances/{instance_id}/stop_progress"),
+        ),
     ] {
         let response = client
-            .get(url.join(&path).unwrap())
-            .header(reqwest::header::ORIGIN, evil_origin)
+            .request(method, url.join(&path).unwrap())
+            .header(header::ORIGIN, evil_origin)
             .send()
             .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN, "{path}");
         assert!(
             response
                 .headers()
-                .get(reqwest::header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
                 .is_none()
         );
     }
-    let response = client
-        .post(
-            url.join(&format!("instances/{instance_id}/stop_progress"))
-                .unwrap(),
-        )
-        .header(reqwest::header::ORIGIN, evil_origin)
-        .send()
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
-
     // Requests with a foreign `Host` header (DNS rebinding) are rejected.
     let response = client
         .get(url.join("instances").unwrap())
-        .header(reqwest::header::HOST, "evil.example")
+        .header(header::HOST, "evil.example")
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
@@ -197,8 +191,8 @@ fn test_control_plane_rejects_browser_requests() {
     let rebound_origin = format!("http://evil.example:{port}");
     let response = client
         .get(url.join("instances").unwrap())
-        .header(reqwest::header::HOST, format!("evil.example:{port}"))
-        .header(reqwest::header::ORIGIN, rebound_origin)
+        .header(header::HOST, format!("evil.example:{port}"))
+        .header(header::ORIGIN, rebound_origin)
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
@@ -207,14 +201,14 @@ fn test_control_plane_rejects_browser_requests() {
     let host = format!("127.0.0.1:{port}");
     let response = client
         .get(url.join("instances").unwrap())
-        .header(reqwest::header::HOST, host.clone())
-        .header(reqwest::header::ORIGIN, format!("http://{host}"))
+        .header(header::HOST, host.clone())
+        .header(header::ORIGIN, format!("http://{host}"))
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let response = client
         .get(url.join("instances").unwrap())
-        .header(reqwest::header::HOST, format!("localhost:{port}"))
+        .header(header::HOST, format!("localhost:{port}"))
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -224,32 +218,17 @@ fn test_control_plane_rejects_browser_requests() {
     let api_status_url = url
         .join(&format!("instances/{instance_id}/api/v2/status"))
         .unwrap();
-    let response = client
-        .request(reqwest::Method::OPTIONS, api_status_url.clone())
-        .header(reqwest::header::ORIGIN, local_origin)
-        .header(reqwest::header::ACCESS_CONTROL_REQUEST_METHOD, "GET")
-        .send()
-        .unwrap();
-    assert_eq!(
-        response
-            .headers()
-            .get(reqwest::header::ACCESS_CONTROL_ALLOW_ORIGIN)
-            .unwrap(),
-        "*"
-    );
-    let response = client
-        .get(api_status_url)
-        .header(reqwest::header::ORIGIN, local_origin)
-        .send()
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(
-        response
-            .headers()
-            .get(reqwest::header::ACCESS_CONTROL_ALLOW_ORIGIN)
-            .unwrap(),
-        "*"
-    );
+    for method in [Method::OPTIONS, Method::GET] {
+        let mut request = client
+            .request(method.clone(), api_status_url.clone())
+            .header(header::ORIGIN, local_origin);
+        if method == Method::OPTIONS {
+            request = request.header(header::ACCESS_CONTROL_REQUEST_METHOD, "GET");
+        }
+        let response = request.send().unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{method}");
+        assert_eq!(response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*");
+    }
 }
 
 #[test]
@@ -277,19 +256,14 @@ fn test_host_validation_with_allowed_hosts() {
     ] {
         let response = client
             .get(instances_url.clone())
-            .header(reqwest::header::HOST, host.clone())
+            .header(header::HOST, host.clone())
             .send()
             .unwrap();
         assert_eq!(response.status(), expected_status, "{host}");
+        if expected_status == StatusCode::FORBIDDEN {
+            assert!(response.text().unwrap().contains("--allowed-host"));
+        }
     }
-
-    // The error message mentions the CLI option to allow additional hosts.
-    let response = client
-        .get(instances_url)
-        .header(reqwest::header::HOST, format!("evil.example:{port}"))
-        .send()
-        .unwrap();
-    assert!(response.text().unwrap().contains("--allowed-host"));
 
     child.kill().unwrap();
     child.wait().unwrap();
@@ -321,33 +295,34 @@ fn test_ic_api_rejects_non_local_origins() {
     ] {
         for (method, path) in [
             (
-                reqwest::Method::GET,
+                Method::GET,
                 format!("instances/{instance_id}/api/v2/status"),
             ),
             (
-                reqwest::Method::POST,
+                Method::POST,
                 format!("instances/{instance_id}/api/v4/canister/aaaaa-aa/call"),
             ),
         ] {
-            // Cross-origin requests from non-local origins are rejected.
-            let response = client
-                .request(method.clone(), url.join(&path).unwrap())
-                .header(reqwest::header::ORIGIN, evil_origin)
-                .send()
-                .unwrap();
-            assert_eq!(response.status(), StatusCode::FORBIDDEN, "{path}");
-
-            // DNS rebinding requests are rejected.
-            let response = client
-                .request(method, url.join(&path).unwrap())
-                .header(reqwest::header::HOST, format!("evil.example:{port}"))
-                .header(
-                    reqwest::header::ORIGIN,
+            // Reject both direct cross-origin requests and DNS rebinding.
+            for (host, origin) in [
+                (format!("127.0.0.1:{port}"), evil_origin.to_string()),
+                (
+                    format!("evil.example:{port}"),
                     format!("http://evil.example:{port}"),
-                )
-                .send()
-                .unwrap();
-            assert_eq!(response.status(), StatusCode::FORBIDDEN, "{path}");
+                ),
+            ] {
+                let response = client
+                    .request(method.clone(), url.join(&path).unwrap())
+                    .header(header::HOST, &host)
+                    .header(header::ORIGIN, &origin)
+                    .send()
+                    .unwrap();
+                assert_eq!(
+                    response.status(),
+                    StatusCode::FORBIDDEN,
+                    "{path} {host} {origin}"
+                );
+            }
         }
 
         let status_url = url
@@ -356,7 +331,7 @@ fn test_ic_api_rejects_non_local_origins() {
         // Requests from local origins are accepted.
         let response = client
             .get(status_url.clone())
-            .header(reqwest::header::ORIGIN, local_origin)
+            .header(header::ORIGIN, local_origin)
             .send()
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -376,7 +351,7 @@ fn test_ic_api_rejects_non_local_origins() {
             ))
             .unwrap(),
         )
-        .header(reqwest::header::ORIGIN, evil_origin)
+        .header(header::ORIGIN, evil_origin)
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
@@ -389,14 +364,14 @@ fn test_ic_api_rejects_non_local_origins() {
         .unwrap();
     let response = client
         .get(status_url.clone())
-        .header(reqwest::header::ORIGIN, "https://app.example.com")
+        .header(header::ORIGIN, "https://app.example.com")
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
     pic.make_live_with_params(None, None, Some(vec!["example.com".to_string()]), None);
     let response = client
         .get(status_url)
-        .header(reqwest::header::ORIGIN, "https://app.example.com")
+        .header(header::ORIGIN, "https://app.example.com")
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -405,18 +380,17 @@ fn test_ic_api_rejects_non_local_origins() {
     let mut pic_without_ingress_validation = pic_without_ingress_validation;
     let gateway_url = pic_without_ingress_validation.make_live(None);
     let gateway_status_url = gateway_url.join("api/v2/status").unwrap();
-    let response = client
-        .get(gateway_status_url.clone())
-        .header(reqwest::header::ORIGIN, evil_origin)
-        .send()
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    let response = client
-        .get(gateway_status_url)
-        .header(reqwest::header::ORIGIN, local_origin)
-        .send()
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    for (origin, expected_status) in [
+        (evil_origin, StatusCode::FORBIDDEN),
+        (local_origin, StatusCode::OK),
+    ] {
+        let response = client
+            .get(gateway_status_url.clone())
+            .header(header::ORIGIN, origin)
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), expected_status, "{origin}");
+    }
 }
 
 #[test]
@@ -470,7 +444,7 @@ fn test_blob_store() {
     let response = client
         .post(url.join("blobstore/").unwrap())
         .body(blob_2)
-        .header(reqwest::header::CONTENT_ENCODING, "gzip")
+        .header(header::CONTENT_ENCODING, "gzip")
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -482,12 +456,7 @@ fn test_blob_store() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    assert!(
-        response
-            .headers()
-            .get(reqwest::header::CONTENT_ENCODING)
-            .is_none()
-    );
+    assert!(response.headers().get(header::CONTENT_ENCODING).is_none());
 
     let blob = response.bytes().unwrap();
     assert_eq!(blob, "decafbad".as_bytes());
@@ -500,7 +469,7 @@ fn test_blob_store() {
 
     let header = response
         .headers()
-        .get(reqwest::header::CONTENT_ENCODING)
+        .get(header::CONTENT_ENCODING)
         .unwrap()
         .as_bytes();
     assert_eq!(header, b"gzip");
@@ -529,7 +498,7 @@ fn test_blob_store_wrong_encoding() {
     let response = client
         .post(url.join("blobstore/").unwrap())
         .body(blob)
-        .header(reqwest::header::CONTENT_ENCODING, "bad_encoding")
+        .header(header::CONTENT_ENCODING, "bad_encoding")
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);

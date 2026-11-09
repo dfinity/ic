@@ -301,6 +301,121 @@ async fn test_https_gateway() {
     test_gateway(server_url, true).await;
 }
 
+#[tokio::test]
+async fn test_http2_gateway_preserves_authority() {
+    let mut pic = PocketIcBuilder::new()
+        .with_server_url(start_server())
+        .with_application_subnet()
+        .build_async()
+        .await;
+    let gateway_url = pic.make_live(None).await;
+    let port = gateway_url.port().unwrap();
+
+    // Connect locally while sending a non-loopback authority, as a browser
+    // accessing the gateway over a LAN would. HTTP/2 uses :authority, not Host.
+    let stream = tokio::net::TcpStream::connect((Ipv4Addr::LOCALHOST, port))
+        .await
+        .unwrap();
+    let (mut sender, connection) = hyper::client::conn::http2::handshake(
+        hyper_util::rt::TokioExecutor::new(),
+        hyper_util::rt::TokioIo::new(stream),
+    )
+    .await
+    .unwrap();
+    let connection_task = tokio::spawn(connection);
+
+    for (host, origin_host, expected_status) in [
+        ("192.0.2.1", "192.0.2.1", StatusCode::OK),
+        ("192.0.2.1", "192.0.2.2", StatusCode::FORBIDDEN),
+        ("evil.example", "evil.example", StatusCode::FORBIDDEN),
+    ] {
+        let response = sender
+            .send_request(
+                http::Request::builder()
+                    .uri(format!("http://{host}:{port}/api/v2/status"))
+                    .header(header::ORIGIN, format!("http://{origin_host}:{port}"))
+                    .body(reqwest::Body::from(""))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.version(), http::Version::HTTP_2);
+        assert_eq!(response.status(), expected_status, "{host} {origin_host}");
+    }
+
+    // A same-origin POST must reach the handler (which rejects the invalid CBOR),
+    // rather than being rejected by the origin guard.
+    let response = sender
+        .send_request(
+            http::Request::builder()
+                .method(http::Method::POST)
+                .uri(format!(
+                    "http://192.0.2.1:{port}/api/v2/canister/aaaaa-aa/query"
+                ))
+                .header(header::ORIGIN, format!("http://192.0.2.1:{port}"))
+                .body(reqwest::Body::from("invalid CBOR"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    drop(sender);
+    connection_task.abort();
+    pic.drop().await;
+}
+
+#[tokio::test]
+async fn test_gateway_origin_domain_normalization() {
+    let server_url = start_server();
+    let mut pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_application_subnet()
+        .build_async()
+        .await;
+    let server_status_url = server_url
+        .join(&format!("instances/{}/api/v2/status", pic.instance_id))
+        .unwrap();
+    let client = NonblockingClient::new();
+
+    for configured_domain in ["Example.com.", "example.com"] {
+        let mut gateway_url = pic
+            .make_live_with_params(None, None, Some(vec![configured_domain.to_string()]), None)
+            .await;
+        gateway_url.set_host(Some("127.0.0.1")).unwrap();
+        let port = gateway_url.port().unwrap();
+        // Both dotted and undotted origins must match the gateway's FQDN rules.
+        for status_url in [
+            server_status_url.clone(),
+            gateway_url.join("api/v2/status").unwrap(),
+        ] {
+            for (domain, expected_status) in [
+                ("example.com", StatusCode::OK),
+                ("example.com.", StatusCode::OK),
+                ("app.example.com", StatusCode::OK),
+                ("app.example.com.", StatusCode::OK),
+                ("evilexample.com", StatusCode::FORBIDDEN),
+                ("example.com.evil", StatusCode::FORBIDDEN),
+            ] {
+                let response = client
+                    .get(status_url.clone())
+                    .header(header::HOST, format!("example.com:{port}"))
+                    .header(header::ORIGIN, format!("http://{domain}:{port}"))
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    response.status(),
+                    expected_status,
+                    "{configured_domain} {status_url} {domain}"
+                );
+            }
+        }
+        pic.stop_live().await;
+    }
+    pic.drop().await;
+}
+
 // Test that the HTTP gateway exits gracefully upon receiving a signal.
 
 fn kill_gateway_with_signal(shutdown_signal: Signal) {

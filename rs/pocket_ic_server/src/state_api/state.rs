@@ -24,7 +24,7 @@ use http::{
     Method, StatusCode,
     header::{
         ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, COOKIE, DNT,
-        IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
+        HOST, IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
     },
 };
 use ic_gateway::ic_bn_lib::http::{
@@ -171,7 +171,7 @@ impl HttpGateway {
 pub struct HttpGatewayDomains {
     // Domains passed as `domains` when creating an HTTP gateway
     // (their subdomains are served, too).
-    domains: Vec<String>,
+    domains: Vec<FQDN>,
     // Domains configured through custom domain providers (exact matches only).
     custom_domain_storages: Vec<Arc<CustomDomainStorage>>,
 }
@@ -180,26 +180,23 @@ impl HttpGatewayDomains {
     #[cfg(test)]
     pub(crate) fn from_domains(domains: Vec<String>) -> Self {
         Self {
-            domains,
+            domains: domains.iter().map(|domain| fqdn!(domain)).collect(),
             custom_domain_storages: vec![],
         }
     }
 
-    /// Returns whether the given (lowercase) domain is served by an HTTP gateway.
+    /// Returns whether the domain is served by an HTTP gateway, using the same
+    /// FQDN normalization (including case and trailing dots) as the gateway.
     pub fn contains(&self, domain: &str) -> bool {
-        let is_domain_or_subdomain = self.domains.iter().any(|gateway_domain| {
-            let gateway_domain = gateway_domain.to_ascii_lowercase();
-            domain == gateway_domain
-                || domain
-                    .strip_suffix(&gateway_domain)
-                    .is_some_and(|prefix| prefix.ends_with('.'))
-        });
-        is_domain_or_subdomain
-            || FQDN::from_ascii_str(domain).is_ok_and(|fqdn| {
-                self.custom_domain_storages
+        FQDN::from_ascii_str(domain).is_ok_and(|fqdn| {
+            self.domains
+                .iter()
+                .any(|gateway_domain| fqdn.is_subdomain_of(gateway_domain))
+                || self
+                    .custom_domain_storages
                     .iter()
                     .any(|storage| storage.resolve(&fqdn).is_some())
-            })
+        })
     }
 }
 
@@ -968,6 +965,19 @@ impl ApiState {
                             )),
                     )
                     .fallback(|mut request: AxumRequest| async move {
+                        // HTTP/2 carries the original host in :authority. Keep it
+                        // in Host before the gateway rewrites the URI for its
+                        // HTTP/1.1 backend request, so the origin guard can still
+                        // recognize same-origin requests (including LAN IPs).
+                        if request.version() == http::Version::HTTP_2
+                            && let Some(authority) = request.uri().authority()
+                        {
+                            let host = authority
+                                .as_str()
+                                .parse()
+                                .expect("URI authorities are valid Host header values");
+                            request.headers_mut().insert(HOST, host);
+                        }
                         let conn_info = ConnInfo::default();
                         request.extensions_mut().insert(Arc::new(conn_info));
                         ic_gateway_router.oneshot(request).await
@@ -1170,9 +1180,14 @@ impl ApiState {
     pub async fn http_gateway_domains(&self) -> HttpGatewayDomains {
         let mut gateway_domains = HttpGatewayDomains::default();
         for gateway in self.http_gateways.read().await.iter().flatten() {
-            gateway_domains
-                .domains
-                .extend(gateway.details.domains.clone().unwrap_or_default());
+            gateway_domains.domains.extend(
+                gateway
+                    .details
+                    .domains
+                    .iter()
+                    .flatten()
+                    .map(|domain| fqdn!(domain)),
+            );
             gateway_domains
                 .custom_domain_storages
                 .push(gateway.custom_domain_storage.clone());

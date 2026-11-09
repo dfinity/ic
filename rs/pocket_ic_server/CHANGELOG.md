@@ -19,7 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The PocketIC server rejects browser requests from arbitrary web pages to protect against malicious websites, including DNS rebinding attacks:
   - Browser requests to the IC HTTP API (`/instances/<id>/api/...`) are only accepted from local origins,
     domains of HTTP gateways, and same-origin pages.
-  - Requests to all other endpoints are rejected if they are cross-origin browser requests
+  - The read-only dashboard and topology endpoints (`/instances/<id>/_/dashboard` and `/instances/<id>/_/topology`)
+    remain accessible from any origin, including through HTTP gateways.
+  - Requests to the remaining endpoints are rejected if they are cross-origin browser requests
     or if their `Host` header is neither an IP address, `localhost`, nor allowed by `--allowed-host`.
 
 ### Fixed
