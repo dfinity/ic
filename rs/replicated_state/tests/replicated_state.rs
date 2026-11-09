@@ -693,14 +693,17 @@ fn push_subnet_queues_input_respects_subnet_available_guaranteed_response_memory
         &mut subnet_available_guaranteed_response_memory,
     );
 
-    // No more memory for a second guaranteed response request.
+    // No more memory for a second guaranteed response request. The returned
+    // request has its effective canister ID cached (it has none).
+    let mut expected_request = request_to(SUBNET_ID.into());
+    expected_request.effective_canister_id = Some(None);
     assert_eq!(
         Err((
             StateError::OutOfMemory {
                 requested: (MAX_RESPONSE_COUNT_BYTES as u64).into(),
                 available: 0.into()
             },
-            request_to(SUBNET_ID.into()).into(),
+            expected_request.into(),
         )),
         res
     );
@@ -786,67 +789,92 @@ fn subnet_queue_push_input_response() {
     );
 }
 
-#[test]
-fn subnet_queue_push_input_request_populates_effective_canister_id() {
-    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
-
-    let target = canister_test_id(13);
-    let request = RequestBuilder::default()
+fn management_request(method: Ic00Method, payload: Vec<u8>) -> Request {
+    RequestBuilder::default()
         .sender(CANISTER_ID)
         .receiver(SUBNET_ID.into())
-        .method_name(Ic00Method::StartCanister)
-        .method_payload(CanisterIdRecord::from(target).encode())
-        .build();
-    assert_eq!(request.effective_canister_id, None);
+        .method_name(method)
+        .method_payload(payload)
+        .build()
+}
 
+/// Pushes `request` into the subnet queues of `state` and pops it back out.
+fn push_and_pop_subnet_request(state: &mut ReplicatedState, request: Arc<Request>) -> Arc<Request> {
     assert_eq!(
         state.push_input(
-            request.into(),
+            RequestOrResponse::Request(request),
             &mut SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY.clone()
         ),
         Ok(true)
     );
-
-    // The effective canister ID was decoded and cached upon induction.
     match state.pop_subnet_input() {
-        Some(SubnetMessage::Request(request)) => {
-            assert_eq!(request.effective_canister_id, Some(target));
-        }
+        Some(SubnetMessage::Request(request)) => request,
         msg => panic!("Expected a subnet request, got {msg:?}"),
     }
 }
 
 #[test]
-fn subnet_queue_push_input_shared_request_without_effective_canister_id_is_not_copied() {
+fn subnet_queue_push_input_request_populates_effective_canister_id() {
     let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
-    // A request without an effective canister ID, whose `Arc` is shared (as it
-    // would be with the loopback stream).
-    let request = Arc::new(
-        RequestBuilder::default()
-            .sender(CANISTER_ID)
-            .receiver(SUBNET_ID.into())
-            .method_name(Ic00Method::RawRand)
-            .method_payload(EmptyBlob.encode())
-            .build(),
-    );
-
-    assert_eq!(
-        state.push_input(
-            RequestOrResponse::Request(Arc::clone(&request)),
-            &mut SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY.clone()
+    let target = canister_test_id(13);
+    for (request, expected) in [
+        // A request with an effective canister ID.
+        (
+            management_request(
+                Ic00Method::StartCanister,
+                CanisterIdRecord::from(target).encode(),
+            ),
+            Some(Some(target)),
         ),
-        Ok(true)
-    );
+        // A request without an effective canister ID.
+        (
+            management_request(Ic00Method::RawRand, EmptyBlob.encode()),
+            Some(None),
+        ),
+        // A request with an invalid payload.
+        (
+            management_request(Ic00Method::StartCanister, vec![1, 2, 3]),
+            Some(None),
+        ),
+    ] {
+        assert_eq!(request.effective_canister_id, None);
 
-    // The cache is unchanged, so the request was not copied.
-    match state.pop_subnet_input() {
-        Some(SubnetMessage::Request(inducted)) => {
-            assert!(Arc::ptr_eq(&inducted, &request));
-            assert_eq!(inducted.effective_canister_id, None);
-        }
-        msg => panic!("Expected a subnet request, got {msg:?}"),
+        let inducted = push_and_pop_subnet_request(&mut state, Arc::new(request));
+
+        assert_eq!(inducted.effective_canister_id, expected);
     }
+}
+
+#[test]
+fn subnet_queue_push_input_shared_request_already_cached_is_not_copied() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    // An already cached request whose `Arc` is shared (as it would be with the
+    // loopback stream).
+    let mut request = management_request(Ic00Method::RawRand, EmptyBlob.encode());
+    request.effective_canister_id = Some(None);
+    let request = Arc::new(request);
+
+    let inducted = push_and_pop_subnet_request(&mut state, Arc::clone(&request));
+
+    assert!(Arc::ptr_eq(&inducted, &request));
+    assert_eq!(inducted.effective_canister_id, Some(None));
+}
+
+#[test]
+fn subnet_queue_push_input_shared_request_not_cached_is_copied() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    // A request without cached effective canister ID, whose `Arc` is shared.
+    let request = Arc::new(management_request(Ic00Method::RawRand, EmptyBlob.encode()));
+
+    let inducted = push_and_pop_subnet_request(&mut state, Arc::clone(&request));
+
+    // The inducted request was copied and populated; the shared one is unchanged.
+    assert!(!Arc::ptr_eq(&inducted, &request));
+    assert_eq!(inducted.effective_canister_id, Some(None));
+    assert_eq!(request.effective_canister_id, None);
 }
 
 #[test]

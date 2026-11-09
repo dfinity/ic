@@ -121,10 +121,13 @@ pub struct Request {
     /// canister, as returned by `extract_effective_canister_id()`.
     ///
     /// Populated when the request is inducted into the subnet queues (see
-    /// `ReplicatedState::push_input()`). `None` if not (yet) populated or if
-    /// the request has no effective canister ID. Not part of the canonical
-    /// (XNet stream) encoding.
-    pub effective_canister_id: Option<CanisterId>,
+    /// `ReplicatedState::push_input()`):
+    ///  * `None`: not (yet) populated;
+    ///  * `Some(None)`: the request has no effective canister ID;
+    ///  * `Some(Some(id))`: the request's effective canister ID is `id`.
+    ///
+    /// Not part of the canonical (XNet stream) encoding.
+    pub effective_canister_id: Option<Option<CanisterId>>,
 }
 
 impl Request {
@@ -159,8 +162,10 @@ impl Request {
     /// Returns the effective canister ID of this request: the cached value, if
     /// populated; else decodes it from the payload.
     pub fn effective_canister_id(&self) -> Option<CanisterId> {
-        self.effective_canister_id
-            .or_else(|| self.extract_effective_canister_id())
+        match self.effective_canister_id {
+            Some(cached) => cached,
+            None => self.extract_effective_canister_id(),
+        }
     }
 
     /// Helper function to extract the effective canister id from the payload.
@@ -853,7 +858,11 @@ impl From<&Request> for pb_queues::Request {
             cycles_payment: Some((req.payment).into()),
             metadata: Some((&req.metadata).into()),
             deadline_seconds: req.deadline.as_secs_since_unix_epoch(),
-            effective_canister_id: req.effective_canister_id.map(pb_types::CanisterId::from),
+            effective_canister_id: req.effective_canister_id.map(|effective_canister_id| {
+                pb_queues::EffectiveCanisterId {
+                    canister_id: effective_canister_id.map(pb_types::CanisterId::from),
+                }
+            }),
         }
     }
 }
@@ -884,7 +893,12 @@ impl TryFrom<pb_queues::Request> for Request {
             deadline: CoarseTime::from_secs_since_unix_epoch(req.deadline_seconds),
             effective_canister_id: req
                 .effective_canister_id
-                .map(CanisterId::try_from)
+                .map(|effective_canister_id| {
+                    effective_canister_id
+                        .canister_id
+                        .map(CanisterId::try_from)
+                        .transpose()
+                })
                 .transpose()?,
         })
     }

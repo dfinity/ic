@@ -208,14 +208,14 @@ fn effective_canister_id_is_cached() {
     assert_eq!(request.effective_canister_id, None);
     assert_eq!(request.effective_canister_id(), Some(target));
 
-    request.effective_canister_id = request.extract_effective_canister_id();
-    assert_eq!(request.effective_canister_id, Some(target));
-    assert_eq!(request.effective_canister_id(), Some(target));
-
     // The cached value takes precedence over the payload.
     let other = canister_test_id(14);
-    request.effective_canister_id = Some(other);
+    request.effective_canister_id = Some(Some(other));
     assert_eq!(request.effective_canister_id(), Some(other));
+
+    // Cached "no effective canister ID" also takes precedence over the payload.
+    request.effective_canister_id = Some(None);
+    assert_eq!(request.effective_canister_id(), None);
 }
 
 #[test]
@@ -230,17 +230,26 @@ fn effective_canister_id_of_invalid_payload() {
 #[test]
 fn request_effective_canister_id_proto_round_trip() {
     let target = canister_test_id(13);
-    for effective_canister_id in [None, Some(target)] {
+    for (effective_canister_id, expected_encoding) in [
+        (None, None),
+        (
+            Some(None),
+            Some(pb_queues::EffectiveCanisterId { canister_id: None }),
+        ),
+        (
+            Some(Some(target)),
+            Some(pb_queues::EffectiveCanisterId {
+                canister_id: Some(pb_types::CanisterId::from(target)),
+            }),
+        ),
+    ] {
         let request = Request {
             effective_canister_id,
             ..start_canister_request(target)
         };
 
         let encoded = pb_queues::Request::from(&request);
-        assert_eq!(
-            encoded.effective_canister_id,
-            effective_canister_id.map(pb_types::CanisterId::from)
-        );
+        assert_eq!(encoded.effective_canister_id, expected_encoding);
         let decoded = Request::try_from(encoded).unwrap();
         assert_eq!(request, decoded);
     }

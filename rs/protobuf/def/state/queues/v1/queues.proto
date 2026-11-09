@@ -63,6 +63,12 @@ message RequestMetadata {
   uint64 call_tree_start_time_nanos = 2;
 }
 
+// The cached effective canister ID of a request (see `Request`).
+message EffectiveCanisterId {
+  // Absent if the request has no effective canister ID.
+  types.v1.CanisterId canister_id = 1;
+}
+
 message Request {
   reserved 4;
   reserved "payment";
@@ -78,8 +84,8 @@ message Request {
   uint32 deadline_seconds = 9;
   // Cached effective canister ID of a request addressed to the management
   // canister, populated upon induction into the subnet queues. Absent if not
-  // (yet) populated or if the request has no effective canister ID.
-  types.v1.CanisterId effective_canister_id = 10;
+  // (yet) populated.
+  EffectiveCanisterId effective_canister_id = 10;
 }
 
 message RejectContext {
