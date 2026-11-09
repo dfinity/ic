@@ -76,6 +76,11 @@ pub struct Request {
     /// If non-zero, this is a best-effort call.
     #[prost(uint32, tag = "9")]
     pub deadline_seconds: u32,
+    /// Cached effective canister ID of a request addressed to the management
+    /// canister, populated upon induction into the subnet queues. Absent if not
+    /// (yet) populated or if the request has no effective canister ID.
+    #[prost(message, optional, tag = "10")]
+    pub effective_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RejectContext {

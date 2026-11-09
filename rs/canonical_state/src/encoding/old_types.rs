@@ -210,6 +210,7 @@ impl TryFrom<RequestV19> for ic_types::messages::Request {
             method_payload: request.method_payload,
             metadata: request.metadata.map_or_else(Default::default, From::from),
             deadline: CoarseTime::from_secs_since_unix_epoch(request.deadline),
+            effective_canister_id: None,
         })
     }
 }
@@ -280,6 +281,7 @@ impl TryFrom<RequestV22> for ic_types::messages::Request {
             method_payload: request.method_payload,
             metadata: request.metadata.map_or_else(Default::default, From::from),
             deadline: CoarseTime::from_secs_since_unix_epoch(request.deadline),
+            effective_canister_id: None,
         })
     }
 }

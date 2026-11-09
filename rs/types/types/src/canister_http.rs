@@ -1677,6 +1677,7 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
+                effective_canister_id: None,
             }),
             time: UNIX_EPOCH,
             replication: Replication::FullyReplicated,
@@ -1725,6 +1726,7 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
+                effective_canister_id: None,
             }),
             time: UNIX_EPOCH,
             replication: Replication::FullyReplicated,
@@ -1803,6 +1805,7 @@ mod tests {
                         method_payload: Vec::new(),
                         metadata: Default::default(),
                         deadline: NO_DEADLINE,
+                        effective_canister_id: None,
                     }),
                     time: UNIX_EPOCH,
                     replication: replication.clone(),
@@ -1837,6 +1840,7 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
+                effective_canister_id: None,
             }),
             url: "https://example.com".to_string(),
             max_response_bytes: None,
@@ -2339,6 +2343,7 @@ mod tests {
             method_payload: Vec::new(),
             metadata: Default::default(),
             deadline: NO_DEADLINE,
+            effective_canister_id: None,
         }
     }
 

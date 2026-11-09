@@ -8,7 +8,7 @@ use ic_btc_replica_types::{
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
     BitcoinGetSuccessorsResponse, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
-    EcdsaCurve, EcdsaKeyId, EmptyBlob, Payload as _,
+    CanisterIdRecord, EcdsaCurve, EcdsaKeyId, EmptyBlob, Method as Ic00Method, Payload as _,
 };
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -784,6 +784,36 @@ fn subnet_queue_push_input_response() {
             response.into()
         ))
     );
+}
+
+#[test]
+fn subnet_queue_push_input_request_populates_effective_canister_id() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    let target = canister_test_id(13);
+    let request = RequestBuilder::default()
+        .sender(CANISTER_ID)
+        .receiver(SUBNET_ID.into())
+        .method_name(Ic00Method::StartCanister)
+        .method_payload(CanisterIdRecord::from(target).encode())
+        .build();
+    assert_eq!(request.effective_canister_id, None);
+
+    assert_eq!(
+        state.push_input(
+            request.into(),
+            &mut SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY.clone()
+        ),
+        Ok(true)
+    );
+
+    // The effective canister ID was decoded and cached upon induction.
+    match state.pop_subnet_input() {
+        Some(SubnetMessage::Request(request)) => {
+            assert_eq!(request.effective_canister_id, Some(target));
+        }
+        msg => panic!("Expected a subnet request, got {msg:?}"),
+    }
 }
 
 #[test]

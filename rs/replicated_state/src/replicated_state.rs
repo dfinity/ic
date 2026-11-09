@@ -1087,23 +1087,28 @@ impl ReplicatedState {
             None => {
                 let subnet_id = self.metadata.own_subnet_id.get_ref();
                 if receiver.get_ref() == subnet_id {
-                    match &msg {
-                        RequestOrResponse::Request(_) => push_input(
-                            &mut self.subnet_queues,
-                            msg,
-                            subnet_available_guaranteed_response_memory,
-                            own_subnet_type,
-                            input_queue_type,
-                        )
-                        // Requests are never silently dropped.
-                        .map(|_| true),
+                    match msg {
+                        RequestOrResponse::Request(mut request) => {
+                            // Decode the effective canister ID once, upon induction, so that
+                            // the scheduler doesn't need to repeatedly decode it.
+                            Arc::make_mut(&mut request).populate_effective_canister_id();
+                            push_input(
+                                &mut self.subnet_queues,
+                                RequestOrResponse::Request(request),
+                                subnet_available_guaranteed_response_memory,
+                                own_subnet_type,
+                                input_queue_type,
+                            )
+                            // Requests are never silently dropped.
+                            .map(|_| true)
+                        }
 
                         RequestOrResponse::Response(response) => Err((
                             StateError::non_matching_response(
                                 "Management canister does not accept canister responses",
-                                response,
+                                &response,
                             ),
-                            msg,
+                            RequestOrResponse::Response(response),
                         )),
                     }
                 } else {

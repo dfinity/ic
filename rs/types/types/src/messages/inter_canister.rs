@@ -117,6 +117,15 @@ pub struct Request {
     pub metadata: RequestMetadata,
     /// If non-zero, this is a best-effort call.
     pub deadline: CoarseTime,
+    /// Cached effective canister ID of a request addressed to the management
+    /// canister, as returned by `extract_effective_canister_id()`.
+    ///
+    /// Populated (by calling `populate_effective_canister_id()`) when the
+    /// request is inducted into the subnet queues, so that it doesn't need to
+    /// be repeatedly decoded from the payload. `None` if not (yet) populated or
+    /// if the request has no effective canister ID. Not part of the canonical
+    /// (XNet stream) encoding.
+    pub effective_canister_id: Option<CanisterId>,
 }
 
 impl Request {
@@ -146,6 +155,19 @@ impl Request {
     /// (i.e. if it has a non-zero deadline).
     pub fn is_best_effort(&self) -> bool {
         self.deadline != NO_DEADLINE
+    }
+
+    /// Returns the effective canister ID of this request: the cached value, if
+    /// populated; else decodes it from the payload.
+    pub fn effective_canister_id(&self) -> Option<CanisterId> {
+        self.effective_canister_id
+            .or_else(|| self.extract_effective_canister_id())
+    }
+
+    /// Decodes the effective canister ID from the payload and caches it in
+    /// `self.effective_canister_id`.
+    pub fn populate_effective_canister_id(&mut self) {
+        self.effective_canister_id = self.extract_effective_canister_id();
     }
 
     /// Helper function to extract the effective canister id from the payload.
@@ -314,6 +336,7 @@ impl std::fmt::Debug for Request {
             method_payload,
             metadata,
             deadline,
+            effective_canister_id,
         } = self;
         f.debug_struct("Request")
             .field("receiver", receiver)
@@ -324,6 +347,7 @@ impl std::fmt::Debug for Request {
             .field("method_payload", &truncate_and_format(method_payload, 1024))
             .field("metadata", metadata)
             .field("deadline", deadline)
+            .field("effective_canister_id", effective_canister_id)
             .finish()
     }
 }
@@ -836,6 +860,7 @@ impl From<&Request> for pb_queues::Request {
             cycles_payment: Some((req.payment).into()),
             metadata: Some((&req.metadata).into()),
             deadline_seconds: req.deadline.as_secs_since_unix_epoch(),
+            effective_canister_id: req.effective_canister_id.map(pb_types::CanisterId::from),
         }
     }
 }
@@ -864,6 +889,10 @@ impl TryFrom<pb_queues::Request> for Request {
             method_payload: req.method_payload,
             metadata: req.metadata.map_or_else(Default::default, From::from),
             deadline: CoarseTime::from_secs_since_unix_epoch(req.deadline_seconds),
+            effective_canister_id: req
+                .effective_canister_id
+                .map(CanisterId::try_from)
+                .transpose()?,
         })
     }
 }

@@ -25,6 +25,7 @@ impl Default for RequestBuilder {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
+                effective_canister_id: None,
             },
         }
     }

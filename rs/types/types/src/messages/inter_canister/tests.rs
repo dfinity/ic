@@ -184,3 +184,65 @@ fn assert_eq_message(r: &RequestOrResponse, s: &StreamMessage) {
         _ => panic!("Mismatched variants: {:?} vs {:?}", r, s),
     }
 }
+
+fn start_canister_request(target: CanisterId) -> Request {
+    Request {
+        receiver: CanisterId::ic_00(),
+        sender: canister_test_id(1),
+        sender_reply_callback: CallbackId::from(2),
+        payment: Cycles::zero(),
+        method_name: Method::StartCanister.to_string(),
+        method_payload: CanisterIdRecord::from(target).encode(),
+        metadata: Default::default(),
+        deadline: NO_DEADLINE,
+        effective_canister_id: None,
+    }
+}
+
+#[test]
+fn effective_canister_id_is_cached() {
+    let target = canister_test_id(13);
+
+    let mut request = start_canister_request(target);
+    // Not cached: decoded from the payload.
+    assert_eq!(request.effective_canister_id, None);
+    assert_eq!(request.effective_canister_id(), Some(target));
+
+    request.populate_effective_canister_id();
+    assert_eq!(request.effective_canister_id, Some(target));
+    assert_eq!(request.effective_canister_id(), Some(target));
+
+    // The cached value takes precedence over the payload.
+    let other = canister_test_id(14);
+    request.effective_canister_id = Some(other);
+    assert_eq!(request.effective_canister_id(), Some(other));
+}
+
+#[test]
+fn effective_canister_id_not_populated_for_invalid_payload() {
+    let mut request = start_canister_request(canister_test_id(13));
+    request.method_payload = vec![1, 2, 3];
+
+    request.populate_effective_canister_id();
+    assert_eq!(request.effective_canister_id, None);
+    assert_eq!(request.effective_canister_id(), None);
+}
+
+#[test]
+fn request_effective_canister_id_proto_round_trip() {
+    let target = canister_test_id(13);
+    for effective_canister_id in [None, Some(target)] {
+        let request = Request {
+            effective_canister_id,
+            ..start_canister_request(target)
+        };
+
+        let encoded = pb_queues::Request::from(&request);
+        assert_eq!(
+            encoded.effective_canister_id,
+            effective_canister_id.map(pb_types::CanisterId::from)
+        );
+        let decoded = Request::try_from(encoded).unwrap();
+        assert_eq!(request, decoded);
+    }
+}
