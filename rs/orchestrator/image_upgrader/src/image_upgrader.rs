@@ -374,7 +374,7 @@ where
         let duration = start_time.elapsed();
 
         if let Err(e) = download_result {
-            warn!(logger, "{} failed in {:?}: {}", req, duration, e);
+            warn!(logger, "{} failed in {:?}: {:?}", req, duration, e);
             error = UpgradeError::from(e);
         } else {
             info!(logger, "{} processed in {:?}", req, duration);
