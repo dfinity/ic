@@ -18,7 +18,7 @@ use axum_server::Handle;
 use axum_server::tls_rustls::RustlsConfig;
 use base64::prelude::*;
 use clap::Parser;
-use fqdn::fqdn;
+use fqdn::{FQDN, fqdn};
 use futures::future::Shared;
 use http::{
     Method, StatusCode,
@@ -43,7 +43,7 @@ use ic_gateway::{
         },
         ic_agent::agent::route_provider::RoundRobinRouteProvider,
     },
-    routing::domain::CustomDomainStorage,
+    routing::domain::{CustomDomainStorage, ResolvesDomain},
     setup_router,
 };
 use ic_types::{CanisterId, NodeId, PrincipalId, SubnetId, canister_http::CanisterHttpRequestId};
@@ -148,14 +148,58 @@ struct Instance {
 struct HttpGateway {
     details: HttpGatewayDetails,
     shutdown_handle: Handle,
+    // Domains configured through a custom domain provider (e.g., a local file).
+    custom_domain_storage: Arc<CustomDomainStorage>,
 }
 
 impl HttpGateway {
-    fn new(details: HttpGatewayDetails, shutdown_handle: Handle) -> Self {
+    fn new(
+        details: HttpGatewayDetails,
+        shutdown_handle: Handle,
+        custom_domain_storage: Arc<CustomDomainStorage>,
+    ) -> Self {
         Self {
             details,
             shutdown_handle,
+            custom_domain_storage,
         }
+    }
+}
+
+/// A snapshot of the domains served by the HTTP gateways.
+#[derive(Default)]
+pub struct HttpGatewayDomains {
+    // Domains passed as `domains` when creating an HTTP gateway
+    // (their subdomains are served, too).
+    domains: Vec<String>,
+    // Domains configured through custom domain providers (exact matches only).
+    custom_domain_storages: Vec<Arc<CustomDomainStorage>>,
+}
+
+impl HttpGatewayDomains {
+    #[cfg(test)]
+    pub(crate) fn from_domains(domains: Vec<String>) -> Self {
+        Self {
+            domains,
+            custom_domain_storages: vec![],
+        }
+    }
+
+    /// Returns whether the given (lowercase) domain is served by an HTTP gateway.
+    pub fn contains(&self, domain: &str) -> bool {
+        let is_domain_or_subdomain = self.domains.iter().any(|gateway_domain| {
+            let gateway_domain = gateway_domain.to_ascii_lowercase();
+            domain == gateway_domain
+                || domain
+                    .strip_suffix(&gateway_domain)
+                    .is_some_and(|prefix| prefix.ends_with('.'))
+        });
+        is_domain_or_subdomain
+            || FQDN::from_ascii_str(domain).is_ok_and(|fqdn| {
+                self.custom_domain_storages
+                    .iter()
+                    .any(|storage| storage.resolve(&fqdn).is_some())
+            })
     }
 }
 
@@ -816,9 +860,19 @@ impl ApiState {
 
         let handle = Handle::new();
         let axum_handle = handle.clone();
-        let domain_custom_provider_local_file = http_gateway_config
+        let custom_domain_providers: Vec<Arc<dyn ProvidesCustomDomains>> = http_gateway_config
             .domain_custom_provider_local_file
-            .clone();
+            .clone()
+            .map(|path| {
+                Arc::new(LocalFileProvider::new(path.into(), 0, None))
+                    as Arc<dyn ProvidesCustomDomains>
+            })
+            .into_iter()
+            .collect();
+        let registry = ic_gateway::ic_bn_lib::prometheus::Registry::new();
+        let custom_domain_storage =
+            Arc::new(CustomDomainStorage::new(custom_domain_providers, &registry));
+        let gateway_custom_domain_storage = custom_domain_storage.clone();
         let raw_domains = http_gateway_config.domains.clone();
         spawn(async move {
             let router = {
@@ -842,14 +896,6 @@ impl ApiState {
                 }
                 args.push("--domain-canister-id-from-query-params".to_string());
                 args.push("--domain-canister-id-from-referer".to_string());
-                let custom_domain_providers: Vec<Arc<dyn ProvidesCustomDomains>> =
-                    domain_custom_provider_local_file
-                        .map(|path| {
-                            Arc::new(LocalFileProvider::new(path.into(), 0, None))
-                                as Arc<dyn ProvidesCustomDomains>
-                        })
-                        .into_iter()
-                        .collect();
                 args.push("--domain-custom-provider-poll-interval".to_string());
                 args.push("1s".to_string());
                 args.push("--ic-unsafe-root-key-fetch".to_string());
@@ -882,9 +928,6 @@ impl ApiState {
 
                 let (_, reload_handle) = reload::Layer::new(EnvFilter::new("warn"));
                 let health_manager = Arc::new(HealthManager::default());
-                let registry = ic_gateway::ic_bn_lib::prometheus::Registry::new();
-                let custom_domain_storage =
-                    Arc::new(CustomDomainStorage::new(custom_domain_providers, &registry));
                 tasks.add_interval(
                     "custom_domain_storage",
                     custom_domain_storage.clone(),
@@ -970,7 +1013,11 @@ impl ApiState {
             https_config: http_gateway_config.https_config.clone(),
         };
         let shutdown_handle = handle.clone();
-        let http_gateway = HttpGateway::new(http_gateway_details, shutdown_handle);
+        let http_gateway = HttpGateway::new(
+            http_gateway_details,
+            shutdown_handle,
+            gateway_custom_domain_storage,
+        );
         http_gateways.push(Some(http_gateway));
         drop(http_gateways);
 
@@ -1117,6 +1164,20 @@ impl ApiState {
             }
         }
         res
+    }
+
+    /// Returns a snapshot of the domains served by the (running) HTTP gateways.
+    pub async fn http_gateway_domains(&self) -> HttpGatewayDomains {
+        let mut gateway_domains = HttpGatewayDomains::default();
+        for gateway in self.http_gateways.read().await.iter().flatten() {
+            gateway_domains
+                .domains
+                .extend(gateway.details.domains.clone().unwrap_or_default());
+            gateway_domains
+                .custom_domain_storages
+                .push(gateway.custom_domain_storage.clone());
+        }
+        gateway_domains
     }
 
     pub async fn list_http_gateways(&self) -> Vec<HttpGatewayDetails> {

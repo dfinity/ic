@@ -33,6 +33,24 @@ pub fn start_server_helper(
     capture_stdout: bool,
     capture_stderr: bool,
 ) -> (Url, Child) {
+    start_server_with_args(
+        test_driver_pid,
+        log_levels,
+        capture_stdout,
+        capture_stderr,
+        &[],
+    )
+}
+
+// this function is not used by all integration test suites => dead code allowed
+#[allow(dead_code)]
+pub fn start_server_with_args(
+    test_driver_pid: Option<u32>,
+    log_levels: Option<String>,
+    capture_stdout: bool,
+    capture_stderr: bool,
+    extra_args: &[&str],
+) -> (Url, Child) {
     let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
     let port_file_path = if let Some(test_driver_pid) = test_driver_pid {
         std::env::temp_dir().join(format!("pocket_ic_{test_driver_pid}.port"))
@@ -48,6 +66,7 @@ pub fn start_server_helper(
     // so that the server doesn't die during the test if the runner
     // is overloaded
     cmd.arg("--ttl").arg("300");
+    cmd.args(extra_args);
     if capture_stdout {
         cmd.stdout(std::process::Stdio::piped());
     }

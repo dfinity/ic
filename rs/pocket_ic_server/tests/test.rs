@@ -1,4 +1,6 @@
-use crate::common::{send_signal_to_pic, start_server, start_server_helper};
+use crate::common::{
+    send_signal_to_pic, start_server, start_server_helper, start_server_with_args,
+};
 use candid::{Encode, Principal};
 use ic_agent::agent::CallResponse;
 use ic_cdk_management_canister::{
@@ -251,6 +253,49 @@ fn test_control_plane_rejects_browser_requests() {
 }
 
 #[test]
+fn test_host_validation_with_allowed_hosts() {
+    // The `Host` header is validated even if the PocketIC server
+    // is not (only) bound to a loopback interface.
+    let (url, mut child) = start_server_with_args(
+        None,
+        None,
+        false,
+        false,
+        &["--ip-addr", "0.0.0.0", "--allowed-host", "pocket-ic"],
+    );
+    let client = Client::new();
+    let port = url.port().unwrap();
+    let instances_url = url.join("instances").unwrap();
+
+    for (host, expected_status) in [
+        (format!("127.0.0.1:{port}"), StatusCode::OK),
+        (format!("localhost:{port}"), StatusCode::OK),
+        (format!("pocket-ic:{port}"), StatusCode::OK),
+        (format!("POCKET-IC:{port}"), StatusCode::OK),
+        (format!("evil.example:{port}"), StatusCode::FORBIDDEN),
+        (format!("sub.pocket-ic:{port}"), StatusCode::FORBIDDEN),
+    ] {
+        let response = client
+            .get(instances_url.clone())
+            .header(reqwest::header::HOST, host.clone())
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), expected_status, "{host}");
+    }
+
+    // The error message mentions the CLI option to allow additional hosts.
+    let response = client
+        .get(instances_url)
+        .header(reqwest::header::HOST, format!("evil.example:{port}"))
+        .send()
+        .unwrap();
+    assert!(response.text().unwrap().contains("--allowed-host"));
+
+    child.kill().unwrap();
+    child.wait().unwrap();
+}
+
+#[test]
 fn test_ic_api_rejects_non_local_origins() {
     let url = start_server();
     let client = Client::new();
@@ -321,7 +366,9 @@ fn test_ic_api_rejects_non_local_origins() {
     }
 
     // Requests to instances that do not exist (yet) are subject to the same rules.
-    let unknown_instance_id = pic_without_ingress_validation.instance_id() + 1;
+    // We use an instance ID that cannot be allocated by concurrent tests
+    // sharing the same PocketIC server.
+    let unknown_instance_id = usize::MAX;
     let response = client
         .post(
             url.join(&format!(

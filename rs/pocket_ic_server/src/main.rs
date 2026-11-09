@@ -32,7 +32,7 @@ use libc::{RLIMIT_NOFILE, getrlimit, rlimit, setrlimit};
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
 use pocket_ic_server::BlobStore;
 use pocket_ic_server::state_api::routes::{
-    ControlPlaneGuardConfig, control_plane_guard, handler_prune_graph, handler_read_graph,
+    AllowedHosts, control_plane_guard, handler_prune_graph, handler_read_graph,
 };
 use pocket_ic_server::state_api::{
     routes::{AppState, RouterExt, http_gateway_routes, instances_routes, status},
@@ -72,6 +72,13 @@ struct Args {
     /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]
     ip_addr: Option<String>,
+    /// A host name (without port) that is allowed in the `Host` header of requests
+    /// in addition to IP addresses and `localhost` (or a subdomain thereof),
+    /// e.g., the host name of the PocketIC server in a Docker network.
+    /// Can be specified multiple times.
+    /// Requests with other `Host` headers are rejected to prevent DNS rebinding attacks.
+    #[clap(long = "allowed-host", value_name = "HOST")]
+    allowed_hosts: Vec<String>,
     /// Log levels for PocketIC server logs (defaults to `pocket_ic_server=info,tower_http=info,axum::rejection=trace`).
     #[clap(long, short)]
     log_levels: Option<String>,
@@ -215,14 +222,7 @@ async fn start(runtime: Arc<Runtime>) {
     let addr = format!("{}:{}", ip_addr, args.port);
     let listener = std::net::TcpListener::bind(addr.clone())
         .unwrap_or_else(|_| panic!("Failed to bind PocketIC server to address {addr}"));
-    let local_addr = listener.local_addr().unwrap();
-    let real_port = local_addr.port();
-    // If the server is only reachable from the local machine,
-    // then we validate the `Host` header of control plane requests
-    // to prevent DNS rebinding attacks.
-    let control_plane_guard_config = ControlPlaneGuardConfig {
-        validate_host: local_addr.ip().to_canonical().is_loopback(),
-    };
+    let real_port = listener.local_addr().unwrap().port();
 
     // The shared, mutable state of the PocketIC process.
     let api_state = PocketIcApiStateBuilder::default()
@@ -303,7 +303,7 @@ async fn start(runtime: Arc<Runtime>) {
         .nest("/http_gateway", http_gateway_routes::<AppState>())
         .fallback(|| async { (StatusCode::NOT_FOUND, "") })
         .layer(DefaultBodyLimit::disable())
-        .layer(Extension(control_plane_guard_config))
+        .layer(Extension(AllowedHosts(args.allowed_hosts)))
         .layer(Extension(app_state.api_state.clone()))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),

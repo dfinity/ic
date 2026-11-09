@@ -6,7 +6,8 @@
 /// deterministically update the PocketIc state machine.
 ///
 use super::state::{
-    ApiState, DEFAULT_SYNC_WAIT_DURATION, OpOut, PocketIcError, StateLabel, UpdateReply,
+    ApiState, DEFAULT_SYNC_WAIT_DURATION, HttpGatewayDomains, OpOut, PocketIcError, StateLabel,
+    UpdateReply,
 };
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
@@ -320,36 +321,37 @@ where
     control_plane_routes.merge(ic_api_routes)
 }
 
-/// Configuration of the [`control_plane_guard`] middleware.
+/// Host names (without port) in addition to IP addresses and `localhost`
+/// (or a subdomain thereof) that are allowed in the `Host` header of requests
+/// (e.g., the host name of the PocketIC server in a Docker network).
 /// Expected to be provided as a request extension.
-#[derive(Clone, Copy, Debug)]
-pub struct ControlPlaneGuardConfig {
-    /// Whether the `Host` header of requests must be `localhost`
-    /// (or a subdomain thereof) or an IP address.
-    /// This should be enabled if the server is bound to a loopback interface
-    /// to prevent DNS rebinding attacks.
-    pub validate_host: bool,
-}
-
-impl Default for ControlPlaneGuardConfig {
-    fn default() -> Self {
-        Self {
-            validate_host: true,
-        }
-    }
-}
+#[derive(Clone, Debug, Default)]
+pub struct AllowedHosts(pub Vec<String>);
 
 /// Returns whether the given `Host` header value (with an optional port)
-/// is an IP address or `localhost` (or a subdomain thereof).
-fn is_allowed_host(host: &str) -> bool {
+/// is an IP address, `localhost` (or a subdomain thereof),
+/// or one of the given allowed host names.
+fn is_allowed_host(host: &str, allowed_hosts: &[String]) -> bool {
     let Ok(authority) = http::uri::Authority::from_str(host) else {
         return false;
     };
     match url::Host::parse(authority.host()) {
         Ok(url::Host::Ipv4(_) | url::Host::Ipv6(_)) => true,
-        Ok(url::Host::Domain(domain)) => is_localhost_domain(&domain),
+        Ok(url::Host::Domain(domain)) => {
+            is_localhost_domain(&domain)
+                || allowed_hosts
+                    .iter()
+                    .any(|allowed_host| allowed_host.eq_ignore_ascii_case(&domain))
+        }
         Err(_) => false,
     }
+}
+
+fn allowed_hosts(req: &Request) -> &[String] {
+    req.extensions()
+        .get::<AllowedHosts>()
+        .map(|allowed_hosts| allowed_hosts.0.as_slice())
+        .unwrap_or_default()
 }
 
 fn request_host(req: &Request) -> Option<String> {
@@ -372,15 +374,21 @@ fn origin_authority(origin: &str) -> Option<&str> {
 
 /// Returns whether a browser request with the given `Origin` and `Host` headers
 /// may access the IC HTTP API, i.e., whether
-/// - it is a same-origin request to `localhost` (or a subdomain thereof)
-///   or an IP address (such a request is not the result of DNS rebinding), or
+/// - it is a same-origin request to an allowed host (see [`is_allowed_host`]),
+///   i.e., a request that is not the result of DNS rebinding, or
 /// - the origin is local, i.e., `localhost` (or a subdomain thereof)
 ///   or a loopback IP address, or
-/// - the origin is a domain (or a subdomain thereof) of an HTTP gateway.
-fn is_allowed_ic_api_origin(origin: &str, host: Option<&str>, gateway_domains: &[String]) -> bool {
+/// - the origin is a domain served by an HTTP gateway
+///   (see [`HttpGatewayDomains::contains`]).
+fn is_allowed_ic_api_origin(
+    origin: &str,
+    host: Option<&str>,
+    allowed_hosts: &[String],
+    is_gateway_domain: impl Fn(&str) -> bool,
+) -> bool {
     if let (Some(origin_authority), Some(host)) = (origin_authority(origin), host)
         && origin_authority.eq_ignore_ascii_case(host)
-        && is_allowed_host(host)
+        && is_allowed_host(host, allowed_hosts)
     {
         return true;
     }
@@ -393,16 +401,7 @@ fn is_allowed_ic_api_origin(origin: &str, host: Option<&str>, gateway_domains: &
     match origin.host() {
         Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
         Some(url::Host::Ipv6(ip)) => ip.to_canonical().is_loopback(),
-        Some(url::Host::Domain(domain)) => {
-            is_localhost_domain(domain)
-                || gateway_domains.iter().any(|gateway_domain| {
-                    let gateway_domain = gateway_domain.to_ascii_lowercase();
-                    domain == gateway_domain
-                        || domain
-                            .strip_suffix(&gateway_domain)
-                            .is_some_and(|prefix| prefix.ends_with('.'))
-                })
-        }
+        Some(url::Host::Domain(domain)) => is_localhost_domain(domain) || is_gateway_domain(domain),
         None => false,
     }
 }
@@ -415,25 +414,21 @@ fn is_allowed_ic_api_origin(origin: &str, host: Option<&str>, gateway_domains: &
 /// This applies to requests proxied by an HTTP gateway, too,
 /// since HTTP gateways forward the `Origin` header.
 /// Expects the [`ApiState`] to be provided as a request extension
-/// to determine the domains of HTTP gateways.
+/// to determine the domains served by HTTP gateways.
 async fn ic_api_guard(req: Request, next: Next) -> Response {
     let Some(origin) = req.headers().get(http::header::ORIGIN) else {
         return next.run(req).await;
     };
-    let gateway_domains: Vec<String> = match req.extensions().get::<Arc<ApiState>>() {
-        Some(api_state) => api_state
-            .list_http_gateways()
-            .await
-            .into_iter()
-            .flat_map(|gateway| gateway.domains.unwrap_or_default())
-            .collect(),
-        None => vec![],
+    let gateway_domains = match req.extensions().get::<Arc<ApiState>>() {
+        Some(api_state) => api_state.http_gateway_domains().await,
+        None => HttpGatewayDomains::default(),
     };
     let host = request_host(&req);
-    let allowed = origin
-        .to_str()
-        .ok()
-        .is_some_and(|origin| is_allowed_ic_api_origin(origin, host.as_deref(), &gateway_domains));
+    let allowed = origin.to_str().ok().is_some_and(|origin| {
+        is_allowed_ic_api_origin(origin, host.as_deref(), allowed_hosts(&req), |domain| {
+            gateway_domains.contains(domain)
+        })
+    });
     if !allowed {
         return (
             StatusCode::FORBIDDEN,
@@ -449,23 +444,20 @@ async fn ic_api_guard(req: Request, next: Next) -> Response {
 /// - requests with an `Origin` header (i.e., browser requests) are rejected
 ///   unless they are same-origin requests (cross-origin requests that do not
 ///   require a CORS preflight, e.g., HTML form submissions, are rejected, too);
-/// - if [`ControlPlaneGuardConfig::validate_host`] holds, requests whose `Host`
-///   header is neither `localhost` (or a subdomain thereof) nor an IP address
+/// - requests whose `Host` header is not allowed (see [`is_allowed_host`])
 ///   are rejected (to prevent DNS rebinding attacks).
 pub async fn control_plane_guard(req: Request, next: Next) -> Response {
-    let config = req
-        .extensions()
-        .get::<ControlPlaneGuardConfig>()
-        .copied()
-        .unwrap_or_default();
     let host = request_host(&req);
-    if config.validate_host
-        && let Some(ref host) = host
-        && !is_allowed_host(host)
+    if let Some(ref host) = host
+        && !is_allowed_host(host, allowed_hosts(&req))
     {
         return (
             StatusCode::FORBIDDEN,
-            format!("The host {host} is not allowed to access the PocketIC server."),
+            format!(
+                "The host {host} is not allowed to access the PocketIC server. \
+                 Use the CLI option `--allowed-host <HOST>` of the PocketIC server \
+                 to allow additional host names."
+            ),
         )
             .into_response();
     }
@@ -2044,11 +2036,16 @@ pub fn timeout_or_default(header_map: HeaderMap) -> Option<Duration> {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_allowed_host, is_allowed_ic_api_origin};
+    use super::{HttpGatewayDomains, is_allowed_host, is_allowed_ic_api_origin};
+
+    fn allowed_hosts() -> Vec<String> {
+        vec!["Pocket-IC".to_string()]
+    }
 
     #[test]
     fn test_is_allowed_ic_api_origin() {
-        let gateway_domains = vec!["Example.com".to_string()];
+        let gateway_domains = HttpGatewayDomains::from_domains(vec!["Example.com".to_string()]);
+        let is_gateway_domain = |domain: &str| gateway_domains.contains(domain);
         for (origin, host) in [
             // local origins
             ("http://localhost:5173", None),
@@ -2062,12 +2059,13 @@ mod tests {
             // gateway domains
             ("https://example.com", None),
             ("https://app.example.com", Some("app.example.com")),
-            // same-origin requests to an IP address or `localhost`
+            // same-origin requests to an allowed host
             ("http://192.168.1.5:4943", Some("192.168.1.5:4943")),
             ("http://[2001:db8::1]:4943", Some("[2001:db8::1]:4943")),
+            ("http://pocket-ic:4943", Some("pocket-ic:4943")),
         ] {
             assert!(
-                is_allowed_ic_api_origin(origin, host, &gateway_domains),
+                is_allowed_ic_api_origin(origin, host, &allowed_hosts(), is_gateway_domain),
                 "{origin} {host:?}"
             );
         }
@@ -2076,6 +2074,8 @@ mod tests {
             ("https://evil.example", Some("127.0.0.1:4943")),
             // DNS rebinding
             ("http://evil.example:4943", Some("evil.example:4943")),
+            // cross-origin requests from an allowed host
+            ("http://pocket-ic:4943", Some("127.0.0.1:4943")),
             // non-loopback IP addresses (could be controlled by an attacker)
             ("http://192.168.1.5:4943", None),
             ("http://1.2.3.4", Some("127.0.0.1:4943")),
@@ -2091,7 +2091,7 @@ mod tests {
             ("ftp://localhost", None),
         ] {
             assert!(
-                !is_allowed_ic_api_origin(origin, host, &gateway_domains),
+                !is_allowed_ic_api_origin(origin, host, &allowed_hosts(), is_gateway_domain),
                 "{origin} {host:?}"
             );
         }
@@ -2112,8 +2112,11 @@ mod tests {
             "LocalHost:8080",
             "aaaaa-aa.localhost:8080",
             "a.b.LOCALHOST",
+            // allowed hosts
+            "pocket-ic",
+            "POCKET-IC:8080",
         ] {
-            assert!(is_allowed_host(host), "{host}");
+            assert!(is_allowed_host(host, &allowed_hosts()), "{host}");
         }
         for host in [
             "",
@@ -2124,8 +2127,11 @@ mod tests {
             "localhost.:8080",
             "::1",
             "[::1",
+            // lookalikes of allowed hosts
+            "sub.pocket-ic:8080",
+            "pocket-ic.evil.example:8080",
         ] {
-            assert!(!is_allowed_host(host), "{host}");
+            assert!(!is_allowed_host(host, &allowed_hosts()), "{host}");
         }
     }
 }

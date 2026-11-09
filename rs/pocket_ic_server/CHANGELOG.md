@@ -17,13 +17,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of all endpoints under `/instances`.
 - Requests to all other endpoints of the PocketIC server (the PocketIC control plane) are rejected with status code 403 if
   - they carry an `Origin` header (set by browsers) that does not match the `Host` header (i.e., cross-origin browser requests), or
-  - the PocketIC server is bound to a loopback address and their `Host` header is neither an IP address nor `localhost` (or a subdomain thereof)
-    to prevent DNS rebinding attacks.
+  - their `Host` header is neither an IP address, `localhost` (or a subdomain thereof),
+    nor a host name specified by the new CLI option `--allowed-host` (to prevent DNS rebinding attacks).
+    Use `--allowed-host <HOST>` (can be specified multiple times) to allow additional host names,
+    e.g., the host name of the PocketIC server in a Docker network.
 - Requests to the IC HTTP API endpoints (incl. requests proxied by an HTTP gateway) carrying an `Origin` header (set by browsers)
   are rejected with status code 403 unless
   - the origin is `localhost` (or a subdomain thereof) or a loopback IP address, or
-  - the origin is a domain (or a subdomain thereof) of an HTTP gateway, or
-  - the request is a same-origin request to `localhost` (or a subdomain thereof) or an IP address.
+  - the origin is a domain (or a subdomain thereof) of an HTTP gateway
+    or a custom domain of an HTTP gateway (configured through `domain_custom_provider_local_file`), or
+  - the request is a same-origin request to an IP address, `localhost` (or a subdomain thereof),
+    or a host name specified by the CLI option `--allowed-host`.
 
   This prevents arbitrary web pages from, e.g., making calls on behalf of arbitrary senders to instances with disabled ingress validation.
 

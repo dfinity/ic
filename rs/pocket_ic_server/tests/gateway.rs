@@ -674,6 +674,33 @@ async fn test_gateway_custom_domain_provider_file() {
         );
     }
 
+    // Browser requests to the IC HTTP API from custom domains (exact matches only)
+    // are accepted, both directly and through the HTTP gateway.
+    let instance_id = pic.instance_id;
+    let server_status_url = server_url
+        .join(&format!("instances/{instance_id}/api/v2/status"))
+        .unwrap();
+    let gateway_status_url = format!("http://{apex_domain}:{port}/api/v2/status");
+    for status_url in [server_status_url.to_string(), gateway_status_url] {
+        for (origin, expected_status) in [
+            (format!("http://{apex_domain}:{port}"), StatusCode::OK),
+            (format!("http://{sub_domain}:{port}"), StatusCode::OK),
+            (
+                format!("http://evil.{apex_domain}:{port}"),
+                StatusCode::FORBIDDEN,
+            ),
+            ("https://evil.example".to_string(), StatusCode::FORBIDDEN),
+        ] {
+            let res = client
+                .get(&status_url)
+                .header(header::ORIGIN, origin.clone())
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), expected_status, "{status_url} {origin}");
+        }
+    }
+
     pic.drop().await;
 }
 
