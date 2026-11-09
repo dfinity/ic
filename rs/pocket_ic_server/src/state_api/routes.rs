@@ -370,17 +370,22 @@ fn request_host(req: &Request) -> Option<String> {
 /// ingress validation (incl. signature checks) in the same way
 /// as [`control_plane_guard`].
 /// Expects the [`ApiState`] to be provided as a request extension
-/// and applies [`control_plane_guard`] if the [`ApiState`] is not available.
+/// and applies [`control_plane_guard`] if the [`ApiState`] is not available
+/// or the instance does not exist.
 async fn ic_api_guard(params: extract::RawPathParams, req: Request, next: Next) -> Response {
     let instance_id = params
         .iter()
         .find(|(key, _)| *key == "id")
         .and_then(|(_, value)| value.parse::<InstanceId>().ok());
+    // We fail closed if the instance does not exist (yet):
+    // otherwise, a request could pass this guard and only be handled
+    // after an instance with disabled ingress validation has been created
+    // (e.g., while the handler awaits the request body).
     let ingress_validation_disabled = match (req.extensions().get::<Arc<ApiState>>(), instance_id) {
         (Some(api_state), Some(instance_id)) => api_state
             .ingress_validation_disabled(instance_id)
             .await
-            .unwrap_or_default(),
+            .unwrap_or(true),
         _ => true,
     };
     if ingress_validation_disabled {

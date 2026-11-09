@@ -292,6 +292,23 @@ fn test_ic_api_rejects_browser_requests_if_ingress_validation_disabled() {
         assert_eq!(response.status(), StatusCode::FORBIDDEN, "{path}");
     }
 
+    // Cross-origin requests to the IC HTTP API of an instance
+    // that does not exist (yet) are rejected: such an instance
+    // could be created with disabled ingress validation
+    // before the request is handled.
+    let unknown_instance_id = instance_id + 1;
+    let response = client
+        .post(
+            url.join(&format!(
+                "instances/{unknown_instance_id}/api/v4/canister/aaaaa-aa/call"
+            ))
+            .unwrap(),
+        )
+        .header(reqwest::header::ORIGIN, "https://evil.example")
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
     // Requests from non-browser clients are accepted.
     let response = client
         .get(
