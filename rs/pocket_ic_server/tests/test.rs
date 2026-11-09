@@ -217,13 +217,14 @@ fn test_control_plane_rejects_browser_requests() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    // The IC HTTP API remains accessible to browsers from any origin.
+    // The IC HTTP API remains accessible to browsers from local origins.
+    let local_origin = "http://localhost:5173";
     let api_status_url = url
         .join(&format!("instances/{instance_id}/api/v2/status"))
         .unwrap();
     let response = client
         .request(reqwest::Method::OPTIONS, api_status_url.clone())
-        .header(reqwest::header::ORIGIN, evil_origin)
+        .header(reqwest::header::ORIGIN, local_origin)
         .header(reqwest::header::ACCESS_CONTROL_REQUEST_METHOD, "GET")
         .send()
         .unwrap();
@@ -236,7 +237,7 @@ fn test_control_plane_rejects_browser_requests() {
     );
     let response = client
         .get(api_status_url)
-        .header(reqwest::header::ORIGIN, evil_origin)
+        .header(reqwest::header::ORIGIN, local_origin)
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -250,53 +251,77 @@ fn test_control_plane_rejects_browser_requests() {
 }
 
 #[test]
-fn test_ic_api_rejects_browser_requests_if_ingress_validation_disabled() {
+fn test_ic_api_rejects_non_local_origins() {
     let url = start_server();
+    let client = Client::new();
+    let port = url.port().unwrap();
+    let evil_origin = "https://evil.example";
+    let local_origin = "http://localhost:5173";
+
+    // The same rules apply to all instances (in particular,
+    // to instances with disabled ingress validation on which
+    // calls can be made on behalf of arbitrary senders).
     let pic = PocketIcBuilder::new()
+        .with_server_url(url.clone())
+        .with_application_subnet()
+        .build();
+    let pic_without_ingress_validation = PocketIcBuilder::new()
         .with_server_url(url.clone())
         .with_application_subnet()
         .disable_ingress_validation()
         .build();
-    let instance_id = pic.instance_id();
-    let client = Client::new();
-    let port = url.port().unwrap();
-
-    for (method, path) in [
-        (
-            reqwest::Method::GET,
-            format!("instances/{instance_id}/api/v2/status"),
-        ),
-        (
-            reqwest::Method::POST,
-            format!("instances/{instance_id}/api/v4/canister/aaaaa-aa/call"),
-        ),
+    for instance_id in [
+        pic.instance_id(),
+        pic_without_ingress_validation.instance_id(),
     ] {
-        // Cross-origin requests are rejected.
-        let response = client
-            .request(method.clone(), url.join(&path).unwrap())
-            .header(reqwest::header::ORIGIN, "https://evil.example")
-            .send()
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{path}");
+        for (method, path) in [
+            (
+                reqwest::Method::GET,
+                format!("instances/{instance_id}/api/v2/status"),
+            ),
+            (
+                reqwest::Method::POST,
+                format!("instances/{instance_id}/api/v4/canister/aaaaa-aa/call"),
+            ),
+        ] {
+            // Cross-origin requests from non-local origins are rejected.
+            let response = client
+                .request(method.clone(), url.join(&path).unwrap())
+                .header(reqwest::header::ORIGIN, evil_origin)
+                .send()
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN, "{path}");
 
-        // Requests with a foreign `Host` header (DNS rebinding) are rejected.
+            // DNS rebinding requests are rejected.
+            let response = client
+                .request(method, url.join(&path).unwrap())
+                .header(reqwest::header::HOST, format!("evil.example:{port}"))
+                .header(
+                    reqwest::header::ORIGIN,
+                    format!("http://evil.example:{port}"),
+                )
+                .send()
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN, "{path}");
+        }
+
+        let status_url = url
+            .join(&format!("instances/{instance_id}/api/v2/status"))
+            .unwrap();
+        // Requests from local origins are accepted.
         let response = client
-            .request(method, url.join(&path).unwrap())
-            .header(reqwest::header::HOST, format!("evil.example:{port}"))
-            .header(
-                reqwest::header::ORIGIN,
-                format!("http://evil.example:{port}"),
-            )
+            .get(status_url.clone())
+            .header(reqwest::header::ORIGIN, local_origin)
             .send()
             .unwrap();
-        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{path}");
+        assert_eq!(response.status(), StatusCode::OK);
+        // Requests from non-browser clients are accepted.
+        let response = client.get(status_url).send().unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
-    // Cross-origin requests to the IC HTTP API of an instance
-    // that does not exist (yet) are rejected: such an instance
-    // could be created with disabled ingress validation
-    // before the request is handled.
-    let unknown_instance_id = instance_id + 1;
+    // Requests to instances that do not exist (yet) are subject to the same rules.
+    let unknown_instance_id = pic_without_ingress_validation.instance_id() + 1;
     let response = client
         .post(
             url.join(&format!(
@@ -304,17 +329,44 @@ fn test_ic_api_rejects_browser_requests_if_ingress_validation_disabled() {
             ))
             .unwrap(),
         )
-        .header(reqwest::header::ORIGIN, "https://evil.example")
+        .header(reqwest::header::ORIGIN, evil_origin)
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
-    // Requests from non-browser clients are accepted.
+    // Requests from the domains of HTTP gateways are accepted.
+    let mut pic = pic;
+    let instance_id = pic.instance_id();
+    let status_url = url
+        .join(&format!("instances/{instance_id}/api/v2/status"))
+        .unwrap();
     let response = client
-        .get(
-            url.join(&format!("instances/{instance_id}/api/v2/status"))
-                .unwrap(),
-        )
+        .get(status_url.clone())
+        .header(reqwest::header::ORIGIN, "https://app.example.com")
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    pic.make_live_with_params(None, None, Some(vec!["example.com".to_string()]), None);
+    let response = client
+        .get(status_url)
+        .header(reqwest::header::ORIGIN, "https://app.example.com")
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // The rules also apply to requests proxied by an HTTP gateway.
+    let mut pic_without_ingress_validation = pic_without_ingress_validation;
+    let gateway_url = pic_without_ingress_validation.make_live(None);
+    let gateway_status_url = gateway_url.join("api/v2/status").unwrap();
+    let response = client
+        .get(gateway_status_url.clone())
+        .header(reqwest::header::ORIGIN, evil_origin)
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let response = client
+        .get(gateway_status_url)
+        .header(reqwest::header::ORIGIN, local_origin)
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);

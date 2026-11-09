@@ -305,10 +305,10 @@ where
         //
         // All the api v4 endpoints
         .nest("/{id}/api/v4", instance_api_v4_routes())
-        // If ingress validation (incl. signature checks) is disabled for an instance,
-        // then its IC HTTP API is as powerful as the control plane
-        // (requests can be made on behalf of arbitrary senders)
-        // and thus must be protected in the same way.
+        // Requests can be made on behalf of arbitrary senders
+        // to instances with disabled ingress validation
+        // and thus the IC HTTP API must be protected
+        // against requests from arbitrary web pages.
         .route_layer(axum::middleware::from_fn(ic_api_guard))
         //
         // The instance dashboard
@@ -339,24 +339,17 @@ impl Default for ControlPlaneGuardConfig {
     }
 }
 
+/// Returns whether the given `Host` header value (with an optional port)
+/// is an IP address or `localhost` (or a subdomain thereof).
 fn is_allowed_host(host: &str) -> bool {
     let Ok(authority) = http::uri::Authority::from_str(host) else {
         return false;
     };
-    // Reject authorities with user info.
-    if authority.as_str().contains('@') {
-        return false;
+    match url::Host::parse(authority.host()) {
+        Ok(url::Host::Ipv4(_) | url::Host::Ipv6(_)) => true,
+        Ok(url::Host::Domain(domain)) => is_localhost_domain(&domain),
+        Err(_) => false,
     }
-    let host_name = authority.host();
-    let host_name = host_name
-        .strip_prefix('[')
-        .and_then(|h| h.strip_suffix(']'))
-        .unwrap_or(host_name);
-    if host_name.parse::<std::net::IpAddr>().is_ok() {
-        return true;
-    }
-    let host_name = host_name.to_ascii_lowercase();
-    host_name == "localhost" || host_name.ends_with(".localhost")
 }
 
 fn request_host(req: &Request) -> Option<String> {
@@ -366,33 +359,89 @@ fn request_host(req: &Request) -> Option<String> {
     }
 }
 
-/// Middleware protecting the IC HTTP API of instances with disabled
-/// ingress validation (incl. signature checks) in the same way
-/// as [`control_plane_guard`].
-/// Expects the [`ApiState`] to be provided as a request extension
-/// and applies [`control_plane_guard`] if the [`ApiState`] is not available
-/// or the instance does not exist.
-async fn ic_api_guard(params: extract::RawPathParams, req: Request, next: Next) -> Response {
-    let instance_id = params
-        .iter()
-        .find(|(key, _)| *key == "id")
-        .and_then(|(_, value)| value.parse::<InstanceId>().ok());
-    // We fail closed if the instance does not exist (yet):
-    // otherwise, a request could pass this guard and only be handled
-    // after an instance with disabled ingress validation has been created
-    // (e.g., while the handler awaits the request body).
-    let ingress_validation_disabled = match (req.extensions().get::<Arc<ApiState>>(), instance_id) {
-        (Some(api_state), Some(instance_id)) => api_state
-            .ingress_validation_disabled(instance_id)
-            .await
-            .unwrap_or(true),
-        _ => true,
-    };
-    if ingress_validation_disabled {
-        control_plane_guard(req, next).await
-    } else {
-        next.run(req).await
+fn is_localhost_domain(domain: &str) -> bool {
+    domain == "localhost" || domain.ends_with(".localhost")
+}
+
+/// Returns the authority (`host[:port]`) of an HTTP(S) origin.
+fn origin_authority(origin: &str) -> Option<&str> {
+    origin
+        .strip_prefix("http://")
+        .or_else(|| origin.strip_prefix("https://"))
+}
+
+/// Returns whether a browser request with the given `Origin` and `Host` headers
+/// may access the IC HTTP API, i.e., whether
+/// - it is a same-origin request to `localhost` (or a subdomain thereof)
+///   or an IP address (such a request is not the result of DNS rebinding), or
+/// - the origin is local, i.e., `localhost` (or a subdomain thereof)
+///   or a loopback IP address, or
+/// - the origin is a domain (or a subdomain thereof) of an HTTP gateway.
+fn is_allowed_ic_api_origin(origin: &str, host: Option<&str>, gateway_domains: &[String]) -> bool {
+    if let (Some(origin_authority), Some(host)) = (origin_authority(origin), host)
+        && origin_authority.eq_ignore_ascii_case(host)
+        && is_allowed_host(host)
+    {
+        return true;
     }
+    let Ok(origin) = url::Url::parse(origin) else {
+        return false;
+    };
+    if !matches!(origin.scheme(), "http" | "https") {
+        return false;
+    }
+    match origin.host() {
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(url::Host::Ipv6(ip)) => ip.to_canonical().is_loopback(),
+        Some(url::Host::Domain(domain)) => {
+            is_localhost_domain(domain)
+                || gateway_domains.iter().any(|gateway_domain| {
+                    let gateway_domain = gateway_domain.to_ascii_lowercase();
+                    domain == gateway_domain
+                        || domain
+                            .strip_suffix(&gateway_domain)
+                            .is_some_and(|prefix| prefix.ends_with('.'))
+                })
+        }
+        None => false,
+    }
+}
+
+/// Middleware protecting the IC HTTP API against requests from browsers
+/// on behalf of arbitrary web pages (e.g., to make calls on behalf of arbitrary
+/// senders to instances with disabled ingress validation):
+/// requests with an `Origin` header (i.e., browser requests) are rejected
+/// unless [`is_allowed_ic_api_origin`] holds.
+/// This applies to requests proxied by an HTTP gateway, too,
+/// since HTTP gateways forward the `Origin` header.
+/// Expects the [`ApiState`] to be provided as a request extension
+/// to determine the domains of HTTP gateways.
+async fn ic_api_guard(req: Request, next: Next) -> Response {
+    let Some(origin) = req.headers().get(http::header::ORIGIN) else {
+        return next.run(req).await;
+    };
+    let gateway_domains: Vec<String> = match req.extensions().get::<Arc<ApiState>>() {
+        Some(api_state) => api_state
+            .list_http_gateways()
+            .await
+            .into_iter()
+            .flat_map(|gateway| gateway.domains.unwrap_or_default())
+            .collect(),
+        None => vec![],
+    };
+    let host = request_host(&req);
+    let allowed = origin
+        .to_str()
+        .ok()
+        .is_some_and(|origin| is_allowed_ic_api_origin(origin, host.as_deref(), &gateway_domains));
+    if !allowed {
+        return (
+            StatusCode::FORBIDDEN,
+            "Requests to the IC HTTP API of the PocketIC server are only allowed from local origins.".to_string(),
+        )
+            .into_response();
+    }
+    next.run(req).await
 }
 
 /// Middleware protecting the (unauthenticated) PocketIC control plane
@@ -421,15 +470,16 @@ pub async fn control_plane_guard(req: Request, next: Next) -> Response {
             .into_response();
     }
     if let Some(origin) = req.headers().get(http::header::ORIGIN) {
-        let same_origin = origin.to_str().ok().is_some_and(|origin| {
-            let origin_authority = origin
-                .strip_prefix("http://")
-                .or_else(|| origin.strip_prefix("https://"));
-            match (origin_authority, &host) {
-                (Some(origin_authority), Some(host)) => origin_authority.eq_ignore_ascii_case(host),
-                _ => false,
-            }
-        });
+        let same_origin =
+            origin
+                .to_str()
+                .ok()
+                .is_some_and(|origin| match (origin_authority(origin), &host) {
+                    (Some(origin_authority), Some(host)) => {
+                        origin_authority.eq_ignore_ascii_case(host)
+                    }
+                    _ => false,
+                });
         if !same_origin {
             return (
                 StatusCode::FORBIDDEN,
@@ -1990,4 +2040,92 @@ impl headers::Header for ProcessingTimeout {
 pub fn timeout_or_default(header_map: HeaderMap) -> Option<Duration> {
     let timeout_from_header = header_map.typed_get::<ProcessingTimeout>().map(|x| x.0);
     Some(timeout_from_header.unwrap_or(DEFAULT_SYNC_WAIT_DURATION))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_allowed_host, is_allowed_ic_api_origin};
+
+    #[test]
+    fn test_is_allowed_ic_api_origin() {
+        let gateway_domains = vec!["Example.com".to_string()];
+        for (origin, host) in [
+            // local origins
+            ("http://localhost:5173", None),
+            ("http://localhost:5173", Some("127.0.0.1:4943")),
+            ("http://LOCALHOST", Some("evil.example")),
+            ("http://aaaaa-aa.localhost:4943", Some("localhost:4943")),
+            ("https://127.0.0.1:3000", Some("localhost:4943")),
+            ("http://127.1.2.3", None),
+            ("http://[::1]:3000", None),
+            ("http://[::ffff:127.0.0.1]:3000", None),
+            // gateway domains
+            ("https://example.com", None),
+            ("https://app.example.com", Some("app.example.com")),
+            // same-origin requests to an IP address or `localhost`
+            ("http://192.168.1.5:4943", Some("192.168.1.5:4943")),
+            ("http://[2001:db8::1]:4943", Some("[2001:db8::1]:4943")),
+        ] {
+            assert!(
+                is_allowed_ic_api_origin(origin, host, &gateway_domains),
+                "{origin} {host:?}"
+            );
+        }
+        for (origin, host) in [
+            ("https://evil.example", None),
+            ("https://evil.example", Some("127.0.0.1:4943")),
+            // DNS rebinding
+            ("http://evil.example:4943", Some("evil.example:4943")),
+            // non-loopback IP addresses (could be controlled by an attacker)
+            ("http://192.168.1.5:4943", None),
+            ("http://1.2.3.4", Some("127.0.0.1:4943")),
+            ("http://[2001:db8::1]", None),
+            // lookalikes of local origins and gateway domains
+            ("http://localhost.evil.example", None),
+            ("http://evillocalhost", None),
+            ("https://evilexample.com", None),
+            ("https://example.com.evil.example", None),
+            // other schemes and opaque origins
+            ("null", None),
+            ("file://", None),
+            ("ftp://localhost", None),
+        ] {
+            assert!(
+                !is_allowed_ic_api_origin(origin, host, &gateway_domains),
+                "{origin} {host:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_is_allowed_host() {
+        for host in [
+            "127.0.0.1",
+            "127.0.0.1:8080",
+            "0.0.0.0:8080",
+            "192.168.1.1:8080",
+            "[::1]",
+            "[::1]:8080",
+            "[::ffff:127.0.0.1]:8080",
+            "localhost",
+            "localhost:8080",
+            "LocalHost:8080",
+            "aaaaa-aa.localhost:8080",
+            "a.b.LOCALHOST",
+        ] {
+            assert!(is_allowed_host(host), "{host}");
+        }
+        for host in [
+            "",
+            "evil.example",
+            "evil.example:8080",
+            "localhost.evil.example:8080",
+            "evillocalhost:8080",
+            "localhost.:8080",
+            "::1",
+            "[::1",
+        ] {
+            assert!(!is_allowed_host(host), "{host}");
+        }
+    }
 }
