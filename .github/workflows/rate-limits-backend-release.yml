@@ -75,13 +75,15 @@ jobs:
           echo "RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
 
       - name: release notes
+        env:
+          DESCRIPTION: ${{ inputs.description }}
         run: |
           NOTES=$(mktemp)
 
           CODE_BLOCK='```'
 
           cat > ${NOTES} <<EOF
-          ${{ inputs.description }}
+          ${DESCRIPTION}
 
           ## Verification
 

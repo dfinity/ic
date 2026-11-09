@@ -224,6 +224,7 @@ fn validate_and_instrument(
         config.metering_type,
         max_wasm_memory_size,
         config.max_stable_memory_size,
+        config.feature_flags.wasm_memory_accessed_page_limit,
     )?;
     Ok((wasm_validation_details, instrumentation_output))
 }

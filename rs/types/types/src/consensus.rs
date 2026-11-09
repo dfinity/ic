@@ -4,7 +4,7 @@ use crate::{
     artifact::ConsensusMessageId,
     batch::{BatchPayload, ValidationContext},
     consensus::dkg::DkgPayload,
-    crypto::threshold_sig::ni_dkg::NiDkgId,
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag},
     crypto::*,
     replica_version::ReplicaVersion,
     signature::*,
@@ -14,6 +14,7 @@ use ic_base_types::PrincipalIdError;
 use ic_base_types::subnet_id_try_from_option;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_management_canister_types_private::VetKdKeyId;
 use ic_protobuf::types::v1::{self as pb, consensus_message::Msg};
 use ic_protobuf::{
     log::block_log_entry::v1::BlockLogEntry,
@@ -105,6 +106,12 @@ impl<T: HasCommittee, S> HasCommittee for Signed<T, S> {
 impl<T: HasVersion, S> HasVersion for Signed<T, S> {
     fn version(&self) -> &ReplicaVersion {
         self.content.version()
+    }
+}
+
+impl<T> HasHash for Hashed<CryptoHashOf<T>, T> {
+    fn hash(&self) -> &CryptoHash {
+        self.hash.get_ref()
     }
 }
 
@@ -958,6 +965,10 @@ impl PbArtifact for ConsensusMessage {
     type PbIdError = ProxyDecodeError;
     type PbMessage = ic_protobuf::types::v1::ConsensusMessage;
     type PbMessageError = ProxyDecodeError;
+
+    fn check_integrity(&self) -> bool {
+        ConsensusMessageHashable::check_integrity(self)
+    }
 }
 
 impl From<ConsensusMessage> for pb::ConsensusMessage {
@@ -1451,7 +1462,20 @@ impl TryFrom<pb::Block> for Block {
 
 impl CountBytes for NiDkgId {
     fn count_bytes(&self) -> usize {
-        std::mem::size_of::<Self>()
+        let Self {
+            start_block_height: _,
+            dealer_subnet: _,
+            dkg_tag,
+            target_subnet: _,
+        } = self;
+        let key_name_bytes = match dkg_tag {
+            NiDkgTag::LowThreshold | NiDkgTag::HighThreshold => 0,
+            NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+                curve: _,
+                name,
+            })) => name.len(),
+        };
+        std::mem::size_of::<Self>() + key_name_bytes
     }
 }
 
@@ -1467,11 +1491,11 @@ pub trait ConsensusMessageHashable: Clone {
     fn assert(msg: &ConsensusMessage) -> Option<&Self>;
     fn into_message(self) -> ConsensusMessage;
 
-    /// Check integrity of a message. Default is false.
+    /// Check integrity of a message. Default is true.
     /// This should be implemented for those that have `Hashed<H, V>`.
     /// Note that if lazy loading is also used, it will force evaluation.
     fn check_integrity(&self) -> bool {
-        false
+        true
     }
 }
 

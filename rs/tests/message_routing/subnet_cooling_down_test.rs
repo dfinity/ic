@@ -96,6 +96,7 @@ end::catalog[] */
 use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_agent::Agent;
+use ic_agent::agent::RejectCode;
 use ic_consensus_system_test_subnet_recovery::utils::{SshKeys, get_ssh_keys_for_user};
 use ic_recovery::{RecoveryArgs, get_node_metrics, util::DataLocation};
 use ic_registry_subnet_type::SubnetType;
@@ -124,7 +125,7 @@ use ic_system_test_driver::util::{
 use ic_types::Height;
 use ic_universal_canister::management::InstallMode;
 use ic_universal_canister::{
-    CallInterface, call_args, get_universal_canister_wasm, management, wasm,
+    CallInterface, PayloadBuilder, call_args, get_universal_canister_wasm, management, wasm,
 };
 use slog::{Logger, info};
 use std::{net::IpAddr, time::Duration};
@@ -765,6 +766,9 @@ async fn check_ingress_and_queries_rejected(context: &Context<'_>) {
 /// Step 11: check that `UT`'s call loop of step 2 is stalled, i.e. that its
 /// iteration counter, read via a query to `T`, does not advance. `UM`'s counter
 /// cannot be read, as `M` rejects query calls.
+///
+/// Iterations whose call to `UM` was rejected with `SYS_TRANSIENT` do not
+/// count (see `start_call_loop`).
 async fn check_ut_loop_stalled(context: &Context<'_>) {
     let logger = &context.logger;
     info!(
@@ -907,13 +911,16 @@ fn term(terms: &[Term], condition: Condition) -> &Term {
 /// keeps the number of open call contexts bounded (had it not replied, every
 /// iteration would have left behind one open call context) and it makes each
 /// iteration consist of one self-call plus one cross-subnet call.
+///
+/// The iteration counter (the global counter of `canister`) does not count the
+/// iterations whose call to `peer` was rejected with `SYS_TRANSIENT`, so that
+/// it stalls while messages to `peer` are held back, e.g. because `peer`'s
+/// subnet is cooling down.
 async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
-    // The continuation, executed by the reply and reject callbacks of the call
-    // to `peer`: call `canister` itself with the loop body it holds in its
-    // global data as the payload. Neither callback of this call may reply, as
-    // the call context it is made in was already responded by the loop body.
-    let continuation = wasm()
-        .call_simple(
+    // The continuation: run `ops`, then re-enter the loop body. Its callbacks
+    // must not reply, as the loop body has already replied.
+    let continuation = |ops: PayloadBuilder| {
+        ops.call_simple(
             canister.canister_id(),
             "update",
             call_args()
@@ -921,18 +928,21 @@ async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
                 .on_reply(wasm().noop())
                 .on_reject(wasm().noop()),
         )
-        .build();
-    // The loop body: bump the iteration counter, fire a call to `peer` (which
-    // merely replies) with the continuation as both callbacks, then reply.
+        .build()
+    };
+    // The loop body: call `peer`, counting the iteration unless the call is
+    // rejected with `SYS_TRANSIENT`, and continue the loop.
     let loop_body = wasm()
-        .inc_global_counter()
         .call_simple(
             peer,
             "update",
             call_args()
                 .other_side(wasm().reply_data(&[]))
-                .on_reply(continuation.clone())
-                .on_reject(continuation),
+                .on_reply(continuation(wasm().inc_global_counter()))
+                .on_reject(continuation(wasm().reject_code().int_to_blob().if_neq(
+                    (RejectCode::SysTransient as u32).to_le_bytes(),
+                    wasm().inc_global_counter(),
+                ))),
         )
         .reply_data(&[])
         .build();

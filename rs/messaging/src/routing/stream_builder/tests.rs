@@ -312,7 +312,7 @@ fn build_streams_local_canisters() {
         let expected_stream = Stream::new(
             requests_into_queue_round_robin(
                 StreamIndex::from(0),
-                msgs,
+                msgs.clone(),
                 None,
                 provided_state.time(),
             ),
@@ -323,6 +323,19 @@ fn build_streams_local_canisters() {
         // The expected_canister_states contains both the source canisters with consumed
         // messages, but also the destination canisters of all messages.
         let mut expected_state = consume_output_queues(&provided_state);
+
+        // Every request routed into the loopback stream is recorded in the sending
+        // canister's connection metrics.
+        let batch_time = expected_state.time();
+        for msg in &msgs {
+            expected_state
+                .canister_state_make_mut(&msg.sender)
+                .unwrap()
+                .system_state
+                .canister_metrics_mut()
+                .connection_metrics_mut()
+                .increment(msg.receiver, batch_time);
+        }
 
         // Establish the expected ReplicatedState that holds the expected_stream_state
         // and expected_canister_states
@@ -2238,10 +2251,20 @@ fn build_streams_with_oversized_payloads() {
         let mut expected_state = consume_output_queues(&provided_state);
 
         // Expecting a reject response for the remote request.
+        let batch_time = expected_state.time();
         let local_canister = expected_state
             .canister_state_make_mut(&local_canister)
             .unwrap();
         push_input(local_canister, remote_request_reject.into());
+
+        // Expecting the loopback-routed local request to be recorded in the sending
+        // canister's connection metrics.
+        let local_canister_id = local_canister.canister_id();
+        local_canister
+            .system_state
+            .canister_metrics_mut()
+            .connection_metrics_mut()
+            .increment(local_canister_id, batch_time);
 
         // Expecting a loopback stream consisting of:
         //  * successfully routed local request;

@@ -164,31 +164,35 @@ jobs:
     name: CI Main
     needs: [verify-inputs-and-get-pr-refs]
     uses: ./.github/workflows/ci-main.yml
-    secrets: inherit
+    # Not `secrets: inherit`: only the BEP passphrase.
+    secrets:
+      BEP_GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
     with:
       # The reviewed head merged into master. CI PR Only and the statuses use the head itself.
       commit-sha: ${{ needs.verify-inputs-and-get-pr-refs.outputs.merge-sha }}
       release-build: 'false'
+    # Read-only: the PR's code runs in these jobs.
     permissions:
-      actions: write
       contents: read
-      id-token: write
       pull-requests: read
 
   ci-pr-only:
     name: CI PR Only
     needs: [verify-inputs-and-get-pr-refs]
     uses: ./.github/workflows/ci-pr-only.yml
-    secrets: inherit
+    # Not `secrets: inherit`: only the bot's key, and only for a head branch in this repository.
+    secrets:
+      PR_CREATION_BOT_PRIVATE_KEY: ${{ needs.verify-inputs-and-get-pr-refs.outputs.head-repo == github.repository && secrets.PR_CREATION_BOT_PRIVATE_KEY || '' }}
     with:
       commit-sha: ${{ inputs.commit-sha }}
       base-ref: ${{ needs.verify-inputs-and-get-pr-refs.outputs.base-ref }}
       head-ref: ${{ needs.verify-inputs-and-get-pr-refs.outputs.head-ref }}
       head-repo: ${{ needs.verify-inputs-and-get-pr-refs.outputs.head-repo }}
       pr-number: ${{ inputs.pr-number }}
+    # Read-only: the PR's code runs in these jobs.
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: read
 
   post-required-check-status-ci-main:
     name: CI Main Required Check Status
@@ -200,9 +204,8 @@ jobs:
       pull-requests: write
       statuses: write
     steps:
+      # This workflow's commit, not the PR's, for the local action below.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ inputs.commit-sha }}
       - uses: ./.github/actions/post-commit-status
         with:
           commit-sha: ${{ inputs.commit-sha }}
@@ -219,9 +222,8 @@ jobs:
       pull-requests: write
       statuses: write
     steps:
+      # This workflow's commit, not the PR's, for the local action below.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ inputs.commit-sha }}
       - uses: ./.github/actions/post-commit-status
         with:
           commit-sha: ${{ inputs.commit-sha }}

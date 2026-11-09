@@ -2764,16 +2764,15 @@ fn induct_stream_slices_with_refunds() {
     }
 }
 
-/// Tests that a refund arriving in a slice across an engine boundary is dropped,
-/// its cycles are observed as lost, and a critical error is raised. With subnet
+/// Tests that a refund arriving in a slice across an engine boundary (from a remote
+/// CloudEngine subnet; or from a regular subnet onto a CloudEngine subnet) is dropped,
+/// its cycles are not observed as lost (no cycles are allowed to be attached to
+/// messages crossing an engine boundary), and a critical error is raised. With subnet
 /// types fixed at creation, an honest peer would never produce such a refund —
 /// arrival here implies a malicious or buggy sender.
 #[test]
 fn induct_stream_slices_drops_refund_at_engine_boundary() {
-    for cost_schedule in [
-        CanisterCyclesCostSchedule::Normal,
-        CanisterCyclesCostSchedule::Free,
-    ] {
+    for remote_is_engine in [true, false] {
         with_test_setup(
             btreemap![],
             btreemap![REMOTE_SUBNET => StreamSliceConfig {
@@ -2781,29 +2780,31 @@ fn induct_stream_slices_drops_refund_at_engine_boundary() {
                 ..StreamSliceConfig::default()
             }],
             |stream_handler, mut state, slices, metrics| {
-                // Mark REMOTE_SUBNET as a CloudEngine.
-                state.metadata.modify_network_topology(|network_topology| {
-                    network_topology.subnets_mut().insert(
-                        REMOTE_SUBNET,
-                        SubnetTopology {
-                            subnet_type: SubnetType::CloudEngine,
-                            ..Default::default()
-                        },
-                    );
-                });
+                if remote_is_engine {
+                    // Mark REMOTE_SUBNET as a CloudEngine.
+                    state.metadata.modify_network_topology(|network_topology| {
+                        network_topology.subnets_mut().insert(
+                            REMOTE_SUBNET,
+                            SubnetTopology {
+                                subnet_type: SubnetType::CloudEngine,
+                                ..Default::default()
+                            },
+                        );
+                    });
+                } else {
+                    // Make this subnet a CloudEngine.
+                    state.metadata.own_subnet_type = SubnetType::CloudEngine;
+                }
 
-                // Expected state: a stream with one accept signal, no induction, cycles lost.
-                let refund = *refund_in_slice(slices.get(&REMOTE_SUBNET), 0);
+                // Expected state: a stream with one accept signal, no induction, no cycles
+                // observed as lost.
+                assert!(refund_in_slice(slices.get(&REMOTE_SUBNET), 0).amount() > Cycles::zero());
                 let mut expected_state = state.clone();
                 let expected_stream = stream_from_config(StreamConfig {
                     signals_end: 1,
                     ..StreamConfig::default()
                 });
                 expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
-                expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-                    refund.amount(),
-                    cost_schedule,
-                ));
 
                 let mut available_guaranteed_response_memory =
                     stream_handler.available_guaranteed_response_memory(&state);
@@ -3486,8 +3487,9 @@ fn induct_stream_slices_engine_src_best_effort_response_inducted() {
 /// before the genuine response from the real respondent could arrive.
 ///
 /// Expected: sender-subnet validation must fail closed even at the engine boundary;
-/// the forged response is dropped, cycles are accounted for as lost, and the
-/// `sender_subnet_mismatch` critical error is raised.
+/// the forged response is dropped, its cycles are not accounted for as lost (engines are
+/// not allowed to attach cycles to messages crossing the engine boundary), and the `sender_subnet_mismatch`
+/// critical error is raised.
 #[test]
 fn induct_stream_slices_engine_boundary_drops_forged_response() {
     with_test_setup(
@@ -3513,19 +3515,15 @@ fn induct_stream_slices_engine_boundary_drops_forged_response() {
                 );
             });
 
-            // Expected state: response dropped (no induction), accept signal pushed,
-            // cycles attached to the forged response observed as lost.
-            let forged = response_in_slice(slices.get(&REMOTE_SUBNET), 0).clone();
+            // Expected state: response dropped (no induction), accept signal pushed, no
+            // cycles observed as lost.
+            assert!(response_in_slice(slices.get(&REMOTE_SUBNET), 0).refund > Cycles::zero());
             let mut expected_state = state.clone();
             let expected_stream = stream_from_config(StreamConfig {
                 signals_end: 1,
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
-            expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-                forged.refund,
-                CanisterCyclesCostSchedule::Normal,
-            ));
 
             let mut available_guaranteed_response_memory =
                 stream_handler.available_guaranteed_response_memory(&state);
@@ -3552,7 +3550,7 @@ fn induct_stream_slices_engine_boundary_drops_forged_response() {
 
 /// Tests that a guaranteed-response response which should not exist at the engine
 /// boundary — here one carrying cycles, from a CloudEngine subnet — has its cycles
-/// stripped (and lost) but is still inducted, so a waiting caller is not stranded
+/// stripped (and not observed as lost, as engines are not allowed to attach cycles) but is still inducted, so a waiting caller is not stranded
 /// forever by our bug. The `illegal_engine_message` critical error is raised. The
 /// sender subnet matches and a matching callback exists, so the (now cycle-free)
 /// response is inducted rather than reaching the sender-subnet-mismatch path.
@@ -3615,13 +3613,23 @@ fn induct_stream_slices_engine_boundary_strips_and_inducts_guaranteed_response()
                 }
                 other => panic!("expected an inducted response, got {other}"),
             }
+
+            // The stripped cycles are not observed as lost.
+            assert_eq!(
+                None,
+                inducted_state
+                    .metadata
+                    .subnet_metrics
+                    .get_consumed_cycles_by_use_case()
+                    .get(&CyclesUseCase::DroppedMessages)
+            );
         },
     );
 }
 
 /// Tests that a best-effort response carrying cycles which should not exist at the
 /// engine boundary, from a CloudEngine subnet, is dropped (not inducted): its cycles
-/// are stripped and lost, an accept signal is pushed, and the `illegal_engine_message`
+/// are stripped (and not observed as lost, as engines are not allowed to attach cycles), an accept signal is pushed, and the `illegal_engine_message`
 /// critical error is raised. Unlike a guaranteed response, a best-effort response is
 /// not delivered — the caller will time out on its own.
 #[test]
@@ -3661,17 +3669,14 @@ fn induct_stream_slices_engine_boundary_drops_best_effort_response_with_cycles()
                 ..StreamSliceConfig::default()
             });
 
-            // Expected: response dropped (no induction), accept signal pushed, cycles lost.
+            // Expected: response dropped (no induction), accept signal pushed, no cycles
+            // observed as lost.
             let mut expected_state = state.clone();
             let expected_stream = stream_from_config(StreamConfig {
                 signals_end: 1,
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
-            expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-                payment,
-                CanisterCyclesCostSchedule::Normal,
-            ));
 
             let mut available_guaranteed_response_memory =
                 stream_handler.available_guaranteed_response_memory(&state);

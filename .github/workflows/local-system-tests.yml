@@ -40,4 +40,4 @@ jobs:
               --test_tag_filters=local_system_test \
               //rs/tests/... \
               --keep_going
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}

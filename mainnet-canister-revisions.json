@@ -52,8 +52,8 @@
     "sha256": "c5e9adf7c953f1922fd75d502a38aa4c0f1fefb6ce877845a8e374c07ca2f950"
   },
   "cycles_ledger": {
-    "sha256": "ed99402535bb4f58e4ab469acc40c903f2fdeea409be16623d5c6a9131cbf120",
-    "tag": "cycles-ledger-v1.0.6"
+    "sha256": "70f8bd40d022374622b34266d2c182d2a5b711d965f3bef9e505467a84c40bce",
+    "tag": "cycles-ledger-v1.1.0"
   },
   "cycles_ledger_index": {
     "rev": "e446c64d99a97e38166be23ff2bfade997d15ff7",
@@ -84,12 +84,12 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_backend": {
-    "sha256": "b09b4ddac9db91b78a931edf340db93621ee4634e1b96645dc2f1c3f41610d6a",
-    "tag": "release-2026-10-16"
+    "sha256": "e60f50a0bb6fb0ca6cc2db157808d0364b9f87b9598d9ca3a4c3bfb9811f64a1",
+    "tag": "release-2026-11-06"
   },
   "internet_identity_frontend": {
-    "sha256": "45bb284c221052dae12d0918fcd01ac9b99bcd44f29a6c46788390cdd5a577e7",
-    "tag": "release-2026-10-16"
+    "sha256": "ba99e4ab5fea202ae3de75826cdf7ba468f5dc0e67504fc3e3d3a47111ae85b9",
+    "tag": "release-2026-11-06"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -104,8 +104,8 @@
     "sha256": "0327f3833c4a61b1d23820bc2564e233ecfa623a770d5e25d5fd81dd652ab376"
   },
   "nns_dapp_test": {
-    "sha256": "23a5bc1cf95a182cfdd82e8b6524ec77d18f786690741d96f23b00477bdb66ef",
-    "tag": "proposal-144564"
+    "sha256": "ba7d77012001485459173bd3a468672033a0731bfdf987e0a704a1d2ffde832a",
+    "tag": "proposal-144655"
   },
   "node-rewards": {
     "rev": "0e0e15dbf24b6a0d9a1b7bba459d087eb5cd7125",

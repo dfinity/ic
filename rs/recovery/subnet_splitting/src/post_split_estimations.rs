@@ -1,6 +1,5 @@
 use std::{
     collections::BTreeMap,
-    fmt::Display,
     fs::File,
     io::BufReader,
     path::{Path, PathBuf},
@@ -194,22 +193,5 @@ pub struct Estimates {
 impl Estimates {
     pub fn total(&self) -> u64 {
         self.source + self.destination
-    }
-}
-
-impl Display for Estimates {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let total = self.total() as f64;
-        let source_proportion = self.source as f64 / total;
-        let destination_proportion = self.destination as f64 / total;
-
-        write!(
-            f,
-            "source: {} ({:.2}%), destination: {} ({:.2}%)",
-            self.source,
-            source_proportion * 100.0,
-            self.destination,
-            destination_proportion * 100.0,
-        )
     }
 }
