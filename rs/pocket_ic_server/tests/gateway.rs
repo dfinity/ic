@@ -329,18 +329,25 @@ async fn test_http2_gateway_preserves_authority() {
         ("192.0.2.1", "192.0.2.2", StatusCode::FORBIDDEN),
         ("evil.example", "evil.example", StatusCode::FORBIDDEN),
     ] {
-        let response = sender
-            .send_request(
-                http::Request::builder()
-                    .uri(format!("http://{host}:{port}/api/v2/status"))
-                    .header(header::ORIGIN, format!("http://{origin_host}:{port}"))
-                    .body(reqwest::Body::from(""))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.version(), http::Version::HTTP_2);
-        assert_eq!(response.status(), expected_status, "{host} {origin_host}");
+        for method in [http::Method::GET, http::Method::OPTIONS] {
+            let mut request = http::Request::builder()
+                .method(method.clone())
+                .uri(format!("http://{host}:{port}/api/v2/status"))
+                .header(header::ORIGIN, format!("http://{origin_host}:{port}"));
+            if method == http::Method::OPTIONS {
+                request = request.header(header::ACCESS_CONTROL_REQUEST_METHOD, "GET");
+            }
+            let response = sender
+                .send_request(request.body(reqwest::Body::from("")).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.version(), http::Version::HTTP_2);
+            assert_eq!(
+                response.status(),
+                expected_status,
+                "{method} {host} {origin_host}"
+            );
+        }
     }
 
     // A same-origin POST must reach the handler (which rejects the invalid CBOR),

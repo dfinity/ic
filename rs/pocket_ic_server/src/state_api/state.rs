@@ -983,7 +983,7 @@ impl ApiState {
                             .route("/topology", get(proxy_handler).layer(cors_get.clone()))
                             .with_state((
                                 format!("{}/_", replica_url.trim_end_matches('/')),
-                                backend_client,
+                                backend_client.clone(),
                             )),
                     )
                     .fallback(|mut request: AxumRequest| async move {
@@ -999,6 +999,32 @@ impl ApiState {
                                 .parse()
                                 .expect("URI authorities are valid Host header values");
                             request.headers_mut().insert(HOST, host);
+                        }
+                        // The gateway's CORS layer answers API preflights
+                        // without contacting the backend. Check them with the
+                        // backend first, then let the gateway generate its usual
+                        // CORS headers for accepted requests.
+                        if request.method() == Method::OPTIONS
+                            && ["/api/v2/", "/api/v3/", "/api/v4/"]
+                                .iter()
+                                .any(|prefix| request.uri().path().starts_with(prefix))
+                        {
+                            let mut preflight = AxumRequest::new(axum::body::Body::empty());
+                            *preflight.method_mut() = Method::OPTIONS;
+                            *preflight.uri_mut() = request.uri().clone();
+                            *preflight.headers_mut() = request.headers().clone();
+                            let response = proxy_handler(
+                                State((
+                                    replica_url.trim_end_matches('/').to_string(),
+                                    backend_client,
+                                )),
+                                preflight,
+                            )
+                            .await
+                            .into_response();
+                            if !response.status().is_success() {
+                                return Ok(response);
+                            }
                         }
                         let conn_info = ConnInfo::default();
                         request.extensions_mut().insert(Arc::new(conn_info));

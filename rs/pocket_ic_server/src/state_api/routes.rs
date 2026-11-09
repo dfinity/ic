@@ -292,9 +292,7 @@ where
         .api_route("/{id}/stop_progress", post(stop_progress))
         .route_layer(axum::middleware::from_fn(control_plane_guard));
 
-    // The IC HTTP API (whose requests are authenticated by signatures)
-    // and read-only endpoints that can be accessed by browsers
-    // (e.g., through an HTTP gateway).
+    // The IC HTTP API (whose requests are authenticated by signatures).
     let ic_api_routes = ApiRouter::new()
         //
         // All the api v2 endpoints
@@ -305,11 +303,15 @@ where
         //
         // All the api v4 endpoints
         .nest("/{id}/api/v4", instance_api_v4_routes())
+        .layer(cors_layer())
         // Requests can be made on behalf of arbitrary senders
         // to instances with disabled ingress validation
         // and thus the IC HTTP API must be protected
-        // against requests from arbitrary web pages.
-        .route_layer(axum::middleware::from_fn(ic_api_guard))
+        // against requests from arbitrary web pages. Run the guard outside
+        // CORS so it also checks preflights before CORS can answer them.
+        .route_layer(axum::middleware::from_fn(ic_api_guard));
+
+    let read_only_routes = ApiRouter::new()
         //
         // The instance dashboard
         .api_route("/{id}/_/dashboard", get(handler_dashboard))
@@ -317,7 +319,9 @@ where
         .api_route("/{id}/_/topology", get(handler_topology))
         .layer(cors_layer());
 
-    control_plane_routes.merge(ic_api_routes)
+    control_plane_routes
+        .merge(ic_api_routes)
+        .merge(read_only_routes)
 }
 
 /// Host names (without port) in addition to IP addresses and `localhost`

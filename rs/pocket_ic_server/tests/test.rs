@@ -413,6 +413,122 @@ fn test_ic_api_rejects_non_local_origins() {
 }
 
 #[test]
+fn test_ic_api_preflights() {
+    check_ic_api_preflights(false);
+}
+
+#[test]
+fn test_gateway_ic_api_preflights() {
+    check_ic_api_preflights(true);
+}
+
+fn check_ic_api_preflights(through_gateway: bool) {
+    let server_url = start_server();
+    let client = Client::new();
+    for disable_ingress_validation in [false, true] {
+        let mut builder = PocketIcBuilder::new()
+            .with_server_url(server_url.clone())
+            .with_application_subnet();
+        if disable_ingress_validation {
+            builder = builder.disable_ingress_validation();
+        }
+        let mut pic = builder.build();
+        let mut gateway_url =
+            pic.make_live_with_params(None, None, Some(vec!["example.com".to_string()]), None);
+        gateway_url.set_host(Some("127.0.0.1")).unwrap();
+        let url = if through_gateway {
+            gateway_url
+        } else {
+            server_url
+                .join(&format!("instances/{}/", pic.instance_id()))
+                .unwrap()
+        };
+
+        for (path, method) in [
+            ("api/v2/status", "GET"),
+            ("api/v2/canister/aaaaa-aa/query", "POST"),
+            ("api/v3/canister/aaaaa-aa/call", "POST"),
+            ("api/v4/canister/aaaaa-aa/call", "POST"),
+        ] {
+            for (origin, allowed) in [
+                ("https://evil.example", false),
+                ("null", false),
+                ("https://example.com.evil", false),
+                ("http://localhost:5173", true),
+                ("https://example.com", true),
+                ("https://app.example.com", true),
+            ] {
+                let response = client
+                    .request(Method::OPTIONS, url.join(path).unwrap())
+                    .header(header::ORIGIN, origin)
+                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, method)
+                    .header(header::ACCESS_CONTROL_REQUEST_HEADERS, "content-type")
+                    .send()
+                    .unwrap();
+                assert_eq!(
+                    response.status(),
+                    if allowed {
+                        StatusCode::OK
+                    } else {
+                        StatusCode::FORBIDDEN
+                    },
+                    "{url} {path} {origin} disable_ingress_validation={disable_ingress_validation}"
+                );
+                let allow_origin = response.headers().get(header::ACCESS_CONTROL_ALLOW_ORIGIN);
+                if allowed {
+                    assert_eq!(allow_origin.unwrap(), "*");
+                    // Preserve the gateway's existing allowed headers when
+                    // adding backend origin validation to its preflights.
+                    if through_gateway {
+                        assert!(
+                            response.headers()[header::ACCESS_CONTROL_ALLOW_HEADERS]
+                                .to_str()
+                                .unwrap()
+                                .contains("x-requested-with")
+                        );
+                    }
+                    assert!(
+                        response.headers()[header::ACCESS_CONTROL_ALLOW_METHODS]
+                            .to_str()
+                            .unwrap()
+                            .contains(method)
+                    );
+                } else {
+                    assert!(allow_origin.is_none());
+                }
+            }
+        }
+
+        if through_gateway {
+            // Other /api paths belong to canister HTTP applications, not the
+            // IC HTTP API, and retain the gateway's existing CORS behavior.
+            let response = client
+                .request(Method::OPTIONS, url.join("api/custom").unwrap())
+                .header(header::ORIGIN, "https://evil.example")
+                .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                .send()
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*");
+        }
+
+        // The read-only routes retain wildcard CORS for every origin.
+        for path in ["_/dashboard", "_/topology"] {
+            for method in [Method::OPTIONS, Method::GET] {
+                let response = client
+                    .request(method, url.join(path).unwrap())
+                    .header(header::ORIGIN, "https://evil.example")
+                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                    .send()
+                    .unwrap();
+                assert_eq!(response.status(), StatusCode::OK);
+                assert_eq!(response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*");
+            }
+        }
+    }
+}
+
+#[test]
 fn test_creation_of_instance_extended() {
     let url = start_server();
     let client = Client::new();

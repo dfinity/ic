@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Browser requests to the IC HTTP API (`/instances/<id>/api/...`) are only accepted from local origins
     (`localhost` and loopback IP addresses), domains of HTTP gateways, and same-origin pages.
     In particular, cross-origin browser requests from pages served on other (e.g., LAN) IP addresses are rejected.
+    The same origin checks apply to CORS preflights, including through HTTP gateways.
   - The read-only dashboard and topology endpoints (`/instances/<id>/_/dashboard` and `/instances/<id>/_/topology`)
     remain accessible from any origin, including through HTTP gateways.
   - Requests to the remaining endpoints are rejected if they are cross-origin browser requests
