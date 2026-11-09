@@ -138,9 +138,6 @@ impl Step for WaitForHaltingCupStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        // A node that is not answering yet is the normal state of affairs while
-        // the subnet is still running towards its halting CUP, so errors are
-        // retried.
         let cup = wait_for(
             &format!("subnet {} reaches the CUP it halts at", self.subnet_id),
             self.timeout,
