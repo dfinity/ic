@@ -13,8 +13,6 @@ pub struct Ic00MethodPermissions {
     allow_remote_subnet_sender: bool,
     /// Call initiated only by the NNS subnet.
     allow_only_nns_subnet_sender: bool,
-    /// Due to the substantial complexity of this call, it must be counted toward the round limit.
-    counts_toward_round_limit: bool,
     /// As this call modifies the canister state (changes to the cycles balance are ignored here),
     /// it must not be executed on an aborted canister.
     /// The only exception is `update_settings` to enable changing an aborted canister's compute allocation.
@@ -30,19 +28,12 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
-                counts_toward_round_limit: true,
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
             Ic00Method::CanisterStatus
             | Ic00Method::CanisterInfo
             | Ic00Method::CanisterMetadata
-            // NOTE: `ListCanisters` does consume round instructions, but it has
-            // no effective canister ID and therefore never reaches
-            // `can_be_executed` (see `can_execute_subnet_msg` in `scheduler.rs`),
-            // so `counts_toward_round_limit` is not consulted for it. Its
-            // round-instruction deferral is handled by a dedicated special case
-            // in `can_execute_subnet_msg` instead.
             | Ic00Method::ListCanisters
             | Ic00Method::DepositCycles
             | Ic00Method::ECDSAPublicKey
@@ -69,7 +60,6 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
-                counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
@@ -79,7 +69,6 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
-                counts_toward_round_limit: true,
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
@@ -91,7 +80,6 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
-                counts_toward_round_limit: true,
                 does_not_run_on_aborted_canister: true,
                 installs_code: false,
             },
@@ -104,7 +92,6 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
-                counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: true,
                 installs_code: false,
             },
@@ -115,7 +102,6 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: false,
                 allow_only_nns_subnet_sender: false,
-                counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
@@ -123,7 +109,6 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
-                counts_toward_round_limit: true,
                 does_not_run_on_aborted_canister: true,
                 // Only one install code message allowed at a time.
                 installs_code: true,
@@ -132,7 +117,6 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: true,
-                counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
@@ -141,7 +125,6 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: true,
-                counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: true,
                 installs_code: false,
             },
@@ -211,16 +194,10 @@ impl Ic00MethodPermissions {
 
     pub(crate) fn can_be_executed(
         &self,
-        instructions_reached: bool,
         ongoing_long_install_code: bool,
         effective_canister_is_aborted: bool,
     ) -> bool {
-        !(self.counts_toward_round_limit && instructions_reached
-            || self.does_not_run_on_aborted_canister && effective_canister_is_aborted
+        !(self.does_not_run_on_aborted_canister && effective_canister_is_aborted
             || self.installs_code && ongoing_long_install_code)
-    }
-
-    pub fn counts_toward_round_limit(&self) -> bool {
-        self.counts_toward_round_limit
     }
 }
