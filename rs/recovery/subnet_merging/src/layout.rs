@@ -34,17 +34,17 @@ struct CoolingDownRegistryVersion {
 /// |  |-- ${destination_subnet_id}.states_metadata.pbuf
 pub(crate) struct Layout {
     root: PathBuf,
-    cooling_down_registry_version: PathBuf,
 }
 
 impl Layout {
     pub(crate) fn new(recovery: &Recovery) -> Self {
         Self {
             root: recovery.recovery_dir.clone(),
-            cooling_down_registry_version: recovery
-                .recovery_dir
-                .join(COOLING_DOWN_REGISTRY_VERSION_FILE),
         }
+    }
+
+    fn cooling_down_registry_version_file(&self) -> PathBuf {
+        self.root.join(COOLING_DOWN_REGISTRY_VERSION_FILE)
     }
 
     /// A registry version at which the subnet that is merged away is labeled
@@ -59,7 +59,7 @@ impl Layout {
         version: u64,
     ) -> RecoveryResult<()> {
         write_file(
-            &self.cooling_down_registry_version,
+            &self.cooling_down_registry_version_file(),
             encode_cooling_down_registry_version(source_subnet_id, version),
         )
     }
@@ -70,8 +70,8 @@ impl Layout {
         &self,
         source_subnet_id: SubnetId,
     ) -> RecoveryResult<u64> {
-        let path = &self.cooling_down_registry_version;
-        decode_cooling_down_registry_version(&read_file(path)?, source_subnet_id).map_err(|err| {
+        let path = self.cooling_down_registry_version_file();
+        decode_cooling_down_registry_version(&read_file(&path)?, source_subnet_id).map_err(|err| {
             RecoveryError::UnexpectedError(format!(
                 "Failed to read the registry version at {}: {err}",
                 path.display()
