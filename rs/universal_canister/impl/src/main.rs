@@ -391,8 +391,7 @@ fn eval(ops_bytes: OpsBytes) {
                     api::trap_with_blob(&c)
                 }
             }
-            // Evaluate the ops in the topmost blob (on a fresh stack) if the next
-            // two blobs are equal (`IfEq`) or not equal (`IfNeq`).
+            // Conditionally evaluate a nested payload on a fresh stack.
             Ops::IfEq | Ops::IfNeq => {
                 let ops = stack.pop_blob();
                 let b = stack.pop_blob();

@@ -588,8 +588,8 @@ impl PayloadBuilder {
         self
     }
 
-    /// Executes `then` (on a fresh stack) if the blob on top of the stack
-    /// equals `data`, popping the blob.
+    /// Executes `then` on a fresh stack if the blob on top of the stack equals
+    /// `data`.
     pub fn if_eq<P: AsRef<[u8]>>(mut self, data: P, then: PayloadBuilder) -> Self {
         self = self.push_bytes(data.as_ref());
         self = self.push_bytes(&then.build());
@@ -597,8 +597,8 @@ impl PayloadBuilder {
         self
     }
 
-    /// Executes `then` (on a fresh stack) if the blob on top of the stack
-    /// does not equal `data`, popping the blob.
+    /// Executes `then` on a fresh stack if the blob on top of the stack does
+    /// not equal `data`.
     pub fn if_neq<P: AsRef<[u8]>>(mut self, data: P, then: PayloadBuilder) -> Self {
         self = self.push_bytes(data.as_ref());
         self = self.push_bytes(&then.build());
