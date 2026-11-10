@@ -1158,13 +1158,29 @@ async fn verify_after_merge(context: &Context) {
         "Step 17: Checking the state of U8 and UR after the merge"
     );
     let u8 = UniversalCanister::from_canister_id(&context.r_agent, context.u8);
+    // `R` now hosts the canister ID ranges of `M`, but the NNS delegation it
+    // serves responses with only lists them once it has fetched a new one; until
+    // then, it rejects requests with a `503 Service Unavailable` because its
+    // delegation is inconsistent with its state. So the first request is
+    // retried until `R` serves a consistent delegation.
+    let u8_stable_memory = retry_with_msg_async!(
+        "reading the stable memory of U8 from subnet R",
+        logger,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            u8.read_stable(
+                STABLE_MEMORY_OFFSET,
+                STABLE_MEMORY_BLOB.len().try_into().unwrap(),
+            )
+            .await
+            .map_err(|err| anyhow!("could not read the stable memory of U8: {err}"))
+        }
+    )
+    .await
+    .expect("subnet R did not serve U8 after the merge");
     assert_eq!(
-        u8.try_read_stable(
-            STABLE_MEMORY_OFFSET,
-            STABLE_MEMORY_BLOB.len().try_into().unwrap()
-        )
-        .await,
-        STABLE_MEMORY_BLOB,
+        u8_stable_memory, STABLE_MEMORY_BLOB,
         "the stable memory of U8 did not survive the merge",
     );
     assert!(
