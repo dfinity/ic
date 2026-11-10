@@ -1087,30 +1087,23 @@ impl ReplicatedState {
             None => {
                 let subnet_id = self.metadata.own_subnet_id.get_ref();
                 if receiver.get_ref() == subnet_id {
-                    match msg {
-                        RequestOrResponse::Request(mut request) => {
-                            if request.effective_canister_id.is_none() {
-                                let effective_canister_id = request.extract_effective_canister_id();
-                                Arc::make_mut(&mut request).effective_canister_id =
-                                    Some(effective_canister_id);
-                            }
-                            push_input(
-                                &mut self.subnet_queues,
-                                RequestOrResponse::Request(request),
-                                subnet_available_guaranteed_response_memory,
-                                own_subnet_type,
-                                input_queue_type,
-                            )
-                            // Requests are never silently dropped.
-                            .map(|_| true)
-                        }
+                    match &msg {
+                        RequestOrResponse::Request(_) => push_input(
+                            &mut self.subnet_queues,
+                            msg,
+                            subnet_available_guaranteed_response_memory,
+                            own_subnet_type,
+                            input_queue_type,
+                        )
+                        // Requests are never silently dropped.
+                        .map(|_| true),
 
                         RequestOrResponse::Response(response) => Err((
                             StateError::non_matching_response(
                                 "Management canister does not accept canister responses",
-                                &response,
+                                response,
                             ),
-                            RequestOrResponse::Response(response),
+                            msg,
                         )),
                     }
                 } else {
@@ -1182,6 +1175,18 @@ impl ReplicatedState {
     /// `self.subnet_queues`.
     pub fn peek_subnet_input(&mut self) -> Option<SubnetMessage> {
         self.subnet_queues.peek_input().map(into_subnet_message)
+    }
+
+    /// Caches the given effective canister ID in the next inter-canister request
+    /// in `self.subnet_queues`, i.e. the one that `peek_subnet_input()` just
+    /// returned (no-op if that is not a request), so that it doesn't need to be
+    /// decoded from the payload again if the request is peeked again.
+    ///
+    /// Must be called right after `peek_subnet_input()`. The request is copied
+    /// if its `Arc` is shared, so drop the peeked `Arc` first.
+    pub fn cache_subnet_input_effective_canister_id(&mut self, effective_canister_id: CanisterId) {
+        self.subnet_queues
+            .cache_next_input_effective_canister_id(effective_canister_id);
     }
 
     /// Skips the next inter-canister or ingress message from `self.subnet_queues`.

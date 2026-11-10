@@ -210,12 +210,8 @@ fn effective_canister_id_is_cached() {
 
     // The cached value takes precedence over the payload.
     let other = canister_test_id(14);
-    request.effective_canister_id = Some(Some(other));
+    request.effective_canister_id = Some(Box::new(other));
     assert_eq!(request.effective_canister_id(), Some(other));
-
-    // Cached "no effective canister ID" also takes precedence over the payload.
-    request.effective_canister_id = Some(None);
-    assert_eq!(request.effective_canister_id(), None);
 }
 
 #[test]
@@ -233,14 +229,8 @@ fn request_effective_canister_id_proto_round_trip() {
     for (effective_canister_id, expected_encoding) in [
         (None, None),
         (
-            Some(None),
-            Some(pb_queues::EffectiveCanisterId { canister_id: None }),
-        ),
-        (
-            Some(Some(target)),
-            Some(pb_queues::EffectiveCanisterId {
-                canister_id: Some(pb_types::CanisterId::from(target)),
-            }),
+            Some(Box::new(target)),
+            Some(pb_types::CanisterId::from(target)),
         ),
     ] {
         let request = Request {

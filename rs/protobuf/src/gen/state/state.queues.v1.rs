@@ -57,13 +57,6 @@ pub struct RequestMetadata {
     #[prost(uint64, tag = "2")]
     pub call_tree_start_time_nanos: u64,
 }
-/// The cached effective canister ID of a request (see `Request`).
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct EffectiveCanisterId {
-    /// Absent if the request has no effective canister ID.
-    #[prost(message, optional, tag = "1")]
-    pub canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
-}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Request {
     #[prost(message, optional, tag = "1")]
@@ -84,10 +77,9 @@ pub struct Request {
     #[prost(uint32, tag = "9")]
     pub deadline_seconds: u32,
     /// Cached effective canister ID of a request addressed to the management
-    /// canister, populated upon induction into the subnet queues. Absent if not
-    /// (yet) populated.
+    /// canister, populated upon induction into the subnet queues.
     #[prost(message, optional, tag = "10")]
-    pub effective_canister_id: ::core::option::Option<EffectiveCanisterId>,
+    pub effective_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RejectContext {

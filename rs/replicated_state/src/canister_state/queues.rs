@@ -1045,6 +1045,36 @@ impl CanisterQueues {
         None
     }
 
+    /// Caches the given effective canister ID in the next inter-canister input
+    /// message, i.e. the one that `peek_input()` just returned (no-op if that is
+    /// not a request).
+    ///
+    /// Must be called right after `peek_input()`, which skips over any empty
+    /// input sources and input queues, so the next input message is at the front
+    /// of the queue of the sender at the front of the current input source's
+    /// schedule.
+    pub(crate) fn cache_next_input_effective_canister_id(
+        &mut self,
+        effective_canister_id: CanisterId,
+    ) {
+        let input_queue_type = match self.input_schedule.input_source() {
+            InputSource::Ingress => return,
+            InputSource::RemoteSubnet => InputQueueType::RemoteSubnet,
+            InputSource::LocalSubnet => InputQueueType::LocalSubnet,
+        };
+        let Some(reference) = self
+            .input_schedule
+            .peek(input_queue_type)
+            .and_then(|sender| self.canister_queues.get(sender))
+            .and_then(|(input_queue, _)| input_queue.peek())
+        else {
+            return;
+        };
+        self.store
+            .pool
+            .cache_effective_canister_id(reference, effective_canister_id);
+    }
+
     /// Skips the next ingress or inter-canister input message.
     pub(crate) fn skip_input(&mut self, loop_detector: &mut CanisterQueuesLoopDetector) {
         match self.input_schedule.next_input_source() {
