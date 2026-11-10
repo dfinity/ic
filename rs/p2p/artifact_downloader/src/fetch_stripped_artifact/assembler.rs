@@ -58,7 +58,7 @@ use super::{
     types::{
         SignedIngressId,
         stripped::{
-            MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedConsensusMessageId,
+            MaybeStrippedConsensusMessage, MaybeStrippedConsensusMessageId, StrippedBlockProposal,
         },
     },
 };
@@ -84,7 +84,7 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrip
     }
 }
 
-impl<Pool, Factory> BouncerFactory<StrippedConsensusMessageId, Pool>
+impl<Pool, Factory> BouncerFactory<MaybeStrippedConsensusMessageId, Pool>
     for BouncerFactoryWrapper<Factory>
 where
     Factory: BouncerFactory<ConsensusMessageId, Pool>,
@@ -92,7 +92,7 @@ where
     fn new_bouncer(
         &self,
         pool: &Pool,
-    ) -> ic_interfaces::p2p::consensus::Bouncer<StrippedConsensusMessageId> {
+    ) -> ic_interfaces::p2p::consensus::Bouncer<MaybeStrippedConsensusMessageId> {
         let nested = self.bouncer_factory.new_bouncer(pool);
 
         Box::new(move |id| nested(id.as_ref()))
@@ -204,7 +204,7 @@ impl FetchStrippedConsensusArtifact {
     /// Tries to assemble the message from the pushed artifact, or from one downloaded from a peer.
     async fn try_assemble_message<P: Peers + Clone + Send + 'static>(
         &self,
-        id: &StrippedConsensusMessageId,
+        id: &MaybeStrippedConsensusMessageId,
         artifact: Option<(MaybeStrippedConsensusMessage, NodeId)>,
         peer_rx: P,
         deadline: Instant,
@@ -749,7 +749,7 @@ impl BlockProposalAssembler {
     /// Tries to reassemble a block.
     ///
     /// Fails if there are still some stripped messages missing, the proposal isn't
-    /// propperly stripped, the assembled proposal can't be deserialized, or it
+    /// properly stripped, the assembled proposal can't be deserialized, or it
     /// fails the integrity check against the claimed ID.
     pub(crate) fn try_assemble(self) -> Result<ConsensusMessage, AssemblyError> {
         let BlockProposalAssembler {
@@ -1440,7 +1440,7 @@ mod tests {
     /// do.
     async fn request_consensus_message(
         router: axum::Router,
-        id: StrippedConsensusMessageId,
+        id: MaybeStrippedConsensusMessageId,
     ) -> Result<MaybeStrippedConsensusMessage, StatusCode> {
         let request = Request::builder()
             .uri("/strippedconsensus/rpc")

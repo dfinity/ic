@@ -195,33 +195,45 @@ impl From<MaybeStrippedConsensusMessage> for pb::StrippedConsensusMessage {
     }
 }
 
-/// The id of a [`MaybeStrippedConsensusMessage`], which also covers the IDs of the messages
-/// stripped from a block proposal, so that a proposal listing other messages has another id.
+/// The id of a [`MaybeStrippedConsensusMessage`].
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct StrippedConsensusMessageId {
-    unstripped_id: ConsensusMessageId,
-    stripped_message_ids_hash: Option<CryptoHashOf<StrippedMessageIds>>,
+pub enum MaybeStrippedConsensusMessageId {
+    /// Also covers the IDs of the stripped messages, so that a proposal listing other messages
+    /// has another id.
+    StrippedBlockProposal {
+        unstripped_id: ConsensusMessageId,
+        stripped_message_ids_hash: CryptoHashOf<StrippedMessageIds>,
+    },
+    Unstripped(ConsensusMessageId),
 }
 
-impl AsRef<ConsensusMessageId> for StrippedConsensusMessageId {
+impl AsRef<ConsensusMessageId> for MaybeStrippedConsensusMessageId {
     fn as_ref(&self) -> &ConsensusMessageId {
-        &self.unstripped_id
-    }
-}
-
-impl From<StrippedConsensusMessageId> for pb::StrippedConsensusMessageId {
-    fn from(value: StrippedConsensusMessageId) -> Self {
-        pb::StrippedConsensusMessageId {
-            unstripped_id: Some(value.unstripped_id.into()),
-            stripped_message_ids_hash: value
-                .stripped_message_ids_hash
-                .map(|hash| hash.get().0)
-                .unwrap_or_default(),
+        match self {
+            Self::StrippedBlockProposal { unstripped_id, .. } => unstripped_id,
+            Self::Unstripped(id) => id,
         }
     }
 }
 
-impl TryFrom<pb::StrippedConsensusMessageId> for StrippedConsensusMessageId {
+impl From<MaybeStrippedConsensusMessageId> for pb::StrippedConsensusMessageId {
+    fn from(value: MaybeStrippedConsensusMessageId) -> Self {
+        let (unstripped_id, stripped_message_ids_hash) = match value {
+            MaybeStrippedConsensusMessageId::StrippedBlockProposal {
+                unstripped_id,
+                stripped_message_ids_hash,
+            } => (unstripped_id, stripped_message_ids_hash.get().0),
+            MaybeStrippedConsensusMessageId::Unstripped(id) => (id, vec![]),
+        };
+
+        pb::StrippedConsensusMessageId {
+            unstripped_id: Some(unstripped_id.into()),
+            stripped_message_ids_hash,
+        }
+    }
+}
+
+impl TryFrom<pb::StrippedConsensusMessageId> for MaybeStrippedConsensusMessageId {
     type Error = ProxyDecodeError;
 
     fn try_from(value: pb::StrippedConsensusMessageId) -> Result<Self, Self::Error> {
@@ -231,10 +243,13 @@ impl TryFrom<pb::StrippedConsensusMessageId> for StrippedConsensusMessageId {
         )?;
         let hash = value.stripped_message_ids_hash;
 
-        Ok(Self {
-            unstripped_id,
-            stripped_message_ids_hash: (!hash.is_empty())
-                .then_some(CryptoHashOf::new(CryptoHash(hash))),
+        Ok(if hash.is_empty() {
+            Self::Unstripped(unstripped_id)
+        } else {
+            Self::StrippedBlockProposal {
+                unstripped_id,
+                stripped_message_ids_hash: CryptoHashOf::new(CryptoHash(hash)),
+            }
         })
     }
 }
@@ -242,19 +257,18 @@ impl TryFrom<pb::StrippedConsensusMessageId> for StrippedConsensusMessageId {
 impl IdentifiableArtifact for MaybeStrippedConsensusMessage {
     const NAME: &'static str = "strippedconsensus";
 
-    type Id = StrippedConsensusMessageId;
+    type Id = MaybeStrippedConsensusMessageId;
 
     fn id(&self) -> Self::Id {
         match self {
-            MaybeStrippedConsensusMessage::Unstripped(unstripped) => StrippedConsensusMessageId {
-                unstripped_id: unstripped.id(),
-                stripped_message_ids_hash: None,
-            },
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) => {
-                StrippedConsensusMessageId {
+                MaybeStrippedConsensusMessageId::StrippedBlockProposal {
                     unstripped_id: stripped.unstripped_consensus_message_id.clone(),
-                    stripped_message_ids_hash: Some(crypto_hash(&stripped.stripped_message_ids)),
+                    stripped_message_ids_hash: crypto_hash(&stripped.stripped_message_ids),
                 }
+            }
+            MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
+                MaybeStrippedConsensusMessageId::Unstripped(unstripped.id())
             }
         }
     }
@@ -407,7 +421,10 @@ mod tests {
             let id = message.id();
             let proto = pb::StrippedConsensusMessageId::from(id.clone());
 
-            assert_eq!(StrippedConsensusMessageId::try_from(proto).unwrap(), id);
+            assert_eq!(
+                MaybeStrippedConsensusMessageId::try_from(proto).unwrap(),
+                id
+            );
         }
     }
 

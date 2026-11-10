@@ -2278,7 +2278,7 @@ mod tests {
     }
 
     #[test]
-    fn idkg_payload_with_a_repeated_transcript_fails_to_decode_test() {
+    fn idkg_payload_with_a_repeated_transcript_id_fails_to_decode_test() {
         use crate::crypto::canister_threshold_sig::idkg::{
             IDkgReceivers, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
         };
@@ -2302,9 +2302,9 @@ mod tests {
         );
         let mut proto = pb::IDkgPayload::from(&payload);
         assert_eq!(IDkgPayload::try_from(proto.clone()).unwrap(), payload);
-        proto
-            .idkg_transcripts
-            .push(proto.idkg_transcripts[0].clone());
+        let mut other_transcript = proto.idkg_transcripts[0].clone();
+        other_transcript.registry_version += 1;
+        proto.idkg_transcripts.push(other_transcript);
 
         assert_matches!(
             IDkgPayload::try_from(proto),
