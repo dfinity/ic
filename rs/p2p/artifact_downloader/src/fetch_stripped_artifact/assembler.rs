@@ -526,7 +526,7 @@ impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
 
 impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
     type ArtifactId = (NodeIndex, IDkgArtifactId);
-    type Payload = pb::IDkgPayload;
+    type Payload = Option<pb::IDkgPayload>;
 
     fn missing_artifacts(&self) -> impl Iterator<Item = Self::ArtifactId> {
         self.signed_dealings
@@ -577,7 +577,10 @@ impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
             }
         }
 
-        for transcript in &mut payload.idkg_transcripts {
+        for transcript in payload
+            .iter_mut()
+            .flat_map(|idkg| idkg.idkg_transcripts.iter_mut())
+        {
             let transcript_id =
                 try_from_option_field(transcript.transcript_id.clone(), "transcript_id")
                     .map_err(AssemblyError::DeserializationFailed)?;
@@ -745,9 +748,9 @@ impl BlockProposalAssembler {
 
     /// Tries to reassemble a block.
     ///
-    /// Fails if there are still some stripped messages missing,
-    /// the assembled proposal can't be deserialized, or it fails
-    /// the integrity check against the claimed ID.
+    /// Fails if there are still some stripped messages missing, the proposal isn't
+    /// propperly stripped, the assembled proposal can't be deserialized, or it
+    /// fails the integrity check against the claimed ID.
     pub(crate) fn try_assemble(self) -> Result<ConsensusMessage, AssemblyError> {
         let BlockProposalAssembler {
             pruned_block_proposal_proto: mut reconstructed_block_proposal_proto,
@@ -759,15 +762,7 @@ impl BlockProposalAssembler {
 
         if let Some(block) = reconstructed_block_proposal_proto.value.as_mut() {
             Self::try_reconstruct_payload(ingress_messages, &mut block.ingress_payload)?;
-            match block.idkg_payload.as_mut() {
-                Some(idkg) => Self::try_reconstruct_payload(signed_dealings, idkg)?,
-                // Without an IDKG payload, no dealing has a slot.
-                None => {
-                    if let Some(((_, dealing_id), _)) = signed_dealings.into_iter().next() {
-                        return Err(AssemblyError::UnusedIDkgDealing(dealing_id));
-                    }
-                }
-            }
+            Self::try_reconstruct_payload(signed_dealings, &mut block.idkg_payload)?;
             Self::try_reconstruct_payload(
                 canister_http_responses,
                 &mut block.canister_http_payload_bytes,
@@ -1953,19 +1948,23 @@ mod tests {
         );
     }
 
-    /// The assembler of `NODE_1`, whose peer `NODE_2` serves `message` once.
+    /// The assembler of `NODE_1`, whose peer `NODE_2` serves `messages`, one per request.
     fn set_up_assembler_with_peer_serving(
-        message: MaybeStrippedConsensusMessage,
+        messages: Vec<MaybeStrippedConsensusMessage>,
     ) -> FetchStrippedConsensusArtifact {
-        let response = bytes::Bytes::from(pb::StrippedConsensusMessage::proxy_encode(message));
+        let requests = messages.len();
+        let mut messages = messages.into_iter();
         let mut mock_transport = MockTransport::new();
         mock_transport
             .expect_rpc()
-            .times(1)
+            .times(requests)
             .returning(move |peer, _| {
                 assert_eq!(*peer, NODE_2);
+                let message = messages.next().unwrap();
                 Ok(axum::response::Response::builder()
-                    .body(response.clone())
+                    .body(bytes::Bytes::from(
+                        pb::StrippedConsensusMessage::proxy_encode(message),
+                    ))
                     .unwrap())
             });
 
@@ -1984,7 +1983,7 @@ mod tests {
         message: ConsensusMessage,
     ) {
         assert_eq!(invalid_artifact.id().as_ref(), &message.id());
-        let assembler = set_up_assembler_with_peer_serving(message.clone().strip());
+        let assembler = set_up_assembler_with_peer_serving(vec![message.clone().strip()]);
         let start = Instant::now();
 
         let result = assembler
@@ -2030,26 +2029,6 @@ mod tests {
             message,
         )
         .await;
-    }
-
-    /// The assembler of `NODE_1`, which finds the given ingress messages in its pool.
-    fn set_up_assembler_with_ingress_pool(
-        ingress_messages: Vec<SignedIngress>,
-    ) -> FetchStrippedConsensusArtifact {
-        let mut ingress_pool = MockValidatedPoolReader::<SignedIngress>::default();
-        ingress_pool.expect_get().returning(move |id| {
-            ingress_messages
-                .iter()
-                .find(|message| IngressMessageId::from(*message) == *id)
-                .cloned()
-        });
-
-        build_assembler(
-            ingress_pool,
-            FakeCanisterHttpPool::empty(),
-            wanting_bouncer_factory(),
-            MockTransport::new(),
-        )
     }
 
     /// Checks that `artifact`, pushed by `NODE_1`, is counted as invalid instead of assembled.
@@ -2100,13 +2079,58 @@ mod tests {
         .await;
     }
 
+    /// A fetched stripped proposal listing other messages has another id, so it is fetched again.
+    #[tokio::test(start_paused = true)]
+    async fn assemble_refetches_stripped_block_proposal_listing_other_messages() {
+        let message = ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![]));
+        let stripped = message.clone().strip();
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut other) = stripped.clone()
+        else {
+            unreachable!();
+        };
+        let (_, ingress_id) = fake_ingress_message_with_arg_size("fake_1", 8);
+        other
+            .stripped_message_ids
+            .ingress_messages
+            .insert(ingress_id.ingress_message_id, ingress_id.ingress_bytes_hash);
+        let assembler = set_up_assembler_with_peer_serving(vec![
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(other),
+            stripped.clone(),
+        ]);
+
+        let result = assembler
+            .assemble_message(stripped.id(), None, MockPeers(NODE_2))
+            .await;
+
+        assert_matches!(
+            result,
+            AssembleResult::Done { message: assembled, peer_id }
+                if peer_id == NODE_2 && assembled == message
+        );
+        assert_eq!(
+            assembler
+                .fetch_stripped
+                .metrics
+                .download_task_invalid_artifacts_total
+                .get(),
+            1
+        );
+    }
+
     /// Peers strip data blocks, so an unstripped data block is not what peers send.
     #[tokio::test]
     async fn assemble_rejects_unstripped_data_block_proposal() {
         let message = ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![]));
 
+        let assembler = build_assembler(
+            MockValidatedPoolReader::<SignedIngress>::default(),
+            FakeCanisterHttpPool::empty(),
+            wanting_bouncer_factory(),
+            MockTransport::new(),
+        );
+
         assert_artifact_rejected(
-            &set_up_assembler_with_ingress_pool(vec![]),
+            &assembler,
             MaybeStrippedConsensusMessage::Unstripped(message),
         )
         .await;

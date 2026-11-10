@@ -68,6 +68,25 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
             )));
         }
 
+        // Peers strip only data block proposals.
+        if pruned_block_proposal_proto
+            .value
+            .as_ref()
+            .is_some_and(|block| {
+                !matches!(
+                    block
+                        .dkg_payload
+                        .as_ref()
+                        .and_then(|payload| payload.val.as_ref()),
+                    Some(pb::dkg_payload::Val::DataPayload(_))
+                )
+            })
+        {
+            return Err(ProxyDecodeError::Other(String::from(
+                "The block proposal is NOT a data block proposal",
+            )));
+        }
+
         let unstripped_consensus_message_id: ConsensusMessageId = try_from_option_field(
             value.unstripped_consensus_message_id,
             "unstripped_consensus_message_id",
@@ -333,6 +352,27 @@ mod tests {
         assert_matches!(
             result,
             Err(ProxyDecodeError::Other(msg)) if msg.contains("is NOT for a block proposal")
+        );
+    }
+
+    #[test]
+    fn deserialize_summary_block_proposal_should_fail() {
+        let message = fake_summary_block_proposal();
+        let ConsensusMessage::BlockProposal(block_proposal) = message.clone() else {
+            unreachable!();
+        };
+        let mut stripped_block_proposal = fake_stripped_block_proposal_with_messages(vec![]);
+        stripped_block_proposal.pruned_block_proposal_proto =
+            pb::BlockProposal::from(block_proposal);
+        stripped_block_proposal.unstripped_consensus_message_id = message.id();
+
+        let original_consensus_message =
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped_block_proposal);
+        let proto = pb::StrippedConsensusMessage::from(original_consensus_message.clone());
+        let result = MaybeStrippedConsensusMessage::try_from(proto);
+        assert_matches!(
+            result,
+            Err(ProxyDecodeError::Other(msg)) if msg.contains("is NOT a data block proposal")
         );
     }
 

@@ -1956,7 +1956,13 @@ impl TryFrom<pb::IDkgPayload> for IDkgPayload {
                 ))
             })?;
             let transcript_id = transcript.transcript_id;
-            idkg_transcripts.insert(transcript_id, transcript);
+            if idkg_transcripts.insert(transcript_id, transcript).is_some() {
+                return Err(ProxyDecodeError::DuplicateEntry {
+                    key: format!("{transcript_id:?}"),
+                    v1: String::new(),
+                    v2: String::new(),
+                });
+            }
         }
 
         // ongoing_xnet_reshares
@@ -2269,5 +2275,40 @@ mod tests {
         assert_eq!(pre_sig_id_0.id(), 0);
         assert_eq!(pre_sig_id_1.id(), 1);
         assert_eq!(pre_sig_id_2.id(), 2);
+    }
+
+    #[test]
+    fn idkg_payload_with_a_repeated_transcript_fails_to_decode_test() {
+        use crate::crypto::canister_threshold_sig::idkg::{
+            IDkgReceivers, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
+        };
+        use assert_matches::assert_matches;
+        use ic_types_test_utils::ids::{NODE_1, SUBNET_0};
+        use std::sync::Arc;
+
+        let transcript_id = IDkgTranscriptId::new(SUBNET_0, 1, Height::new(42));
+        let mut payload = IDkgPayload::empty(Height::new(100), SUBNET_0, vec![]);
+        payload.idkg_transcripts.insert(
+            transcript_id,
+            IDkgTranscript {
+                transcript_id,
+                receivers: IDkgReceivers::new(BTreeSet::from([NODE_1])).unwrap(),
+                registry_version: RegistryVersion::from(1),
+                verified_dealings: Arc::new(BTreeMap::new()),
+                transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
+                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                internal_transcript_raw: vec![],
+            },
+        );
+        let mut proto = pb::IDkgPayload::from(&payload);
+        assert_eq!(IDkgPayload::try_from(proto.clone()).unwrap(), payload);
+        proto
+            .idkg_transcripts
+            .push(proto.idkg_transcripts[0].clone());
+
+        assert_matches!(
+            IDkgPayload::try_from(proto),
+            Err(ProxyDecodeError::DuplicateEntry { key, .. }) if key == format!("{transcript_id:?}")
+        );
     }
 }

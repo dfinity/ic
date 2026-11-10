@@ -81,7 +81,7 @@ pub(crate) enum CanisterHttpPayloadError {
 /// Returns the payload with the content of every response worth stripping removed,
 /// together with the hashes of the contents that were removed, or `None` if the
 /// payload is to be left as it is: if there is nothing worth stripping, or if it
-/// could not be parsed (the block then fails validation later on).
+/// could not be parsed (the block then fails to reassemble).
 ///
 /// Assumes that the payload is canonically encoded, i.e. exactly what prost encodes
 /// its messages to, as payload validation requires. A receiver puts the payload back
@@ -150,9 +150,9 @@ fn content_size(response: &pb::CanisterHttpResponse) -> usize {
 /// Puts the given response contents back into the payload, in place of the ones
 /// that [`strip_responses`] removed, and returns the reassembled payload.
 ///
-/// Fails if the payload is missing a response whose content was not provided, or as
-/// soon as it is clear that the reassembled payload would be bigger than any valid
-/// block's.
+/// Fails unless the payload and the contents are exactly what [`strip_responses`]
+/// produces, or as soon as it is clear that the reassembled payload would be bigger
+/// than any valid block's.
 pub(crate) fn reinsert_responses(
     payload_bytes: &[u8],
     responses: &BTreeMap<CanisterHttpResponseContentHash, Option<CanisterHttpResponse>>,
