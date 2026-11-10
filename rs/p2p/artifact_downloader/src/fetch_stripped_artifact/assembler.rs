@@ -2125,6 +2125,35 @@ mod tests {
         );
     }
 
+    /// A fetched unstripped proposal has another id, so the stripped one is fetched again.
+    #[tokio::test(start_paused = true)]
+    async fn assemble_refetches_stripped_block_proposal_served_unstripped() {
+        let message = ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![]));
+        let stripped = message.clone().strip();
+        let assembler = set_up_assembler_with_peer_serving(vec![
+            MaybeStrippedConsensusMessage::Unstripped(message.clone()),
+            stripped.clone(),
+        ]);
+
+        let result = assembler
+            .assemble_message(stripped.id(), None, MockPeers(NODE_2))
+            .await;
+
+        assert_matches!(
+            result,
+            AssembleResult::Done { message: assembled, peer_id }
+                if peer_id == NODE_2 && assembled == message
+        );
+        assert_eq!(
+            assembler
+                .fetch_stripped
+                .metrics
+                .download_task_invalid_artifacts_total
+                .get(),
+            1
+        );
+    }
+
     /// Peers strip data blocks, so an unstripped data block is not what peers send.
     #[tokio::test]
     async fn assemble_rejects_unstripped_data_block_proposal() {
