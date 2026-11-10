@@ -228,15 +228,22 @@ impl FetchStrippedConsensusArtifact {
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) => stripped,
             MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
                 total_timer.stop_and_discard();
-                // Peers strip every data block proposal.
+                // Peers strip every data block proposal, and no other artifact has this id.
                 if matches!(&unstripped, ConsensusMessage::BlockProposal(proposal)
                     if proposal.as_ref().payload.payload_type() == PayloadType::Data)
                 {
-                    return self.fetch_stripped.invalid_artifact(
-                        id,
+                    self.fetch_stripped
+                        .metrics
+                        .download_task_invalid_artifacts_total
+                        .inc();
+                    warn!(
+                        self.log,
+                        "Peer {} sent an invalid artifact {:?}, not fetching it again: {}",
                         peer,
-                        AssemblyError::UnstrippedDataBlockProposal,
+                        id,
+                        AssemblyError::UnstrippedDataBlockProposal
                     );
+                    return Attempt::Unwanted;
                 }
                 return Attempt::Done {
                     message: unstripped,
@@ -2032,7 +2039,7 @@ mod tests {
         .await;
     }
 
-    /// Checks that `artifact`, pushed by `NODE_1`, is counted as invalid instead of assembled.
+    /// Checks that `artifact`, pushed by `NODE_1`, is counted as invalid and not fetched again.
     async fn assert_artifact_rejected(
         assembler: &FetchStrippedConsensusArtifact,
         artifact: MaybeStrippedConsensusMessage,
@@ -2047,7 +2054,7 @@ mod tests {
             )
             .await;
 
-        assert!(matches!(result, Attempt::Retry));
+        assert!(matches!(result, Attempt::Unwanted));
         assert_eq!(
             assembler
                 .fetch_stripped
