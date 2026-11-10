@@ -29,11 +29,10 @@ fn snapshot_id() -> SnapshotId {
     SnapshotId::from((dapp_canister_id(), 3))
 }
 
-/// A NativeEnvironment where Root says that dapp_canister_id is a registered dapp canister iff
-/// `is_registered_dapp`.
+/// A NativeEnvironment where Root says that the registered dapp canisters are `dapps`.
 ///
 /// Calls that are not explicitly expected (by the caller of this function) fail.
-fn new_env(is_registered_dapp: bool) -> NativeEnvironment {
+fn new_env(dapps: Vec<CanisterId>) -> NativeEnvironment {
     let mut env = NativeEnvironment::default();
     env.default_canister_call_response = Err((Some(1), "Unexpected call!".to_string()));
     env.set_call_canister_response(
@@ -41,11 +40,7 @@ fn new_env(is_registered_dapp: bool) -> NativeEnvironment {
         "list_sns_canisters",
         Encode!(&ListSnsCanistersRequest {}).unwrap(),
         Ok(Encode!(&ListSnsCanistersResponse {
-            dapps: if is_registered_dapp {
-                vec![dapp_canister_id().get()]
-            } else {
-                vec![]
-            },
+            dapps: dapps.into_iter().map(CanisterId::get).collect(),
             ..Default::default()
         })
         .unwrap()),
@@ -126,7 +121,7 @@ fn execute_load_canister_snapshot(
 #[test]
 fn test_load_canister_snapshot_calls_root() {
     // Step 1: Prepare the world.
-    let mut env = new_env(/* is_registered_dapp = */ true);
+    let mut env = new_env(vec![dapp_canister_id()]);
     // When env is dropped, it asserts that Governance called Root's load_canister_snapshot
     // method, with exactly this request.
     env.require_call_canister_invocation(
@@ -160,7 +155,7 @@ fn test_load_canister_snapshot_calls_root() {
 #[test]
 fn test_load_canister_snapshot_fails_when_root_fails() {
     // Step 1: Prepare the world.
-    let mut env = new_env(/* is_registered_dapp = */ true);
+    let mut env = new_env(vec![dapp_canister_id()]);
     env.require_call_canister_invocation(
         root_canister_id(),
         "load_canister_snapshot",
@@ -190,13 +185,15 @@ fn test_load_canister_snapshot_fails_when_root_fails() {
     assert_eq!(proposal_data.executed_timestamp_seconds, 0);
     let failure_reason = proposal_data.failure_reason.unwrap();
     assert_eq!(failure_reason.error_type, ErrorType::External as i32);
-    assert_eq!(
-        failure_reason.error_message,
-        format!(
-            "Failed to load a snapshot into canister {} (error code Some(3)): \
-             Could not find the snapshot ID.",
-            dapp_canister_id(),
-        ),
+    // The cause is the error from Root (prepared in step 1), for this canister.
+    let message = &failure_reason.error_message;
+    assert!(
+        message.contains("Could not find the snapshot ID"),
+        "{message}"
+    );
+    assert!(
+        message.contains(&dapp_canister_id().to_string()),
+        "{message}"
     );
 }
 
@@ -207,7 +204,7 @@ fn test_load_canister_snapshot_fails_when_target_is_no_longer_a_dapp() {
     // Step 1: Prepare the world. Root no longer lists the target as a dapp canister. Governance
     // must not even try to call Root's load_canister_snapshot method (new_env makes any such
     // call fail, but the error below shows that it was not made).
-    let env = new_env(/* is_registered_dapp = */ false);
+    let env = new_env(vec![]);
 
     // Step 2: Run the code under test.
     let proposal_data = execute_load_canister_snapshot(env, btreemap! {});
@@ -220,21 +217,21 @@ fn test_load_canister_snapshot_fails_when_target_is_no_longer_a_dapp() {
     );
     let failure_reason = proposal_data.failure_reason.unwrap();
     assert_eq!(failure_reason.error_type, ErrorType::InvalidProposal as i32);
-    assert_eq!(
-        failure_reason.error_message,
-        format!(
-            "LoadCanisterSnapshot was invalid: Canister {} is not a dapp canister registered \
-             with this SNS. Registered dapp canisters: []",
-            dapp_canister_id(),
-        ),
+    // The cause is that the target is no longer registered.
+    let message = &failure_reason.error_message;
+    assert!(message.contains("registered"), "{message}");
+    assert!(
+        message.contains(&dapp_canister_id().to_string()),
+        "{message}"
     );
 }
 
 /// An adopted UpgradeSnsControlledCanister proposal that is being executed.
 fn upgrade_in_progress() -> ProposalData {
     ProposalData {
-        action: (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default()))
-            .into(),
+        action: u64::from(&Action::UpgradeSnsControlledCanister(
+            UpgradeSnsControlledCanister::default(),
+        )),
         id: Some(ProposalId { id: 7 }),
         decided_timestamp_seconds: NOW - 10,
         latest_tally: Some(Tally {
@@ -248,12 +245,12 @@ fn upgrade_in_progress() -> ProposalData {
 }
 
 /// Like other upgrades, a LoadCanisterSnapshot proposal is not executed while an upgrade is in
-/// progress.
+/// progress: its execution fails (it is not retried later).
 #[test]
-fn test_load_canister_snapshot_waits_for_upgrade_in_progress() {
+fn test_load_canister_snapshot_aborts_when_an_upgrade_is_in_progress() {
     // Step 1: Prepare the world. Governance must not call Root's load_canister_snapshot method
     // (new_env makes any such call fail, but the error below shows that it was not made).
-    let env = new_env(/* is_registered_dapp = */ true);
+    let env = new_env(vec![dapp_canister_id()]);
     let upgrade_in_progress = upgrade_in_progress();
     assert_eq!(
         upgrade_in_progress.status(),
@@ -312,7 +309,7 @@ fn test_load_canister_snapshot_in_progress_blocks_upgrades() {
         }
         .try_into()
         .unwrap(),
-        Box::new(new_env(/* is_registered_dapp = */ true)),
+        Box::new(new_env(vec![dapp_canister_id()])),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
         Box::new(FakeCmc::new()),

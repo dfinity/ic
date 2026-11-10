@@ -358,9 +358,18 @@ async fn test_load_canister_snapshot() {
     assert_eq!(get(&pocket_ic, dapp_canister_id).await, 3);
     inc(&pocket_ic, dapp_canister_id).await;
     assert_eq!(get(&pocket_ic, dapp_canister_id).await, 4);
+    let snapshots_after_proposal = pocket_ic
+        .list_canister_snapshots(dapp_canister_id.into(), Some(sns.root.canister_id.0))
+        .await
+        .unwrap();
 
-    // Only SNS Governance may call SNS Root's snapshot methods.
+    // Only SNS Governance may call SNS Root's snapshot methods. Root rejects other callers by
+    // comparing the caller with the Governance canister ID, so both appear in the error.
     let not_governance = PrincipalId::new_user_test_id(42).0;
+    let expected_in_reject_message = [
+        not_governance.to_text(),
+        sns.governance.canister_id.to_string(),
+    ];
     let err = pocket_ic
         .update_call(
             sns.root.canister_id.0,
@@ -374,7 +383,9 @@ async fn test_load_canister_snapshot() {
         )
         .await
         .unwrap_err();
-    assert!(err.reject_message.contains("assertion"), "{err:?}");
+    for expected in &expected_in_reject_message {
+        assert!(err.reject_message.contains(expected), "{err:?}");
+    }
     let err = pocket_ic
         .update_call(
             sns.root.canister_id.0,
@@ -388,15 +399,16 @@ async fn test_load_canister_snapshot() {
         )
         .await
         .unwrap_err();
-    assert!(err.reject_message.contains("assertion"), "{err:?}");
+    for expected in &expected_in_reject_message {
+        assert!(err.reject_message.contains(expected), "{err:?}");
+    }
     // Neither call had any effect.
     assert_eq!(get(&pocket_ic, dapp_canister_id).await, 4);
     assert_eq!(
         pocket_ic
             .list_canister_snapshots(dapp_canister_id.into(), Some(sns.root.canister_id.0))
             .await
-            .unwrap()
-            .len(),
-        1
+            .unwrap(),
+        snapshots_after_proposal,
     );
 }

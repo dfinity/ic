@@ -1,5 +1,8 @@
 use super::*;
-use crate::types::{NativeAction, test_helpers::NativeEnvironment};
+use crate::{
+    temporarily_disable_canister_snapshot_proposals,
+    types::{NativeAction, test_helpers::NativeEnvironment},
+};
 use futures::FutureExt;
 use ic_test_utilities_types::ids::canister_test_id;
 use pretty_assertions::assert_eq;
@@ -126,7 +129,7 @@ fn test_non_dapp_target_is_rejected() {
 
 #[test]
 fn test_load_canister_snapshot_is_rejected_when_not_enabled() {
-    let _disabled = crate::temporarily_disable_canister_snapshot_proposals();
+    let _disabled = temporarily_disable_canister_snapshot_proposals();
     let load_canister_snapshot = LoadCanisterSnapshot {
         canister_id: Some(dapp_canister_id().get()),
         snapshot_id: Some(snapshot_id(dapp_canister_id(), 5)),
@@ -153,13 +156,14 @@ fn test_load_canister_snapshot_classification() {
         NativeAction::LoadCanisterSnapshot as u64
     );
     assert_eq!(
-        crate::pb::v1::Topic::get_topic_for_native_action(&action),
-        Some(crate::pb::v1::Topic::DappCanisterManagement),
+        Topic::get_topic_for_native_action(&action),
+        Some(Topic::DappCanisterManagement),
     );
 
-    // Counts as an upgrade proposal. That is what makes it wait for any upgrade that is in
-    // progress (and vice versa); see test_load_canister_snapshot_waits_for_upgrade_in_progress
-    // and test_load_canister_snapshot_in_progress_blocks_upgrades in
+    // Counts as an upgrade proposal. That is what makes its execution fail (not wait) while
+    // another upgrade is in progress (and vice versa); see
+    // test_load_canister_snapshot_aborts_when_an_upgrade_is_in_progress and
+    // test_load_canister_snapshot_in_progress_blocks_upgrades in
     // governance/load_canister_snapshot_tests.rs, which show that.
     let proposal_data = ProposalData {
         action: u64::from(&action),

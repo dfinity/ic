@@ -1225,7 +1225,7 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
 /// snapshot belongs to. Officially though, snapshot IDs are opaque. The supported way to find out
 /// whether a snapshot belongs to a canister is to list the canister's snapshots, which would
 /// require a call to the Management canister (via SNS Root).
-pub(crate) fn validate_snapshot_id(
+fn validate_snapshot_id(
     field_name: &str,
     snapshot_id: &[u8],
     // We require that the snapshot belong to this canister (e.g. the one that the snapshot will
@@ -1249,7 +1249,7 @@ pub(crate) fn validate_snapshot_id(
 /// Makes sure that `canister_id` is a dapp canister registered with SNS Root. That excludes the
 /// SNS framework canisters (Root, Governance, Ledger, Swap, Index, and the ledger archives), as
 /// well as SNS extensions.
-pub(crate) async fn validate_registered_dapp_canister(
+async fn validate_registered_dapp_canister(
     env: &dyn Environment,
     root_canister_id: CanisterId,
     canister_id: CanisterId,
@@ -1274,7 +1274,13 @@ pub(crate) async fn validate_registered_dapp_canister(
 }
 
 impl LoadCanisterSnapshot {
-    /// Returns the (parsed) target canister ID and snapshot ID, if this is valid.
+    /// Returns the (parsed) target canister ID and snapshot ID, if this is valid, i.e.
+    ///
+    ///   1. canister_id is a dapp canister registered with SNS Root (not an SNS framework
+    ///      canister), and
+    ///
+    ///   2. the snapshot belongs to that canister (lower layers would allow loading a snapshot of
+    ///      one canister into another).
     ///
     /// This is done when the proposal is submitted, and again when it is executed (by then, the
     /// target might no longer be a registered dapp canister).
