@@ -1241,8 +1241,9 @@ mod tests {
 
         assert_matches!(
             BlockProposalAssembler::new(stripped_block_proposal).try_assemble(),
-            Err(AssemblyError::CanisterHttpPayload(CanisterHttpPayloadError::NotStripped(hash)))
-                if hash == ic_types::crypto::crypto_hash(&response)
+            Err(AssemblyError::CanisterHttpPayload(
+                CanisterHttpPayloadError::MismatchedStrippedResponses
+            ))
         );
     }
 

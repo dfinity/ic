@@ -70,12 +70,8 @@ pub(crate) enum CanisterHttpPayloadError {
         MAX_CANISTER_HTTP_PAYLOAD_SIZE
     )]
     TooLarge,
-    #[error("The response with content hash {0:?} is worth stripping, but was left in the payload")]
-    NotStripped(CanisterHttpResponseContentHash),
-    #[error("The response with content hash {0:?} was stripped, but is not worth stripping")]
-    NotWorthStripping(CanisterHttpResponseContentHash),
-    #[error("The response with content hash {0:?} has no slot in the payload")]
-    UnusedResponse(CanisterHttpResponseContentHash),
+    #[error("The stripped responses are not exactly the ones worth stripping")]
+    MismatchedStrippedResponses,
 }
 
 /// Returns the payload with the content of every response worth stripping removed,
@@ -150,9 +146,9 @@ fn content_size(response: &pb::CanisterHttpResponse) -> usize {
 /// Puts the given response contents back into the payload, in place of the ones
 /// that [`strip_responses`] removed, and returns the reassembled payload.
 ///
-/// Fails unless the payload and the contents are exactly what [`strip_responses`]
-/// produces, or as soon as it is clear that the reassembled payload would be bigger
-/// than any valid block's.
+/// Fails unless the given contents are exactly the ones worth stripping from the
+/// reassembled payload, or as soon as it is clear that the reassembled payload would
+/// be bigger than any valid block's.
 pub(crate) fn reinsert_responses(
     payload_bytes: &[u8],
     responses: &BTreeMap<CanisterHttpResponseContentHash, Option<CanisterHttpResponse>>,
@@ -167,36 +163,28 @@ pub(crate) fn reinsert_responses(
     // Putting a content back grows the payload by more than the content itself, so
     // this is a lower bound on the size of the reassembled payload.
     let mut reassembled_size = payload_bytes.len();
-    let mut reinserted = BTreeSet::new();
+    // The responses worth stripping from the reassembled payload.
+    let mut worth_stripping = BTreeSet::new();
     for message in &mut messages {
         for (content_hash, response) in response_slots(message) {
-            if response.is_some() {
-                // Peers strip every response worth stripping.
-                if is_worth_stripping(response) {
-                    return Err(CanisterHttpPayloadError::NotStripped(content_hash));
+            if response.is_none() {
+                let Some(Some(content)) = responses.get(&content_hash) else {
+                    return Err(CanisterHttpPayloadError::MissingResponse(content_hash));
+                };
+                reassembled_size = reassembled_size.saturating_add(content.content.count_bytes());
+                if reassembled_size > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
+                    return Err(CanisterHttpPayloadError::TooLarge);
                 }
-                continue;
+                *response = Some(pb::CanisterHttpResponse::from(content.clone()));
             }
-            let Some(Some(content)) = responses.get(&content_hash) else {
-                return Err(CanisterHttpPayloadError::MissingResponse(content_hash));
-            };
-            reassembled_size = reassembled_size.saturating_add(content.content.count_bytes());
-            if reassembled_size > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
-                return Err(CanisterHttpPayloadError::TooLarge);
+            if is_worth_stripping(response) {
+                worth_stripping.insert(content_hash);
             }
-            *response = Some(pb::CanisterHttpResponse::from(content.clone()));
-            // Peers strip only responses worth stripping.
-            if !is_worth_stripping(response) {
-                return Err(CanisterHttpPayloadError::NotWorthStripping(content_hash));
-            }
-            reinserted.insert(content_hash);
         }
     }
-    if let Some(unused) = responses
-        .keys()
-        .find(|content_hash| !reinserted.contains(*content_hash))
-    {
-        return Err(CanisterHttpPayloadError::UnusedResponse(unused.clone()));
+    // Peers strip exactly the responses worth stripping.
+    if !responses.keys().eq(&worth_stripping) {
+        return Err(CanisterHttpPayloadError::MismatchedStrippedResponses);
     }
 
     Ok(encode(messages))
@@ -511,24 +499,28 @@ mod tests {
         );
     }
 
-    /// Peers strip every response worth stripping, so a payload that still holds one is
-    /// refused, even once it has been put back together.
+    /// Peers strip every response worth stripping, so a payload that still holds one it
+    /// doesn't declare is refused.
     #[test]
-    fn reinsert_refuses_a_response_left_in_test() {
+    fn reinsert_refuses_an_undeclared_response_left_in_test() {
+        let (payload, _) = fake_canister_http_payload_with_every_kind();
+
+        assert_matches!(
+            reinsert_responses(&payload, &BTreeMap::new()),
+            Err(CanisterHttpPayloadError::MismatchedStrippedResponses)
+        );
+    }
+
+    /// A declared response that was left in reassembles as if it had been stripped.
+    #[test]
+    fn reinsert_accepts_a_declared_response_left_in_test() {
         let (payload, all) = fake_canister_http_payload_with_every_kind();
-        let (stripped, _) = strip_responses(&payload).expect("Should have stripped something");
         let responses = all
             .into_iter()
             .map(|response| (hash_of(&response), Some(response)))
             .collect();
-        let reinserted = reinsert_responses(&stripped, &responses).unwrap();
 
-        for (payload, responses) in [(&payload, BTreeMap::new()), (&reinserted, responses)] {
-            assert_matches!(
-                reinsert_responses(payload, &responses),
-                Err(CanisterHttpPayloadError::NotStripped(_))
-            );
-        }
+        assert_eq!(reinsert_responses(&payload, &responses).unwrap(), payload);
     }
 
     /// Peers strip only responses worth stripping, so one too small to be worth it can't
@@ -545,7 +537,7 @@ mod tests {
 
         assert_matches!(
             reinsert_responses(&stripped, &responses),
-            Err(CanisterHttpPayloadError::NotWorthStripping(hash)) if hash == hash_of(&tiny)
+            Err(CanisterHttpPayloadError::MismatchedStrippedResponses)
         );
     }
 
@@ -567,7 +559,7 @@ mod tests {
 
         assert_matches!(
             reinsert_responses(&stripped, &responses),
-            Err(CanisterHttpPayloadError::UnusedResponse(hash)) if hash == hash_of(&other)
+            Err(CanisterHttpPayloadError::MismatchedStrippedResponses)
         );
     }
 
