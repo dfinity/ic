@@ -188,6 +188,11 @@ pub struct Args {
     /// Default is 100000 blocks per batch.
     #[arg(long = "balance-sync-batch-size")]
     pub balance_sync_batch_size: Option<u64>,
+
+    /// Use standard ICRC-3 endpoints (icrc3_get_blocks) for block synchronization
+    /// instead of the legacy get_blocks endpoint.
+    #[arg(long = "icrc3", default_value = "false")]
+    pub icrc3: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -205,6 +210,7 @@ pub struct ParsedConfig {
     pub sqlite_max_cache_kb: Option<i64>,
     pub flush_cache_shrink_mem: bool,
     pub balance_sync_batch_size: Option<u64>,
+    pub icrc3: bool,
 }
 
 impl ParsedConfig {
@@ -252,6 +258,7 @@ impl ParsedConfig {
             sqlite_max_cache_kb: args.sqlite_max_cache_kb,
             flush_cache_shrink_mem: args.flush_cache_shrink_mem,
             balance_sync_batch_size: args.balance_sync_batch_size,
+            icrc3: args.icrc3,
         })
     }
 
@@ -332,6 +339,7 @@ mod tests {
             sqlite_max_cache_kb: None,
             flush_cache_shrink_mem: false,
             balance_sync_batch_size: Some(100000),
+            icrc3: false,
         }
     }
 
