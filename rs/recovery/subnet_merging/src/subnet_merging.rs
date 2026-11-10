@@ -180,8 +180,11 @@ impl SubnetMerging {
     /// 1) They are two different subnets;
     /// 2) Both are `Application` (or `VerifiedApplication`) subnets;
     /// 3) Neither holds any chain keys;
-    /// 4) The destination subnet is not cooling down;
-    /// 5) Both have the same subnet type, cycles cost schedule, subnet admins
+    /// 4) Neither is halted (`is_halted`), as a halted subnet never reaches the
+    ///    CUP it is halted at by the tool (which sets `halt_at_cup_height`, but
+    ///    never `is_halted`);
+    /// 5) The destination subnet is not cooling down;
+    /// 6) Both have the same subnet type, cycles cost schedule, subnet admins
     ///    and SEV setting.
     fn check_subnets_preconditions(
         recovery: &Recovery,
@@ -226,8 +229,9 @@ impl SubnetMerging {
             // Checked for each subnet on its own, by
             // `get_and_pre_validate_subnet_record`.
             is_halted: _,
-            halt_at_cup_height: _,
             chain_key_config: _,
+            // Set by the tool itself to halt both subnets.
+            halt_at_cup_height: _,
             // Capacity, left to the merge step.
             max_number_of_canisters: _,
             resource_limits: _,
@@ -333,6 +337,10 @@ impl SubnetMerging {
             .is_some_and(|chain_key_config| !chain_key_config.key_configs.is_empty())
         {
             return validation_error("Subnet should not hold any chain keys".to_string());
+        }
+
+        if subnet_record.is_halted {
+            return validation_error("Subnet should not be halted".to_string());
         }
 
         let subnet_type = subnet_record
