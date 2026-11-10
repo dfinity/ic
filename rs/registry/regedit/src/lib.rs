@@ -12,7 +12,7 @@ use anyhow::{Result, anyhow};
 use args::{Command, RegistrySpec, SourceSpec, VersionSpec, universal_projection};
 use ic_base_types::RegistryVersion;
 use ic_registry_local_store::{
-    KeyMutation, LocalStoreImpl, LocalStoreWriter, changelog_to_compact_delta,
+    ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter, changelog_to_compact_delta,
 };
 use normalization::NormalizedSnapshot;
 use serde_json::Value;
@@ -49,7 +49,7 @@ fn registry_spec_to_delta_pb(
     let local_store_changelog = registry_changelogs.into_iter().fold(vec![], |mut cl, r| {
         let v_delta = (r.version - start_version).get() + 1;
         if cl.len() < v_delta as usize {
-            cl.push(Vec::new())
+            cl.push(ChangelogEntry::default())
         }
         cl.last_mut().unwrap().push(KeyMutation {
             key: r.key.clone(),

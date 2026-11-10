@@ -6,7 +6,7 @@ use std::time::Duration;
 use url::Url;
 
 use ic_canister_client::{Agent, Sender};
-use ic_interfaces_registry::RegistryRecord;
+use ic_interfaces_registry::{RegistryRecord, RegistryUpdates};
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
     Error, GetChunk, dechunkify_delta, dechunkify_get_value_response_content,
@@ -173,7 +173,7 @@ impl RegistryCanister {
         &self,
         version: u64,
         nns_public_key: &ThresholdSigPublicKey,
-    ) -> Result<(Vec<RegistryRecord>, RegistryVersion, Time), Error> {
+    ) -> Result<(RegistryUpdates, RegistryVersion, Time), Error> {
         let payload = serialize_get_changes_since_request(version).unwrap();
         let response = self
             .choose_random_agent()
