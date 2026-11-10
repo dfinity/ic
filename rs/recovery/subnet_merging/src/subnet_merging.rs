@@ -93,8 +93,11 @@ pub struct SubnetMergingArgs {
 
     /// How long to wait, in seconds, for a subnet to reach the CUP it halts at.
     /// The step waiting for it is meant to be run once the proposal halting the
-    /// subnet has been executed, so the next CUP is at most a DKG interval away.
-    #[clap(long, default_value = "600")]
+    /// subnet has been executed. The subnet halts at the first CUP whose
+    /// registry version has the subnet scheduled to halt. As a DKG summary
+    /// takes its registry version from the previous summary, that CUP can be up
+    /// to two DKG intervals away.
+    #[clap(long, default_value = "1800")]
     pub halt_timeout_secs: u64,
 
     /// How long to wait, in seconds, for the proposal labeling the source
