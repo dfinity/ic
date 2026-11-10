@@ -1448,3 +1448,96 @@ mod submit_pending_requests {
         mutate_state(|s| s.ecdsa_public_key = Some(ecdsa_public_key()))
     }
 }
+
+mod process_maybe_finalized_transactions {
+    use crate::process_maybe_finalized_transactions;
+    use crate::state::eventlog::CkBtcEventLogger;
+    use crate::state::{
+        ChangeOutput, RetrieveBtcRequest, SubmittedBtcTransaction, mutate_state, read_state,
+    };
+    use crate::test_fixtures::mock::{MockCanisterRuntime, mock_increasing_time};
+    use crate::test_fixtures::{NOW, ignored_utxo, init_args, init_state, minter, utxo};
+    use icrc_ledger_types::icrc1::account::Account;
+    use std::collections::BTreeMap;
+    use std::time::Duration;
+
+    #[test]
+    fn should_not_import_utxos_sent_by_third_parties_to_the_main_address() {
+        init_state(init_args());
+
+        let main_account = Account {
+            owner: minter(),
+            subaccount: None,
+        };
+
+        // A transaction submitted by the minter whose change output is the
+        // UTXO returned by `utxo()`.
+        let change_utxo = utxo();
+        let submitted_tx = SubmittedBtcTransaction {
+            requests: vec![retrieve_btc_request()].into(),
+            txid: change_utxo.outpoint.txid,
+            used_utxos: vec![],
+            submitted_at: 0,
+            change_output: Some(ChangeOutput {
+                vout: change_utxo.outpoint.vout,
+                value: change_utxo.value,
+            }),
+            effective_fee_per_vbyte: None,
+            withdrawal_fee: None,
+            signed_tx: None,
+        };
+        mutate_state(|s| s.submitted_transactions.push(submitted_tx.clone()));
+
+        // A UTXO sent to the minter's main address by a third party. It does not
+        // correspond to any change output of a minter transaction and was never
+        // screened by the Bitcoin checker.
+        let third_party_utxo = ignored_utxo();
+
+        let mut runtime = MockCanisterRuntime::new();
+        mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
+        runtime.expect_event_logger().return_const(CkBtcEventLogger);
+
+        let mut maybe_finalized_transactions =
+            BTreeMap::from([(submitted_tx.txid, submitted_tx.clone())]);
+
+        mutate_state(|s| {
+            process_maybe_finalized_transactions(
+                s,
+                &mut maybe_finalized_transactions,
+                vec![change_utxo.clone(), third_party_utxo.clone()],
+                main_account,
+                &runtime,
+            )
+        });
+
+        read_state(|s| {
+            assert!(
+                s.available_utxos.contains(&change_utxo),
+                "the minter's own change output must enter the reserve"
+            );
+            assert!(
+                !s.available_utxos.contains(&third_party_utxo),
+                "unscreened third-party UTXO must not enter the reserve"
+            );
+            assert_eq!(
+                s.tokens_minted, change_utxo.value,
+                "only the screened change output must be accounted for"
+            );
+        });
+
+        // The submitted transaction is finalized once its change output appears.
+        assert!(maybe_finalized_transactions.is_empty());
+        read_state(|s| assert!(s.submitted_transactions.is_empty()));
+    }
+
+    fn retrieve_btc_request() -> RetrieveBtcRequest {
+        RetrieveBtcRequest {
+            amount: 10_000,
+            address: crate::test_fixtures::bitcoin_address(),
+            block_index: 0,
+            received_at: 0,
+            kyt_provider: None,
+            reimbursement_account: None,
+        }
+    }
+}
