@@ -88,6 +88,8 @@ pub(crate) fn get_subnet_record_at_version(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
 ) -> RecoveryResult<Option<SubnetRecord>> {
+    // Called only to poll the `RegistryReplicator`, so that the local store has
+    // caught up with `registry_version`; the latest version itself is not needed.
     let _ = registry_helper.latest_registry_version()?;
 
     registry_helper

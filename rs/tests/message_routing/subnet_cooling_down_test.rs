@@ -96,11 +96,15 @@ Runbook::
    counter is read via a query to `T`; `UM` sits on `M`, which answers no query,
    so `M`'s count of the rounds it skipped canister execution in stands in for
    it.
-12. The tool sets the `halt_at_cup_height` flag of both `M` and `R` and waits
-   until the node of each that the state is taken from holds the CUP its subnet
-   halts at -- served at its public endpoint, written to its disk, and with the
-   state it names certified (`Halt*SubnetAtCupHeight`,
-   `WaitForHaltingCupOn*Subnet`).
+12. The tool sets the `halt_at_cup_height` flag of both `M` and `R`, and waits
+   until the node of each that the state is taken from serves the CUP its
+   subnet halts at (`Halt*SubnetAtCupHeight`, `WaitForHaltingCupOn*Subnet`).
+   After `WaitForHaltingCupOnDestinationSubnet`: check that both subnets are
+   halted, i.e. that every one of their nodes certifies the height its subnet
+   halts at and none goes past it, even after `HALT_OBSERVATION_PERIOD`. The
+   tool then waits until each of those nodes has also written the halting CUP
+   to its disk and certified the state it names
+   (`WaitForHaltingCheckpointOn*Subnet`).
 13. The tool stops the replicas of both subnets, downloads the states they
    halted at, validates each against the CUP it was taken at and the subnet's
    public key in the NNS signed state tree, and assembles the merged state
@@ -161,12 +165,15 @@ end::catalog[] */
 
 use anyhow::{Result, anyhow, bail};
 use candid::{Decode, Encode, Principal};
-use ic_agent::{Agent, RequestId, agent::RequestStatusResponse};
+use ic_agent::{
+    Agent, RequestId,
+    agent::{RejectCode, RequestStatusResponse},
+};
 use ic_management_canister_types::{
     ListCanisterSnapshotsArgs, ListCanisterSnapshotsResult, SnapshotId, TakeCanisterSnapshotArgs,
     TakeCanisterSnapshotResult,
 };
-use ic_recovery::{RecoveryArgs, file_sync_helper};
+use ic_recovery::{RecoveryArgs, file_sync_helper, get_node_metrics, util::DataLocation};
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_merging::{
     metrics_helper::{
@@ -198,7 +205,7 @@ use ic_system_test_driver::util::{
 use ic_types::Height;
 use ic_universal_canister::management::InstallMode;
 use ic_universal_canister::{
-    CallInterface, call_args, get_universal_canister_wasm, management, wasm,
+    CallInterface, PayloadBuilder, call_args, get_universal_canister_wasm, management, wasm,
 };
 use slog::{Logger, info};
 use std::net::IpAddr;
@@ -309,9 +316,6 @@ const MERGING_DIR: &str = "subnet_merging";
 /// before the subnet started cooling down are pruned, i.e. at their (up to
 /// `MAX_INGRESS_TTL` = 5 minutes away) expiry times.
 const MERGE_READY_TIMEOUT: Duration = Duration::from_secs(2400);
-/// Timeout for a subnet to reach the CUP it halts at, which is up to a full DKG
-/// interval away.
-const HALT_TIMEOUT: Duration = Duration::from_secs(900);
 /// Timeout for the registry to reflect a proposal that `ic-admin` reported as
 /// executed.
 const REGISTRY_TIMEOUT: Duration = Duration::from_secs(300);
@@ -319,6 +323,12 @@ const REGISTRY_TIMEOUT: Duration = Duration::from_secs(300);
 /// waits for. Longer than a driver retry because every evaluation scrapes the
 /// metrics of all subnets.
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
+/// Timeout for a subnet to reach the CUP it halts at. As a DKG summary takes
+/// its registry version from the previous summary, that CUP is up to two DKG
+/// intervals, i.e. about `2 * (DKG_INTERVAL_LENGTH + 1)` = 1000 rounds, away.
+/// Shorter than the default of the tool so that the test fits into the timeout
+/// of its Bazel target.
+const HALT_TIMEOUT: Duration = Duration::from_secs(1200);
 
 /// Timeout for an ingress message that was in progress across the merge to
 /// complete once the loop it is waiting for is broken. Generous because the
@@ -335,6 +345,10 @@ const INDUCTION_BACKOFF: Duration = Duration::from_secs(1);
 
 /// How long the loops are observed to be stalled (step 11).
 const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
+
+/// How long the certified heights of the nodes of `M` and `R` are observed to
+/// stay at the height their subnet halts at (step 12).
+const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 
 /// Timeouts of the test itself: draining the `install_code` calls dominates,
 /// the rest of the scenario takes a couple of minutes. The overall timeout
@@ -769,8 +783,8 @@ fn merge(env: &TestEnv, context: &Context, runtime: &Runtime) {
         readonly_pub_key: Some(readonly_pub_key),
         readonly_key_file: Some(ssh_priv_key_path),
         keep_downloaded_state: Some(false),
-        download_node_source: Some(context.m_node.get_ip_addr()),
-        download_node_destination: Some(context.r_node.get_ip_addr()),
+        download_node_source: Some(DataLocation::Remote(context.m_node.get_ip_addr())),
+        download_node_destination: Some(DataLocation::Remote(context.r_node.get_ip_addr())),
         upload_node_destination: Some(context.r_node.get_ip_addr()),
         merge_ready_timeout_secs: MERGE_READY_TIMEOUT.as_secs(),
         halt_timeout_secs: HALT_TIMEOUT.as_secs(),
@@ -804,6 +818,9 @@ fn merge(env: &TestEnv, context: &Context, runtime: &Runtime) {
                 runtime.block_on(check_ingress_and_queries_rejected(context))
             }
             StepType::CheckMergeReadiness => runtime.block_on(check_loops_stalled(context)),
+            StepType::WaitForHaltingCupOnDestinationSubnet => {
+                runtime.block_on(check_subnets_halted(context))
+            }
             StepType::UnhaltDestinationSubnet => runtime.block_on(verify_after_merge(context)),
             StepType::DeleteSourceSubnet => {
                 runtime.block_on(check_source_subnet_deleted(&topology, context))
@@ -813,6 +830,99 @@ fn merge(env: &TestEnv, context: &Context, runtime: &Runtime) {
     }
 
     info!(logger, "Subnet M has been merged into subnet R and deleted");
+}
+
+/// Step 12: check that `M` and `R` are halted, i.e. that every one of their
+/// nodes certifies the height its subnet halts at, and that it still does so
+/// after `HALT_OBSERVATION_PERIOD`.
+///
+/// The tool only waits for the node of each subnet the state would be
+/// downloaded from, so the other nodes are waited for to catch up with the
+/// halting height.
+async fn check_subnets_halted(context: &Context) {
+    let logger = &context.logger;
+    let subnets = [
+        (&context.m_subnet, &context.m_node),
+        (&context.r_subnet, &context.r_node),
+    ];
+    let mut halting_heights = Vec::new();
+
+    for (subnet, download_node) in subnets {
+        let subnet_id = subnet.subnet_id;
+        // The tool has checked that the download node serves the CUP the subnet
+        // halts at, and no CUP follows that one.
+        let download_node = download_node.get_ip_addr();
+        let halting_height = get_node_metrics(logger, &download_node)
+            .await
+            .unwrap_or_else(|| panic!("failed to get the metrics of node {download_node}"))
+            .catch_up_package_height;
+        info!(
+            logger,
+            "Step 12: Waiting until every node of subnet {subnet_id} has certified the height \
+             {halting_height} it halts at"
+        );
+        retry_with_msg_async!(
+            format!(
+                "waiting until every node of subnet {subnet_id} has certified height \
+                 {halting_height}"
+            ),
+            logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                for node in subnet.nodes() {
+                    let ip = node.get_ip_addr();
+                    let Some(metrics) = get_node_metrics(logger, &ip).await else {
+                        bail!("failed to get the metrics of node {ip}");
+                    };
+                    let height = metrics.certification_height;
+                    assert!(
+                        height <= halting_height,
+                        "node {ip} of subnet {subnet_id} certified height {height}, past the \
+                         height {halting_height} the subnet halts at"
+                    );
+                    if height < halting_height {
+                        bail!(
+                            "node {ip} of subnet {subnet_id} has certified up to height {height}"
+                        );
+                    }
+                }
+                Ok(())
+            }
+        )
+        .await
+        .expect("not every node certified the height its subnet halts at");
+        info!(
+            logger,
+            "Step 12: every node of subnet {subnet_id} has certified the height {halting_height} \
+             it halts at"
+        );
+        halting_heights.push(halting_height);
+    }
+
+    info!(
+        logger,
+        "Step 12: Checking that the certified heights stay put over {HALT_OBSERVATION_PERIOD:?}"
+    );
+    tokio::time::sleep(HALT_OBSERVATION_PERIOD).await;
+    for ((subnet, _), halting_height) in subnets.into_iter().zip(halting_heights) {
+        let subnet_id = subnet.subnet_id;
+        for node in subnet.nodes() {
+            let ip = node.get_ip_addr();
+            let height = get_node_metrics(logger, &ip)
+                .await
+                .unwrap_or_else(|| panic!("failed to get the metrics of node {ip}"))
+                .certification_height;
+            assert_eq!(
+                height, halting_height,
+                "node {ip} of subnet {subnet_id} certified height {height} rather than the \
+                 height {halting_height} the subnet halts at, {HALT_OBSERVATION_PERIOD:?} after \
+                 reaching it"
+            );
+        }
+    }
+
+    info!(logger, "Step 12 done: subnets M and R are halted");
 }
 
 /// Step 9: wait until the replicas of `M` observed the "cooling down" label,
@@ -893,6 +1003,9 @@ async fn check_ingress_and_queries_rejected(context: &Context) {
 /// `M`, which answers no query, so the number of rounds `M` skipped canister
 /// execution in stands in for it: while that keeps growing, `M` executes no
 /// canister message at all, the next iteration of `UM`'s loop included.
+///
+/// Iterations whose call to `UM` was rejected with `SYS_TRANSIENT` do not
+/// count (see `start_call_loop`).
 async fn check_loops_stalled(context: &Context) {
     let logger = &context.logger;
     info!(
@@ -1232,14 +1345,17 @@ async fn await_ingress_message_replied(
 /// triggered this iteration) as soon as it has fired the call to `peer`. This
 /// keeps the number of open call contexts bounded (had it not replied, every
 /// iteration would have left behind one open call context) and it makes each
-/// iteration consist of one loopback call plus one cross-subnet call.
+/// iteration consist of one self-call plus one cross-subnet call.
+///
+/// The iteration counter (the global counter of `canister`) does not count the
+/// iterations whose call to `peer` was rejected with `SYS_TRANSIENT`, so that
+/// it stalls while messages to `peer` are held back, e.g. because `peer`'s
+/// subnet is cooling down.
 async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
-    // The continuation, executed by the reply and reject callbacks of the call
-    // to `peer`: call `canister` itself with the loop body it holds in its
-    // global data as the payload. Neither callback of this call may reply, as
-    // the call context it is made in was already responded by the loop body.
-    let continuation = wasm()
-        .call_simple(
+    // The continuation: run `ops`, then re-enter the loop body. Its callbacks
+    // must not reply, as the loop body has already replied.
+    let continuation = |ops: PayloadBuilder| {
+        ops.call_simple(
             canister.canister_id(),
             "update",
             call_args()
@@ -1247,18 +1363,21 @@ async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
                 .on_reply(wasm().noop())
                 .on_reject(wasm().noop()),
         )
-        .build();
-    // The loop body: bump the iteration counter, fire a call to `peer` (which
-    // merely replies) with the continuation as both callbacks, then reply.
+        .build()
+    };
+    // The loop body: call `peer`, counting the iteration unless the call is
+    // rejected with `SYS_TRANSIENT`, and continue the loop.
     let loop_body = wasm()
-        .inc_global_counter()
         .call_simple(
             peer,
             "update",
             call_args()
                 .other_side(wasm().reply_data(&[]))
-                .on_reply(continuation.clone())
-                .on_reject(continuation),
+                .on_reply(continuation(wasm().inc_global_counter()))
+                .on_reject(continuation(wasm().reject_code().int_to_blob().if_neq(
+                    (RejectCode::SysTransient as u32).to_le_bytes(),
+                    wasm().inc_global_counter(),
+                ))),
         )
         .reply_data(&[])
         .build();

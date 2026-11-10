@@ -63,10 +63,6 @@ impl ValidatedPoolReader<SignedIngress> for FakeIngressPool {
     fn get(&self, id: &IngressMessageId) -> Option<SignedIngress> {
         self.ingresses.get(id).cloned()
     }
-
-    fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = SignedIngress> + '_> {
-        unimplemented!()
-    }
 }
 
 struct FakeIDkgPool {
@@ -76,10 +72,6 @@ struct FakeIDkgPool {
 impl ValidatedPoolReader<IDkgMessage> for FakeIDkgPool {
     fn get(&self, id: &IDkgArtifactId) -> Option<IDkgMessage> {
         self.dealings.get(id).cloned().map(IDkgMessage::Dealing)
-    }
-
-    fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = IDkgMessage> + '_> {
-        unimplemented!()
     }
 }
 
@@ -127,7 +119,7 @@ fn set_up_assembler(
         Arc::new(RwLock::new(ingress_pool)),
         Arc::new(RwLock::new(idkg_pool)),
         Arc::new(RwLock::new(canister_http_pool)),
-        Arc::new(mock_bouncer_factory),
+        mock_bouncer_factory,
         MetricsRegistry::new(),
         NODE_1,
     )

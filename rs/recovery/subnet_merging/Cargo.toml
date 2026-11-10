@@ -10,6 +10,7 @@ documentation.workspace = true
 anyhow = { workspace = true }
 clap = { workspace = true }
 futures = { workspace = true }
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types/" }
 ic-cup-explorer = { path = "../../cup_explorer" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
@@ -22,6 +23,7 @@ ic-state-layout = { path = "../../state_layout" }
 ic-subnet-tools = { path = "../subnet_tools" }
 ic-types = { path = "../../types/types" }
 prometheus-parse = { workspace = true }
+prost = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

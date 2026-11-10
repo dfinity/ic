@@ -74,9 +74,14 @@ Key implementation details:
 | `GITHUB_TOKEN` | yes | Token used to authenticate the snapshot POST. If unset the job raises. |
 | `GITHUB_REPOSITORY` | yes | `owner/repo` used to build the snapshot URL. |
 | `GITHUB_RUN_ID` | yes | Used as the submission job id. |
-| `GITHUB_REF` | yes | Git ref recorded on the snapshot. |
-| `GITHUB_SHA` / `GITHUB_PR_SHA` | yes | Commit recorded on the snapshot (`GITHUB_PR_SHA` wins if set). |
+| `GITHUB_REF` | outside PRs | Git ref recorded on the snapshot. Ignored for a PR snapshot. |
+| `GITHUB_SHA` / `GITHUB_PR_SHA` | yes | Commit recorded on the snapshot: `GITHUB_PR_SHA` for a PR snapshot, otherwise `GITHUB_SHA`. |
 | `GITHUB_WORKSPACE` / `GITHUB_PR_DIR` | yes | Directory containing `Cargo.Bazel.toml.lock` (`GITHUB_PR_DIR` wins if set). |
+| `GITHUB_EVENT_PATH` | for PRs | Event payload written by the runner. A PR snapshot is recorded under `refs/pull/<pull_request.number>/head`, never under `GITHUB_REF` (which is the base branch under `pull_request_target`). |
+
+A PR snapshot is one where `GITHUB_PR_DIR` or `GITHUB_PR_SHA` is set. Both are
+then required, as is a pull request number in the event payload. The job also
+refuses to run for a `pull_request*` event without them.
 
 ## CI jobs that use this job
 
@@ -101,7 +106,9 @@ Key implementation details:
      `pr/` (sparse checkout of just `Cargo.Bazel.toml.lock`).
   2. Runs `job/bazel_rust_gh_submission_job.py` from the `base/` checkout but with
      `GITHUB_PR_DIR` pointing at the `pr/` checkout, so the **PR's** lock file is
-     submitted as a snapshot for the PR's head commit.
+     submitted as a snapshot for the PR's head commit under the ref
+     `refs/pull/<number>/head`. It is never recorded under `master`, so a PR
+     cannot replace the default branch's dependency graph.
   3. Runs [`actions/dependency-review-action`][gh-dep-review] with
      `fail-on-severity: moderate`, which compares the submitted snapshot against
      the base and fails the PR if it introduces dependencies with known

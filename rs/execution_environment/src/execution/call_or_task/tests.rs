@@ -6,19 +6,20 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     CallOrigin,
-    canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES},
+    canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES, system_state::ConnectionMetrics},
 };
 use ic_state_machine_tests::WasmResult;
 use ic_sys::PAGE_SIZE;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
-use ic_types::{NumBytes, NumInstructions, NumOsPages};
+use ic_types::{CanisterId, NumBytes, NumInstructions, NumOsPages};
 use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::assert_gt;
+use std::collections::BTreeMap;
 use std::time::Duration;
 
-use ic_config::embedders::StableMemoryPageLimit;
+use ic_config::embedders::MemoryPageLimit;
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status,
 };
@@ -120,7 +121,7 @@ fn with_update_and_replicated_query<F: Fn(&str)>(test: F) {
 #[test]
 fn can_write_to_each_page_in_stable_memory() {
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(10),
             message: NumOsPages::new(10),
             query: NumOsPages::new(10),
@@ -624,7 +625,7 @@ fn dirty_pages_cost_the_same_on_app_and_system_subnets() {
 fn hitting_page_delta_limit_fails_message() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(no_pages),
             message: NumOsPages::new(no_pages),
             query: NumOsPages::new(no_pages),
@@ -651,7 +652,7 @@ fn hitting_page_delta_limit_fails_message() {
 fn hitting_page_delta_limit_fails_message_system_subnet() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(no_pages),
             message: NumOsPages::new(no_pages),
             query: NumOsPages::new(no_pages),
@@ -681,7 +682,7 @@ fn hitting_page_delta_limit_fails_for_install_code() {
     // A large enough limit that will never be triggered.
     let no_pages_other_messages = no_pages_upgrade * 10_000_000;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(no_pages_upgrade),
             message: NumOsPages::new(no_pages_other_messages),
             query: NumOsPages::new(no_pages_other_messages),
@@ -713,7 +714,7 @@ fn hitting_page_delta_limit_fails_for_install_code() {
 fn hitting_page_delta_limit_fails_non_replicated_query() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(no_pages),
             message: NumOsPages::new(no_pages),
             query: NumOsPages::new(no_pages - 1),
@@ -737,7 +738,7 @@ fn hitting_page_delta_limit_fails_non_replicated_query() {
 fn hitting_page_delta_limit_fails_replicated_query() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(no_pages),
             message: NumOsPages::new(no_pages),
             query: NumOsPages::new(no_pages - 1),
@@ -759,7 +760,7 @@ fn hitting_page_delta_limit_fails_replicated_query() {
 fn hitting_access_limit_fails_non_replicated_query() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_access_limit(StableMemoryPageLimit {
+        .with_stable_memory_access_limit(MemoryPageLimit {
             message: NumOsPages::new(no_pages),
             upgrade: NumOsPages::new(no_pages),
             query: NumOsPages::new(no_pages - 1),
@@ -777,6 +778,177 @@ fn hitting_access_limit_fails_non_replicated_query() {
          {} KB for queries.",
          no_pages * (PAGE_SIZE as u64 / 1024), (no_pages - 1) * (PAGE_SIZE as u64 / 1024))
     );
+}
+
+/// A module whose update `go`, query `go` and `canister_init` read the given
+/// number of distinct Wasm heap pages, and whose update `go_sliced` reads
+/// `update_pages` pages in two halves separated by a long loop, so that the
+/// two halves run in different DTS slices.
+fn wat_reading_heap_pages(update_pages: u64, query_pages: u64, init_pages: u64) -> String {
+    let first_half = update_pages / 2;
+    let second_half = update_pages - first_half;
+    format!(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            ;; reads one byte of each of the `count` pages starting at `page`
+            (func $read (param $page i32) (param $count i32)
+                (loop $loop
+                    (br_if 1 (i32.eqz (local.get $count)))
+                    (drop (i32.load8_u (i32.mul (local.get $page) (i32.const {page_size}))))
+                    (local.set $page (i32.add (local.get $page) (i32.const 1)))
+                    (local.set $count (i32.sub (local.get $count) (i32.const 1)))
+                    (br $loop)
+                )
+            )
+            ;; about 400k instructions, more than one DTS slice
+            (func $burn (local $i i32)
+                (local.set $i (i32.const 100000))
+                (loop $loop
+                    (local.set $i (i32.sub (local.get $i) (i32.const 1)))
+                    (br_if $loop (local.get $i))
+                )
+            )
+            (func (export "canister_update update")
+                (call $read (i32.const 0) (i32.const {update_pages}))
+                (call $msg_reply)
+            )
+            (func (export "canister_update update_sliced")
+                (call $read (i32.const 0) (i32.const {first_half}))
+                (call $burn)
+                (call $read (i32.const {first_half}) (i32.const {second_half}))
+                (call $msg_reply)
+            )
+            (func (export "canister_query query")
+                (call $read (i32.const 0) (i32.const {query_pages}))
+                (call $msg_reply)
+            )
+            (func (export "canister_init")
+                (call $read (i32.const 0) (i32.const {init_pages}))
+            )
+            (memory (export "memory") 16)
+        )"#,
+        page_size = WASM_PAGE_SIZE_IN_BYTES,
+    )
+}
+
+const OS_PAGES_PER_WASM_PAGE: u64 = WASM_PAGE_SIZE_IN_BYTES as u64 / PAGE_SIZE as u64;
+
+fn wasm_heap_accessed_page_limit_error(
+    canister_id: CanisterId,
+    limit_wasm_pages: MemoryPageLimit,
+) -> String {
+    let kib = |pages: NumOsPages| pages.get() * (PAGE_SIZE as u64 / 1024);
+    format!(
+        "Error from Canister {canister_id}: Canister exceeded memory access limits: \
+        Exceeded the limit for the number of accessed pages in the Wasm heap in a \
+        single message execution: limit {} KB for regular messages, {} KB for upgrade \
+        messages and {} KB for queries.",
+        kib(limit_wasm_pages.message),
+        kib(limit_wasm_pages.upgrade),
+        kib(limit_wasm_pages.query),
+    )
+}
+
+/// The accessed heap page limit of the API type applies: regular messages,
+/// upgrade messages (including `canister_init`) and queries each have their
+/// own limit.
+#[test]
+fn hitting_wasm_heap_accessed_page_limit_uses_the_limit_of_the_api_type() {
+    let limit = MemoryPageLimit {
+        message: NumOsPages::new(2 * OS_PAGES_PER_WASM_PAGE),
+        upgrade: NumOsPages::new(4 * OS_PAGES_PER_WASM_PAGE),
+        query: NumOsPages::new(3 * OS_PAGES_PER_WASM_PAGE),
+    };
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_memory_accessed_page_limit(limit)
+        .build();
+
+    // Reading 3 pages is within the query and upgrade limits, but exceeds
+    // the limit for regular messages. `canister_init` reads 4 pages, which
+    // fits the upgrade limit only.
+    let canister_id = test
+        .canister_from_wat(wat_reading_heap_pages(3, 3, 4))
+        .unwrap();
+    let result = test.non_replicated_query(canister_id, "query", vec![]);
+    assert_eq!(result, Ok(WasmResult::Reply(vec![])));
+    let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &wasm_heap_accessed_page_limit_error(canister_id, limit),
+    );
+
+    // One page more than the query limit.
+    let canister_id = test
+        .canister_from_wat(wat_reading_heap_pages(1, 4, 1))
+        .unwrap();
+    let err = test
+        .non_replicated_query(canister_id, "query", vec![])
+        .unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &wasm_heap_accessed_page_limit_error(canister_id, limit),
+    );
+
+    // One page more than the upgrade limit.
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    let err = test
+        .install_canister(
+            canister_id,
+            wat::parse_str(wat_reading_heap_pages(1, 1, 5)).unwrap(),
+        )
+        .unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &wasm_heap_accessed_page_limit_error(canister_id, limit),
+    );
+}
+
+/// The accessed heap pages of a message accumulate across DTS slices: a
+/// message that stays within the limit in every slice but crosses it over
+/// the whole execution fails in the later slice.
+#[test]
+fn dts_wasm_heap_accessed_pages_accumulate_across_slices() {
+    let limit = NumOsPages::new(3 * OS_PAGES_PER_WASM_PAGE);
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_memory_accessed_page_limit(MemoryPageLimit {
+            message: limit,
+            upgrade: limit,
+            query: limit,
+        })
+        .with_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(200_000)
+        .with_manual_execution()
+        .build();
+
+    // 3 pages in total, 1 + 2 around the slice boundary: fits.
+    let canister_id = test
+        .canister_from_wat(wat_reading_heap_pages(3, 1, 1))
+        .unwrap();
+    let (ingress_id, _) = test.ingress_raw(canister_id, "update_sliced", vec![]);
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+    test.execute_message(canister_id);
+    let result = check_ingress_status(test.ingress_status(&ingress_id));
+    assert_eq!(result, Ok(WasmResult::Reply(vec![])));
+
+    // 4 pages in total, 2 + 2 around the slice boundary: the second slice
+    // exceeds the limit.
+    let canister_id = test
+        .canister_from_wat(wat_reading_heap_pages(4, 1, 1))
+        .unwrap();
+    let (ingress_id, _) = test.ingress_raw(canister_id, "update_sliced", vec![]);
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+    test.execute_message(canister_id);
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterMemoryAccessLimitExceeded);
 }
 
 #[test]
@@ -1006,6 +1178,69 @@ fn dts_abort_of_replicated_execution_works() {
                 - test.canister_execution_cost(b_id).real()
         );
     });
+}
+
+#[test]
+fn dts_abort_of_replicated_execution_records_canister_metrics_once() {
+    // Test steps:
+    // 1. Canister A runs an update method that calls canister B.
+    // 2. The called update method of canister B runs with DTS.
+    // 3. The called update method is aborted.
+    // 4. The called update method resumes and succeeds.
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm()
+        .instruction_counter_is_at_least(1_000_000)
+        .push_bytes(&[42])
+        .append_and_reply()
+        .build();
+    let a = wasm().inter_update(b_id, call_args().other_side(b)).build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+
+    let request_time = test.time();
+    test.execute_slice(b_id);
+    assert_eq!(
+        test.canister_state(b_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+    test.abort_all_paused_executions();
+    test.advance_time(Duration::from_secs(1));
+    test.execute_message(b_id);
+
+    test.induct_messages();
+    test.execute_message(a_id);
+    let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![42]));
+
+    // The request from A is recorded once, when B first executes it, despite B executing it
+    // twice.
+    let canister_metrics = test.canister_state(b_id).system_state.canister_metrics();
+    assert_eq!(
+        canister_metrics
+            .load_metrics()
+            .local_subnet_messages_executed(),
+        1
+    );
+    assert_eq!(
+        canister_metrics.connection_metrics().get(),
+        &BTreeMap::from([(
+            a_id,
+            ConnectionMetrics {
+                last_access_timestamp: request_time,
+                count: 1,
+            }
+        )])
+    );
 }
 
 #[test]

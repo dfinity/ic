@@ -1,13 +1,15 @@
 use crate::target_subnet::TargetSubnet;
 
 use ic_base_types::SubnetId;
+use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     CHECKPOINTS, CUPS_DIR, IC_STATE, Recovery,
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{create_dir, read_file, write_file},
+    file_sync_helper::{create_dir, read_file, write_bytes, write_file},
 };
 use ic_state_layout::StateLayout;
 use ic_types::Height;
+use prost::Message;
 use serde::{Deserialize, Serialize};
 
 use std::path::{Path, PathBuf};
@@ -48,8 +50,10 @@ struct RecordedRegistryVersion {
 /// |  |-- nns.pem
 /// |  |-- ${source_subnet_id}.pruned_state_tree.cbor
 /// |  |-- ${destination_subnet_id}.pruned_state_tree.cbor
-/// |  |-- ${source_subnet_id}.halting_cup.pb
-/// |  |-- ${destination_subnet_id}.halting_cup.pb
+/// |  |-- halting_cup_${source_subnet_id}.pb
+/// |  |-- halting_cup_${destination_subnet_id}.pb
+/// |  |-- ${source_subnet_id}.on_disk_cup.pb
+/// |  |-- ${destination_subnet_id}.on_disk_cup.pb
 /// |  |-- (destination_|merged_)work_dir/
 /// |  |   |-- data/
 /// |  |   |   |-- cups/cup.types.v1.CatchUpPackage.pb
@@ -171,10 +175,11 @@ impl Layout {
             .join(format!("{subnet_id}.pruned_state_tree.cbor"))
     }
 
-    /// The copy of the CUP a subnet halted at that is pulled off its node while
-    /// waiting for the halt, before the state is downloaded.
-    pub(crate) fn halting_cup_file(&self, subnet_id: SubnetId) -> PathBuf {
-        self.root.join(format!("{subnet_id}.halting_cup.pb"))
+    /// The copy of the CUP the orchestrator of a node has written to disk,
+    /// pulled off the node while waiting for it to be the CUP the subnet halts
+    /// at, before the state is downloaded.
+    pub(crate) fn on_disk_cup_file(&self, subnet_id: SubnetId) -> PathBuf {
+        self.root.join(format!("{subnet_id}.on_disk_cup.pb"))
     }
 
     /// The CUP that came with the downloaded state, i.e. the one the validation
@@ -234,6 +239,24 @@ impl Layout {
         Recovery::get_latest_checkpoint_name_and_height(&self.checkpoints_dir(target_subnet))
             .map(|(_, height)| height)
     }
+
+    /// The file holding the CUP `subnet_id` halts at, as a
+    /// `types.v1.CatchUpPackage` protobuf, i.e. in the format of the CUP file
+    /// of a replica.
+    pub(crate) fn halting_cup_file(&self, subnet_id: SubnetId) -> PathBuf {
+        self.root.join(format!("halting_cup_{subnet_id}.pb"))
+    }
+
+    /// Records the CUP `subnet_id` halts at, as served by a node of the
+    /// subnet, so that the state downloaded later can be validated against it
+    /// without downloading the CUP again.
+    pub(crate) fn write_halting_cup(
+        &self,
+        subnet_id: SubnetId,
+        cup: &pb::CatchUpPackage,
+    ) -> RecoveryResult<()> {
+        write_bytes(&self.halting_cup_file(subnet_id), cup.encode_to_vec())
+    }
 }
 
 fn read_registry_version(path: &Path, source_subnet_id: SubnetId) -> RecoveryResult<u64> {
@@ -286,6 +309,36 @@ mod tests {
         let contents = encode_registry_version(subnet_id(1), 42);
         let err = decode_registry_version(&contents, subnet_id(2)).unwrap_err();
         assert!(err.contains("not for subnet"), "{err}");
+    }
+
+    #[test]
+    fn halting_cup_round_trips() {
+        let root =
+            std::env::temp_dir().join(format!("subnet_merging_layout_test_{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let layout = Layout {
+            root: root.clone(),
+            source_working_dir: root.join("work_dir"),
+            nns_public_key: root.join("nns.pem"),
+            merged_state_manifest: root.join("merged.manifest"),
+            merged_state_params: root.join("merged_state_params.json"),
+            cooling_down_registry_version: root.join(COOLING_DOWN_REGISTRY_VERSION_FILE),
+            merge_registry_version: root.join(MERGE_REGISTRY_VERSION_FILE),
+        };
+        let cup = pb::CatchUpPackage {
+            content: vec![1, 2, 3],
+            signature: vec![4, 5],
+            signer: None,
+        };
+
+        layout.write_halting_cup(subnet_id(1), &cup).unwrap();
+
+        assert_eq!(
+            pb::CatchUpPackage::read_from_file(layout.halting_cup_file(subnet_id(1))).unwrap(),
+            cup
+        );
+        assert!(pb::CatchUpPackage::read_from_file(layout.halting_cup_file(subnet_id(2))).is_err());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

@@ -17,6 +17,8 @@ on:
 
 permissions:
   contents: read
+  # For the Configure AWS credentials rehearsal of bazel-test-all-rbe.
+  id-token: write
 
 env:
   CI_EVENT_NAME: ${{ github.event_name }}
@@ -128,6 +130,11 @@ jobs:
     name: Bazel Test All on RBE
     continue-on-error: true
     needs: [config]
+    environment:
+      # Rehearsal of the Upload artifacts step of bazel-test-all (ci-main.yml), see the "Dry-run the
+      # artifact upload" step below: its AWS role can only be assumed from the `upload-artifacts`
+      # environment, which is only active on protected branches, where release builds run.
+      name: ${{ case(needs.config.outputs.release-build == 'true', 'upload-artifacts', '') }}
     # container.mount-scratch gives the runner a real ephemeral filesystem at /namespace/scratch.
     # The ic-os image builds put their scratch there, see the "Prepare the scratch directory" step below.
     runs-on: namespace-profile-rbe-driver-amd64-linux-16x32;container.mount-scratch=true
@@ -163,9 +170,9 @@ jobs:
         # step checks it and the other repository-cache steps are skipped when it is unset.
         NSC_CACHE_PATH: ${{ env.NSC_CACHE_PATH }}
     # A job timeout cancels the job, skipping the uploads of the bazel-namespace action, so this
-    # exceeds the steps' timeout-minutes (35 + 20 + 100 + 130 = 285) plus all other steps (setup,
+    # exceeds the steps' timeout-minutes (35 + 20 + 100 + 30 + 130 = 315) plus all other steps (setup,
     # uploads and reports take under a minute together).
-    timeout-minutes: 300
+    timeout-minutes: 320
     steps:
       - uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0
       - name: Set up Bazel Remote Execution
@@ -362,10 +369,56 @@ jobs:
         uses: ./.github/actions/bazel-namespace
         with:
           timeout-minutes: 90
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
+          # Compared with build-ic's execlogs-build-ic by the rbe-build-determinism job of
+          # ci-kickoff.yml, a rehearsal of ci-main.yml's build-determinism job for this build.
+          execlogs-artifact-name: execlogs-bazel-build-rbe
           run: |
             read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
             bazel build "${inferred_args[@]}" --target_pattern_file="$HOME/bazel-targets/build-targets"
+
+      # The two steps below rehearse the Configure AWS credentials and Upload artifacts steps of
+      # bazel-test-all (ci-main.yml) on a Namespace runner, where they have never run: OIDC role
+      # assumption from this container job, and the upload's `bazel run --check_up_to_date` under
+      # Build-without-the-Bytes in the bazel server of the build step. Nothing is uploaded to the CDN
+      # (DRY_RUN) and nothing is attested. Release builds only, like in ci-main.yml: only then does
+      # the job run in the `upload-artifacts` environment that the AWS role trusts (see `environment:`
+      # above) and is the build stamped. continue-on-error: a rehearsal failure must not skip the
+      # test step.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        if: needs.config.outputs.release-build == 'true'
+        continue-on-error: true
+        with:
+          role-session-name: "GitHub-Actions_ic_upload-artifacts"
+          role-to-assume: ${{ vars.AWS_ASSUME_ROLE }}
+          aws-region: eu-central-1
+          # Only proves that the role can be assumed from here: the dry run below never uploads, so the
+          # session is neither exported nor passed on.
+          output-env-credentials: false
+          output-credentials: false
+
+      - name: Dry-run the artifact upload
+        if: needs.config.outputs.release-build == 'true'
+        continue-on-error: true
+        timeout-minutes: 30 # Backstop, see "Infer Bazel Targets".
+        env:
+          # ci/src/artifacts/upload.sh skips rclone but still expands the CF_AWS_* variables, hence the
+          # placeholder credentials passed below.
+          DRY_RUN: '1'
+        uses: ./.github/actions/upload-artifacts
+        with:
+          name: Bazel Test All on RBE (dry run)
+          target: //:upload-artifacts
+          bazel-args: ${{ steps.infer-bazel-args.outputs.bazel-args }}
+          check-up-to-date: 'true'
+          bazel-action: bazel-namespace
+          timeout-minutes: 20
+          aws-access-key-id: dry-run
+          aws-secret-access-key: dry-run
+          aws-session-token: dry-run
+          cf-aws-access-key-id: dry-run
+          cf-aws-secret-access-key: dry-run
 
       - name: Bazel Test with RBE
         id: bazel-test
@@ -376,7 +429,7 @@ jobs:
         uses: ./.github/actions/bazel-namespace
         with:
           timeout-minutes: 120
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
           run: |
             read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
             test_targets="$HOME/bazel-targets/test-targets"
