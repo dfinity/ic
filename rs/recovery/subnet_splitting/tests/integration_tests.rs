@@ -160,11 +160,7 @@ fn load_metrics_e2e_test() {
             local_subnet_messages_executed_upper_bound,
             http_outcalls_executed,
             heartbeats_and_global_timers_executed,
-            // TODO: check me when PR on moving metrics collection is merged
-            //
-            // Not checked: the canister-to-canister requests in this test are inducted directly
-            // by the scheduler, so they are not recorded in the communication metrics.
-            canisters_with_broken_local_connections_lower_bound: _,
+            canisters_with_broken_local_connections_lower_bound: broken_connections,
         } = dbg!(
             ic_subnet_splitting::post_split_estimations::estimate(
                 canister_id_ranges,
@@ -248,6 +244,21 @@ fn load_metrics_e2e_test() {
         assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 15, 13);
         assert_eq_oriented!(http_outcalls_executed, 6, 4);
         assert_eq_oriented!(heartbeats_and_global_timers_executed, 341, 353);
+        let canisters_with_broken_local_connections =
+            broken_connections.map(|connections| connections.len() as u64);
+        assert_eq_oriented!(canisters_with_broken_local_connections, 2, 1);
+        // Each universal canister sends a single request to the one created before it, so every
+        // connection broken by the split carries exactly one request.
+        for (sender, receivers) in broken_connections
+            .source
+            .iter()
+            .chain(broken_connections.destination.iter())
+        {
+            assert!(
+                receivers.values().all(|&requests_sent| requests_sent == 1),
+                "{sender} should have sent a single request to each receiver, got {receivers:?}"
+            );
+        }
         // A single split cannot report some metrics in the original orientation and others in the
         // swapped one, so require all the orientation-sensitive metrics to agree on one labeling.
         assert!(
