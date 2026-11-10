@@ -23,32 +23,34 @@ pub(crate) mod testing {
     use super::*;
     use tokio::sync::watch::{Receiver, Sender, channel};
 
-    /// Mock implementation that records the notifications.
+    /// Mock implementation that counts the notifications.
     #[derive(Clone)]
     pub struct MockSystemdNotifier {
-        ready: (Sender<bool>, Receiver<bool>),
+        ready_count: (Sender<u32>, Receiver<u32>),
     }
 
     impl MockSystemdNotifier {
         pub fn new() -> Self {
             Self {
-                ready: channel(false),
+                ready_count: channel(0),
             }
         }
 
-        /// Wait until `self.notify_ready()` is called. If it has already been called
-        /// before, the function returns immediately.
-        pub async fn await_ready(&self) {
-            self.ready.1.clone().wait_for(|x| *x).await.unwrap();
+        /// Wait until `self.notify_ready()` has been called at least `count` times. If it has
+        /// already been called that often before, the function returns immediately.
+        pub async fn await_ready_count(&self, count: u32) {
+            self.ready_count
+                .1
+                .clone()
+                .wait_for(|x| *x >= count)
+                .await
+                .unwrap();
         }
     }
 
     impl SystemdNotifier for MockSystemdNotifier {
         fn notify_ready(&self) -> Result<()> {
-            self.ready
-                .0
-                .send(true)
-                .expect("Failed to send ready notification");
+            self.ready_count.0.send_modify(|x| *x += 1);
             Ok(())
         }
     }
