@@ -4,7 +4,7 @@ use candid::Encode;
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, HttpMethod};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_machine_tests::{StateMachine, two_subnets_simple};
-use ic_subnet_splitting::post_split_estimations::{LoadEstimates, StateSizeEstimates};
+use ic_subnet_splitting::post_split_estimations::PostSplitEstimations;
 use ic_test_utilities_logger::with_test_logger;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::CanisterId;
@@ -151,23 +151,28 @@ fn load_metrics_e2e_test() {
 
         // And finally use the `subnet-splitting-tool` to estimate the loads on each subnet after a
         // split.
-        let (
-            StateSizeEstimates { states_sizes_bytes },
-            LoadEstimates {
-                canisters_installed,
-                instructions_executed,
-                ingress_messages_executed,
-                remote_subnet_messages_executed_lower_bound,
-                local_subnet_messages_executed_upper_bound,
-                http_outcalls_executed,
-                heartbeats_and_global_timers_executed,
-            },
-        ) = dbg!(
+        let PostSplitEstimations {
+            states_sizes_bytes,
+            canisters_installed,
+            instructions_executed,
+            ingress_messages_executed,
+            remote_subnet_messages_executed_lower_bound,
+            local_subnet_messages_executed_upper_bound,
+            http_outcalls_executed,
+            heartbeats_and_global_timers_executed,
+            // TODO: check me when PR on moving metrics collection is merged
+            //
+            // Not checked: the canister-to-canister requests in this test are inducted directly
+            // by the scheduler, so they are not recorded in the communication metrics.
+            canisters_with_broken_local_connections_lower_bound: _,
+        } = dbg!(
             ic_subnet_splitting::post_split_estimations::estimate(
                 canister_id_ranges,
                 manifest_path,
                 load_samples_path,
                 load_samples_baseline_path,
+                communication_samples_path,
+                communication_samples_baseline_path,
             )
             .expect("Should succeed given valid inputs")
         );

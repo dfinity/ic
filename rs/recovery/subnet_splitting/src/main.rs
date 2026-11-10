@@ -1,11 +1,11 @@
 use anyhow::Context;
 use clap::Parser;
-use colored::Colorize;
+use colored::{Color, Colorize};
 use ic_base_types::SubnetId;
 use ic_recovery::{NeuronArgs, RecoveryArgs, cli, util};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_subnet_splitting::{
-    post_split_estimations::{self, Estimates, LoadEstimates, StateSizeEstimates},
+    post_split_estimations::{self, BrokenConnections, Estimates, PostSplitEstimations},
     subnet_splitting::{SubnetSplitting, SubnetSplittingArgs},
 };
 use ic_subnet_tools::{utils::canister_id_ranges_to_strings, validation::validate_artifacts};
@@ -13,7 +13,7 @@ use ic_types::ReplicaVersion;
 use slog::{Logger, info, warn};
 use url::Url;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const FORUM_ANNOUNCEMENT_TEMPLATE_URL: &str =
     "https://wiki.internetcomputer.org/wiki/Subnet_splitting_forum_announcement_template";
@@ -78,6 +78,10 @@ struct ValidateArgs {
     source_subnet_id: SubnetId,
 }
 
+/// Maximum number of broken connections printed per subnet when no
+/// [`EstimateArgs::broken_connections_output_path`] is given.
+const MAX_BROKEN_CONNECTIONS_TO_PRINT: usize = 50;
+
 #[derive(Parser)]
 struct EstimateArgs {
     /// The canister ID ranges to be moved to the destination subnet.
@@ -99,6 +103,21 @@ struct EstimateArgs {
     /// estimate the load which occurred in the time frame between the two samples were collected.
     #[clap(long)]
     load_samples_baseline_path: PathBuf,
+
+    /// Path to a CSV file containing a sample of subnet-local communication metrics (number of
+    /// requests sent from each canister to each other canister) on the source subnet.
+    #[clap(long)]
+    communication_samples_path: PathBuf,
+
+    /// Path to a CSV file containing an older sample of subnet-local communication metrics on the
+    /// source subnet. Used in the same way as [`EstimateArgs::load_samples_baseline_path`].
+    #[clap(long)]
+    communication_samples_baseline_path: PathBuf,
+
+    /// (Optional) path to a CSV file to write all the subnet-local connections broken by the split
+    /// to. If not set, they are printed instead, unless there are too many of them.
+    #[clap(long)]
+    broken_connections_output_path: Option<PathBuf>,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -202,22 +221,23 @@ fn do_validate(args: ValidateArgs, logger: Logger) -> anyhow::Result<()> {
 }
 
 fn do_estimate(args: EstimateArgs, _logger: Logger) -> anyhow::Result<()> {
-    let (
-        StateSizeEstimates { states_sizes_bytes },
-        LoadEstimates {
-            canisters_installed,
-            instructions_executed,
-            ingress_messages_executed,
-            remote_subnet_messages_executed_lower_bound,
-            local_subnet_messages_executed_upper_bound,
-            http_outcalls_executed,
-            heartbeats_and_global_timers_executed,
-        },
-    ) = post_split_estimations::estimate(
+    let PostSplitEstimations {
+        states_sizes_bytes,
+        canisters_installed,
+        instructions_executed,
+        ingress_messages_executed,
+        remote_subnet_messages_executed_lower_bound,
+        local_subnet_messages_executed_upper_bound,
+        http_outcalls_executed,
+        heartbeats_and_global_timers_executed,
+        canisters_with_broken_local_connections_lower_bound: broken_connections,
+    } = post_split_estimations::estimate(
         args.canister_id_ranges_to_move,
         args.state_manifest_path,
         args.load_samples_path,
         args.load_samples_baseline_path,
+        args.communication_samples_path,
+        args.communication_samples_baseline_path,
     )
     .context("Failed to estimate the load")?;
 
@@ -252,7 +272,25 @@ fn do_estimate(args: EstimateArgs, _logger: Logger) -> anyhow::Result<()> {
             "Estimated number of heartbeats and global timers made on both subnets",
             &heartbeats_and_global_timers_executed,
         ),
+        (
+            "Canisters whose local subnet messages would become remote (lower bound)",
+            &broken_connections.map(|connections| connections.len() as u64),
+        ),
     ]);
+
+    println!();
+    match args.broken_connections_output_path {
+        Some(path) => {
+            write_broken_connections(&broken_connections, &path).with_context(|| {
+                format!(
+                    "Failed to write the broken connections to {}",
+                    path.display()
+                )
+            })?;
+            println!("Wrote the broken connections to {}", path.display());
+        }
+        None => print_broken_connections(&broken_connections),
+    }
 
     Ok(())
 }
@@ -298,6 +336,117 @@ fn print_estimates(rows: &[(&str, &Estimates)]) {
             format!("({:>6.2}%)", percentage(estimates.destination)).magenta(),
         );
     }
+}
+
+/// Prints, for each subnet, the canisters sending subnet-local requests to canisters which would
+/// end up on the other subnet, unless there are too many of them.
+fn print_broken_connections(broken_connections: &Estimates<BrokenConnections>) {
+    let mut truncated = false;
+
+    for (subnet, other_subnet, color, connections) in [
+        (
+            "source",
+            "destination",
+            Color::Cyan,
+            &broken_connections.source,
+        ),
+        (
+            "destination",
+            "source",
+            Color::Magenta,
+            &broken_connections.destination,
+        ),
+    ] {
+        println!(
+            "{}",
+            format!(
+                "Broken connections from the {subnet} subnet to the {other_subnet} subnet \
+                (sender -> receiver: requests since the baseline):"
+            )
+            .bold()
+        );
+
+        let connections_count: usize = connections.values().map(|receivers| receivers.len()).sum();
+        if connections_count == 0 {
+            println!("  <none>");
+            continue;
+        }
+        if connections_count > MAX_BROKEN_CONNECTIONS_TO_PRINT {
+            truncated = true;
+            println!(
+                "  <too many to print: {} canisters with {connections_count} total broken connections>",
+                connections.len()
+            );
+            continue;
+        }
+
+        for (sender, receivers) in connections {
+            let sender = sender.to_string();
+            for (i, (receiver, requests_sent)) in receivers.iter().enumerate() {
+                /*
+                 *  canister_id_1 -> canister_id_2: requests_sent
+                 *                -> canister_id_3: requests_sent
+                 *  canister_id_4 -> canister_id_5: requests_sent
+                 *
+                 *  Sender column is printed only for the first receiver, replaced with spaces
+                 *  otherwise
+                 */
+                let sender_column = if i == 0 {
+                    sender.clone()
+                } else {
+                    " ".repeat(sender.len())
+                };
+                println!(
+                    "  {} -> {receiver}: {requests_sent}",
+                    sender_column.color(color).bold()
+                );
+            }
+        }
+    }
+
+    if truncated {
+        println!(
+            "{}",
+            format!(
+                "At most {MAX_BROKEN_CONNECTIONS_TO_PRINT} broken connections are printed per \
+                subnet. Pass --broken-connections-output-path <FILE> to write all of them to a file."
+            )
+            .yellow()
+        );
+    }
+}
+
+/// Writes all the broken connections to a CSV file, with one row per (sender, receiver) pair.
+fn write_broken_connections(
+    broken_connections: &Estimates<BrokenConnections>,
+    path: &Path,
+) -> anyhow::Result<()> {
+    let mut writer = csv::Writer::from_path(path).context("Failed to create the file")?;
+    writer.write_record([
+        "sender_subnet",
+        "sender_canister_id",
+        "receiver_canister_id",
+        "requests_sent",
+    ])?;
+
+    for (sender_subnet, connections) in [
+        ("source", &broken_connections.source),
+        ("destination", &broken_connections.destination),
+    ] {
+        for (sender, receivers) in connections {
+            for (receiver, requests_sent) in receivers {
+                writer.write_record([
+                    sender_subnet,
+                    &sender.to_string(),
+                    &receiver.to_string(),
+                    &requests_sent.to_string(),
+                ])?;
+            }
+        }
+    }
+
+    writer.flush()?;
+    Ok(())
 }
 
 fn main() -> anyhow::Result<()> {
