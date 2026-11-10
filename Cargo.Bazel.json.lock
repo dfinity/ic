@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "d7023d0da8ee7ee36803e8fac37765cd17385283ddf2d1e54b38f32854461158",
+  "checksum": "eb44a59d804ba333a44a21fca501bae2682a57ca10706d8957275b785e859582",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -17803,10 +17803,6 @@
           {
             "id": "object 0.37.3",
             "target": "object"
-          },
-          {
-            "id": "once_cell 1.21.3",
-            "target": "once_cell"
           },
           {
             "id": "opentelemetry 0.32.0",
@@ -67034,7 +67030,6 @@
     "num-bigint-dig 0.9.1",
     "num-traits 0.2.19",
     "object 0.37.3",
-    "once_cell 1.21.3",
     "opentelemetry 0.32.0",
     "opentelemetry-otlp 0.32.0",
     "opentelemetry-prometheus 0.32.0",

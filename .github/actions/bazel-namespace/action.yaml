@@ -9,8 +9,9 @@ description: |
     --bazelrc=bazel/conf/.bazelrc.build
     --bazelrc=/tmp/bazel-rbe.bazelrc
     --bazelrc=.github/actions/bazel-namespace/rbe.bazelrc
-  (rbe.bazelrc holds the RBE options, including the worker image) and gives every build, test,
-  run and coverage command its own Build Event Protocol (BEP) file and execution profile.
+  (rbe.bazelrc holds the RBE options, including the worker image) and gives every build, test and
+  coverage command its own Build Event Protocol (BEP) file and execution profile. `bazel run` gets
+  none: a BEP file records the environment of the bazel client, see the artifact upload of ci-main.yml.
 
   Afterwards, also when `run` failed or ran out of timeout-minutes, but not when the job was
   cancelled, these artifacts are uploaded to GitHub, where any signed-in user can download them,
@@ -21,7 +22,13 @@ description: |
     <artifact-name>-logs: the logs of the tests that `run` ran, laid out like bazel-testlogs:
                           <package>/<name>/test.log, <package>/<name>/test_attempts/attempt_<n>.log
                           and so on. Tests whose passing result came from the remote cache are
-                          left out. Only uploaded when there are any.
+                          left out. Only uploaded when there are any;
+    <execlogs-artifact-name>: only when that input is set: execlogs.csv, the compact execution logs of
+                          the build and test commands of `run` converted to CSV by
+                          ./.github/actions/upload-execlogs, for the build-determinism job of ci-main.yml.
+  When Bazel rewinds actions to regenerate lost inputs (rbe.bazelrc), a warning annotation lists
+  the actions that lost them (a lower bound, see the step), and an error annotation reports when
+  Bazel gave up.
 
   Before using this action the job must:
     * run namespacelabs/nscloud-setup and
@@ -65,6 +72,14 @@ inputs:
       Passphrase to encrypt the BEP files with for the public <artifact-name>-bep artifact on
       GitHub: pass secrets.BEP_GPG_PASSPHRASE, with which github-stats decrypts them. BEP files
       contain the options and environment of the bazel client, so they are only uploaded encrypted.
+  execlogs-artifact-name:
+    required: false
+    default: ''
+    description: |
+      When set, the build and test commands of `run` write Bazel's compact execution log, which is
+      converted to execlogs.csv and uploaded as the GitHub artifact of this name by
+      ./.github/actions/upload-execlogs, like the input of the same name of ./.github/actions/bazel.
+      The build-determinism job of ci-main.yml compares it with the one of its build-ic job.
 
 runs:
   using: composite
@@ -82,8 +97,16 @@ runs:
         # Read by bin/bazel.
         BAZEL_NAMESPACE_OUT: ${{ steps.out.outputs.dir }}
         TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+        # Read by bin/bazel, see the execlogs-artifact-name input.
+        BAZEL_NAMESPACE_EXECLOG: ${{ inputs.execlogs-artifact-name != '' && '1' || '' }}
       run: |
         set -euo pipefail
+
+        # Keep the job's OIDC token request credentials out of the environment of the bazel client,
+        # which the BEP files record and which `nsc bazel setup` streams to Namespace's Build Event
+        # Service, like ./.github/actions/bazel does: bazel-test-all in ci-main.yml has id-token: write
+        # for its Configure AWS credentials and Attest steps, and nothing `run` starts uses OIDC.
+        unset ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL
 
         # Local actions live in the workspace (github.action_path expands to the host path in
         # container jobs). PATH is exported, so processes started by `run` find the wrapper too.
@@ -120,6 +143,50 @@ runs:
           echo "::error title=Bazel timed out::bazel was stopped after timeout-minutes: $TIMEOUT_MINUTES (exit code $status)."
         fi
         exit "$status"
+
+    - name: Report action rewinding
+      # Bazel prints nothing when it rewinds actions to regenerate lost inputs (rbe.bazelrc), but its
+      # profile records every rewind plan: report them as a warning annotation, which shows up on the
+      # summary page of the run. A rewind plan is an attempt: when an action loses the same input
+      # more than 20 times, Bazel gives up and fails it with "lost input too many times" (for a lost
+      # top-level output: "rewinding was ineffective"), which the error annotation below reports.
+      # bin/bazel turns off profile slimming, which would merge short events like these with their
+      # neighbors. Still a lower bound: a rerun of the whole command
+      # (--experimental_remote_cache_eviction_retries) overwrites the profile of the earlier attempt.
+      if: ${{ !cancelled() }}
+      continue-on-error: true
+      shell: bash
+      env:
+        BAZEL_NAMESPACE_OUT: ${{ steps.out.outputs.dir }}
+      run: |
+        # Not -e, which `shell: bash` sets: grep fails for a profile without rewinds.
+        set +e -uo pipefail
+        shopt -s nullglob
+
+        for profile in "$BAZEL_NAMESPACE_OUT"/profile-*.json; do
+          # The profile has one event per line, like
+          # {"cat":"prepare action rewind plan","name":"Preparing rewind plan for 2 lost inputs of action 'Testing //a:b'",...}
+          # or, for lost top-level outputs, "Preparing rewind plan for 1 lost outputs of //a:b".
+          plans="$(grep -o '"cat":"prepare action rewind plan","name":"[^"]*"' "$profile" |
+            sed -e 's/.*"name":"Preparing rewind plan for //' -e 's/"$//')"
+          if [ -z "$plans" ]; then
+            continue
+          fi
+          name="$(basename "$profile")"
+          echo "Rewind plans in $name:"
+          echo "$plans"
+          n="$(wc -l <<<"$plans")"
+          first="$(head -n 3 <<<"$plans" | paste -sd ';' - | sed 's/;/; /g')"
+          more=""
+          if [ "$n" -gt 3 ]; then
+            more="; ..."
+          fi
+          echo "::warning title=Action rewinding::Bazel rewound actions to regenerate lost files: $n rewind plans in $name, for $first$more"
+        done
+
+        if grep -q -E "lost input too many times|rewinding was ineffective" "$BAZEL_NAMESPACE_OUT/console.log" 2>/dev/null; then
+          echo "::error title=Action rewinding::Rewinding didn't recover lost inputs: Bazel gave up after too many attempts (see 'lost input too many times' or 'rewinding was ineffective' in the log)."
+        fi
 
     - name: Encrypt the BEP files
       # For the GitHub artifact below. The passphrase is only in the env of this step, not in the
@@ -271,3 +338,12 @@ runs:
         path: ${{ steps.out.outputs.dir }}/test-logs/
         if-no-files-found: ignore
         retention-days: 14
+
+    - name: Convert and upload the execution logs
+      # For the build-determinism job of ci-main.yml, which fails loudly without the artifact: so this
+      # step is not continue-on-error like the uploads above.
+      if: ${{ !cancelled() && inputs.execlogs-artifact-name != '' }}
+      uses: ./.github/actions/upload-execlogs
+      with:
+        execlogs-dir: ${{ steps.out.outputs.dir }}
+        artifact-name: ${{ inputs.execlogs-artifact-name }}

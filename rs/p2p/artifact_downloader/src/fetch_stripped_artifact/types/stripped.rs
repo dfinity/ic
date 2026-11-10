@@ -253,13 +253,11 @@ impl PbArtifact for MaybeStrippedConsensusMessage {
 
     type PbMessageError = ProxyDecodeError;
 
-    fn check_integrity(&self, id: &Self::Id) -> bool {
+    fn check_integrity(&self) -> bool {
         match self {
-            MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
-                unstripped.check_integrity(id.as_ref())
-            }
+            MaybeStrippedConsensusMessage::Unstripped(unstripped) => unstripped.check_integrity(),
             // A stripped proposal can only be checked once it is reassembled.
-            MaybeStrippedConsensusMessage::StrippedBlockProposal(_) => self.id() == *id,
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(_) => true,
         }
     }
 }
