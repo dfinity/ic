@@ -469,7 +469,7 @@ pub(crate) fn spawn_tip_thread(
                             // Largest deltas first, so that `parallel_map` starts them right
                             // away.
                             let mut pagemaps = pagemaps;
-                            pagemaps.sort_by_key(|p| {
+                            pagemaps.sort_by_cached_key(|p| {
                                 Reverse(p.page_map.as_ref().map_or(0, |page_map| {
                                     page_map.num_unflushed_delta_pages()
                                 }))
