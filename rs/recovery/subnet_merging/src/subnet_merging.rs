@@ -9,7 +9,7 @@ use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
     NeuronArgs, Recovery, RecoveryArgs,
-    cli::read_optional_data_location,
+    cli::read_data_location,
     error::{RecoveryError, RecoveryResult},
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
@@ -77,12 +77,16 @@ pub struct SubnetMergingArgs {
     pub destination_subnet_id: SubnetId,
 
     /// The node of the source subnet to download the state from: its IP
-    /// address, or "local" if the tool runs on that node.
+    /// address, or "local" if the tool runs on that node. Required by
+    /// `WaitForHaltingCupOnSourceSubnet`; asked for if missing, unless prompts
+    /// are skipped.
     #[clap(long, value_parser=ic_recovery::util::data_location_from_str)]
     pub download_node_source: Option<DataLocation>,
 
     /// The node of the destination subnet to download the state from: its IP
-    /// address, or "local" if the tool runs on that node.
+    /// address, or "local" if the tool runs on that node. Required by
+    /// `WaitForHaltingCupOnDestinationSubnet`; asked for if missing, unless
+    /// prompts are skipped.
     #[clap(long, value_parser=ic_recovery::util::data_location_from_str)]
     pub download_node_destination: Option<DataLocation>,
 
@@ -165,6 +169,11 @@ impl SubnetMerging {
         )
         .expect("Subnets should satisfy all the preconditions");
 
+        if recovery_args.skip_prompts {
+            Self::check_download_nodes(&subnet_merging_args)
+                .expect("The download nodes should be given when prompts are skipped");
+        }
+
         Self {
             step_iterator: StepType::iter().peekable(),
             params: subnet_merging_args,
@@ -174,6 +183,35 @@ impl SubnetMerging {
             recovery,
             logger,
         }
+    }
+
+    /// Checks that the download node of each subnet is given, unless the step
+    /// waiting for the halting CUP on it is skipped explicitly.
+    ///
+    /// Only needed when prompts are skipped: otherwise the step asks for the
+    /// node. Without the node the step cannot be created, and the tool would
+    /// carry on without confirming that the subnet has halted.
+    fn check_download_nodes(args: &SubnetMergingArgs) -> RecoveryResult<()> {
+        let skipped_steps = args.skip.clone().unwrap_or_default();
+        for (step_type, node, option) in [
+            (
+                StepType::WaitForHaltingCupOnSourceSubnet,
+                args.download_node_source,
+                "--download-node-source",
+            ),
+            (
+                StepType::WaitForHaltingCupOnDestinationSubnet,
+                args.download_node_destination,
+                "--download-node-destination",
+            ),
+        ] {
+            if node.is_none() && !skipped_steps.contains(&step_type) {
+                return Err(RecoveryError::UnexpectedError(format!(
+                    "{option} is required by step {step_type:?}"
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Checks whether the subnets satisfy the following preconditions:
@@ -374,8 +412,13 @@ impl SubnetMerging {
         &self,
         target_subnet: TargetSubnet,
     ) -> RecoveryResult<impl Step + use<>> {
+        // Not `StepSkipped`: the node is asked for or checked upfront, and
+        // skipping the step would leave the halt unconfirmed.
         let Some(node) = self.download_node(target_subnet) else {
-            return Err(RecoveryError::StepSkipped);
+            return Err(RecoveryError::UnexpectedError(format!(
+                "The node of subnet {} to download the state from is missing",
+                self.subnet_id(target_subnet),
+            )));
         };
 
         Ok(WaitForHaltingCupStep {
@@ -465,20 +508,20 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             StepType::HaltSourceSubnetAtCupHeight | StepType::HaltDestinationSubnetAtCupHeight => {}
             StepType::WaitForHaltingCupOnSourceSubnet => {
                 if self.params.download_node_source.is_none() {
-                    self.params.download_node_source = read_optional_data_location(
+                    self.params.download_node_source = Some(read_data_location(
                         &self.logger,
                         "Enter the IP of the node of the Source Subnet to download the state from \
                          (or \"local\" if the tool runs on that node):",
-                    );
+                    ));
                 }
             }
             StepType::WaitForHaltingCupOnDestinationSubnet => {
                 if self.params.download_node_destination.is_none() {
-                    self.params.download_node_destination = read_optional_data_location(
+                    self.params.download_node_destination = Some(read_data_location(
                         &self.logger,
                         "Enter the IP of the node of the Destination Subnet to download the state \
                          from (or \"local\" if the tool runs on that node):",
-                    );
+                    ));
                 }
             }
         }
@@ -576,6 +619,27 @@ mod tests {
             next_step: Some(StepType::CheckMergeReadiness),
             skip: None,
         }
+    }
+
+    #[test]
+    fn download_nodes_are_required_unless_their_step_is_skipped() {
+        assert!(SubnetMerging::check_download_nodes(&args()).is_ok());
+
+        let mut args = args();
+        args.download_node_destination = None;
+        let err = SubnetMerging::check_download_nodes(&args)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("--download-node-destination"), "{err}");
+
+        args.skip = Some(vec![StepType::WaitForHaltingCupOnDestinationSubnet]);
+        assert!(SubnetMerging::check_download_nodes(&args).is_ok());
+
+        args.download_node_source = None;
+        let err = SubnetMerging::check_download_nodes(&args)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("--download-node-source"), "{err}");
     }
 
     #[test]
