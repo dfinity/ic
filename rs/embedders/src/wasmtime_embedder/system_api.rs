@@ -4164,6 +4164,32 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
+    fn ic0_is_subnet_admin(
+        &self,
+        src: usize,
+        size: usize,
+        heap: &mut Heap<'_>,
+    ) -> HypervisorResult<u32> {
+        let msg_bytes = heap.get("ic0.is_subnet_admin", src, size)?;
+        let result = PrincipalId::try_from(msg_bytes)
+            .map(|principal_id| {
+                self.sandbox_safe_system_state
+                    .is_subnet_admin(&principal_id)
+                    .into()
+            })
+            .map_err(|e| HypervisorError::InvalidPrincipalId(PrincipalIdBlobParseError(e.0)));
+
+        trace_syscall!(
+            self,
+            IsSubnetAdmin,
+            src,
+            size,
+            summarize(heap, src, size),
+            result
+        );
+        result
+    }
+
     /// Sets `timeout_seconds` to the provided value if not yet set, making this a best-effort call.
     /// The timeout is bounded from above by `MAX_CALL_TIMEOUT_SECONDS`.
     ///

@@ -246,6 +246,7 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::GlobalTimerSet => vec!["I", "G", "U", "Ry", "Rt", "C", "T"],
         SystemApiCallId::PerformanceCounter => vec!["*", "s"],
         SystemApiCallId::IsController => vec!["*", "s"],
+        SystemApiCallId::IsSubnetAdmin => vec!["*", "s"],
         SystemApiCallId::InReplicatedExecution => vec!["*", "s"],
         SystemApiCallId::CostCall => vec!["*", "s"],
         SystemApiCallId::CostCreateCanister => vec!["*", "s"],
@@ -880,6 +881,16 @@ fn api_availability_test(
         SystemApiCallId::IsController => {
             assert_api_availability(
                 |api| api.ic0_is_controller(0, 0, &mut Heap::unchecked(&mut [42; 128])),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::IsSubnetAdmin => {
+            assert_api_availability(
+                |api| api.ic0_is_subnet_admin(0, 0, &mut Heap::unchecked(&mut [42; 128])),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -2050,6 +2061,22 @@ fn ic0_is_controller_invalid_principal_id() {
     let mut controller = [0_u8; 70];
     assert!(matches!(
         api.ic0_is_controller(0, controller.len(), &mut Heap::unchecked(&mut controller)),
+        Err(HypervisorError::InvalidPrincipalId(
+            PrincipalIdBlobParseError(..)
+        ))
+    ));
+}
+
+#[test]
+fn ic0_is_subnet_admin_invalid_principal_id() {
+    let api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &SystemStateBuilder::default().build(),
+        CyclesAccountManagerBuilder::new().build(),
+    );
+    let mut admin = [0_u8; 70];
+    assert!(matches!(
+        api.ic0_is_subnet_admin(0, admin.len(), &mut Heap::unchecked(&mut admin)),
         Err(HypervisorError::InvalidPrincipalId(
             PrincipalIdBlobParseError(..)
         ))

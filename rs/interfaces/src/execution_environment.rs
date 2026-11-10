@@ -224,6 +224,8 @@ pub enum SystemApiCallId {
     InReplicatedExecution,
     /// Tracker for `ic0.is_controller()`
     IsController,
+    /// Tracker for `ic0.is_subnet_admin()`
+    IsSubnetAdmin,
     /// Tracker for `ic0.mint_cycles128()`
     MintCycles128,
     /// Tracker for `ic0.msg_arg_data_copy()`
@@ -1294,6 +1296,19 @@ pub trait SystemApi {
     ///
     /// This system call traps if src+size exceeds the size of the WebAssembly memory.
     fn ic0_is_controller(
+        &self,
+        src: usize,
+        size: usize,
+        heap: &mut Heap<'_>,
+    ) -> HypervisorResult<u32>;
+
+    /// Checks whether the principal identified by src/size is a subnet admin
+    /// of the subnet the canister runs on. If yes, then a value of 1 is
+    /// returned, otherwise a 0 is returned. On a subnet that cannot have
+    /// subnet admins, it returns 0. It can be called multiple times.
+    ///
+    /// This system call traps if src+size exceeds the size of the WebAssembly memory.
+    fn ic0_is_subnet_admin(
         &self,
         src: usize,
         size: usize,

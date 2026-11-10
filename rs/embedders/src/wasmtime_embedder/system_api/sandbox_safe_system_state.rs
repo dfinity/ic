@@ -22,7 +22,8 @@ use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
-    CallOrigin, NetworkTopology, OutputRequest, SystemState, canister_state::DEFAULT_QUEUE_CAPACITY,
+    CallOrigin, NetworkTopology, OutputRequest, SystemState,
+    canister_state::DEFAULT_QUEUE_CAPACITY, metadata_state::can_have_subnet_admins,
 };
 use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
@@ -1232,6 +1233,19 @@ impl SandboxSafeSystemState {
 
     pub fn is_controller(&self, principal_id: &PrincipalId) -> bool {
         self.controllers.contains(principal_id)
+    }
+
+    /// Whether `principal_id` is a subnet admin of the subnet this canister
+    /// runs on. Admins count only on subnets that can have them, as in
+    /// `ReplicatedState::get_own_subnet_admins`.
+    pub fn is_subnet_admin(&self, principal_id: &PrincipalId) -> bool {
+        self.network_topology
+            .subnets()
+            .get(&self.get_subnet_id())
+            .is_some_and(|subnet| {
+                can_have_subnet_admins(subnet.subnet_type, subnet.cost_schedule)
+                    && subnet.subnet_admins.contains(principal_id)
+            })
     }
 
     /// Checks the cycles balance against the freezing threshold with the new
