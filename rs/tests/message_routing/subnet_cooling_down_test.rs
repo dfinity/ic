@@ -207,9 +207,12 @@ const REGISTRY_TIMEOUT: Duration = Duration::from_secs(120);
 /// waits for. Longer than a driver retry because every evaluation scrapes the
 /// metrics of all subnets.
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
-/// Timeout for a subnet to reach the CUP it halts at, which is up to a full DKG
-/// interval away.
-const HALT_TIMEOUT: Duration = Duration::from_secs(900);
+/// Timeout for a subnet to reach the CUP it halts at. As a DKG summary takes
+/// its registry version from the previous summary, that CUP is up to two DKG
+/// intervals, i.e. about `2 * (DKG_INTERVAL_LENGTH + 1)` = 1000 rounds, away.
+/// Shorter than the default of the tool so that the test fits into the timeout
+/// of its Bazel target.
+const HALT_TIMEOUT: Duration = Duration::from_secs(1200);
 
 /// How long `UT`'s loop is observed to be stalled (step 11).
 const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
@@ -220,10 +223,14 @@ const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 
 /// Timeouts of the test itself, above the sum of the timeouts of its steps
 /// (dominated by `MERGE_READY_TIMEOUT` and `HALT_TIMEOUT`), so that a stuck
-/// step fails with its own error. The overall timeout additionally covers the
-/// setup (booting the IC and installing the NNS).
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2400);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(3000);
+/// step fails with its own error. `HALT_TIMEOUT` is counted once although it
+/// applies to each of the two subnets: both are scheduled to halt before either
+/// is waited for, so the two waits overlap. The overall timeout additionally
+/// covers the setup (booting the IC and installing the NNS) and has to stay
+/// well below the 3600s of the `eternal` timeout of the Bazel target, which
+/// also covers what runs outside of the test driver's own timeouts.
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2700);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(3300);
 
 /// The conditions this scenario violates, i.e. the ones step 7 checks. This
 /// includes `CommonQuorum`, since the replicas do not satisfy the individual
