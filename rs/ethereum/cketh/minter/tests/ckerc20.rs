@@ -682,6 +682,51 @@ mod deposit_erc20 {
     }
 
     #[test]
+    fn should_require_two_agreeing_providers_before_acting_on_a_scanned_balance() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let caller = ckerc20.caller();
+        let token = a_supported_token(&ckerc20);
+        let (ckerc20, before) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
+            .expect_deposit_response();
+        let address = before.address.as_str();
+        let funded = 1_000_000_000;
+        ckerc20.refresh_latest_block(4_500_000);
+
+        ckerc20.run_balance_scan_with_each_provider_answering([
+            &[(address, 0)],
+            &[(address, funded)],
+            &[(address, funded + 1)],
+        ]);
+
+        let (ckerc20, disputed) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
+            .expect_deposit_response();
+        assert_matches!(
+            disputed.status,
+            DepositStatus::Scanning {
+                scan_count: 0,
+                last_scanned_block: None,
+                ..
+            },
+            "a batch without two agreeing providers must not advance the scan"
+        );
+        assert_eq!(count_automatic_deposits_received(&ckerc20), 0);
+
+        ckerc20.run_balance_scan_with_each_provider_answering([
+            &[(address, 0)],
+            &[(address, funded)],
+            &[(address, funded)],
+        ]);
+
+        assert_eq!(
+            count_automatic_deposits_received(&ckerc20),
+            1,
+            "two agreeing providers outvote a single zero balance"
+        );
+    }
+
+    #[test]
     fn should_move_funded_addresses_to_the_sweep_queue() {
         let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
         let caller = ckerc20.caller();
