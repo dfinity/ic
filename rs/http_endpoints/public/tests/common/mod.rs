@@ -707,8 +707,7 @@ impl HttpEndpointBuilder {
             watch::channel(self.certified_height.unwrap_or_default());
         let builder = self.delegation_from_nns.map(nns_delegation_builder);
         let (nns_delegation_watcher_tx, nns_delegation_watcher_rx) = watch::channel(None);
-        let nns_delegation_reader =
-            NNSDelegationReader::new(nns_delegation_watcher_rx, log.clone());
+        let nns_delegation_reader = NNSDelegationReader::new(nns_delegation_watcher_rx);
         nns_delegation_watcher_tx
             .send(builder)
             .expect("The NNS delegation receiver should be alive.");

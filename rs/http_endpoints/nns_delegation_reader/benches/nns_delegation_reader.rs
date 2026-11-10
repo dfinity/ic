@@ -104,7 +104,7 @@ fn build_delegation_bench(
             "The delegation size in bytes with {} canister ranges: {}",
             canister_id_ranges_count,
             builder
-                .build_verified(ranges_check, &state, &logger)
+                .build_verified(ranges_check, &state)
                 .unwrap_or_else(|err| panic!("Failed to build verified delegation: {err:?}"))
                 .certificate
                 .len()
@@ -113,7 +113,7 @@ fn build_delegation_bench(
         group.bench_function(
             format!("{canister_id_ranges_count}_canister_id_ranges"),
             |bencher| {
-                bencher.iter(|| black_box(builder.build_verified(ranges_check, &state, &logger)));
+                bencher.iter(|| black_box(builder.build_verified(ranges_check, &state)));
             },
         );
     };
