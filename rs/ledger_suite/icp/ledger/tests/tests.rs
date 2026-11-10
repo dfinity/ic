@@ -8,8 +8,8 @@ use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::{Tokens, block::BlockType};
 use ic_ledger_suite_state_machine_helpers::{
-    AllowanceProvider, balance_of, icrc21_consent_message, send_approval, send_transfer,
-    send_transfer_from, supported_standards, total_supply, transfer,
+    AllowanceProvider, balance_of, icrc21_consent_message, parse_metric, retrieve_metrics,
+    send_approval, send_transfer, send_transfer_from, supported_standards, total_supply, transfer,
 };
 use ic_ledger_suite_state_machine_tests::archiving::icp_archives;
 use ic_ledger_suite_state_machine_tests::{
@@ -2622,6 +2622,77 @@ fn test_burn_whole_balance() {
     burn(fee_e8s / 2, None);
 
     assert_eq!(balance_of(&env, canister_id, p1.0), 0);
+}
+
+#[test]
+fn test_archive_and_dedup_config_metrics() {
+    const TRIGGER_THRESHOLD: usize = 17;
+    const NUM_BLOCKS_TO_ARCHIVE: usize = 5;
+    const NODE_MAX_MEMORY_SIZE_BYTES: u64 = 123_456;
+    const MAX_MESSAGE_SIZE_BYTES: u64 = 64 * 1024;
+    const CYCLES_FOR_ARCHIVE_CREATION: u64 = 7_000_000_000;
+    const TRANSACTION_WINDOW: Duration = Duration::from_secs(3600);
+
+    let env = StateMachine::new();
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .icrc1_minting_account(MINTER)
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .transaction_window(TRANSACTION_WINDOW)
+        .archive_options(ArchiveOptions {
+            trigger_threshold: TRIGGER_THRESHOLD,
+            num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE,
+            node_max_memory_size_bytes: Some(NODE_MAX_MEMORY_SIZE_BYTES),
+            max_message_size_bytes: Some(MAX_MESSAGE_SIZE_BYTES),
+            controller_id: PrincipalId::new_user_test_id(100),
+            more_controller_ids: None,
+            cycles_for_archive_creation: Some(CYCLES_FOR_ARCHIVE_CREATION),
+            max_transactions_per_response: None,
+        })
+        .build()
+        .unwrap();
+    let ledger_id = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister");
+
+    let metric = |name: &str| parse_metric(&env, ledger_id, name);
+
+    assert_eq!(
+        metric("ledger_archive_trigger_threshold"),
+        TRIGGER_THRESHOLD as u64
+    );
+    assert_eq!(
+        metric("ledger_archive_num_blocks_to_archive"),
+        NUM_BLOCKS_TO_ARCHIVE as u64
+    );
+    assert_eq!(
+        metric("ledger_archive_node_max_memory_size_bytes"),
+        NODE_MAX_MEMORY_SIZE_BYTES
+    );
+    assert_eq!(
+        metric("ledger_archive_max_message_size_bytes"),
+        MAX_MESSAGE_SIZE_BYTES
+    );
+    assert_eq!(
+        metric("ledger_archive_cycles_for_archive_creation"),
+        CYCLES_FOR_ARCHIVE_CREATION
+    );
+    assert!(
+        !retrieve_metrics(&env, ledger_id)
+            .iter()
+            .any(|line| line.starts_with("ledger_archive_max_transactions_per_response")),
+        "the ICP archive has no max_transactions_per_response setting, so the ICP ledger must not \
+         advertise one"
+    );
+
+    assert_eq!(
+        metric("ledger_transaction_window_seconds"),
+        TRANSACTION_WINDOW.as_secs(),
+        "the ICP ledger's transaction window is configurable, so the metric must reflect the configured value"
+    );
+    assert!(metric("ledger_max_transactions_in_window") > 0);
+    assert!(metric("ledger_max_transactions_to_purge") > 0);
 }
 
 #[test]
