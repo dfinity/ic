@@ -3,8 +3,10 @@ use ic_canonical_state::lazy_tree_conversion::state_height_as_tree;
 use ic_canonical_state_tree_hash::lazy_tree::materialize::materialize;
 use ic_consensus_utils::{
     MINIMUM_CHAIN_LENGTH, active_high_threshold_nidkg_id, aggregate,
-    bouncer_metrics::BouncerMetrics, membership::Membership, registry_version_at_height,
-    subnet_splitting_status_at_height,
+    bouncer_metrics::BouncerMetrics,
+    membership::Membership,
+    recovery::{RecoveryStatus, get_recovery_status},
+    registry_version_at_height, subnet_splitting_status_at_height,
 };
 use ic_crypto_tree_hash::{Witness, recompute_digest};
 use ic_interfaces::{
@@ -346,6 +348,10 @@ impl CertifierImpl {
             .filter(|state_hash_metadata| {
                 !self.should_skip_due_to_subnet_splitting(state_hash_metadata.height)
             })
+            // Filter out all heights if an automated recovery is pending. Note that we only stop
+            // *creating* new shares; we keep validating and aggregating shares of others, so that
+            // the certification pools of all nodes converge on the same recovery target.
+            .filter(|_| !self.should_skip_signing_due_to_recovery())
             .cloned()
             .filter_map(|state_hash_metadata| {
                 let content = CertificationContent::new(state_hash_metadata.hash);
@@ -613,6 +619,46 @@ impl CertifierImpl {
                         }
                     },
                 )
+            }
+        }
+    }
+
+    /// Checks if we should skip the creation of new certification shares because an automated
+    /// recovery is pending (the subnet record's `is_in_recovery_mode` flag is set at the latest
+    /// registry version, and wasn't yet picked up by a recovery CUP). The recovery target is the
+    /// highest state supported by `f + 1` certification shares, so we must stop contributing
+    /// shares for it to stabilize.
+    fn should_skip_signing_due_to_recovery(&self) -> bool {
+        let watermark_version = self
+            .consensus_pool_cache
+            .catch_up_package()
+            .content
+            .registry_version();
+
+        match get_recovery_status(
+            self.membership.registry_client.as_ref(),
+            self.replica_config.subnet_id,
+            watermark_version,
+        ) {
+            Ok(RecoveryStatus::NotScheduled) => false,
+            Ok(RecoveryStatus::Scheduled { .. }) => {
+                info!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Skipping creation of certification shares because an automated recovery \
+                    is pending"
+                );
+
+                true
+            }
+            Err(err) => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Couldn't determine the automated recovery status: {err}"
+                );
+
+                false
             }
         }
     }
@@ -1826,6 +1872,76 @@ mod tests {
                             );
                         }
                     },
+                );
+            })
+        })
+    }
+
+    /// Once the `is_in_recovery_mode` flag is set in the subnet record at a registry version
+    /// above the CUP's, the certifier must stop creating new shares (but nothing else — the
+    /// existing validation/aggregation tests cover that those paths are unaffected).
+    #[test]
+    fn test_sign_skips_during_recovery() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    registry,
+                    registry_data_provider,
+                    crypto,
+                    state_manager,
+                    ..
+                } = DependenciesBuilder::new(pool_config.clone(), 4)
+                    .with_dkg_interval_length(TEST_DKG_INTERVAL)
+                    .build();
+                let subnet_id = replica_config.subnet_id;
+
+                let metrics_registry = MetricsRegistry::new();
+                let cert_pool = CertificationPoolImpl::new(
+                    replica_config.node_id,
+                    pool_config,
+                    ic_logger::replica_logger::no_op_logger(),
+                    metrics_registry.clone(),
+                );
+                let certifier = CertifierImpl::new(
+                    replica_config,
+                    registry.clone(),
+                    crypto,
+                    state_manager,
+                    pool.get_cache(),
+                    metrics_registry,
+                    log,
+                );
+
+                let state_hash_metadata = |height| StateHashMetadata {
+                    height: Height::from(height),
+                    hash: CryptoHashOfPartialState::from(CryptoHash(vec![1, 2, 3])),
+                    height_witness: Witness::new_for_testing_with_height(),
+                };
+
+                // Without the recovery flag, shares are created.
+                let shares = certifier.sign(&cert_pool, &[state_hash_metadata(1)]);
+                assert!(!shares.is_empty());
+
+                // Set the recovery flag at a fresh registry version.
+                let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+                ic_test_utilities_registry::add_subnet_record(
+                    &registry_data_provider,
+                    /*version=*/ 2,
+                    subnet_id,
+                    ic_test_utilities_registry::SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(TEST_DKG_INTERVAL)
+                        .with_is_in_recovery_mode(true)
+                        .build(),
+                );
+                registry.update_to_latest_version();
+
+                // No new shares are created anymore.
+                let shares = certifier.sign(&cert_pool, &[state_hash_metadata(2)]);
+                assert!(
+                    shares.is_empty(),
+                    "Expected no shares during a pending recovery, got: {shares:?}"
                 );
             })
         })

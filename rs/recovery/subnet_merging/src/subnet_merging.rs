@@ -186,6 +186,7 @@ impl SubnetMerging {
             // `get_and_pre_validate_subnet_record`.
             is_halted: _,
             halt_at_cup_height: _,
+            is_in_recovery_mode: _,
             chain_key_config: _,
             // Capacity, left to the merge step.
             max_number_of_canisters: _,
@@ -311,6 +312,12 @@ impl SubnetMerging {
         if subnet_record.is_halted || subnet_record.halt_at_cup_height {
             return validation_error(String::from(
                 "Subnet should neither be halted nor scheduled to halt at its next CUP",
+            ));
+        }
+
+        if subnet_record.is_in_recovery_mode {
+            return validation_error(String::from(
+                "Subnet should not be undergoing an automated recovery",
             ));
         }
 
