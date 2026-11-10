@@ -425,50 +425,35 @@ fn subnet_node_ips(
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> RecoveryResult<SubnetNodeIps> {
+    let registry_error = |what: String| {
+        move |err| {
+            RecoveryError::RegistryError(format!(
+                "Failed to get {what} at registry version {registry_version}: {err}"
+            ))
+        }
+    };
+    let missing = |what: String| {
+        RecoveryError::RegistryError(format!("No {what} at registry version {registry_version}"))
+    };
+
     let subnet_ids = registry_client
         .get_subnet_ids(registry_version)
-        .map_err(|err| {
-            RecoveryError::RegistryError(format!(
-                "Failed to get the subnet ids at registry version {registry_version}: {err}"
-            ))
-        })?
-        .ok_or_else(|| {
-            RecoveryError::RegistryError(format!(
-                "No subnet ids at registry version {registry_version}"
-            ))
-        })?;
+        .map_err(registry_error("the subnet ids".to_string()))?
+        .ok_or_else(|| missing("subnet ids".to_string()))?;
 
     subnet_ids
         .into_iter()
         .map(|subnet_id| {
-            let node_ips = node_ips_on_subnet(registry_client, subnet_id, registry_version)?;
+            let node_ids = registry_client
+                .get_node_ids_on_subnet(subnet_id, registry_version)
+                .map_err(registry_error(format!("the nodes of subnet {subnet_id}")))?
+                .ok_or_else(|| missing(format!("nodes of subnet {subnet_id}")))?;
+            let node_ips = node_ids
+                .into_iter()
+                .map(|node_id| node_ip(registry_client, node_id, registry_version))
+                .collect::<RecoveryResult<_>>()?;
             Ok((subnet_id, node_ips))
         })
-        .collect()
-}
-
-/// The IP addresses of the nodes of `subnet_id` as of `registry_version`.
-fn node_ips_on_subnet(
-    registry_client: &dyn RegistryClient,
-    subnet_id: SubnetId,
-    registry_version: RegistryVersion,
-) -> RecoveryResult<Vec<IpAddr>> {
-    let node_ids = registry_client
-        .get_node_ids_on_subnet(subnet_id, registry_version)
-        .map_err(|err| {
-            RecoveryError::RegistryError(format!(
-                "Failed to get the nodes of subnet {subnet_id} at registry version \
-                 {registry_version}: {err}"
-            ))
-        })?
-        .ok_or_else(|| {
-            RecoveryError::RegistryError(format!(
-                "No nodes of subnet {subnet_id} at registry version {registry_version}"
-            ))
-        })?;
-    node_ids
-        .into_iter()
-        .map(|node_id| node_ip(registry_client, node_id, registry_version))
         .collect()
 }
 
