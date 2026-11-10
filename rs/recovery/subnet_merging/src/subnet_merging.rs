@@ -382,6 +382,7 @@ impl SubnetMerging {
             subnet_id: self.subnet_id(target_subnet),
             node,
             registry_helper: self.recovery.registry_helper.clone(),
+            layout: self.layout.clone(),
             timeout: Duration::from_secs(self.params.halt_timeout_secs),
             poll_interval: Duration::from_secs(self.params.poll_interval_secs),
             logger: self.recovery.logger.clone(),

@@ -1,5 +1,5 @@
 use crate::{
-    layout::Layout,
+    layout::{HaltingCup, Layout},
     readiness,
     utils::{get_subnet_record_at_version, wait_for},
 };
@@ -117,12 +117,15 @@ impl Step for CheckMergeReadinessStep {
 
 /// Waits until the CUP where the subnet halts appears on the node the state is
 /// downloaded from. At that point, we have the guarantee that the subnet is
-/// halted. The CUP signature is validated together with the checkpoint later
-/// when the state is downloaded.
+/// halted. The height, registry version and state hash of the CUP are
+/// persisted, so that the step downloading the state later can check that it
+/// downloads the same CUP, whose signature is validated together with the
+/// checkpoint.
 pub(crate) struct WaitForHaltingCupStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) node: DataLocation,
     pub(crate) registry_helper: RegistryHelper,
+    pub(crate) layout: Layout,
     pub(crate) timeout: Duration,
     pub(crate) poll_interval: Duration,
     pub(crate) logger: Logger,
@@ -154,6 +157,11 @@ impl Step for WaitForHaltingCupStep {
             },
         )?;
 
+        let halting_cup = HaltingCup {
+            height: cup.height().get(),
+            registry_version: cup.content.registry_version().get(),
+            state_hash: hex::encode(&cup.content.state_hash.get_ref().0),
+        };
         // Logged so that the operator can double check that this is the CUP of
         // the current halt, and not of an earlier one the node is lagging at.
         info!(
@@ -161,11 +169,12 @@ impl Step for WaitForHaltingCupStep {
             "Subnet {} halted at the CUP at height {} with registry version {} and state hash \
              {}",
             self.subnet_id,
-            cup.height(),
-            cup.content.registry_version(),
-            hex::encode(&cup.content.state_hash.get_ref().0),
+            halting_cup.height,
+            halting_cup.registry_version,
+            halting_cup.state_hash,
         );
-        Ok(())
+
+        self.layout.write_halting_cup(self.subnet_id, &halting_cup)
     }
 }
 

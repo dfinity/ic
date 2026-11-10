@@ -20,11 +20,22 @@ struct CoolingDownRegistryVersion {
     registry_version: u64,
 }
 
+/// The contents of the file in which the tool records the height, registry
+/// version and state hash of the CUP a subnet halts at.
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
+pub(crate) struct HaltingCup {
+    pub(crate) height: u64,
+    pub(crate) registry_version: u64,
+    /// Hex-encoded.
+    pub(crate) state_hash: String,
+}
+
 #[derive(Clone)]
 /// Describes the layout of the working directory of subnet merging:
 ///
 /// |-- root/
 /// |  |-- cooling_down_registry_version.json
+/// |  |-- halting_cup_<subnet_id>.json
 pub(crate) struct Layout {
     root: PathBuf,
 }
@@ -67,6 +78,38 @@ impl Layout {
         decode_cooling_down_registry_version(&read_file(&path)?, source_subnet_id).map_err(|err| {
             RecoveryError::UnexpectedError(format!(
                 "Failed to read the registry version at {}: {err}",
+                path.display()
+            ))
+        })
+    }
+
+    fn halting_cup_file(&self, subnet_id: SubnetId) -> PathBuf {
+        self.root.join(format!("halting_cup_{subnet_id}.json"))
+    }
+
+    /// Records the height, registry version and state hash of the CUP
+    /// `subnet_id` halts at, so that the step downloading its state can check that the CUP it
+    /// downloads is that same CUP.
+    pub(crate) fn write_halting_cup(
+        &self,
+        subnet_id: SubnetId,
+        halting_cup: &HaltingCup,
+    ) -> RecoveryResult<()> {
+        write_file(
+            &self.halting_cup_file(subnet_id),
+            serde_json::to_string_pretty(halting_cup).expect("Failed to serialize the halting CUP"),
+        )
+    }
+
+    /// Reads the height, registry version and state hash of the CUP
+    /// `subnet_id` halts at.
+    // Read by the step downloading the state, added in a follow-up.
+    #[allow(dead_code)]
+    pub(crate) fn read_halting_cup(&self, subnet_id: SubnetId) -> RecoveryResult<HaltingCup> {
+        let path = self.halting_cup_file(subnet_id);
+        serde_json::from_str(&read_file(&path)?).map_err(|err| {
+            RecoveryError::UnexpectedError(format!(
+                "Failed to read the halting CUP at {}: {err}",
                 path.display()
             ))
         })
@@ -120,6 +163,27 @@ mod tests {
         let contents = encode_cooling_down_registry_version(subnet_id(1), 42);
         let err = decode_cooling_down_registry_version(&contents, subnet_id(2)).unwrap_err();
         assert!(err.contains("not for subnet"), "{err}");
+    }
+
+    #[test]
+    fn halting_cup_round_trips() {
+        let root =
+            std::env::temp_dir().join(format!("subnet_merging_layout_test_{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let layout = Layout { root: root.clone() };
+        let halting_cup = HaltingCup {
+            height: 500,
+            registry_version: 42,
+            state_hash: "0123abcd".to_string(),
+        };
+
+        layout
+            .write_halting_cup(subnet_id(1), &halting_cup)
+            .unwrap();
+
+        assert_eq!(layout.read_halting_cup(subnet_id(1)).unwrap(), halting_cup);
+        assert!(layout.read_halting_cup(subnet_id(2)).is_err());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
