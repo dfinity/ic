@@ -1,11 +1,12 @@
 use crate::{
-    layout::{HaltingCup, Layout},
+    layout::Layout,
     readiness,
     utils::{get_subnet_record_at_version, wait_for},
 };
 
 use ic_base_types::SubnetId;
 use ic_cup_explorer::get_cup;
+use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     error::{RecoveryError, RecoveryResult},
     registry_helper::RegistryHelper,
@@ -117,10 +118,9 @@ impl Step for CheckMergeReadinessStep {
 
 /// Waits until the CUP where the subnet halts appears on the node the state is
 /// downloaded from. At that point, we have the guarantee that the subnet is
-/// halted. The height, registry version and state hash of the CUP are
-/// persisted, so that the step downloading the state later can check that it
-/// downloads the same CUP, whose signature is validated together with the
-/// checkpoint.
+/// halted. The CUP, as served by the node, is persisted, so that the state
+/// downloaded later can be validated against it (its threshold signature and
+/// its state hash) without downloading the CUP again.
 pub(crate) struct WaitForHaltingCupStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) node: DataLocation,
@@ -141,7 +141,7 @@ impl Step for WaitForHaltingCupStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let cup = wait_for(
+        let (cup, proto) = wait_for(
             &format!("subnet {} reaches the CUP it halts at", self.subnet_id),
             self.timeout,
             self.poll_interval,
@@ -157,11 +157,6 @@ impl Step for WaitForHaltingCupStep {
             },
         )?;
 
-        let halting_cup = HaltingCup {
-            height: cup.height().get(),
-            registry_version: cup.content.registry_version().get(),
-            state_hash: hex::encode(&cup.content.state_hash.get_ref().0),
-        };
         // Logged so that the operator can double check that this is the CUP of
         // the current halt, and not of an earlier one the node is lagging at.
         info!(
@@ -169,12 +164,12 @@ impl Step for WaitForHaltingCupStep {
             "Subnet {} halted at the CUP at height {} with registry version {} and state hash \
              {}",
             self.subnet_id,
-            halting_cup.height,
-            halting_cup.registry_version,
-            halting_cup.state_hash,
+            cup.height(),
+            cup.content.registry_version(),
+            hex::encode(&cup.content.state_hash.get_ref().0),
         );
 
-        self.layout.write_halting_cup(self.subnet_id, &halting_cup)
+        self.layout.write_halting_cup(self.subnet_id, &proto)
     }
 }
 
@@ -193,9 +188,10 @@ impl WaitForHaltingCupStep {
         })
     }
 
-    /// Returns the halting CUP if the node serves it, `None` if it does not
-    /// yet, and an error if the node could not be asked.
-    fn check(&self) -> RecoveryResult<Option<CatchUpPackage>> {
+    /// Returns the halting CUP, both decoded and as the protobuf served by the
+    /// node, if the node serves it, `None` if it does not yet, and an error if
+    /// the node could not be asked.
+    fn check(&self) -> RecoveryResult<Option<(CatchUpPackage, pb::CatchUpPackage)>> {
         let node_ip = self.node_ip();
         let node_url = self.node_url()?;
         let Some(proto) = block_on(get_cup(&node_url)).map_err(|err| {
@@ -237,6 +233,6 @@ impl WaitForHaltingCupStep {
             return Ok(None);
         }
 
-        Ok(Some(cup))
+        Ok(Some((cup, proto)))
     }
 }

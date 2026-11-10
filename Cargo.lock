@@ -14621,6 +14621,7 @@ dependencies = [
  "ic-subnet-tools",
  "ic-types",
  "prometheus-parse",
+ "prost",
  "reqwest",
  "serde",
  "serde_json",

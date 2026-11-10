@@ -20,6 +20,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-subnet-tools = { path = "../subnet_tools" }
 ic-types = { path = "../../types/types" }
 prometheus-parse = { workspace = true }
+prost = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
