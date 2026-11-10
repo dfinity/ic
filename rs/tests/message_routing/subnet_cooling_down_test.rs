@@ -1,13 +1,15 @@
 /* tag::catalog[]
-Title:: Draining a subnet that is "cooling down" with the subnet merging tool.
+Title:: Draining and halting a subnet that is "cooling down" with the subnet
+merging tool.
 
 Goal:: Verify that a subnet holding what a subnet merge has to drain violates
 the individual terms of the "merge readiness" condition, i.e. that the
 condition the subnet merging tool waits for before merging such a subnet away
 is one that the subnet does not satisfy to begin with; and that once the tool
 (`rs/recovery/subnet_merging`) has labeled the subnet "cooling down", the
-subnet rejects ingress messages and query calls, and the tool eventually finds
-the condition to hold. The subnet also holds calls waiting
+subnet rejects ingress messages and query calls, the tool eventually finds the
+condition to hold, and it then halts both subnets at their next
+CUP. The subnet also holds calls waiting
 for responses that never arrive: they are not drained, but make it possible to
 assert that a subnet merge populates the ingress history properly.
 
@@ -16,8 +18,7 @@ called `M`; a second Application subnet `T` holds the canisters at the other
 end of `M`'s cross-subnet calls, and is the subnet the tool is told to merge
 `M` into.
 
-The tool submits the proposal labeling `M` as "cooling down" through
-`ic-admin`, with the test neuron.
+The tool submits its proposals through `ic-admin`, with the test neuron.
 
 "Executing" an update call below always means submitting it as an ingress
 message without waiting for it to complete: most of the calls of this test are
@@ -75,11 +76,20 @@ Runbook::
 11. After `CheckMergeReadiness`: check that `UT`'s loop of step 2 is stalled,
    i.e. that its iteration counter does not advance, as read via a query to
    `T`. `UM`'s counter cannot be read, as `M` rejects query calls.
+12. The following steps of the tool are executed: `HaltSourceSubnetAtCupHeight`
+   and `HaltDestinationSubnetAtCupHeight`, which set the `halt_at_cup_height`
+   flag of `M` and `T`, and `WaitForHaltingCupOnSourceSubnet` and
+   `WaitForHaltingCupOnDestinationSubnet`, which wait until the node of each
+   subnet that its state would be downloaded from serves the halting CUP.
+13. After `WaitForHaltingCupOnDestinationSubnet`: check that both subnets are
+   halted, i.e. that every one of their nodes certifies the height its subnet
+   halts at and none goes past it, even after `HALT_OBSERVATION_PERIOD`.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
 violated before `M` starts cooling down; `M` then rejects ingress messages and
-query calls and becomes "merge ready", and `UT`'s loop of step 2 is stalled.
+query calls and becomes "merge ready", and `UT`'s loop of step 2 is stalled;
+the tool then halts `M` and `T` at their next CUP.
 
 end::catalog[] */
 
@@ -87,7 +97,7 @@ use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_agent::Agent;
 use ic_agent::agent::RejectCode;
-use ic_recovery::RecoveryArgs;
+use ic_recovery::{RecoveryArgs, get_node_metrics, util::DataLocation};
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_merging::metrics_helper::{
     Labels, MetricsByReplica, ScrapeError, fetch_available_metrics, replica_values,
@@ -197,16 +207,30 @@ const REGISTRY_TIMEOUT: Duration = Duration::from_secs(120);
 /// waits for. Longer than a driver retry because every evaluation scrapes the
 /// metrics of all subnets.
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
+/// Timeout for a subnet to reach the CUP it halts at. As a DKG summary takes
+/// its registry version from the previous summary, that CUP is up to two DKG
+/// intervals, i.e. about `2 * (DKG_INTERVAL_LENGTH + 1)` = 1000 rounds, away.
+/// Shorter than the default of the tool so that the test fits into the timeout
+/// of its Bazel target.
+const HALT_TIMEOUT: Duration = Duration::from_secs(1200);
 
 /// How long `UT`'s loop is observed to be stalled (step 11).
 const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 
+/// How long the certified heights of the nodes of `M` and `T` are observed to
+/// stay at the height their subnet halts at (step 13).
+const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
+
 /// Timeouts of the test itself, above the sum of the timeouts of its steps
-/// (dominated by `MERGE_READY_TIMEOUT`), so that a stuck step fails with its
-/// own error. The overall timeout additionally covers the setup (booting the IC
-/// and installing the NNS).
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(1500);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(2100);
+/// (dominated by `MERGE_READY_TIMEOUT` and `HALT_TIMEOUT`), so that a stuck
+/// step fails with its own error. `HALT_TIMEOUT` is counted once although it
+/// applies to each of the two subnets: both are scheduled to halt before either
+/// is waited for, so the two waits overlap. The overall timeout additionally
+/// covers the setup (booting the IC and installing the NNS) and has to stay
+/// well below the 3600s of the `eternal` timeout of the Bazel target, which
+/// also covers what runs outside of the test driver's own timeouts.
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2700);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(3300);
 
 /// The conditions this scenario violates, i.e. the ones step 7 checks. This
 /// includes `CommonQuorum`, since the replicas do not satisfy the individual
@@ -511,7 +535,10 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     let merging_args = SubnetMergingArgs {
         source_subnet_id: context.m_subnet.subnet_id,
         destination_subnet_id: context.t_subnet.subnet_id,
+        download_node_source: Some(DataLocation::Remote(download_node(&context.m_subnet))),
+        download_node_destination: Some(DataLocation::Remote(download_node(&context.t_subnet))),
         merge_ready_timeout_secs: MERGE_READY_TIMEOUT.as_secs(),
+        halt_timeout_secs: HALT_TIMEOUT.as_secs(),
         registry_timeout_secs: REGISTRY_TIMEOUT.as_secs(),
         poll_interval_secs: POLL_INTERVAL.as_secs(),
         next_step: None,
@@ -548,14 +575,122 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     info!(logger, "Step 10 done: subnet M is \"merge ready\"");
     runtime.block_on(check_ut_loop_stalled(context));
 
+    info!(logger, "Step 12: Halting subnets M and T at their next CUP");
+    exec_next_step(StepType::HaltSourceSubnetAtCupHeight);
+    exec_next_step(StepType::HaltDestinationSubnetAtCupHeight);
+    exec_next_step(StepType::WaitForHaltingCupOnSourceSubnet);
+    exec_next_step(StepType::WaitForHaltingCupOnDestinationSubnet);
+    info!(
+        logger,
+        "Step 12 done: the nodes of M and T the states would be downloaded from serve the CUPs \
+         their subnets halt at"
+    );
+    runtime.block_on(check_subnets_halted(context));
+
     if let Some((step_type, _)) = merging.next() {
         panic!("unexpected step {step_type:?}");
     }
 
     info!(
         logger,
-        "Subnet M has been drained by the subnet merging tool"
+        "Subnet M has been drained and halted by the subnet merging tool"
     );
+}
+
+/// The node of `subnet` the tool waits for the halting CUP on, i.e. the one the
+/// state of `subnet` would be downloaded from.
+fn download_node(subnet: &SubnetSnapshot) -> IpAddr {
+    subnet.nodes().next().unwrap().get_ip_addr()
+}
+
+/// Step 13: check that `M` and `T` are halted, i.e. that every one of their
+/// nodes certifies the height its subnet halts at, and that it still does so
+/// after `HALT_OBSERVATION_PERIOD`.
+///
+/// The tool only waits for the node of each subnet the state would be
+/// downloaded from, so the other nodes are waited for to catch up with the
+/// halting height.
+async fn check_subnets_halted(context: &Context<'_>) {
+    let logger = &context.logger;
+    let subnets = [&context.m_subnet, &context.t_subnet];
+    let mut halting_heights = Vec::new();
+
+    for subnet in subnets {
+        let subnet_id = subnet.subnet_id;
+        // The tool has checked that the download node serves the CUP the subnet
+        // halts at, and no CUP follows that one.
+        let download_node = download_node(subnet);
+        let halting_height = get_node_metrics(logger, &download_node)
+            .await
+            .unwrap_or_else(|| panic!("failed to get the metrics of node {download_node}"))
+            .catch_up_package_height;
+        info!(
+            logger,
+            "Step 13: Waiting until every node of subnet {subnet_id} has certified the height \
+             {halting_height} it halts at"
+        );
+        retry_with_msg_async!(
+            format!(
+                "waiting until every node of subnet {subnet_id} has certified height \
+                 {halting_height}"
+            ),
+            logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                for node in subnet.nodes() {
+                    let ip = node.get_ip_addr();
+                    let Some(metrics) = get_node_metrics(logger, &ip).await else {
+                        bail!("failed to get the metrics of node {ip}");
+                    };
+                    let height = metrics.certification_height;
+                    assert!(
+                        height <= halting_height,
+                        "node {ip} of subnet {subnet_id} certified height {height}, past the \
+                         height {halting_height} the subnet halts at"
+                    );
+                    if height < halting_height {
+                        bail!(
+                            "node {ip} of subnet {subnet_id} has certified up to height {height}"
+                        );
+                    }
+                }
+                Ok(())
+            }
+        )
+        .await
+        .expect("not every node certified the height its subnet halts at");
+        info!(
+            logger,
+            "Step 13: every node of subnet {subnet_id} has certified the height {halting_height} \
+             it halts at"
+        );
+        halting_heights.push(halting_height);
+    }
+
+    info!(
+        logger,
+        "Step 13: Checking that the certified heights stay put over {HALT_OBSERVATION_PERIOD:?}"
+    );
+    tokio::time::sleep(HALT_OBSERVATION_PERIOD).await;
+    for (subnet, halting_height) in subnets.into_iter().zip(halting_heights) {
+        let subnet_id = subnet.subnet_id;
+        for node in subnet.nodes() {
+            let ip = node.get_ip_addr();
+            let height = get_node_metrics(logger, &ip)
+                .await
+                .unwrap_or_else(|| panic!("failed to get the metrics of node {ip}"))
+                .certification_height;
+            assert_eq!(
+                height, halting_height,
+                "node {ip} of subnet {subnet_id} certified height {height} rather than the \
+                 height {halting_height} the subnet halts at, {HALT_OBSERVATION_PERIOD:?} after \
+                 reaching it"
+            );
+        }
+    }
+
+    info!(logger, "Step 13 done: subnets M and T are halted");
 }
 
 /// Step 9: wait until the replicas of `M` observed the "cooling down" label,
