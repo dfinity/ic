@@ -7,6 +7,7 @@
 /var/lib/ic/data(/.*)?                         gen_context(system_u:object_r:ic_data_t,s0)
 /var/lib/ic/data/ic_state/page_deltas(/.*)?    gen_context(system_u:object_r:ic_canister_mem_t,s0)
 /var/lib/ic/crypto(/.*)?                       gen_context(system_u:object_r:ic_crypto_store_t,s0)
+/run/config(/.*)?                              gen_context(system_u:object_r:ic_config_var_run_t,s0)
 /run/ic-node                                -- gen_context(system_u:object_r:ic_var_run_t,s0)
 /run/ic-node/nftables-ruleset               -d gen_context(system_u:object_r:ic_nftables_ruleset_t,s0)
 /run/ic-node/config                         -d gen_context(system_u:object_r:ic_replica_conffile_t,s0)
