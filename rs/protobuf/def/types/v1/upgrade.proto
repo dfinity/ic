@@ -12,6 +12,7 @@ message UpgradePermitAction {
     RequestUpgradePermit request_permit = 1;
     AuthorizeUpgradePermit authorize_permit = 2;
     ReturnUpgradePermit return_permit = 3;
+    ExpireUpgradePermit expire_permit = 4;
   }
 }
 
@@ -29,6 +30,10 @@ message AuthorizeUpgradePermit {
 }
 
 message ReturnUpgradePermit {
+  types.v1.NodeId node = 1;
+}
+
+message ExpireUpgradePermit {
   types.v1.NodeId node = 1;
 }
 

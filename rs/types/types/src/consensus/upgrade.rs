@@ -31,14 +31,15 @@ use crate::{Height, NodeId, node_id_into_protobuf, node_id_try_from_option};
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum UpgradePermitAction {
     /// Request permission to reboot. The block maker requests for itself.
-    /// `request_height` is the height of the block containing this request,
-    /// used for timeout tracking.
     RequestPermit(UpgradePermitRequest),
     /// Authorize a node to reboot — the signed request and the basic
     /// signatures over it collected from other nodes.
     AuthorizePermit(Signed<UpgradePermitRequest, BasicSignatureBatch<UpgradePermitRequest>>),
     /// Release a previously authorized permit (reboot complete).
     ReturnPermit { node: NodeId },
+    /// Expire a permit, if the request is no longer valid. e.g. The node has
+    /// left, or the request is too old.
+    ExpirePermit { node: NodeId },
 }
 
 /// UpgradePermitRequest holds the values that are used in creating an upgrade

@@ -3591,10 +3591,6 @@ fn network_topology_reference_subnet_size_is_never_zero() {
     }
 }
 
-fn upgrade_state_members(nodes: &[u64]) -> BTreeSet<NodeId> {
-    nodes.iter().map(|&i| node_test_id(i)).collect()
-}
-
 fn upgrade_request_action(requestor: NodeId) -> UpgradePermitAction {
     UpgradePermitAction::RequestPermit(UpgradePermitRequest { requestor })
 }
@@ -3612,13 +3608,16 @@ fn upgrade_return_action(requestor: NodeId) -> UpgradePermitAction {
     UpgradePermitAction::ReturnPermit { node: requestor }
 }
 
+fn upgrade_expire_action(requestor: NodeId) -> UpgradePermitAction {
+    UpgradePermitAction::ExpirePermit { node: requestor }
+}
+
 #[test]
 fn upgrade_state_applies_request() {
     let mut state = UpgradeState::default();
     state.apply(
         &[upgrade_request_action(node_test_id(1))],
         Height::new(3),
-        &upgrade_state_members(&[1, 2, 3]),
         &no_op_logger(),
     );
     assert_eq!(
@@ -3630,19 +3629,16 @@ fn upgrade_state_applies_request() {
 
 #[test]
 fn upgrade_state_authorize_moves_request_to_authorized() {
-    let members = upgrade_state_members(&[1, 2, 3]);
     let mut state = UpgradeState::default();
 
     state.apply(
         &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
-        &members,
         &no_op_logger(),
     );
     state.apply(
         &[upgrade_authorize_action(node_test_id(1))],
         Height::new(5),
-        &members,
         &no_op_logger(),
     );
     assert!(state.unauthorized_upgrade_requests.is_empty());
@@ -3651,25 +3647,21 @@ fn upgrade_state_authorize_moves_request_to_authorized() {
 
 #[test]
 fn upgrade_state_return_removes_authorization() {
-    let members = upgrade_state_members(&[1, 2, 3]);
     let mut state = UpgradeState::default();
 
     state.apply(
         &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
-        &members,
         &no_op_logger(),
     );
     state.apply(
         &[upgrade_authorize_action(node_test_id(1))],
         Height::new(2),
-        &members,
         &no_op_logger(),
     );
     state.apply(
         &[upgrade_return_action(node_test_id(1))],
         Height::new(3),
-        &members,
         &no_op_logger(),
     );
     assert!(state.unauthorized_upgrade_requests.is_empty());
@@ -3678,33 +3670,28 @@ fn upgrade_state_return_removes_authorization() {
 
 #[test]
 fn upgrade_state_prunes_departed_members() {
-    let old_members = upgrade_state_members(&[1, 2, 3, 7]);
     let mut state = UpgradeState::default();
 
     state.apply(
         &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
-        &old_members,
         &no_op_logger(),
     );
     state.apply(
         &[upgrade_request_action(node_test_id(7))],
         Height::new(2),
-        &old_members,
         &no_op_logger(),
     );
     state.apply(
         &[upgrade_authorize_action(node_test_id(7))],
         Height::new(3),
-        &old_members,
         &no_op_logger(),
     );
 
     // Node 7 leaves the subnet; its request and permit are pruned.
     state.apply(
-        &[],
+        &[upgrade_expire_action(node_test_id(7))],
         Height::new(4),
-        &upgrade_state_members(&[1, 2, 3]),
         &no_op_logger(),
     );
     assert_eq!(
@@ -3716,20 +3703,17 @@ fn upgrade_state_prunes_departed_members() {
 
 #[test]
 fn upgrade_state_applies_multiple_actions_per_block() {
-    let members = upgrade_state_members(&[1, 2, 3]);
     let mut state = UpgradeState::default();
 
     // Two nodes request...
     state.apply(
         &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
-        &members,
         &no_op_logger(),
     );
     state.apply(
         &[upgrade_request_action(node_test_id(2))],
         Height::new(2),
-        &members,
         &no_op_logger(),
     );
     assert_eq!(state.unauthorized_upgrade_requests.len(), 2);
@@ -3741,7 +3725,6 @@ fn upgrade_state_applies_multiple_actions_per_block() {
             upgrade_authorize_action(node_test_id(2)),
         ],
         Height::new(5),
-        &members,
         &no_op_logger(),
     );
     assert!(state.unauthorized_upgrade_requests.is_empty());

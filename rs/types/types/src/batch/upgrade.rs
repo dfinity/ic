@@ -72,6 +72,11 @@ impl From<&UpgradePermitAction> for pb::UpgradePermitAction {
                     node: Some(crate::node_id_into_protobuf(*node)),
                 })
             }
+            UpgradePermitAction::ExpirePermit { node } => {
+                Action::ExpirePermit(pb::ExpireUpgradePermit {
+                    node: Some(crate::node_id_into_protobuf(*node)),
+                })
+            }
         };
         Self {
             action: Some(proto_action),
@@ -99,6 +104,9 @@ impl TryFrom<pb::UpgradePermitAction> for UpgradePermitAction {
             }),
             Action::ReturnPermit(return_permit) => UpgradePermitAction::ReturnPermit {
                 node: crate::node_id_try_from_option(return_permit.node)?,
+            },
+            Action::ExpirePermit(expire_permit) => UpgradePermitAction::ExpirePermit {
+                node: crate::node_id_try_from_option(expire_permit.node)?,
             },
         })
     }

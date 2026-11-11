@@ -1880,7 +1880,7 @@ impl ChainKeyErrorCode {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpgradePermitAction {
-    #[prost(oneof = "upgrade_permit_action::Action", tags = "1, 2, 3")]
+    #[prost(oneof = "upgrade_permit_action::Action", tags = "1, 2, 3, 4")]
     pub action: ::core::option::Option<upgrade_permit_action::Action>,
 }
 /// Nested message and enum types in `UpgradePermitAction`.
@@ -1893,6 +1893,8 @@ pub mod upgrade_permit_action {
         AuthorizePermit(super::AuthorizeUpgradePermit),
         #[prost(message, tag = "3")]
         ReturnPermit(super::ReturnUpgradePermit),
+        #[prost(message, tag = "4")]
+        ExpirePermit(super::ExpireUpgradePermit),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1914,6 +1916,11 @@ pub struct AuthorizeUpgradePermit {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ReturnUpgradePermit {
+    #[prost(message, optional, tag = "1")]
+    pub node: ::core::option::Option<NodeId>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ExpireUpgradePermit {
     #[prost(message, optional, tag = "1")]
     pub node: ::core::option::Option<NodeId>,
 }

@@ -14,7 +14,7 @@ use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
-use ic_logger::{ReplicaLogger, info};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_management_canister_types_private::{
     IC_00, MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse,
 };
@@ -2423,10 +2423,6 @@ impl UnflushedCheckpointOps {
     }
 }
 
-/// If a permit request is not authorized within this many blocks, something
-/// has likely gone wrong. This timeout is used to log for monitoring.
-pub const UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS: Height = Height::new(100);
-
 /// The Phase 2 state during fast GuestOS upgrades, stored in `SystemMetadata`.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct UpgradeState {
@@ -2444,7 +2440,6 @@ impl UpgradeState {
         &mut self,
         actions: &[UpgradePermitAction],
         height: Height,
-        subnet_members: &BTreeSet<NodeId>,
         logger: &ReplicaLogger,
     ) {
         for action in actions {
@@ -2463,29 +2458,15 @@ impl UpgradeState {
                     self.unauthorized_upgrade_requests.remove(node);
                     self.rebooting_nodes.remove(node);
                 }
+                UpgradePermitAction::ExpirePermit { node } => {
+                    info!(
+                        logger,
+                        "Upgrade permit request from '{}' expired at height '{}'", node, height,
+                    );
+                    self.unauthorized_upgrade_requests.remove(node);
+                    self.rebooting_nodes.remove(node);
+                }
             }
-        }
-
-        // Prune departed members.
-        self.unauthorized_upgrade_requests
-            .retain(|node, _req_height| subnet_members.contains(node));
-
-        self.rebooting_nodes
-            .retain(|node| subnet_members.contains(node));
-
-        // Log about any nodes that have been sitting with an open request for
-        // more than UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS blocks.
-        for node in self
-            .unauthorized_upgrade_requests
-            .iter()
-            .filter_map(|(node, req_height)| {
-                (*req_height + UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS >= height).then_some(*node)
-            })
-        {
-            info!(
-                logger,
-                "Upgrade permit request from '{}' expired at height '{}'", node, height,
-            );
         }
     }
 }
