@@ -1089,11 +1089,7 @@ impl ReplicatedState {
                 if receiver.get_ref() == subnet_id {
                     match msg {
                         RequestOrResponse::Request(mut request) => {
-                            // Cache the effective canister ID, unless already cached. Local
-                            // requests are cached when routed into the loopback stream, because
-                            // here their `Arc` is shared with the loopback stream and caching
-                            // would copy them; XNet requests come from a decoded stream slice,
-                            // so they are not shared and are cached in place.
+                            // Cache the effective canister ID, unless already cached.
                             Request::cache_effective_canister_id(&mut request);
                             push_input(
                                 &mut self.subnet_queues,
