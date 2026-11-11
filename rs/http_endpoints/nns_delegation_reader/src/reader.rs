@@ -107,29 +107,11 @@ impl NNSDelegationReader {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NNSDelegationBuilder {
     builder: NNSDelegationBuilderInner,
     precomputed_delegation_with_flat_canister_ranges: CertificateDelegation,
     precomputed_delegation_without_canister_ranges: CertificateDelegation,
-    logger: ReplicaLogger,
-}
-
-/// Manual implementation because [`ReplicaLogger`] does not implement [`fmt::Debug`].
-impl fmt::Debug for NNSDelegationBuilder {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NNSDelegationBuilder")
-            .field("builder", &self.builder)
-            .field(
-                "precomputed_delegation_with_flat_canister_ranges",
-                &self.precomputed_delegation_with_flat_canister_ranges,
-            )
-            .field(
-                "precomputed_delegation_without_canister_ranges",
-                &self.precomputed_delegation_without_canister_ranges,
-            )
-            .finish_non_exhaustive()
-    }
 }
 
 impl NNSDelegationBuilder {
@@ -165,17 +147,17 @@ impl NNSDelegationBuilder {
             full_labeled_tree,
             raw_certificate,
             subnet_id,
+            logger.clone(),
         );
         let precomputed_delegation_without_canister_ranges =
-            builder.build_uncached_or_original(CanisterRangesFilter::None, logger);
+            builder.build_uncached_or_original(CanisterRangesFilter::None);
         let precomputed_delegation_with_flat_canister_ranges =
-            builder.build_uncached_or_original(CanisterRangesFilter::Flat, logger);
+            builder.build_uncached_or_original(CanisterRangesFilter::Flat);
 
         Self {
             builder,
             precomputed_delegation_with_flat_canister_ranges,
             precomputed_delegation_without_canister_ranges,
-            logger: logger.clone(),
         }
     }
 
@@ -232,7 +214,7 @@ impl NNSDelegationBuilder {
             }
             CanisterRangesFilter::Tree(_canister_id) => self
                 .builder
-                .build_uncached_or_original(canister_ranges_filter, &self.logger),
+                .build_uncached_or_original(canister_ranges_filter),
         }
     }
 
@@ -258,13 +240,27 @@ impl NNSDelegationBuilder {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct NNSDelegationBuilderInner {
     full_certificate: Certificate,
     full_labeled_tree: LabeledTree<Vec<u8>>,
     full_filter_builder: FilterBuilder,
     subnet_id: SubnetId,
     original_delegation: CertificateDelegation,
+    logger: ReplicaLogger,
+}
+
+/// Manual implementation because [`ReplicaLogger`] does not implement [`fmt::Debug`].
+impl fmt::Debug for NNSDelegationBuilderInner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NNSDelegationBuilderInner")
+            .field("full_certificate", &self.full_certificate)
+            .field("full_labeled_tree", &self.full_labeled_tree)
+            .field("full_filter_builder", &self.full_filter_builder)
+            .field("subnet_id", &self.subnet_id)
+            .field("original_delegation", &self.original_delegation)
+            .finish_non_exhaustive()
+    }
 }
 
 impl NNSDelegationBuilderInner {
@@ -273,6 +269,7 @@ impl NNSDelegationBuilderInner {
         full_labeled_tree: LabeledTree<Vec<u8>>,
         raw_certificate: Blob,
         subnet_id: SubnetId,
+        logger: ReplicaLogger,
     ) -> Self {
         Self {
             full_filter_builder: full_certificate.tree.filter_builder(),
@@ -283,21 +280,18 @@ impl NNSDelegationBuilderInner {
                 subnet_id: Blob(subnet_id.get().to_vec()),
                 certificate: raw_certificate,
             },
+            logger,
         }
     }
 
     /// Builds the delegation from scratch instead of consulting the precomputed delegations.
-    fn build_uncached_or_original(
-        &self,
-        filter: CanisterRangesFilter,
-        logger: &ReplicaLogger,
-    ) -> CertificateDelegation {
+    fn build_uncached_or_original(&self, filter: CanisterRangesFilter) -> CertificateDelegation {
         match self.try_build(filter) {
             Ok(delegation) => delegation,
             Err(err) => {
                 warn!(
                     every_n_seconds => 30,
-                    logger,
+                    self.logger,
                     "Failed to build an NNS delegation with filter {filter:?}: {err}. \
                     Returning the original delegation."
                 );
