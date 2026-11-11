@@ -271,3 +271,34 @@ fn cache_effective_canister_id() {
     assert!(Arc::ptr_eq(&request, &shared));
     assert_eq!(request.effective_canister_id, None);
 }
+
+#[test]
+fn count_bytes_includes_cached_effective_canister_id() {
+    let target = canister_test_id(13);
+    let uncached = start_canister_request(target);
+    let cached = Request {
+        effective_canister_id: Some(Box::new(target)),
+        ..uncached.clone()
+    };
+
+    assert_eq!(
+        uncached.count_bytes(),
+        size_of::<RequestOrResponse>()
+            + size_of::<Request>()
+            + uncached.payload_size_bytes().get() as usize
+    );
+    assert_eq!(
+        cached.count_bytes(),
+        uncached.count_bytes() + size_of::<CanisterId>()
+    );
+    // Consistent with the wrapping types.
+    let cached = Arc::new(cached);
+    assert_eq!(
+        RequestOrResponse::Request(Arc::clone(&cached)).count_bytes(),
+        cached.count_bytes()
+    );
+    assert_eq!(
+        StreamMessage::Request(Arc::clone(&cached)).count_bytes(),
+        cached.count_bytes()
+    );
+}

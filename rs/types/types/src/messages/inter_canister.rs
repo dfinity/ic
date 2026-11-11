@@ -765,10 +765,19 @@ impl StreamMessage {
 /// `RequestOrResponse::Request(self).count_bytes()` and
 /// `StreamMessage::Request(self).count_bytes()` so we don't need to wrap
 /// `self` only to calculate its estimated byte size.
+///
+/// Includes the heap-allocated cached effective canister ID, if any. The cache is
+/// only populated (by `cache_effective_canister_id()`) before the request is
+/// pushed into a stream or queue, so its byte size does not change while it is
+/// accounted for in one.
 impl CountBytes for Request {
     fn count_bytes(&self) -> usize {
         size_of::<RequestOrResponse>()
             + size_of::<Request>()
+            + self
+                .effective_canister_id
+                .as_ref()
+                .map_or(0, |_| size_of::<CanisterId>())
             + self.payload_size_bytes().get() as usize
     }
 }
