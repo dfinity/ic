@@ -86,7 +86,9 @@ Runbook::
    halted, i.e. that every one of their nodes certifies the height its subnet
    halts at and none goes past it, even after `HALT_OBSERVATION_PERIOD`.
 14. The following steps of the tool are executed, over SSH with the admin key:
-   `Stop{Source,Destination}Replica`;
+   `Stop{Source,Destination}Replica`, which wait until the node of each subnet
+   holds a finished checkpoint at the height of the CUP its subnet halts at
+   and then stop its replica;
    `DownloadStateFrom{Source,Destination}Subnet`, which download the
    checkpoint at the height of the CUP each subnet halted at; and
    `Validate{Source,Destination}SubnetCup`, which validate each downloaded state

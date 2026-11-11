@@ -2,7 +2,8 @@ use crate::{
     admin_helper::get_propose_to_cool_down_subnet_command,
     layout::Layout,
     steps::{
-        CheckCoolingDownStep, CheckMergeReadinessStep, ValidateCupStep, WaitForHaltingCupStep,
+        CheckCoolingDownStep, CheckMergeReadinessStep, StopReplicaAtHaltingCheckpointStep,
+        ValidateCupStep, WaitForHaltingCupStep,
     },
     target_subnet::TargetSubnet,
 };
@@ -67,11 +68,13 @@ pub enum StepType {
     /// Wait until the node of the destination subnet the state is downloaded
     /// from serves the CUP the subnet halts at.
     WaitForHaltingCupOnDestinationSubnet,
-    /// Stop the replica of the node of the source subnet the state is
-    /// downloaded from.
+    /// Wait until the node of the source subnet the state is downloaded from
+    /// holds a finished checkpoint at the height of the CUP the subnet halts
+    /// at, then stop its replica.
     StopSourceReplica,
-    /// Stop the replica of the node of the destination subnet the state is
-    /// downloaded from.
+    /// Wait until the node of the destination subnet the state is downloaded
+    /// from holds a finished checkpoint at the height of the CUP the subnet
+    /// halts at, then stop its replica.
     StopDestinationReplica,
     /// Download the checkpoint at the height of the CUP the source subnet
     /// halted at.
@@ -127,7 +130,8 @@ pub struct SubnetMergingArgs {
     /// subnet has been executed. The subnet halts at the first CUP whose
     /// registry version has the subnet scheduled to halt. As a DKG summary
     /// takes its registry version from the previous summary, that CUP can be up
-    /// to two DKG intervals away.
+    /// to two DKG intervals away. Also how long to wait for the node a state is
+    /// downloaded from to finish the checkpoint at the height of that CUP.
     #[clap(long, default_value = "1800")]
     pub halt_timeout_secs: u64,
 
@@ -460,7 +464,16 @@ impl SubnetMerging {
         // until the merged state is uploaded to it; the source subnet's stays
         // stopped for good, as that subnet is deleted at the end of the merge.
         let node_ip = self.download_node_ip(target_subnet, "StopReplica")?;
-        Ok(self.recovery.get_stop_replica_step(node_ip))
+        Ok(StopReplicaAtHaltingCheckpointStep {
+            subnet_id: self.subnet_id(target_subnet),
+            node_ip,
+            layout: self.layout.clone(),
+            ssh_helper: self.ssh_helper(node_ip),
+            stop_replica: Box::new(self.recovery.get_stop_replica_step(node_ip)),
+            timeout: Duration::from_secs(self.params.halt_timeout_secs),
+            poll_interval: Duration::from_secs(self.params.poll_interval_secs),
+            logger: self.recovery.logger.clone(),
+        })
     }
 
     /// Downloads the checkpoint at the height of the CUP a subnet halted at,

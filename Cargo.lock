@@ -14619,6 +14619,7 @@ dependencies = [
  "ic-recovery",
  "ic-registry-client-helpers",
  "ic-registry-subnet-type",
+ "ic-state-layout",
  "ic-subnet-tools",
  "ic-types",
  "prometheus-parse",

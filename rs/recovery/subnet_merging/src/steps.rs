@@ -9,20 +9,28 @@ use ic_base_types::SubnetId;
 use ic_cup_explorer::get_cup;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
+    IC_CHECKPOINTS_PATH, IC_DATA_PATH,
     error::{RecoveryError, RecoveryResult},
     registry_helper::RegistryHelper,
+    ssh_helper::SshHelper,
     steps::Step,
     util::{DataLocation, block_on},
 };
+use ic_state_layout::{STATE_SYNC_CHECKPOINT_MARKER, StateLayout, UNVERIFIED_CHECKPOINT_MARKER};
 use ic_subnet_tools::{
-    agent_helper::AgentHelper, state_tool_helper, validation::validate_artifacts,
+    agent_helper::AgentHelper, state_tool_helper, utils::get_cup as read_cup_file,
+    validation::validate_artifacts,
 };
-use ic_types::consensus::{CatchUpPackage, HasHeight};
+use ic_types::{
+    Height,
+    consensus::{CatchUpPackage, HasHeight},
+};
 use slog::{Logger, info};
 use url::Url;
 
 use std::{
     net::{IpAddr, Ipv6Addr},
+    path::PathBuf,
     time::Duration,
 };
 
@@ -294,5 +302,102 @@ impl Step for ValidateCupStep {
             self.subnet_id,
             &self.logger,
         )
+    }
+}
+
+/// Stops the replica of the node the state of a subnet is downloaded from, but
+/// only once the node holds a finished checkpoint at the height of the CUP the
+/// subnet halts at.
+///
+/// The state manager renames a checkpoint into the `checkpoints` directory
+/// together with an unverified marker, keeps writing its files asynchronously,
+/// and only removes the marker once they are all written and synced (a
+/// checkpoint obtained by state sync carries a second marker, which is removed
+/// last). A node may also hold the halting CUP before it has written the
+/// checkpoint at all, e.g. if it got the CUP from its peers. Stopping the
+/// replica before the checkpoint is finished would leave it unfinished for
+/// good, so the step waits for that first. Once the replica is stopped, nothing
+/// changes the checkpoint anymore, so the state that is downloaded is the one
+/// that was checked here.
+pub(crate) struct StopReplicaAtHaltingCheckpointStep {
+    pub(crate) subnet_id: SubnetId,
+    pub(crate) node_ip: IpAddr,
+    pub(crate) layout: Layout,
+    pub(crate) ssh_helper: SshHelper,
+    pub(crate) stop_replica: Box<dyn Step>,
+    pub(crate) timeout: Duration,
+    pub(crate) poll_interval: Duration,
+    pub(crate) logger: Logger,
+}
+
+impl Step for StopReplicaAtHaltingCheckpointStep {
+    fn descr(&self) -> String {
+        format!(
+            "Wait until node {} holds a finished checkpoint at the height of the CUP subnet {} \
+             halts at, then: {}",
+            self.node_ip,
+            self.subnet_id,
+            self.stop_replica.descr(),
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let height = read_cup_file(&self.layout.halting_cup_file(self.subnet_id))?.height();
+
+        // A checkpoint that does not exist yet, or is not finished yet, is the
+        // normal state of affairs while the node is still catching up with the
+        // halting CUP, so every error is retried.
+        wait_for(
+            &format!(
+                "node {} holds a finished checkpoint at height {height} of subnet {}",
+                self.node_ip, self.subnet_id,
+            ),
+            self.timeout,
+            self.poll_interval,
+            &self.logger,
+            || self.check_checkpoint_finished(height),
+        )?;
+        info!(
+            self.logger,
+            "Node {} holds a finished checkpoint at height {height} of subnet {}",
+            self.node_ip,
+            self.subnet_id,
+        );
+
+        self.stop_replica.exec()
+    }
+}
+
+impl StopReplicaAtHaltingCheckpointStep {
+    /// Succeeds if the node holds the checkpoint at `height` and it carries
+    /// neither of the markers of an unfinished checkpoint.
+    fn check_checkpoint_finished(&self, height: Height) -> RecoveryResult<()> {
+        let checkpoint = PathBuf::from(IC_DATA_PATH)
+            .join(IC_CHECKPOINTS_PATH)
+            .join(StateLayout::checkpoint_name(height));
+        let checkpoint = checkpoint.display();
+        let output = self.ssh_helper.ssh(format!(
+            "if [ ! -d {checkpoint} ]; then echo missing; \
+             elif [ -e {checkpoint}/{UNVERIFIED_CHECKPOINT_MARKER} ] \
+             || [ -e {checkpoint}/{STATE_SYNC_CHECKPOINT_MARKER} ]; then echo unfinished; \
+             else echo finished; fi"
+        ))?;
+
+        match output.as_deref().map(str::trim) {
+            Some("finished") => Ok(()),
+            Some("missing") => Err(RecoveryError::UnexpectedError(format!(
+                "node {} does not hold the checkpoint {checkpoint} yet",
+                self.node_ip
+            ))),
+            Some("unfinished") => Err(RecoveryError::UnexpectedError(format!(
+                "the checkpoint {checkpoint} on node {} is not finished yet",
+                self.node_ip
+            ))),
+            other => Err(RecoveryError::UnexpectedError(format!(
+                "unexpected output while checking the checkpoint {checkpoint} on node {}: \
+                 {other:?}",
+                self.node_ip
+            ))),
+        }
     }
 }
