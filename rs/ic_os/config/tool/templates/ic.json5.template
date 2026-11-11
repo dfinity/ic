@@ -1,8 +1,8 @@
-{#- Dedicated sets: `rate_limit`/`connection_limit` already carry this table's
-    INPUT-wide limiters, and an nftables dynamic set holds one stateful object
-    per element, so an independent limit needs its own set. -#}
+{#- `rate_limit`/`connection_limit` already carry this table's INPUT-wide
+    limiters, and a dynamic set holds one stateful object per element, so an
+    independent limit needs its own set. -#}
 {%- macro guest_metrics_proxy() %}
-{%- if self.multi_vm_guest() %}
+{%- if self.cloud_engine_guest() %}
 \n\
   set metrics_rate_limit {\n\
     type ipv6_addr\n\
@@ -16,9 +16,8 @@
     flags dynamic\n\
   }\n\
 \n\
-  # Guests sharing a host serve their own metrics: there is no single\n\
-  # \"guestos\" for the HostOS metrics-proxy to chainload, and `hostos` does not\n\
-  # resolve from inside one. Limits mirror the HostOS metrics_proxy chain.\n\
+  # Guests serve their own metrics: `hostos` does not resolve from inside a\n\
+  # guest that shares its host. Limits mirror the HostOS metrics_proxy chain.\n\
   chain metrics_proxy {\n\
     ct state { new } add @metrics_rate_limit { ip6 saddr limit rate over 100/minute } drop comment \"Maximum 100 connections per minute\"\n\
     ct state { new } add @metrics_connection_limit { ip6 saddr ct count over 6 } drop comment \"No more than 6 connections per source at a time\"\n\
@@ -27,9 +26,10 @@
 {%- endif %}
 {%- endmacro %}
 {%- macro guest_metrics_rule() %}
-{%- if self.multi_vm_guest() %}
-    # Public node metrics, served by this guest's own metrics-proxy.\n\
-    tcp dport { 42372 } goto metrics_proxy\n\
+{%- if self.cloud_engine_guest() %}
+    # Node metrics, served by this guest's own metrics-proxy. The HostOS\n\
+    # metrics-proxy scrapes from the node's own prefix.\n\
+    ip6 saddr { {{ ipv6_prefix }} } tcp dport { 42372 } goto metrics_proxy\n\
 {%- else %}
     # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS\n\
     ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept\n\
