@@ -403,7 +403,7 @@ impl Step for CopyLocalIcStateStep {
             create_dir(&dst_parent)?;
 
             let mut cp = Command::new("cp");
-            cp.arg("-rf").arg(src).arg(dst_parent);
+            cp.arg("-r").arg(src).arg(dst_parent);
             confirm_exec_cmd(&mut cp, log)?;
         }
 
