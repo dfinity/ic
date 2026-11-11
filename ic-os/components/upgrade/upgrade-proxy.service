@@ -8,8 +8,16 @@ StartLimitBurst=30
 
 [Service]
 Type=exec
-DynamicUser=yes
+User=upgrade-proxy
+Group=upgrade-proxy
 StateDirectory=ic/upgrade-proxy ic/upgrade-proxy/tmp
+
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
 
 ExecStartPre=/usr/sbin/nginx -t -c /etc/nginx/upgrade-proxy.conf -g 'daemon off;'
 ExecStart=/usr/sbin/nginx -c /etc/nginx/upgrade-proxy.conf -g 'daemon off;'

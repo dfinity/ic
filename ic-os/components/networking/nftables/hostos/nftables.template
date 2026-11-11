@@ -54,6 +54,7 @@ table ip filter {
 
   chain OUTPUT {
     type filter hook output priority filter; policy drop;
+    meta skuid upgrade-proxy ct state { new } reject comment "Block all IPv4 egress from the upgrade proxy."
     oif "lo" accept
     ct state { invalid } drop
     ct state { established, related } accept
@@ -159,6 +160,8 @@ table ip6 filter {
 
   chain OUTPUT {
     type filter hook output priority filter; policy drop;
+    meta skuid upgrade-proxy fib daddr type local ct state { new } reject comment "Block upgrade proxy access to this host's own addresses."
+    meta skuid upgrade-proxy ip6 daddr { fe80::/10, fc00::/7, {{ ipv6_prefix }} } ct state { new } reject comment "Block upgrade proxy access to link-local, ULA and the local prefix."
     oif "lo" accept
     ct state { invalid } drop
     ct state { established, related } accept

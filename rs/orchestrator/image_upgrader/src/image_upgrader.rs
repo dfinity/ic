@@ -46,7 +46,7 @@ impl ManagebootRunner for ManagebootRunnerImpl {
 pub struct Rebooting;
 
 const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
-const UPGRADE_PROXY_URL: &str = "http://hostos:19300/";
+const UPGRADE_PROXY_URL: &str = "http://hostos:19300";
 
 /// Defines the image upgrader trait and default implementation. It receives a generic version identifier `V`
 /// and a return value `R` stemming from a periodically called `check_for_upgrade` function.
