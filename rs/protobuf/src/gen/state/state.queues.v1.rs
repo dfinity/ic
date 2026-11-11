@@ -77,7 +77,7 @@ pub struct Request {
     #[prost(uint32, tag = "9")]
     pub deadline_seconds: u32,
     /// Cached effective canister ID of a request addressed to the management
-    /// canister, populated upon induction into the subnet queues.
+    /// canister. Absent if not cached.
     #[prost(message, optional, tag = "10")]
     pub effective_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
 }

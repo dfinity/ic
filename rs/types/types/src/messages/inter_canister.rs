@@ -120,12 +120,10 @@ pub struct Request {
     /// Cached effective canister ID of a request addressed to the management
     /// canister, as returned by `extract_effective_canister_id()`.
     ///
-    /// Populated (see `cache_effective_canister_id()`) when a local request is
-    /// routed into the loopback stream, or else when the request is inducted
-    /// into the subnet queues. `None` if not (yet) populated or if the request
-    /// has no effective canister ID. Boxed, so that it only takes
-    /// up the size of a pointer in all other requests. Not part of the
-    /// canonical (XNet stream) encoding.
+    /// Populated by `cache_effective_canister_id()`. `None` if not (yet)
+    /// populated or if the request has no effective canister ID. Boxed, so that
+    /// it only takes up the size of a pointer in all other requests. Not part of
+    /// the canonical (XNet stream) encoding.
     pub effective_canister_id: Option<Box<CanisterId>>,
 }
 
