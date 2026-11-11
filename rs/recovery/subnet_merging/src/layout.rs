@@ -11,8 +11,9 @@ use ic_state_layout::StateLayout;
 use ic_types::Height;
 use prost::Message;
 use serde::{Deserialize, Serialize};
+use slog::{Logger, warn};
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// The file in which the tool records a registry version at which the subnet
 /// that is merged away is labeled "cooling down", i.e. the `V` of the merge
@@ -41,43 +42,49 @@ struct CoolingDownRegistryVersion {
 /// |  |-- halting_cup_${source_subnet_id}.pb
 /// |  |-- halting_cup_${destination_subnet_id}.pb
 /// |  |-- source_working_dir/           (the source subnet's)
-/// |  |   |-- ic.json5
 /// |  |   |-- data/
 /// |  |   |   |-- ic_state/states_metadata.pbuf
 /// |  |   |   |-- ic_state/checkpoints/
 /// |  |   |   |   |-- ${halting_height}/
 /// |  |-- destination_working_dir/      (the destination subnet's)
-/// |  |   |-- ic.json5
 /// |  |   |-- data/
 /// |  |   |   |-- ic_state/states_metadata.pbuf
 /// |  |   |   |-- ic_state/checkpoints/
 /// |  |   |   |   |-- ${halting_height}/
 pub(crate) struct Layout {
     root: PathBuf,
-    source_working_dir: PathBuf,
-    nns_public_key: PathBuf,
 }
 
 impl Layout {
-    pub(crate) fn new(recovery: &Recovery) -> Self {
-        Self {
+    /// Creates the working directories of the two subnets being merged, and
+    /// warns if one of them already holds checkpoints, e.g. from an earlier
+    /// merge.
+    pub(crate) fn new(recovery: &Recovery, logger: &Logger) -> RecoveryResult<Self> {
+        let layout = Self {
             root: recovery.recovery_dir.clone(),
-            source_working_dir: recovery.recovery_dir.join("source_working_dir"),
-            nns_public_key: recovery.recovery_dir.join("nns.pem"),
-        }
-    }
+        };
 
-    /// Creates the working directories of the two subnets being merged.
-    pub(crate) fn create_dirs(&self) -> RecoveryResult<()> {
         for target_subnet in [TargetSubnet::Source, TargetSubnet::Destination] {
-            create_dir(&self.data_dir(target_subnet))?;
+            let checkpoints_dir = layout.checkpoints_dir(target_subnet);
+            let has_checkpoints = std::fs::read_dir(&checkpoints_dir)
+                .is_ok_and(|mut entries| entries.next().is_some());
+            if has_checkpoints {
+                warn!(
+                    logger,
+                    "{} already holds checkpoints. This is expected when resuming a merge, but \
+                     otherwise they are likely left over from an earlier merge on this machine.",
+                    checkpoints_dir.display(),
+                );
+            }
+
+            create_dir(&layout.data_dir(target_subnet))?;
         }
 
-        Ok(())
+        Ok(layout)
     }
 
-    pub(crate) fn nns_public_key_file(&self) -> &Path {
-        &self.nns_public_key
+    pub(crate) fn nns_public_key_file(&self) -> PathBuf {
+        self.root.join("nns.pem")
     }
 
     pub(crate) fn actual_manifest_file(&self, subnet_id: SubnetId) -> PathBuf {
@@ -95,7 +102,7 @@ impl Layout {
 
     pub(crate) fn work_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
         match target_subnet {
-            TargetSubnet::Source => self.source_working_dir.clone(),
+            TargetSubnet::Source => self.root.join("source_working_dir"),
             TargetSubnet::Destination => self.root.join("destination_working_dir"),
         }
     }
@@ -227,11 +234,7 @@ mod tests {
         let root =
             std::env::temp_dir().join(format!("subnet_merging_layout_test_{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
-        let layout = Layout {
-            root: root.clone(),
-            source_working_dir: root.join("source_working_dir"),
-            nns_public_key: root.join("nns.pem"),
-        };
+        let layout = Layout { root: root.clone() };
         let cup = pb::CatchUpPackage {
             content: vec![1, 2, 3],
             signature: vec![4, 5],

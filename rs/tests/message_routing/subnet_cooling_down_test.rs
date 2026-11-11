@@ -541,9 +541,6 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
             .unwrap()
             .get_public_url(),
         replica_version: Some(get_guestos_img_version()),
-        // Downloading the states needs SSH access to a node of each subnet,
-        // which the tool gets with the admin key: it needs that key to upload
-        // the merged state to the destination subnet later on anyway.
         admin_key_file: Some(
             env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
                 .join(SSH_USERNAME),

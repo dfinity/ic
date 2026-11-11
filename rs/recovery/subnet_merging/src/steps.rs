@@ -249,84 +249,15 @@ impl WaitForHaltingCupStep {
     }
 }
 
-/// Validates the CUP a subnet halted at, as recorded by [WaitForHaltingCupStep]
-/// from the node's public endpoint, and the state downloaded at its height: the
-/// subnet's public key is taken from the NNS signed state tree, the CUP
-/// signature is verified against it, and the manifest recomputed from the
-/// downloaded state has to match the state hash the CUP names.
-pub(crate) struct ValidateCupStep {
-    pub(crate) subnet_id: SubnetId,
-    pub(crate) target_subnet: TargetSubnet,
-    pub(crate) nns_url: Url,
-    pub(crate) layout: Layout,
-    pub(crate) logger: Logger,
-}
-
-impl Step for ValidateCupStep {
-    fn descr(&self) -> String {
-        format!(
-            "Validate the CUP and the state downloaded from the {} subnet {}, and preserve the \
-             subnet's public key and the state tree (with only the relevant paths).",
-            self.target_subnet, self.subnet_id,
-        )
-    }
-
-    fn exec(&self) -> RecoveryResult<()> {
-        // 1. Compute the manifest of the downloaded state.
-        info!(self.logger, "Computing the state manifest");
-        // The checkpoint at the height of the halting CUP, whose state hash the
-        // manifest is checked against.
-        let height = read_cup_file(&self.layout.halting_cup_file(self.subnet_id))?.height();
-        let checkpoint_dir = self.layout.checkpoint_dir(self.target_subnet, height);
-        if !checkpoint_dir.is_dir() {
-            return Err(RecoveryError::UnexpectedError(format!(
-                "the checkpoint {} at the height of the halting CUP was not downloaded",
-                checkpoint_dir.display()
-            )));
-        }
-        let manifest_path = self.layout.actual_manifest_file(self.subnet_id);
-
-        state_tool_helper::compute_manifest(&checkpoint_dir, &manifest_path)?;
-
-        // 2. Fetch the NNS certificate after hashing the checkpoint so that it
-        // does not expire during manifest computation, then persist it and the
-        // subnet's public key for validation.
-        info!(self.logger, "Getting the NNS signed State Tree");
-        let agent_helper = AgentHelper::new(
-            &self.nns_url,
-            Some(self.layout.nns_public_key_file()),
-            self.logger.clone(),
-        )?;
-
-        let pruned_state_tree = agent_helper.read_subnet_data(self.subnet_id)?;
-        pruned_state_tree.save_to_file(&self.layout.pruned_state_tree_file(self.subnet_id))?;
-        pruned_state_tree
-            .save_public_key_to_file(&self.layout.subnet_public_key_file(self.subnet_id))?;
-
-        // 3. Validate all the artifacts (state tree, CUP, state manifest).
-        validate_artifacts(
-            self.layout.pruned_state_tree_file(self.subnet_id),
-            Some(self.layout.nns_public_key_file()),
-            self.layout.halting_cup_file(self.subnet_id),
-            manifest_path,
-            self.subnet_id,
-            &self.logger,
-        )
-    }
-}
-
 /// Stops the replica of the node the state of a subnet is downloaded from, but
 /// only once the node holds a finished checkpoint at the height of the CUP the
 /// subnet halts at.
 ///
-/// The state manager renames a checkpoint into the `checkpoints` directory
-/// together with an unverified marker, keeps writing its files asynchronously,
-/// and only removes the marker once they are all written and synced (a
-/// checkpoint obtained by state sync carries a second marker, which is removed
-/// last). A node may also hold the halting CUP before it has written the
-/// checkpoint at all, e.g. if it got the CUP from its peers. Once the replica
-/// is stopped, nothing changes the checkpoint anymore, so the state that is
-/// downloaded is the one that was checked here.
+/// Holding the halting CUP does not imply holding the checkpoint at its
+/// height: the node may hold the CUP before it has written the checkpoint (e.g.
+/// if it got the CUP from its peers), and a checkpoint stays unverified while
+/// its files are still being written (or state-synced). Once the replica is
+/// stopped, the checkpoint cannot change anymore.
 pub(crate) struct StopReplicaAtHaltingCheckpointStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) node: DownloadNode,
@@ -380,7 +311,7 @@ impl StopReplicaAtHaltingCheckpointStep {
             .join(IC_CHECKPOINTS_PATH)
             .join(StateLayout::checkpoint_name(height));
 
-        match self.node.checkpoint_status(&checkpoint)? {
+        match self.node.mode().checkpoint_status(&checkpoint)? {
             Some(CheckpointStatus::Verified) => Ok(()),
             None => Err(RecoveryError::UnexpectedError(format!(
                 "{} does not hold the checkpoint {} yet",
@@ -437,8 +368,9 @@ impl Step for DownloadStateStep {
                 CopyLocalIcStateStep {
                     logger: self.logger.clone(),
                     working_dir,
-                    require_confirmation: self.node.require_confirmation,
+                    require_confirmation: self.node.require_confirmation(),
                     data_includes,
+                    include_config: false,
                 }
                 .exec()
             }
@@ -451,28 +383,85 @@ impl Step for DownloadStateStep {
                 })?;
                 let data_includes = Recovery::get_ic_state_includes(
                     &self.logger,
-                    ExecutionMode::Remote(&ssh_helper),
+                    ExecutionMode::Remote(ssh_helper),
                     CheckpointHeight::Specified(height.get()),
                 )?;
                 DownloadIcDataStep {
                     logger: self.logger.clone(),
-                    ssh_helper,
-                    // Without `keep_downloaded_data`, the state is downloaded
-                    // straight into `working_dir`, and `backup_dir` is not
-                    // used. No pristine copy of the downloaded state has to be
-                    // kept apart, as the merge never modifies it in place.
-                    backup_dir: working_dir.clone(),
+                    ssh_helper: ssh_helper.clone(),
+                    // No pristine copy of the downloaded state has to be kept
+                    // apart, as the merge never modifies it in place.
+                    backup_dir: None,
                     working_dir,
-                    keep_downloaded_data: false,
                     data_includes,
-                    // Also download the node's config `ic.json5`, as
-                    // `CopyLocalIcStateStep` always does, so that a working
-                    // directory looks the same whether the tool runs on the
-                    // node or not.
-                    include_config: true,
+                    include_config: false,
                 }
                 .exec()
             }
         }
+    }
+}
+
+/// Validates the CUP a subnet halted at, as recorded by [WaitForHaltingCupStep]
+/// from the node's public endpoint, and the state downloaded at its height: the
+/// subnet's public key is taken from the NNS signed state tree, the CUP
+/// signature is verified against it, and the manifest recomputed from the
+/// downloaded state has to match the state hash the CUP names.
+pub(crate) struct ValidateCupStep {
+    pub(crate) subnet_id: SubnetId,
+    pub(crate) target_subnet: TargetSubnet,
+    pub(crate) nns_url: Url,
+    pub(crate) layout: Layout,
+    pub(crate) logger: Logger,
+}
+
+impl Step for ValidateCupStep {
+    fn descr(&self) -> String {
+        format!(
+            "Validate the CUP and the state downloaded from the {} subnet {}, and preserve the \
+             subnet's public key and the state tree (with only the relevant paths).",
+            self.target_subnet, self.subnet_id,
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        // 1. Compute the manifest of the downloaded state.
+        info!(self.logger, "Computing the state manifest");
+        // The checkpoint at the height of the halting CUP, whose state hash the
+        // manifest is checked against.
+        let height = read_cup_file(&self.layout.halting_cup_file(self.subnet_id))?.height();
+        let checkpoint_dir = self.layout.checkpoint_dir(self.target_subnet, height);
+        if !checkpoint_dir.is_dir() {
+            return Err(RecoveryError::UnexpectedError(format!(
+                "the checkpoint {} at the height of the halting CUP was not downloaded",
+                checkpoint_dir.display()
+            )));
+        }
+        let manifest_path = self.layout.actual_manifest_file(self.subnet_id);
+
+        state_tool_helper::compute_manifest(&checkpoint_dir, &manifest_path)?;
+
+        // 2. Get the NNS signed State Tree and the subnet's public key.
+        info!(self.logger, "Getting the NNS signed State Tree");
+        let agent_helper = AgentHelper::new(
+            &self.nns_url,
+            Some(self.layout.nns_public_key_file().as_path()),
+            self.logger.clone(),
+        )?;
+
+        let pruned_state_tree = agent_helper.read_subnet_data(self.subnet_id)?;
+        pruned_state_tree.save_to_file(&self.layout.pruned_state_tree_file(self.subnet_id))?;
+        pruned_state_tree
+            .save_public_key_to_file(&self.layout.subnet_public_key_file(self.subnet_id))?;
+
+        // 3. Validate all the artifacts (state tree, CUP, state manifest).
+        validate_artifacts(
+            self.layout.pruned_state_tree_file(self.subnet_id),
+            Some(self.layout.nns_public_key_file().as_path()),
+            self.layout.halting_cup_file(self.subnet_id),
+            manifest_path,
+            self.subnet_id,
+            &self.logger,
+        )
     }
 }
