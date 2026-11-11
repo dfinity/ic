@@ -367,7 +367,7 @@ impl Step for DownloadIcDataStep {
     }
 }
 
-pub(crate) struct CopyLocalIcStateStep {
+pub struct CopyLocalIcStateStep {
     pub logger: Logger,
     pub working_dir: PathBuf,
     pub require_confirmation: bool,

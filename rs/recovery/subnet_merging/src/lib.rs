@@ -5,6 +5,7 @@ pub mod readiness;
 pub mod subnet_merging;
 
 mod admin_helper;
+mod download_node;
 mod layout;
 mod steps;
 mod target_subnet;

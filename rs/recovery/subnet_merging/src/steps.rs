@@ -1,4 +1,5 @@
 use crate::{
+    download_node::DownloadNode,
     layout::Layout,
     readiness,
     target_subnet::TargetSubnet,
@@ -12,9 +13,8 @@ use ic_recovery::{
     IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery,
     error::{RecoveryError, RecoveryResult},
     registry_helper::RegistryHelper,
-    ssh_helper::SshHelper,
-    steps::{DownloadIcDataStep, Step},
-    util::{CheckpointHeight, DataLocation, ExecutionMode, SshUser, block_on},
+    steps::{CopyLocalIcStateStep, DownloadIcDataStep, Step},
+    util::{CheckpointHeight, DataLocation, ExecutionMode, block_on},
 };
 use ic_state_layout::{STATE_SYNC_CHECKPOINT_MARKER, StateLayout, UNVERIFIED_CHECKPOINT_MARKER};
 use ic_subnet_tools::{
@@ -321,10 +321,8 @@ impl Step for ValidateCupStep {
 /// that was checked here.
 pub(crate) struct StopReplicaAtHaltingCheckpointStep {
     pub(crate) subnet_id: SubnetId,
-    pub(crate) node_ip: IpAddr,
+    pub(crate) node: DownloadNode,
     pub(crate) layout: Layout,
-    pub(crate) ssh_helper: SshHelper,
-    pub(crate) stop_replica: Box<dyn Step>,
     pub(crate) timeout: Duration,
     pub(crate) poll_interval: Duration,
     pub(crate) logger: Logger,
@@ -333,11 +331,9 @@ pub(crate) struct StopReplicaAtHaltingCheckpointStep {
 impl Step for StopReplicaAtHaltingCheckpointStep {
     fn descr(&self) -> String {
         format!(
-            "Wait until node {} holds a finished checkpoint at the height of the CUP subnet {} \
-             halts at, then: {}",
-            self.node_ip,
-            self.subnet_id,
-            self.stop_replica.descr(),
+            "Wait until {} holds a finished checkpoint at the height of the CUP subnet {} halts \
+             at, then stop its replica.",
+            self.node, self.subnet_id,
         )
     }
 
@@ -349,8 +345,8 @@ impl Step for StopReplicaAtHaltingCheckpointStep {
         // halting CUP, so every error is retried.
         wait_for(
             &format!(
-                "node {} holds a finished checkpoint at height {height} of subnet {}",
-                self.node_ip, self.subnet_id,
+                "{} holds a finished checkpoint at height {height} of subnet {}",
+                self.node, self.subnet_id,
             ),
             self.timeout,
             self.poll_interval,
@@ -359,12 +355,15 @@ impl Step for StopReplicaAtHaltingCheckpointStep {
         )?;
         info!(
             self.logger,
-            "Node {} holds a finished checkpoint at height {height} of subnet {}",
-            self.node_ip,
+            "{} holds a finished checkpoint at height {height} of subnet {}",
+            self.node,
             self.subnet_id,
         );
 
-        self.stop_replica.exec()
+        info!(self.logger, "Stopping the replica on {}", self.node);
+        self.node
+            .execute("sudo systemctl stop ic-replica".to_string())?;
+        Ok(())
     }
 }
 
@@ -376,7 +375,7 @@ impl StopReplicaAtHaltingCheckpointStep {
             .join(IC_CHECKPOINTS_PATH)
             .join(StateLayout::checkpoint_name(height));
         let checkpoint = checkpoint.display();
-        let output = self.ssh_helper.ssh(format!(
+        let output = self.node.execute(format!(
             "if [ ! -d {checkpoint} ]; then echo missing; \
              elif [ -e {checkpoint}/{UNVERIFIED_CHECKPOINT_MARKER} ] \
              || [ -e {checkpoint}/{STATE_SYNC_CHECKPOINT_MARKER} ]; then echo unfinished; \
@@ -386,24 +385,24 @@ impl StopReplicaAtHaltingCheckpointStep {
         match output.as_deref().map(str::trim) {
             Some("finished") => Ok(()),
             Some("missing") => Err(RecoveryError::UnexpectedError(format!(
-                "node {} does not hold the checkpoint {checkpoint} yet",
-                self.node_ip
+                "{} does not hold the checkpoint {checkpoint} yet",
+                self.node
             ))),
             Some("unfinished") => Err(RecoveryError::UnexpectedError(format!(
-                "the checkpoint {checkpoint} on node {} is not finished yet",
-                self.node_ip
+                "the checkpoint {checkpoint} on {} is not finished yet",
+                self.node
             ))),
             other => Err(RecoveryError::UnexpectedError(format!(
-                "unexpected output while checking the checkpoint {checkpoint} on node {}: \
-                 {other:?}",
-                self.node_ip
+                "unexpected output while checking the checkpoint {checkpoint} on {}: {other:?}",
+                self.node
             ))),
         }
     }
 }
 
 /// Downloads the checkpoint at the height of the CUP a subnet halted at, as
-/// recorded by [WaitForHaltingCupStep], into that subnet's working directory.
+/// recorded by [WaitForHaltingCupStep], into that subnet's working directory:
+/// over SSH from a remote node, and by copying it if the tool runs on the node.
 /// The CUP itself is not downloaded again. If the node does not hold that
 /// checkpoint, the step fails rather than download an earlier one.
 ///
@@ -411,70 +410,73 @@ impl StopReplicaAtHaltingCheckpointStep {
 /// created: a step that fails to be created is skipped, whereas a step that
 /// fails to execute is retried (or skipped) at the operator's discretion.
 ///
-/// `DownloadIcDataStep` rather than `Recovery::get_download_data_step`: a merge
-/// downloads two states, and the latter always downloads into the single
-/// working directory a `Recovery` has.
+/// The steps of `ic-recovery` are used directly rather than through
+/// `Recovery`: a merge downloads two states, and `Recovery` always downloads
+/// into the single working directory it has.
 pub(crate) struct DownloadStateStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) target_subnet: TargetSubnet,
-    pub(crate) node_ip: IpAddr,
+    pub(crate) node: DownloadNode,
     pub(crate) layout: Layout,
-    pub(crate) admin_key_file: Option<PathBuf>,
-    pub(crate) ssh_confirmation: bool,
     pub(crate) logger: Logger,
-}
-
-impl DownloadStateStep {
-    fn ssh_helper(&self) -> SshHelper {
-        SshHelper::new(
-            self.logger.clone(),
-            SshUser::Admin,
-            self.node_ip,
-            self.ssh_confirmation,
-            self.admin_key_file.clone(),
-        )
-    }
 }
 
 impl Step for DownloadStateStep {
     fn descr(&self) -> String {
         format!(
-            "Download the checkpoint at the height of the CUP the {} subnet {} halted at from \
-             node {} to {}.",
+            "Download the checkpoint at the height of the CUP the {} subnet {} halted at from {} \
+             to {}.",
             self.target_subnet,
             self.subnet_id,
-            self.node_ip,
+            self.node,
             self.layout.work_dir(self.target_subnet).display(),
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let ssh_helper = self.ssh_helper();
-        ssh_helper.wait_for_access().map_err(|err| {
-            RecoveryError::UnexpectedError(format!(
-                "SSH access to node {} with the admin key denied: {err}",
-                self.node_ip
-            ))
-        })?;
-
         let height = read_cup_file(&self.layout.halting_cup_file(self.subnet_id))?.height();
-        let data_includes = Recovery::get_ic_state_includes(
-            &self.logger,
-            ExecutionMode::Remote(&ssh_helper),
-            CheckpointHeight::Specified(height.get()),
-        )?;
+        let working_dir = self.layout.work_dir(self.target_subnet);
 
-        DownloadIcDataStep {
-            logger: self.logger.clone(),
-            ssh_helper,
-            // Unused: the downloaded state is not kept apart, as the merge
-            // never modifies it.
-            backup_dir: self.layout.work_dir(self.target_subnet),
-            working_dir: self.layout.work_dir(self.target_subnet),
-            keep_downloaded_data: false,
-            data_includes,
-            include_config: true,
+        match self.node.ssh_helper() {
+            None => {
+                let data_includes = Recovery::get_ic_state_includes(
+                    &self.logger,
+                    ExecutionMode::Local,
+                    CheckpointHeight::Specified(height.get()),
+                )?;
+                CopyLocalIcStateStep {
+                    logger: self.logger.clone(),
+                    working_dir,
+                    require_confirmation: self.node.require_confirmation,
+                    data_includes,
+                }
+                .exec()
+            }
+            Some(ssh_helper) => {
+                ssh_helper.wait_for_access().map_err(|err| {
+                    RecoveryError::UnexpectedError(format!(
+                        "SSH access to {} with the admin key denied: {err}",
+                        self.node
+                    ))
+                })?;
+                let data_includes = Recovery::get_ic_state_includes(
+                    &self.logger,
+                    ExecutionMode::Remote(&ssh_helper),
+                    CheckpointHeight::Specified(height.get()),
+                )?;
+                DownloadIcDataStep {
+                    logger: self.logger.clone(),
+                    ssh_helper,
+                    // Unused: the downloaded state is not kept apart, as the
+                    // merge never modifies it.
+                    backup_dir: working_dir.clone(),
+                    working_dir,
+                    keep_downloaded_data: false,
+                    data_includes,
+                    include_config: true,
+                }
+                .exec()
+            }
         }
-        .exec()
     }
 }

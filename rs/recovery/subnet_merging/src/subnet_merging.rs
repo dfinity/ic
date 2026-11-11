@@ -1,5 +1,6 @@
 use crate::{
     admin_helper::get_propose_to_cool_down_subnet_command,
+    download_node::DownloadNode,
     layout::Layout,
     steps::{
         CheckCoolingDownStep, CheckMergeReadinessStep, DownloadStateStep,
@@ -18,9 +19,8 @@ use ic_recovery::{
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
-    ssh_helper::SshHelper,
     steps::{AdminStep, Step},
-    util::{DataLocation, SshUser},
+    util::DataLocation,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_tools::{
@@ -31,7 +31,7 @@ use slog::{Logger, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 
-use std::{collections::BTreeSet, fmt::Debug, iter::Peekable, net::IpAddr, time::Duration};
+use std::{collections::BTreeSet, fmt::Debug, iter::Peekable, time::Duration};
 
 const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
@@ -104,17 +104,17 @@ pub struct SubnetMergingArgs {
     /// The node of the source subnet to download the state from: its IP
     /// address, or "local" if the tool runs on that node. Required by
     /// `WaitForHaltingCupOnSourceSubnet`; asked for if missing, unless prompts
-    /// are skipped. The steps that access the node over SSH with the admin key
-    /// (stopping the replica and downloading the state) require an IP address.
+    /// are skipped. Unless the tool runs on that node, the steps that stop its
+    /// replica and download its state access it over SSH with the admin key.
     #[clap(long, value_parser=ic_recovery::util::data_location_from_str)]
     pub download_node_source: Option<DataLocation>,
 
     /// The node of the destination subnet to download the state from: its IP
     /// address, or "local" if the tool runs on that node. Required by
     /// `WaitForHaltingCupOnDestinationSubnet`; asked for if missing, unless
-    /// prompts are skipped. The steps that access the node over SSH with the
-    /// admin key (stopping the replica and downloading the state) require an IP
-    /// address.
+    /// prompts are skipped. Unless the tool runs on that node, the steps that
+    /// stop its replica and download its state access it over SSH with the
+    /// admin key.
     #[clap(long, value_parser=ic_recovery::util::data_location_from_str)]
     pub download_node_destination: Option<DataLocation>,
 
@@ -461,13 +461,10 @@ impl SubnetMerging {
         // state is downloaded. The destination subnet's replica stays stopped
         // until the merged state is uploaded to it; the source subnet's stays
         // stopped for good, as that subnet is deleted at the end of the merge.
-        let node_ip = self.download_node_ip(target_subnet, "StopReplica")?;
         Ok(StopReplicaAtHaltingCheckpointStep {
             subnet_id: self.subnet_id(target_subnet),
-            node_ip,
+            node: self.download_node_access(target_subnet)?,
             layout: self.layout.clone(),
-            ssh_helper: self.ssh_helper(node_ip),
-            stop_replica: Box::new(self.recovery.get_stop_replica_step(node_ip)),
             timeout: Duration::from_secs(self.params.halt_timeout_secs),
             poll_interval: Duration::from_secs(self.params.poll_interval_secs),
             logger: self.recovery.logger.clone(),
@@ -478,15 +475,11 @@ impl SubnetMerging {
         &self,
         target_subnet: TargetSubnet,
     ) -> RecoveryResult<impl Step + use<>> {
-        let node_ip = self.download_node_ip(target_subnet, "DownloadState")?;
-
         Ok(DownloadStateStep {
             subnet_id: self.subnet_id(target_subnet),
             target_subnet,
-            node_ip,
+            node: self.download_node_access(target_subnet)?,
             layout: self.layout.clone(),
-            admin_key_file: self.recovery.admin_key_file.clone(),
-            ssh_confirmation: self.recovery.ssh_confirmation,
             logger: self.recovery.logger.clone(),
         })
     }
@@ -501,31 +494,19 @@ impl SubnetMerging {
         }
     }
 
-    /// SSH access to a node with the admin key, which the upload of the merged
-    /// state to the destination subnet needs anyway.
-    fn ssh_helper(&self, node_ip: IpAddr) -> SshHelper {
-        SshHelper::new(
-            self.recovery.logger.clone(),
-            SshUser::Admin,
-            node_ip,
-            self.recovery.ssh_confirmation,
-            self.recovery.admin_key_file.clone(),
-        )
-    }
-
-    /// The IP address of the node of a subnet whose state is merged, for the
-    /// steps accessing it over SSH. Skips the step if the node is not given,
-    /// and fails it if the tool runs on that node.
-    fn download_node_ip(&self, target_subnet: TargetSubnet, step: &str) -> RecoveryResult<IpAddr> {
-        match self.download_node(target_subnet) {
-            Some(DataLocation::Remote(node_ip)) => Ok(node_ip),
-            Some(DataLocation::Local) => Err(RecoveryError::UnexpectedError(format!(
-                "Step {step} needs the IP address of the node of subnet {} to download the \
-                 state from, and does not support running on that node",
-                self.subnet_id(target_subnet),
-            ))),
-            None => Err(RecoveryError::StepSkipped),
-        }
+    /// How the steps run commands on the node of a subnet whose state is
+    /// merged: locally if the tool runs on that node, and over SSH with the
+    /// admin key otherwise. Skips the step if the node is not given.
+    fn download_node_access(&self, target_subnet: TargetSubnet) -> RecoveryResult<DownloadNode> {
+        let location = self
+            .download_node(target_subnet)
+            .ok_or(RecoveryError::StepSkipped)?;
+        Ok(DownloadNode {
+            location,
+            admin_key_file: self.recovery.admin_key_file.clone(),
+            require_confirmation: self.recovery.ssh_confirmation,
+            logger: self.recovery.logger.clone(),
+        })
     }
 
     /// The node of a subnet whose state is merged, i.e. the one the halting CUP
