@@ -796,6 +796,11 @@ impl PageMap {
         self.unflushed_delta.is_empty()
     }
 
+    /// Returns the number of pages in the unflushed delta.
+    pub fn num_unflushed_delta_pages(&self) -> usize {
+        self.unflushed_delta.len()
+    }
+
     /// Whether the page map is consistent with tip (i.e. is based on a checkpoint
     /// or has had pages flushed to tip).
     pub fn has_files_in_tip(&self) -> bool {

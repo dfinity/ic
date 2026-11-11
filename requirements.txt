@@ -603,9 +603,9 @@ numpy==2.4.1 \
     --hash=sha256:f93bc6892fe7b0663e5ffa83b61aab510aacffd58c16e012bb9352d489d90cb7 \
     --hash=sha256:fb1461c99de4d040666ca0444057b06541e5642f800b71c56e6ea92d6a853a0c
     # via pandas
-oauthlib==4.0.0 \
-    --hash=sha256:624c28c13a0a59cabf9747dfa52af63be3e512a7f2714df16e91b5b3a145e6cd \
-    --hash=sha256:efb274799819440f95b4ab3b818869f1ce9ae26c5beacba0201d1a1b76b54f86
+oauthlib==4.0.1 \
+    --hash=sha256:3d73febdb6faa00f277c81fb04be7b7586fb96fc3b7f0b9c772dada69a25ede7 \
+    --hash=sha256:498a298876e996301950a5b053d12c31628bb7b895db03666430c69ce182eb61
     # via
     #   -r requirements.in
     #   requests-oauthlib
