@@ -269,14 +269,22 @@ impl Step for ValidateCupStep {
     fn descr(&self) -> String {
         format!(
             "Validate the CUP and the state downloaded from the {} subnet {}, and preserve the \
-             subnet's public key and the state tree (with only the relevant paths) so that they \
-             can be verified independently.",
+             subnet's public key and the state tree (with only the relevant paths).",
             self.target_subnet, self.subnet_id,
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        // 1. Get the subnet's public key using `ic-agent` and persist it on disk.
+        // 1. Compute the manifest of the downloaded state.
+        info!(self.logger, "Computing the state manifest");
+        let checkpoint_dir = self.layout.latest_checkpoint_dir(self.target_subnet)?;
+        let manifest_path = self.layout.actual_manifest_file(self.subnet_id);
+
+        state_tool_helper::compute_manifest(&checkpoint_dir, &manifest_path)?;
+
+        // 2. Fetch the NNS certificate after hashing the checkpoint so that it
+        // does not expire during manifest computation, then persist it and the
+        // subnet's public key for validation.
         info!(self.logger, "Getting the NNS signed State Tree");
         let agent_helper = AgentHelper::new(
             &self.nns_url,
@@ -288,13 +296,6 @@ impl Step for ValidateCupStep {
         pruned_state_tree.save_to_file(&self.layout.pruned_state_tree_file(self.subnet_id))?;
         pruned_state_tree
             .save_public_key_to_file(&self.layout.subnet_public_key_file(self.subnet_id))?;
-
-        // 2. Compute the manifest of the downloaded state.
-        info!(self.logger, "Computing the state manifest");
-        let checkpoint_dir = self.layout.latest_checkpoint_dir(self.target_subnet)?;
-        let manifest_path = self.layout.actual_manifest_file(self.subnet_id);
-
-        state_tool_helper::compute_manifest(&checkpoint_dir, &manifest_path)?;
 
         // 3. Validate all the artifacts (state tree, CUP, state manifest).
         validate_artifacts(

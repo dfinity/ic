@@ -1,9 +1,6 @@
-use anyhow::Context;
 use clap::Parser;
-use ic_base_types::SubnetId;
 use ic_recovery::{NeuronArgs, RecoveryArgs, cli, util};
 use ic_subnet_merging::subnet_merging::{SubnetMerging, SubnetMergingArgs};
-use ic_subnet_tools::validation::validate_artifacts;
 use ic_types::ReplicaVersion;
 use slog::{Logger, info, warn};
 use url::Url;
@@ -47,38 +44,9 @@ struct MergeArgs {
 }
 
 #[derive(Parser)]
-struct ValidateArgs {
-    /// Path to the State Tree signed by the NNS
-    #[clap(long)]
-    state_tree_path: PathBuf,
-
-    /// (Optional) path to the NNS public key. If not set, the built-in public key is used.
-    #[clap(long)]
-    nns_public_key_path: Option<PathBuf>,
-
-    /// Path to the CUP the subnet halted at, retrieved from one of its nodes.
-    #[clap(long)]
-    cup_path: PathBuf,
-
-    /// Path to the manifest computed (as by `ic-state-tool manifest`) from the
-    /// state the subnet halted at, e.g. the one written by
-    /// `Validate{Source,Destination}SubnetCup`.
-    #[clap(long)]
-    state_manifest_path: PathBuf,
-
-    /// SubnetId of the subnet the artifacts belong to.
-    #[clap(long, value_parser=ic_recovery::util::subnet_id_from_str)]
-    subnet_id: SubnetId,
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Parser)]
 enum Subcommand {
     /// Perform Subnet Merging
     Merge(MergeArgs),
-
-    /// Validate artifacts produced during subnet merging
-    Validate(ValidateArgs),
 }
 
 #[derive(Parser)]
@@ -126,7 +94,7 @@ fn subnet_merging(
     cli::execute_steps(&logger, recovery_args.skip_prompts, subnet_merging);
 }
 
-fn do_merge(args: MergeArgs, logger: Logger) -> anyhow::Result<()> {
+fn do_merge(args: MergeArgs, logger: Logger) {
     let recovery_args = RecoveryArgs {
         dir: args.dir,
         nns_url: args.nns_url,
@@ -145,29 +113,14 @@ fn do_merge(args: MergeArgs, logger: Logger) -> anyhow::Result<()> {
         subnet_merging_state.subcommand_args,
         subnet_merging_state.neuron_args,
     );
-
-    Ok(())
 }
 
-fn do_validate(args: ValidateArgs, logger: Logger) -> anyhow::Result<()> {
-    validate_artifacts(
-        args.state_tree_path,
-        args.nns_public_key_path.as_deref(),
-        args.cup_path,
-        args.state_manifest_path,
-        args.subnet_id,
-        &logger,
-    )
-    .context("Failed to validate the artifacts")
-}
-
-fn main() -> anyhow::Result<()> {
+fn main() {
     let args = SubnetMergingToolArgs::parse();
 
     let logger = util::make_logger();
 
     match args.subcommand {
         Subcommand::Merge(merge_args) => do_merge(merge_args, logger),
-        Subcommand::Validate(validate_args) => do_validate(validate_args, logger),
     }
 }
