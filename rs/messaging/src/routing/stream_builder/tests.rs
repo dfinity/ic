@@ -312,6 +312,12 @@ fn build_streams_caches_effective_canister_id_of_loopback_subnet_request() {
         }
         state.put_canister_state(canister_state);
 
+        // Keep only the address: cloning the Arc would itself force a copy when caching.
+        let request_ptr = match state.output_into_iter().peek().unwrap() {
+            RequestOrResponse::Request(request) => Arc::as_ptr(request),
+            msg => panic!("Expected a request, got {msg:?}"),
+        };
+
         let state = stream_builder.build_streams(state);
 
         let messages: Vec<_> = state
@@ -325,6 +331,7 @@ fn build_streams_caches_effective_canister_id_of_loopback_subnet_request() {
             })
             .collect();
         assert_eq!(messages.len(), 2);
+        assert_eq!(Arc::as_ptr(&messages[0]), request_ptr);
         assert_eq!(messages[0].effective_canister_id, Some(Box::new(target)));
         assert_eq!(messages[1].effective_canister_id, None);
     });

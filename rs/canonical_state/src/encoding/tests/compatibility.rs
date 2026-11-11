@@ -35,6 +35,24 @@ use std::collections::{BTreeMap, VecDeque};
 // Tests for exact binary encoding
 //
 
+#[test]
+fn canonical_encoding_ignores_cached_effective_canister_id() {
+    for certification_version in all_supported_versions() {
+        let uncached = request(certification_version);
+        let cached = Request {
+            effective_canister_id: Some(Box::new(canister_test_id(13))),
+            ..uncached.clone()
+        };
+        let uncached: StreamMessage = uncached.into();
+        let cached: StreamMessage = cached.into();
+        let encoded = encode_message(&cached, certification_version);
+
+        assert_eq!(encoded, encode_message(&uncached, certification_version));
+        // Decoding the wire representation must not restore the local cache.
+        assert_eq!(decode_message(&encoded).unwrap(), uncached);
+    }
+}
+
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
