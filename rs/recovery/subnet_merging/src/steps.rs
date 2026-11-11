@@ -12,6 +12,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery,
     error::{RecoveryError, RecoveryResult},
+    file_sync_helper::remove_dir,
     registry_helper::RegistryHelper,
     steps::{CopyLocalIcStateStep, DownloadIcDataStep, Step},
     util::{CheckpointHeight, DataLocation, ExecutionMode, block_on},
@@ -360,6 +361,12 @@ impl Step for DownloadStateStep {
 
         match self.node.ssh_helper() {
             None => {
+                // Unlike the `rsync --delete` of a download, `cp` keeps files
+                // that are only in the copy, e.g. of a different checkpoint at
+                // the same height left over in a reused working directory,
+                // which would then enter the recomputed manifest. Checkpoints
+                // at other heights are left alone.
+                remove_dir(&self.layout.checkpoint_dir(self.target_subnet, height))?;
                 let data_includes = Recovery::get_ic_state_includes(
                     &self.logger,
                     ExecutionMode::Local,
