@@ -3,7 +3,7 @@ use crate::target_subnet::TargetSubnet;
 use ic_base_types::SubnetId;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    CHECKPOINTS, CUPS_DIR, IC_STATE, Recovery,
+    CHECKPOINTS, IC_STATE, Recovery,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::{create_dir, read_file, write_bytes, write_file},
 };
@@ -11,9 +11,6 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 
 use std::path::{Path, PathBuf};
-
-/// The name the orchestrator stores the latest CUP of a subnet under.
-pub(crate) const CUP_FILE_NAME: &str = "cup.types.v1.CatchUpPackage.pb";
 
 /// The file in which the tool records a registry version at which the subnet
 /// that is merged away is labeled "cooling down", i.e. the `V` of the merge
@@ -41,11 +38,8 @@ struct CoolingDownRegistryVersion {
 /// |  |-- ${destination_subnet_id}.pruned_state_tree.cbor
 /// |  |-- halting_cup_${source_subnet_id}.pb
 /// |  |-- halting_cup_${destination_subnet_id}.pb
-/// |  |-- ${source_subnet_id}.on_disk_cup.pb
-/// |  |-- ${destination_subnet_id}.on_disk_cup.pb
 /// |  |-- (destination_)work_dir/
 /// |  |   |-- data/
-/// |  |   |   |-- cups/cup.types.v1.CatchUpPackage.pb
 /// |  |   |   |-- ic_state/states_metadata.pbuf
 /// |  |   |   |-- ic_state/checkpoints/
 /// |  |   |   |   |-- 1/
@@ -92,32 +86,11 @@ impl Layout {
             .join(format!("{subnet_id}.pruned_state_tree.cbor"))
     }
 
-    /// The copy of the CUP the orchestrator of a node has written to disk,
-    /// pulled off the node while waiting for it to be the CUP the subnet halts
-    /// at, before the state is downloaded.
-    pub(crate) fn on_disk_cup_file(&self, subnet_id: SubnetId) -> PathBuf {
-        self.root.join(format!("{subnet_id}.on_disk_cup.pb"))
-    }
-
-    /// The CUP that came with the downloaded state, i.e. the one the validation
-    /// of the downloaded state checks against.
-    pub(crate) fn downloaded_cup_file(&self, target_subnet: TargetSubnet) -> PathBuf {
-        self.data_dir(target_subnet)
-            .join(CUPS_DIR)
-            .join(CUP_FILE_NAME)
-    }
-
     pub(crate) fn work_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
         match target_subnet {
             TargetSubnet::Source => self.source_working_dir.clone(),
             TargetSubnet::Destination => self.root.join("destination_working_dir"),
         }
-    }
-
-    /// Where the state of a subnet is downloaded to when the downloaded state
-    /// is to be kept, before it is copied into the working directory.
-    pub(crate) fn original_data_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
-        self.work_dir(target_subnet).join("original_data")
     }
 
     pub(crate) fn data_dir(&self, target_subnet: TargetSubnet) -> PathBuf {

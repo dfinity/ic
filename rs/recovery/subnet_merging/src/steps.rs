@@ -1,5 +1,5 @@
 use crate::{
-    layout::{CUP_FILE_NAME, Layout},
+    layout::Layout,
     readiness,
     target_subnet::TargetSubnet,
     utils::{get_subnet_record_at_version, wait_for},
@@ -9,17 +9,13 @@ use ic_base_types::SubnetId;
 use ic_cup_explorer::get_cup;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    IC_DATA_PATH,
     error::{RecoveryError, RecoveryResult},
-    get_node_metrics,
     registry_helper::RegistryHelper,
-    ssh_helper::SshHelper,
     steps::Step,
     util::{DataLocation, block_on},
 };
 use ic_subnet_tools::{
-    agent_helper::AgentHelper, state_tool_helper, utils::get_cup as read_cup_file,
-    validation::validate_artifacts,
+    agent_helper::AgentHelper, state_tool_helper, validation::validate_artifacts,
 };
 use ic_types::consensus::{CatchUpPackage, HasHeight};
 use slog::{Logger, info};
@@ -27,7 +23,6 @@ use url::Url;
 
 use std::{
     net::{IpAddr, Ipv6Addr},
-    path::PathBuf,
     time::Duration,
 };
 
@@ -246,145 +241,9 @@ impl WaitForHaltingCupStep {
     }
 }
 
-/// Waits until the node the state is downloaded from has certified the state
-/// its subnet halts at, and has written the CUP the subnet halts at to disk.
-///
-/// That the node serves the halting CUP, which [WaitForHaltingCupStep] waits
-/// for, is not enough to download the state: a node can hold a CUP that the
-/// rest of the subnet assembled before it got there, i.e. before it finished
-/// writing and hashing the checkpoint the CUP names, and downloading its
-/// latest checkpoint then yields the previous one, a whole DKG interval before
-/// the state the merge is supposed to be assembled from. Moreover, the
-/// orchestrator writes the CUP to disk asynchronously, and it is the on-disk
-/// copy that is downloaded with the state and validated afterwards.
-pub(crate) struct WaitForHaltingCheckpointStep {
-    pub(crate) subnet_id: SubnetId,
-    pub(crate) node_ip: IpAddr,
-    pub(crate) layout: Layout,
-    pub(crate) ssh_helper: SshHelper,
-    pub(crate) timeout: Duration,
-    pub(crate) poll_interval: Duration,
-    pub(crate) logger: Logger,
-}
-
-impl Step for WaitForHaltingCheckpointStep {
-    fn descr(&self) -> String {
-        format!(
-            "Wait until node {} has certified the state subnet {} halts at and has written the \
-             CUP it halts at to disk.",
-            self.node_ip, self.subnet_id,
-        )
-    }
-
-    fn exec(&self) -> RecoveryResult<()> {
-        let halting_cup = read_cup_file(&self.layout.halting_cup_file(self.subnet_id))?;
-
-        // A node that is not answering yet, or a CUP that cannot be pulled off
-        // it yet, is the normal state of affairs while the node is still
-        // catching up with the halting CUP, so every error is retried.
-        wait_for(
-            &format!(
-                "node {} has certified the state subnet {} halts at and has written the CUP it \
-                 halts at to disk",
-                self.node_ip, self.subnet_id,
-            ),
-            self.timeout,
-            self.poll_interval,
-            &self.logger,
-            || {
-                if self.check(&halting_cup)? {
-                    Ok(())
-                } else {
-                    Err(RecoveryError::UnexpectedError(format!(
-                        "node {} has not reached the CUP subnet {} halts at yet",
-                        self.node_ip, self.subnet_id,
-                    )))
-                }
-            },
-        )?;
-        info!(
-            self.logger,
-            "Node {} has certified height {} and holds the CUP subnet {} halts at on disk",
-            self.node_ip,
-            halting_cup.height(),
-            self.subnet_id,
-        );
-        Ok(())
-    }
-}
-
-impl WaitForHaltingCheckpointStep {
-    /// Returns whether the node has certified the height of `halting_cup` and
-    /// holds it on disk, and an error if the node could not be asked.
-    fn check(&self, halting_cup: &CatchUpPackage) -> RecoveryResult<bool> {
-        let cup_height = halting_cup.height();
-
-        // The node has to have caught up with the CUP itself: it is its state
-        // that is downloaded.
-        let metrics = block_on(get_node_metrics(&self.logger, &self.node_ip)).ok_or_else(|| {
-            RecoveryError::UnexpectedError(format!(
-                "Failed to get the metrics of node {}",
-                self.node_ip
-            ))
-        })?;
-        if metrics.certification_height > cup_height {
-            return Err(RecoveryError::ValidationFailed(format!(
-                "Subnet {} certified height {}, past the CUP at height {cup_height} it should \
-                 have halted at",
-                self.subnet_id, metrics.certification_height,
-            )));
-        }
-        if metrics.certification_height < cup_height {
-            info!(
-                self.logger,
-                "Subnet {} halts at the CUP at height {cup_height} but node {} has only certified \
-                 up to height {}",
-                self.subnet_id,
-                self.node_ip,
-                metrics.certification_height,
-            );
-            return Ok(false);
-        }
-
-        // The CUP the orchestrator has written to disk is the one that is
-        // downloaded with the state and validated afterwards, so it has to be
-        // the halting CUP, too.
-        let on_disk_cup = self.on_disk_cup()?;
-        if on_disk_cup.height() != cup_height
-            || on_disk_cup.content.state_hash != halting_cup.content.state_hash
-        {
-            info!(
-                self.logger,
-                "Node {} still holds the CUP at height {} on disk, not the one at height \
-                 {cup_height} subnet {} halts at",
-                self.node_ip,
-                on_disk_cup.height(),
-                self.subnet_id,
-            );
-            return Ok(false);
-        }
-
-        Ok(true)
-    }
-
-    /// The CUP the orchestrator of the node has written to disk, pulled off the
-    /// node and kept next to the other artifacts of the merge.
-    fn on_disk_cup(&self) -> RecoveryResult<CatchUpPackage> {
-        let remote_cup = self.ssh_helper.remote_path(
-            PathBuf::from(IC_DATA_PATH)
-                .join(ic_recovery::CUPS_DIR)
-                .join(CUP_FILE_NAME),
-        );
-        let local_cup = self.layout.on_disk_cup_file(self.subnet_id);
-
-        self.ssh_helper.rsync(remote_cup, &local_cup)?;
-
-        read_cup_file(&local_cup)
-    }
-}
-
-/// Validates the CUP a subnet halted at and the state that was downloaded with
-/// it: the subnet's public key is taken from the NNS signed state tree, the CUP
+/// Validates the CUP a subnet halted at, as recorded by [WaitForHaltingCupStep]
+/// from the node's public endpoint, and the state downloaded at its height: the
+/// subnet's public key is taken from the NNS signed state tree, the CUP
 /// signature is verified against it, and the manifest recomputed from the
 /// downloaded state has to match the state hash the CUP names.
 pub(crate) struct ValidateCupStep {
@@ -426,28 +285,11 @@ impl Step for ValidateCupStep {
 
         state_tool_helper::compute_manifest(&checkpoint_dir, &manifest_path)?;
 
-        // 3. Check that the downloaded CUP is the one the subnet halts at, as
-        // observed by `WaitForHaltingCupStep`, rather than one of an earlier
-        // height that the node still held on disk.
-        let halting_cup = read_cup_file(&self.layout.halting_cup_file(self.subnet_id))?;
-        let downloaded_cup = read_cup_file(&self.layout.downloaded_cup_file(self.target_subnet))?;
-        if downloaded_cup.height() != halting_cup.height()
-            || downloaded_cup.content.state_hash != halting_cup.content.state_hash
-        {
-            return Err(RecoveryError::ValidationFailed(format!(
-                "The CUP downloaded from subnet {} is at height {}, not the CUP at height {} the \
-                 subnet halts at",
-                self.subnet_id,
-                downloaded_cup.height(),
-                halting_cup.height(),
-            )));
-        }
-
-        // 4. Validate all the artifacts (state tree, CUP, state manifest).
+        // 3. Validate all the artifacts (state tree, CUP, state manifest).
         validate_artifacts(
             self.layout.pruned_state_tree_file(self.subnet_id),
             Some(self.layout.nns_public_key_file()),
-            self.layout.downloaded_cup_file(self.target_subnet),
+            self.layout.halting_cup_file(self.subnet_id),
             manifest_path,
             self.subnet_id,
             &self.logger,
