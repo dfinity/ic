@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/types/base_types",
     "//rs/types/types",
+    "@crate_index//:anyhow",
     "@crate_index//:clap",
     "@crate_index//:futures",
     "@crate_index//:hex",

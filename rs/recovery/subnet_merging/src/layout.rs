@@ -1,14 +1,19 @@
+use crate::target_subnet::TargetSubnet;
+
 use ic_base_types::SubnetId;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    Recovery,
+    CHECKPOINTS, CUPS_DIR, IC_STATE, Recovery,
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{read_file, write_bytes, write_file},
+    file_sync_helper::{create_dir, read_file, write_bytes, write_file},
 };
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+/// The name the orchestrator stores the latest CUP of a subnet under.
+pub(crate) const CUP_FILE_NAME: &str = "cup.types.v1.CatchUpPackage.pb";
 
 /// The file in which the tool records a registry version at which the subnet
 /// that is merged away is labeled "cooling down", i.e. the `V` of the merge
@@ -26,17 +31,114 @@ struct CoolingDownRegistryVersion {
 /// Describes the layout of the working directory of subnet merging:
 ///
 /// |-- root/
+/// |  |-- ${source_subnet_id}.manifest
+/// |  |-- ${destination_subnet_id}.manifest
+/// |  |-- ${source_subnet_id}.pem
+/// |  |-- ${destination_subnet_id}.pem
 /// |  |-- cooling_down_registry_version.json
-/// |  |-- halting_cup_<subnet_id>.pb
+/// |  |-- nns.pem
+/// |  |-- ${source_subnet_id}.pruned_state_tree.cbor
+/// |  |-- ${destination_subnet_id}.pruned_state_tree.cbor
+/// |  |-- halting_cup_${source_subnet_id}.pb
+/// |  |-- halting_cup_${destination_subnet_id}.pb
+/// |  |-- ${source_subnet_id}.on_disk_cup.pb
+/// |  |-- ${destination_subnet_id}.on_disk_cup.pb
+/// |  |-- (destination_)work_dir/
+/// |  |   |-- data/
+/// |  |   |   |-- cups/cup.types.v1.CatchUpPackage.pb
+/// |  |   |   |-- ic_state/states_metadata.pbuf
+/// |  |   |   |-- ic_state/checkpoints/
+/// |  |   |   |   |-- 1/
 pub(crate) struct Layout {
     root: PathBuf,
+    source_working_dir: PathBuf,
+    nns_public_key: PathBuf,
 }
 
 impl Layout {
     pub(crate) fn new(recovery: &Recovery) -> Self {
         Self {
             root: recovery.recovery_dir.clone(),
+            source_working_dir: recovery.work_dir.clone(),
+            nns_public_key: recovery.recovery_dir.join("nns.pem"),
         }
+    }
+
+    /// Creates the working directories of the two subnets being merged.
+    /// `Recovery` only creates the one working directory a recovery has, which
+    /// is the source subnet's here.
+    pub(crate) fn create_dirs(&self) -> RecoveryResult<()> {
+        for target_subnet in [TargetSubnet::Source, TargetSubnet::Destination] {
+            create_dir(&self.data_dir(target_subnet))?;
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn nns_public_key_file(&self) -> &Path {
+        &self.nns_public_key
+    }
+
+    pub(crate) fn actual_manifest_file(&self, subnet_id: SubnetId) -> PathBuf {
+        self.root.join(format!("{subnet_id}.manifest"))
+    }
+
+    pub(crate) fn subnet_public_key_file(&self, subnet_id: SubnetId) -> PathBuf {
+        self.root.join(format!("{subnet_id}.pem"))
+    }
+
+    pub(crate) fn pruned_state_tree_file(&self, subnet_id: SubnetId) -> PathBuf {
+        self.root
+            .join(format!("{subnet_id}.pruned_state_tree.cbor"))
+    }
+
+    /// The copy of the CUP the orchestrator of a node has written to disk,
+    /// pulled off the node while waiting for it to be the CUP the subnet halts
+    /// at, before the state is downloaded.
+    pub(crate) fn on_disk_cup_file(&self, subnet_id: SubnetId) -> PathBuf {
+        self.root.join(format!("{subnet_id}.on_disk_cup.pb"))
+    }
+
+    /// The CUP that came with the downloaded state, i.e. the one the validation
+    /// of the downloaded state checks against.
+    pub(crate) fn downloaded_cup_file(&self, target_subnet: TargetSubnet) -> PathBuf {
+        self.data_dir(target_subnet)
+            .join(CUPS_DIR)
+            .join(CUP_FILE_NAME)
+    }
+
+    pub(crate) fn work_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
+        match target_subnet {
+            TargetSubnet::Source => self.source_working_dir.clone(),
+            TargetSubnet::Destination => self.root.join("destination_working_dir"),
+        }
+    }
+
+    /// Where the state of a subnet is downloaded to when the downloaded state
+    /// is to be kept, before it is copied into the working directory.
+    pub(crate) fn original_data_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
+        self.work_dir(target_subnet).join("original_data")
+    }
+
+    pub(crate) fn data_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
+        self.work_dir(target_subnet).join("data")
+    }
+
+    pub(crate) fn checkpoints_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
+        self.data_dir(target_subnet)
+            .join(IC_STATE)
+            .join(CHECKPOINTS)
+    }
+
+    pub(crate) fn latest_checkpoint_dir(
+        &self,
+        target_subnet: TargetSubnet,
+    ) -> RecoveryResult<PathBuf> {
+        let checkpoints_dir = self.checkpoints_dir(target_subnet);
+
+        let (max_name, _) = Recovery::get_latest_checkpoint_name_and_height(&checkpoints_dir)?;
+
+        Ok(checkpoints_dir.join(max_name))
     }
 
     fn cooling_down_registry_version_file(&self) -> PathBuf {
@@ -78,8 +180,6 @@ impl Layout {
     /// The file holding the CUP `subnet_id` halts at, as a
     /// `types.v1.CatchUpPackage` protobuf, i.e. in the format of the CUP file
     /// of a replica.
-    // Read by the step validating the downloaded state, added in a follow-up.
-    #[allow(dead_code)]
     pub(crate) fn halting_cup_file(&self, subnet_id: SubnetId) -> PathBuf {
         self.root.join(format!("halting_cup_{subnet_id}.pb"))
     }
@@ -150,7 +250,11 @@ mod tests {
         let root =
             std::env::temp_dir().join(format!("subnet_merging_layout_test_{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
-        let layout = Layout { root: root.clone() };
+        let layout = Layout {
+            root: root.clone(),
+            source_working_dir: root.join("work_dir"),
+            nns_public_key: root.join("nns.pem"),
+        };
         let cup = pb::CatchUpPackage {
             content: vec![1, 2, 3],
             signature: vec![4, 5],
