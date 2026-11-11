@@ -314,7 +314,7 @@ fn poke_indexes_a_real_transfer_without_changing_adaptive_backoff() {
         env.set_time(normal_deadline);
         common::run_rounds_until(&env, || {
             get_last_wait_time(&env, index) == Duration::from_secs(expected_wait)
-                && common::status(&env, index).num_blocks_synced == Nat::from(1_u64)
+                && common::status(&env, index).num_blocks_synced == 1_u64
         });
         normal_deadline = env.time() + Duration::from_secs(expected_wait);
     }
@@ -331,7 +331,7 @@ fn poke_indexes_a_real_transfer_without_changing_adaptive_backoff() {
         Encode!().unwrap(),
     );
     common::run_rounds_until(&env, || {
-        common::status(&env, index).num_blocks_synced == Nat::from(2_u64)
+        common::status(&env, index).num_blocks_synced == 2_u64
     });
     assert!(env.time() < normal_deadline);
     assert_eq!(
