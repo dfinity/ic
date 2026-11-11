@@ -8,7 +8,7 @@ use super::subnet_call_context_manager::{
 use super::*;
 use crate::metadata_state::testing::SystemMetadataTesting;
 use crate::metrics::ReplicatedStateMetrics;
-use crate::testing::{CanisterQueuesTesting, StreamTesting};
+use crate::testing::{CanisterQueuesTesting, FakeUpgradePermitMetrics, StreamTesting};
 use crate::{CanisterPriority, InputQueueType, ReplicatedState};
 use assert_matches::assert_matches;
 use ic_btc_replica_types::{GetSuccessorsRequestInitial, Network, SendTransactionRequest};
@@ -60,6 +60,7 @@ use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::ops::Range;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::time::Duration;
 use strum::IntoEnumIterator;
@@ -3619,6 +3620,7 @@ fn upgrade_state_applies_request() {
         &[upgrade_request_action(node_test_id(1))],
         Height::new(3),
         &no_op_logger(),
+        &FakeUpgradePermitMetrics::default(),
     );
     assert_eq!(
         state.unauthorized_upgrade_requests,
@@ -3635,11 +3637,13 @@ fn upgrade_state_authorize_moves_request_to_authorized() {
         &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
         &no_op_logger(),
+        &FakeUpgradePermitMetrics::default(),
     );
     state.apply(
         &[upgrade_authorize_action(node_test_id(1))],
         Height::new(5),
         &no_op_logger(),
+        &FakeUpgradePermitMetrics::default(),
     );
     assert!(state.unauthorized_upgrade_requests.is_empty());
     assert_eq!(state.rebooting_nodes, BTreeSet::from([node_test_id(1)]));
@@ -3653,16 +3657,19 @@ fn upgrade_state_return_removes_authorization() {
         &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
         &no_op_logger(),
+        &FakeUpgradePermitMetrics::default(),
     );
     state.apply(
         &[upgrade_authorize_action(node_test_id(1))],
         Height::new(2),
         &no_op_logger(),
+        &FakeUpgradePermitMetrics::default(),
     );
     state.apply(
         &[upgrade_return_action(node_test_id(1))],
         Height::new(3),
         &no_op_logger(),
+        &FakeUpgradePermitMetrics::default(),
     );
     assert!(state.unauthorized_upgrade_requests.is_empty());
     assert!(state.rebooting_nodes.is_empty());
@@ -3670,22 +3677,26 @@ fn upgrade_state_return_removes_authorization() {
 
 #[test]
 fn upgrade_state_prunes_departed_members() {
+    let metrics = FakeUpgradePermitMetrics::default();
     let mut state = UpgradeState::default();
 
     state.apply(
         &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
         &no_op_logger(),
+        &metrics,
     );
     state.apply(
         &[upgrade_request_action(node_test_id(7))],
         Height::new(2),
         &no_op_logger(),
+        &metrics,
     );
     state.apply(
         &[upgrade_authorize_action(node_test_id(7))],
         Height::new(3),
         &no_op_logger(),
+        &metrics,
     );
 
     // Node 7 leaves the subnet; its request and permit are pruned.
@@ -3693,12 +3704,14 @@ fn upgrade_state_prunes_departed_members() {
         &[upgrade_expire_action(node_test_id(7))],
         Height::new(4),
         &no_op_logger(),
+        &metrics,
     );
     assert_eq!(
         state.unauthorized_upgrade_requests,
         BTreeMap::from([(node_test_id(1), Height::new(1))])
     );
     assert!(state.rebooting_nodes.is_empty());
+    assert_eq!(metrics.expired_requests.get(), 1);
 }
 
 #[test]
@@ -3710,11 +3723,13 @@ fn upgrade_state_applies_multiple_actions_per_block() {
         &[upgrade_request_action(node_test_id(1))],
         Height::new(1),
         &no_op_logger(),
+        &FakeUpgradePermitMetrics::default(),
     );
     state.apply(
         &[upgrade_request_action(node_test_id(2))],
         Height::new(2),
         &no_op_logger(),
+        &FakeUpgradePermitMetrics::default(),
     );
     assert_eq!(state.unauthorized_upgrade_requests.len(), 2);
 
@@ -3726,6 +3741,7 @@ fn upgrade_state_applies_multiple_actions_per_block() {
         ],
         Height::new(5),
         &no_op_logger(),
+        &FakeUpgradePermitMetrics::default(),
     );
     assert!(state.unauthorized_upgrade_requests.is_empty());
     assert_eq!(
@@ -3733,6 +3749,38 @@ fn upgrade_state_applies_multiple_actions_per_block() {
         BTreeSet::from([node_test_id(1), node_test_id(2)])
     );
 }
+
+#[test]
+fn upgrade_state_observes_unexpected_permit_return() {
+    let metrics = FakeUpgradePermitMetrics::default();
+    let mut state = UpgradeState::default();
+
+    state.apply(
+        &[upgrade_request_action(node_test_id(1))],
+        Height::new(1),
+        &no_op_logger(),
+        &metrics,
+    );
+
+    // The node returns a permit although its request was never authorized. This
+    // trips a `debug_assert!`, so the call only returns normally in builds
+    // without debug assertions.
+    let returned = catch_unwind(AssertUnwindSafe(|| {
+        state.apply(
+            &[upgrade_return_action(node_test_id(1))],
+            Height::new(2),
+            &no_op_logger(),
+            &metrics,
+        );
+    }));
+    assert_eq!(returned.is_err(), cfg!(debug_assertions));
+
+    // Either way, we see the metric, and the stale request was dropped.
+    assert_eq!(metrics.unexpected_returns.get(), 1);
+    assert!(state.unauthorized_upgrade_requests.is_empty());
+    assert!(state.rebooting_nodes.is_empty());
+}
+
 #[test]
 fn upgrade_state_proto_roundtrip() {
     let state = UpgradeState {

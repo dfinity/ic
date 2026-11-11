@@ -9,6 +9,7 @@ use self::subnet_schedule::SubnetSchedule;
 use crate::CanisterQueues;
 use crate::CanisterState;
 use crate::CheckpointLoadingMetrics;
+use crate::UpgradePermitMetrics;
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
@@ -2441,6 +2442,7 @@ impl UpgradeState {
         actions: &[UpgradePermitAction],
         height: Height,
         logger: &ReplicaLogger,
+        metrics: &impl UpgradePermitMetrics,
     ) {
         for action in actions {
             match action {
@@ -2454,11 +2456,27 @@ impl UpgradeState {
                     self.rebooting_nodes.insert(node);
                 }
                 UpgradePermitAction::ReturnPermit { node } => {
-                    debug_assert!(!self.unauthorized_upgrade_requests.contains_key(node));
+                    let warn = self.unauthorized_upgrade_requests.contains_key(node);
+
+                    // Perform all the actions upfront, so we can check values
+                    // after the debug assertion panic.
                     self.unauthorized_upgrade_requests.remove(node);
                     self.rebooting_nodes.remove(node);
+
+                    if warn {
+                        metrics.observe_unexpected_permit_return();
+                        debug_assert!(
+                            false,
+                            "Node '{node}' is rebooting while its upgrade request is still open."
+                        );
+                        error!(
+                            logger,
+                            "Node '{node}' is rebooting while its upgrade request is still open."
+                        );
+                    }
                 }
                 UpgradePermitAction::ExpirePermit { node } => {
+                    metrics.observe_expired_permit();
                     info!(
                         logger,
                         "Upgrade permit request from '{}' expired at height '{}'", node, height,

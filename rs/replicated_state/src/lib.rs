@@ -109,6 +109,16 @@ pub trait DroppedMessageMetrics {
     fn observe_shed_message(&self, kind: &'static str, context: &'static str, size_bytes: usize);
 }
 
+/// Exposes methods for observing errors that can occur when handling upgrade permits.
+pub trait UpgradePermitMetrics {
+    /// Observes a permit returned by a node whose request was not authorized.
+    fn observe_unexpected_permit_return(&self);
+
+    /// Observes an upgrade permit has expired, either from membership changes,
+    /// or for taking too long.
+    fn observe_expired_permit(&self);
+}
+
 pub mod testing {
     pub use super::canister_state::system_state::testing::OutputRequestBuilder;
     pub use super::canister_state::system_state::testing::SystemStateTesting;
@@ -117,7 +127,8 @@ pub mod testing {
     pub use super::replicated_state::testing::ReplicatedStateTesting;
 
     use super::DroppedMessageMetrics;
-    use std::cell::RefCell;
+    use super::UpgradePermitMetrics;
+    use std::cell::{Cell, RefCell};
     use std::collections::BTreeMap;
 
     #[derive(Debug, Default)]
@@ -158,6 +169,23 @@ pub mod testing {
                 .borrow_mut()
                 .entry((kind, context))
                 .or_default() += size_bytes;
+        }
+    }
+
+    #[derive(Debug, Default)]
+    pub struct FakeUpgradePermitMetrics {
+        pub unexpected_returns: Cell<usize>,
+        pub expired_requests: Cell<usize>,
+    }
+
+    impl UpgradePermitMetrics for FakeUpgradePermitMetrics {
+        fn observe_unexpected_permit_return(&self) {
+            self.unexpected_returns
+                .set(self.unexpected_returns.get() + 1);
+        }
+
+        fn observe_expired_permit(&self) {
+            self.expired_requests.set(self.expired_requests.get() + 1);
         }
     }
 }

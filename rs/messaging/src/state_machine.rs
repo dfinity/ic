@@ -168,6 +168,7 @@ impl StateMachine for StateMachineImpl {
             &batch_messages.upgrade_actions,
             batch.batch_number,
             &self.log,
+            &self.metrics,
         );
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
