@@ -38,51 +38,40 @@ fn get_local_ipv6_address() -> Option<Ipv6Addr> {
 }
 
 fn compute_hostos_address() -> Option<Ipv6Addr> {
-    let prefix = ipv6_prefix((*PUBLIC_IPV6)?);
-    let &Config {
-        ref mgmt_mac,
-        deployment_environment,
-        ..
-    } = ICOS_CONFIG.as_ref()?;
-
-    calculate_deterministic_mac(
-        mgmt_mac,
-        deployment_environment,
-        NodeType::HostOS,
-        VmSlot::Plain,
-    )
-    .calculate_slaac(&prefix)
-    .ok()
+    hostos_address(ICOS_CONFIG.as_ref()?, &ipv6_prefix((*PUBLIC_IPV6)?))
 }
 
 fn compute_guestos_address() -> Option<Ipv6Addr> {
-    let prefix = ipv6_prefix((*PUBLIC_IPV6)?);
-    let &Config {
-        ref mgmt_mac,
-        deployment_environment,
-        multi_vm,
-    } = ICOS_CONFIG.as_ref()?;
+    guestos_address(ICOS_CONFIG.as_ref()?, &ipv6_prefix((*PUBLIC_IPV6)?))
+}
 
-    if multi_vm {
+fn hostos_address(config: &Config, prefix: &str) -> Option<Ipv6Addr> {
+    calculate_deterministic_mac(
+        &config.mgmt_mac,
+        config.deployment_environment,
+        NodeType::HostOS,
+        VmSlot::Plain,
+    )
+    .calculate_slaac(prefix)
+    .ok()
+}
+
+fn guestos_address(config: &Config, prefix: &str) -> Option<Ipv6Addr> {
+    let slot = if config.multi_vm {
         // TODO: For now we always choose the first VM in multi-VM hosts.
-        calculate_deterministic_mac(
-            mgmt_mac,
-            deployment_environment,
-            NodeType::GuestOS,
-            VmSlot::Multi(NonZeroU8::new(1).unwrap()),
-        )
-        .calculate_slaac(&prefix)
-        .ok()
+        VmSlot::Multi(NonZeroU8::new(1).unwrap())
     } else {
-        calculate_deterministic_mac(
-            mgmt_mac,
-            deployment_environment,
-            NodeType::GuestOS,
-            VmSlot::Plain,
-        )
-        .calculate_slaac(&prefix)
-        .ok()
-    }
+        VmSlot::Plain
+    };
+
+    calculate_deterministic_mac(
+        &config.mgmt_mac,
+        config.deployment_environment,
+        NodeType::GuestOS,
+        slot,
+    )
+    .calculate_slaac(prefix)
+    .ok()
 }
 
 fn ipv6_prefix(addr: Ipv6Addr) -> String {
@@ -183,5 +172,70 @@ impl HostHooks for ICOSHosts {
             }
             _ => Response::NotFound,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MGMT_MAC: &str = "b0:7b:25:c8:f6:c0";
+    const LOCAL_ADDRESS: &str = "2602:ffe4:801:17:6800:ff:feec:bd51";
+
+    fn config(multi_vm: bool) -> Config {
+        Config {
+            mgmt_mac: MGMT_MAC.parse().unwrap(),
+            deployment_environment: DeploymentEnvironment::Mainnet,
+            multi_vm,
+        }
+    }
+
+    fn prefix() -> String {
+        ipv6_prefix(LOCAL_ADDRESS.parse().unwrap())
+    }
+
+    #[test]
+    fn ipv6_prefix_keeps_the_first_four_segments() {
+        assert_eq!(prefix(), "2602:ffe4:801:17::");
+    }
+
+    /// Known-answer vectors for the whole chain: mgmt MAC -> deterministic MAC ->
+    /// SLAAC address. This addressing is baked into deployed nodes, so moving any
+    /// of these has to be deliberate.
+    #[test]
+    fn golden_vectors() {
+        let single_vm = config(false);
+        let multi_vm = config(true);
+        let parse = |a: &str| a.parse::<Ipv6Addr>().unwrap();
+
+        assert_eq!(
+            hostos_address(&single_vm, &prefix()),
+            Some(parse("2602:ffe4:801:17:6800:ff:feec:bd51"))
+        );
+        assert_eq!(
+            guestos_address(&single_vm, &prefix()),
+            Some(parse("2602:ffe4:801:17:6801:ff:feec:bd51"))
+        );
+        assert_eq!(
+            guestos_address(&multi_vm, &prefix()),
+            Some(parse("2602:ffe4:801:17:7801:1ff:feec:bd51"))
+        );
+    }
+
+    /// HostOS runs in the plain slot, even when it hosts many guests.
+    #[test]
+    fn hostos_address_does_not_depend_on_the_guest_count() {
+        assert_eq!(
+            hostos_address(&config(false), &prefix()),
+            hostos_address(&config(true), &prefix())
+        );
+    }
+
+    #[test]
+    fn multi_vm_guest_differs_from_single_vm_guest() {
+        assert_ne!(
+            guestos_address(&config(false), &prefix()),
+            guestos_address(&config(true), &prefix())
+        );
     }
 }

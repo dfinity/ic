@@ -19,6 +19,7 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(nested::setup)
         .add_test(systest!(upgrade_hostos))
+        .add_test(systest!(check_metrics_proxy))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(40 * 60))
         .execute_from_args()?;
@@ -132,4 +133,72 @@ pub fn upgrade_hostos(env: TestEnv) {
     info!(logger, "Version found is: '{new_version}'");
 
     assert_eq!(new_version, target_version.to_string());
+}
+
+/// Where `config_tool generate-metrics-proxy-config` writes, mirroring
+/// `DEFAULT_HOSTOS_METRICS_PROXY_OUTPUT_PATH`.
+const GENERATED_METRICS_PROXY_CONFIG: &str = "/run/ic-node/etc/metrics-proxy.yaml";
+
+/// HostOS no longer ships a static `/etc/metrics-proxy.yaml`: it generates one,
+/// because a multi-VM node has no single `guestos` to chainload. Runs after the
+/// upgrade so it covers the HostOS build under test.
+pub fn check_metrics_proxy(env: TestEnv) {
+    let logger = env.logger();
+    let host = env
+        .get_nested_vm(HOST_VM_NAME)
+        .expect("Unable to find HostOS node.");
+
+    let run = |cmd: &str| {
+        host.block_on_bash_script(cmd)
+            .unwrap_or_else(|e| panic!("Failed to run '{cmd}' on HostOS: {e:?}"))
+    };
+
+    let state = run(
+        "systemctl show -p ActiveState -p SubState --value generate-metrics-proxy-config.service",
+    );
+    info!(logger, "generate-metrics-proxy-config.service: {state}");
+    assert!(
+        state.contains("active") && state.contains("exited"),
+        "config generation did not complete: {state}"
+    );
+
+    let config = run(&format!("sudo cat {GENERATED_METRICS_PROXY_CONFIG}"));
+    info!(logger, "Generated metrics-proxy config:\n{config}");
+    assert!(
+        !config.contains("https://guestos:"),
+        "config still chainloads the unresolvable `guestos` name"
+    );
+    assert!(
+        config.contains("/metrics/guestos_replica"),
+        "config proxies no GuestOS replica metrics"
+    );
+
+    let exec_start = run("systemctl show -p ExecStart --value metrics-proxy.service");
+    assert!(
+        exec_start.contains(GENERATED_METRICS_PROXY_CONFIG),
+        "metrics-proxy does not use the generated config: {exec_start}"
+    );
+
+    // The guest is registered by this point, so both ends of the chainload work.
+    for path in ["hostos_node_exporter", "guestos_replica"] {
+        let url = format!("https://[::1]:42372/metrics/{path}");
+        if let Err(e) = retry_with_msg!(
+            format!("Waiting for metrics on {url}"),
+            logger.clone(),
+            Duration::from_secs(300),
+            Duration::from_secs(10),
+            || {
+                let out = run(&format!("curl -sk --max-time 10 {url} | head -n 20"));
+                if out.trim().is_empty() {
+                    bail!("no metrics returned from {url}")
+                } else {
+                    info!(logger, "{url} served:\n{out}");
+                    Ok(())
+                }
+            }
+        ) {
+            try_logging_guestos_diagnostics(&host, &logger);
+            panic!("{url} never served metrics: {e}");
+        }
+    }
 }
