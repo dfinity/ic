@@ -431,7 +431,10 @@ impl Step for ValidateCupStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        // 1. Compute the manifest of the downloaded state.
+        // 1. Compute the manifest of the downloaded state. This comes before
+        // getting the state tree: hashing a large state can take longer than
+        // the certificate of the state tree stays fresh, and the validation
+        // below rejects a stale certificate.
         info!(self.logger, "Computing the state manifest");
         // The checkpoint at the height of the halting CUP, whose state hash the
         // manifest is checked against.

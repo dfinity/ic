@@ -250,12 +250,9 @@ mod tests {
     fn checkpoint_status_matches_state_layout() {
         use ic_state_layout::{CheckpointLayout, ReadOnly};
 
-        let root = std::env::temp_dir().join(format!(
-            "recovery_checkpoint_status_test_{}",
-            std::process::id()
-        ));
+        let root = tempfile::tempdir().expect("Could not create a temp dir");
         let height = Height::new(100);
-        let checkpoint = root.join("0000000000000064");
+        let checkpoint = root.path().join("0000000000000064");
 
         let check = |expected: &str| {
             let status = ExecutionMode::Local.checkpoint_status(&checkpoint).unwrap();
@@ -287,7 +284,5 @@ mod tests {
 
         std::fs::remove_file(&state_sync).unwrap();
         check("verified");
-
-        std::fs::remove_dir_all(&root).unwrap();
     }
 }

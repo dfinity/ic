@@ -12,8 +12,9 @@ use std::{fmt, path::PathBuf, process::Command};
 /// tool runs on that node, and over SSH with the admin key otherwise.
 ///
 /// Unlike [ExecutionMode], which only borrows the [SshHelper], it owns it, so
-/// that a step can hold it, and it asks for confirmation before running a
-/// command locally too.
+/// that a step can hold it. A command run with [DownloadNode::execute] asks for
+/// confirmation on a local node too, unlike the checks made through the
+/// [ExecutionMode] that [DownloadNode::mode] hands out.
 pub(crate) struct DownloadNode {
     /// `None` if the tool runs on the node.
     ssh_helper: Option<SshHelper>,
