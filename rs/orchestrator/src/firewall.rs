@@ -1218,8 +1218,10 @@ mod tests {
         let cloud_engine_ports = [52001, 52002, 52003, 52004, 52005];
         let tmp_dir = tempfile::tempdir().unwrap();
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
-        let replica_ic_config = get_config(Some(NodeRewardType::Type0));
-        let cloud_engine_ic_config = get_config(Some(NodeRewardType::Type4));
+        let replica_reward_type = Some(NodeRewardType::Type0);
+        let cloud_engine_reward_type = Some(NodeRewardType::Type4);
+        let replica_ic_config = get_config(replica_reward_type);
+        let cloud_engine_ic_config = get_config(cloud_engine_reward_type);
         let cloud_engine_firewall_config = CloudEngineFirewallConfig {
             config_file: nftables_config_path.clone(),
             assigned_node_port_lists: cloud_engine_port_lists.clone(),
@@ -1242,7 +1244,7 @@ mod tests {
             tmp_dir.path(),
             Role::AssignedReplica(SUBNET_ID),
             node_test_id(0),
-            Some(NodeRewardType::Type0),
+            replica_reward_type,
         )
         .check_for_firewall_config(RegistryVersion::new(1))
         .expect("Should successfully produce a firewall config");
@@ -1268,7 +1270,7 @@ mod tests {
             tmp_dir.path(),
             Role::AssignedCloudEngine(SUBNET_ID),
             node_test_id(0),
-            Some(NodeRewardType::Type4),
+            cloud_engine_reward_type,
         )
         .check_for_firewall_config(RegistryVersion::new(1))
         .expect("Should successfully produce a firewall config");
