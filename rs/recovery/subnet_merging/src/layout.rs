@@ -7,6 +7,8 @@ use ic_recovery::{
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::{create_dir, read_file, write_bytes, write_file},
 };
+use ic_state_layout::StateLayout;
+use ic_types::Height;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
@@ -108,15 +110,12 @@ impl Layout {
             .join(CHECKPOINTS)
     }
 
-    pub(crate) fn latest_checkpoint_dir(
-        &self,
-        target_subnet: TargetSubnet,
-    ) -> RecoveryResult<PathBuf> {
-        let checkpoints_dir = self.checkpoints_dir(target_subnet);
-
-        let (max_name, _) = Recovery::get_latest_checkpoint_name_and_height(&checkpoints_dir)?;
-
-        Ok(checkpoints_dir.join(max_name))
+    /// The downloaded checkpoint at `height`. Neither download removes the
+    /// other checkpoints in a reused working directory, so the checkpoint is
+    /// selected by its height rather than as the latest one.
+    pub(crate) fn checkpoint_dir(&self, target_subnet: TargetSubnet, height: Height) -> PathBuf {
+        self.checkpoints_dir(target_subnet)
+            .join(StateLayout::checkpoint_name(height))
     }
 
     fn cooling_down_registry_version_file(&self) -> PathBuf {

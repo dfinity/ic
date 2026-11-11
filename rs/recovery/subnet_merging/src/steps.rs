@@ -274,7 +274,16 @@ impl Step for ValidateCupStep {
     fn exec(&self) -> RecoveryResult<()> {
         // 1. Compute the manifest of the downloaded state.
         info!(self.logger, "Computing the state manifest");
-        let checkpoint_dir = self.layout.latest_checkpoint_dir(self.target_subnet)?;
+        // The checkpoint at the height of the halting CUP, whose state hash the
+        // manifest is checked against.
+        let height = read_cup_file(&self.layout.halting_cup_file(self.subnet_id))?.height();
+        let checkpoint_dir = self.layout.checkpoint_dir(self.target_subnet, height);
+        if !checkpoint_dir.is_dir() {
+            return Err(RecoveryError::UnexpectedError(format!(
+                "the checkpoint {} at the height of the halting CUP was not downloaded",
+                checkpoint_dir.display()
+            )));
+        }
         let manifest_path = self.layout.actual_manifest_file(self.subnet_id);
 
         state_tool_helper::compute_manifest(&checkpoint_dir, &manifest_path)?;
