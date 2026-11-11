@@ -5208,7 +5208,7 @@ impl Operation for CallRequest {
                             NNSDelegationBuilder::try_new(
                                 delegation.certificate,
                                 subnet_id,
-                                &subnet.replica_logger,
+                                subnet.replica_logger.clone(),
                             )
                             .unwrap()
                         });
@@ -5334,7 +5334,7 @@ impl Operation for QueryRequest {
                     NNSDelegationBuilder::try_new(
                         delegation.certificate,
                         subnet_id,
-                        &subnet.replica_logger,
+                        subnet.replica_logger.clone(),
                     )
                     .unwrap()
                 });
@@ -5430,7 +5430,7 @@ impl Operation for CanisterReadStateRequest {
                     NNSDelegationBuilder::try_new(
                         delegation.certificate,
                         subnet_id,
-                        &subnet.replica_logger,
+                        subnet.replica_logger.clone(),
                     )
                     .unwrap()
                 });
@@ -5516,7 +5516,7 @@ impl Operation for SubnetReadStateRequest {
                     NNSDelegationBuilder::try_new(
                         delegation.certificate,
                         subnet_id,
-                        &subnet.replica_logger,
+                        subnet.replica_logger.clone(),
                     )
                     .unwrap()
                 });

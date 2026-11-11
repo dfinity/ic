@@ -515,7 +515,7 @@ async fn try_fetch_delegation_from_nns(
         labeled_tree,
         response.certificate,
         subnet_id,
-        log,
+        log.clone(),
     );
 
     observe_delegation_sizes(&nns_delegation_builder, metrics);

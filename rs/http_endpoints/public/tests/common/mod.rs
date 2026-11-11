@@ -590,7 +590,7 @@ pub struct HttpEndpointHandles {
 }
 
 pub fn nns_delegation_builder(delegation: CertificateDelegation) -> NNSDelegationBuilder {
-    NNSDelegationBuilder::try_new(delegation.certificate, subnet_test_id(1), &no_op_logger())
+    NNSDelegationBuilder::try_new(delegation.certificate, subnet_test_id(1), no_op_logger())
         .expect("The NNS delegation should be well-formed.")
 }
 

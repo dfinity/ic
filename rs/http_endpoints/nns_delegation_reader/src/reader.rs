@@ -118,7 +118,7 @@ impl NNSDelegationBuilder {
     pub fn try_new(
         raw_certificate: Blob,
         subnet_id: SubnetId,
-        logger: &ReplicaLogger,
+        logger: ReplicaLogger,
     ) -> Result<Self, String> {
         let full_certificate: Certificate = serde_cbor::from_slice(&raw_certificate)
             .map_err(|err| format!("Failed to parse delegation certificate: {err}"))?;
@@ -140,14 +140,14 @@ impl NNSDelegationBuilder {
         full_labeled_tree: LabeledTree<Vec<u8>>,
         raw_certificate: Blob,
         subnet_id: SubnetId,
-        logger: &ReplicaLogger,
+        logger: ReplicaLogger,
     ) -> Self {
         let builder = NNSDelegationBuilderInner::new(
             full_certificate,
             full_labeled_tree,
             raw_certificate,
             subnet_id,
-            logger.clone(),
+            logger,
         );
         let precomputed_delegation_without_canister_ranges =
             builder.build_uncached_or_original(CanisterRangesFilter::None);
@@ -425,7 +425,7 @@ mod tests {
     }
 
     fn create_builder(delegation: CertificateDelegation) -> NNSDelegationBuilder {
-        NNSDelegationBuilder::try_new(delegation.certificate, SUBNET_0, &no_op_logger()).unwrap()
+        NNSDelegationBuilder::try_new(delegation.certificate, SUBNET_0, no_op_logger()).unwrap()
     }
 
     #[test]

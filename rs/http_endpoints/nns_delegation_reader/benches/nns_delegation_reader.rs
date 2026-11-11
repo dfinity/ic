@@ -70,7 +70,6 @@ fn build_delegation_bench(
     group_name: &str,
 ) {
     let mut group = criterion.benchmark_group(group_name);
-    let logger = no_op_logger();
 
     let mut bench_function = |canister_id_ranges_count| {
         let canister_id_ranges = (0..canister_id_ranges_count)
@@ -97,8 +96,13 @@ fn build_delegation_bench(
             },
         };
 
-        let builder =
-            NNSDelegationBuilder::new(certificate, labeled_tree, Blob(vec![]), SUBNET_0, &logger);
+        let builder = NNSDelegationBuilder::new(
+            certificate,
+            labeled_tree,
+            Blob(vec![]),
+            SUBNET_0,
+            no_op_logger(),
+        );
 
         println!(
             "The delegation size in bytes with {} canister ranges: {}",
