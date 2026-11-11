@@ -775,75 +775,70 @@ fn start_canister_request(target: CanisterId) -> Request {
         .build()
 }
 
-fn peek_subnet_request(state: &mut ReplicatedState) -> Arc<Request> {
-    match state.peek_subnet_input() {
+/// Pushes `request` into the subnet queues of `state` and pops it back out.
+fn push_and_pop_subnet_request(state: &mut ReplicatedState, request: Arc<Request>) -> Arc<Request> {
+    assert_eq!(
+        state.push_input(
+            RequestOrResponse::Request(request),
+            &mut SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY.clone()
+        ),
+        Ok(true)
+    );
+    match state.pop_subnet_input() {
         Some(SubnetMessage::Request(request)) => request,
         msg => panic!("Expected a subnet request, got {msg:?}"),
     }
 }
 
 #[test]
-fn cache_subnet_input_effective_canister_id() {
+fn subnet_queue_push_input_caches_effective_canister_id() {
     let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
-    // Two requests from the same sender, i.e. in the same subnet input queue.
-    let (target1, target2) = (canister_test_id(13), canister_test_id(14));
-    let request1 = Arc::new(start_canister_request(target1));
-    let request1_ptr = Arc::as_ptr(&request1);
-    for request in [request1, Arc::new(start_canister_request(target2))] {
-        assert_eq!(
-            state.push_input(
-                RequestOrResponse::Request(request),
-                &mut SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY.clone()
-            ),
-            Ok(true)
-        );
-    }
+    // A request whose `Arc` is not shared (e.g. from an XNet stream slice) is
+    // cached in place, without a copy.
+    let target = canister_test_id(13);
+    let request = Arc::new(start_canister_request(target));
+    let request_ptr = Arc::as_ptr(&request);
+    let inducted = push_and_pop_subnet_request(&mut state, request);
+    assert_eq!(inducted.effective_canister_id, Some(Box::new(target)));
+    assert_eq!(Arc::as_ptr(&inducted), request_ptr);
 
-    // Peek the first request, drop it and cache its effective canister ID.
-    let peeked = peek_subnet_request(&mut state);
-    assert_eq!(peeked.effective_canister_id, None);
-    drop(peeked);
-    state.cache_subnet_input_effective_canister_id(target1);
-
-    // The first request is still next; its effective canister ID is cached; and,
-    // since its `Arc` was not shared, it was updated in place, without a copy.
-    let peeked = peek_subnet_request(&mut state);
-    assert_eq!(peeked.effective_canister_id, Some(Box::new(target1)));
-    assert_eq!(Arc::as_ptr(&peeked), request1_ptr);
-    drop(peeked);
-    let popped = state.pop_subnet_input().unwrap();
-    assert_matches!(popped, SubnetMessage::Request(request) if request.effective_canister_id == Some(Box::new(target1)));
-
-    // The second request is unaffected.
-    let popped = state.pop_subnet_input().unwrap();
-    assert_matches!(popped, SubnetMessage::Request(request) if request.effective_canister_id.is_none());
-    assert_eq!(state.pop_subnet_input(), None);
+    // A request without an effective canister ID is not cached.
+    let mut request = start_canister_request(target);
+    request.method_payload = vec![1, 2, 3];
+    let inducted = push_and_pop_subnet_request(&mut state, Arc::new(request));
+    assert_eq!(inducted.effective_canister_id, None);
 }
 
 #[test]
-fn cache_subnet_input_effective_canister_id_of_shared_request() {
+fn subnet_queue_push_input_shared_request_already_cached_is_not_copied() {
     let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
-    // A request whose `Arc` is shared (e.g. with a previous state).
+    // An already cached request whose `Arc` is shared (as it is with the loopback
+    // stream).
+    let target = canister_test_id(13);
+    let mut request = start_canister_request(target);
+    request.effective_canister_id = Some(Box::new(target));
+    let request = Arc::new(request);
+
+    let inducted = push_and_pop_subnet_request(&mut state, Arc::clone(&request));
+
+    assert!(Arc::ptr_eq(&inducted, &request));
+}
+
+#[test]
+fn subnet_queue_push_input_shared_request_not_cached_is_copied() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    // An uncached request whose `Arc` is shared.
     let target = canister_test_id(13);
     let request = Arc::new(start_canister_request(target));
-    assert_eq!(
-        state.push_input(
-            RequestOrResponse::Request(Arc::clone(&request)),
-            &mut SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY.clone()
-        ),
-        Ok(true)
-    );
 
-    peek_subnet_request(&mut state);
-    state.cache_subnet_input_effective_canister_id(target);
+    let inducted = push_and_pop_subnet_request(&mut state, Arc::clone(&request));
 
-    // The queued request was copied and the cache populated; the shared one is
-    // unchanged.
-    let popped = peek_subnet_request(&mut state);
-    assert!(!Arc::ptr_eq(&popped, &request));
-    assert_eq!(popped.effective_canister_id, Some(Box::new(target)));
+    // The inducted request was copied and cached; the shared one is unchanged.
+    assert!(!Arc::ptr_eq(&inducted, &request));
+    assert_eq!(inducted.effective_canister_id, Some(Box::new(target)));
     assert_eq!(request.effective_canister_id, None);
 }
 

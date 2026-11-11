@@ -5,7 +5,7 @@ use ic_base_types::NumSeconds;
 use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
 use ic_error_types::RejectCode;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
-use ic_management_canister_types_private::Method;
+use ic_management_canister_types_private::{CanisterIdRecord, Method, Payload as _};
 use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -267,6 +267,66 @@ fn build_streams_success() {
             )]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_SIGNALS_END)
         );
+    });
+}
+
+// Tests that the effective canister ID of a request to the management canister
+// is cached when it is routed into the loopback stream.
+#[test]
+fn build_streams_caches_effective_canister_id_of_loopback_subnet_request() {
+    with_test_replica_logger(|log| {
+        let (stream_builder, mut state, _) = new_fixture(&log);
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology
+                .subnets_mut()
+                .insert(LOCAL_SUBNET, Default::default());
+        });
+
+        let sender = canister_test_id(3);
+        let target = canister_test_id(13);
+        let mut canister_state = new_canister_state(
+            sender,
+            sender.get(),
+            *INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        // A request to the management canister, plus one without an effective canister ID.
+        for (method, payload) in [
+            (
+                Method::StartCanister,
+                CanisterIdRecord::from(target).encode(),
+            ),
+            (Method::StartCanister, vec![1, 2, 3]),
+        ] {
+            canister_state
+                .push_output_request(
+                    OutputRequestBuilder::default()
+                        .sender(sender)
+                        .receiver(CanisterId::unchecked_from_principal(LOCAL_SUBNET.get()))
+                        .method_name(method)
+                        .method_payload(payload)
+                        .build(),
+                    UNIX_EPOCH,
+                )
+                .unwrap();
+        }
+        state.put_canister_state(canister_state);
+
+        let state = stream_builder.build_streams(state);
+
+        let messages: Vec<_> = state
+            .get_stream(&LOCAL_SUBNET)
+            .unwrap()
+            .messages()
+            .iter()
+            .map(|(_, msg)| match msg {
+                StreamMessage::Request(request) => request.clone(),
+                msg => panic!("Expected a request, got {msg:?}"),
+            })
+            .collect();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].effective_canister_id, Some(Box::new(target)));
+        assert_eq!(messages[1].effective_canister_id, None);
     });
 }
 

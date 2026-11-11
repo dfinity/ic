@@ -120,9 +120,10 @@ pub struct Request {
     /// Cached effective canister ID of a request addressed to the management
     /// canister, as returned by `extract_effective_canister_id()`.
     ///
-    /// Populated when the request is inducted into the subnet queues (see
-    /// `ReplicatedState::push_input()`). `None` if not (yet) populated or if
-    /// the request has no effective canister ID. Boxed, so that it only takes
+    /// Populated (see `cache_effective_canister_id()`) when a local request is
+    /// routed into the loopback stream, or else when the request is inducted
+    /// into the subnet queues. `None` if not (yet) populated or if the request
+    /// has no effective canister ID. Boxed, so that it only takes
     /// up the size of a pointer in all other requests. Not part of the
     /// canonical (XNet stream) encoding.
     pub effective_canister_id: Option<Box<CanisterId>>,
@@ -164,6 +165,20 @@ impl Request {
             .as_deref()
             .copied()
             .or_else(|| self.extract_effective_canister_id())
+    }
+
+    /// Caches the effective canister ID of `request` (a request addressed to the
+    /// management canister), unless it is already cached or `request` has no
+    /// effective canister ID.
+    ///
+    /// Copies the request if its `Arc` is shared, so call it while `request` is
+    /// (most likely) the only reference.
+    pub fn cache_effective_canister_id(request: &mut Arc<Request>) {
+        if request.effective_canister_id.is_none()
+            && let Some(effective_canister_id) = request.extract_effective_canister_id()
+        {
+            Arc::make_mut(request).effective_canister_id = Some(Box::new(effective_canister_id));
+        }
     }
 
     /// Helper function to extract the effective canister id from the payload.

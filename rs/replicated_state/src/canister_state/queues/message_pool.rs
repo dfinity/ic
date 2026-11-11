@@ -8,7 +8,7 @@ use ic_types::messages::{
     CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Request, RequestOrResponse, Response,
 };
 use ic_types::time::CoarseTime;
-use ic_types::{CanisterId, CountBytes, Time};
+use ic_types::{CountBytes, Time};
 use ic_types_cycles::Cycles;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -541,33 +541,6 @@ impl MessagePool {
     /// Retrieves the message with the given `Reference`.
     pub(super) fn get<T>(&self, reference: Reference<T>) -> Option<&RequestOrResponse> {
         self.messages.get(&reference.into())
-    }
-
-    /// Caches the given effective canister ID in the request with the given
-    /// `Reference`. No-op if there is no such request.
-    ///
-    /// The message stats and priority queues are unaffected, since the cached
-    /// effective canister ID does not change the request's `count_bytes()`.
-    pub(super) fn cache_effective_canister_id<T>(
-        &mut self,
-        reference: Reference<T>,
-        effective_canister_id: CanisterId,
-    ) {
-        let id = reference.into();
-        // `MutableIntMap` has no `get_mut()`, so take the request out and put it back.
-        let Some(RequestOrResponse::Request(_)) = self.messages.get(&id) else {
-            return;
-        };
-        let Some(RequestOrResponse::Request(mut request)) = self.messages.remove(&id) else {
-            unreachable!("message {id:?} should be a request, as checked above");
-        };
-        let size_bytes_before = request.count_bytes();
-        Arc::make_mut(&mut request).effective_canister_id = Some(Box::new(effective_canister_id));
-        debug_assert_eq!(size_bytes_before, request.count_bytes());
-        self.messages
-            .insert(id, RequestOrResponse::Request(request));
-
-        debug_assert_eq!(Ok(()), self.check_invariants());
     }
 
     /// Removes the message with the given `Reference` from the pool.

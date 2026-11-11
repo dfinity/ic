@@ -262,10 +262,8 @@ impl SchedulerImpl {
             let mut available_subnet_messages = false;
             let mut loop_detector = state.subnet_queues_loop_detector();
             while let Some(msg) = state.peek_subnet_input() {
-                let effective_canister_id = msg.effective_canister_id();
                 if can_execute_subnet_msg(
                     &msg,
-                    effective_canister_id,
                     ongoing_long_install_code,
                     state.canister_states(),
                     round_limits,
@@ -273,23 +271,6 @@ impl SchedulerImpl {
                     available_subnet_messages = true;
                     break;
                 }
-
-                // The request is deferred, so it may be peeked many more times until it
-                // executes: cache its effective canister ID, so that it is not decoded from
-                // the payload again. (A deferred request always has one, as requests without
-                // one are always executed.)
-                let is_uncached_request = matches!(
-                    &msg,
-                    SubnetMessage::Request(request) if request.effective_canister_id.is_none()
-                );
-                // Drop the peeked `Arc`, so that caching doesn't copy the request on its
-                // account. (It still copies the request once if its `Arc` is shared with a
-                // previous state, but that is cheaper than decoding it on every peek.)
-                drop(msg);
-                if is_uncached_request && let Some(effective_canister_id) = effective_canister_id {
-                    state.cache_subnet_input_effective_canister_id(effective_canister_id);
-                }
-
                 state.skip_subnet_input(&mut loop_detector);
                 if loop_detector.detected_loop(state.subnet_queues()) {
                     break;
@@ -1849,9 +1830,7 @@ fn execute_canisters_on_thread(
     }
 }
 
-/// Checks whether a subnet message can be executed, given its effective
-/// canister ID (`msg.effective_canister_id()`, passed in so that the caller can
-/// reuse it).
+/// Checks whether a subnet message can be executed.
 ///
 /// Always execute:
 ///  - Responses.
@@ -1867,7 +1846,6 @@ fn execute_canisters_on_thread(
 /// execution, or the canister has an aborted execution.
 fn can_execute_subnet_msg(
     msg: &SubnetMessage,
-    effective_canister_id: Option<CanisterId>,
     ongoing_long_install_code: bool,
     canister_states: &CanisterStates,
     round_limits: &mut RoundLimits,
@@ -1888,7 +1866,7 @@ fn can_execute_subnet_msg(
         return !instructions_reached;
     }
 
-    let Some(effective_canister_id) = effective_canister_id else {
+    let Some(effective_canister_id) = msg.effective_canister_id() else {
         // If there is no effective canister ID, execute the subnet message.
         return true;
     };

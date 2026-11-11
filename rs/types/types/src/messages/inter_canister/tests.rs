@@ -244,3 +244,30 @@ fn request_effective_canister_id_proto_round_trip() {
         assert_eq!(request, decoded);
     }
 }
+
+#[test]
+fn cache_effective_canister_id() {
+    let target = canister_test_id(13);
+
+    // Uncached and not shared: cached in place.
+    let mut request = Arc::new(start_canister_request(target));
+    let ptr = Arc::as_ptr(&request);
+    Request::cache_effective_canister_id(&mut request);
+    assert_eq!(request.effective_canister_id, Some(Box::new(target)));
+    assert_eq!(Arc::as_ptr(&request), ptr);
+
+    // Already cached and shared: not copied.
+    let shared = Arc::clone(&request);
+    Request::cache_effective_canister_id(&mut request);
+    assert!(Arc::ptr_eq(&request, &shared));
+
+    // No effective canister ID (invalid payload) and shared: not copied.
+    let mut request = Arc::new(Request {
+        method_payload: vec![1, 2, 3],
+        ..start_canister_request(target)
+    });
+    let shared = Arc::clone(&request);
+    Request::cache_effective_canister_id(&mut request);
+    assert!(Arc::ptr_eq(&request, &shared));
+    assert_eq!(request.effective_canister_id, None);
+}

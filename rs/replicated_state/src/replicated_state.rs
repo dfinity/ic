@@ -33,7 +33,7 @@ use ic_types::{
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::{IngressState, IngressStatus},
     messages::{
-        CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, SubnetMessage,
+        CallbackId, Ingress, MessageId, Refund, Request, RequestOrResponse, Response, SubnetMessage,
     },
     time::CoarseTime,
 };
@@ -1087,23 +1087,31 @@ impl ReplicatedState {
             None => {
                 let subnet_id = self.metadata.own_subnet_id.get_ref();
                 if receiver.get_ref() == subnet_id {
-                    match &msg {
-                        RequestOrResponse::Request(_) => push_input(
-                            &mut self.subnet_queues,
-                            msg,
-                            subnet_available_guaranteed_response_memory,
-                            own_subnet_type,
-                            input_queue_type,
-                        )
-                        // Requests are never silently dropped.
-                        .map(|_| true),
+                    match msg {
+                        RequestOrResponse::Request(mut request) => {
+                            // Cache the effective canister ID, unless already cached. Local
+                            // requests are cached when routed into the loopback stream, because
+                            // here their `Arc` is shared with the loopback stream and caching
+                            // would copy them; XNet requests come from a decoded stream slice,
+                            // so they are not shared and are cached in place.
+                            Request::cache_effective_canister_id(&mut request);
+                            push_input(
+                                &mut self.subnet_queues,
+                                RequestOrResponse::Request(request),
+                                subnet_available_guaranteed_response_memory,
+                                own_subnet_type,
+                                input_queue_type,
+                            )
+                            // Requests are never silently dropped.
+                            .map(|_| true)
+                        }
 
                         RequestOrResponse::Response(response) => Err((
                             StateError::non_matching_response(
                                 "Management canister does not accept canister responses",
-                                response,
+                                &response,
                             ),
-                            msg,
+                            RequestOrResponse::Response(response),
                         )),
                     }
                 } else {
@@ -1175,18 +1183,6 @@ impl ReplicatedState {
     /// `self.subnet_queues`.
     pub fn peek_subnet_input(&mut self) -> Option<SubnetMessage> {
         self.subnet_queues.peek_input().map(into_subnet_message)
-    }
-
-    /// Caches the given effective canister ID in the next inter-canister request
-    /// in `self.subnet_queues`, i.e. the one that `peek_subnet_input()` just
-    /// returned (no-op if that is not a request), so that it doesn't need to be
-    /// decoded from the payload again if the request is peeked again.
-    ///
-    /// Must be called right after `peek_subnet_input()`. The request is copied
-    /// if its `Arc` is shared, so drop the peeked `Arc` first.
-    pub fn cache_subnet_input_effective_canister_id(&mut self, effective_canister_id: CanisterId) {
-        self.subnet_queues
-            .cache_next_input_effective_canister_id(effective_canister_id);
     }
 
     /// Skips the next inter-canister or ingress message from `self.subnet_queues`.

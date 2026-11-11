@@ -528,8 +528,13 @@ impl StreamBuilderImpl {
                         continue;
                     }
 
-                    // We will route (or reject) the message, pop it.
-                    let mut msg = validated_next(&mut output_iter, &msg);
+                    // We will route (or reject) the message, pop it. Drop the peeked clone, so
+                    // that the popped message's `Arc` is (usually) not shared and
+                    // `Arc::make_mut()` below does not copy it.
+                    let mut msg = {
+                        let peeked = msg;
+                        validated_next(&mut output_iter, &peeked)
+                    };
 
                     let is_engine_dst =
                         !is_loopback_stream && dst_subnet_type == Some(SubnetType::CloudEngine);
@@ -664,8 +669,17 @@ impl StreamBuilderImpl {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
-                            if is_loopback_stream && let RequestOrResponse::Request(req) = &msg {
+                            if is_loopback_stream && let RequestOrResponse::Request(req) = &mut msg
+                            {
                                 local_connections.push((req.sender, req.receiver));
+                                if req.receiver.get() == self.subnet_id.get() {
+                                    // Cache the effective canister ID of a request to the
+                                    // management canister now, while its `Arc` is (usually) not
+                                    // shared: upon induction, it is shared with the loopback
+                                    // stream (and with any retained earlier state), so caching
+                                    // it then would copy the request.
+                                    Request::cache_effective_canister_id(req);
+                                }
                             }
                             dst_stream_entry.or_default().push(msg.into());
                         }

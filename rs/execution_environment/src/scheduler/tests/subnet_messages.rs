@@ -591,24 +591,6 @@ mod can_execute_subnet_msg_tests {
     }
 
     #[test]
-    fn skipped_request_caches_effective_canister_id() {
-        let mut test = CanExecuteSubnetMsgTest::new();
-
-        test.enqueue_task(ExecutionTask::PausedInstallCode(PausedExecutionId(0)));
-        test.inject_canister_status_call(test.canister);
-
-        let mut new_state = test.drain_subnet_messages();
-
-        // The request was skipped and its effective canister ID was cached.
-        match new_state.peek_subnet_input() {
-            Some(SubnetMessage::Request(request)) => {
-                assert_eq!(request.effective_canister_id, Some(Box::new(test.canister)));
-            }
-            msg => panic!("Expected a subnet request, got {msg:?}"),
-        }
-    }
-
-    #[test]
     fn effective_canister_with_paused_install_code_is_skipped() {
         let mut test = CanExecuteSubnetMsgTest::new();
 
