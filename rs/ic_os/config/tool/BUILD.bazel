@@ -2,9 +2,21 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
-exports_files([
+TEMPLATES = [
     "templates/ic.json5.template",
+    "templates/metrics-proxy-hostos.yaml.template",
+]
+
+exports_files(TEMPLATES + [
+    # Read by //ic-os/components:test_metrics_proxy_units for the generated
+    # metrics-proxy config path.
+    "src/lib.rs",
 ])
+
+# `include_str!`d by tests only, so it stays off the library's compile_data.
+TEST_GOLDENS = [
+    "testdata/metrics-proxy-hostos-single-vm.yaml.golden",
+]
 
 BIN_SOURCES = [
     "src/main.rs",
@@ -18,7 +30,7 @@ LIB_SOURCES = glob(
 rust_library(
     name = "config_lib",
     srcs = LIB_SOURCES,
-    compile_data = ["templates/ic.json5.template"],
+    compile_data = TEMPLATES,
     crate_name = "config_tool",
     target_compatible_with = [
         "@platforms//os:linux",
@@ -59,7 +71,7 @@ rust_library(
 rust_library(
     name = "config_lib_dev",
     srcs = LIB_SOURCES,
-    compile_data = ["templates/ic.json5.template"],
+    compile_data = TEMPLATES,
     crate_features = ["dev"],
     crate_name = "config_tool",
     target_compatible_with = [
@@ -101,6 +113,7 @@ rust_library(
 # bazel test //rs/ic_os/config/tool:config_lib_test --test_env=UPDATE_GOLDENFILES=1 --spawn_strategy=local
 rust_test(
     name = "config_lib_test_dev",
+    compile_data = TEST_GOLDENS,
     crate = ":config_lib_dev",
     crate_features = ["dev"],
     data = [
@@ -114,12 +127,14 @@ rust_test(
     },
     deps = [
         # Keep sorted.
+        "@crate_index//:serde_yaml",
         "@crate_index//:tempfile",
     ],
 )
 
 rust_test(
     name = "config_lib_test",
+    compile_data = TEST_GOLDENS,
     crate = ":config_lib",
     data = [
         "@dosfstools//:mkfs.fat",
@@ -131,6 +146,7 @@ rust_test(
     },
     deps = [
         # Keep sorted.
+        "@crate_index//:serde_yaml",
         "@crate_index//:tempfile",
     ],
 )

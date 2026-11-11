@@ -7,37 +7,18 @@ set -euo pipefail
 source /opt/ic/bin/config.sh
 source /opt/ic/bin/logging.sh
 
-node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
+COUNT=$(get_guest_vm_count)
 
-case "${node_reward_type}" in
-    type4.0) COUNT=32 ;;
-    type4.1) COUNT=60 ;;
-    type4.2) COUNT=8 ;;
-    type4.3) COUNT=4 ;;
-    type4.4) COUNT=2 ;;
-    *) COUNT=1 ;;
-esac
-
-# Forward all the GuestOS logs
-for i in $(seq 0 "$((COUNT - 1))"); do
-    # A single GuestOS keeps the guestos-serial.log name
-    if [ "$COUNT" -eq 1 ]; then
-        s=""
-    else
-        s=$i
-    fi
+# Slots are 1-based. There is no guestos0.
+for i in $(seq 1 "${COUNT}"); do
+    s=$(get_guest_vm_suffix "$i" "$COUNT")
 
     tail -F "/var/log/libvirt/qemu/guestos-serial$s.log" | sanitize_output | systemd-cat -t "guestos-serial$s" -p info &
 done
 
 # And the upgrade VMs
-for i in $(seq 0 "$((COUNT - 1))"); do
-    # A single upgrade VM keeps the upgrade-guestos-serial.log name
-    if [ "$COUNT" -eq 1 ]; then
-        s=""
-    else
-        s=$i
-    fi
+for i in $(seq 1 "${COUNT}"); do
+    s=$(get_guest_vm_suffix "$i" "$COUNT")
 
     tail -F "/var/log/libvirt/qemu/upgrade-guestos-serial$s.log" | sanitize_output | systemd-cat -t "upgrade-guestos-serial$s" -p info &
 done

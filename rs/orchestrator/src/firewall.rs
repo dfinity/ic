@@ -1148,7 +1148,7 @@ mod tests {
         golden_test(
             Role::AssignedCloudEngine(SUBNET_ID),
             node_test_id(0),
-            Some(NodeRewardType::Type4),
+            Some(NodeRewardType::Type4dot1),
             NFTABLES_ASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
             "assigned_cloud_engine",
         );
@@ -1177,7 +1177,7 @@ mod tests {
         golden_test(
             Role::Unassigned,
             node_test_id(0),
-            Some(NodeRewardType::Type4),
+            Some(NodeRewardType::Type4dot1),
             NFTABLES_UNASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
             "unassigned_cloud_engine",
         );
@@ -1208,7 +1208,7 @@ mod tests {
         let cloud_engine_ports = [52001, 52002, 52003, 52004, 52005];
         let tmp_dir = tempfile::tempdir().unwrap();
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
-        let config = get_config();
+        let config = get_config(None);
         let replica_firewall_config = ReplicaFirewallConfig {
             config_file: nftables_config_path.clone(),
             assigned_node_port_lists: replica_port_lists.clone(),
@@ -1350,7 +1350,7 @@ mod tests {
     ) {
         let tmp_dir = tempfile::tempdir().unwrap();
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
-        let config = get_config();
+        let config = get_config(reward_type);
         let mut replica_firewall_config = config.firewall.unwrap();
         replica_firewall_config
             .config_file
@@ -1391,7 +1391,15 @@ mod tests {
     }
 
     /// Returns the `ic.json5` config filled with some dummy values.
-    fn get_config() -> ConfigOptional {
+    ///
+    /// `reward_type` matters because the template keys the GuestOS metrics
+    /// firewall rule off it. Derived from the enum so it cannot drift from what a
+    /// real node carries.
+    fn get_config(reward_type: Option<NodeRewardType>) -> ConfigOptional {
+        let node_reward_type = match reward_type {
+            None | Some(NodeRewardType::Unspecified) => String::new(),
+            Some(reward_type) => String::from(reward_type),
+        };
         let template = generate_ic_config::IcConfigTemplate {
             ipv6_prefix: "::/64".to_string(),
             ipv4_address: "".to_string(),
@@ -1403,7 +1411,7 @@ mod tests {
             query_stats_epoch_length: "600".to_string(),
             jaeger_addr: "".to_string(),
             domain_name: "".to_string(),
-            node_reward_type: "".to_string(),
+            node_reward_type,
             malicious_behavior: "null".to_string(),
             extra_api_boundary_node_trust_anchors_pem: "null".to_string(),
             peer_guest_vm_address: Some("2001:db8::6802:94ff:feef:2978".parse().unwrap()),

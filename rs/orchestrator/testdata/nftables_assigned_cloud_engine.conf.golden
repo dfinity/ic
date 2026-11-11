@@ -88,6 +88,27 @@ table ip6 filter {
   counter rate_limit_v6_counter {}
   counter connection_limit_v6_counter {}
 
+  set metrics_rate_limit {
+    type ipv6_addr
+    size 65535
+    flags dynamic
+  }
+
+  set metrics_connection_limit {
+    type ipv6_addr
+    size 65535
+    flags dynamic
+  }
+
+  # Guests sharing a host serve their own metrics: there is no single
+  # "guestos" for the HostOS metrics-proxy to chainload, and `hostos` does not
+  # resolve from inside one. Limits mirror the HostOS metrics_proxy chain.
+  chain metrics_proxy {
+    ct state { new } add @metrics_rate_limit { ip6 saddr limit rate over 100/minute } drop comment "Maximum 100 connections per minute"
+    ct state { new } add @metrics_connection_limit { ip6 saddr ct count over 6 } drop comment "No more than 6 connections per source at a time"
+    accept
+  }
+
   chain INPUT {
     type filter hook input priority 0; policy drop;
     iif lo accept
@@ -105,8 +126,8 @@ table ip6 filter {
     ip6 saddr { ::/64 } ct state { new } tcp dport { 7070, 9090, 9091, 9100, 9314, 19531, 19100 } accept
     # Disk encryption key exchange: only the peer Guest VM may connect
     ip6 saddr { 2001:db8::6802:94ff:feef:2978 } ct state { new } tcp dport { 19522 } accept
-    # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS
-    ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept
+    # Public node metrics, served by this guest's own metrics-proxy.
+    tcp dport { 42372 } goto metrics_proxy
     ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport { 80, 443 } accept
     # Custom templated rules
     ip6 saddr {2001:db8:85a3::8a2e:1370:7334,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e6,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e7,a4c2:7f91:3db6:1e8c:5a4f:cc92:b37:6e41} ct state { new } tcp dport {22,8080} accept # Automatic whitelisted nodes whitelisting

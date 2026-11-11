@@ -1,3 +1,4 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//bazel:defs.bzl", "write_stable_status_file_var")
 load("//ic-os/components/conformance_tests:defs.bzl", "check_unused_components_test")
 load(
@@ -68,7 +69,33 @@ ignored_repo_components = [
     "misc/serial-getty@/guestos-prod/override.conf",
     "hostos/misc/grub-upgrader/grub-upgrader.sh",
     "hostos/misc/grub-upgrader/grub-upgrader.service",
+    "misc/config/test-config-hostos.sh",
+    "monitoring/metrics-proxy/hostos/test-metrics-proxy-units.sh",
 ]
+
+sh_test(
+    name = "test_config_hostos",
+    srcs = ["misc/config/test-config-hostos.sh"],
+    args = ["$(execpath misc/config/config-hostos.sh)"],
+    data = ["misc/config/config-hostos.sh"],
+)
+
+sh_test(
+    name = "test_metrics_proxy_units",
+    srcs = ["monitoring/metrics-proxy/hostos/test-metrics-proxy-units.sh"],
+    args = [
+        "$(execpath monitoring/metrics-proxy/hostos/metrics-proxy.service.d/override.conf)",
+        "$(execpath monitoring/metrics-proxy/hostos/generate-metrics-proxy-config.service)",
+        "$(execpath monitoring/metrics-proxy/metrics-proxy.service)",
+        "$(execpath //rs/ic_os/config/tool:src/lib.rs)",
+    ],
+    data = [
+        "monitoring/metrics-proxy/hostos/generate-metrics-proxy-config.service",
+        "monitoring/metrics-proxy/hostos/metrics-proxy.service.d/override.conf",
+        "monitoring/metrics-proxy/metrics-proxy.service",
+        "//rs/ic_os/config/tool:src/lib.rs",
+    ],
+)
 
 check_unused_components_test(
     name = "check_unused_components_test",
