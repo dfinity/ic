@@ -85,7 +85,8 @@ Runbook::
 13. After `WaitForHaltingCupOnDestinationSubnet`: check that both subnets are
    halted, i.e. that every one of their nodes certifies the height its subnet
    halts at and none goes past it, even after `HALT_OBSERVATION_PERIOD`.
-14. The following steps of the tool are executed, over SSH with the admin key:
+14. The following steps of the tool are executed, over SSH with the admin key
+   (or locally, if the tool runs on the node):
    `Stop{Source,Destination}Replica`, which wait until the node of each subnet
    holds a finished checkpoint at the height of the CUP its subnet halts at
    and then stop its replica;

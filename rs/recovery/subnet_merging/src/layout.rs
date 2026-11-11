@@ -1,4 +1,4 @@
-use crate::target_subnet::TargetSubnet;
+use crate::subnet_merging::TargetSubnet;
 
 use ic_base_types::SubnetId;
 use ic_protobuf::types::v1 as pb;
@@ -38,11 +38,18 @@ struct CoolingDownRegistryVersion {
 /// |  |-- ${destination_subnet_id}.pruned_state_tree.cbor
 /// |  |-- halting_cup_${source_subnet_id}.pb
 /// |  |-- halting_cup_${destination_subnet_id}.pb
-/// |  |-- (destination_)work_dir/
+/// |  |-- working_dir/                  (the source subnet's)
+/// |  |   |-- ic.json5
 /// |  |   |-- data/
 /// |  |   |   |-- ic_state/states_metadata.pbuf
 /// |  |   |   |-- ic_state/checkpoints/
-/// |  |   |   |   |-- 1/
+/// |  |   |   |   |-- ${halting_height}/
+/// |  |-- destination_working_dir/      (the destination subnet's)
+/// |  |   |-- ic.json5
+/// |  |   |-- data/
+/// |  |   |   |-- ic_state/states_metadata.pbuf
+/// |  |   |   |-- ic_state/checkpoints/
+/// |  |   |   |   |-- ${halting_height}/
 pub(crate) struct Layout {
     root: PathBuf,
     source_working_dir: PathBuf,
@@ -59,8 +66,6 @@ impl Layout {
     }
 
     /// Creates the working directories of the two subnets being merged.
-    /// `Recovery` only creates the one working directory a recovery has, which
-    /// is the source subnet's here.
     pub(crate) fn create_dirs(&self) -> RecoveryResult<()> {
         for target_subnet in [TargetSubnet::Source, TargetSubnet::Destination] {
             create_dir(&self.data_dir(target_subnet))?;

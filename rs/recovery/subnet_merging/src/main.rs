@@ -60,7 +60,9 @@ struct ValidateArgs {
     #[clap(long)]
     cup_path: PathBuf,
 
-    /// Path to the manifest computed from the state the subnet halted at.
+    /// Path to the manifest computed (as by `ic-state-tool manifest`) from the
+    /// state the subnet halted at, e.g. the one written by
+    /// `Validate{Source,Destination}SubnetCup`.
     #[clap(long)]
     state_manifest_path: PathBuf,
 
