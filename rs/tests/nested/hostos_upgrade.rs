@@ -177,8 +177,7 @@ pub fn check_metrics_proxy(env: TestEnv) {
         "metrics-proxy does not use the generated config: {exec_start}"
     );
 
-    // The node is unassigned, so no replica is running. node_exporter is the
-    // only guest endpoint that answers, and it still proves the chainload.
+    // The node is unassigned, so no replica is running.
     for path in ["hostos_node_exporter", "guestos_node_exporter"] {
         let url = format!("https://[::1]:42372/metrics/{path}");
         if let Err(e) = retry_with_msg!(
@@ -187,10 +186,10 @@ pub fn check_metrics_proxy(env: TestEnv) {
             Duration::from_secs(300),
             Duration::from_secs(10),
             || {
-                // --fail turns an HTTP error into a non-zero exit, so an error
-                // body cannot pass as metrics.
+                // sed, not head: head closes the pipe early and curl dies of
+                // a write error.
                 let out = host.block_on_bash_script(&format!(
-                    "set -o pipefail; curl -sk --fail --max-time 10 {url} | head -n 20"
+                    "set -o pipefail; curl -sk --fail --max-time 10 {url} | sed -n '1,20p'"
                 ))?;
                 if out.trim().is_empty() {
                     bail!("empty response from {url}")

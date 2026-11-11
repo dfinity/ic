@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail, ensure};
 use askama::Template;
-use config_types::{DeploymentEnvironment, GuestOSConfig, Ipv6Config, is_multi_vm_node};
+use config_types::{DeploymentEnvironment, GuestOSConfig, Ipv6Config, is_cloud_engine_node};
 use ipnet::Ipv6Net;
 use serde_json;
 use std::fs::write;
@@ -43,8 +43,8 @@ pub struct IcConfigTemplate {
 impl IcConfigTemplate {
     /// Picks the GuestOS metrics firewall rule. Derived so it cannot
     /// contradict `node_reward_type`.
-    fn multi_vm_guest(&self) -> bool {
-        is_multi_vm_node(&self.node_reward_type)
+    fn cloud_engine_guest(&self) -> bool {
+        is_cloud_engine_node(&self.node_reward_type)
     }
 }
 

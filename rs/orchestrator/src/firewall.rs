@@ -1145,13 +1145,18 @@ mod tests {
 
     #[test]
     fn nftables_golden_assigned_cloud_engine_test() {
-        golden_test(
-            Role::AssignedCloudEngine(SUBNET_ID),
-            node_test_id(0),
-            Some(NodeRewardType::Type4dot1),
-            NFTABLES_ASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
-            "assigned_cloud_engine",
-        );
+        for reward_type in NodeRewardType::iter()
+            .filter(|reward_type| is_cloud_engine_reward_type(*reward_type))
+            .map(Some)
+        {
+            golden_test(
+                Role::AssignedCloudEngine(SUBNET_ID),
+                node_test_id(0),
+                reward_type,
+                NFTABLES_ASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
+                "assigned_cloud_engine",
+            );
+        }
     }
 
     #[test]
@@ -1174,13 +1179,18 @@ mod tests {
 
     #[test]
     fn nftables_golden_unassigned_cloud_engine_test() {
-        golden_test(
-            Role::Unassigned,
-            node_test_id(0),
-            Some(NodeRewardType::Type4dot1),
-            NFTABLES_UNASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
-            "unassigned_cloud_engine",
-        );
+        for reward_type in NodeRewardType::iter()
+            .filter(|reward_type| is_cloud_engine_reward_type(*reward_type))
+            .map(Some)
+        {
+            golden_test(
+                Role::Unassigned,
+                node_test_id(0),
+                reward_type,
+                NFTABLES_UNASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
+                "unassigned_cloud_engine",
+            );
+        }
     }
 
     /// The automatic node whitelisting/blacklisting rules of an assigned cloud engine must
@@ -1208,20 +1218,21 @@ mod tests {
         let cloud_engine_ports = [52001, 52002, 52003, 52004, 52005];
         let tmp_dir = tempfile::tempdir().unwrap();
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
-        let config = get_config(None);
-        let replica_firewall_config = ReplicaFirewallConfig {
-            config_file: nftables_config_path.clone(),
-            assigned_node_port_lists: replica_port_lists.clone(),
-            ..config.firewall.unwrap()
-        };
+        let replica_ic_config = get_config(Some(NodeRewardType::Type0));
+        let cloud_engine_ic_config = get_config(Some(NodeRewardType::Type4));
         let cloud_engine_firewall_config = CloudEngineFirewallConfig {
             config_file: nftables_config_path.clone(),
             assigned_node_port_lists: cloud_engine_port_lists.clone(),
-            ..config.cloud_engine_firewall.unwrap()
+            ..cloud_engine_ic_config.cloud_engine_firewall.unwrap()
+        };
+        let replica_firewall_config = ReplicaFirewallConfig {
+            config_file: nftables_config_path.clone(),
+            assigned_node_port_lists: replica_port_lists.clone(),
+            ..replica_ic_config.firewall.unwrap()
         };
         let boundary_node_firewall_config = BoundaryNodeFirewallConfig {
             config_file: nftables_config_path.clone(),
-            ..config.boundary_node_firewall.unwrap()
+            ..replica_ic_config.boundary_node_firewall.unwrap()
         };
 
         set_up_firewall_dependencies(
@@ -1317,6 +1328,22 @@ mod tests {
                 reward_type,
                 NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES,
                 "boundary_node_app_subnet",
+            );
+        }
+    }
+
+    /// The GuestOS template keys its metrics rule off the reward-type string.
+    #[test]
+    fn cloud_engine_reward_types_agree_with_config_types() {
+        for reward_type in NodeRewardType::iter() {
+            let as_str = match reward_type {
+                NodeRewardType::Unspecified => String::new(),
+                other => String::from(other),
+            };
+            assert_eq!(
+                is_cloud_engine_reward_type(reward_type),
+                config_types::is_cloud_engine_node(&as_str),
+                "{reward_type:?} renders as {as_str:?}"
             );
         }
     }

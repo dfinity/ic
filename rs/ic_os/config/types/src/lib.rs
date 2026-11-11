@@ -395,6 +395,12 @@ pub fn is_multi_vm_node(node_reward_type: &str) -> bool {
     guest_vm_count(node_reward_type) > 1
 }
 
+/// The `type4` family. Wider than [`is_multi_vm_node`]: `type4` and `type4.5`
+/// are cloud engine types that run a single VM.
+pub fn is_cloud_engine_node(node_reward_type: &str) -> bool {
+    node_reward_type == "type4" || node_reward_type.starts_with("type4.")
+}
+
 #[derive(Copy, Clone)]
 pub enum VmSlot {
     Plain,
@@ -438,6 +444,19 @@ mod tests {
         for multi in ["type4.1", "type4.2", "type4.3", "type4.4"] {
             assert!(is_multi_vm_node(multi), "{multi}");
         }
+    }
+
+    #[test]
+    fn cloud_engine_covers_every_type4() {
+        for cloud in [
+            "type4", "type4.1", "type4.2", "type4.3", "type4.4", "type4.5",
+        ] {
+            assert!(is_cloud_engine_node(cloud), "{cloud}");
+        }
+        for other in ["", "type0", "type3.1", "type40", "TYPE4.1"] {
+            assert!(!is_cloud_engine_node(other), "{other}");
+        }
+        assert!(!is_multi_vm_node("type4") && is_cloud_engine_node("type4"));
     }
     use serde_json::Value;
     use std::collections::HashSet;
