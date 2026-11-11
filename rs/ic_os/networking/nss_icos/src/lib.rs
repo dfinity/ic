@@ -135,6 +135,8 @@ impl HostHooks for ICOSHosts {
 
     fn get_host_by_name(name: &str, family: AddressFamily) -> Response<Host> {
         match family {
+            // Checked before PUBLIC_IPV6, which caches its first result forever.
+            AddressFamily::IPv6 if !KNOWN_NAMES.contains(&name) => Response::NotFound,
             AddressFamily::IPv6 => match PUBLIC_IPV6.clone() {
                 Ok(local_ipv6) => match resolve(name, local_ipv6) {
                     Some(addr) => Response::Success(Host {
@@ -209,6 +211,16 @@ mod tests {
     #[test]
     fn unknown_names_do_not_resolve() {
         assert_eq!(resolve("nowhere", real_hostos_address()), None);
+    }
+
+    #[test]
+    fn every_known_name_resolves() {
+        for name in KNOWN_NAMES {
+            assert!(
+                resolve(name, real_hostos_address()).is_some(),
+                "{name} is in KNOWN_NAMES but does not resolve"
+            );
+        }
     }
 
     struct Vector {

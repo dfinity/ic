@@ -10,8 +10,7 @@ use std::path::Path;
 
 /// One GuestOS VM for HostOS to chainload metrics from.
 pub struct GuestProxyTarget {
-    /// Appended to the HostOS listen path. Empty on a single-VM node, so the
-    /// scrape paths there stay exactly as they were before generation.
+    /// Appended to the listen path. Empty on a single-VM node.
     pub path_suffix: String,
     pub address: Ipv6Addr,
 }
@@ -22,11 +21,7 @@ pub struct MetricsProxyTemplate {
     pub guests: Vec<GuestProxyTarget>,
 }
 
-/// Generate the HostOS metrics-proxy configuration.
-///
-/// Each guest is reached at its own deterministic address, so a multi-VM node
-/// proxies all of its guests instead of a single slot-less `guestos` name that
-/// nothing listens on.
+/// Generate the HostOS metrics-proxy configuration, one proxy pair per guest.
 pub fn generate_metrics_proxy_config(config: &HostOSConfig, output_path: &Path) -> Result<()> {
     let template = MetricsProxyTemplate {
         guests: guest_proxy_targets(config)?,
@@ -37,15 +32,12 @@ pub fn generate_metrics_proxy_config(config: &HostOSConfig, output_path: &Path) 
     if let Some(parent) = output_path.parent() {
         create_dir_all(parent)
             .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
-        set_permissions(parent, Permissions::from_mode(0o755))
-            .with_context(|| format!("Failed to chmod directory: {}", parent.display()))?;
     }
 
     write(output_path, &output_content)
         .with_context(|| format!("Failed to write output file: {}", output_path.display()))?;
 
-    // umask for the service is restrictive, but metrics-proxy reads this as an
-    // unprivileged user.
+    // metrics-proxy reads this as an unprivileged user.
     set_permissions(output_path, Permissions::from_mode(0o644))
         .with_context(|| format!("Failed to chmod output file: {}", output_path.display()))
 }
@@ -72,8 +64,6 @@ fn guest_proxy_targets(config: &HostOSConfig) -> Result<Vec<GuestProxyTarget>> {
             );
             let address = mac.calculate_slaac(&ipv6_config.prefix)?;
 
-            // `to_suffix` is the authority on slot naming, so the listen path
-            // cannot drift from the VM and serial log names.
             let suffix = slot.to_suffix();
             let path_suffix = if suffix.is_empty() {
                 String::new()
@@ -89,8 +79,8 @@ fn guest_proxy_targets(config: &HostOSConfig) -> Result<Vec<GuestProxyTarget>> {
         .collect()
 }
 
-/// The slots this node's guests occupy. A single-VM node holds one guest in
-/// [`VmSlot::Plain`], a multi-VM node holds its guests in slots 1..=count.
+/// A single-VM node holds one guest in [`VmSlot::Plain`], a multi-VM node
+/// holds its guests in slots 1..=count.
 fn guest_vm_slots(config: &HostOSConfig) -> Vec<VmSlot> {
     let count = config
         .icos_settings
@@ -162,8 +152,6 @@ mod tests {
         }
     }
 
-    /// Every guest must be reached at a distinct address, or the proxy would
-    /// report one guest's metrics under several slots.
     #[test]
     fn guest_addresses_are_distinct() {
         let targets = guest_proxy_targets(&test_config(Some("type4.2"))).unwrap();
@@ -213,8 +201,6 @@ mod tests {
         (targets, rendered)
     }
 
-    /// The rendered file has to be YAML metrics-proxy can act on, not just text
-    /// containing the right substrings.
     #[test]
     fn rendered_config_parses_as_yaml() {
         for reward_type in [None, Some("type4.4"), Some("type4.2")] {
@@ -235,8 +221,6 @@ mod tests {
         }
     }
 
-    /// Two proxies listening on one URL make the config ambiguous, and a listen
-    /// path that does not carry its slot would serve the wrong guest.
     #[test]
     fn listen_urls_are_unique_and_carry_the_slot() {
         for reward_type in [None, Some("type4.4"), Some("type4.2")] {
@@ -262,8 +246,6 @@ mod tests {
         }
     }
 
-    /// Each guest is chainloaded at its own address, on the unsuffixed path the
-    /// guest itself serves.
     #[test]
     fn connect_urls_target_each_guest_address() {
         for reward_type in [None, Some("type4.4"), Some("type4.2")] {
@@ -280,7 +262,6 @@ mod tests {
                 }
             }
 
-            // The HostOS proxy is the only one not pointed at a guest.
             let guest_connects = config
                 .proxies
                 .iter()
@@ -299,11 +280,8 @@ mod tests {
             .collect()
     }
 
-    /// Generation must be a behavioural no-op for every ordinary single-VM
-    /// node. The golden is the static file this generator replaced, with only
-    /// the `guestos` name it could not resolve swapped for the real address.
-    /// Comments are excluded: they were reorganised so the per-guest block is
-    /// not repeated once per VM.
+    /// Generation must be a no-op for single-VM nodes. The golden is the
+    /// static file this replaced, with `guestos` swapped for the real address.
     #[test]
     fn single_vm_render_matches_retired_static_file() {
         let targets = guest_proxy_targets(&test_config(None)).unwrap();

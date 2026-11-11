@@ -135,13 +135,11 @@ pub fn upgrade_hostos(env: TestEnv) {
     assert_eq!(new_version, target_version.to_string());
 }
 
-/// Where `config_tool generate-metrics-proxy-config` writes, mirroring
-/// `DEFAULT_HOSTOS_METRICS_PROXY_OUTPUT_PATH`.
+/// Mirrors `DEFAULT_HOSTOS_METRICS_PROXY_OUTPUT_PATH`.
 const GENERATED_METRICS_PROXY_CONFIG: &str = "/run/ic-node/etc/metrics-proxy.yaml";
 
-/// HostOS no longer ships a static `/etc/metrics-proxy.yaml`: it generates one,
-/// because a multi-VM node has no single `guestos` to chainload. Runs after the
-/// upgrade so it covers the HostOS build under test.
+/// HostOS generates its metrics-proxy config rather than shipping a static one.
+/// Runs after the upgrade so it covers the HostOS build under test.
 pub fn check_metrics_proxy(env: TestEnv) {
     let logger = env.logger();
     let host = env
@@ -179,8 +177,9 @@ pub fn check_metrics_proxy(env: TestEnv) {
         "metrics-proxy does not use the generated config: {exec_start}"
     );
 
-    // The guest is registered by this point, so both ends of the chainload work.
-    for path in ["hostos_node_exporter", "guestos_replica"] {
+    // The node is unassigned, so no replica is running. node_exporter is the
+    // only guest endpoint that answers, and it still proves the chainload.
+    for path in ["hostos_node_exporter", "guestos_node_exporter"] {
         let url = format!("https://[::1]:42372/metrics/{path}");
         if let Err(e) = retry_with_msg!(
             format!("Waiting for metrics on {url}"),
@@ -188,13 +187,16 @@ pub fn check_metrics_proxy(env: TestEnv) {
             Duration::from_secs(300),
             Duration::from_secs(10),
             || {
-                let out = run(&format!("curl -sk --max-time 10 {url} | head -n 20"));
+                // --fail turns an HTTP error into a non-zero exit, so an error
+                // body cannot pass as metrics.
+                let out = host.block_on_bash_script(&format!(
+                    "set -o pipefail; curl -sk --fail --max-time 10 {url} | head -n 20"
+                ))?;
                 if out.trim().is_empty() {
-                    bail!("no metrics returned from {url}")
-                } else {
-                    info!(logger, "{url} served:\n{out}");
-                    Ok(())
+                    bail!("empty response from {url}")
                 }
+                info!(logger, "{url} served:\n{out}");
+                Ok(())
             }
         ) {
             try_logging_guestos_diagnostics(&host, &logger);

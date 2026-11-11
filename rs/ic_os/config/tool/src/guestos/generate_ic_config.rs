@@ -41,8 +41,8 @@ pub struct IcConfigTemplate {
 }
 
 impl IcConfigTemplate {
-    /// Used by the template to pick the GuestOS metrics firewall rule. Derived
-    /// rather than stored so it cannot contradict `node_reward_type`.
+    /// Picks the GuestOS metrics firewall rule. Derived so it cannot
+    /// contradict `node_reward_type`.
     fn multi_vm_guest(&self) -> bool {
         is_multi_vm_node(&self.node_reward_type)
     }

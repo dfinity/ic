@@ -31,9 +31,7 @@ function test_get_guest_vm_suffix_helper() {
     fi
 }
 
-# The VM names a monitoring loop produces must match what guest_vm_runner
-# derives from VmSlot. A single-VM node uses the unsuffixed name, and a
-# multi-VM node starts at 1, so guestos0 must never appear.
+# VM names must match what guest_vm_runner derives from VmSlot.
 function test_vm_names() {
     test_vm_names_helper 1 "guestos"
     test_vm_names_helper 2 "guestos1 guestos2"
