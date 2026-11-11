@@ -2,8 +2,8 @@ use crate::{
     admin_helper::get_propose_to_cool_down_subnet_command,
     layout::Layout,
     steps::{
-        CheckCoolingDownStep, CheckMergeReadinessStep, StopReplicaAtHaltingCheckpointStep,
-        ValidateCupStep, WaitForHaltingCupStep,
+        CheckCoolingDownStep, CheckMergeReadinessStep, DownloadStateStep,
+        StopReplicaAtHaltingCheckpointStep, ValidateCupStep, WaitForHaltingCupStep,
     },
     target_subnet::TargetSubnet,
 };
@@ -19,17 +19,15 @@ use ic_recovery::{
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
     ssh_helper::SshHelper,
-    steps::{AdminStep, DownloadIcDataStep, Step},
-    util::{CheckpointHeight, DataLocation, ExecutionMode, SshUser},
+    steps::{AdminStep, Step},
+    util::{DataLocation, SshUser},
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_tools::{
-    admin_helper::get_halt_subnet_at_cup_height_command,
-    utils::{get_cup as read_cup_file, print_url_and_ask_for_confirmation},
+    admin_helper::get_halt_subnet_at_cup_height_command, utils::print_url_and_ask_for_confirmation,
 };
-use ic_types::consensus::HasHeight;
 use serde::{Deserialize, Serialize};
-use slog::{Logger, info, warn};
+use slog::{Logger, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 
@@ -476,52 +474,20 @@ impl SubnetMerging {
         })
     }
 
-    /// Downloads the checkpoint at the height of the CUP a subnet halted at,
-    /// as recorded by `WaitForHaltingCup*`, into that subnet's working
-    /// directory. The CUP itself is not downloaded again. If the node has not
-    /// written that checkpoint (yet), the step fails rather than download an
-    /// earlier one.
-    ///
-    /// `DownloadIcDataStep` rather than `Recovery::get_download_data_step`: a
-    /// merge downloads two states, and the latter always downloads into the
-    /// single working directory a `Recovery` has.
     fn download_state_step(
         &self,
         target_subnet: TargetSubnet,
     ) -> RecoveryResult<impl Step + use<>> {
         let node_ip = self.download_node_ip(target_subnet, "DownloadState")?;
-        let subnet_id = self.subnet_id(target_subnet);
 
-        let ssh_helper = self.ssh_helper(node_ip);
-        ssh_helper.wait_for_access().map_err(|err| {
-            RecoveryError::UnexpectedError(format!(
-                "SSH access to node {node_ip} with the admin key denied: {err}"
-            ))
-        })?;
-
-        let halting_height = read_cup_file(&self.layout.halting_cup_file(subnet_id))?.height();
-        let includes = Recovery::get_ic_state_includes(
-            &self.recovery.logger,
-            ExecutionMode::Remote(&ssh_helper),
-            CheckpointHeight::Specified(halting_height.get()),
-        )?;
-
-        info!(
-            self.recovery.logger,
-            "Downloading the checkpoint at height {halting_height} of the {target_subnet} subnet \
-             {subnet_id} from node {node_ip}",
-        );
-
-        Ok(DownloadIcDataStep {
+        Ok(DownloadStateStep {
+            subnet_id: self.subnet_id(target_subnet),
+            target_subnet,
+            node_ip,
+            layout: self.layout.clone(),
+            admin_key_file: self.recovery.admin_key_file.clone(),
+            ssh_confirmation: self.recovery.ssh_confirmation,
             logger: self.recovery.logger.clone(),
-            ssh_helper,
-            // Unused: the downloaded state is not kept apart, as the merge
-            // never modifies it.
-            backup_dir: self.layout.work_dir(target_subnet),
-            working_dir: self.layout.work_dir(target_subnet),
-            keep_downloaded_data: false,
-            data_includes: includes,
-            include_config: true,
         })
     }
 

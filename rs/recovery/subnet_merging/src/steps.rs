@@ -9,12 +9,12 @@ use ic_base_types::SubnetId;
 use ic_cup_explorer::get_cup;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    IC_CHECKPOINTS_PATH, IC_DATA_PATH,
+    IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery,
     error::{RecoveryError, RecoveryResult},
     registry_helper::RegistryHelper,
     ssh_helper::SshHelper,
-    steps::Step,
-    util::{DataLocation, block_on},
+    steps::{DownloadIcDataStep, Step},
+    util::{CheckpointHeight, DataLocation, ExecutionMode, SshUser, block_on},
 };
 use ic_state_layout::{STATE_SYNC_CHECKPOINT_MARKER, StateLayout, UNVERIFIED_CHECKPOINT_MARKER};
 use ic_subnet_tools::{
@@ -399,5 +399,82 @@ impl StopReplicaAtHaltingCheckpointStep {
                 self.node_ip
             ))),
         }
+    }
+}
+
+/// Downloads the checkpoint at the height of the CUP a subnet halted at, as
+/// recorded by [WaitForHaltingCupStep], into that subnet's working directory.
+/// The CUP itself is not downloaded again. If the node does not hold that
+/// checkpoint, the step fails rather than download an earlier one.
+///
+/// Everything that can fail happens in `exec`, rather than while the step is
+/// created: a step that fails to be created is skipped, whereas a step that
+/// fails to execute is retried (or skipped) at the operator's discretion.
+///
+/// `DownloadIcDataStep` rather than `Recovery::get_download_data_step`: a merge
+/// downloads two states, and the latter always downloads into the single
+/// working directory a `Recovery` has.
+pub(crate) struct DownloadStateStep {
+    pub(crate) subnet_id: SubnetId,
+    pub(crate) target_subnet: TargetSubnet,
+    pub(crate) node_ip: IpAddr,
+    pub(crate) layout: Layout,
+    pub(crate) admin_key_file: Option<PathBuf>,
+    pub(crate) ssh_confirmation: bool,
+    pub(crate) logger: Logger,
+}
+
+impl DownloadStateStep {
+    fn ssh_helper(&self) -> SshHelper {
+        SshHelper::new(
+            self.logger.clone(),
+            SshUser::Admin,
+            self.node_ip,
+            self.ssh_confirmation,
+            self.admin_key_file.clone(),
+        )
+    }
+}
+
+impl Step for DownloadStateStep {
+    fn descr(&self) -> String {
+        format!(
+            "Download the checkpoint at the height of the CUP the {} subnet {} halted at from \
+             node {} to {}.",
+            self.target_subnet,
+            self.subnet_id,
+            self.node_ip,
+            self.layout.work_dir(self.target_subnet).display(),
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let ssh_helper = self.ssh_helper();
+        ssh_helper.wait_for_access().map_err(|err| {
+            RecoveryError::UnexpectedError(format!(
+                "SSH access to node {} with the admin key denied: {err}",
+                self.node_ip
+            ))
+        })?;
+
+        let height = read_cup_file(&self.layout.halting_cup_file(self.subnet_id))?.height();
+        let data_includes = Recovery::get_ic_state_includes(
+            &self.logger,
+            ExecutionMode::Remote(&ssh_helper),
+            CheckpointHeight::Specified(height.get()),
+        )?;
+
+        DownloadIcDataStep {
+            logger: self.logger.clone(),
+            ssh_helper,
+            // Unused: the downloaded state is not kept apart, as the merge
+            // never modifies it.
+            backup_dir: self.layout.work_dir(self.target_subnet),
+            working_dir: self.layout.work_dir(self.target_subnet),
+            keep_downloaded_data: false,
+            data_includes,
+            include_config: true,
+        }
+        .exec()
     }
 }
