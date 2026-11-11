@@ -38,7 +38,7 @@ struct CoolingDownRegistryVersion {
 /// |  |-- ${destination_subnet_id}.pruned_state_tree.cbor
 /// |  |-- halting_cup_${source_subnet_id}.pb
 /// |  |-- halting_cup_${destination_subnet_id}.pb
-/// |  |-- working_dir/                  (the source subnet's)
+/// |  |-- source_working_dir/           (the source subnet's)
 /// |  |   |-- ic.json5
 /// |  |   |-- data/
 /// |  |   |   |-- ic_state/states_metadata.pbuf
@@ -60,7 +60,7 @@ impl Layout {
     pub(crate) fn new(recovery: &Recovery) -> Self {
         Self {
             root: recovery.recovery_dir.clone(),
-            source_working_dir: recovery.work_dir.clone(),
+            source_working_dir: recovery.recovery_dir.join("source_working_dir"),
             nns_public_key: recovery.recovery_dir.join("nns.pem"),
         }
     }
@@ -230,7 +230,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let layout = Layout {
             root: root.clone(),
-            source_working_dir: root.join("work_dir"),
+            source_working_dir: root.join("source_working_dir"),
             nns_public_key: root.join("nns.pem"),
         };
         let cup = pb::CatchUpPackage {

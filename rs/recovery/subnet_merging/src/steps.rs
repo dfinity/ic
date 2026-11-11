@@ -16,10 +16,7 @@ use ic_recovery::{
     steps::{CopyLocalIcStateStep, DownloadIcDataStep, Step},
     util::{CheckpointHeight, DataLocation, ExecutionMode, block_on},
 };
-use ic_state_layout::{
-    CheckpointLayout, CheckpointStatus, ReadOnly, STATE_SYNC_CHECKPOINT_MARKER, StateLayout,
-    UNVERIFIED_CHECKPOINT_MARKER,
-};
+use ic_state_layout::{CheckpointStatus, StateLayout};
 use ic_subnet_tools::{
     agent_helper::AgentHelper, state_tool_helper, utils::get_cup as read_cup_file,
     validation::validate_artifacts,
@@ -33,7 +30,7 @@ use url::Url;
 
 use std::{
     net::{IpAddr, Ipv6Addr},
-    path::{Path, PathBuf},
+    path::PathBuf,
     time::Duration,
 };
 
@@ -374,7 +371,7 @@ impl StopReplicaAtHaltingCheckpointStep {
             .join(IC_CHECKPOINTS_PATH)
             .join(StateLayout::checkpoint_name(height));
 
-        match self.checkpoint_status(&checkpoint, height)? {
+        match self.node.checkpoint_status(&checkpoint)? {
             Some(CheckpointStatus::Verified) => Ok(()),
             None => Err(RecoveryError::UnexpectedError(format!(
                 "{} does not hold the checkpoint {} yet",
@@ -387,47 +384,6 @@ impl StopReplicaAtHaltingCheckpointStep {
                     checkpoint.display(),
                     self.node
                 )))
-            }
-        }
-    }
-
-    /// The status of the checkpoint at `height` on the node, as the state
-    /// manager determines it, or `None` if the node does not hold it.
-    fn checkpoint_status(
-        &self,
-        checkpoint: &Path,
-        height: Height,
-    ) -> RecoveryResult<Option<CheckpointStatus>> {
-        match self.node.ssh_helper() {
-            None => {
-                if !checkpoint.exists() {
-                    return Ok(None);
-                }
-                let layout =
-                    CheckpointLayout::<ReadOnly>::new_untracked(checkpoint.to_path_buf(), height)
-                        .map_err(|err| {
-                        RecoveryError::UnexpectedError(format!(
-                            "failed to read the checkpoint {}: {err}",
-                            checkpoint.display()
-                        ))
-                    })?;
-                Ok(Some(layout.checkpoint_status()))
-            }
-            // The state layout code only reads local files, so the markers it
-            // looks at are checked over SSH, in the same order as
-            // `CheckpointLayout::checkpoint_status` does.
-            Some(ssh_helper) => {
-                let node = ExecutionMode::Remote(&ssh_helper);
-                if !node.path_exists(checkpoint)? {
-                    return Ok(None);
-                }
-                if node.path_exists(&checkpoint.join(STATE_SYNC_CHECKPOINT_MARKER))? {
-                    return Ok(Some(CheckpointStatus::UnverifiedStateSync));
-                }
-                if node.path_exists(&checkpoint.join(UNVERIFIED_CHECKPOINT_MARKER))? {
-                    return Ok(Some(CheckpointStatus::UnverifiedRegular));
-                }
-                Ok(Some(CheckpointStatus::Verified))
             }
         }
     }
