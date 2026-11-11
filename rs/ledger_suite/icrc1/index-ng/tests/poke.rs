@@ -215,6 +215,63 @@ fn poke_preserves_deadline_and_busy_callback_preserves_one_polling_chain() {
 }
 
 #[test]
+fn poke_during_scheduled_sync_is_serviced_before_next_polling_deadline() {
+    let (env, ledger, index) = setup(100, Some(PokeCallers::All));
+    let mint = BlockBuilder::new(0, 0)
+        .mint(account(1, 0), Tokens::from(100_u64))
+        .build();
+    add_block(&env, ledger, &mint).unwrap();
+
+    // Start with an ordinary scheduled poll, holding its captured response.
+    hold(&env, ledger, true);
+    advance_time_and_run_rounds(&env, 100);
+    assert_eq!(count(&env, ledger), 1);
+    assert_eq!(status(&env, index).num_blocks_synced, Nat::from(0_u64));
+
+    // This transfer cannot be included in the scheduled poll's response.
+    let transfer = BlockBuilder::new(1, 1)
+        .with_fee(Tokens::from(1_u64))
+        .transfer(account(1, 0), account(2, 0), Tokens::from(20_u64))
+        .build();
+    add_block(&env, ledger, &transfer).unwrap();
+    notify(&env, ledger, index);
+    assert_eq!(count(&env, ledger), 1, "the poke must not overlap the poll");
+
+    release_one(&env, ledger);
+    run_rounds_until(&env, || count(&env, ledger) == 2);
+    assert_eq!(status(&env, index).num_blocks_synced, Nat::from(1_u64));
+    let next_poll_deadline = env.time() + Duration::from_secs(100);
+
+    // Keep the follow-up in flight so its completion cannot shift the deadline.
+    advance_time_and_run_rounds(&env, 50);
+    assert_eq!(count(&env, ledger), 2);
+    release_one(&env, ledger);
+    run_rounds_until(&env, || status(&env, index).num_blocks_synced == 2_u64);
+    hold(&env, ledger, false);
+    run_rounds(&env);
+    assert_eq!(count(&env, ledger), 2, "the poke adds exactly one pass");
+    assert!(env.time() < next_poll_deadline);
+    for (account, expected_balance) in [(account(1, 0), 79_u64), (account(2, 0), 20_u64)] {
+        let balance = env
+            .query(index, "icrc1_balance_of", Encode!(&account).unwrap())
+            .unwrap()
+            .bytes();
+        assert_eq!(Decode!(&balance, Nat).unwrap(), Nat::from(expected_balance));
+    }
+
+    env.set_time(next_poll_deadline - Duration::from_secs(1));
+    run_rounds(&env);
+    assert_eq!(count(&env, ledger), 2);
+    env.set_time(next_poll_deadline);
+    run_rounds(&env);
+    assert_eq!(count(&env, ledger), 3);
+    advance_time_and_run_rounds(&env, 99);
+    assert_eq!(count(&env, ledger), 3);
+    advance_time_and_run_rounds(&env, 1);
+    assert_eq!(count(&env, ledger), 4, "exactly one polling chain remains");
+}
+
+#[test]
 fn poke_policy_and_upgrade_compatibility() {
     let listed = PrincipalId::new_user_test_id(42);
     for (policy, anonymous_requests, expected_requests) in [
