@@ -257,8 +257,7 @@ impl WaitForHaltingCupStep {
 /// Holding the halting CUP does not imply holding the checkpoint at its
 /// height: the node may hold the CUP before it has written the checkpoint (e.g.
 /// if it got the CUP from its peers), and a checkpoint stays unverified while
-/// its files are still being written (or state-synced). Once the replica is
-/// stopped, the checkpoint cannot change anymore.
+/// its files are still being written (or state-synced).
 pub(crate) struct StopReplicaAtHaltingCheckpointStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) node: DownloadNode,
