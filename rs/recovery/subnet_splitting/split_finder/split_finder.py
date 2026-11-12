@@ -51,11 +51,7 @@ def find_split(
     of either post-split subnet may exceed the maximum allowed load per subnet by that fraction.
     """
     data = load_subnet_data(
-        path,
-        baseline_path,
-        list(load_epsilons),
-        communication_data_path,
-        communication_baseline_data_path,
+        path, baseline_path, list(load_epsilons), communication_data_path, communication_baseline_data_path
     )
     edges = data["edges"]
     loads = data["loads"]
@@ -130,10 +126,7 @@ def parse_args(argv=None):
         required=True,
     )
     parser.add_argument(
-        "--communication-data-path",
-        type=Path,
-        help="Path to canister-to-canister communication data",
-        required=True,
+        "--communication-data-path", type=Path, help="Path to canister-to-canister communication data", required=True
     )
     parser.add_argument(
         "--communication-baseline-data-path",
@@ -168,12 +161,7 @@ def parse_args(argv=None):
         default=DEFAULT_EPSILON_LOAD_DEFAULT,
         help="Allowed load deviation fraction of the load types which don't specify their own",
     )
-    parser.add_argument(
-        "--max-cuts",
-        type=int,
-        default=DEFAULT_MAX_CUTS,
-        help="Maximum number of routing cuts",
-    )
+    parser.add_argument("--max-cuts", type=int, default=DEFAULT_MAX_CUTS, help="Maximum number of routing cuts")
     args = parser.parse_args(argv)
 
     args.load_epsilons = {}
