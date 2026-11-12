@@ -58,12 +58,10 @@ fn test() {
         migrated_canister_subnet,
         vec![],
         None,
-        Some(false),
         replaced_canister,
         replaced_canister_subnet,
         vec![],
         None,
-        Some(false),
         caller,
     );
     insert_request(RequestState::Accepted { request });

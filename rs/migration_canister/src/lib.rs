@@ -145,22 +145,6 @@ pub struct Request {
     /// case, the memory allocation of the migrated canister must be left untouched.
     #[serde(default)]
     migrated_canister_memory_allocation: Option<ManagedMemoryAllocation>,
-    /// Whether the migration canister successfully made itself the exclusive controller
-    /// of the migrated canister:
-    /// - `Some(true)`: the corresponding call succeeded and thus the original controllers and
-    ///   memory allocation of the migrated canister must be restored if the request fails;
-    /// - `Some(false)`: no such call has been made or the call definitely had no effect
-    ///   and thus there is nothing to restore;
-    /// - `None`: the request was validated by a version of the migration canister that did not
-    ///   track this yet and thus the original controllers of the migrated canister must be
-    ///   restored if its canister history reveals that the migration canister is its exclusive
-    ///   controller.
-    ///
-    /// This is never `None` for requests validated by this version of the migration canister:
-    /// the call is retried as long as its outcome is unknown
-    /// (see `set_exclusive_controller`).
-    #[serde(default)]
-    migrated_canister_exclusive_controller: Option<bool>,
     replaced_canister: Principal,
     replaced_canister_subnet: Principal,
     replaced_canister_original_controllers: Vec<Principal>,
@@ -169,10 +153,6 @@ pub struct Request {
     /// (see `migrated_canister_memory_allocation`).
     #[serde(default)]
     replaced_canister_memory_allocation: Option<ManagedMemoryAllocation>,
-    /// Whether the migration canister successfully made itself the exclusive controller
-    /// of the replaced canister (see `migrated_canister_exclusive_controller`).
-    #[serde(default)]
-    replaced_canister_exclusive_controller: Option<bool>,
     caller: Principal,
 }
 
@@ -183,12 +163,10 @@ impl Request {
         migrated_canister_subnet: Principal,
         migrated_canister_original_controllers: Vec<Principal>,
         migrated_canister_memory_allocation: Option<ManagedMemoryAllocation>,
-        migrated_canister_exclusive_controller: Option<bool>,
         replaced_canister: Principal,
         replaced_canister_subnet: Principal,
         replaced_canister_original_controllers: Vec<Principal>,
         replaced_canister_memory_allocation: Option<ManagedMemoryAllocation>,
-        replaced_canister_exclusive_controller: Option<bool>,
         caller: Principal,
     ) -> Self {
         Self {
@@ -196,12 +174,10 @@ impl Request {
             migrated_canister_subnet,
             migrated_canister_original_controllers,
             migrated_canister_memory_allocation,
-            migrated_canister_exclusive_controller,
             replaced_canister,
             replaced_canister_subnet,
             replaced_canister_original_controllers,
             replaced_canister_memory_allocation,
-            replaced_canister_exclusive_controller,
             caller,
         }
     }
@@ -220,15 +196,13 @@ impl Display for Request {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Request {{ migrated_canister: {}, migrated_canister_subnet: {}, replaced_canister: {}, replaced_canister_subnet: {}, migrated_canister_memory_allocation: {:?}, migrated_canister_exclusive_controller: {:?}, replaced_canister_memory_allocation: {:?}, replaced_canister_exclusive_controller: {:?}, caller: {}, migrated_canister_original_controllers: [",
+            "Request {{ migrated_canister: {}, migrated_canister_subnet: {}, replaced_canister: {}, replaced_canister_subnet: {}, migrated_canister_memory_allocation: {:?}, replaced_canister_memory_allocation: {:?}, caller: {}, migrated_canister_original_controllers: [",
             self.migrated_canister,
             self.migrated_canister_subnet,
             self.replaced_canister,
             self.replaced_canister_subnet,
             self.migrated_canister_memory_allocation,
-            self.migrated_canister_exclusive_controller,
             self.replaced_canister_memory_allocation,
-            self.replaced_canister_exclusive_controller,
             self.caller
         )?;
         for x in self.migrated_canister_original_controllers.iter() {
