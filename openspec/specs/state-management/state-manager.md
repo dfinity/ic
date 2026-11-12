@@ -265,6 +265,12 @@ The tip thread merges overlay files to control storage overhead.
 - **THEN** shards with the highest storage overhead are merged first
 - **AND** merging stops once the budget is exhausted
 
+#### Scenario: A failed merge is fatal
+- **WHEN** applying a scheduled `MergeCandidate` fails, e.g. because the data disk fills up partway through
+- **THEN** the tip thread aborts the replica with `fatal!` ("Failed to merge PageMap files"), like its other I/O failures such as persisting the unflushed delta
+- **AND** the failure is not ignored, because a merge that fails partway may already have removed its input files from the tip and left a partial output file behind; a later checkpoint would include that corrupt `PageMap` file and the replica would panic loading it (`InvalidOverlay`)
+- **AND** after the restart, the tip is rebuilt from the last checkpoint, which still has the merge's inputs
+
 ### Requirement: Certified Stream Store
 
 The State Manager provides certified stream slices for cross-subnet communication.
