@@ -290,7 +290,12 @@ pub(crate) fn spawn_tip_thread(
             .expect("failed to spawn TipSyncfs thread");
     }
 
-    let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
+    // Benchmarking switch (`IC_TIP_THREADS`): size of the pool flushing and merging page maps.
+    let tip_threads = std::env::var("IC_TIP_THREADS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(NUMBER_OF_CHECKPOINT_THREADS);
+    let mut thread_pool = scoped_threadpool::Pool::new(tip_threads);
     let mut tip_state = TipState::default();
     // Height(0) doesn't need manifest
     tip_state.latest_checkpoint_state.has_manifest = true;
@@ -381,7 +386,13 @@ pub(crate) fn spawn_tip_thread(
                                 });
                             }
                             // Start flushing the freshly written Wasm binaries.
-                            let _ = syncfs_sender.try_send(());
+                            // Benchmarking switch (`IC_SYNCFS_PING_AFTER=1`): ping only after
+                            // `tip_to_checkpoint_and_switch`, outside the critical path.
+                            let ping_after = std::env::var("IC_SYNCFS_PING_AFTER").as_deref()
+                                == Ok("1");
+                            if !ping_after {
+                                let _ = syncfs_sender.try_send(());
+                            }
                             let tip_to_checkpoint_result = {
                                 let _timer =
                                     request_timer(&metrics, "tip_to_checkpoint_and_switch");
@@ -407,6 +418,9 @@ pub(crate) fn spawn_tip_thread(
                                             result.checkpoint_readonly,
                                         )))
                                         .expect("Failed to send TipToCheckpointAndSwitch result");
+                                    if ping_after {
+                                        let _ = syncfs_sender.try_send(());
+                                    }
                                     if let Some(checkpoint_readwrite) = result.checkpoint_readwrite
                                     {
                                         let _timer = request_timer(

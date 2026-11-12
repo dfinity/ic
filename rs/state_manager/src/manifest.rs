@@ -44,6 +44,52 @@ use std::sync::{Arc, Mutex, Weak};
 /// have a hash computed earlier by this replica process.
 const REHASH_EVERY_NTH_CHUNK: u64 = 10;
 
+/// Benchmarking switch (`IC_MANIFEST_PREFETCH=1`): ask the kernel to read each chunk in one go
+/// before hashing it, instead of faulting it in read-ahead-sized pieces.
+fn prefetch_chunks() -> bool {
+    static PREFETCH: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *PREFETCH.get_or_init(|| std::env::var("IC_MANIFEST_PREFETCH").as_deref() == Ok("1"))
+}
+
+/// Advises the kernel that `data[start..start + len]` (page-aligned `start`) will be needed soon.
+fn prefetch(data: &[u8], start: usize, len: usize) {
+    if len == 0 {
+        return;
+    }
+    let addr = data[start..].as_ptr() as *mut std::ffi::c_void;
+    // Failure only means no prefetch.
+    let _ = unsafe {
+        nix::sys::mman::madvise(
+            std::ptr::NonNull::new(addr).expect("non-null"),
+            len,
+            nix::sys::mman::MmapAdvise::MADV_WILLNEED,
+        )
+    };
+}
+
+/// Benchmarking switch (`IC_NOREUSE=1`): open files to hash with `POSIX_FADV_NOREUSE`, so that
+/// hashing them doesn't count as recent use for page reclaim.
+fn noreuse() -> bool {
+    static NOREUSE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *NOREUSE.get_or_init(|| std::env::var("IC_NOREUSE").as_deref() == Ok("1"))
+}
+
+/// Maps the file at `path` read-only for hashing, through a file of its own opened with
+/// `POSIX_FADV_NOREUSE` if `noreuse()`.
+fn map_for_hashing(path: &std::path::Path) -> std::io::Result<ScopedMmap> {
+    let file = std::fs::File::open(path)?;
+    if noreuse() {
+        // Failure only means the pages count as recently used.
+        let _ = nix::fcntl::posix_fadvise(
+            &file,
+            0,
+            0,
+            nix::fcntl::PosixFadviseAdvice::POSIX_FADV_NOREUSE,
+        );
+    }
+    ScopedMmap::mmap_file_readonly(file)
+}
+
 /// During the downloading phase of state sync, We group certain files together
 /// which have filenames ending with `FILE_TO_GROUP`.
 ///
@@ -423,7 +469,7 @@ fn build_chunk_table_parallel(
                             Some(mmap) => mmap,
                             None => {
                                 let mmap = Arc::new(
-                                    ScopedMmap::from_path(&file_path)
+                                    map_for_hashing(&file_path)
                                         .unwrap_or_else(|e| fatal!(log, "failed to mmap file {}: {}", file_path.display(), e)),
                                 );
                                 cache.insert(chunk_info.file_index, Arc::downgrade(&mmap));
@@ -432,7 +478,7 @@ fn build_chunk_table_parallel(
                         }
                     } else {
                         Arc::new(
-                            ScopedMmap::from_path(&file_path)
+                            map_for_hashing(&file_path)
                                 .unwrap_or_else(|e| fatal!(log, "failed to mmap file {}: {}", file_path.display(), e))
                         )
                     };
@@ -441,6 +487,9 @@ fn build_chunk_table_parallel(
                     let mut hasher = chunk_hasher();
                     let chunk_start = chunk_info.offset as usize;
                     let chunk_end = chunk_start + chunk_info.size_bytes as usize;
+                    if prefetch_chunks() {
+                        prefetch(data, chunk_start, chunk_end - chunk_start);
+                    }
                     hasher.write(&data[chunk_start..chunk_end]);
                     hasher.finish()
                 };
