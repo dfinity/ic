@@ -7,6 +7,7 @@ use crate::{
         MergeStatesStep, ProposeRecoveryCupStep, StopReplicaAtHaltingCheckpointStep,
         ValidateCupStep, WaitForHaltingCupStep, WaitForRecoveryCupStep,
     },
+    utils::ensure_default_initial_dkg_subnet_is_not_merged,
 };
 
 use clap::Parser;
@@ -320,7 +321,9 @@ impl SubnetMerging {
     ///    whether that proposal was executed before the run was interrupted;
     /// 5) The destination subnet is not cooling down;
     /// 6) Both have the same subnet type, cycles cost schedule, subnet admins
-    ///    and SEV setting.
+    ///    and SEV setting;
+    /// 7) Neither is the default initial DKG subnet, which runs the DKG for the
+    ///    recovery of the destination subnet.
     fn check_subnets_preconditions(
         recovery: &Recovery,
         source_subnet_id: SubnetId,
@@ -349,6 +352,12 @@ impl SubnetMerging {
             &source,
             destination_subnet_id,
             &destination,
+        )?;
+
+        ensure_default_initial_dkg_subnet_is_not_merged(
+            &recovery.registry_helper,
+            source_subnet_id,
+            destination_subnet_id,
         )
     }
 
@@ -828,6 +837,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 source_subnet_id: self.params.source_subnet_id,
                 destination_subnet_id: self.params.destination_subnet_id,
                 admin_helper: self.recovery.admin_helper.clone(),
+                registry_helper: self.recovery.registry_helper.clone(),
                 layout: self.layout.clone(),
                 logger: self.recovery.logger.clone(),
             }

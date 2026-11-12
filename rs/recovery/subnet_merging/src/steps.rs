@@ -3,7 +3,10 @@ use crate::{
     layout::Layout,
     readiness,
     subnet_merging::TargetSubnet,
-    utils::{MergedStateParams, get_subnet_record_at_version, wait_for},
+    utils::{
+        MergedStateParams, ensure_default_initial_dkg_subnet_is_not_merged,
+        get_subnet_record_at_version, wait_for,
+    },
 };
 
 use ic_base_types::SubnetId;
@@ -659,6 +662,7 @@ pub(crate) struct ProposeRecoveryCupStep {
     pub(crate) source_subnet_id: SubnetId,
     pub(crate) destination_subnet_id: SubnetId,
     pub(crate) admin_helper: AdminHelper,
+    pub(crate) registry_helper: RegistryHelper,
     pub(crate) layout: Layout,
     pub(crate) logger: Logger,
 }
@@ -722,7 +726,7 @@ impl Step for ProposeRecoveryCupStep {
         let summary = format!(
             "Propose a recovery CUP for subnet {} at the height and state hash of the merged \
              state recorded in {}, with its DKG run by the default initial DKG subnet (or the \
-             NNS subnet if none is set).",
+             NNS subnet if none is set), which must be neither subnet of the merge.",
             self.destination_subnet_id,
             self.layout.merged_state_params_file().display(),
         );
@@ -740,6 +744,12 @@ impl Step for ProposeRecoveryCupStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
+        // Checked when the tool starts, but the default may have changed since.
+        ensure_default_initial_dkg_subnet_is_not_merged(
+            &self.registry_helper,
+            self.source_subnet_id,
+            self.destination_subnet_id,
+        )?;
         let time = SystemTime::now();
         self.check_time_is_past_halting_cups(time)?;
         let step = self.admin_step(time)?;
