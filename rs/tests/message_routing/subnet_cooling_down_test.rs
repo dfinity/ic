@@ -61,8 +61,8 @@ Runbook::
       loop as its payload, so that `M` holds a canister waiting for a response
       from another subnet that never arrives;
    d. execute an update call on `UR` (on `R`) with the loop as its payload, so
-      that `R` is not idle up to the point it is halted, and the state it is
-      halted with holds a canister with an open call context.
+      that `R` holds a canister looping in a call that never completes, just
+      like `M` does.
    Wait until all four loops are running.
 7. Evaluate the terms of the "merge readiness" condition for `M` and check that
    none of the `VIOLATED_CONDITIONS` holds: `T` holds messages in its stream to
