@@ -26,7 +26,7 @@ show_menu() {
     echo "  service-status          - Show service status (usage: service-status <service-name>)" 
     echo "  view-logs               - View service logs (usage: view-logs <service-name>)"
     echo "  config-json             - Show /boot/config/config.json"
-    echo "  guestos-console-logs    - Show GuestOS Serial Console Logs"
+    echo "  guestos-console-logs    - Show GuestOS Serial Console Logs (usage: guestos-console-logs [slot])"
     echo "  network-config-settings - Show network settings from config"
     echo "  network-interfaces      - Show network interface status"
     echo "  ip-addresses            - Show all IP addresses"
@@ -119,7 +119,13 @@ execute_command() {
             ;;
         "guestos-console-logs")
             echo "=== GuestOS Serial Console Logs ==="
-            run_hardened /usr/bin/less -f /var/log/libvirt/qemu/guestos-serial.log
+            local count=$(get_guest_vm_count)
+            local slot="${2:-1}"
+            if [[ ! "$slot" =~ ^[0-9]+$ ]] || ((slot < 1 || slot > count)); then
+                echo "Usage: guestos-console-logs [slot] (1-${count})"
+            else
+                run_hardened /usr/bin/less -f "/var/log/libvirt/qemu/guestos-serial$(get_guest_vm_suffix "$slot" "$count").log"
+            fi
             ;;
         "network-config-settings")
             echo "=== Network Settings from Config ==="
