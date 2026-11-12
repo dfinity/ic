@@ -242,48 +242,6 @@ mod output_addresses {
     }
 }
 
-#[test]
-fn should_not_require_fetching_coinbase_input() {
-    use bitcoin::{
-        Amount, OutPoint, ScriptBuf, Sequence, TxIn, TxOut, Witness, absolute::LockTime,
-        hashes::Hash, transaction::Version,
-    };
-    let input = |previous_output| TxIn {
-        previous_output,
-        script_sig: ScriptBuf::new(),
-        sequence: Sequence::MAX,
-        witness: Witness::new(),
-    };
-    let coinbase = Transaction {
-        version: Version::ONE,
-        lock_time: LockTime::ZERO,
-        input: vec![input(OutPoint::null())],
-        output: vec![TxOut {
-            value: Amount::from_sat(50_0000_0000),
-            script_pubkey: ScriptBuf::new_op_return([0; 4]),
-        }],
-    };
-    assert!(coinbase.is_coinbase());
-    let other = Transaction {
-        input: vec![
-            input(OutPoint::null()),
-            input(OutPoint::new(bitcoin::Txid::from_byte_array([1; 32]), 0)),
-        ],
-        ..coinbase.clone()
-    };
-
-    let fetched = FetchedTx::new(
-        TransactionCheckData::from_transaction(&BtcNetwork::Mainnet, coinbase).unwrap(),
-    );
-    assert!(fetched.tx.inputs[0].is_coinbase());
-    assert_eq!(fetched.input_addresses, vec![Some(vec![])]);
-
-    let fetched = FetchedTx::new(
-        TransactionCheckData::from_transaction(&BtcNetwork::Mainnet, other).unwrap(),
-    );
-    assert_eq!(fetched.input_addresses, vec![Some(vec![]), None]);
-}
-
 mod schema_upgrades {
     use crate::state::Config;
     use candid::Deserialize;

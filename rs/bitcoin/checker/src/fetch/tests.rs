@@ -305,6 +305,51 @@ async fn test_fetch_tx() {
     ));
 }
 
+#[test]
+fn should_check_every_address_of_an_input() {
+    let good_address = Address::from_str("12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S")
+        .unwrap()
+        .assume_checked();
+    let bad_address = Address::from_str(blocklist::BTC_ADDRESS_BLOCKLIST[0])
+        .unwrap()
+        .assume_checked();
+    let tx = TransactionCheckData::from_transaction(
+        &BtcNetwork::Mainnet,
+        mock_transaction_with_inputs(vec![(mock_txid(1), 0), (mock_txid(2), 0)]),
+    )
+    .unwrap();
+    let fetched = |input_addresses| FetchedTx {
+        tx: tx.clone(),
+        input_addresses,
+    };
+
+    // An input with several addresses (e.g. a spent bare multisig output) is
+    // blocked if any one of them is blocked.
+    assert!(matches!(
+        check_for_blocked_input_addresses(&fetched(vec![
+            Some(vec![good_address.clone()]),
+            Some(vec![good_address.clone(), bad_address.clone()]),
+        ])),
+        Err(CheckTxInputsError::BlockedInputAddresses(blocked))
+            if blocked == vec![bad_address.to_string()]
+    ));
+
+    // An input without any address to check does not block the transaction.
+    assert!(
+        check_for_blocked_input_addresses(&fetched(vec![
+            Some(vec![good_address.clone()]),
+            Some(vec![]),
+        ]))
+        .is_ok()
+    );
+
+    // An input whose addresses are not known yet must still be fetched.
+    assert!(matches!(
+        check_for_blocked_input_addresses(&fetched(vec![Some(vec![good_address]), None])),
+        Err(CheckTxInputsError::MissingInputAddresses)
+    ));
+}
+
 #[tokio::test]
 async fn test_check_fetched() {
     let mut env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
@@ -633,29 +678,4 @@ async fn should_check_input_spending_p2pk_output() {
         ),
         status => panic!("unexpected status {status:?}"),
     }
-}
-
-#[tokio::test]
-async fn should_check_transaction_with_coinbase_input_without_fetching_it() {
-    let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
-    let txid = mock_txid(20);
-    let mut tx = mock_transaction_with_outputs(1);
-    tx.input = vec![TxIn {
-        previous_output: OutPoint::null(),
-        script_sig: ScriptBuf::from_bytes(vec![1, 2, 3]),
-        sequence: Sequence::MAX,
-        witness: Witness::new(),
-    }];
-    assert!(tx.is_coinbase());
-    let fetched = FetchedTx::new(
-        TransactionCheckData::from_transaction(&env.config().btc_network(), tx).unwrap(),
-    );
-    state::set_fetch_status(txid, FetchTxStatus::Fetched(fetched.clone()));
-
-    assert!(matches!(
-        env.check_fetched(txid, &fetched).await,
-        CheckTransactionResponse::Passed
-    ));
-    env.assert_no_more_get_tx_call();
-    assert_eq!(env.cycles_accepted(), 0);
 }

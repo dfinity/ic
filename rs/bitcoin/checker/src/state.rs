@@ -60,10 +60,9 @@ pub struct FetchTxStatusError {
 
 /// Once the transaction data is successfully fetched, we create
 /// a list of `input_addresses` (matching the number of inputs)
-/// that is initialized as `None`, except for coinbase inputs, which
-/// do not spend any previous output and therefore have no address.
-/// Once a corresponding input transaction is fetched (see function
-/// `check_fetched`), its input addresses will be computed and filled in.
+/// that is initialized as `None`. Once a corresponding input
+/// transaction is fetched (see function `check_fetched`), its
+/// input addresses will be computed and filled in.
 #[derive(Clone, Debug)]
 pub struct FetchedTx {
     pub tx: TransactionCheckData,
@@ -72,17 +71,7 @@ pub struct FetchedTx {
 
 impl FetchedTx {
     pub fn new(tx: TransactionCheckData) -> Self {
-        let input_addresses = tx
-            .inputs
-            .iter()
-            .map(|input| {
-                if input.is_coinbase() {
-                    Some(Vec::new())
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let input_addresses = vec![None; tx.inputs.len()];
         Self {
             tx,
             input_addresses,
@@ -104,13 +93,6 @@ pub struct TransactionCheckData {
 pub struct PreviousOutput {
     pub txid: Txid,
     pub vout: u32,
-}
-
-impl PreviousOutput {
-    /// A coinbase input refers to the null outpoint (all-zero txid and `vout` equal to `u32::MAX`).
-    pub fn is_coinbase(&self) -> bool {
-        self.txid == Txid::from([0; 32]) && self.vout == u32::MAX
-    }
 }
 
 impl TransactionCheckData {
