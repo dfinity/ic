@@ -9,8 +9,9 @@ condition the subnet merging tool waits for before merging such a subnet away
 is one that the subnet does not satisfy to begin with; and that once the tool
 (`rs/recovery/subnet_merging`) has labeled the subnet "cooling down", the
 subnet rejects ingress messages and query calls, the tool eventually finds the
-condition to hold, and it then halts both subnets at their next
-CUP, and downloads and validates the state each halted at. The subnet also holds calls waiting
+condition to hold, and it then halts the subnet and the subnet it is told to
+merge it into at their next CUP, and downloads and validates the state each
+halted at. The subnet also holds calls waiting
 for responses that never arrive: they are not drained, but make it possible to
 assert that a subnet merge populates the ingress history properly.
 
@@ -20,7 +21,9 @@ called `R`. A third Application subnet `T` holds the canisters at the other end
 of `M`'s cross-subnet calls. It is kept apart from `R` so that, once the merge
 goes ahead, the messages and calls between `T` and the canisters of `M` have to
 be rerouted to `R` by a subnet that is not itself part of the merge, rather than
-becoming calls within the destination subnet.
+becoming calls within the destination subnet. `R` holds a canister `UR` looping
+in a call of its own, so that the state the tool downloads from the destination
+subnet and validates is not that of an idle subnet without canisters.
 
 The tool submits its proposals through `ic-admin`, with the test neuron.
 
@@ -38,7 +41,7 @@ Runbook::
 3. Wait until both loops have completed a few iterations, i.e. messages are
    actually flowing between `M` and `T` in both directions.
 4. Install the universal canisters of the steps below (`U1`, `U3`, `U5` and `U6`
-   on `M`, `U4` and `U7` on `T`) and create two empty canisters `U2a` and `U2b`
+   on `M`, `U4` and `U7` on `T`, `UR` on `R`) and create two empty canisters `U2a` and `U2b`
    on `M`, controlled by `U1`.
 5. Execute an update call on `U1` that makes two calls to the management
    canister's `install_code` method, one per `U2x`, in mode `install`, with the
@@ -46,7 +49,7 @@ Runbook::
    `INIT_INSTRUCTIONS` instructions. Wait until both requests have left
    `U1`'s output queue, i.e. until they are enqueued in `M`'s subnet input
    queues or already executing.
-6. Start three endless loops, each of which calls the management canister's
+6. Start four endless loops, each of which calls the management canister's
    `canister_status` method for the looping canister over and over until the
    global data of that canister is set to `LOOP_BREAK_TRIGGER`, which this test
    never does:
@@ -56,8 +59,11 @@ Runbook::
       another subnet that it can never respond to;
    c. execute an update call on `U6` (on `M`) that calls `U7` (on `T`) with the
       loop as its payload, so that `M` holds a canister waiting for a response
-      from another subnet that never arrives.
-   Wait until all three loops are running.
+      from another subnet that never arrives;
+   d. execute an update call on `UR` (on `R`) with the loop as its payload, so
+      that `R` holds a canister with an open call context, executing in every
+      round, when it is halted.
+   Wait until all four loops are running.
 7. Evaluate the terms of the "merge readiness" condition for `M` and check that
    none of the `VIOLATED_CONDITIONS` holds: `T` holds messages in its stream to
    `M` and `M` holds messages in its own streams (the loops of step 2), the
@@ -176,8 +182,8 @@ const INSTALL_CODE_TARGETS: [&str; 2] = ["U2a", "U2b"];
 /// for it.
 const INIT_INSTRUCTIONS: u64 = 295 * B;
 
-/// The global data value that would end the endless loops of `U3`, `U5` and
-/// `U7`. The test never sets it, so those loops never end.
+/// The global data value that would end the endless loops of `U3`, `U5`, `U7`
+/// and `UR`. The test never sets it, so those loops never end.
 const LOOP_BREAK_TRIGGER: &[u8] = b"break";
 
 /// The number of nodes of every subnet. More than one so that the terms of the
@@ -353,9 +359,10 @@ pub fn test(env: TestEnv) {
     };
     let m_agent = agent(&m_subnet);
     let t_agent = agent(&t_subnet);
+    let r_agent = agent(&r_subnet);
 
     let context = runtime.block_on(prepare(
-        &env, m_subnet, t_subnet, r_subnet, &m_agent, &t_agent,
+        &env, m_subnet, t_subnet, r_subnet, &m_agent, &t_agent, &r_agent,
     ));
     cool_down(&env, &context, &runtime);
 }
@@ -382,11 +389,13 @@ async fn prepare<'a>(
     r_subnet: SubnetSnapshot,
     m_agent: &'a Agent,
     t_agent: &'a Agent,
+    r_agent: &Agent,
 ) -> Context<'a> {
     let logger = env.logger();
     let topology = env.topology_snapshot();
     let m_node = m_subnet.nodes().next().unwrap();
     let t_node = t_subnet.nodes().next().unwrap();
+    let r_node = r_subnet.nodes().next().unwrap();
     info!(
         logger,
         "Subnets under test:\n  M={}\n  T={}\n  R={}\n  NNS={}",
@@ -448,8 +457,8 @@ async fn prepare<'a>(
     // `U1`'s calls for as long as they run.
     info!(
         logger,
-        "Step 4: Installing U1, U3, U5, U6 on M and U4, U7 on T, and creating {} canisters for U1 \
-         to install code on",
+        "Step 4: Installing U1, U3, U5, U6 on M, U4, U7 on T and UR on R, and creating {} \
+         canisters for U1 to install code on",
         INSTALL_CODE_TARGETS.len(),
     );
     let m_id = m_node.effective_canister_id();
@@ -460,15 +469,18 @@ async fn prepare<'a>(
     let u5 = UniversalCanister::new_with_retries(m_agent, m_id, &logger).await;
     let u6 = UniversalCanister::new_with_retries(m_agent, m_id, &logger).await;
     let u7 = UniversalCanister::new_with_retries(t_agent, t_id, &logger).await;
+    let ur =
+        UniversalCanister::new_with_retries(r_agent, r_node.effective_canister_id(), &logger).await;
     info!(
         logger,
-        "Step 4: U1={}, U3={}, U5={}, U6={} on M; U4={}, U7={} on T",
+        "Step 4: U1={}, U3={}, U5={}, U6={} on M; U4={}, U7={} on T; UR={} on R",
         u1.canister_id(),
         u3.canister_id(),
         u5.canister_id(),
         u6.canister_id(),
         u4.canister_id(),
         u7.canister_id(),
+        ur.canister_id(),
     );
     let mut targets = Vec::new();
     for name in INSTALL_CODE_TARGETS {
@@ -494,12 +506,13 @@ async fn prepare<'a>(
         "Step 5 done: all of U1's `install_code` requests left its output queue"
     );
 
-    // Step 6: Start the three endless loops.
-    info!(logger, "Step 6: Starting the three endless loops");
+    // Step 6: Start the four endless loops.
+    info!(logger, "Step 6: Starting the four endless loops");
     for (canister, name, callee) in [
         (&u3, "U3", None),
         (&u4, "U4", Some(&u5)),
         (&u6, "U6", Some(&u7)),
+        (&ur, "UR", None),
     ] {
         let payload = match callee {
             None => endless_loop(),
@@ -511,13 +524,13 @@ async fn prepare<'a>(
             .unwrap_or_else(|e| panic!("submitting {name}'s update call should succeed: {e}"))
             .unwrap_or_else(|| panic!("{name}'s update call should not have completed already"));
     }
-    for (canister, name) in [(&u3, "U3"), (&u5, "U5"), (&u7, "U7")] {
+    for (canister, name) in [(&u3, "U3"), (&u5, "U5"), (&u7, "U7"), (&ur, "UR")] {
         await_loop_started(canister, name, &logger).await;
     }
     info!(
         logger,
-        "Step 6 done: U3 is looping, U5 is looping in a call from U4, and U7 is looping in a call \
-         from U6"
+        "Step 6 done: U3 and UR are looping, U5 is looping in a call from U4, and U7 is looping \
+         in a call from U6"
     );
 
     // Step 7: Check that the scenario violates the individual conditions.
@@ -999,7 +1012,7 @@ async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
         .expect("starting the call loop should succeed");
 }
 
-/// The payload of the endless loops of `U3`, `U5` and `U7`: bump the global
+/// The payload of the endless loops of `U3`, `U5`, `U7` and `UR`: bump the global
 /// counter, so that the test can observe (via a query) that the payload started
 /// executing, and then loop until the global data is set to
 /// `LOOP_BREAK_TRIGGER`, which this test never does.
