@@ -70,3 +70,4 @@ ovmf
 pciutils
 qemu-system-x86
 strace
+nginx-light
