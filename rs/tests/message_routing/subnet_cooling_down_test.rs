@@ -117,7 +117,9 @@ Runbook::
    re-register the ingress messages of the merged-in canisters that are still in
    progress. The tool also computes the hash of the manifest of the merged
    state (`Stop*Replica`, `DownloadStateFrom*Subnet`, `Validate*SubnetCup`,
-   `MergeStates`).
+   `MergeStates`). After `MergeStates`: check that the merged state is a single
+   checkpoint that holds both a canister of `M` (`UM`) and a canister of `R`
+   (`UR`).
 14. The tool submits a `MergeSubnets` proposal for `M` and `R`, which reroutes
    the canister ID ranges of `M` to `R`, and then a `RecoverSubnet` proposal for
    `R`, which creates a recovery CUP for `R` at the merged state, stamped with
@@ -172,7 +174,10 @@ use ic_management_canister_types::{
     CanisterIdRecord, ListCanisterSnapshotsArgs, ListCanisterSnapshotsResult, SnapshotId,
     TakeCanisterSnapshotArgs, TakeCanisterSnapshotResult,
 };
-use ic_recovery::{RecoveryArgs, get_node_metrics, util::DataLocation};
+use ic_recovery::{
+    CHECKPOINTS, IC_STATE, RECOVERY_DIRECTORY_NAME, RecoveryArgs, get_node_metrics,
+    util::DataLocation,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_merging::{
     metrics_helper::{
@@ -880,6 +885,7 @@ fn merge(env: &TestEnv, context: &Context, runtime: &Runtime) {
             StepType::WaitForHaltingCupOnDestinationSubnet => {
                 runtime.block_on(check_subnets_halted(context))
             }
+            StepType::MergeStates => check_merged_state(env, context),
             StepType::UnhaltDestinationSubnet => runtime.block_on(verify_after_merge(context)),
             _ => {}
         }
@@ -892,6 +898,46 @@ fn merge(env: &TestEnv, context: &Context, runtime: &Runtime) {
         "the merging tool did not run exactly the steps of a merge"
     );
     info!(logger, "Subnet M has been merged into subnet R");
+}
+
+/// Step 13: check that the merged state the tool assembled is a single
+/// checkpoint, and that it holds a canister of each of the two subnets: `UM`,
+/// which `M` hosted, and `UR`, which `R` hosted.
+fn check_merged_state(env: &TestEnv, context: &Context) {
+    let logger = &context.logger;
+    let checkpoints_dir = env
+        .get_path(MERGING_DIR)
+        .join(RECOVERY_DIRECTORY_NAME)
+        .join("merged_working_dir")
+        .join("data")
+        .join(IC_STATE)
+        .join(CHECKPOINTS);
+    let checkpoints: Vec<_> = std::fs::read_dir(&checkpoints_dir)
+        .unwrap_or_else(|e| panic!("failed to read {}: {e}", checkpoints_dir.display()))
+        .map(|entry| entry.expect("failed to read a directory entry").path())
+        .collect();
+    let [checkpoint] = checkpoints.as_slice() else {
+        panic!("expected a single merged checkpoint, got {checkpoints:?}");
+    };
+
+    for (canister_id, name, subnet) in [(context.um, "UM", "M"), (context.ur, "UR", "R")] {
+        // A checkpoint keeps the state of a canister in a directory named after
+        // the hex encoding of its ID.
+        let canister_dir = checkpoint
+            .join("canister_states")
+            .join(hex::encode(canister_id.as_slice()));
+        assert!(
+            canister_dir.is_dir(),
+            "the merged state does not hold {name} ({canister_id}) of subnet {subnet}: {} is \
+             missing",
+            canister_dir.display(),
+        );
+    }
+    info!(
+        logger,
+        "Step 13: the merged checkpoint {} holds UM and UR",
+        checkpoint.display(),
+    );
 }
 
 /// Step 12: check that `M` and `R` are halted, i.e. that every one of their
