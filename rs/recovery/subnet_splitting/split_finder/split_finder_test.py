@@ -1,9 +1,11 @@
+import contextlib
+import io
 import tempfile
 import unittest
 from pathlib import Path
 
 from data_io import load_subnet_data
-from split_finder import compute_max_allowed_load_per_subnet, find_split
+from split_finder import compute_max_allowed_load_per_subnet, find_split, parse_args
 
 TEST_DATA_DIR = Path(__file__).resolve().parents[1] / "test_data"
 FAKE_LOAD_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_load_sample.csv")
@@ -24,6 +26,19 @@ FAKE_SAMPLE_PATHS = (
     FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
     FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
 )
+# All the command line arguments of the split finder which are required apart from `--load-type`.
+REQUIRED_ARGS = [
+    "--load-path",
+    FAKE_LOAD_SAMPLE_CSV_PATH,
+    "--load-baseline-path",
+    FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
+    "--communication-data-path",
+    FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
+    "--communication-baseline-data-path",
+    FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+    "--output-path",
+    "output.txt",
+]
 
 
 def max_load_ratio(canister_ranges, load_type):
@@ -143,8 +158,7 @@ class TestCsvLoading(unittest.TestCase):
             FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
             FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
             FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
-            ["instructions_executed"],
-            0.0001,
+            {"instructions_executed": 0.0001},
             100,
         )
 
@@ -160,14 +174,10 @@ class TestCsvLoading(unittest.TestCase):
 
     def test_solver_balances_every_load_type(self):
         epsilon = 0.01
-        split = find_split(
-            *FAKE_SAMPLE_PATHS,
-            ["instructions_executed", "heartbeats_and_global_timers_executed"],
-            epsilon,
-            100,
-        )
+        load_types = ["instructions_executed", "heartbeats_and_global_timers_executed"]
+        split = find_split(*FAKE_SAMPLE_PATHS, {load_type: epsilon for load_type in load_types}, 100)
 
-        for load_type in ["instructions_executed", "heartbeats_and_global_timers_executed"]:
+        for load_type in load_types:
             self.assertLessEqual(
                 max_load_ratio(split, load_type),
                 1 + epsilon,
@@ -176,12 +186,58 @@ class TestCsvLoading(unittest.TestCase):
 
         # Balancing the instructions alone leaves the heartbeats unbalanced, so the split above is
         # balanced because of the heartbeats constraint rather than by coincidence.
-        instructions_only_split = find_split(*FAKE_SAMPLE_PATHS, ["instructions_executed"], epsilon, 100)
+        instructions_only_split = find_split(*FAKE_SAMPLE_PATHS, {"instructions_executed": epsilon}, 100)
         self.assertGreater(
             max_load_ratio(instructions_only_split, "heartbeats_and_global_timers_executed"),
             1 + epsilon,
             msg=f"`find_split` unexpectedly balanced the heartbeats: {instructions_only_split}",
         )
+
+    def test_solver_applies_each_load_type_epsilon(self):
+        load_epsilons = {"instructions_executed": 0.001, "heartbeats_and_global_timers_executed": 0.05}
+        split = find_split(*FAKE_SAMPLE_PATHS, load_epsilons, 100)
+
+        for load_type, epsilon in load_epsilons.items():
+            self.assertLessEqual(
+                max_load_ratio(split, load_type),
+                1 + epsilon,
+                msg=f"`find_split` returned a split which doesn't balance {load_type}: {split}",
+            )
+
+        # No split balances the heartbeats as tightly as the instructions, so the split above is
+        # only found thanks to the heartbeats' own, larger, epsilon.
+        with self.assertRaises(RuntimeError):
+            find_split(*FAKE_SAMPLE_PATHS, {load_type: 0.001 for load_type in load_epsilons}, 100)
+
+
+class TestArgParsing(unittest.TestCase):
+    def test_load_types_without_epsilon_use_epsilon_load(self):
+        args = parse_args(
+            REQUIRED_ARGS
+            + ["--load-type", "instructions_executed", "heartbeats_and_global_timers_executed=0.2"]
+            + ["--epsilon-load", "0.01"]
+        )
+        self.assertEqual(
+            args.load_epsilons,
+            {"instructions_executed": 0.01, "heartbeats_and_global_timers_executed": 0.2},
+        )
+
+    def test_invalid_load_types_are_rejected(self):
+        for load_type_args in [
+            ["bogus"],
+            ["bogus=0.1"],
+            ["instructions_executed="],
+            ["instructions_executed=abc"],
+            ["instructions_executed=-0.1"],
+            ["instructions_executed=nan"],
+            ["instructions_executed", "instructions_executed=0.1"],
+        ]:
+            with (
+                self.subTest(load_type_args=load_type_args),
+                contextlib.redirect_stderr(io.StringIO()),
+                self.assertRaises(SystemExit),
+            ):
+                parse_args(REQUIRED_ARGS + ["--load-type", *load_type_args])
 
 
 if __name__ == "__main__":
