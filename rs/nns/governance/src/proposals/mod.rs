@@ -232,7 +232,7 @@ impl ValidProposalAction {
     pub async fn to_self_describing(
         &self,
         env: Arc<dyn Environment>,
-    ) -> Result<SelfDescribingProposalAction, GovernanceError> {
+    ) -> SelfDescribingProposalAction {
         match self {
             // ExecuteNnsFunction is the only case where we need to call `canister_metadata` to get
             // the candid file of an external canister, and hence it's the only one with `await`.
@@ -241,68 +241,62 @@ impl ValidProposalAction {
             }
 
             ValidProposalAction::Motion(motion) => {
-                Ok(SelfDescribingProposalAction::from(motion.clone()))
+                SelfDescribingProposalAction::from(motion.clone())
             }
-            ValidProposalAction::ApproveGenesisKyc(approve_genesis_kyc) => Ok(
-                SelfDescribingProposalAction::from(approve_genesis_kyc.clone()),
-            ),
-            ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider) => Ok(
-                SelfDescribingProposalAction::from(add_or_remove_node_provider.clone()),
-            ),
-            ValidProposalAction::RegisterKnownNeuron(register_known_neuron) => Ok(
-                SelfDescribingProposalAction::from(register_known_neuron.clone()),
-            ),
+            ValidProposalAction::ApproveGenesisKyc(approve_genesis_kyc) => {
+                SelfDescribingProposalAction::from(approve_genesis_kyc.clone())
+            }
+            ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
+                SelfDescribingProposalAction::from(add_or_remove_node_provider.clone())
+            }
+            ValidProposalAction::RegisterKnownNeuron(register_known_neuron) => {
+                SelfDescribingProposalAction::from(register_known_neuron.clone())
+            }
             ValidProposalAction::DeregisterKnownNeuron(deregister_known_neuron) => {
-                Ok(SelfDescribingProposalAction::from(*deregister_known_neuron))
+                SelfDescribingProposalAction::from(*deregister_known_neuron)
             }
             ValidProposalAction::InstallCode(install_code) => {
-                Ok(SelfDescribingProposalAction::from(install_code.abridge()))
+                SelfDescribingProposalAction::from(install_code.abridge())
             }
-            ValidProposalAction::StopOrStartCanister(stop_or_start_canister) => Ok(
-                SelfDescribingProposalAction::from(stop_or_start_canister.clone()),
-            ),
-            ValidProposalAction::UpdateCanisterSettings(update_canister_settings) => Ok(
-                SelfDescribingProposalAction::from(update_canister_settings.clone()),
-            ),
-            ValidProposalAction::ManageNeuron(manage_neuron) => Ok(
-                SelfDescribingProposalAction::from(manage_neuron.as_ref().clone()),
-            ),
-            ValidProposalAction::ManageNetworkEconomics(manage_network_economics) => Ok(
-                SelfDescribingProposalAction::from(manage_network_economics.clone()),
-            ),
-            ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => Ok(
-                SelfDescribingProposalAction::from(fulfill_subnet_rental_request.clone()),
-            ),
-            ValidProposalAction::CreateServiceNervousSystem(create_service_nervous_system) => Ok(
-                SelfDescribingProposalAction::from(create_service_nervous_system.clone()),
-            ),
+            ValidProposalAction::StopOrStartCanister(stop_or_start_canister) => {
+                SelfDescribingProposalAction::from(stop_or_start_canister.clone())
+            }
+            ValidProposalAction::UpdateCanisterSettings(update_canister_settings) => {
+                SelfDescribingProposalAction::from(update_canister_settings.clone())
+            }
+            ValidProposalAction::ManageNeuron(manage_neuron) => {
+                SelfDescribingProposalAction::from(manage_neuron.as_ref().clone())
+            }
+            ValidProposalAction::ManageNetworkEconomics(manage_network_economics) => {
+                SelfDescribingProposalAction::from(manage_network_economics.clone())
+            }
+            ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
+                SelfDescribingProposalAction::from(fulfill_subnet_rental_request.clone())
+            }
+            ValidProposalAction::CreateServiceNervousSystem(create_service_nervous_system) => {
+                SelfDescribingProposalAction::from(create_service_nervous_system.clone())
+            }
             ValidProposalAction::BlessAlternativeGuestOsVersion(
                 bless_alternative_guest_os_version,
-            ) => Ok(SelfDescribingProposalAction::from(
-                bless_alternative_guest_os_version.clone(),
-            )),
-            ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => Ok(
-                SelfDescribingProposalAction::from(take_canister_snapshot.clone()),
-            ),
-            ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => Ok(
-                SelfDescribingProposalAction::from(load_canister_snapshot.clone()),
-            ),
+            ) => SelfDescribingProposalAction::from(bless_alternative_guest_os_version.clone()),
+            ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
+                SelfDescribingProposalAction::from(take_canister_snapshot.clone())
+            }
+            ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
+                SelfDescribingProposalAction::from(load_canister_snapshot.clone())
+            }
             ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code) => {
-                Ok(SelfDescribingProposalAction::from(
-                    create_canister_and_install_code.abridge(),
-                ))
+                SelfDescribingProposalAction::from(create_canister_and_install_code.abridge())
             }
             ValidProposalAction::UpdateStandardEngineReplicaVersion(
                 update_standard_engine_replica_version,
-            ) => Ok(SelfDescribingProposalAction::from(
-                update_standard_engine_replica_version.clone(),
-            )),
-            ValidProposalAction::RewardNodeProvider(reward_node_provider) => Ok(
-                SelfDescribingProposalAction::from(reward_node_provider.clone()),
-            ),
-            ValidProposalAction::RewardNodeProviders(reward_node_providers) => Ok(
-                SelfDescribingProposalAction::from(reward_node_providers.clone()),
-            ),
+            ) => SelfDescribingProposalAction::from(update_standard_engine_replica_version.clone()),
+            ValidProposalAction::RewardNodeProvider(reward_node_provider) => {
+                SelfDescribingProposalAction::from(reward_node_provider.clone())
+            }
+            ValidProposalAction::RewardNodeProviders(reward_node_providers) => {
+                SelfDescribingProposalAction::from(reward_node_providers.clone())
+            }
         }
     }
 }
