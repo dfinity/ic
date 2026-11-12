@@ -566,18 +566,10 @@ impl Step for MergeStatesStep {
         let state_hash = state_tool_helper::verify_manifest(&manifest_path)
             .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
 
-        // The upload step transfers the states metadata alongside the
-        // checkpoint, and rsync is given every path it transfers as an explicit
-        // source, so a missing one fails the whole transfer: take the
-        // destination subnet's along.
-        //
-        // It is a manifest cache, which the state manager recomputes for the
-        // checkpoints it finds whenever it is missing or does not describe them,
-        // and the heights it names here are the ones the destination subnet held
-        // before the merge, none of which the merged state directory has. That is
-        // the same mismatch a plain subnet recovery uploads, where the metadata
-        // comes from the state that was downloaded and the checkpoint from the
-        // replay that followed.
+        // The upload step fails if the states metadata is missing, so copy the
+        // destination subnet's. Its heights don't match the merged checkpoint,
+        // but that is harmless: it is only a manifest cache, which the state
+        // manager recomputes when stale (as in a plain subnet recovery).
         std::fs::copy(
             self.layout
                 .ic_state_dir(TargetSubnet::Destination)
