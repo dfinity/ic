@@ -1,7 +1,7 @@
 /* tag::catalog[]
-Title:: Draining and halting a subnet that is "cooling down", and downloading
-and validating the states of the subnets to merge, with the subnet merging
-tool.
+Title:: Draining and halting a subnet that is "cooling down", and downloading,
+validating and merging the states of the subnets to merge, with the subnet
+merging tool.
 
 Goal:: Verify that a subnet holding what a subnet merge has to drain violates
 the individual terms of the "merge readiness" condition, i.e. that the
@@ -10,8 +10,8 @@ is one that the subnet does not satisfy to begin with; and that once the tool
 (`rs/recovery/subnet_merging`) has labeled the subnet "cooling down", the
 subnet rejects ingress messages and query calls, the tool eventually finds the
 condition to hold, and it then halts the subnet and the subnet it is told to
-merge it into at their next CUP, and downloads and validates the state each
-halted at. The cooling down subnet also holds calls waiting for responses that
+merge it into at their next CUP, downloads and validates the state each halted
+at, and assembles the merged state from them. The cooling down subnet also holds calls waiting for responses that
 never arrive: they are not drained, but make it possible to assert that a
 subnet merge populates the ingress history properly.
 
@@ -104,13 +104,20 @@ Runbook::
    `Validate{Source,Destination}SubnetCup`, which validate each downloaded state
    against the CUP its subnet halted at and the subnet's public key in the NNS
    signed state tree.
+15. The following step of the tool is executed: `MergeStates`, which assembles
+   the merged state locally, as a checkpoint holding the state of `R` with the
+   canisters and canister snapshots of `M` added to it, and records its height
+   and state hash. Neither subnet nor the registry is touched.
+16. After `MergeStates`: check that the merged state is a single checkpoint that
+   holds both a canister of `M` (`UM`) and a canister of `R` (`UR`).
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
 violated before `M` starts cooling down; `M` then rejects ingress messages and
 query calls and becomes "merge ready", and `UT`'s loop of step 2 is stalled;
-the tool then halts `M` and `R` at their next CUP, and the states it downloads
-from them pass validation.
+the tool then halts `M` and `R` at their next CUP, the states it downloads from
+them pass validation, and the merged state it assembles from them holds the
+canisters of both.
 
 end::catalog[] */
 
@@ -118,7 +125,10 @@ use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_agent::Agent;
 use ic_agent::agent::RejectCode;
-use ic_recovery::{RecoveryArgs, get_node_metrics, util::DataLocation};
+use ic_recovery::{
+    CHECKPOINTS, IC_STATE, RECOVERY_DIRECTORY_NAME, RecoveryArgs, get_node_metrics,
+    util::DataLocation,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_merging::metrics_helper::{
     Labels, MetricsByReplica, ScrapeError, fetch_available_metrics, replica_values,
@@ -378,6 +388,8 @@ struct Context<'a> {
     /// `M` and `UT` on `T`.
     um: UniversalCanister<'a>,
     ut: UniversalCanister<'a>,
+    /// The canister `R` holds, looping in a call of its own.
+    ur: Principal,
 }
 
 /// Steps 1 to 7: set the scenario up and check that `M` violates the
@@ -538,6 +550,7 @@ async fn prepare<'a>(
 
     Context {
         logger,
+        ur: ur.canister_id(),
         um,
         ut,
         m_subnet,
@@ -545,7 +558,7 @@ async fn prepare<'a>(
     }
 }
 
-/// Steps 8 to 14: hand the scenario over to the subnet merging tool, and make
+/// Steps 8 to 16: hand the scenario over to the subnet merging tool, and make
 /// the checks of the steps in between its steps.
 ///
 /// Plain synchronous code, like `rs/tests/consensus/subnet_splitting_test.rs`:
@@ -641,14 +654,65 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
         "Step 14 done: the states M and R halted at are downloaded and valid"
     );
 
+    info!(logger, "Step 15: Merging the states of subnets M and R");
+    exec_next_step(StepType::MergeStates);
+    info!(logger, "Step 15 done: the merged state is assembled");
+    check_merged_state(env, context);
+
     if let Some((step_type, _)) = merging.next() {
         panic!("unexpected step {step_type:?}");
     }
 
     info!(
         logger,
-        "Subnet M has been drained and halted, and the states of M and R downloaded and \
-         validated, by the subnet merging tool"
+        "Subnet M has been drained and halted, and the states of M and R downloaded, validated \
+         and merged, by the subnet merging tool"
+    );
+}
+
+/// Step 16: check that the merged state the tool assembled is a single
+/// checkpoint, and that it holds a canister of each of the two subnets: `UM`,
+/// which `M` hosted, and `UR`, which `R` hosted.
+fn check_merged_state(env: &TestEnv, context: &Context<'_>) {
+    let logger = &context.logger;
+    let checkpoints_dir = env
+        .get_path(MERGING_DIR)
+        .join(RECOVERY_DIRECTORY_NAME)
+        .join("merged_working_dir")
+        .join("data")
+        .join(IC_STATE)
+        .join(CHECKPOINTS);
+    let checkpoints: Vec<_> = std::fs::read_dir(&checkpoints_dir)
+        .unwrap_or_else(|e| panic!("failed to read {}: {e}", checkpoints_dir.display()))
+        .map(|entry| entry.expect("failed to read a directory entry").path())
+        .collect();
+    let [checkpoint] = checkpoints.as_slice() else {
+        panic!("expected a single merged checkpoint, got {checkpoints:?}");
+    };
+
+    for (canister_id, name, subnet) in [
+        (context.um.canister_id(), "UM", "M"),
+        (context.ur, "UR", "R"),
+    ] {
+        // A checkpoint keeps the state of a canister in a directory named after
+        // the hex encoding of its ID.
+        let canister_dir_name: String = canister_id
+            .as_slice()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        let canister_dir = checkpoint.join("canister_states").join(canister_dir_name);
+        assert!(
+            canister_dir.is_dir(),
+            "the merged state does not hold {name} ({canister_id}) of subnet {subnet}: {} is \
+             missing",
+            canister_dir.display(),
+        );
+    }
+    info!(
+        logger,
+        "Step 16 done: the merged checkpoint {} holds UM and UR",
+        checkpoint.display(),
     );
 }
 

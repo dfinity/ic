@@ -3,14 +3,14 @@ use crate::{
     layout::Layout,
     readiness,
     subnet_merging::TargetSubnet,
-    utils::{get_subnet_record_at_version, wait_for},
+    utils::{MergedStateParams, get_subnet_record_at_version, wait_for},
 };
 
 use ic_base_types::SubnetId;
 use ic_cup_explorer::get_cup;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery,
+    IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery, STATES_METADATA,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::remove_dir,
     registry_helper::RegistryHelper,
@@ -472,5 +472,116 @@ impl Step for ValidateCupStep {
             self.subnet_id,
             &self.logger,
         )
+    }
+}
+
+/// Assembles the merged state from the states the two subnets halted at: the
+/// state of the destination subnet, with the canisters and canister snapshots
+/// of the source subnet added to it, as a new checkpoint that the destination
+/// subnet is then recovered at.
+pub(crate) struct MergeStatesStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) destination_subnet_id: SubnetId,
+    pub(crate) layout: Layout,
+    pub(crate) logger: Logger,
+}
+
+impl Step for MergeStatesStep {
+    fn descr(&self) -> String {
+        format!(
+            "Assemble the merged state from the checkpoints downloaded to {} and {} at the \
+             heights of the CUPs the two subnets halted at, as a new checkpoint in {}, and \
+             record the height and the state hash the recovery of the destination subnet needs.",
+            self.layout.work_dir(TargetSubnet::Source).display(),
+            self.layout.work_dir(TargetSubnet::Destination).display(),
+            self.layout.work_dir(TargetSubnet::Merged).display(),
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        // The checkpoints the two subnets halted at, which the validation steps
+        // checked against the halting CUPs. A reused working directory may hold
+        // other checkpoints too, so they are selected by height rather than as
+        // the latest ones.
+        let source_height =
+            read_cup_file(&self.layout.halting_cup_file(self.source_subnet_id))?.height();
+        let destination_height =
+            read_cup_file(&self.layout.halting_cup_file(self.destination_subnet_id))?.height();
+        let source_checkpoint = self
+            .layout
+            .checkpoint_dir(TargetSubnet::Source, source_height);
+        let destination_checkpoint = self
+            .layout
+            .checkpoint_dir(TargetSubnet::Destination, destination_height);
+
+        // The recovery CUP is created at the next recovery height above the one
+        // the destination subnet halted at, exactly as in any other recovery.
+        let merged_height = Recovery::get_recovery_height(destination_height);
+        let merged_checkpoint = self
+            .layout
+            .checkpoint_dir(TargetSubnet::Merged, merged_height);
+
+        info!(
+            self.logger,
+            "The source subnet halted at height {source_height} and the destination subnet at \
+             height {destination_height}; the merged state is the checkpoint {merged_height}",
+        );
+
+        // The merge claims its output directory by creating it, and the upload
+        // step refuses a state directory holding more than one checkpoint, so
+        // every merged checkpoint left over from an earlier run of this step
+        // is removed first, whatever its height. The downloaded checkpoints of
+        // the two subnets are in other directories and stay untouched.
+        remove_dir(&self.layout.checkpoints_dir(TargetSubnet::Merged))?;
+
+        info!(self.logger, "Merging the states");
+        state_tool_helper::merge_checkpoints(
+            &destination_checkpoint,
+            &source_checkpoint,
+            &merged_checkpoint,
+        )?;
+
+        info!(self.logger, "Computing the manifest of the merged state");
+        let manifest_path = self.layout.merged_state_manifest_file();
+        state_tool_helper::compute_manifest(&merged_checkpoint, &manifest_path)?;
+
+        // The state hash is the root hash of the manifest, taken from the
+        // manifest as it was written rather than by hashing the (possibly
+        // large) merged checkpoint a second time.
+        info!(self.logger, "Validating the manifest of the merged state");
+        let state_hash = state_tool_helper::verify_manifest(&manifest_path)
+            .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
+
+        // The upload step transfers the states metadata alongside the
+        // checkpoint, and rsync is given every path it transfers as an explicit
+        // source, so a missing one fails the whole transfer: take the
+        // destination subnet's along.
+        //
+        // It is a manifest cache, which the state manager recomputes for the
+        // checkpoints it finds whenever it is missing or does not describe them,
+        // and the heights it names here are the ones the destination subnet held
+        // before the merge, none of which the merged state directory has. That is
+        // the same mismatch a plain subnet recovery uploads, where the metadata
+        // comes from the state that was downloaded and the checkpoint from the
+        // replay that followed.
+        std::fs::copy(
+            self.layout
+                .ic_state_dir(TargetSubnet::Destination)
+                .join(STATES_METADATA),
+            self.layout
+                .ic_state_dir(TargetSubnet::Merged)
+                .join(STATES_METADATA),
+        )
+        .map_err(|err| {
+            RecoveryError::UnexpectedError(format!("Failed to copy the states metadata: {err}"))
+        })?;
+
+        let params = MergedStateParams {
+            height: merged_height.get(),
+            state_hash,
+        };
+        info!(self.logger, "The merged state: {params:?}");
+
+        params.write(&self.layout.merged_state_params_file())
     }
 }

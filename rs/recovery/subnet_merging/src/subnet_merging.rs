@@ -3,7 +3,7 @@ use crate::{
     download_node::DownloadNode,
     layout::Layout,
     steps::{
-        CheckCoolingDownStep, CheckMergeReadinessStep, DownloadStateStep,
+        CheckCoolingDownStep, CheckMergeReadinessStep, DownloadStateStep, MergeStatesStep,
         StopReplicaAtHaltingCheckpointStep, ValidateCupStep, WaitForHaltingCupStep,
     },
 };
@@ -85,6 +85,8 @@ pub enum StepType {
     /// Validate the state downloaded from the destination subnet against the
     /// CUP it halted at.
     ValidateDestinationSubnetCup,
+    /// Assemble the merged state from the two downloaded states.
+    MergeStates,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -153,7 +155,8 @@ pub struct SubnetMergingArgs {
     pub skip: Option<Vec<StepType>>,
 }
 
-/// The two subnets a subnet merge works with.
+/// The three states a subnet merge works with: the two states that are
+/// downloaded and the merged one that is assembled from them.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub(crate) enum TargetSubnet {
     /// The subnet that is cooling down, whose canisters are merged away and
@@ -162,6 +165,9 @@ pub(crate) enum TargetSubnet {
     /// The subnet that hosts the canisters of the source subnet after the merge
     /// and that is recovered at the merged state.
     Destination,
+    /// Not a subnet of its own: the state assembled from the states of the two
+    /// subnets above, which the destination subnet is recovered at.
+    Merged,
 }
 
 impl std::fmt::Display for TargetSubnet {
@@ -169,6 +175,7 @@ impl std::fmt::Display for TargetSubnet {
         let name = match self {
             TargetSubnet::Source => "source",
             TargetSubnet::Destination => "destination",
+            TargetSubnet::Merged => "merged",
         };
         write!(f, "{name}")
     }
@@ -538,6 +545,8 @@ impl SubnetMerging {
         let node = match target_subnet {
             TargetSubnet::Source => self.params.download_node_source,
             TargetSubnet::Destination => self.params.download_node_destination,
+            // The merged state is assembled locally.
+            TargetSubnet::Merged => None,
         };
         node.ok_or_else(|| {
             RecoveryError::UnexpectedError(format!(
@@ -550,7 +559,7 @@ impl SubnetMerging {
     fn subnet_id(&self, target_subnet: TargetSubnet) -> SubnetId {
         match target_subnet {
             TargetSubnet::Source => self.params.source_subnet_id,
-            TargetSubnet::Destination => self.params.destination_subnet_id,
+            TargetSubnet::Destination | TargetSubnet::Merged => self.params.destination_subnet_id,
         }
     }
 
@@ -635,6 +644,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 }
             }
             StepType::ValidateSourceSubnetCup | StepType::ValidateDestinationSubnetCup => {}
+            StepType::MergeStates => {}
         }
     }
 
@@ -702,6 +712,14 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             StepType::ValidateDestinationSubnetCup => {
                 self.validate_cup_step(TargetSubnet::Destination).into()
             }
+
+            StepType::MergeStates => MergeStatesStep {
+                source_subnet_id: self.params.source_subnet_id,
+                destination_subnet_id: self.params.destination_subnet_id,
+                layout: self.layout.clone(),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
         };
 
         Ok(step)

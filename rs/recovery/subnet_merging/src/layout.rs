@@ -36,6 +36,8 @@ struct CoolingDownRegistryVersion {
 /// |  |-- ${source_subnet_id}.pem
 /// |  |-- ${destination_subnet_id}.pem
 /// |  |-- cooling_down_registry_version.json
+/// |  |-- merged.manifest
+/// |  |-- merged_state_params.json
 /// |  |-- nns.pem
 /// |  |-- ${source_subnet_id}.pruned_state_tree.cbor
 /// |  |-- ${destination_subnet_id}.pruned_state_tree.cbor
@@ -51,6 +53,11 @@ struct CoolingDownRegistryVersion {
 /// |  |   |   |-- ic_state/states_metadata.pbuf
 /// |  |   |   |-- ic_state/checkpoints/
 /// |  |   |   |   |-- ${halting_height}/
+/// |  |-- merged_working_dir/           (the merged state)
+/// |  |   |-- data/
+/// |  |   |   |-- ic_state/states_metadata.pbuf
+/// |  |   |   |-- ic_state/checkpoints/
+/// |  |   |   |   |-- ${recovery_height}/
 pub(crate) struct Layout {
     root: PathBuf,
 }
@@ -79,12 +86,23 @@ impl Layout {
 
             create_dir(&layout.data_dir(target_subnet))?;
         }
+        create_dir(&layout.data_dir(TargetSubnet::Merged))?;
 
         Ok(layout)
     }
 
     pub(crate) fn nns_public_key_file(&self) -> PathBuf {
         self.root.join("nns.pem")
+    }
+
+    /// The manifest of the merged state.
+    pub(crate) fn merged_state_manifest_file(&self) -> PathBuf {
+        self.root.join("merged.manifest")
+    }
+
+    /// The [crate::utils::MergedStateParams] of the merged state.
+    pub(crate) fn merged_state_params_file(&self) -> PathBuf {
+        self.root.join("merged_state_params.json")
     }
 
     pub(crate) fn actual_manifest_file(&self, subnet_id: SubnetId) -> PathBuf {
@@ -104,6 +122,7 @@ impl Layout {
         match target_subnet {
             TargetSubnet::Source => self.root.join("source_working_dir"),
             TargetSubnet::Destination => self.root.join("destination_working_dir"),
+            TargetSubnet::Merged => self.root.join("merged_working_dir"),
         }
     }
 
@@ -111,10 +130,12 @@ impl Layout {
         self.work_dir(target_subnet).join("data")
     }
 
+    pub(crate) fn ic_state_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
+        self.data_dir(target_subnet).join(IC_STATE)
+    }
+
     pub(crate) fn checkpoints_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
-        self.data_dir(target_subnet)
-            .join(IC_STATE)
-            .join(CHECKPOINTS)
+        self.ic_state_dir(target_subnet).join(CHECKPOINTS)
     }
 
     /// The downloaded checkpoint at `height`. Neither download removes the
