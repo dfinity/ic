@@ -448,6 +448,10 @@ pub struct CanisterCodeDeployment {
     pub mode: i32,
     #[prost(bytes = "vec", tag = "2")]
     pub module_hash: ::prost::alloc::vec::Vec<u8>,
+    /// SHA-256 hash of the init/post-upgrade argument of `install_code`.
+    /// `None` for entries recorded before `args_hash` started being recorded.
+    #[prost(bytes = "vec", optional, tag = "3")]
+    pub args_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterControllersChange {
