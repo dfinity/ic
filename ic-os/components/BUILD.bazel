@@ -69,16 +69,8 @@ ignored_repo_components = [
     "misc/serial-getty@/guestos-prod/override.conf",
     "hostos/misc/grub-upgrader/grub-upgrader.sh",
     "hostos/misc/grub-upgrader/grub-upgrader.service",
-    "misc/config/test-config-hostos.sh",
     "monitoring/metrics-proxy/hostos/test-metrics-proxy-units.sh",
 ]
-
-sh_test(
-    name = "test_config_hostos",
-    srcs = ["misc/config/test-config-hostos.sh"],
-    args = ["$(execpath misc/config/config-hostos.sh)"],
-    data = ["misc/config/config-hostos.sh"],
-)
 
 sh_test(
     name = "test_metrics_proxy_units",
