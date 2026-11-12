@@ -91,7 +91,7 @@ Simple wrapper for canister ID payloads: `{ canister_id: principal }`.
 
 - `CanisterChangeOrigin` -- Variant: `from_user { user_id }` or `from_canister { canister_id, canister_version }`.
 - `CanisterCreationRecord` -- `{ controllers: Vec<PrincipalId>, environment_variables_hash: Option<[u8; 32]> }`.
-- `CanisterCodeDeploymentRecord` -- `{ mode: CanisterInstallMode, module_hash: [u8; 32] }`.
+- `CanisterCodeDeploymentRecord` -- `{ mode: CanisterInstallMode, module_hash: [u8; 32], args_hash: Option<[u8; 32]> }`, with Candid `args_hash : opt blob`. `args_hash` is the SHA-256 of the `install_code` argument (the init or post-upgrade argument); it is `None` (`null`) for entries recorded before the field was introduced. Older clients still decode responses, because Candid ignores extra record fields.
 - `CanisterControllersChangeRecord` -- `{ controllers: Vec<PrincipalId> }`.
 - `CanisterLoadSnapshotRecord` -- `{ canister_version, snapshot_id, taken_at_timestamp, source: SnapshotSource, from_canister_id }`.
 - `CanisterSettingsChangeRecord` -- `{ controllers: Option<Vec<PrincipalId>>, environment_variables_hash: Option<[u8; 32]> }`.

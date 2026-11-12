@@ -92,6 +92,12 @@ Code is installed via the `install_code` management canister method in one of th
 - **THEN** the Wasm module is assembled from chunks previously uploaded to the chunk store
 - **AND** the assembled module hash must match the provided `wasm_module_hash`
 
+#### Scenario: Code deployment history records the argument hash
+- **WHEN** `install_code` (or `install_chunked_code`) installs, reinstalls, or upgrades a canister
+- **THEN** the `code_deployment` canister history entry records the mode, the module hash, and `args_hash`, the SHA-256 of the init/post-upgrade argument passed to `install_code`
+- **AND** the hash is carried in the `AddCanisterChange` install-code step, so it is preserved when the steps are replayed under DTS
+- **AND** `args_hash` is persisted in checkpoints as `optional bytes args_hash = 3` in `CanisterCodeDeployment`; history entries from checkpoints written before this field existed decode with `args_hash = null`, and `canister_info` returns them that way
+
 ### Requirement: Canister Uninstallation
 
 Uninstalling a canister removes its code but preserves the canister ID and cycles balance.
