@@ -9,6 +9,7 @@ use ic_types_cycles::Cycles;
 use num_traits::cast::ToPrimitive;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
+use std::fmt;
 
 #[cfg(test)]
 mod tests;
@@ -412,6 +413,22 @@ pub enum UpdateSettingsError {
     LogMemoryLimitOutOfRange { provided: candid::Nat },
 }
 
+/// Displays small values exactly and summarizes larger values.
+struct CompactNatDisplay<'a>(&'a candid::Nat);
+
+impl fmt::Display for CompactNatDisplay<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        const MAX_EXACT_BITS: u64 = 256;
+
+        let bits = self.0.0.bits();
+        if bits <= MAX_EXACT_BITS {
+            write!(f, "{}", self.0)
+        } else {
+            write!(f, "<nat too large: {bits} bits>")
+        }
+    }
+}
+
 impl From<UpdateSettingsError> for UserError {
     fn from(err: UpdateSettingsError) -> Self {
         match err {
@@ -421,43 +438,51 @@ impl From<UpdateSettingsError> for UserError {
                     "ComputeAllocation expected to be in the range [{}..{}], got {}",
                     err.min(),
                     err.max(),
-                    err.given()
+                    CompactNatDisplay(err.given_ref())
                 ),
             ),
             UpdateSettingsError::MemoryAllocationOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
-                format!("MemoryAllocation expected to be in the range [0..2^64-1], got {provided}"),
+                format!(
+                    "MemoryAllocation expected to be in the range [0..2^64-1], got {}",
+                    CompactNatDisplay(&provided)
+                ),
             ),
             UpdateSettingsError::FreezingThresholdOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Freezing threshold expected to be in the range of [0..2^64-1], got {provided}"
+                    "Freezing threshold expected to be in the range of [0..2^64-1], got {}",
+                    CompactNatDisplay(&provided)
                 ),
             ),
             UpdateSettingsError::ReservedCyclesLimitOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Reserved cycles limit expected to be in the range of [0..2^128-1], got {provided}"
+                    "Reserved cycles limit expected to be in the range of [0..2^128-1], got {}",
+                    CompactNatDisplay(&provided)
                 ),
             ),
             UpdateSettingsError::MinimumIncomingCanisterCallCyclesOutOfRange { provided } => {
                 UserError::new(
                     ErrorCode::CanisterContractViolation,
                     format!(
-                        "Minimum incoming canister call cycles expected to be in the range of [0..2^128-1], got {provided}"
+                        "Minimum incoming canister call cycles expected to be in the range of [0..2^128-1], got {}",
+                        CompactNatDisplay(&provided)
                     ),
                 )
             }
             UpdateSettingsError::WasmMemoryLimitOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Wasm memory limit expected to be in the range of [0..2^64-1], got {provided}"
+                    "Wasm memory limit expected to be in the range of [0..2^64-1], got {}",
+                    CompactNatDisplay(&provided)
                 ),
             ),
             UpdateSettingsError::WasmMemoryThresholdOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Wasm memory threshold expected to be in the range of [0..2^48], got {provided}"
+                    "Wasm memory threshold expected to be in the range of [0..2^48], got {}",
+                    CompactNatDisplay(&provided)
                 ),
             ),
             UpdateSettingsError::DuplicateEnvironmentVariables => UserError::new(
@@ -467,7 +492,8 @@ impl From<UpdateSettingsError> for UserError {
             UpdateSettingsError::LogMemoryLimitOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Log memory limit expected to be in the range of [0..2^64-1], got {provided}"
+                    "Log memory limit expected to be in the range of [0..2^64-1], got {}",
+                    CompactNatDisplay(&provided)
                 ),
             ),
         }

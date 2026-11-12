@@ -28,13 +28,27 @@
 //!    every subnet a single quorum of the replicas satisfies all of these terms
 //!    at once, as opposed to each term holding on a possibly different quorum.
 
-use crate::metrics_helper::{self, Labels, MetricsByReplica, ReplicaMetrics, ScrapeError};
+use crate::{
+    metrics_helper::{self, Labels, MetricsByReplica, ReplicaMetrics, ScrapeError},
+    utils::wait_for,
+};
 
-use ic_base_types::SubnetId;
+use ic_base_types::{NodeId, RegistryVersion, SubnetId};
+use ic_interfaces_registry::RegistryClient;
+use ic_recovery::{
+    error::{RecoveryError, RecoveryResult},
+    registry_helper::RegistryHelper,
+    util::block_on,
+};
+use ic_registry_client_helpers::{
+    node::NodeRegistry,
+    subnet::{SubnetListRegistry, SubnetRegistry},
+};
 use ic_types::consensus::get_faults_tolerated;
+use slog::{Logger, info, warn};
 use strum_macros::EnumIter;
 
-use std::{collections::BTreeMap, fmt, net::IpAddr};
+use std::{collections::BTreeMap, fmt, net::IpAddr, time::Duration};
 
 /// The nodes of every subnet the conditions below range over.
 pub type SubnetNodeIps = BTreeMap<SubnetId, Vec<IpAddr>>;
@@ -151,23 +165,29 @@ async fn fetch_readiness_metrics(
     if let Some((&subnet_id, _)) = subnets.iter().find(|(_, node_ips)| node_ips.is_empty()) {
         return Err(ReadinessError::NoNodes(subnet_id));
     }
+    const SOURCE_SUBNET_METRICS: &[&str] = &[
+        METRIC_REGISTRY_VERSION,
+        METRIC_STREAM_MESSAGES,
+        METRIC_INGRESS_HISTORY_BY_STATE,
+        METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
+        METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
+        METRIC_SUBNET_CALL_CONTEXTS,
+        METRIC_PENDING_REFUNDS,
+    ];
+    const OTHER_SUBNET_METRICS: &[&str] = &[METRIC_REGISTRY_VERSION, METRIC_STREAM_MESSAGES];
+    let groups = subnets.iter().map(|(&subnet_id, node_ips)| {
+        let metrics = if subnet_id == source_subnet_id {
+            SOURCE_SUBNET_METRICS
+        } else {
+            OTHER_SUBNET_METRICS
+        };
+        (subnet_id, node_ips.as_slice(), metrics)
+    });
     let mut result = BTreeMap::new();
     let mut scrape_failures = Vec::new();
-    for (&subnet_id, node_ips) in subnets {
-        let metrics: &[&str] = if subnet_id == source_subnet_id {
-            &[
-                METRIC_REGISTRY_VERSION,
-                METRIC_STREAM_MESSAGES,
-                METRIC_INGRESS_HISTORY_BY_STATE,
-                METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
-                METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
-                METRIC_SUBNET_CALL_CONTEXTS,
-                METRIC_PENDING_REFUNDS,
-            ]
-        } else {
-            &[METRIC_REGISTRY_VERSION, METRIC_STREAM_MESSAGES]
-        };
-        let (metrics, failures) = metrics_helper::fetch_available_metrics(node_ips, metrics).await;
+    for (subnet_id, (metrics, failures)) in
+        metrics_helper::fetch_available_metrics_by_group(groups).await
+    {
         result.insert(subnet_id, metrics);
         scrape_failures.extend(failures.map(|err| (subnet_id, err)));
     }
@@ -340,6 +360,136 @@ fn evaluate(
             common_quorum,
         ),
     ]
+}
+
+/// Waits until every term of the readiness condition holds, logging which
+/// terms hold after every round, along with the nodes that could not be
+/// scraped. A round in which the condition cannot be evaluated (e.g. because
+/// the registry cannot be read) counts as not ready.
+pub fn await_merge_readiness(
+    registry_helper: &RegistryHelper,
+    source_subnet_id: SubnetId,
+    registry_version: u64,
+    timeout: Duration,
+    poll_interval: Duration,
+    logger: &Logger,
+) -> RecoveryResult<()> {
+    wait_for(
+        &format!("subnet {source_subnet_id} is ready to be merged"),
+        timeout,
+        poll_interval,
+        logger,
+        || {
+            // The replicas to scrape are those of the latest topology, not of
+            // `V`: nodes may have been replaced and subnets created since `V`.
+            let latest_version = registry_helper.latest_registry_version()?;
+            let subnets = subnet_node_ips(&*registry_helper.registry_client(), latest_version)?;
+            let Readiness {
+                terms,
+                scrape_failures,
+            } = block_on(evaluate_merge_readiness(
+                &subnets,
+                source_subnet_id,
+                registry_version,
+            ))
+            .map_err(|err| RecoveryError::UnexpectedError(err.to_string()))?;
+
+            for (subnet_id, err) in &scrape_failures {
+                warn!(logger, "Subnet {subnet_id}: {err}");
+            }
+            let unsatisfied = terms.iter().filter(|term| !term.satisfied).count();
+            info!(
+                logger,
+                "Subnet {source_subnet_id}: {} of {} terms of the merge readiness condition hold:",
+                terms.len() - unsatisfied,
+                terms.len(),
+            );
+            for term in &terms {
+                let mark = if term.satisfied { "x" } else { " " };
+                info!(logger, "  [{mark}] {}", term.description);
+            }
+
+            if unsatisfied > 0 {
+                return Err(RecoveryError::UnexpectedError(format!(
+                    "{unsatisfied} of {} terms do not hold",
+                    terms.len()
+                )));
+            }
+            Ok(())
+        },
+    )
+}
+
+/// The nodes of every subnet in the registry at `registry_version`.
+fn subnet_node_ips(
+    registry_client: &dyn RegistryClient,
+    registry_version: RegistryVersion,
+) -> RecoveryResult<SubnetNodeIps> {
+    let registry_error = |what: String| {
+        move |err| {
+            RecoveryError::RegistryError(format!(
+                "Failed to get {what} at registry version {registry_version}: {err}"
+            ))
+        }
+    };
+    let missing = |what: String| {
+        RecoveryError::RegistryError(format!("No {what} at registry version {registry_version}"))
+    };
+
+    let subnet_ids = registry_client
+        .get_subnet_ids(registry_version)
+        .map_err(registry_error("the subnet ids".to_string()))?
+        .ok_or_else(|| missing("subnet ids".to_string()))?;
+
+    subnet_ids
+        .into_iter()
+        .map(|subnet_id| {
+            let node_ids = registry_client
+                .get_node_ids_on_subnet(subnet_id, registry_version)
+                .map_err(registry_error(format!("the nodes of subnet {subnet_id}")))?
+                .ok_or_else(|| missing(format!("nodes of subnet {subnet_id}")))?;
+            let node_ips = node_ids
+                .into_iter()
+                .map(|node_id| node_ip(registry_client, node_id, registry_version))
+                .collect::<RecoveryResult<_>>()?;
+            Ok((subnet_id, node_ips))
+        })
+        .collect()
+}
+
+/// The IP address of `node_id` as of `registry_version`.
+fn node_ip(
+    registry_client: &dyn RegistryClient,
+    node_id: NodeId,
+    registry_version: RegistryVersion,
+) -> RecoveryResult<IpAddr> {
+    let node_record = registry_client
+        .get_node_record(node_id, registry_version)
+        .map_err(|err| {
+            RecoveryError::RegistryError(format!(
+                "Failed to get the record of node {node_id} at registry version \
+                 {registry_version}: {err}"
+            ))
+        })?
+        .ok_or_else(|| {
+            RecoveryError::RegistryError(format!(
+                "No record of node {node_id} at registry version {registry_version}"
+            ))
+        })?;
+    let ip_addr = node_record
+        .http
+        .ok_or_else(|| {
+            RecoveryError::RegistryError(format!(
+                "The record of node {node_id} at registry version {registry_version} has no \
+                 http endpoint"
+            ))
+        })?
+        .ip_addr;
+    ip_addr.parse().map_err(|err| {
+        RecoveryError::UnexpectedError(format!(
+            "Failed to parse the IP address {ip_addr} of node {node_id}: {err}"
+        ))
+    })
 }
 
 #[cfg(test)]

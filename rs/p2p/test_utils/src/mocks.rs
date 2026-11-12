@@ -148,11 +148,8 @@ mock! {
 mock! {
     pub ValidatedPoolReader<A: IdentifiableArtifact> {}
 
-    impl<A: IdentifiableArtifact> ValidatedPoolReader<A> for ValidatedPoolReader<A> {
+    impl<A: IdentifiableArtifact + Sync> ValidatedPoolReader<A> for ValidatedPoolReader<A> {
         fn get(&self, id: &A::Id) -> Option<A>;
-        fn get_all_for_initial_broadcast(
-            &self,
-        ) -> Box<dyn Iterator<Item = A>>;
     }
 }
 

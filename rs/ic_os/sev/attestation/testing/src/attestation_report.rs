@@ -1,3 +1,4 @@
+use attestation::LAUNCH_MEASUREMENT_LEN;
 use der::EncodePem;
 use der::pem::LineEnding;
 use p384::ecdsa::Signature;
@@ -45,7 +46,7 @@ impl AttestationReportBuilder {
         self
     }
 
-    pub fn with_measurement(mut self, measurement: [u8; 48]) -> Self {
+    pub fn with_measurement(mut self, measurement: [u8; LAUNCH_MEASUREMENT_LEN]) -> Self {
         self.attestation_report
             .measurement
             .copy_from_slice(&measurement);

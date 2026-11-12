@@ -12,7 +12,7 @@ single_version_override(
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    versions = ["1.99.0"],
+    versions = ["1.99.1"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
@@ -364,6 +364,10 @@ crate.spec(
 crate.spec(
     package = "crossbeam-utils",
     version = "^0.8.21",
+)
+crate.spec(
+    package = "crossterm",
+    version = "0.29.0",
 )
 crate.spec(
     package = "csv",
@@ -746,7 +750,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-management-canister-types",
-    version = "^0.8.0",
+    version = "^0.11.0",
 )
 crate.spec(
     default_features = False,
@@ -995,6 +999,10 @@ crate.spec(
     version = "^0.3.1",
 )
 crate.spec(
+    package = "netdev",
+    version = "0.46.3",
+)
+crate.spec(
     package = "nftables",
     version = "^0.4.1",
 )
@@ -1035,10 +1043,6 @@ crate.spec(
 crate.spec(
     package = "object",
     version = "^0.37.3",
-)
-crate.spec(
-    package = "once_cell",
-    version = "^1.8",
 )
 crate.spec(
     features = [
@@ -1187,10 +1191,6 @@ crate.spec(
 crate.spec(
     package = "protobuf",
     version = "^3.7.2",
-)
-crate.spec(
-    package = "publicsuffix",
-    version = "^2.2.3",
 )
 crate.spec(
     package = "quickcheck",
@@ -1369,6 +1369,15 @@ crate.spec(
 crate.spec(
     package = "rustc-hash",
     version = "^1.1.0",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "event",
+        "process",
+    ],
+    package = "rustix",
+    version = "1.1.4",
 )
 crate.spec(
     default_features = False,
@@ -1668,7 +1677,7 @@ crate.spec(
 crate.spec(
     features = ["full"],
     package = "tokio",
-    version = "^1.54.0",
+    version = "^1.54.1",
 )
 crate.spec(
     package = "tokio-io-timeout",
@@ -1802,10 +1811,6 @@ crate.spec(
     version = "^0.3.20",
 )
 crate.spec(
-    package = "trust-dns-resolver",
-    version = "^0.22.0",
-)
-crate.spec(
     package = "turmoil",
     version = "^0.6.6",
 )
@@ -1881,7 +1886,7 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^48.0.1",
+    version = "^48.0.7",
 )
 crate.spec(
     package = "wast",

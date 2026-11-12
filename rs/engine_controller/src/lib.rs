@@ -51,3 +51,17 @@ pub struct CreateEngineArgs {
 pub struct DeleteEngineArgs {
     pub subnet_id: Principal,
 }
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct CreateCanisterArgs {
+    /// The cloud engine subnet to create the canister on.
+    pub subnet_id: Principal,
+    /// The new canister's controllers, 1 to 10 of them. The engine controller
+    /// is not made a controller unless it is listed here.
+    pub controllers: Vec<Principal>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
+pub struct NewCanister {
+    pub canister_id: Principal,
+}

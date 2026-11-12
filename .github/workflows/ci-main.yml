@@ -12,22 +12,32 @@ on:
         required: false
         default: ''
         type: string
+    secrets:
+      BEP_GPG_PASSPHRASE:
+        description: Encrypts the build event files that the bazel action uploads
+        required: false
+      CF_AWS_ACCESS_KEY_ID:
+        description: Uploads the artifacts of release builds; an upload-artifacts environment secret that the caller must pass (secrets inherit)
+        required: false
+      CF_AWS_SECRET_ACCESS_KEY:
+        description: Uploads the artifacts of release builds; an upload-artifacts environment secret that the caller must pass (secrets inherit)
+        required: false
 
 # This reusable workflow declares no `permissions:` of its own: its jobs run with
 # exactly the GITHUB_TOKEN permissions the calling job grants. Callers that run
 # release builds (ci-kickoff.yml, release-testing.yml) grant on their `ci-main` job:
-#   actions: write        # Actions artifacts (bazel-targets, BEP, execlogs)
+#   actions: write        # artifact uploads of bazel-test-arm64 (#9634)
 #   attestations: write   # Attest steps of bazel-test-all / upload-external-artifacts
 #   contents: read
 #   id-token: write       # AWS OIDC role assumption and Sigstore signing
 #   pull-requests: read
-# ci-kickoff-manual.yml (CI for pull requests from forks) grants the same set WITHOUT
-# `attestations: write`: it never runs a release build. A permission declared here
-# would be validated against every caller's grant at parse time regardless of `if:`
-# (https://github.com/orgs/community/discussions/155062) and so would force that
-# grant onto fork-PR runs. Not declaring it keeps fork-PR builds unable to store
-# attestations; the price is that a caller missing a grant fails at runtime (HTTP
-# 403 in the Attest step) rather than at parse time.
+# ci-kickoff-manual.yml (CI for pull requests from forks) grants only `contents: read`
+# and `pull-requests: read`: these jobs run the PR's code, and it never runs a release
+# build. A permission declared here would be validated against every caller's grant at
+# parse time regardless of `if:` (https://github.com/orgs/community/discussions/155062)
+# and so would force that grant onto fork-PR runs. Declaring none lets fork-PR builds
+# stay read-only; the price is that a caller missing a grant fails at runtime (e.g.
+# HTTP 403 in the Attest step) rather than at parse time.
 
 env:
   CI_COMMIT_SHA: ${{ inputs.commit-sha }}
@@ -43,7 +53,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:0b6a915e614105c632a0c7a0f6e530ed506decfbd0316b297b28e9c555c532a2
+      image: ghcr.io/dfinity/ic-build@sha256:6184a4beddca0e898c9e2113b2dd78f0391caefef7c13090c56ae1ab7b1ec399
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
@@ -64,6 +74,8 @@ jobs:
             fuzzers:
               - ".github/workflows/ci-main.yml"
               - "ci/container/TAG"
+              - "ci/container/ic-build.digest"
+              - "ci/container/ic-dev.digest"
               - "bin/fuzzing/*.sh"
               - "**/BUILD.bazel"
               - "**/*.bzl"
@@ -286,7 +298,7 @@ jobs:
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         with:
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
           execlogs-artifact-name: execlogs-bazel-build
           invocation-names: build
           run: |
@@ -299,26 +311,35 @@ jobs:
             eval "bazel build $bazel_args --target_pattern_file=$build_targets"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        id: aws-credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         if: needs.config.outputs.release-build == 'true'
         with:
           role-session-name: "GitHub-Actions_ic_upload-artifacts"
           role-to-assume: ${{ vars.AWS_ASSUME_ROLE }}
           aws-region: eu-central-1
+          # Only for the Upload artifacts step: the BEP files of Run Tests record the job's environment.
+          output-env-credentials: false
+          output-credentials: true
 
       - name: Upload artifacts
         id: upload-artifacts
         uses: ./.github/actions/upload-artifacts
         if: needs.config.outputs.release-build == 'true'
-        env:
-          CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
-          CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
           name: Bazel Test All
-          # with --check_up_to_date Bazel will error out if the artifacts
-          # to be uploaded were not built in the build step above
-          # (this ensures that the exact artifacts built above are uploaded)
-          upload-command: bazel run --check_up_to_date //:upload-artifacts
+          target: //:upload-artifacts
+          # The options of the Run Bazel Commands step above; with --check_up_to_date Bazel will error
+          # out if the artifacts to be uploaded were not built in that step (this ensures that the exact
+          # artifacts built above are uploaded).
+          bazel-args: ${{ steps.infer-bazel-args.outputs.bazel-args }}
+          check-up-to-date: 'true'
+          # Only the step of the action that runs the uploader gets these.
+          aws-access-key-id: ${{ steps.aws-credentials.outputs.aws-access-key-id }}
+          aws-secret-access-key: ${{ steps.aws-credentials.outputs.aws-secret-access-key }}
+          aws-session-token: ${{ steps.aws-credentials.outputs.aws-session-token }}
+          cf-aws-access-key-id: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
+          cf-aws-secret-access-key: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
 
       - name: Attest
         # Mint the build-provenance attestation for the files the step above
@@ -339,7 +360,7 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/bazel
         with:
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
           execlogs-artifact-name: execlogs-bazel-test
           invocation-names: test
           run: |
@@ -592,21 +613,30 @@ jobs:
           echo bundledir="$bundledir" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        id: aws-credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-session-name: "GitHub-Actions_ic_upload-artifacts"
           role-to-assume: ${{ vars.AWS_ASSUME_ROLE }}
           aws-region: eu-central-1
+          # Only for the Upload artifacts step, as in bazel-test-all.
+          output-env-credentials: false
+          output-credentials: true
 
       - name: Upload artifacts
         id: upload-artifacts
         uses: ./.github/actions/upload-artifacts
-        env:
-          CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
-          CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
           name: arm64 artifacts
-          upload-command: bazel run --config=stamped //:artifact-uploader -- ${{ steps.prepare-bundle.outputs.bundledir }}
+          target: //:artifact-uploader
+          bazel-args: --config=stamped
+          program-args: ${{ steps.prepare-bundle.outputs.bundledir }}
+          # Only the step of the action that runs the uploader gets these.
+          aws-access-key-id: ${{ steps.aws-credentials.outputs.aws-access-key-id }}
+          aws-secret-access-key: ${{ steps.aws-credentials.outputs.aws-secret-access-key }}
+          aws-session-token: ${{ steps.aws-credentials.outputs.aws-session-token }}
+          cf-aws-access-key-id: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
+          cf-aws-secret-access-key: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
 
       - name: Attest
         # See the Attest step of bazel-test-all.
@@ -705,9 +735,21 @@ jobs:
           n_lines_nocache=$(cat execlogs-nocache/execlogs.csv | wc -l)
           echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
 
+          # Outside pull requests both jobs build everything, so every artifact of the nocache side
+          # should be in the cache side. But the cache side can be incomplete: when bazel retries a
+          # build after a remote-cache eviction (--experimental_remote_cache_eviction_retries), its
+          # compact execution log only covers the last attempt, and this check would silently compare
+          # less. So warn when many artifacts are missing from it, also when it is empty.
+          warn_if_low_coverage() { # <number of artifacts present in both>
+            if [ "$CI_EVENT_NAME" != "pull_request" ] && [ "$1" -lt $(((n_lines_nocache + 1) / 2)) ]; then
+              echo "::warning title=Build Determinism::only $1 of the $n_lines_nocache artifacts built by build-ic are in the execution log of bazel-test-all"
+            fi
+          }
+
           # running tests may not pull all targets locally. If that's the case,
           # there will be 0 lines and nothing to compare.
           if [ "$n_lines_cache" -eq 0 ] || [ "$n_lines_nocache" -eq 0 ]; then
+            warn_if_low_coverage 0
             echo "No lines to compare"
             exit 0
           fi
@@ -722,6 +764,11 @@ jobs:
           cp "$sponge" execlogs-nocache/execlogs.csv
 
           rm "$sponge"
+
+          # How many artifacts the comparison covers, see warn_if_low_coverage above.
+          n_joined=$(join -t, -12 -22 execlogs-cache/execlogs.csv execlogs-nocache/execlogs.csv | wc -l)
+          echo "comparing $n_joined artifacts present in both"
+          warn_if_low_coverage "$n_joined"
 
           # join the CSVs (separator ',') and compare the hashes. This creates a table with the following columns:
           #   //rs/foo,bazel-out/path/to-artifact,deadbeef,deafb33f
@@ -761,6 +808,8 @@ jobs:
               - "**/*.lock"
               - "ci/scripts/rust-lint.sh"
               - "ci/container/TAG"
+              - "ci/container/ic-build.digest"
+              - "ci/container/ic-dev.digest"
               - ".github/**"
       - name: Run Cargo ${{ matrix.name }} Linux
         if: |
@@ -836,6 +885,11 @@ jobs:
           if command -v podman &>/dev/null && [ -x /usr/local/bin/crun ]; then
             echo 'PODMAN_RUN_USR_ARGS=(--runtime /usr/local/bin/crun)' >>~/.container-run.conf
           fi
+      - name: Check image pins
+        # Not behind the path filter: the pins are rewritten together by
+        # container-autobuild.yml, and a hand edit or a merge that keeps an
+        # older pin makes container-run.sh and CI run different images.
+        run: ./ci/container/check-image-pins.sh
       - name: Filter Relevant Files
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter

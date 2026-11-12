@@ -184,9 +184,8 @@ use ic_types::{
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_xnet_payload_builder::{
-    RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics,
-    certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,
-    testing::XNetPayloadBuilderTesting,
+    XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, certified_slice_pool::CertifiedSlicePool,
+    exchange::PullTaskHandle, testing::XNetPayloadBuilderTesting,
 };
 
 use maplit::btreemap;
@@ -838,8 +837,11 @@ impl PocketXNetImpl {
     }
 
     fn refill(&self, registry_version: RegistryVersion, log: ReplicaLogger) {
-        let refill_stream_slice_indices =
-            refill_stream_slice_indices(&self.pool.lock().unwrap(), self.own_subnet_id);
+        let refill_stream_slice_indices = self
+            .pool
+            .lock()
+            .unwrap()
+            .refill_stream_slice_indices(self.own_subnet_id);
 
         for (subnet_id, indices) in refill_stream_slice_indices {
             // When restoring a PocketIC instance from its state,
@@ -1782,11 +1784,8 @@ impl StateMachineBuilder {
         // Register this new `StateMachine` in the *shared* pool of `StateMachine`s.
         subnets.insert(sm.clone());
 
-        // Create a dummny refill task handle to be used in `XNetPayloadBuilderImpl`.
-        // It is fine that we do not pop any messages from the (bounded) channel
-        // since errors are ignored in `RefillTaskHandle::trigger_refill()`.
-        let (refill_trigger, _refill_receiver) = mpsc::channel(1);
-        let refill_task_handle = RefillTaskHandle(Mutex::new(refill_trigger));
+        // No pull task: `PocketXNetImpl::refill()` refills the pool.
+        let pull_task_handle = PullTaskHandle::disconnected();
 
         // Instantiate a `XNetPayloadBuilderImpl`.
         let certified_stream_store: Arc<dyn CertifiedStreamStore> = sm.state_manager.clone();
@@ -1801,7 +1800,7 @@ impl StateMachineBuilder {
                 sm.state_manager.clone(),
                 sm.registry_client.clone(),
                 certified_slice_pool.clone(),
-                refill_task_handle,
+                pull_task_handle,
                 metrics,
                 sm.replica_logger.clone(),
             )

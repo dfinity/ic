@@ -37,6 +37,7 @@ use ic_utils::thread::parallel_map;
 use ic_utils_thread::JoinOnDrop;
 use ic_wasm_types::{CanisterModule, ModuleLoadingStatus};
 use prometheus::HistogramTimer;
+use std::cmp::Reverse;
 use std::collections::BTreeSet;
 use std::convert::identity;
 use std::ops::Deref;
@@ -465,6 +466,14 @@ pub(crate) fn spawn_tip_thread(
                                 );
                             });
 
+                            // Largest deltas first, so that `parallel_map` starts them right
+                            // away.
+                            let mut pagemaps = pagemaps;
+                            pagemaps.sort_by_cached_key(|p| {
+                                Reverse(p.page_map.as_ref().map_or(0, |page_map| {
+                                    page_map.num_unflushed_delta_pages()
+                                }))
+                            });
                             parallel_map(
                                 &mut thread_pool,
                                 pagemaps.into_iter(),
@@ -1199,8 +1208,14 @@ fn merge(
         .with_label_values(&["storage"])
         .observe(merges_by_storage as f64);
 
+    // Largest first, so that `parallel_map` starts them right away.
+    scheduled_merges.sort_by_key(|m| Reverse(m.write_size_bytes()));
     parallel_map(thread_pool, scheduled_merges.iter(), |m| {
-        m.apply(&metrics.storage_metrics)
+        m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
+            // A failed merge may have removed its input files from the tip and left a partial
+            // output behind, so the next checkpoint would include a corrupt `PageMap`.
+            fatal!(log, "Failed to merge PageMap files: {}", err);
+        })
     });
 }
 
@@ -1492,6 +1507,12 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             http_outcalls_executed: load_metrics_bits.http_outcalls_executed(),
             heartbeats_and_global_timers_executed: load_metrics_bits
                 .heartbeats_and_global_timers_executed(),
+            connection_metrics: canister_state
+                .system_state
+                .canister_metrics()
+                .connection_metrics()
+                .get()
+                .clone(),
         }
         .into(),
     )?;

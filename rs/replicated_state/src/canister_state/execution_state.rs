@@ -5,7 +5,8 @@ use crate::{NumWasmPages, PageMap, canister_state::WASM_PAGE_SIZE_IN_BYTES, num_
 use ic_management_canister_types_private::Global;
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CountBytes, ExecutionRound, NumBytes, Time,
+    CountBytes, ExecutionRound, MAX_WASM_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES, NumBytes,
+    Time,
     methods::{SystemMethod, WasmMethod},
 };
 use ic_validate_eq::ValidateEq;
@@ -645,6 +646,15 @@ impl WasmExecutionMode {
         match self {
             WasmExecutionMode::Wasm32 => "wasm32",
             WasmExecutionMode::Wasm64 => "wasm64",
+        }
+    }
+
+    /// The upper limit on the Wasm memory size of a canister running in this
+    /// execution mode.
+    pub fn max_wasm_memory_size(&self) -> NumBytes {
+        match self {
+            WasmExecutionMode::Wasm32 => NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
+            WasmExecutionMode::Wasm64 => NumBytes::new(MAX_WASM64_MEMORY_IN_BYTES),
         }
     }
 }

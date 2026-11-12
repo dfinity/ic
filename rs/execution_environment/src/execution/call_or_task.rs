@@ -368,12 +368,18 @@ impl CallOrTaskHelper {
                         num_bytes_try_from(es.wasm_memory.size).unwrap()
                     });
 
+                let wasm_execution_mode = clean_canister
+                    .execution_state
+                    .as_ref()
+                    .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
+
                 if let Some(wasm_memory_limit) = clean_canister.system_state.wasm_memory_limit {
                     // A Wasm memory limit of 0 means unlimited.
                     if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
                         let err = HypervisorError::WasmMemoryLimitExceeded {
                             bytes: wasm_memory_usage,
                             limit: wasm_memory_limit,
+                            max_wasm_memory_size: wasm_execution_mode.max_wasm_memory_size(),
                         };
                         return Err(err.into_user_error(&clean_canister.canister_id()));
                     }

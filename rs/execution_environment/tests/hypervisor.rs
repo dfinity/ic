@@ -2411,6 +2411,52 @@ fn ic0_msg_caller_info_works_in_non_replicated_query() {
 }
 
 #[test]
+fn universal_canister_if_eq_and_if_neq() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let mut run = |payload: Vec<u8>| test.ingress(canister_id, "update", payload);
+
+    // The branch is taken iff the comparison holds.
+    let append_then = || wasm().push_bytes(b"then").reply_data_append();
+    for (data, eq_expected, neq_expected) in [(b"a", &b"then"[..], &b""[..]), (b"b", b"", b"then")]
+    {
+        let result = run(wasm()
+            .push_bytes(b"a")
+            .if_eq(data, append_then())
+            .reply()
+            .build());
+        assert_eq!(result.unwrap(), WasmResult::Reply(eq_expected.to_vec()));
+        let result = run(wasm()
+            .push_bytes(b"a")
+            .if_neq(data, append_then())
+            .reply()
+            .build());
+        assert_eq!(result.unwrap(), WasmResult::Reply(neq_expected.to_vec()));
+    }
+
+    // The branch runs on a fresh stack: values it leaves on its stack are
+    // discarded and the outer values remain. The branch also ends in a literal
+    // push, which must not trap.
+    let result = run(wasm()
+        .push_bytes(b"outer")
+        .push_bytes(b"a")
+        .if_eq(b"a", wasm().push_bytes(b"inner"))
+        .reply_data_append()
+        .reply()
+        .build());
+    assert_eq!(result.unwrap(), WasmResult::Reply(b"outer".to_vec()));
+
+    // The branch cannot pop the outer values.
+    let err = run(wasm()
+        .push_bytes(b"outer")
+        .push_bytes(b"a")
+        .if_eq(b"a", wasm().reply_data_append().reply())
+        .build())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+}
+
+#[test]
 fn ic0_msg_caller_info_works_in_inspect_message() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
@@ -8745,6 +8791,76 @@ fn set_reserved_cycles_limit_below_existing_fails() {
     assert_eq!(err.code(), ErrorCode::ReservedCyclesLimitIsTooLow);
 }
 
+/// Multiple grows in one slice reserve exactly the total allocation's cost.
+/// The final state application must not reserve any additional cycles.
+#[test]
+fn memory_grows_without_pausing_need_no_storage_reservation_top_up() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(1_000_000_000)
+        .with_subnet_memory_threshold(500_000_000)
+        .with_subnet_memory_reservation(0)
+        .with_resource_saturation_scaling(2)
+        .with_instruction_limit(1_000_000_000)
+        .with_slice_instruction_limit(100_000_000)
+        .with_manual_execution()
+        .build();
+    let canister_id = test
+        .canister_from_wat(
+            r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+            (memory 1)
+            (func (export "canister_update update")
+                (if (i32.eq (memory.grow (i32.const 100)) (i32.const -1))
+                    (then (unreachable)))
+                (if (i64.eq (call $stable64_grow (i64.const 200)) (i64.const -1))
+                    (then (unreachable)))
+                (if (i32.eq (memory.grow (i32.const 300)) (i32.const -1))
+                    (then (unreachable)))
+                (call $msg_reply)))
+    "#,
+        )
+        .unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+        .unwrap();
+    // Start above the subnet memory threshold so every grow reserves a nonzero
+    // amount.
+    test.set_available_execution_memory(125_000_000);
+    let allocated_bytes = NumBytes::new(600 * WASM_PAGE_SIZE_IN_BYTES as u64);
+    let expected_reservation =
+        test.expected_storage_reservation_cycles(&test.subnet_memory_saturation(), allocated_bytes);
+    assert_gt!(expected_reservation, Cycles::zero());
+    let reserved_before = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+    let memory_before = test.canister_state(canister_id).execution_memory_usage();
+
+    let (message_id, _) = test.ingress_raw(canister_id, "update", vec![]);
+    test.execute_slice(canister_id);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .has_paused_execution_or_install_code()
+    );
+    assert_eq!(
+        test.ingress_result(&message_id),
+        Ok(WasmResult::Reply(vec![]))
+    );
+    assert_eq!(
+        test.canister_state(canister_id).execution_memory_usage() - memory_before,
+        allocated_bytes
+    );
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .reserved_balance()
+            - reserved_before,
+        expected_reservation
+    );
+}
+
 #[test]
 fn upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
     let mut test: ExecutionTest = ExecutionTestBuilder::new().build();
@@ -9405,6 +9521,86 @@ fn wasm_memory_limit_is_enforced_with_static_memory_in_init() {
     // The canister init is expected to fail.
     let err = test.install_canister(canister_id, wasm).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}
+
+/// Checks that the `WasmMemoryLimitExceeded` error reports the maximum Wasm
+/// memory size of the canister's Wasm execution mode (4GiB for Wasm32 and
+/// 6GiB for Wasm64), both when the limit is exceeded by `memory.grow` during
+/// execution and when it is already exceeded at the start of an update call.
+fn wasm_memory_limit_error_reports_max_wasm_memory_size(is_wasm64: bool) {
+    let mut test = ExecutionTestBuilder::new().build();
+    let (memory_type, grow_delta) = if is_wasm64 {
+        ("i64", "(i64.const 10)")
+    } else {
+        ("", "(i32.const 10)")
+    };
+    let wat = format!(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update grow")
+                (drop (memory.grow {grow_delta}))
+                (call $msg_reply)
+            )
+            (func (export "canister_update noop")
+                (call $msg_reply)
+            )
+            (memory {memory_type} 1)
+        )"#
+    );
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    assert_eq!(
+        test.execution_state(canister_id)
+            .wasm_execution_mode
+            .is_wasm64(),
+        is_wasm64
+    );
+
+    let expected_max_wasm_memory_size = if is_wasm64 {
+        ic_types::MAX_WASM64_MEMORY_IN_BYTES
+    } else {
+        ic_types::MAX_WASM_MEMORY_IN_BYTES
+    };
+    let expected_text = format!(
+        "If the canister reaches its maximum Wasm memory size of {expected_max_wasm_memory_size} bytes"
+    );
+
+    // Growing the memory by 10 pages exceeds a limit of usage + 5 pages, so
+    // the error is raised by `memory.grow` during execution.
+    set_wasm_memory_limit(
+        &mut test,
+        canister_id,
+        NumBytes::new(5 * WASM_PAGE_SIZE as u64),
+    );
+    let err = test.ingress(canister_id, "grow", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+    assert!(
+        err.description().contains(&expected_text),
+        "unexpected error description: {}",
+        err.description()
+    );
+
+    // The memory already exceeds a limit of 1 byte, so the error is raised at
+    // the start of the update call.
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1))
+        .unwrap();
+    let err = test.ingress(canister_id, "noop", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+    assert!(
+        err.description().contains(&expected_text),
+        "unexpected error description: {}",
+        err.description()
+    );
+}
+
+#[test]
+fn wasm_memory_limit_error_reports_max_wasm_memory_size_for_wasm32() {
+    wasm_memory_limit_error_reports_max_wasm_memory_size(false);
+}
+
+#[test]
+fn wasm_memory_limit_error_reports_max_wasm_memory_size_for_wasm64() {
+    wasm_memory_limit_error_reports_max_wasm_memory_size(true);
 }
 
 #[test]

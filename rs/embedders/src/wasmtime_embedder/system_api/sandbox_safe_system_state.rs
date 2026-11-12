@@ -15,8 +15,8 @@ use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{
     CanisterStatusType, CreateCanisterArgs, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, RenameCanisterArgs, UninstallCodeArgs,
-    UpdateSettingsArgs,
+    ProvisionalCreateCanisterWithCyclesArgs, RenameCanisterArgs, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -152,6 +152,19 @@ impl Default for SystemStateModifications {
             should_bump_canister_version: false,
         }
     }
+}
+
+/// Appends the given canister log records produced by an execution to the
+/// canister log of the given system state, leaving `delta_log` empty.
+pub fn append_canister_log<Metrics: CanisterLogMetrics>(
+    delta_log: &mut CanisterLog,
+    system_state: &mut SystemState,
+    metrics: &Metrics,
+) {
+    if !delta_log.is_empty() {
+        metrics.observe_delta_log_size(delta_log.bytes_used());
+    }
+    system_state.log_memory_store.append_delta_log(delta_log);
 }
 
 impl SystemStateModifications {
@@ -310,6 +323,8 @@ impl SystemStateModifications {
                 .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::RenameCanister) => RenameCanisterArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
+            Ok(Ic00Method::TakeCanisterSnapshot) => TakeCanisterSnapshotArgs::decode(payload)
+                .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::CanisterStatus)
             | Ok(Ic00Method::CanisterInfo)
@@ -344,7 +359,6 @@ impl SystemStateModifications {
             | Ok(Ic00Method::UploadChunk)
             | Ok(Ic00Method::StoredChunks)
             | Ok(Ic00Method::ClearChunkStore)
-            | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::ListCanisterSnapshots)
             | Ok(Ic00Method::DeleteCanisterSnapshot)
             | Ok(Ic00Method::ReadCanisterSnapshotMetadata)
@@ -391,12 +405,16 @@ impl SystemStateModifications {
         system_state: &mut SystemState,
         metrics: &Metrics,
     ) {
-        if !self.canister_log.is_empty() {
-            metrics.observe_delta_log_size(self.canister_log.bytes_used());
-        }
-        system_state
-            .log_memory_store
-            .append_delta_log(&mut self.canister_log);
+        append_canister_log(&mut self.canister_log, system_state, metrics);
+    }
+
+    /// Takes the canister log records produced by the execution, leaving the
+    /// delta log empty.
+    ///
+    /// The caller is responsible for persisting the returned canister log
+    /// records (see `append_canister_log()`).
+    pub fn take_canister_log(&mut self) -> CanisterLog {
+        self.canister_log.take()
     }
 
     /// Like `apply_canister_log()`, but appends the canister log records to

@@ -384,12 +384,21 @@ impl InstallCodeHelper {
                 num_bytes_try_from(es.wasm_memory.size).unwrap()
             });
 
+        // Use the execution mode of the newly installed module rather than
+        // `original.wasm_execution_mode`, which is only a charging default.
+        let wasm_execution_mode = self
+            .canister
+            .execution_state
+            .as_ref()
+            .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
+
         if let Some(wasm_memory_limit) = self.canister.system_state.wasm_memory_limit {
             // A Wasm memory limit of 0 means unlimited.
             if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
                 let err = HypervisorError::WasmMemoryLimitExceeded {
                     bytes: wasm_memory_usage,
                     limit: wasm_memory_limit,
+                    max_wasm_memory_size: wasm_execution_mode.max_wasm_memory_size(),
                 };
                 return finish_err(
                     clean_canister,
