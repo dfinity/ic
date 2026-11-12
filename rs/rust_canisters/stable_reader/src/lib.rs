@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 /// A helper to read information from stable memory and write to a writer, using
 /// a buffer. Expects the input to be length-prefix encoded.
 pub fn read(input: &mut impl Read, output: impl Write) -> std::io::Result<u32> {
-    let mut prefix = [0_u8; 4];
+    let mut prefix = [0_u8; size_of::<u32>()];
     input.read_exact(&mut prefix)?;
     let prefix = u32::from_le_bytes(prefix);
     let mut piped_bytes = 0_u32;
