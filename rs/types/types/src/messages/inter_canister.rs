@@ -121,9 +121,9 @@ pub struct Request {
     /// canister, as returned by `extract_effective_canister_id()`.
     ///
     /// Populated by `cache_effective_canister_id()`. `None` if not (yet)
-    /// populated or if the request has no effective canister ID. Boxed, so that
-    /// it only takes up the size of a pointer in all other requests. Not part of
-    /// the canonical (XNet stream) encoding.
+    /// populated or if the request has no effective canister ID. Persisted in
+    /// checkpoints, but not part of the canonical (XNet stream) encoding. Boxed,
+    /// so that it only takes up the size of a pointer in all other requests.
     pub effective_canister_id: Option<Box<CanisterId>>,
 }
 

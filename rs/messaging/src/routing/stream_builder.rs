@@ -414,10 +414,10 @@ impl StreamBuilderImpl {
         ///    peeked one.
         fn validated_next(
             iterator: &mut dyn PeekableOutputIterator,
-            expected_message: &RequestOrResponse,
+            expected_message: RequestOrResponse,
         ) -> RequestOrResponse {
             let message = iterator.next().unwrap();
-            debug_assert_eq!(&message, expected_message);
+            debug_assert_eq!(message, expected_message);
             message
         }
 
@@ -527,13 +527,10 @@ impl StreamBuilderImpl {
                         continue;
                     }
 
-                    // We will route (or reject) the message, pop it. Drop the peeked clone, so
-                    // that the popped message's `Arc` is (usually) not shared and
+                    // We will route (or reject) the message, pop it. This consumes the peeked
+                    // clone, so that the popped message's `Arc` is (usually) not shared and
                     // `Arc::make_mut()` below does not copy it.
-                    let mut msg = {
-                        let peeked = msg;
-                        validated_next(&mut output_iter, &peeked)
-                    };
+                    let mut msg = validated_next(&mut output_iter, msg);
 
                     let is_engine_dst =
                         !is_loopback_stream && dst_subnet_type == Some(SubnetType::CloudEngine);
@@ -672,11 +669,8 @@ impl StreamBuilderImpl {
                                 && let RequestOrResponse::Request(req) = &mut msg
                                 && req.receiver.get() == self.subnet_id.get()
                             {
-                                // Cache the effective canister ID of a request to the
-                                // management canister now, while its `Arc` is (usually) not
-                                // shared: upon induction, it is shared with the loopback
-                                // stream (and with any retained earlier state), so caching
-                                // it then would copy the request.
+                                // Optimization: cache the effective canister ID of a request to the
+                                // local management canister now, while its `Arc` is not shared.
                                 Request::cache_effective_canister_id(req);
                             }
                             dst_stream_entry.or_default().push(msg.into());
@@ -692,7 +686,7 @@ impl StreamBuilderImpl {
                 None => {
                     warn!(self.log, "No route to canister {}", msg.receiver());
                     self.observe_message_status(&msg, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND);
-                    match validated_next(&mut output_iter, &msg) {
+                    match validated_next(&mut output_iter, msg) {
                         // A Request: generate a reject Response.
                         RequestOrResponse::Request(req) => {
                             requests_to_reject.push(req);
