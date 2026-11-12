@@ -1,12 +1,14 @@
+use actix_web::dev::ServiceRequest;
+use actix_web::http::Method as ActixMethod;
 use actix_web_prom::{PrometheusMetrics, PrometheusMetricsBuilder};
 use axum::{
     body::{Body, to_bytes},
-    extract::Request,
+    extract::{MatchedPath, Request},
     response::Response,
 };
 use bytes::Bytes;
 use prometheus::{
-    Encoder, GaugeVec, HistogramTimer, HistogramVec, IntCounterVec, IntGaugeVec,
+    Encoder, GaugeVec, HistogramTimer, HistogramVec, IntCounterVec, IntGaugeVec, Registry,
     register_gauge_vec, register_histogram_vec, register_int_counter_vec, register_int_gauge_vec,
 };
 use serde_json::Value;
@@ -19,7 +21,45 @@ use tower::{Layer, Service};
 
 use lazy_static::lazy_static;
 
+#[cfg(test)]
+mod tests;
+
+/// Endpoint label used for requests that do not match any registered route.
+pub const UNMATCHED_ENDPOINT_LABEL: &str = "UNMATCHED";
+
+/// Method label used for requests whose HTTP method is not a standard one.
+pub const OTHER_METHOD_LABEL: &str = "OTHER";
+
+/// Maps an HTTP method to a label value from a fixed set, so that the
+/// number of distinct `method` label values stays bounded.
+pub fn http_method_label(method: &str) -> &'static str {
+    match method {
+        "GET" => "GET",
+        "HEAD" => "HEAD",
+        "POST" => "POST",
+        "PUT" => "PUT",
+        "DELETE" => "DELETE",
+        "CONNECT" => "CONNECT",
+        "OPTIONS" => "OPTIONS",
+        "TRACE" => "TRACE",
+        "PATCH" => "PATCH",
+        _ => OTHER_METHOD_LABEL,
+    }
+}
+
+/// Replaces a non-standard HTTP method of an actix request with
+/// [`OTHER_METHOD_LABEL`], so that the `method` label recorded by the actix
+/// HTTP metrics middleware stays bounded. Must run before that middleware.
+pub fn normalize_http_method(req: &mut ServiceRequest) {
+    if http_method_label(req.method().as_str()) == OTHER_METHOD_LABEL {
+        req.head_mut().method = OTHER_METHOD.clone();
+    }
+}
+
 lazy_static! {
+    static ref OTHER_METHOD: ActixMethod =
+        ActixMethod::from_bytes(OTHER_METHOD_LABEL.as_bytes()).unwrap();
+
     static ref ENDPOINTS_METRICS: RosettaEndpointsMetrics = RosettaEndpointsMetrics::new();
 
     static ref VERIFIED_HEIGHT: IntGaugeVec = register_int_gauge_vec!(
@@ -228,8 +268,7 @@ impl RosettaMetrics {
             return metrics.clone();
         }
 
-        let registry = prometheus::default_registry().clone();
-        let metrics = PrometheusMetricsBuilder::new("rosetta").registry(registry);
+        let metrics = http_metrics_builder(prometheus::default_registry().clone());
 
         let metrics = if expose {
             metrics.endpoint("/metrics").build().unwrap()
@@ -263,6 +302,12 @@ impl RosettaMetrics {
         let mut map = CANISTER_DISPLAY_NAMES.lock().unwrap();
         map.insert(canister_id, display_name);
     }
+}
+
+fn http_metrics_builder(registry: Registry) -> PrometheusMetricsBuilder {
+    PrometheusMetricsBuilder::new("rosetta")
+        .registry(registry)
+        .mask_unmatched_patterns(UNMATCHED_ENDPOINT_LABEL)
 }
 
 // Axum middleware implementation for Rosetta metrics
@@ -323,8 +368,12 @@ where
             return Box::pin(async { Ok(response) });
         }
 
-        let path = req.uri().path().to_owned();
-        let method = req.method().to_string();
+        let path = req
+            .extensions()
+            .get::<MatchedPath>()
+            .map(|matched_path| matched_path.as_str().to_owned())
+            .unwrap_or_else(|| UNMATCHED_ENDPOINT_LABEL.to_owned());
+        let method = http_method_label(req.method().as_str());
         let default_metrics = self.default_metrics.clone();
         let mut inner = self.inner.clone();
 
@@ -366,13 +415,13 @@ where
                     metrics.inc_api_status_count(&status);
 
                     // Record request duration with status
-                    metrics.observe_request_duration(&path, &method, &status, duration);
+                    metrics.observe_request_duration(&path, method, &status, duration);
                 }
                 Err(_) => {
                     metrics.inc_api_status_count("error");
 
                     // Record request duration with error status
-                    metrics.observe_request_duration(&path, &method, "error", duration);
+                    metrics.observe_request_duration(&path, method, "error", duration);
                 }
             }
 

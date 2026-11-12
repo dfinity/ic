@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Fixed
+- Bound the cardinality of HTTP metric labels: requests are labelled with their route template, requests to unknown paths are recorded under a single `UNMATCHED` endpoint label and non-standard HTTP methods under a single `OTHER` method label.
 
 ## [1.2.10] - 2026-07-02
 ### Added
