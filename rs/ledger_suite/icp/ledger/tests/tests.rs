@@ -1886,7 +1886,6 @@ fn test_icrc21_legacy_transfer_incorrect_fee() {
 
 #[test]
 fn test_icrc21_legacy_transfer_rejects_arg_exceeding_limits() {
-    // Step 1: Prepare the world.
     let env = StateMachine::new();
     let payload = LedgerCanisterInitPayload::builder()
         .minting_account(MINTER.into())
@@ -1917,19 +1916,14 @@ fn test_icrc21_legacy_transfer_rejects_arg_exceeding_limits() {
         },
     };
 
-    // A second argument that is a vector of u32::MAX `null` values. It takes only a few bytes,
-    // because `null` values take no bytes. The encoding ends with the length of the empty vector
-    // (0), which is replaced with the LEB128 encoding of u32::MAX.
     let mut arg_with_large_vec = Encode!(&transfer_args, &Vec::<()>::new()).unwrap();
     assert_eq!(arg_with_large_vec.pop(), Some(0));
     arg_with_large_vec.extend_from_slice(&[0xff, 0xff, 0xff, 0xff, 0x0f]);
     assert!(arg_with_large_vec.len() <= MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize);
 
-    // A second argument that makes the arg exceed the size limit.
     let padding = vec![0_u8; MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize];
     let oversized_arg = Encode!(&transfer_args, &padding).unwrap();
 
-    // Step 2: Run the code under test.
     let large_vec_result = icrc21_consent_message(
         &env,
         canister_id,
@@ -1949,7 +1943,6 @@ fn test_icrc21_legacy_transfer_rejects_arg_exceeding_limits() {
         new_request(Encode!(&transfer_args).unwrap()),
     );
 
-    // Step 3: Verify result(s).
     match large_vec_result {
         Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo { description })) => {
             assert!(

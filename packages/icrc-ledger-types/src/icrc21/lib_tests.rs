@@ -2,7 +2,6 @@ use super::*;
 use crate::icrc21::requests::ConsentMessageSpec;
 use candid::Encode;
 
-/// LEB128 encoding of `u32::MAX`.
 const U32_MAX_LEB128: [u8; 5] = [0xff, 0xff, 0xff, 0xff, 0x0f];
 
 fn new_account(id: u8) -> Account {
@@ -29,31 +28,25 @@ fn new_consent_message_request(method: &str, arg: Vec<u8>) -> ConsentMessageRequ
 fn build_consent_info(method: &str, arg: Vec<u8>) -> Result<ConsentInfo, Icrc21Error> {
     build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
         new_consent_message_request(method, arg),
-        new_account(1).owner,  // caller
-        Nat::from(10_000_u64), // ledger fee
+        new_account(1).owner,
+        Nat::from(10_000_u64),
         "TOK".to_string(),
         "Token".to_string(),
-        8, // decimals
+        8,
     )
 }
 
-/// Returns the encoding of `valid_arg` followed by a second argument, a vector of `u32::MAX`
-/// `null` values. The vector takes only a few bytes, because `null` values take no bytes.
 fn append_large_vec_of_nulls<T: CandidType>(valid_arg: &T) -> Vec<u8> {
     let mut arg = Encode!(valid_arg, &Vec::<()>::new()).unwrap();
-    // The encoding ends with the length of the empty vector (0). Replace it with u32::MAX.
     assert_eq!(arg.pop(), Some(0));
     arg.extend_from_slice(&U32_MAX_LEB128);
     arg
 }
 
-/// A consent message request case for one ICRC-1/ICRC-2 method.
 struct Case {
     method: &'static str,
     valid_arg: Vec<u8>,
-    /// `valid_arg` followed by a large trailing vector of `null` values.
     large_arg: Vec<u8>,
-    /// The result of decoding `large_arg` as the method's argument type.
     large_arg_decode_result: Result<(), candid::Error>,
 }
 
@@ -127,29 +120,21 @@ fn test_build_icrc21_consent_info_rejects_arg_exceeding_skipping_quota() {
             large_arg_decode_result,
         } = case;
 
-        // Step 1: Prepare the world. The large arg must fit within the size limit, so that only
-        // the skipping quota can stop it.
         assert!(
             large_arg.len() <= MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize,
             "{method}: {} bytes",
             large_arg.len()
         );
 
-        // Step 2: Run the code under test.
         let large_result = build_consent_info(method, large_arg);
         let valid_result = build_consent_info(method, valid_arg);
 
-        // Step 3: Verify result(s).
-
-        // Step 3.1: The root cause is the skipping quota, not some other limit. (The error
-        // description only shows the outermost context of the decoding error.)
         let decode_error = large_arg_decode_result.expect_err(method);
         assert!(
             format!("{decode_error:?}").contains("Skipping cost exceeds the limit"),
             "{method}: {decode_error:?}"
         );
 
-        // Step 3.2: The large arg is rejected.
         match large_result {
             Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo { description })) => {
                 assert!(
@@ -160,7 +145,6 @@ fn test_build_icrc21_consent_info_rejects_arg_exceeding_skipping_quota() {
             other => panic!("{method}: expected UnsupportedCanisterCall, got {other:?}"),
         }
 
-        // Step 3.3: The valid arg still produces a consent message.
         assert!(valid_result.is_ok(), "{method}: {valid_result:?}");
     }
 }
