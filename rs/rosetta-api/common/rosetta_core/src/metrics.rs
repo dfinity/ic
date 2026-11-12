@@ -302,6 +302,14 @@ impl RosettaMetrics {
         let mut map = CANISTER_DISPLAY_NAMES.lock().unwrap();
         map.insert(canister_id, display_name);
     }
+
+    fn registered_for_canister_id(canister_id: String) -> Option<Self> {
+        let map = CANISTER_DISPLAY_NAMES.lock().unwrap();
+        map.get(&canister_id).map(|display_name| Self {
+            token_display_name: display_name.clone(),
+            canister_id,
+        })
+    }
 }
 
 fn http_metrics_builder(registry: Registry) -> PrometheusMetricsBuilder {
@@ -387,14 +395,10 @@ where
                 Err(_) => (None, Body::empty()),
             };
 
-            // Use display name from map or default
-            let metrics = match canister_id {
-                Some(id) => {
-                    let display_name = RosettaMetrics::get_display_name_from_canister_id(&id);
-                    RosettaMetrics::new(display_name, id)
-                }
-                None => default_metrics,
-            };
+            // Use the registered display name, or the default for unknown canister IDs
+            let metrics = canister_id
+                .and_then(RosettaMetrics::registered_for_canister_id)
+                .unwrap_or(default_metrics);
 
             // Reconstruct request with the buffered body
             let req = Request::from_parts(parts, reconstructed_body);
