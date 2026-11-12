@@ -367,6 +367,12 @@ Users burn ckBTC to withdraw real BTC to a specified Bitcoin address.
 - **AND** the `from_subaccount` parameter allows burning from a specific subaccount
 - **AND** insufficient allowance returns `InsufficientAllowance`
 
+#### Scenario: ICRC-21 consent message for retrieve_btc_with_approval
+- **WHEN** anyone, including the anonymous principal, calls the `icrc21_canister_call_consent_message` update method of the ckBTC minter
+- **THEN** an argument larger than `MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES` (500 bytes) is rejected with `UnsupportedCanisterCall`, and only `retrieve_btc_with_approval` is supported; any other method is rejected with `UnsupportedCanisterCall`
+- **AND** the `RetrieveBtcWithApprovalArgs` argument is decoded with a Candid `DecoderConfig` whose skipping quota is 10,000, the same limit the `ic_cdk` endpoint macros apply to `retrieve_btc_with_approval` itself, so values of zero-sized types (e.g. a trailing `vec null` declaring `u32::MAX` elements in a few bytes) cannot make the minter burn cycles stepping through them; an argument exceeding the quota is rejected with `UnsupportedCanisterCall` ("Failed to decode RetrieveBtcWithApprovalArgs: …")
+- **AND** the destination address is validated for the minter's network, and the message is returned in English, as a `GenericDisplay` or `FieldsDisplay` message per the request's device spec (`GenericDisplay` by default)
+
 ---
 
 ### Requirement: ckBTC Minter - Transaction Building and Signing

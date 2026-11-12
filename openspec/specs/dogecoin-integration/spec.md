@@ -215,3 +215,7 @@ The ckDOGE minter reuses the ckBTC deposit and withdrawal flow with Dogecoin-spe
 - **AND** ckDOGE tokens are burned from the user's account
 - **AND** a Dogecoin transaction is constructed and signed
 - **AND** the transaction is broadcast via the Dogecoin canister
+
+#### Scenario: ICRC-21 consent message for retrieve_doge_with_approval
+- **WHEN** anyone calls the ckDOGE minter's `icrc21_canister_call_consent_message` update method for `retrieve_doge_with_approval`
+- **THEN** it behaves as the ckBTC minter's ICRC-21 endpoint: the argument is limited to 500 bytes and decoded with a Candid skipping quota of 10,000, the same as the `ic_cdk` endpoint macros apply to `retrieve_doge_with_approval`, so a tiny argument declaring a huge vector of zero-sized values is rejected with `UnsupportedCanisterCall` instead of burning the minter's cycles
