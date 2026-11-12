@@ -25,6 +25,12 @@ The PocketIC server manages the lifecycle of IC emulation instances.
 - **WHEN** multiple instances are created
 - **THEN** each instance operates independently with its own state
 
+#### Scenario: Client library downloads the server binary when none is usable
+- **WHEN** the `pocket-ic` client library starts a server (`start_server`) and neither `PocketIcBuilder::with_server_binary` nor `POCKET_IC_BIN` names a binary that passes the version check
+- **THEN** it downloads `pocket-ic-<arch>-<os>.gz` for `LATEST_SERVER_VERSION` from the `dfinity/pocketic` GitHub releases into `<temp dir>/pocket-ic-server-<version>/pocket-ic`, decompresses it, and syncs it to disk before reporting success
+- **AND** the download fails if the response has an HTTP error status, and fails if decompressing or writing the binary fails; on failure the partially written binary is removed and the library panics with the error, rather than leaving a corrupted binary behind
+- **AND** if the binary was named explicitly and fails the version check, the library panics instead of downloading; if another test is already downloading the default binary, it waits up to 60 seconds for that binary to pass the version check
+
 ---
 
 ### Requirement: Instance Configuration
