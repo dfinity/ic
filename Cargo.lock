@@ -17845,6 +17845,7 @@ dependencies = [
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "rejoin-test-lib",
+ "serde_json",
  "slog",
  "tempfile",
  "tokio",

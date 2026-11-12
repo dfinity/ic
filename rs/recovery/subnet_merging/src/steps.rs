@@ -30,7 +30,7 @@ use url::Url;
 
 use std::{
     net::{IpAddr, Ipv6Addr},
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::Duration,
 };
 
@@ -508,7 +508,7 @@ impl Step for MergeStatesStep {
              record the height and the state hash the recovery of the destination subnet needs.",
             self.layout.work_dir(TargetSubnet::Source).display(),
             self.layout.work_dir(TargetSubnet::Destination).display(),
-            self.layout.work_dir(TargetSubnet::Merged).display(),
+            self.layout.merged_work_dir().display(),
         )
     }
 
@@ -531,9 +531,7 @@ impl Step for MergeStatesStep {
         // The recovery CUP is created at the next recovery height above the one
         // the destination subnet halted at, exactly as in any other recovery.
         let merged_height = Recovery::get_recovery_height(destination_height);
-        let merged_checkpoint = self
-            .layout
-            .checkpoint_dir(TargetSubnet::Merged, merged_height);
+        let merged_checkpoint = self.layout.merged_checkpoint_dir(merged_height);
 
         info!(
             self.logger,
@@ -546,7 +544,16 @@ impl Step for MergeStatesStep {
         // every merged checkpoint left over from an earlier run of this step
         // is removed first, whatever its height. The downloaded checkpoints of
         // the two subnets are in other directories and stay untouched.
-        remove_dir(&self.layout.checkpoints_dir(TargetSubnet::Merged))?;
+        //
+        // The manifest and the params of an earlier run go with it, so that
+        // the params, which are written last, only ever describe a merged
+        // state that is complete, also if this run fails halfway.
+        let manifest_path = self.layout.merged_state_manifest_file();
+        let params_path = self.layout.merged_state_params_file();
+        for path in [&params_path, &manifest_path] {
+            remove_file_if_exists(path)?;
+        }
+        remove_dir(&self.layout.merged_checkpoints_dir())?;
 
         info!(self.logger, "Merging the states");
         state_tool_helper::merge_checkpoints(
@@ -556,7 +563,6 @@ impl Step for MergeStatesStep {
         )?;
 
         info!(self.logger, "Computing the manifest of the merged state");
-        let manifest_path = self.layout.merged_state_manifest_file();
         state_tool_helper::compute_manifest(&merged_checkpoint, &manifest_path)?;
 
         // The state hash is the root hash of the manifest, taken from the
@@ -567,16 +573,14 @@ impl Step for MergeStatesStep {
             .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
 
         // The upload step fails if the states metadata is missing, so copy the
-        // destination subnet's. Its heights don't match the merged checkpoint,
-        // but that is harmless: it is only a manifest cache, which the state
-        // manager recomputes when stale (as in a plain subnet recovery).
+        // destination subnet's. It doesn't describe the merged checkpoint, but
+        // that is harmless: it is only a manifest cache, so the node the merged
+        // state is uploaded to recomputes the merged manifest when it starts.
         std::fs::copy(
             self.layout
                 .ic_state_dir(TargetSubnet::Destination)
                 .join(STATES_METADATA),
-            self.layout
-                .ic_state_dir(TargetSubnet::Merged)
-                .join(STATES_METADATA),
+            self.layout.merged_ic_state_dir().join(STATES_METADATA),
         )
         .map_err(|err| {
             RecoveryError::UnexpectedError(format!("Failed to copy the states metadata: {err}"))
@@ -588,6 +592,16 @@ impl Step for MergeStatesStep {
         };
         info!(self.logger, "The merged state: {params:?}");
 
-        params.write(&self.layout.merged_state_params_file())
+        params.write(&params_path)
+    }
+}
+
+/// Removes the file at `path`, which need not exist.
+fn remove_file_if_exists(path: &Path) -> RecoveryResult<()> {
+    match std::fs::remove_file(path) {
+        Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
+            Err(RecoveryError::file_error(path, err))
+        }
+        _ => Ok(()),
     }
 }

@@ -11,9 +11,10 @@ is one that the subnet does not satisfy to begin with; and that once the tool
 subnet rejects ingress messages and query calls, the tool eventually finds the
 condition to hold, and it then halts the subnet and the subnet it is told to
 merge it into at their next CUP, downloads and validates the state each halted
-at, and assembles the merged state from them. The cooling down subnet also holds calls waiting for responses that
-never arrive: they are not drained, but make it possible to assert that a
-subnet merge populates the ingress history properly.
+at, and assembles the merged state from them. The cooling down subnet also
+holds calls waiting for responses that never arrive: they are not drained, but
+make it possible to assert that a subnet merge populates the ingress history
+properly.
 
 The subnet that is cooled down, i.e. the one that would be merged away, is
 called `M`, and the Application subnet the tool is told to merge `M` into is
@@ -109,7 +110,9 @@ Runbook::
    canisters and canister snapshots of `M` added to it, and records its height
    and state hash. Neither subnet nor the registry is touched.
 16. After `MergeStates`: check that the merged state is a single checkpoint that
-   holds both a canister of `M` (`UM`) and a canister of `R` (`UR`).
+   holds both a canister of `M` (`UM`) and a canister of `R` (`UR`), that it
+   comes with the states metadata uploading it requires, and that the recorded
+   height is the height of that checkpoint.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -126,8 +129,8 @@ use candid::Principal;
 use ic_agent::Agent;
 use ic_agent::agent::RejectCode;
 use ic_recovery::{
-    CHECKPOINTS, IC_STATE, RECOVERY_DIRECTORY_NAME, RecoveryArgs, get_node_metrics,
-    util::DataLocation,
+    CHECKPOINTS, IC_STATE, RECOVERY_DIRECTORY_NAME, RecoveryArgs, STATES_METADATA,
+    get_node_metrics, util::DataLocation,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_merging::metrics_helper::{
@@ -672,16 +675,17 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
 
 /// Step 16: check that the merged state the tool assembled is a single
 /// checkpoint, and that it holds a canister of each of the two subnets: `UM`,
-/// which `M` hosted, and `UR`, which `R` hosted.
+/// which `M` hosted, and `UR`, which `R` hosted; and that the tool left what
+/// recovering the destination subnet at it needs: the states metadata next to
+/// the checkpoint, and the height of the checkpoint in the recorded params.
 fn check_merged_state(env: &TestEnv, context: &Context<'_>) {
     let logger = &context.logger;
-    let checkpoints_dir = env
-        .get_path(MERGING_DIR)
-        .join(RECOVERY_DIRECTORY_NAME)
+    let recovery_dir = env.get_path(MERGING_DIR).join(RECOVERY_DIRECTORY_NAME);
+    let ic_state_dir = recovery_dir
         .join("merged_working_dir")
         .join("data")
-        .join(IC_STATE)
-        .join(CHECKPOINTS);
+        .join(IC_STATE);
+    let checkpoints_dir = ic_state_dir.join(CHECKPOINTS);
     let checkpoints: Vec<_> = std::fs::read_dir(&checkpoints_dir)
         .unwrap_or_else(|e| panic!("failed to read {}: {e}", checkpoints_dir.display()))
         .map(|entry| entry.expect("failed to read a directory entry").path())
@@ -709,6 +713,33 @@ fn check_merged_state(env: &TestEnv, context: &Context<'_>) {
             canister_dir.display(),
         );
     }
+
+    let states_metadata = ic_state_dir.join(STATES_METADATA);
+    assert!(
+        states_metadata.is_file(),
+        "the merged state lacks {}",
+        states_metadata.display(),
+    );
+
+    // A checkpoint is named after the hex encoding of its height.
+    let checkpoint_name = checkpoint
+        .file_name()
+        .and_then(|name| name.to_str())
+        .expect("the merged checkpoint has no name");
+    let height = u64::from_str_radix(checkpoint_name, 16)
+        .unwrap_or_else(|e| panic!("{checkpoint_name} is not a checkpoint name: {e}"));
+    let params_file = recovery_dir.join("merged_state_params.json");
+    let params = std::fs::read_to_string(&params_file)
+        .unwrap_or_else(|e| panic!("failed to read {}: {e}", params_file.display()));
+    let params: serde_json::Value = serde_json::from_str(&params)
+        .unwrap_or_else(|e| panic!("failed to parse {}: {e}", params_file.display()));
+    assert_eq!(
+        params["height"].as_u64(),
+        Some(height),
+        "{} does not record the height of the merged checkpoint {checkpoint_name}: {params}",
+        params_file.display(),
+    );
+
     info!(
         logger,
         "Step 16 done: the merged checkpoint {} holds UM and UR",
