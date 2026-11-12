@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Bound the cardinality of HTTP metric labels: requests are labelled with their route template, requests to unknown paths are recorded under a single `UNMATCHED` endpoint label and non-standard HTTP methods under a single `OTHER` method label.
 - Record HTTP metrics for requests whose network identifier does not match a configured token under the default token label instead of the raw network identifier.
+### Changed
+- The `token_display_name` label of HTTP metrics for a configured token is now its display name (e.g. `ckBTC-mxzaz`), consistent with the other token metrics, instead of its ledger canister ID.
 
 ## [1.2.10] - 2026-07-02
 ### Added
