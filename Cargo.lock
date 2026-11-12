@@ -21458,6 +21458,7 @@ dependencies = [
 name = "rosetta-core"
 version = "0.9.0"
 dependencies = [
+ "actix-web",
  "actix-web-prom",
  "anyhow",
  "axum",

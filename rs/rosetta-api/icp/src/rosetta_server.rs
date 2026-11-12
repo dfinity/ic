@@ -9,11 +9,11 @@ use crate::{
 use actix_rt::time::interval;
 use actix_web::{
     App, HttpResponse, HttpServer,
-    dev::{Server, ServerHandle},
+    dev::{Server, ServerHandle, Service as _},
     get, post, web,
 };
 
-use rosetta_core::metrics::RosettaMetrics;
+use rosetta_core::metrics::{RosettaMetrics, normalize_http_method};
 use rosetta_core::watchdog::WatchdogThread;
 use std::{
     io,
@@ -293,6 +293,10 @@ impl RosettaApiServer {
         let server = HttpServer::new(move || {
             App::new()
                 .wrap(http_metrics_wrapper.clone())
+                .wrap_fn(|mut req, srv| {
+                    normalize_http_method(&mut req);
+                    srv.call(req)
+                })
                 .app_data(web::Data::new(
                     web::JsonConfig::default()
                         .limit(4 * 1024 * 1024)
