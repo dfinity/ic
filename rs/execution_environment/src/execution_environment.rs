@@ -3407,8 +3407,7 @@ impl ExecutionEnvironment {
     ///
     /// Charges no round instructions: every field comes from adding up a fixed
     /// number of already-aggregated `SubnetMetrics` fields, so there is no work
-    /// here to price. See the `counts_toward_round_limit: false` grouping in
-    /// `ic00_permissions.rs`.
+    /// here to price.
     fn subnet_metrics(
         &self,
         state: &ReplicatedState,

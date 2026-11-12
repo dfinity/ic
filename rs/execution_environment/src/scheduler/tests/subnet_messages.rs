@@ -7,14 +7,13 @@ use super::super::*;
 use super::zero_instruction_overhead_config;
 use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_management_canister_types_private::{
-    CanisterIdRecord, EmptyBlob, FetchCanisterLogsRequest, Method, Payload as _,
-};
+use ic_management_canister_types_private::{CanisterIdRecord, EmptyBlob, Method, Payload as _};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::{CanisterQueuesTesting, ReplicatedStateTesting};
 use ic_test_utilities_metrics::{HistogramStats, fetch_histogram_vec_stats, labels};
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::RequestBuilder;
+use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
 use ic_types_cycles::CompoundCycles;
 use ic_types_test_utils::ids::canister_test_id;
@@ -246,90 +245,43 @@ fn scheduler_executes_postponed_raw_rand_requests() {
     );
 }
 
-/// `drain_subnet_queues` skips the input queues with subnet calls that count
-/// toward the round limit, after the instruction limit was reached.
+/// `drain_subnet_queues` stops executing subnet messages (of any kind) once the
+/// round instruction limit has been reached.
 #[test]
-fn drain_subnet_queues_skips_heavy_subnet_calls_when_instructions_reached() {
-    const SLICE: u64 = 100;
-
+fn drain_subnet_queues_stops_when_instructions_reached() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            max_instructions_per_round: NumInstructions::from(SLICE),
-            max_instructions_per_message: NumInstructions::from(SLICE),
-            max_instructions_per_slice: NumInstructions::from(SLICE),
-            max_instructions_per_install_code_slice: NumInstructions::from(SLICE),
+            // Subnet messages get a budget of a single instruction.
+            max_instructions_per_round: NumInstructions::from(SUBNET_MESSAGES_LIMIT_FRACTION),
             ..zero_instruction_overhead_config()
         })
         .build();
-
     let canister = test.create_canister();
-
     let xnet_canister_id = test.xnet_canister_id();
-    let remote_canister_1 = canister_test_id(169);
-    let remote_canister_2 = canister_test_id(2197);
 
-    // CanisterStatus — counts_toward_round_limit: false.
-    fn inject_canister_status_call(
-        test: &mut SchedulerTest,
-        caller: CanisterId,
-        target: CanisterId,
-    ) {
-        test.inject_call_to_ic00(
-            Method::CanisterStatus,
-            CanisterIdRecord::from(target).encode(),
-            Cycles::zero(),
-            caller,
-            InputQueueType::RemoteSubnet,
-        );
-    }
-
-    // Two management canister calls from `xnet_canister_id`.
-    //
-    // The `InstallCode` counts toward the round limit, but gets executed while the
-    // `100 / 16` instruction budget is fully available. It consumes the entire
-    // budget, so no other messages that count toward the round limit get executed.
-    // The `CanisterStatus` does not count toward the round limit, so it gets
-    // executed regardless of the instruction budget.
-    let install_code = TestInstallCode::Reinstall {
-        init: instructions(SLICE / SUBNET_MESSAGES_LIMIT_FRACTION + 1),
-    };
-    test.inject_install_code_call_to_ic00(canister, install_code);
-    inject_canister_status_call(&mut test, xnet_canister_id, canister);
-
-    // Two calls from `remote_canister_1`.
-    //
-    // The `FetchCanisterLogs` counts toward the round limit, so the whole input
-    // queue gets skipped. The `CanisterStatus` does not count toward the round
-    // limit but never gets executed because the queue got skipped.
+    // The `InstallCode` consumes the entire budget.
+    test.inject_install_code_call_to_ic00(
+        canister,
+        TestInstallCode::Reinstall {
+            init: instructions(1),
+        },
+    );
+    // A cheap call in a different input queue (from a different sender).
     test.inject_call_to_ic00(
-        Method::FetchCanisterLogs,
-        FetchCanisterLogsRequest::new(canister).encode(),
+        Method::CanisterStatus,
+        CanisterIdRecord::from(canister).encode(),
         Cycles::zero(),
-        remote_canister_1,
+        canister_test_id(169),
         InputQueueType::RemoteSubnet,
     );
-    // CanisterStatus — counts_toward_round_limit: false.
-    inject_canister_status_call(&mut test, remote_canister_1, canister);
-
-    // Two calls from `remote_canister_2`.
-    //
-    // Neither counts toward the round limit, so both should get executed.
-    inject_canister_status_call(&mut test, remote_canister_2, canister);
-    inject_canister_status_call(&mut test, remote_canister_2, canister);
-
-    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 6);
 
     let mut new_state = test.drain_subnet_messages();
 
+    // Only the `InstallCode` was executed.
     let queues = new_state.subnet_queues_mut();
-    // The two calls from `remote_canister_2` were not executed.
-    assert_eq!(queues.input_queues_message_count(), 2);
-    // The other 4 calls were executed.
-    assert_eq!(queues.output_queues_message_count(), 4);
+    assert_eq!(queues.input_queues_message_count(), 1);
+    assert_eq!(queues.output_queues_message_count(), 1);
     assert!(queues.pop_canister_output(&xnet_canister_id).is_some());
-    assert!(queues.pop_canister_output(&xnet_canister_id).is_some());
-    assert!(queues.pop_canister_output(&remote_canister_2).is_some());
-    assert!(queues.pop_canister_output(&remote_canister_2).is_some());
 }
 
 /// Subnet messages with `does_not_run_on_aborted_canister` are skipped when
@@ -337,16 +289,8 @@ fn drain_subnet_queues_skips_heavy_subnet_calls_when_instructions_reached() {
 /// Messages without the flag execute normally.
 #[test]
 fn drain_subnet_queues_skips_messages_targeting_aborted_canister() {
-    const SLICE: u64 = 10;
     let mut test = SchedulerTestBuilder::new()
-        .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(SLICE),
-            max_instructions_per_message: NumInstructions::from(SLICE * 10),
-            max_instructions_per_slice: NumInstructions::from(SLICE),
-            max_instructions_per_install_code_slice: NumInstructions::from(SLICE),
-            ..zero_instruction_overhead_config()
-        })
+        .with_scheduler_config(zero_instruction_overhead_config())
         .build();
     let canister = test.create_canister();
 
@@ -360,9 +304,17 @@ fn drain_subnet_queues_skips_messages_targeting_aborted_canister() {
     controllers.insert(xnet_caller_2.get());
     controllers.insert(xnet_caller_3.get());
 
-    // Start and immediately abort a long execution.
-    test.send_ingress(canister, ingress(SLICE * 10));
-    test.execute_round(ExecutionRoundType::CheckpointRound);
+    // Have an aborted execution on the canister.
+    test.canister_state_mut(canister)
+        .system_state
+        .task_queue
+        .enqueue(ExecutionTask::AbortedExecution {
+            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::zero(),
+                CanisterCyclesCostSchedule::Normal,
+            ),
+        });
 
     // StopCanister — does_not_run_on_aborted_canister: true → skipped.
     let canister_id_payload = Encode!(&CanisterIdRecord::from(canister)).unwrap();
@@ -374,10 +326,10 @@ fn drain_subnet_queues_skips_messages_targeting_aborted_canister() {
         InputQueueType::RemoteSubnet,
     );
 
-    // FetchCanisterLogs — does_not_run_on_aborted_canister: true → skipped.
+    // UninstallCode — does_not_run_on_aborted_canister: true → skipped.
     test.inject_call_to_ic00(
-        Method::FetchCanisterLogs,
-        FetchCanisterLogsRequest::new(canister).encode(),
+        Method::UninstallCode,
+        canister_id_payload.clone(),
         Cycles::zero(),
         xnet_caller_2,
         InputQueueType::RemoteSubnet,
@@ -460,21 +412,20 @@ mod can_execute_subnet_msg_tests {
     use candid::CandidType;
     use ic_management_canister_types_private::TakeCanisterSnapshotArgs;
     use ic_replicated_state::canister_state::system_state::PausedExecutionId;
-    use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 
     /// Fixture for testing `can_execute_subnet_msg()`. By default, tests are run
-    /// with no instructions left and a paused install code on a third party local
-    /// canister, i.e. the most restrictive case.
+    /// with ample instructions and a paused install code on a third party local
+    /// canister.
     struct CanExecuteSubnetMsgTest {
         test: SchedulerTest,
         canister: CanisterId,
     }
 
     impl CanExecuteSubnetMsgTest {
-        /// Creates a fixture witn no istructions left and a paused install code (on a
+        /// Creates a fixture with ample instructions and a paused install code (on a
         /// third party local canister).
         fn new() -> Self {
-            Self::with_instruction_limit(0)
+            Self::with_instruction_limit(1_000_000_000)
         }
 
         /// Creates a fixture with the given instruction limit and a paused install code
@@ -603,24 +554,13 @@ mod can_execute_subnet_msg_tests {
     }
 
     #[test]
-    fn method_that_counts_toward_round_limit_is_skipped_when_instructions_reached() {
+    fn heavy_method_is_executed_when_instructions_available() {
         let mut test = CanExecuteSubnetMsgTest::new();
 
         test.inject_call(
             Method::TakeCanisterSnapshot,
             &TakeCanisterSnapshotArgs::new(test.canister, None, None, None),
         );
-
-        assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
-        let new_state = test.drain_subnet_messages();
-        assert_eq!(new_state.subnet_queues().input_queues_message_count(), 1);
-    }
-
-    #[test]
-    fn method_that_does_not_count_toward_round_limit_is_executed_when_instructions_reached() {
-        let mut test = CanExecuteSubnetMsgTest::new();
-
-        test.inject_canister_status_call(test.canister);
 
         assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
         let new_state = test.drain_subnet_messages();
@@ -665,7 +605,7 @@ mod can_execute_subnet_msg_tests {
 
     #[test]
     fn install_code_is_skipped_with_ongoing_long_install_code() {
-        let mut test = CanExecuteSubnetMsgTest::with_instruction_limit(1_000_000_000);
+        let mut test = CanExecuteSubnetMsgTest::new();
 
         test.inject_install_code_call_to_ic00(test.canister);
 
