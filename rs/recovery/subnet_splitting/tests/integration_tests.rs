@@ -4,7 +4,7 @@ use candid::Encode;
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, HttpMethod};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_machine_tests::{StateMachine, two_subnets_simple};
-use ic_subnet_splitting::post_split_estimations::{LoadEstimates, StateSizeEstimates};
+use ic_subnet_splitting::post_split_estimations::PostSplitEstimations;
 use ic_test_utilities_logger::with_test_logger;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::CanisterId;
@@ -151,23 +151,24 @@ fn load_metrics_e2e_test() {
 
         // And finally use the `subnet-splitting-tool` to estimate the loads on each subnet after a
         // split.
-        let (
-            StateSizeEstimates { states_sizes_bytes },
-            LoadEstimates {
-                canisters_installed,
-                instructions_executed,
-                ingress_messages_executed,
-                remote_subnet_messages_executed_lower_bound,
-                local_subnet_messages_executed_upper_bound,
-                http_outcalls_executed,
-                heartbeats_and_global_timers_executed,
-            },
-        ) = dbg!(
+        let PostSplitEstimations {
+            states_sizes_bytes,
+            canisters_installed,
+            instructions_executed,
+            ingress_messages_executed,
+            remote_subnet_messages_executed_lower_bound,
+            local_subnet_messages_executed_upper_bound,
+            http_outcalls_executed,
+            heartbeats_and_global_timers_executed,
+            canisters_with_broken_local_connections_lower_bound: broken_connections,
+        } = dbg!(
             ic_subnet_splitting::post_split_estimations::estimate(
                 canister_id_ranges,
                 manifest_path,
                 load_samples_path,
                 load_samples_baseline_path,
+                communication_samples_path,
+                communication_samples_baseline_path,
             )
             .expect("Should succeed given valid inputs")
         );
@@ -243,6 +244,21 @@ fn load_metrics_e2e_test() {
         assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 15, 13);
         assert_eq_oriented!(http_outcalls_executed, 6, 4);
         assert_eq_oriented!(heartbeats_and_global_timers_executed, 341, 353);
+        let canisters_with_broken_local_connections =
+            broken_connections.map(|connections| connections.len() as u64);
+        assert_eq_oriented!(canisters_with_broken_local_connections, 2, 1);
+        // Each universal canister sends a single request to the one created before it, so every
+        // connection broken by the split carries exactly one request.
+        for (sender, receivers) in broken_connections
+            .source
+            .iter()
+            .chain(broken_connections.destination.iter())
+        {
+            assert!(
+                receivers.values().all(|&requests_sent| requests_sent == 1),
+                "{sender} should have sent a single request to each receiver, got {receivers:?}"
+            );
+        }
         // A single split cannot report some metrics in the original orientation and others in the
         // swapped one, so require all the orientation-sensitive metrics to agree on one labeling.
         assert!(
