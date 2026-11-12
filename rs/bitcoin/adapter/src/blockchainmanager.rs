@@ -40,6 +40,20 @@ const MAX_UNSOLICITED_HEADERS: usize = 20;
 /// to a peer at a time.
 const INV_PER_GET_DATA_REQUEST: u32 = 8;
 
+/// Number of failed download attempts (timeouts or `notfound` replies) after which a block is
+/// no longer requested until its back-off period has elapsed.
+const MAX_BLOCK_DOWNLOAD_FAILURES: u32 = 3;
+
+/// Back-off period after reaching `MAX_BLOCK_DOWNLOAD_FAILURES`. It doubles with every further
+/// failure, up to `2^MAX_BLOCK_DOWNLOAD_BACKOFF_EXPONENT` times this value.
+const BLOCK_DOWNLOAD_BACKOFF: Duration = Duration::from_secs(60);
+
+const MAX_BLOCK_DOWNLOAD_BACKOFF_EXPONENT: u32 = 4;
+
+/// Maximum number of blocks for which download failures are tracked. When exceeded, the entries
+/// that were updated least recently are dropped.
+const MAX_TRACKED_BLOCK_DOWNLOAD_FAILURES: usize = 10_000;
+
 /// Block locators. Consists of starting hashes and a stop hash.
 type Locators = (Vec<BlockHash>, BlockHash);
 
@@ -129,6 +143,24 @@ struct GetDataRequestInfo {
     sent_at: Option<Instant>,
 }
 
+/// Repeated failures to download a block.
+#[derive(Debug)]
+struct BlockDownloadFailures {
+    count: u32,
+    last_failed_at: Instant,
+}
+
+impl BlockDownloadFailures {
+    fn is_backing_off(&self) -> bool {
+        if self.count < MAX_BLOCK_DOWNLOAD_FAILURES {
+            return false;
+        }
+        let exponent =
+            (self.count - MAX_BLOCK_DOWNLOAD_FAILURES).min(MAX_BLOCK_DOWNLOAD_BACKOFF_EXPONENT);
+        self.last_failed_at.elapsed() < BLOCK_DOWNLOAD_BACKOFF * 2_u32.pow(exponent)
+    }
+}
+
 /// The BlockChainManager struct handles interactions that involve the headers.
 pub struct BlockchainManager<Network: BlockchainNetwork> {
     /// This field contains the BlockchainState, which stores and manages
@@ -165,6 +197,11 @@ pub struct BlockchainManager<Network: BlockchainNetwork> {
     /// A block hash is removed when it is determined a peer can receive another `getdata` message.
     block_sync_queue: LinkedHashSet<BlockHash>,
 
+    /// Tracks blocks whose download failed, so that blocks that repeatedly fail to be downloaded
+    /// (e.g., because no peer serves them) do not keep taking up `getdata` request slots.
+    /// An entry is removed when the block is received or pruned.
+    block_download_failures: LinkedHashMap<BlockHash, BlockDownloadFailures>,
+
     /// This field contains a logger for the blockchain manager's use.
     logger: ReplicaLogger,
     metrics: RouterMetrics,
@@ -195,6 +232,7 @@ where
             getheaders_requests: HashMap::new(),
             catchup_headers: HashSet::new(),
             block_sync_queue: LinkedHashSet::new(),
+            block_download_failures: LinkedHashMap::new(),
             logger,
             metrics,
             request_timeout,
@@ -208,6 +246,7 @@ where
         self.metrics.idle.inc();
 
         self.block_sync_queue.clear();
+        self.block_download_failures.clear();
         self.getdata_request_info.clear();
         self.peer_info.clear();
         self.blockchain.clear_blocks();
@@ -431,6 +470,7 @@ where
                 return Err(ReceivedBlockMessageError::UnknownBlock);
             }
         };
+        self.block_download_failures.remove(&block_hash);
 
         let time_taken = request.sent_at.map(|i| i.elapsed()).unwrap_or_default();
         trace!(
@@ -451,6 +491,48 @@ where
                 Err(ReceivedBlockMessageError::BlockNotAdded)
             }
         }
+    }
+
+    /// This function processes "notfound" messages received from Bitcoin nodes.
+    /// Pending `getdata` requests sent to the peer for the listed blocks are dropped and counted as
+    /// failed, so that the blocks can be requested again (possibly from another peer).
+    fn received_notfound_message(&mut self, addr: &SocketAddr, inventory: &[Inventory]) {
+        for inv in inventory {
+            let Inventory::Block(block_hash) = inv else {
+                continue;
+            };
+            if self
+                .getdata_request_info
+                .get(block_hash)
+                .is_some_and(|request| request.socket == *addr)
+            {
+                self.getdata_request_info.remove(block_hash);
+                self.record_block_download_failure(*block_hash);
+            }
+        }
+    }
+
+    fn record_block_download_failure(&mut self, block_hash: BlockHash) {
+        let count = self
+            .block_download_failures
+            .remove(&block_hash)
+            .map_or(0, |failures| failures.count);
+        self.block_download_failures.insert(
+            block_hash,
+            BlockDownloadFailures {
+                count: count.saturating_add(1),
+                last_failed_at: Instant::now(),
+            },
+        );
+        while self.block_download_failures.len() > MAX_TRACKED_BLOCK_DOWNLOAD_FAILURES {
+            self.block_download_failures.pop_front();
+        }
+    }
+
+    fn is_block_download_backing_off(&self, block_hash: &BlockHash) -> bool {
+        self.block_download_failures
+            .get(block_hash)
+            .is_some_and(BlockDownloadFailures::is_backing_off)
     }
 
     /// This function adds a new peer to `peer_info`
@@ -531,11 +613,13 @@ where
     fn sync_blocks(&mut self, channel: &mut impl Channel<Network::Header, Network::Block>) {
         // Timeout requests so they may be retried again, but the same peer should be avoided.
         let mut retry_queue: LinkedHashSet<(BlockHash, Option<SocketAddr>)> = LinkedHashSet::new();
+        let mut timed_out = vec![];
         for (block_hash, request) in self.getdata_request_info.iter() {
             match request.sent_at {
                 Some(sent_at) => {
                     if sent_at.elapsed() > self.request_timeout {
                         retry_queue.insert((*block_hash, Some(request.socket)));
+                        timed_out.push(*block_hash);
                     }
                 }
                 None => {
@@ -550,6 +634,11 @@ where
         for (block_hash, _) in &retry_queue {
             self.getdata_request_info.remove(block_hash);
         }
+
+        for block_hash in timed_out {
+            self.record_block_download_failure(block_hash);
+        }
+        retry_queue.retain(|(block_hash, _)| !self.is_block_download_backing_off(block_hash));
 
         // If nothing to be synced, then there is nothing to do at this point.
         if retry_queue.is_empty() && self.block_sync_queue.is_empty() {
@@ -677,6 +766,9 @@ where
                     return Err(ProcessNetworkMessageError::InvalidMessage);
                 }
             }
+            NetworkMessage::NotFound(inventory) => {
+                self.received_notfound_message(&addr, inventory);
+            }
             _ => {}
         };
         Ok(())
@@ -717,13 +809,14 @@ where
     }
 
     /// Add block hashes to the sync queue that are not already being synced, planned to be synced,
-    /// or in the block cache.
+    /// in the block cache, or held back after repeated download failures.
     pub fn enqueue_new_blocks_to_download(&mut self, next_headers: Vec<PureHeader>) {
         for header in next_headers {
             let hash = header.block_hash();
             if self.blockchain.get_block(&hash).is_none()
                 && !self.block_sync_queue.contains(&hash)
                 && !self.getdata_request_info.contains_key(&hash)
+                && !self.is_block_download_backing_off(&hash)
             {
                 self.block_sync_queue.insert(hash);
             }
@@ -758,11 +851,19 @@ where
                     .map_or(0, |c| c.data.height)
                     >= filter_height
             });
+
+            self.block_download_failures.retain(|b, _| {
+                self.blockchain
+                    .get_cached_header(b)
+                    .map_or(0, |c| c.data.height)
+                    >= filter_height
+            });
         };
 
         for block_hash in processed_block_hashes {
             self.getdata_request_info.remove(&block_hash);
             self.block_sync_queue.remove(&block_hash);
+            self.block_download_failures.remove(&block_hash);
         }
     }
 
@@ -1722,5 +1823,179 @@ pub mod test {
         assert_eq!(blockchain_manager.getheaders_requests.len(), 1);
         assert!(channel.has_discarded_address(&addr));
         assert!(!channel.has_discarded_address(&addr2));
+    }
+
+    fn expire_getdata_request(
+        blockchain_manager: &mut BlockchainManager<Network>,
+        hash: &BlockHash,
+    ) {
+        let request = blockchain_manager
+            .getdata_request_info
+            .get_mut(hash)
+            .expect("request should be in flight");
+        request.sent_at = Some(Instant::now() - TEST_REQUEST_TIMEOUT - Duration::from_secs(1));
+    }
+
+    fn last_getdata_hashes(channel: &mut TestChannel) -> Vec<BlockHash> {
+        match channel.pop_back().map(|command| command.message) {
+            Some(NetworkMessage::GetData(inventory)) => inventory
+                .into_iter()
+                .filter_map(|inv| match inv {
+                    Inventory::Block(hash) => Some(hash),
+                    _ => None,
+                })
+                .collect(),
+            other => panic!("expected a getdata message, got {other:?}"),
+        }
+    }
+
+    /// Ensures that a block whose download repeatedly times out is held back for a while, so that
+    /// other blocks are still requested.
+    #[tokio::test]
+    async fn test_repeatedly_failing_block_downloads_are_held_back() {
+        let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+        let mut channel = TestChannel::new(vec![addr]);
+        let (genesis, mut blockchain_manager) = create_blockchain_manager(Network::Regtest);
+        let fork = generate_headers(genesis.block_hash(), genesis.time, 1, &[])[0];
+        let fork_hash = fork.block_hash();
+        let main_chain = generate_headers(genesis.block_hash(), genesis.time, 2, &[fork_hash]);
+        let main_hash = main_chain[0].block_hash();
+        blockchain_manager.blockchain.add_headers(&[fork]).await;
+        blockchain_manager.blockchain.add_headers(&main_chain).await;
+        blockchain_manager.add_peer(&mut channel, &addr);
+
+        for attempt in 1..=MAX_BLOCK_DOWNLOAD_FAILURES {
+            blockchain_manager.enqueue_new_blocks_to_download(vec![fork]);
+            blockchain_manager.sync_blocks(&mut channel);
+            assert_eq!(last_getdata_hashes(&mut channel), vec![fork_hash]);
+
+            expire_getdata_request(&mut blockchain_manager, &fork_hash);
+            blockchain_manager.sync_blocks(&mut channel);
+            assert!(blockchain_manager.getdata_request_info.is_empty());
+            assert_eq!(
+                blockchain_manager.block_download_failures[&fork_hash].count,
+                attempt
+            );
+        }
+
+        blockchain_manager.enqueue_new_blocks_to_download(vec![fork, main_chain[0]]);
+        assert_eq!(
+            blockchain_manager
+                .block_sync_queue
+                .iter()
+                .copied()
+                .collect::<Vec<_>>(),
+            vec![main_hash]
+        );
+        blockchain_manager.sync_blocks(&mut channel);
+        assert_eq!(last_getdata_hashes(&mut channel), vec![main_hash]);
+
+        // Once the back-off period has elapsed, the block is requested again.
+        blockchain_manager
+            .block_download_failures
+            .get_mut(&fork_hash)
+            .unwrap()
+            .last_failed_at = Instant::now() - BLOCK_DOWNLOAD_BACKOFF - Duration::from_secs(1);
+        blockchain_manager.enqueue_new_blocks_to_download(vec![fork]);
+        blockchain_manager.sync_blocks(&mut channel);
+        assert_eq!(last_getdata_hashes(&mut channel), vec![fork_hash]);
+
+        // Further failures extend the back-off period.
+        expire_getdata_request(&mut blockchain_manager, &fork_hash);
+        blockchain_manager.sync_blocks(&mut channel);
+        blockchain_manager
+            .block_download_failures
+            .get_mut(&fork_hash)
+            .unwrap()
+            .last_failed_at = Instant::now() - BLOCK_DOWNLOAD_BACKOFF - Duration::from_secs(1);
+        blockchain_manager.enqueue_new_blocks_to_download(vec![fork]);
+        assert!(blockchain_manager.block_sync_queue.is_empty());
+    }
+
+    /// Ensures that a `notfound` reply for a requested block frees up the request and is counted as
+    /// a failure, and that receiving the block clears the failures.
+    #[tokio::test]
+    async fn test_notfound_block_counts_as_download_failure() {
+        let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+        let other_addr = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
+        let mut channel = TestChannel::new(vec![addr, other_addr]);
+        let (genesis, mut blockchain_manager) = create_blockchain_manager(Network::Regtest);
+        let header = generate_headers(genesis.block_hash(), genesis.time, 1, &[])[0];
+        let hash = header.block_hash();
+        blockchain_manager.add_peer(&mut channel, &addr);
+        blockchain_manager.add_peer(&mut channel, &other_addr);
+        blockchain_manager.getdata_request_info.insert(
+            hash,
+            GetDataRequestInfo {
+                socket: addr,
+                sent_at: Some(Instant::now()),
+            },
+        );
+
+        let notfound = NetworkMessage::NotFound(vec![Inventory::Block(hash)]);
+        blockchain_manager
+            .process_bitcoin_network_message(&mut channel, other_addr, &notfound)
+            .await
+            .unwrap();
+        assert!(blockchain_manager.getdata_request_info.contains_key(&hash));
+        assert!(blockchain_manager.block_download_failures.is_empty());
+
+        blockchain_manager
+            .process_bitcoin_network_message(&mut channel, addr, &notfound)
+            .await
+            .unwrap();
+        assert!(blockchain_manager.getdata_request_info.is_empty());
+        assert_eq!(blockchain_manager.block_download_failures[&hash].count, 1);
+
+        blockchain_manager.enqueue_new_blocks_to_download(vec![header]);
+        blockchain_manager.sync_blocks(&mut channel);
+        let socket = blockchain_manager.getdata_request_info[&hash].socket;
+        let block = Block {
+            header,
+            txdata: vec![],
+        };
+        blockchain_manager
+            .received_block_message(&socket, &block)
+            .await
+            .unwrap();
+        assert!(blockchain_manager.block_download_failures.is_empty());
+    }
+
+    /// Ensures that download failures are dropped when the blocks are pruned and that the number
+    /// of tracked blocks is bounded.
+    #[tokio::test]
+    async fn test_block_download_failures_are_pruned_and_bounded() {
+        let (genesis, mut blockchain_manager) = create_blockchain_manager(Network::Regtest);
+        let chain = generate_headers(genesis.block_hash(), genesis.time, 4, &[]);
+        let hashes = chain.iter().map(|h| h.block_hash()).collect::<Vec<_>>();
+        blockchain_manager.blockchain.add_headers(&chain).await;
+        for hash in &hashes {
+            blockchain_manager.record_block_download_failure(*hash);
+        }
+
+        blockchain_manager.prune_blocks(hashes[1], vec![hashes[3]]);
+        assert_eq!(
+            blockchain_manager
+                .block_download_failures
+                .keys()
+                .copied()
+                .collect::<Vec<_>>(),
+            vec![hashes[2]]
+        );
+
+        for i in 0..MAX_TRACKED_BLOCK_DOWNLOAD_FAILURES {
+            let mut bytes = [0_u8; 32];
+            bytes[..8].copy_from_slice(&(i as u64).to_le_bytes());
+            blockchain_manager.record_block_download_failure(BlockHash::from_byte_array(bytes));
+        }
+        assert_eq!(
+            blockchain_manager.block_download_failures.len(),
+            MAX_TRACKED_BLOCK_DOWNLOAD_FAILURES
+        );
+        assert!(
+            !blockchain_manager
+                .block_download_failures
+                .contains_key(&hashes[2])
+        );
     }
 }
