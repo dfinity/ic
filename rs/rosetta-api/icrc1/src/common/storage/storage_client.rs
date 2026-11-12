@@ -213,7 +213,14 @@ impl StorageClient {
         Ok(storage_client)
     }
 
+    /// Sets the token served by this storage client and registers its display
+    /// name, so that HTTP metrics of requests for this token's network
+    /// identifier (the ledger canister ID) are labelled with it.
     pub fn initialize(&mut self, token_info: TokenInfo) {
+        RosettaMetrics::register_canister_display_name(
+            token_info.ledger_id.to_string(),
+            token_info.display_name(),
+        );
         self.token_info = Some(token_info);
     }
 
@@ -550,6 +557,21 @@ mod tests {
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::block::BlockType;
     use proptest::prelude::*;
+
+    #[test]
+    fn initialize_registers_token_display_name_for_metrics() {
+        let ledger_id = CanisterId::from_u64(4_242);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let mut storage_client = StorageClient::new_in_memory().await.unwrap();
+            storage_client.initialize(TokenInfo::new("TKN".to_string(), 8, ledger_id));
+
+            assert_eq!(
+                RosettaMetrics::get_display_name_from_canister_id(&ledger_id.to_string()),
+                storage_client.get_token_display_name()
+            );
+        });
+    }
 
     fn create_tmp_dir() -> tempfile::TempDir {
         tempfile::Builder::new()
