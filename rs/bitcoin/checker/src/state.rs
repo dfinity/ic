@@ -2,7 +2,7 @@ use crate::{
     BtcNetwork, CheckMode,
     providers::{Provider, parse_authorization_header_from_url},
 };
-use bitcoin::{Address, PublicKey, Script, Transaction, script::Instruction};
+use bitcoin::{Address, PubkeyHash, Script, Transaction, hashes::Hash, script::Instruction};
 use ic_btc_interface::Txid;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{Cell, DefaultMemoryImpl, Storable, storable::Bound};
@@ -138,11 +138,12 @@ impl TransactionCheckData {
 
 /// Return the addresses to check when the output with the given `script_pubkey` is spent:
 /// - If the script has a standard address (P2PKH, P2SH, or a witness program), return it.
-/// - Otherwise, return the P2PKH address of every valid public key pushed by the script,
+/// - Otherwise, return the P2PKH address of every public key pushed by the script,
 ///   in the same (compressed or uncompressed) encoding. In particular, a P2PK output yields
 ///   the P2PKH address of its public key, and a bare multisig output yields the P2PKH
-///   addresses of all its public keys.
-/// - If the script contains no valid public key (e.g. `OP_RETURN` or other non-standard
+///   addresses of all its public keys. Any push that is encoded like a public key is
+///   considered, without checking that it is a valid point on the curve.
+/// - If the script contains no public key (e.g. `OP_RETURN` or other non-standard
 ///   scripts), return an empty list, i.e. spending such an output does not fail the check.
 pub fn output_addresses(script_pubkey: &Script, network: bitcoin::Network) -> Vec<Address> {
     if let Ok(address) = Address::from_script(script_pubkey, network) {
@@ -152,11 +153,19 @@ pub fn output_addresses(script_pubkey: &Script, network: bitcoin::Network) -> Ve
         .instructions()
         .map_while(Result::ok)
         .filter_map(|instruction| match instruction {
-            Instruction::PushBytes(bytes) => PublicKey::from_slice(bytes.as_bytes()).ok(),
-            Instruction::Op(_) => None,
+            Instruction::PushBytes(bytes) if is_public_key_encoding(bytes.as_bytes()) => {
+                Some(Address::p2pkh(PubkeyHash::hash(bytes.as_bytes()), network))
+            }
+            _ => None,
         })
-        .map(|public_key| Address::p2pkh(public_key.pubkey_hash(), network))
         .collect()
+}
+
+fn is_public_key_encoding(bytes: &[u8]) -> bool {
+    matches!(
+        (bytes.len(), bytes.first()),
+        (33, Some(0x02 | 0x03)) | (65, Some(0x04))
+    )
 }
 
 // Max number of concurrent http outcalls.

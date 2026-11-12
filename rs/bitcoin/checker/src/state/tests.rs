@@ -165,12 +165,7 @@ mod output_addresses {
     const COMPRESSED_PUBLIC_KEY_P2PKH: &str = "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH";
     const UNCOMPRESSED_PUBLIC_KEY: &str = "0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8";
     const UNCOMPRESSED_PUBLIC_KEY_P2PKH: &str = "1EHNa6Q4Jz2uvNExL497mE43ikXhwF6kZm";
-    // There is no point on the curve with x-coordinate 0.
-    const INVALID_PUBLIC_KEY: [u8; 33] = {
-        let mut key = [0; 33];
-        key[0] = 0x02;
-        key
-    };
+    const MALFORMED_PUBLIC_KEY: [u8; 33] = [0x05; 33];
 
     fn public_key(hex: &str) -> PublicKey {
         PublicKey::from_str(hex).unwrap()
@@ -213,7 +208,7 @@ mod output_addresses {
             .push_opcode(OP_PUSHNUM_1)
             .push_key(&public_key(COMPRESSED_PUBLIC_KEY))
             .push_key(&public_key(UNCOMPRESSED_PUBLIC_KEY))
-            .push_slice(INVALID_PUBLIC_KEY)
+            .push_slice(MALFORMED_PUBLIC_KEY)
             .push_opcode(OP_PUSHNUM_3)
             .push_opcode(OP_CHECKMULTISIG)
             .into_script();
@@ -231,17 +226,17 @@ mod output_addresses {
     #[test]
     fn should_return_no_address_for_script_without_public_key() {
         let op_return = ScriptBuf::new_op_return([0xaa; 32]);
-        let invalid_p2pk = ScriptBuf::from_bytes(
+        let malformed_p2pk = ScriptBuf::from_bytes(
             [
                 &[OP_PUSHBYTES_33.to_u8()][..],
-                &INVALID_PUBLIC_KEY,
+                &MALFORMED_PUBLIC_KEY,
                 &[OP_CHECKSIG.to_u8()],
             ]
             .concat(),
         );
         let anyone_can_spend = Builder::new().push_opcode(OP_PUSHNUM_1).into_script();
 
-        for script in [op_return, invalid_p2pk, anyone_can_spend] {
+        for script in [op_return, malformed_p2pk, anyone_can_spend] {
             assert_eq!(output_addresses(&script, Network::Bitcoin), vec![]);
         }
     }
