@@ -321,6 +321,16 @@ rust_doc_test(
 )
 
 rust_ic_bench(
+    name = "candid_decode_vec_u8_bench",
+    srcs = ["benches/candid_decode_vec_u8.rs"],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:criterion",
+    ],
+)
+
+rust_ic_bench(
     name = "execute_inspect_message_bench",
     srcs = ["benches/system_api/execute_inspect_message.rs"],
     test_name = "execute_inspect_message_bench_test",

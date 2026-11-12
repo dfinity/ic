@@ -8,6 +8,7 @@ use crate::{
     canister_settings::{CanisterSettings, CanisterSettingsBuilder},
     execution_environment::{CompilationCostHandling, RoundCounters, as_round_instructions},
     hypervisor::Hypervisor,
+    subnet_message_payload_instructions,
     types::{IngressResponse, Response},
     units::{GIB, KIB, MIB},
 };
@@ -6002,6 +6003,7 @@ fn update_settings_charges_log_resize_instructions_when_the_call_fails() {
         sender_canister_version: None,
     }
     .encode();
+    let payload_instructions = subnet_message_payload_instructions(args.len());
     let err = test
         .subnet_message(Method::UpdateSettings, args)
         .unwrap_err();
@@ -6024,7 +6026,11 @@ fn update_settings_charges_log_resize_instructions_when_the_call_fails() {
 
     // The round instruction budget is debited too: this is what bounds the
     // number of log resizes a canister can trigger within a single round.
-    assert_eq!(test.subnet_message_instructions(), resize_instructions);
+    // The round is also charged for the payload size.
+    assert_eq!(
+        test.subnet_message_instructions(),
+        resize_instructions + payload_instructions
+    );
 
     // The re-charge on the rolled-back canister must succeed, i.e. the inline
     // charge and the re-charge must be computed against the same state.
@@ -6161,6 +6167,7 @@ fn update_settings_validates_log_resize_against_the_pre_update_freezing_threshol
         sender_canister_version: None,
     }
     .encode();
+    let payload_instructions = subnet_message_payload_instructions(args.len());
     let err = test
         .subnet_message(Method::UpdateSettings, args)
         .unwrap_err();
@@ -6181,11 +6188,11 @@ fn update_settings_validates_log_resize_against_the_pre_update_freezing_threshol
     );
 
     // The resize never ran, so neither the canister nor the round is charged
-    // for it, ...
+    // for it (the round is only charged for the payload size), ...
     let (gauge_after, counter_after) = consumed_instruction_cycles(&test, canister_id);
     assert_eq!(gauge_after, gauge_before);
     assert_eq!(counter_after, counter_before);
-    assert_eq!(test.subnet_message_instructions(), NumInstructions::new(0));
+    assert_eq!(test.subnet_message_instructions(), payload_instructions);
 
     // ... and no charge was left behind for the rollback to fail to re-apply.
     assert_eq!(failed_subnet_message_charges(&test), 0);

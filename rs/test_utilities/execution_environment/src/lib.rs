@@ -23,7 +23,8 @@ use ic_execution_environment::{
     CompilationCostHandling, DataCertificateWithDelegationMetadata, ExecuteMessageResult,
     ExecuteSubnetMessageResultType, ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor,
     IngressFilterMetrics, InternalHttpQueryHandler, RoundInstructions, RoundLimits,
-    abort_all_paused_executions, execute_canister,
+    abort_all_paused_executions, as_round_instructions, execute_canister,
+    subnet_message_payload_instructions,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -1818,10 +1819,24 @@ impl ExecutionTest {
             self.current_round,
             &mut round_limits,
         );
-        let slice_instructions_used =
+        let round_instructions_used =
             remaining_round_instructions_before - round_limits.instructions;
+        // Instructions charged against the round limits for the request payload size
+        // are not charged in cycles and thus excluded from the instructions executed
+        // by the subnet message.
+        let payload_instructions = match &message {
+            SubnetMessage::Response(_) => NumInstructions::new(0),
+            SubnetMessage::Request(request) => {
+                subnet_message_payload_instructions(request.method_payload().len())
+            }
+            SubnetMessage::Ingress(ingress) => {
+                subnet_message_payload_instructions(ingress.method_payload.len())
+            }
+        };
         self.subnet_message_instructions =
-            NumInstructions::from(slice_instructions_used.get() as u64);
+            NumInstructions::from(round_instructions_used.get() as u64);
+        let slice_instructions_used =
+            round_instructions_used - as_round_instructions(payload_instructions);
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.state = Some(new_state);
