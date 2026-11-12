@@ -22,7 +22,7 @@ use ic_state_layout::{CheckpointStatus, StateLayout};
 use ic_subnet_tools::{
     agent_helper::AgentHelper,
     state_tool_helper,
-    utils::{get_cup as read_cup_file, get_state_hash},
+    utils::{get_batch_time_from_cup, get_cup as read_cup_file},
     validation::validate_artifacts,
 };
 use ic_types::{
@@ -35,8 +35,7 @@ use url::Url;
 use std::{
     net::{IpAddr, Ipv6Addr},
     path::PathBuf,
-    thread::sleep,
-    time::{Duration, SystemTime},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 /// Waits until the record of the subnet that is being merged away is labeled
@@ -479,11 +478,6 @@ impl Step for ValidateCupStep {
     }
 }
 
-/// How long [MergeStatesStep] waits before it reports success, so that the
-/// recovery CUP proposed afterwards is stamped past the batch times of the two
-/// checkpoints the merged state was assembled from.
-const SETTLE_TIME: Duration = Duration::from_secs(30);
-
 /// Assembles the merged state from the states the two subnets halted at: the
 /// state of the destination subnet, with the canisters and canister snapshots
 /// of the source subnet added to it, as a new checkpoint that the destination
@@ -500,7 +494,7 @@ impl Step for MergeStatesStep {
         format!(
             "Assemble the merged state from the checkpoints downloaded to {} and {} at the \
              heights of the CUPs the two subnets halted at, as a new checkpoint in {}, and \
-             compute the height and the state hash the recovery of the destination subnet needs.",
+             record the height and the state hash the recovery of the destination subnet needs.",
             self.layout.work_dir(TargetSubnet::Source).display(),
             self.layout.work_dir(TargetSubnet::Destination).display(),
             self.layout.work_dir(TargetSubnet::Merged).display(),
@@ -554,16 +548,12 @@ impl Step for MergeStatesStep {
         let manifest_path = self.layout.merged_state_manifest_file();
         state_tool_helper::compute_manifest(&merged_checkpoint, &manifest_path)?;
 
+        // The state hash is the root hash of the manifest, taken from the
+        // manifest as it was written rather than by hashing the (possibly
+        // large) merged checkpoint a second time.
         info!(self.logger, "Validating the manifest of the merged state");
-        let manifest_hash = state_tool_helper::verify_manifest(&manifest_path)
+        let state_hash = state_tool_helper::verify_manifest(&manifest_path)
             .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
-        let state_hash = get_state_hash(&merged_checkpoint)?;
-        if manifest_hash != state_hash {
-            return Err(RecoveryError::ValidationFailed(format!(
-                "The root hash {manifest_hash} of the manifest of the merged state differs from \
-                 the hash {state_hash} recomputed from the merged checkpoint",
-            )));
-        }
 
         // The upload step transfers the states metadata alongside the
         // checkpoint, and rsync is given every path it transfers as an explicit
@@ -595,22 +585,7 @@ impl Step for MergeStatesStep {
         };
         info!(self.logger, "The merged state: {params:?}");
 
-        params.write(&self.layout.merged_state_params_file())?;
-
-        // The recovery CUP is stamped with the time it is proposed at, and the
-        // merged subnet has to resume past the batch times of both checkpoints
-        // it is assembled from: either subnet's canisters may have run ahead of
-        // the merged state's own batch time, which is the destination subnet's.
-        // Both subnets halted before this step ran, so both batch times are in
-        // the past already; this wait puts the clock clear of them.
-        info!(
-            self.logger,
-            "Waiting {SETTLE_TIME:?}, so that the recovery CUP is stamped past the batch times of \
-             both checkpoints",
-        );
-        sleep(SETTLE_TIME);
-
-        Ok(())
+        params.write(&self.layout.merged_state_params_file())
     }
 }
 
@@ -681,27 +656,20 @@ impl Step for CheckRoutingTableStep {
 /// step that fails to be created is skipped, and the tool would then upload the
 /// merged state and unhalt the destination subnet without a recovery CUP.
 pub(crate) struct ProposeRecoveryCupStep {
+    pub(crate) source_subnet_id: SubnetId,
     pub(crate) destination_subnet_id: SubnetId,
     pub(crate) admin_helper: AdminHelper,
     pub(crate) layout: Layout,
     pub(crate) logger: Logger,
 }
 
-impl Step for ProposeRecoveryCupStep {
-    fn descr(&self) -> String {
-        format!(
-            "Propose a recovery CUP for subnet {} at the height and state hash of the merged \
-             state recorded in {}, with its DKG run by the default initial DKG subnet (or the \
-             NNS subnet if none is set).",
-            self.destination_subnet_id,
-            self.layout.merged_state_params_file().display(),
-        )
-    }
-
-    fn exec(&self) -> RecoveryResult<()> {
+impl ProposeRecoveryCupStep {
+    /// The proposal for the recovery CUP at the merged state, stamped with
+    /// `time`.
+    fn admin_step(&self, time: SystemTime) -> RecoveryResult<AdminStep> {
         let params = MergedStateParams::read(&self.layout.merged_state_params_file())?;
 
-        AdminStep {
+        Ok(AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: self
                 .admin_helper
@@ -713,10 +681,70 @@ impl Step for ProposeRecoveryCupStep {
                     /*chain_key_config=*/ None,
                     /*replacement_nodes=*/ &[],
                     /*registry_params=*/ None,
-                    SystemTime::now(),
+                    time,
                 ),
+        })
+    }
+
+    /// Checks that `time`, which the recovery CUP is stamped with, is past the
+    /// batch times of both checkpoints the merged state is assembled from, i.e.
+    /// the times of the CUPs the two subnets halted at: the merged subnet has
+    /// to resume past both, as either subnet's canisters may have run ahead of
+    /// the merged state's own batch time, which is the destination subnet's.
+    ///
+    /// Both subnets halted well before this step runs, so this only fails if
+    /// the clock of this machine is behind the clocks of the subnets.
+    fn check_time_is_past_halting_cups(&self, time: SystemTime) -> RecoveryResult<()> {
+        let time_nanos = time
+            .duration_since(UNIX_EPOCH)
+            .map_err(|err| {
+                RecoveryError::UnexpectedError(format!(
+                    "The clock of this machine is before the Unix epoch: {err}"
+                ))
+            })?
+            .as_nanos();
+        for subnet_id in [self.source_subnet_id, self.destination_subnet_id] {
+            let batch_time = get_batch_time_from_cup(&self.layout.halting_cup_file(subnet_id))?;
+            if time_nanos <= u128::from(batch_time.as_nanos_since_unix_epoch()) {
+                return Err(RecoveryError::ValidationFailed(format!(
+                    "The time the recovery CUP would be stamped with ({time_nanos} ns since the \
+                     Unix epoch) is not past the time {batch_time} of the CUP subnet {subnet_id} \
+                     halted at. Check the clock of this machine and retry.",
+                )));
+            }
         }
-        .exec()
+        Ok(())
+    }
+}
+
+impl Step for ProposeRecoveryCupStep {
+    fn descr(&self) -> String {
+        let summary = format!(
+            "Propose a recovery CUP for subnet {} at the height and state hash of the merged \
+             state recorded in {}, with its DKG run by the default initial DKG subnet (or the \
+             NNS subnet if none is set).",
+            self.destination_subnet_id,
+            self.layout.merged_state_params_file().display(),
+        );
+        // Like the description of any other proposal, this shows the command
+        // that is about to run. The recorded values may not be readable yet
+        // when the step is described (see above), and the timestamp is taken
+        // anew when the step is executed.
+        match self.admin_step(SystemTime::now()) {
+            Ok(step) => format!(
+                "{summary} The command, up to the timestamp, which is taken when it is run: {}",
+                step.descr(),
+            ),
+            Err(err) => format!("{summary} The command cannot be shown yet: {err}"),
+        }
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let time = SystemTime::now();
+        self.check_time_is_past_halting_cups(time)?;
+        let step = self.admin_step(time)?;
+        info!(self.logger, "{}", step.descr());
+        step.exec()
     }
 }
 

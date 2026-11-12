@@ -45,8 +45,8 @@ pub(crate) fn wait_for<T>(
 /// merged state, as computed by the step that assembles it.
 ///
 /// Persisted next to the merged state so that the steps proposing the recovery
-/// CUP and waiting for it agree on the same values, and so that a resumed run
-/// neither re-merges the states nor re-hashes the merged checkpoint.
+/// CUP and waiting for it agree on the same values, also in a run that is
+/// resumed after the merged state was assembled.
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub(crate) struct MergedStateParams {
     /// The height of the merged checkpoint, i.e. the height the destination
