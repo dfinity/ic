@@ -128,5 +128,7 @@ try_from_u8!(
         MsgCallerInfoSigner = 99,
         LoopUntilGlobalDataSet = 100,
         CyclesBurnLiquidBalance = 101,
+        IfEq = 102,
+        IfNeq = 103,
     }
 );

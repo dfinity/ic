@@ -307,12 +307,17 @@ impl CanisterCreationRecord {
 /// record {
 ///   mode : variant {install; reinstall; upgrade};
 ///   module_hash : blob;
+///   args_hash : opt blob;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterCodeDeploymentRecord {
     mode: CanisterInstallMode,
     module_hash: [u8; HASH_LENGTH],
+    /// SHA-256 hash of the init/post-upgrade argument of `install_code`.
+    /// `None` for entries recorded before `args_hash` started being recorded
+    /// in canister history.
+    args_hash: Option<[u8; HASH_LENGTH]>,
 }
 
 impl CanisterCodeDeploymentRecord {
@@ -321,6 +326,9 @@ impl CanisterCodeDeploymentRecord {
     }
     pub fn module_hash(&self) -> [u8; HASH_LENGTH] {
         self.module_hash
+    }
+    pub fn args_hash(&self) -> Option<[u8; HASH_LENGTH]> {
+        self.args_hash
     }
 }
 
@@ -495,6 +503,7 @@ impl RenameToRecord {
 ///   code_deployment : record {
 ///     mode : variant {install; reinstall; upgrade};
 ///     module_hash : blob;
+///     args_hash : opt blob;
 ///   };
 ///   controllers_change : record {
 ///     controllers : vec principal;
@@ -557,10 +566,12 @@ impl CanisterChangeDetails {
     pub fn code_deployment(
         mode: CanisterInstallMode,
         module_hash: [u8; HASH_LENGTH],
+        args_hash: Option<[u8; HASH_LENGTH]>,
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterCodeDeployment(CanisterCodeDeploymentRecord {
             mode,
             module_hash,
+            args_hash,
         })
     }
 
@@ -916,6 +927,7 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                     pb_canister_state_bits::CanisterCodeDeployment {
                         module_hash: canister_code_deployment.module_hash.to_vec(),
                         mode: (&canister_code_deployment.mode).into(),
+                        args_hash: canister_code_deployment.args_hash.map(|hash| hash.to_vec()),
                     },
                 )
             }
@@ -1030,8 +1042,16 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                 })?;
 
                 let module_hash = try_decode_hash(canister_code_deployment.module_hash)?;
+                let args_hash = match canister_code_deployment.args_hash {
+                    Some(bytes) => Some(try_decode_hash(bytes)?),
+                    None => None,
+                };
 
-                Ok(CanisterChangeDetails::code_deployment(mode, module_hash))
+                Ok(CanisterChangeDetails::code_deployment(
+                    mode,
+                    module_hash,
+                    args_hash,
+                ))
             }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterControllersChange(
                 canister_controllers_change,

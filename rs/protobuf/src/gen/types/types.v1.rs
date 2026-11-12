@@ -1848,6 +1848,10 @@ pub mod stripped_consensus_message {
 pub struct StrippedConsensusMessageId {
     #[prost(message, optional, tag = "1")]
     pub unstripped_id: ::core::option::Option<ConsensusMessageId>,
+    /// The hash of the IDs of the messages stripped from the block proposal, or empty if the
+    /// message was not stripped.
+    #[prost(bytes = "vec", tag = "2")]
+    pub stripped_message_ids_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

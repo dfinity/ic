@@ -1,9 +1,11 @@
 use ic_base_types::SubnetId;
+use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     Recovery,
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{read_file, write_file},
+    file_sync_helper::{read_file, write_bytes, write_file},
 };
+use prost::Message;
 use serde::{Deserialize, Serialize};
 
 use std::path::PathBuf;
@@ -25,17 +27,20 @@ struct CoolingDownRegistryVersion {
 ///
 /// |-- root/
 /// |  |-- cooling_down_registry_version.json
+/// |  |-- halting_cup_<subnet_id>.pb
 pub(crate) struct Layout {
-    cooling_down_registry_version: PathBuf,
+    root: PathBuf,
 }
 
 impl Layout {
     pub(crate) fn new(recovery: &Recovery) -> Self {
         Self {
-            cooling_down_registry_version: recovery
-                .recovery_dir
-                .join(COOLING_DOWN_REGISTRY_VERSION_FILE),
+            root: recovery.recovery_dir.clone(),
         }
+    }
+
+    fn cooling_down_registry_version_file(&self) -> PathBuf {
+        self.root.join(COOLING_DOWN_REGISTRY_VERSION_FILE)
     }
 
     /// A registry version at which the subnet that is merged away is labeled
@@ -50,7 +55,7 @@ impl Layout {
         version: u64,
     ) -> RecoveryResult<()> {
         write_file(
-            &self.cooling_down_registry_version,
+            &self.cooling_down_registry_version_file(),
             encode_cooling_down_registry_version(source_subnet_id, version),
         )
     }
@@ -61,13 +66,33 @@ impl Layout {
         &self,
         source_subnet_id: SubnetId,
     ) -> RecoveryResult<u64> {
-        let path = &self.cooling_down_registry_version;
-        decode_cooling_down_registry_version(&read_file(path)?, source_subnet_id).map_err(|err| {
+        let path = self.cooling_down_registry_version_file();
+        decode_cooling_down_registry_version(&read_file(&path)?, source_subnet_id).map_err(|err| {
             RecoveryError::UnexpectedError(format!(
                 "Failed to read the registry version at {}: {err}",
                 path.display()
             ))
         })
+    }
+
+    /// The file holding the CUP `subnet_id` halts at, as a
+    /// `types.v1.CatchUpPackage` protobuf, i.e. in the format of the CUP file
+    /// of a replica.
+    // Read by the step validating the downloaded state, added in a follow-up.
+    #[allow(dead_code)]
+    pub(crate) fn halting_cup_file(&self, subnet_id: SubnetId) -> PathBuf {
+        self.root.join(format!("halting_cup_{subnet_id}.pb"))
+    }
+
+    /// Records the CUP `subnet_id` halts at, as served by a node of the
+    /// subnet, so that the state downloaded later can be validated against it
+    /// without downloading the CUP again.
+    pub(crate) fn write_halting_cup(
+        &self,
+        subnet_id: SubnetId,
+        cup: &pb::CatchUpPackage,
+    ) -> RecoveryResult<()> {
+        write_bytes(&self.halting_cup_file(subnet_id), cup.encode_to_vec())
     }
 }
 
@@ -118,6 +143,28 @@ mod tests {
         let contents = encode_cooling_down_registry_version(subnet_id(1), 42);
         let err = decode_cooling_down_registry_version(&contents, subnet_id(2)).unwrap_err();
         assert!(err.contains("not for subnet"), "{err}");
+    }
+
+    #[test]
+    fn halting_cup_round_trips() {
+        let root =
+            std::env::temp_dir().join(format!("subnet_merging_layout_test_{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let layout = Layout { root: root.clone() };
+        let cup = pb::CatchUpPackage {
+            content: vec![1, 2, 3],
+            signature: vec![4, 5],
+            signer: None,
+        };
+
+        layout.write_halting_cup(subnet_id(1), &cup).unwrap();
+
+        assert_eq!(
+            pb::CatchUpPackage::read_from_file(layout.halting_cup_file(subnet_id(1))).unwrap(),
+            cup
+        );
+        assert!(pb::CatchUpPackage::read_from_file(layout.halting_cup_file(subnet_id(2))).is_err());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
