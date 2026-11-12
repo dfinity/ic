@@ -15,9 +15,12 @@ for responses that never arrive: they are not drained, but make it possible to
 assert that a subnet merge populates the ingress history properly.
 
 The subnet that is cooled down, i.e. the one that would be merged away, is
-called `M`; a second Application subnet `T` holds the canisters at the other
-end of `M`'s cross-subnet calls, and is the subnet the tool is told to merge
-`M` into.
+called `M`, and the Application subnet the tool is told to merge `M` into is
+called `R`. A third Application subnet `T` holds the canisters at the other end
+of `M`'s cross-subnet calls. It is kept apart from `R` so that, once the merge
+goes ahead, the messages and calls between `T` and the canisters of `M` have to
+be rerouted to `R` by a subnet that is not itself part of the merge, rather than
+becoming calls within the destination subnet.
 
 The tool submits its proposals through `ic-admin`, with the test neuron.
 
@@ -26,8 +29,8 @@ message without waiting for it to complete: most of the calls of this test are
 never meant to complete.
 
 Runbook::
-0. Set up an IC with an NNS subnet (with the NNS canisters installed) and two
-   Application subnets `M` and `T`, of `SUBNET_SIZE` nodes each.
+0. Set up an IC with an NNS subnet (with the NNS canisters installed) and three
+   Application subnets `M`, `T` and `R`, of `SUBNET_SIZE` nodes each.
 1. Install a universal canister on each of `M` and `T`: `UM` on `M`, `UT` on
    `T`.
 2. Make an ingress call to each of `UM` and `UT` with a payload that calls the
@@ -79,7 +82,7 @@ Runbook::
    `T`. `UM`'s counter cannot be read, as `M` rejects query calls.
 12. The following steps of the tool are executed: `HaltSourceSubnetAtCupHeight`
    and `HaltDestinationSubnetAtCupHeight`, which set the `halt_at_cup_height`
-   flag of `M` and `T`, and `WaitForHaltingCupOnSourceSubnet` and
+   flag of `M` and `R`, and `WaitForHaltingCupOnSourceSubnet` and
    `WaitForHaltingCupOnDestinationSubnet`, which wait until the node of each
    subnet that its state would be downloaded from serves the halting CUP.
 13. After `WaitForHaltingCupOnDestinationSubnet`: check that both subnets are
@@ -100,7 +103,7 @@ Success::
 Every term of the "merge readiness" condition that this scenario exercises is
 violated before `M` starts cooling down; `M` then rejects ingress messages and
 query calls and becomes "merge ready", and `UT`'s loop of step 2 is stalled;
-the tool then halts `M` and `T` at their next CUP, and the states it downloads
+the tool then halts `M` and `R` at their next CUP, and the states it downloads
 from them pass validation.
 
 end::catalog[] */
@@ -231,7 +234,7 @@ const HALT_TIMEOUT: Duration = Duration::from_secs(1200);
 /// How long `UT`'s loop is observed to be stalled (step 11).
 const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 
-/// How long the certified heights of the nodes of `M` and `T` are observed to
+/// How long the certified heights of the nodes of `M` and `R` are observed to
 /// stay at the height their subnet halts at (step 13).
 const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 
@@ -298,6 +301,7 @@ pub fn setup(env: TestEnv) {
         .add_subnet(subnet(SubnetType::System))
         .add_subnet(subnet(SubnetType::Application))
         .add_subnet(subnet(SubnetType::Application))
+        .add_subnet(subnet(SubnetType::Application))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
     env.topology_snapshot().subnets().for_each(|subnet| {
@@ -326,10 +330,10 @@ pub fn test(env: TestEnv) {
     // own, so they run outside of it.
     let runtime = Runtime::new().expect("failed to create a tokio runtime");
 
-    // The two Application subnets: `M` is the one that is set up to be cooled
-    // down and merged away, `T` is the one `M` exchanges messages with in a
-    // loop and that holds the canisters at the other end of the cross-subnet
-    // endless loops of step 6.
+    // The three Application subnets: `M` is the one that is set up to be
+    // cooled down and merged away, `R` is the one it is merged into, and `T` is
+    // the one `M` exchanges messages with in a loop and that holds the
+    // canisters at the other end of the cross-subnet endless loops of step 6.
     let app_subnets: Vec<_> = env
         .topology_snapshot()
         .subnets()
@@ -337,11 +341,12 @@ pub fn test(env: TestEnv) {
         .collect();
     assert_eq!(
         app_subnets.len(),
-        2,
-        "expected exactly 2 Application subnets"
+        3,
+        "expected exactly 3 Application subnets"
     );
     let m_subnet = app_subnets[0].clone();
     let t_subnet = app_subnets[1].clone();
+    let r_subnet = app_subnets[2].clone();
     let agent = |subnet: &SubnetSnapshot| {
         let node = subnet.nodes().next().unwrap();
         runtime.block_on(assert_create_agent(node.get_public_url().as_str()))
@@ -349,7 +354,9 @@ pub fn test(env: TestEnv) {
     let m_agent = agent(&m_subnet);
     let t_agent = agent(&t_subnet);
 
-    let context = runtime.block_on(prepare(&env, m_subnet, t_subnet, &m_agent, &t_agent));
+    let context = runtime.block_on(prepare(
+        &env, m_subnet, t_subnet, r_subnet, &m_agent, &t_agent,
+    ));
     cool_down(&env, &context, &runtime);
 }
 
@@ -358,7 +365,8 @@ pub fn test(env: TestEnv) {
 struct Context<'a> {
     logger: Logger,
     m_subnet: SubnetSnapshot,
-    t_subnet: SubnetSnapshot,
+    /// The subnet `M` is merged into.
+    r_subnet: SubnetSnapshot,
     /// The two canisters calling each other in a loop across subnets, `UM` on
     /// `M` and `UT` on `T`.
     um: UniversalCanister<'a>,
@@ -371,6 +379,7 @@ async fn prepare<'a>(
     env: &TestEnv,
     m_subnet: SubnetSnapshot,
     t_subnet: SubnetSnapshot,
+    r_subnet: SubnetSnapshot,
     m_agent: &'a Agent,
     t_agent: &'a Agent,
 ) -> Context<'a> {
@@ -380,9 +389,10 @@ async fn prepare<'a>(
     let t_node = t_subnet.nodes().next().unwrap();
     info!(
         logger,
-        "Subnets under test:\n  M={}\n  T={}\n  NNS={}",
+        "Subnets under test:\n  M={}\n  T={}\n  R={}\n  NNS={}",
         m_subnet.subnet_id,
         t_subnet.subnet_id,
+        r_subnet.subnet_id,
         topology.root_subnet_id(),
     );
 
@@ -518,7 +528,7 @@ async fn prepare<'a>(
         um,
         ut,
         m_subnet,
-        t_subnet,
+        r_subnet,
     }
 }
 
@@ -550,9 +560,9 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     };
     let merging_args = SubnetMergingArgs {
         source_subnet_id: context.m_subnet.subnet_id,
-        destination_subnet_id: context.t_subnet.subnet_id,
+        destination_subnet_id: context.r_subnet.subnet_id,
         download_node_source: Some(DataLocation::Remote(download_node(&context.m_subnet))),
-        download_node_destination: Some(DataLocation::Remote(download_node(&context.t_subnet))),
+        download_node_destination: Some(DataLocation::Remote(download_node(&context.r_subnet))),
         merge_ready_timeout_secs: MERGE_READY_TIMEOUT.as_secs(),
         halt_timeout_secs: HALT_TIMEOUT.as_secs(),
         registry_timeout_secs: REGISTRY_TIMEOUT.as_secs(),
@@ -591,21 +601,21 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     info!(logger, "Step 10 done: subnet M is \"merge ready\"");
     runtime.block_on(check_ut_loop_stalled(context));
 
-    info!(logger, "Step 12: Halting subnets M and T at their next CUP");
+    info!(logger, "Step 12: Halting subnets M and R at their next CUP");
     exec_next_step(StepType::HaltSourceSubnetAtCupHeight);
     exec_next_step(StepType::HaltDestinationSubnetAtCupHeight);
     exec_next_step(StepType::WaitForHaltingCupOnSourceSubnet);
     exec_next_step(StepType::WaitForHaltingCupOnDestinationSubnet);
     info!(
         logger,
-        "Step 12 done: the nodes of M and T the states would be downloaded from serve the CUPs \
+        "Step 12 done: the nodes of M and R the states would be downloaded from serve the CUPs \
          their subnets halt at"
     );
     runtime.block_on(check_subnets_halted(context));
 
     info!(
         logger,
-        "Step 14: Downloading and validating the states of subnets M and T"
+        "Step 14: Downloading and validating the states of subnets M and R"
     );
     exec_next_step(StepType::StopSourceReplica);
     exec_next_step(StepType::StopDestinationReplica);
@@ -615,7 +625,7 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     exec_next_step(StepType::ValidateDestinationSubnetCup);
     info!(
         logger,
-        "Step 14 done: the states M and T halted at are downloaded and valid"
+        "Step 14 done: the states M and R halted at are downloaded and valid"
     );
 
     if let Some((step_type, _)) = merging.next() {
@@ -624,7 +634,7 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
 
     info!(
         logger,
-        "Subnet M has been drained and halted, and the states of M and T downloaded and \
+        "Subnet M has been drained and halted, and the states of M and R downloaded and \
          validated, by the subnet merging tool"
     );
 }
@@ -635,7 +645,7 @@ fn download_node(subnet: &SubnetSnapshot) -> IpAddr {
     subnet.nodes().next().unwrap().get_ip_addr()
 }
 
-/// Step 13: check that `M` and `T` are halted, i.e. that every one of their
+/// Step 13: check that `M` and `R` are halted, i.e. that every one of their
 /// nodes certifies the height its subnet halts at, and that it still does so
 /// after `HALT_OBSERVATION_PERIOD`.
 ///
@@ -644,7 +654,7 @@ fn download_node(subnet: &SubnetSnapshot) -> IpAddr {
 /// halting height.
 async fn check_subnets_halted(context: &Context<'_>) {
     let logger = &context.logger;
-    let subnets = [&context.m_subnet, &context.t_subnet];
+    let subnets = [&context.m_subnet, &context.r_subnet];
     let mut halting_heights = Vec::new();
 
     for subnet in subnets {
@@ -722,7 +732,7 @@ async fn check_subnets_halted(context: &Context<'_>) {
         }
     }
 
-    info!(logger, "Step 13 done: subnets M and T are halted");
+    info!(logger, "Step 13 done: subnets M and R are halted");
 }
 
 /// Step 9: wait until the replicas of `M` observed the "cooling down" label,
