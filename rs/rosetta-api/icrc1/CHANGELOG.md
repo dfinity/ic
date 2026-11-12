@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 ### Fixed
-- Reject ledger and archive blocks whose values exceed a maximum nesting depth during block synchronization
+- Reject ledger and archive blocks whose values exceed a maximum nesting depth during block synchronization ([#12087](https://github.com/dfinity/ic/pull/12087))
 
 ## [1.2.10] - 2026-07-02
 ### Added
