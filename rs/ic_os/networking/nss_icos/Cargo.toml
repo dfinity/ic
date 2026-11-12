@@ -13,8 +13,13 @@ name = "nss_icos"
 crate-type = ["cdylib"]
 
 [dependencies]
+config_types = { path = "../../config/types" }
+deterministic_ips = { path = "../deterministic_ips" }
 lazy_static = { workspace = true }
 libc = { workspace = true }
 libnss = { workspace = true }
 nix = { workspace = true }
+macaddr = { workspace = true }
 paste = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
