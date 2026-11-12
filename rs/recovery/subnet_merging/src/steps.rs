@@ -364,15 +364,19 @@ impl Step for DownloadStateStep {
         let working_dir = self.layout.work_dir(self.target_subnet);
 
         // A working directory is reused when the download is retried, e.g.
-        // after an interrupted copy, or when the tool is run again with the
-        // same directory. Checkpoints left over from that would otherwise stay:
-        // `cp` keeps files that are only in the copy, and they would enter the
-        // recomputed manifest; checkpoints at other heights could be mistaken
-        // for the downloaded one by later steps.
-        remove_dir(&self.layout.checkpoints_dir(self.target_subnet))?;
+        // after an interrupted transfer, or when the tool is run again with the
+        // same directory. Only the checkpoint at the halting height is kept, so
+        // that checkpoints at other heights cannot be mistaken for the
+        // downloaded one by later steps.
+        self.layout
+            .remove_checkpoints_except(self.target_subnet, height)?;
 
         match &self.node {
             ExecutionMode::Local => {
+                // Unlike the `rsync --delete` of a download, `cp` keeps files
+                // that are only in a stale copy, which would then enter the
+                // recomputed manifest, so the checkpoint is copied afresh.
+                remove_dir(&self.layout.checkpoint_dir(self.target_subnet, height))?;
                 let data_includes = Recovery::get_ic_state_includes(
                     &self.logger,
                     ExecutionMode::Local,
@@ -387,6 +391,9 @@ impl Step for DownloadStateStep {
                 }
                 .exec()
             }
+            // The checkpoint at the halting height is kept: `rsync --delete`
+            // removes stale files from it, and `--partial` lets a retry resume
+            // the transfer instead of starting over.
             ExecutionMode::Remote(ssh_helper) => {
                 ssh_helper.wait_for_access().map_err(|err| {
                     RecoveryError::UnexpectedError(format!(
