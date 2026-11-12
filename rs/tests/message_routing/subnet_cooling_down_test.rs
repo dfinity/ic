@@ -10,8 +10,10 @@ another subnet without losing any of that state.
 
 The subnet that is cooling down, i.e. the one that is merged away, is called `M`
 and the Application subnet it is merged into is called `R`. A third Application
-subnet `T` holds the canisters at the other end of `M`'s cross-subnet calls. The
-NNS subnet is none of these: it has to stay available throughout, as it is where
+subnet `T` holds the canisters at the other end of `M`'s cross-subnet calls. `R`
+holds a canister `UR` looping in a call of its own, so that the state of the
+destination subnet is not that of an idle subnet without canisters. The NNS
+subnet is none of these: it has to stay available throughout, as it is where
 the proposals of this test are executed, including the one recovering `R` at the
 merged state.
 
@@ -48,7 +50,7 @@ Runbook::
 6. Execute an update call on `U9` (on `T`) making a best effort call to `U10`
    (on `M`) that carries cycles and that `U10` does not answer before the merge,
    so that `U10` holds the call context of a best effort call whose deadline has
-   passed across the merge. Then start three endless loops, each of which runs
+   passed across the merge. Then start four endless loops, each of which runs
    until the global data of the looping canister is set to `LOOP_BREAK_TRIGGER`,
    which this test only does after the merge (step 18):
    a. execute an update call on `U3` that loops on `U3` itself;
@@ -57,8 +59,11 @@ Runbook::
       another subnet that it can never respond to;
    c. execute an update call on `U6` (on `M`) that calls `U7` (on `T`) with the
       loop as its payload, so that `M` holds a canister waiting for a response
-      from another subnet that never arrives.
-   Wait until all three loops are running.
+      from another subnet that never arrives;
+   d. execute an update call on `UR` (on `R`) that loops on `UR` itself, so that
+      `R` holds a canister looping in a call that stays in progress across the
+      merge, just like `M` does.
+   Wait until all four loops are running.
 7. Evaluate the terms of the "merge readiness" condition for `M` and check that
    none of the `VIOLATED_CONDITIONS` holds: `T` holds messages in its stream to
    `M` and `M` holds messages in its own streams (the loops of step 2), the
@@ -139,8 +144,9 @@ Runbook::
    installed, i.e. that the `install_code` calls of step 5 ran to completion
    while `M` was cooling down rather than being lost or rejected.
 18. Also after `UnhaltDestinationSubnet`: set the global data of `U3`, `U5`,
-   `U7` and `U10` to `LOOP_BREAK_TRIGGER`, ending the endless loops, and check
-   that every ingress message that was in progress across the merge completed.
+   `U7`, `UR` and `U10` to `LOOP_BREAK_TRIGGER`, ending the endless loops, and
+   check that every ingress message that was in progress across the merge
+   completed.
    `U3`, `U5` and `U10` are reached through `R`, which serves the canisters of
    `M` after the merge. Then stop `U10`, which only succeeds once the call
    context of `U9`'s best effort call, which the merge carried over, is closed.
@@ -281,8 +287,8 @@ const MERGED_CALL_REPLY: &[u8] = b"hello from the merged subnet";
 /// a hundred trillion.
 const MAX_BURNED_CYCLES_FRACTION: u128 = 1_000;
 
-/// The global data value that ends the endless loops of `U3`, `U5`, `U7` and
-/// `U10`. The test only sets it after the merge (step 18), so those loops run
+/// The global data value that ends the endless loops of `U3`, `U5`, `U7`, `UR`
+/// and `U10`. The test only sets it after the merge (step 18), so those loops run
 /// across it.
 const LOOP_BREAK_TRIGGER: &[u8] = b"break";
 
@@ -486,7 +492,8 @@ struct Context {
     u8: Principal,
     u8_snapshot: SnapshotId,
     u8_cycles_before: u128,
-    /// The canister `R` hosted all along, which the merge must leave alone.
+    /// The canister `R` hosted all along, looping in a call of its own, which
+    /// the merge must leave alone.
     ur: Principal,
     /// The two ends of the best effort call of step 6, `U9` on `T` and `U10` on
     /// `M`, and the ingress message that made `U9` call.
@@ -706,11 +713,11 @@ async fn prepare(env: &TestEnv) -> Context {
         "Step 5 done: all of U1's `install_code` requests left its output queue"
     );
 
-    // Step 6: Start the three endless loops, and the best effort call whose
+    // Step 6: Start the four endless loops, and the best effort call whose
     // cycles are held by the callee's call context across the merge.
     info!(
         logger,
-        "Step 6: Starting the three endless loops and U9's best effort call to U10"
+        "Step 6: Starting the four endless loops and U9's best effort call to U10"
     );
     // `U10` does not respond before the merge, so `U9` gets to see the call time
     // out, and replies to its ingress message with the reject code.
@@ -733,12 +740,14 @@ async fn prepare(env: &TestEnv) -> Context {
     // 18 can check that all of them eventually completed, each with the canister
     // looping on its behalf (if not the one it was sent to) and the agent it has
     // to be read through after the merge: `U3` and `U6` are on `M` and thus
-    // served by `R` by then, while `U4` stays on `T`.
+    // served by `R` by then, like `UR`, which is on `R` all along, while `U4`
+    // stays on `T`.
     let mut pending_ingress_messages = Vec::new();
     for (canister, name, callee, agent_after_merge) in [
         (&u3, "U3", None, &r_agent),
         (&u4, "U4", Some(&u5), &t_agent),
         (&u6, "U6", Some(&u7), &r_agent),
+        (&ur, "UR", None, &r_agent),
     ] {
         let payload = match callee {
             None => endless_loop(),
@@ -758,13 +767,19 @@ async fn prepare(env: &TestEnv) -> Context {
     }
     // `U10` looping means that `U9`'s best effort call made it to `M` before `M`
     // starts cooling down, i.e. that `U10` holds its call context.
-    for (canister, name) in [(&u3, "U3"), (&u5, "U5"), (&u7, "U7"), (&u10, "U10")] {
+    for (canister, name) in [
+        (&u3, "U3"),
+        (&u5, "U5"),
+        (&u7, "U7"),
+        (&ur, "UR"),
+        (&u10, "U10"),
+    ] {
         await_loop_started(canister, name, &logger).await;
     }
     info!(
         logger,
-        "Step 6 done: U3 is looping, U5 is looping in a call from U4, U7 is looping in a call \
-         from U6, and U10 is looping in a best effort call from U9"
+        "Step 6 done: U3 and UR are looping, U5 is looping in a call from U4, U7 is looping in \
+         a call from U6, and U10 is looping in a best effort call from U9"
     );
 
     // Step 7: Check that the scenario violates the individual conditions.
@@ -1309,6 +1324,7 @@ async fn verify_after_merge(context: &Context) {
         (&context.r_agent, context.u3, "U3"),
         (&context.r_agent, context.u5, "U5"),
         (&context.t_agent, context.u7, "U7"),
+        (&context.r_agent, context.ur, "UR"),
         (&context.r_agent, context.u10, "U10"),
     ] {
         let canister = UniversalCanister::from_canister_id(agent, canister_id);
@@ -1484,7 +1500,7 @@ async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
         .expect("starting the call loop should succeed");
 }
 
-/// The payload of the endless loops of `U3`, `U5`, `U7` and `U10`: bump the
+/// The payload of the endless loops of `U3`, `U5`, `U7`, `UR` and `U10`: bump the
 /// global counter, so that the test can observe (via a query) that the payload
 /// started executing, and then loop until the global data is set to
 /// `LOOP_BREAK_TRIGGER`, which this test only does after the merge.
