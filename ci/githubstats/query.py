@@ -1870,8 +1870,8 @@ Examples:
   # Show all runs of a test since the time of a specific commit
   bazel --quiet run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since abc123def
 
-  # Show the last flaky runs of a *_local system-test and download their logs: from GitHub for its runs in CI Main
-  # (RBE @ Namespace), from BuildBuddy for the nightly runs of local-system-tests.yml
+  # Show the last flaky runs of a *_local system-test and download their logs from the GitHub artifacts of its runs in
+  # CI Main (RBE @ Namespace)
   bazel --quiet run //ci/githubstats:query -- last --flaky //rs/tests/consensus:safety_test_local --week
 """,
     )
