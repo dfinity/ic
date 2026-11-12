@@ -3,14 +3,14 @@ use crate::{
     layout::Layout,
     readiness,
     subnet_merging::TargetSubnet,
-    utils::{get_subnet_record_at_version, wait_for},
+    utils::{MergedStateParams, get_subnet_record_at_version, wait_for},
 };
 
 use ic_base_types::SubnetId;
 use ic_cup_explorer::get_cup;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery,
+    IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery, STATES_METADATA,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::remove_dir,
     registry_helper::RegistryHelper,
@@ -19,7 +19,9 @@ use ic_recovery::{
 };
 use ic_state_layout::{CheckpointStatus, StateLayout};
 use ic_subnet_tools::{
-    agent_helper::AgentHelper, state_tool_helper, utils::get_cup as read_cup_file,
+    agent_helper::AgentHelper,
+    state_tool_helper,
+    utils::{get_cup as read_cup_file, get_state_hash},
     validation::validate_artifacts,
 };
 use ic_types::{
@@ -32,6 +34,7 @@ use url::Url;
 use std::{
     net::{IpAddr, Ipv6Addr},
     path::PathBuf,
+    thread::sleep,
     time::Duration,
 };
 
@@ -471,6 +474,227 @@ impl Step for ValidateCupStep {
             manifest_path,
             self.subnet_id,
             &self.logger,
+        )
+    }
+}
+
+/// How long [MergeStatesStep] waits before it reports success, so that the
+/// recovery CUP proposed afterwards is stamped past the batch times of the two
+/// checkpoints the merged state was assembled from.
+const SETTLE_TIME: Duration = Duration::from_secs(30);
+
+/// Assembles the merged state from the states the two subnets halted at: the
+/// state of the destination subnet, with the canisters and canister snapshots
+/// of the source subnet added to it, as a new checkpoint that the destination
+/// subnet is then recovered at.
+pub(crate) struct MergeStatesStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) destination_subnet_id: SubnetId,
+    pub(crate) layout: Layout,
+    pub(crate) logger: Logger,
+}
+
+impl Step for MergeStatesStep {
+    fn descr(&self) -> String {
+        format!(
+            "Assemble the merged state from the checkpoints downloaded to {} and {} at the \
+             heights of the CUPs the two subnets halted at, as a new checkpoint in {}, and \
+             compute the height and the state hash the recovery of the destination subnet needs.",
+            self.layout.work_dir(TargetSubnet::Source).display(),
+            self.layout.work_dir(TargetSubnet::Destination).display(),
+            self.layout.work_dir(TargetSubnet::Merged).display(),
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        // The checkpoints the two subnets halted at, which the validation steps
+        // checked against the halting CUPs. A reused working directory may hold
+        // other checkpoints too, so they are selected by height rather than as
+        // the latest ones.
+        let source_height =
+            read_cup_file(&self.layout.halting_cup_file(self.source_subnet_id))?.height();
+        let destination_height =
+            read_cup_file(&self.layout.halting_cup_file(self.destination_subnet_id))?.height();
+        let source_checkpoint = self
+            .layout
+            .checkpoint_dir(TargetSubnet::Source, source_height);
+        let destination_checkpoint = self
+            .layout
+            .checkpoint_dir(TargetSubnet::Destination, destination_height);
+
+        // The recovery CUP is created at the next recovery height above the one
+        // the destination subnet halted at, exactly as in any other recovery.
+        let merged_height = Recovery::get_recovery_height(destination_height);
+        let merged_checkpoint = self
+            .layout
+            .checkpoint_dir(TargetSubnet::Merged, merged_height);
+
+        info!(
+            self.logger,
+            "The source subnet halted at height {source_height} and the destination subnet at \
+             height {destination_height}; the merged state is the checkpoint {merged_height}",
+        );
+
+        // The merge claims its output directory by creating it, so a merged
+        // checkpoint left over from an earlier run of this step is removed
+        // first.
+        remove_dir(&merged_checkpoint)?;
+
+        info!(self.logger, "Merging the states");
+        state_tool_helper::merge_checkpoints(
+            &destination_checkpoint,
+            &source_checkpoint,
+            &merged_checkpoint,
+        )?;
+
+        info!(self.logger, "Computing the manifest of the merged state");
+        let manifest_path = self.layout.merged_state_manifest_file();
+        state_tool_helper::compute_manifest(&merged_checkpoint, &manifest_path)?;
+
+        info!(self.logger, "Validating the manifest of the merged state");
+        let manifest_hash = state_tool_helper::verify_manifest(&manifest_path)
+            .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
+        let state_hash = get_state_hash(&merged_checkpoint)?;
+        if manifest_hash != state_hash {
+            return Err(RecoveryError::ValidationFailed(format!(
+                "The root hash {manifest_hash} of the manifest of the merged state differs from \
+                 the hash {state_hash} recomputed from the merged checkpoint",
+            )));
+        }
+
+        // The upload step transfers the states metadata alongside the
+        // checkpoint, and rsync is given every path it transfers as an explicit
+        // source, so a missing one fails the whole transfer: take the
+        // destination subnet's along.
+        //
+        // It is a manifest cache, which the state manager recomputes for the
+        // checkpoints it finds whenever it is missing or does not describe them,
+        // and the heights it names here are the ones the destination subnet held
+        // before the merge, none of which the merged state directory has. That is
+        // the same mismatch a plain subnet recovery uploads, where the metadata
+        // comes from the state that was downloaded and the checkpoint from the
+        // replay that followed.
+        std::fs::copy(
+            self.layout
+                .ic_state_dir(TargetSubnet::Destination)
+                .join(STATES_METADATA),
+            self.layout
+                .ic_state_dir(TargetSubnet::Merged)
+                .join(STATES_METADATA),
+        )
+        .map_err(|err| {
+            RecoveryError::UnexpectedError(format!("Failed to copy the states metadata: {err}"))
+        })?;
+
+        let params = MergedStateParams {
+            height: merged_height.get(),
+            state_hash,
+        };
+        info!(self.logger, "The merged state: {params:?}");
+
+        params.write(&self.layout.merged_state_params_file())?;
+
+        // The recovery CUP is stamped with the time it is proposed at, and the
+        // merged subnet has to resume past the batch times of both checkpoints
+        // it is assembled from: either subnet's canisters may have run ahead of
+        // the merged state's own batch time, which is the destination subnet's.
+        // Both subnets halted before this step ran, so both batch times are in
+        // the past already; this wait puts the clock clear of them.
+        info!(
+            self.logger,
+            "Waiting {SETTLE_TIME:?}, so that the recovery CUP is stamped past the batch times of \
+             both checkpoints",
+        );
+        sleep(SETTLE_TIME);
+
+        Ok(())
+    }
+}
+
+/// Waits until the routing table no longer assigns any canister ID range to the
+/// subnet that was merged away, and persists the registry version it was read
+/// at (not necessarily the version that rerouted the ranges), which is what
+/// every other subnet has to reach before that subnet may be deleted.
+pub(crate) struct CheckRoutingTableStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) destination_subnet_id: SubnetId,
+    pub(crate) registry_helper: RegistryHelper,
+    pub(crate) layout: Layout,
+    pub(crate) timeout: Duration,
+    pub(crate) poll_interval: Duration,
+    pub(crate) logger: Logger,
+}
+
+impl Step for CheckRoutingTableStep {
+    fn descr(&self) -> String {
+        format!(
+            "Wait until the routing table assigns no canister id range to subnet {} anymore, and \
+             record the registry version at which this was read.",
+            self.source_subnet_id,
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let source_subnet_id = self.source_subnet_id;
+        let (merge_registry_version, routing_table) = wait_for(
+            &format!("subnet {source_subnet_id} hosts no canister id range anymore"),
+            self.timeout,
+            self.poll_interval,
+            &self.logger,
+            || {
+                let (registry_version, routing_table) = self.registry_helper.get_routing_table()?;
+                let Some(routing_table) = routing_table else {
+                    return Err(RecoveryError::RegistryError(format!(
+                        "No routing table at registry version {registry_version}"
+                    )));
+                };
+                if !routing_table.ranges(source_subnet_id).is_empty() {
+                    return Err(RecoveryError::RegistryError(format!(
+                        "Subnet {source_subnet_id} still hosts canister id ranges at registry \
+                         version {registry_version}"
+                    )));
+                }
+                Ok((registry_version, routing_table))
+            },
+        )?;
+
+        info!(
+            self.logger,
+            "Subnet {source_subnet_id} hosts no canister id range anymore at registry version \
+             {merge_registry_version}; subnet {} hosts: {:#?}",
+            self.destination_subnet_id,
+            routing_table.ranges(self.destination_subnet_id),
+        );
+
+        self.layout
+            .write_merge_registry_version(source_subnet_id, merge_registry_version.get())
+    }
+}
+
+/// Waits until the destination subnet came up on the merged state, i.e. until
+/// the node the merged state was uploaded to reports the recovery CUP.
+pub(crate) struct WaitForRecoveryCupStep {
+    pub(crate) node_ip: IpAddr,
+    pub(crate) layout: Layout,
+    pub(crate) logger: Logger,
+}
+
+impl Step for WaitForRecoveryCupStep {
+    fn descr(&self) -> String {
+        format!(
+            "Wait until node {} reports the recovery CUP holding the merged state.",
+            self.node_ip,
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let params = MergedStateParams::read(&self.layout.merged_state_params_file())?;
+
+        Recovery::wait_for_recovery_cup(
+            &self.logger,
+            self.node_ip,
+            Height::from(params.height),
+            params.state_hash,
         )
     }
 }
