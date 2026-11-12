@@ -3,6 +3,7 @@
 
 import argparse
 from pathlib import Path
+from typing import List
 
 import pulp
 from data_io import load_subnet_data
@@ -39,28 +40,39 @@ def find_split(
     baseline_path: Path,
     communication_data_path: Path,
     communication_baseline_data_path: Path,
-    load_type: str,
+    load_types: List[str],
     epsilon_load: float,
     max_cuts: int,
 ):
-    data = load_subnet_data(path, baseline_path, load_type, communication_data_path, communication_baseline_data_path)
+    data = load_subnet_data(
+        path,
+        baseline_path,
+        load_types,
+        communication_data_path,
+        communication_baseline_data_path,
+    )
     edges = data["edges"]
-    load = data["load"]
+    loads = data["loads"]
     index_to_canister_id = data["index_to_canister_id"]
 
-    max_allowed_load_per_subnet = compute_max_allowed_load_per_subnet(load)
+    load_constraints = [
+        LoadConstraints(
+            load_type, load, compute_max_allowed_load_per_subnet(load), epsilon_load
+        )
+        for load_type, load in loads.items()
+    ]
 
-    result = solve_partition(
-        [LoadConstraints(load_type, load, max_allowed_load_per_subnet, epsilon_load)],
-        edges,
-        max_cuts,
-    )
+    result = solve_partition(load_constraints, edges, max_cuts)
 
     problem = result["problem"]
     assignments = result["assignments"]
 
     if problem.status != pulp.LpStatusOptimal:
-        raise RuntimeError("Status: Solution Not Optimal. Please check model constraints and settings.")
+        raise RuntimeError(
+            f"Status: {pulp.LpStatus[problem.status]}. No optimal split balances all of the load types "
+            f"{list(loads)} within an allowed load deviation of {epsilon_load} using at most {max_cuts} cuts. "
+            "Consider increasing `--epsilon-load` or `--max-cuts`, or balancing fewer load types."
+        )
 
     ranges = []
     first_in_range = None
@@ -86,7 +98,9 @@ def find_split(
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run subnet splitting MILP.")
-    parser.add_argument("--load-path", type=Path, help="Path to load data", required=True)
+    parser.add_argument(
+        "--load-path", type=Path, help="Path to load data", required=True
+    )
     parser.add_argument(
         "--load-baseline-path",
         type=Path,
@@ -96,7 +110,10 @@ def parse_args():
         required=True,
     )
     parser.add_argument(
-        "--communication-data-path", type=Path, help="Path to canister-to-canister communication data", required=True
+        "--communication-data-path",
+        type=Path,
+        help="Path to canister-to-canister communication data",
+        required=True,
     )
     parser.add_argument(
         "--communication-baseline-data-path",
@@ -116,8 +133,11 @@ def parse_args():
     )
     parser.add_argument(
         "--load-type",
+        dest="load_types",
         type=str,
-        help="Type of load to optimize for",
+        nargs="+",
+        help="Types of load to balance across both post-split subnets. "
+        "When several are given, the split must balance every one of them.",
         choices=LOAD_TYPES,
         required=True,
     )
@@ -125,9 +145,14 @@ def parse_args():
         "--epsilon-load",
         type=float,
         default=DEFAULT_EPSILON_LOAD_DEFAULT,
-        help="Allowed load deviation fraction",
+        help="Allowed load deviation fraction, applied to each load type",
     )
-    parser.add_argument("--max-cuts", type=int, default=DEFAULT_MAX_CUTS, help="Maximum number of routing cuts")
+    parser.add_argument(
+        "--max-cuts",
+        type=int,
+        default=DEFAULT_MAX_CUTS,
+        help="Maximum number of routing cuts",
+    )
     return parser.parse_args()
 
 
@@ -139,7 +164,7 @@ def main():
         baseline_path=args.load_baseline_path,
         communication_data_path=args.communication_data_path,
         communication_baseline_data_path=args.communication_baseline_data_path,
-        load_type=args.load_type,
+        load_types=args.load_types,
         epsilon_load=args.epsilon_load,
         max_cuts=args.max_cuts,
     )
