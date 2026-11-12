@@ -91,6 +91,7 @@ pub struct GetSuccessorsHandler<Network: BlockchainNetwork> {
     network: Network,
     metrics: GetSuccessorMetrics,
     pruning_task_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    most_work_chain: Mutex<MostWorkChain>,
 }
 
 impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
@@ -108,6 +109,7 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
             network,
             metrics: GetSuccessorMetrics::new(metrics_registry),
             pruning_task_handle: Mutex::new(None),
+            most_work_chain: Mutex::new(MostWorkChain::default()),
         }
     }
 
@@ -127,9 +129,9 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
             .processed_block_hashes
             .observe(request.processed_block_hashes.len() as f64);
 
-        let anchor_height = self
-            .state
-            .get_cached_header(&request.anchor)
+        let anchor_header = self.state.get_cached_header(&request.anchor);
+        let anchor_height = anchor_header
+            .as_ref()
             .map_or(0, |cached| cached.data.height);
 
         // Spawn persist-to-disk task without waiting for it to finish, and make sure there
@@ -158,13 +160,23 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
                 allow_multiple_blocks,
                 &self.network,
             );
+            let mut most_work_chain = self.most_work_chain.lock().unwrap();
+            let most_work_chain_above_anchor = anchor_header
+                .is_some()
+                .then(|| {
+                    most_work_chain.hashes_above_anchor(&self.state, &request.anchor, anchor_height)
+                })
+                .into_iter()
+                .flatten();
             let next = get_next_headers(
                 &self.state,
                 &request.anchor,
                 &request.processed_block_hashes,
                 &blocks,
+                most_work_chain_above_anchor,
                 &self.network,
             );
+            drop(most_work_chain);
             // If no blocks are returned, this means that nothing that is in the cache could be reached from the anchor.
             // We can safely remove everything that is in the cache then, as those blocks are no longer needed.
             // There is a chance that these blocks are above the anchor height (but they were forked below it),
@@ -302,15 +314,95 @@ fn get_successor_blocks<Network: BlockchainNetwork>(
     successor_blocks
 }
 
+/// Block hashes of the chain ending in the tip with the most accumulated work, where the first
+/// hash is at `base_height`. It is kept across requests so that the chain only needs to be
+/// walked from the tip down to the first header it shares with the previously known chain.
+#[derive(Default)]
+struct MostWorkChain {
+    base_height: BlockHeight,
+    hashes: VecDeque<BlockHash>,
+}
+
+impl MostWorkChain {
+    fn hash_at(&self, height: BlockHeight) -> Option<&BlockHash> {
+        let index = height.checked_sub(self.base_height)?;
+        self.hashes.get(index as usize)
+    }
+
+    /// Brings the chain up to date with the current most-work tip, drops the hashes below the
+    /// anchor, and returns the hashes above the anchor in ascending order of height.
+    /// Returns nothing if the anchor is not on the most-work chain.
+    fn hashes_above_anchor<Network: BlockchainNetwork>(
+        &mut self,
+        state: &BlockchainState<Network>,
+        anchor: &BlockHash,
+        anchor_height: BlockHeight,
+    ) -> impl Iterator<Item = BlockHash> + '_ {
+        if self.base_height > anchor_height {
+            self.hashes.clear();
+        }
+        while self.base_height < anchor_height && self.hashes.pop_front().is_some() {
+            self.base_height += 1;
+        }
+
+        let tip = state.get_active_chain_tip();
+        let tip_hash = tip.header.block_hash();
+        if self.hashes.back() != Some(&tip_hash) {
+            let mut new_hashes = vec![];
+            let mut shared_height = None;
+            let mut current = Some((tip_hash, tip.height, tip.header.prev_block_hash()));
+            while let Some((hash, height, prev_hash)) = current {
+                if self.hash_at(height) == Some(&hash) {
+                    shared_height = Some(height);
+                    break;
+                }
+                new_hashes.push(hash);
+                if height <= anchor_height {
+                    break;
+                }
+                current = state.get_cached_header(&prev_hash).map(|node| {
+                    (
+                        prev_hash,
+                        node.data.height,
+                        node.data.header.prev_block_hash(),
+                    )
+                });
+            }
+            match shared_height {
+                Some(height) => self
+                    .hashes
+                    .truncate((height - self.base_height) as usize + 1),
+                None => {
+                    self.hashes.clear();
+                    self.base_height = (tip.height + 1).saturating_sub(new_hashes.len() as u32);
+                }
+            }
+            self.hashes.extend(new_hashes.into_iter().rev());
+        }
+
+        let skip = if self.hash_at(anchor_height) == Some(anchor) {
+            (anchor_height - self.base_height) as usize + 1
+        } else {
+            self.hashes.len()
+        };
+        self.hashes.iter().skip(skip).copied()
+    }
+}
+
 /// Get the next headers for blocks that may possibly be sent in upcoming GetSuccessor responses.
-/// This returns the first MAX_IN_FLIGHT_BLOCKS / TESTNET4_MAX_IN_FLIGHT_BLOCKS headers from the anchor in BFS fashion
-/// which are not in processed nor are they in the current response. Essentially representing the
-/// blocks that should be returned in the next response.
+/// This returns up to MAX_IN_FLIGHT_BLOCKS / TESTNET4_MAX_IN_FLIGHT_BLOCKS headers which are not
+/// in processed nor are they in the current response. Essentially representing the blocks that
+/// should be returned in the next response.
+///
+/// The headers on the most-work chain above the anchor come first, so that headers of other
+/// branches cannot prevent the blocks of the most-work chain from being downloaded. The
+/// remaining slots are filled with the other headers reachable from the anchor in BFS fashion.
 fn get_next_headers<Network: BlockchainNetwork>(
     state: &BlockchainState<Network>,
     anchor: &BlockHash,
     processed_block_hashes: &[BlockHash],
     blocks: &[(BlockHash, Arc<SerializedBlock>)],
+    most_work_chain_above_anchor: impl Iterator<Item = BlockHash>,
     network: &Network,
 ) -> Vec<Network::Header> {
     let seen: HashSet<BlockHash> = processed_block_hashes
@@ -319,20 +411,36 @@ fn get_next_headers<Network: BlockchainNetwork>(
         .chain(blocks.iter().map(|(hash, _)| *hash))
         .collect();
 
+    let max_in_flight_blocks = network.max_in_flight_blocks();
+    let mut next_headers = vec![];
+    let mut selected = HashSet::new();
+
+    for block_hash in most_work_chain_above_anchor {
+        if next_headers.len() >= max_in_flight_blocks {
+            break;
+        }
+        if seen.contains(&block_hash) {
+            continue;
+        }
+        let Some(header_node) = state.get_cached_header(&block_hash) else {
+            break;
+        };
+        next_headers.push(header_node.data.header);
+        selected.insert(block_hash);
+    }
+
     let mut queue: VecDeque<BlockHash> = state
         .get_cached_header(anchor)
         .map(|c| c.children.into_iter().collect())
         .unwrap_or_default();
 
-    let max_in_flight_blocks = network.max_in_flight_blocks();
-    let mut next_headers = vec![];
     while let Some(block_hash) = queue.pop_front() {
         if next_headers.len() >= max_in_flight_blocks {
             break;
         }
 
         if let Some(header_node) = state.get_cached_header(&block_hash) {
-            if !seen.contains(&block_hash) {
+            if !seen.contains(&block_hash) && !selected.contains(&block_hash) {
                 next_headers.push(header_node.data.header.clone());
             }
             queue.extend(header_node.children.iter());
@@ -455,12 +563,12 @@ mod test {
         assert_eq!(
             next_hashes,
             vec![
+                main_chain[2].block_hash(),   // 3
+                main_chain[3].block_hash(),   // 4
                 side_chain_2[0].block_hash(), // 1''
                 side_chain[1].block_hash(),   // 2'
                 side_chain_2[1].block_hash(), // 2''
-                main_chain[2].block_hash(),   // 3
-                side_chain_2[2].block_hash(), // 3'
-                main_chain[3].block_hash(),   // 4
+                side_chain_2[2].block_hash(), // 3''
             ],
             "main = {:#?}, side = {:#?}, side 2 = {:#?}, next hashes = {:#?}",
             main_chain
@@ -855,6 +963,163 @@ mod test {
         assert!(
             matches!(response.next.first(), Some(header) if large_blocks[0].block_hash() == header.block_hash())
         );
+    }
+
+    fn generate_single_header_forks(
+        parent: &bitcoin::block::Header,
+        count: usize,
+    ) -> Vec<bitcoin::block::Header> {
+        let mut forks: Vec<bitcoin::block::Header> = vec![];
+        for _ in 0..count {
+            let fork = generate_headers(
+                parent.block_hash(),
+                parent.time,
+                1,
+                &headers_to_hashes(&forks),
+            );
+            forks.extend(fork);
+        }
+        forks
+    }
+
+    fn take_enqueued_hashes(
+        receiver: &mut tokio::sync::mpsc::Receiver<BlockchainManagerRequest>,
+    ) -> Vec<BlockHash> {
+        let mut enqueued = vec![];
+        while let Ok(request) = receiver.try_recv() {
+            if let BlockchainManagerRequest::EnqueueNewBlocksToDownload(headers) = request {
+                enqueued.extend(headers.iter().map(|h| h.block_hash()));
+            }
+        }
+        enqueued
+    }
+
+    /// Ensures that the headers of the most-work chain are included in `next` and enqueued for
+    /// download even when more than `MAX_IN_FLIGHT_BLOCKS` other headers that come earlier in
+    /// BFS order are reachable from the anchor.
+    #[tokio::test]
+    async fn test_next_headers_prioritise_most_work_chain() {
+        let network = bitcoin::Network::Regtest;
+        let blockchain_state = new_blockchain_state(network);
+        let genesis = blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
+        let (blockchain_manager_tx, mut blockchain_manager_rx) = channel(10);
+        let handler = GetSuccessorsHandler::new(
+            network,
+            Arc::new(blockchain_state),
+            blockchain_manager_tx,
+            &MetricsRegistry::default(),
+        );
+
+        // Set up the following chain, where the forks 1', 1'', ... are added before the main chain:
+        // |--> 1' (x MAX_IN_FLIGHT_BLOCKS + 50)
+        // 0 -> 1 -> 2 -> 3
+        let forks = generate_single_header_forks(&genesis, MAX_IN_FLIGHT_BLOCKS + 50);
+        let main_chain =
+            generate_headers(genesis_hash, genesis.time, 3, &headers_to_hashes(&forks));
+        {
+            let blockchain = &handler.state;
+            let (added, err) = blockchain.add_headers(&forks).await;
+            assert_eq!(added.len(), forks.len(), "{err:?}");
+            let (added, err) = blockchain.add_headers(&main_chain).await;
+            assert_eq!(added.len(), main_chain.len(), "{err:?}");
+        }
+
+        let request = GetSuccessorsRequest {
+            anchor: genesis_hash,
+            processed_block_hashes: vec![],
+        };
+        let response = handler.get_successors(request).await.unwrap();
+
+        assert!(response.blocks.is_empty());
+        assert_eq!(response.next.len(), MAX_NEXT_BLOCK_HEADERS_LENGTH);
+        assert_eq!(
+            headers_to_hashes(&response.next[..3]),
+            headers_to_hashes(&main_chain)
+        );
+
+        let enqueued = take_enqueued_hashes(&mut blockchain_manager_rx);
+        assert_eq!(enqueued.len(), MAX_IN_FLIGHT_BLOCKS);
+        assert_eq!(enqueued[..3], headers_to_hashes(&main_chain));
+    }
+
+    /// Ensures that `next` follows the most-work chain as the anchor advances, the chain is
+    /// extended, and another branch overtakes it.
+    #[tokio::test]
+    async fn test_next_headers_follow_most_work_chain_as_it_changes() {
+        let network = bitcoin::Network::Regtest;
+        let blockchain_state = new_blockchain_state(network);
+        let genesis = blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
+        let (blockchain_manager_tx, mut blockchain_manager_rx) = channel(10);
+        let handler = GetSuccessorsHandler::new(
+            network,
+            Arc::new(blockchain_state),
+            blockchain_manager_tx,
+            &MetricsRegistry::default(),
+        );
+
+        // 0 -> a1 -> a2
+        let chain_a = generate_headers(genesis_hash, genesis.time, 2, &[]);
+        handler.state.add_headers(&chain_a).await;
+        let response = handler
+            .get_successors(GetSuccessorsRequest {
+                anchor: genesis_hash,
+                processed_block_hashes: vec![],
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            headers_to_hashes(&response.next),
+            headers_to_hashes(&chain_a)
+        );
+
+        // 0 -> a1 -> a2 -> a3 -> a4, with the anchor moved to a1.
+        let a1_hash = chain_a[0].block_hash();
+        let extension = generate_headers(chain_a[1].block_hash(), chain_a[1].time, 2, &[]);
+        handler.state.add_headers(&extension).await;
+        let response = handler
+            .get_successors(GetSuccessorsRequest {
+                anchor: a1_hash,
+                processed_block_hashes: vec![],
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            headers_to_hashes(&response.next),
+            vec![
+                chain_a[1].block_hash(),
+                extension[0].block_hash(),
+                extension[1].block_hash()
+            ]
+        );
+
+        //        |--> a2' (x MAX_IN_FLIGHT_BLOCKS + 50)
+        // 0 -> a1 -> a2 -> a3 -> a4
+        //        |--> b2 -> b3 -> b4 -> b5 -> b6
+        let forks = generate_single_header_forks(&chain_a[0], MAX_IN_FLIGHT_BLOCKS + 50);
+        handler.state.add_headers(&forks).await;
+        let mut known_hashes = headers_to_hashes(&forks);
+        known_hashes.push(chain_a[1].block_hash());
+        let chain_b = generate_headers(a1_hash, chain_a[0].time, 5, &known_hashes);
+        let (added, err) = handler.state.add_headers(&chain_b).await;
+        assert_eq!(added.len(), chain_b.len(), "{err:?}");
+        take_enqueued_hashes(&mut blockchain_manager_rx);
+
+        let response = handler
+            .get_successors(GetSuccessorsRequest {
+                anchor: a1_hash,
+                processed_block_hashes: vec![chain_b[0].block_hash()],
+            })
+            .await
+            .unwrap();
+        assert_eq!(response.next.len(), MAX_NEXT_BLOCK_HEADERS_LENGTH);
+        assert_eq!(
+            headers_to_hashes(&response.next[..4]),
+            headers_to_hashes(&chain_b[1..])
+        );
+        let enqueued = take_enqueued_hashes(&mut blockchain_manager_rx);
+        assert_eq!(enqueued[..4], headers_to_hashes(&chain_b[1..]));
     }
 
     #[test]
