@@ -394,7 +394,7 @@ impl Recovery {
     /// checkpoint.
     pub fn get_ic_state_includes(
         logger: &Logger,
-        execution_mode: ExecutionMode<'_>,
+        execution_mode: ExecutionMode,
         checkpoint_height_to_download: CheckpointHeight,
     ) -> RecoveryResult<Vec<PathBuf>> {
         let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
@@ -475,7 +475,7 @@ impl Recovery {
 
         let includes = Self::get_ic_state_includes(
             &self.logger,
-            ExecutionMode::Remote(&ssh_helper),
+            ExecutionMode::Remote(ssh_helper.clone()),
             CheckpointHeight::from(download_height),
         )?;
 

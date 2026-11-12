@@ -117,9 +117,7 @@ impl Layout {
             .join(CHECKPOINTS)
     }
 
-    /// The downloaded checkpoint at `height`. Neither download removes the
-    /// other checkpoints in a reused working directory, so the checkpoint is
-    /// selected by its height rather than as the latest one.
+    /// The downloaded checkpoint at `height`.
     pub(crate) fn checkpoint_dir(&self, target_subnet: TargetSubnet, height: Height) -> PathBuf {
         self.checkpoints_dir(target_subnet)
             .join(StateLayout::checkpoint_name(height))
