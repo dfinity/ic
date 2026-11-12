@@ -2039,32 +2039,6 @@ mod tests {
         .await;
     }
 
-    /// Checks that `artifact`, pushed by `NODE_1`, is counted as invalid and not fetched again.
-    async fn assert_artifact_rejected(
-        assembler: &FetchStrippedConsensusArtifact,
-        artifact: MaybeStrippedConsensusMessage,
-    ) {
-        let id = artifact.id();
-        let result = assembler
-            .try_assemble_message(
-                &id,
-                Some((artifact, NODE_1)),
-                MockPeers(NODE_2),
-                Instant::now(),
-            )
-            .await;
-
-        assert!(matches!(result, Attempt::Unwanted));
-        assert_eq!(
-            assembler
-                .fetch_stripped
-                .metrics
-                .download_task_invalid_artifacts_total
-                .get(),
-            1
-        );
-    }
-
     #[tokio::test(start_paused = true)]
     async fn assemble_refetches_stripped_block_proposal_failing_integrity_check() {
         let message = ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![]));
@@ -2154,11 +2128,12 @@ mod tests {
         );
     }
 
-    /// Peers strip data blocks, so an unstripped data block is not what peers send.
+    /// Peers strip data blocks, so an unstripped one is counted as invalid and not fetched again.
     #[tokio::test]
     async fn assemble_rejects_unstripped_data_block_proposal() {
         let message = ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![]));
-
+        let artifact = MaybeStrippedConsensusMessage::Unstripped(message);
+        let id = artifact.id();
         let assembler = build_assembler(
             MockValidatedPoolReader::<SignedIngress>::default(),
             FakeCanisterHttpPool::empty(),
@@ -2166,11 +2141,24 @@ mod tests {
             MockTransport::new(),
         );
 
-        assert_artifact_rejected(
-            &assembler,
-            MaybeStrippedConsensusMessage::Unstripped(message),
-        )
-        .await;
+        let result = assembler
+            .try_assemble_message(
+                &id,
+                Some((artifact, NODE_1)),
+                MockPeers(NODE_2),
+                Instant::now(),
+            )
+            .await;
+
+        assert!(matches!(result, Attempt::Unwanted));
+        assert_eq!(
+            assembler
+                .fetch_stripped
+                .metrics
+                .download_task_invalid_artifacts_total
+                .get(),
+            1
+        );
     }
 
     #[tokio::test(start_paused = true)]
