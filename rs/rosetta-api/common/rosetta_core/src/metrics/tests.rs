@@ -102,6 +102,84 @@ async fn axum_non_standard_methods_share_a_single_label() {
     );
 }
 
+fn token_display_names_for_endpoint(endpoint: &str) -> Vec<String> {
+    let families = prometheus::default_registry().gather();
+    series(&families, "rosetta_http_request_duration_seconds")
+        .into_iter()
+        .filter(|metric| label_value(metric, "endpoint") == Some(endpoint))
+        .map(|metric| {
+            label_value(metric, "token_display_name")
+                .unwrap()
+                .to_string()
+        })
+        .collect()
+}
+
+async fn send_axum_request_for_network(router: &Router, path: &str, network: &str) {
+    let body = serde_json::json!({
+        "network_identifier": { "blockchain": "Internet Computer", "network": network }
+    });
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri(path)
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    router.clone().oneshot(request).await.unwrap();
+}
+
+fn axum_router_on(token_display_name: &str, path: &str) -> Router {
+    let metrics = RosettaMetrics::new(
+        token_display_name.to_string(),
+        format!("{token_display_name}_canister"),
+    );
+    Router::new()
+        .route(path, post(|| async { "ok" }))
+        .layer(metrics.metrics_layer())
+}
+
+#[tokio::test]
+async fn axum_unregistered_networks_use_the_default_token_label() {
+    let token = "axum_unregistered_networks_use_the_default_token_label";
+    let path = "/unregistered-networks";
+    let router = axum_router_on(token, path);
+
+    let networks: Vec<String> = (0..NUM_REQUESTS)
+        .map(|i| format!("unregistered-network-{i}"))
+        .collect();
+    for network in &networks {
+        send_axum_request_for_network(&router, path, network).await;
+    }
+
+    assert_eq!(token_display_names_for_endpoint(path), vec![token]);
+    let display_names = CANISTER_DISPLAY_NAMES.lock().unwrap();
+    assert!(
+        networks
+            .iter()
+            .all(|network| !display_names.contains_key(network))
+    );
+}
+
+#[tokio::test]
+async fn axum_registered_network_uses_its_display_name() {
+    let token = "axum_registered_network_uses_its_display_name";
+    let path = "/registered-network";
+    let router = axum_router_on(token, path);
+    let registered_canister_id = "registered-network-canister";
+    let registered_display_name = "registered-network-token";
+    RosettaMetrics::register_canister_display_name(
+        registered_canister_id.to_string(),
+        registered_display_name.to_string(),
+    );
+
+    send_axum_request_for_network(&router, path, registered_canister_id).await;
+
+    assert_eq!(
+        token_display_names_for_endpoint(path),
+        vec![registered_display_name]
+    );
+}
+
 fn actix_series_labels(registry: &Registry) -> Vec<(String, String)> {
     let families = registry.gather();
     let mut labels: Vec<_> = series(&families, "rosetta_http_requests_total")
