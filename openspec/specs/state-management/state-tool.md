@@ -176,5 +176,5 @@ The tool can extract canister metrics from checkpoints.
 - **WHEN** `state_tool canister_metrics --checkpoint <path> --canister-load-output <file> --canister-connections-output <file>` is executed
 - **THEN** the checkpoint is loaded
 - **AND** per-canister load metrics are written in CSV format to the `--canister-load-output` file
-- **AND** canister-to-canister connection counts are written to the `--canister-connections-output` file, with header `sender_canister_id,receiver_canister_id,count` and one row per entry kept by each sending canister
+- **AND** canister-to-canister connection counts are written to the `--canister-connections-output` file, with header `sender_canister_id,receiver_canister_id,count` and one row per entry kept by each receiving canister (each canister tracks the local canisters that sent it requests)
 - **AND** the command fails if both output paths are the same, since the second file would otherwise overwrite the first

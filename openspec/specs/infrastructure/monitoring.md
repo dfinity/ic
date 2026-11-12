@@ -201,10 +201,11 @@ The system collects per-canister load metrics for capacity planning and subnet s
 - **AND** this data is consumed by subnet splitting estimation tools to plan optimal canister distribution
 
 #### Scenario: Canister-to-canister connection metrics
-- **WHEN** the stream builder routes a request from one canister to another canister on the same subnet (the loopback stream)
-- **THEN** the sending canister's `connection_metrics` entry for the receiver has its count incremented and its last-access timestamp set to the batch time
-- **AND** each canister keeps at most 100 receiver entries; when a new receiver would exceed that, the least recently accessed entry is evicted, ties broken by the lower count and then by receiver ID, so eviction is deterministic
-- **AND** the entries are part of the replicated state and are persisted in checkpoints (`CanisterToCanisterMetrics` in `canister_state_bits`)
+- **WHEN** execution picks a canister request for a canister whose sender is another canister on the same subnet (where load metrics count it as a local-subnet message)
+- **THEN** the receiving canister's `connection_metrics` entry for the sender has its count incremented and its last-access timestamp set to the round time
+- **AND** this counts every local request, including those inducted directly by the scheduler without going through the loopback stream, and never counts management canister calls, which execute as subnet messages and do not reach this path; resumed paused or aborted executions are not counted again
+- **AND** each canister keeps at most 100 sender entries; when a new sender would exceed that, the least recently accessed entry is evicted, ties broken by the lower count and then by sender ID, so eviction is deterministic
+- **AND** the entries are part of the replicated state and are persisted in checkpoints (`CanisterToCanisterMetrics`, keyed by `sender_canister_id`, in field 73 of `canister_state_bits`); field 72, which held the earlier per-receiver metrics collected by the stream builder, is reserved, so those metrics are dropped on upgrade and collection starts from scratch
 - **AND** cross-subnet requests and responses are not counted
 
 #### Scenario: Split finder uses connection metrics
