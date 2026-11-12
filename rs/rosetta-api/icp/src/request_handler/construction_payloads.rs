@@ -37,6 +37,14 @@ use tracing::log::debug;
 /// `ConstructionPayloadsRequestMetadata`.
 const MAX_INGRESS_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 
+/// Maximum permitted number of (request, ingress expiry) pairs in
+/// `/construction/payloads`. Each pair is turned into an update and a read
+/// state signing payload, so this bounds the work and the size of the
+/// response. It allows 100 requests over the maximum ingress window (720
+/// ingress expiries), which is well above what realistic transfer and neuron
+/// management workflows need.
+const MAX_REQUEST_INGRESS_EXPIRY_PAIRS: usize = 100 * 720;
+
 /// Validate the caller-provided ingress window before it is expanded into a
 /// list of ingress expiries.
 ///
@@ -72,6 +80,21 @@ fn validate_ingress_window(
         return Err(ApiError::invalid_request(format!(
             "ingress_end must not be more than {} hours in the future.",
             MAX_INGRESS_WINDOW.as_secs() / 3600
+        )));
+    }
+    Ok(())
+}
+
+/// Validate the number of (request, ingress expiry) pairs before any signing
+/// payloads are built for them.
+fn validate_request_ingress_expiry_pairs(
+    num_requests: usize,
+    num_ingress_expiries: usize,
+) -> Result<(), ApiError> {
+    let num_pairs = num_requests.saturating_mul(num_ingress_expiries);
+    if num_pairs > MAX_REQUEST_INGRESS_EXPIRY_PAIRS {
+        return Err(ApiError::invalid_request(format!(
+            "The number of requests multiplied by the number of ingress expiries must not exceed {MAX_REQUEST_INGRESS_EXPIRY_PAIRS}: got {num_requests} requests and {num_ingress_expiries} ingress expiries."
         )));
     }
     Ok(())
@@ -154,6 +177,8 @@ impl RosettaRequestHandler {
             ingress_expiries.push(ingress_expiry);
             now += interval;
         }
+
+        validate_request_ingress_expiry_pairs(transactions.len(), ingress_expiries.len())?;
 
         let mut updates = vec![];
         let mut payloads = vec![];
@@ -1224,5 +1249,29 @@ mod tests {
         assert!(
             validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), t(NOW_NANOS + max + 1)).is_err()
         );
+    }
+
+    // Boundary: exactly the maximum number of (request, ingress expiry) pairs is
+    // accepted, one more request or one more expiry is rejected.
+    #[test]
+    fn request_ingress_expiry_pairs_boundary_is_inclusive() {
+        const EXPIRIES: usize = 720;
+        const MAX_REQUESTS: usize = MAX_REQUEST_INGRESS_EXPIRY_PAIRS / EXPIRIES;
+        assert_eq!(MAX_REQUESTS * EXPIRIES, MAX_REQUEST_INGRESS_EXPIRY_PAIRS);
+
+        assert!(validate_request_ingress_expiry_pairs(MAX_REQUESTS - 1, EXPIRIES).is_ok());
+        assert!(validate_request_ingress_expiry_pairs(MAX_REQUESTS, EXPIRIES).is_ok());
+        assert!(validate_request_ingress_expiry_pairs(MAX_REQUESTS + 1, EXPIRIES).is_err());
+        assert!(validate_request_ingress_expiry_pairs(MAX_REQUEST_INGRESS_EXPIRY_PAIRS, 1).is_ok());
+        assert!(
+            validate_request_ingress_expiry_pairs(MAX_REQUEST_INGRESS_EXPIRY_PAIRS + 1, 1).is_err()
+        );
+    }
+
+    // The product of the counts must not wrap around and slip under the bound.
+    #[test]
+    fn request_ingress_expiry_pairs_overflow_is_rejected() {
+        assert!(validate_request_ingress_expiry_pairs(usize::MAX, 2).is_err());
+        assert!(validate_request_ingress_expiry_pairs(2, usize::MAX).is_err());
     }
 }
