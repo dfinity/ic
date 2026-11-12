@@ -178,6 +178,7 @@ mod tests {
         time::UNIX_EPOCH,
     };
     use std::collections::BTreeSet;
+    use std::sync::Arc;
     use std::time::Duration;
 
     fn context(
@@ -185,7 +186,7 @@ mod tests {
         per_replica_allowance: u128,
     ) -> CanisterHttpRequestContext {
         CanisterHttpRequestContext {
-            request: Request {
+            request: Arc::new(Request {
                 receiver: CanisterId::from_u64(1),
                 sender: CanisterId::from_u64(1),
                 sender_reply_callback: CallbackId::from(1),
@@ -194,10 +195,10 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
-            },
+            }),
             url: String::new(),
             max_response_bytes: None,
-            headers: vec![],
+            headers: Arc::new(vec![]),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,
@@ -617,6 +618,9 @@ mod tests {
             Replication::FullyReplicated,
             Replication::NonReplicated(node),
             flexible(4),
+            // A committee of 11 on a 13-node subnet, whose worst case is not a whole
+            // number of allowances, so that the rounding below actually happens.
+            flexible(11),
         ] {
             for max_response_bytes in [None, Some(NumBytes::from(0)), Some(NumBytes::from(1_000))] {
                 let subnet_size = NumberOfNodes::from(13);
@@ -665,11 +669,21 @@ mod tests {
                     allowances >= worst_case,
                     "{replication:?}, {max_response_bytes:?}"
                 );
-                // And they cover no more than that: the only slack is what rounding
-                // the worst case up to a whole number of allowances adds.
+                // And they cover no more than that: the only slack is what [`usage_fee`]
+                // added by rounding the worst case up to a whole number of allowances,
+                // i.e. fewer cycles than there are allowances.
                 assert!(
                     allowances - worst_case < Cycles::from(node_count as u64),
                     "{replication:?}, {max_response_bytes:?}"
+                );
+                // Every replica leaves its own share of the consensus fee unspent, not
+                // just the collective allowance above.
+                assert!(
+                    allowance - tracker.spent >= consensus_fee.div_ceil(node_count as u128),
+                    "{replication:?}, {max_response_bytes:?}: a replica that spent \
+                     {} of its {allowance} allowance does not hold its share of the \
+                     {consensus_fee} consensus fee",
+                    tracker.spent
                 );
             }
         }

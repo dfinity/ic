@@ -144,6 +144,13 @@ pub struct Neuron {
     /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
     #[prost(message, optional, tag = "19")]
     pub topic_followees: ::core::option::Option<neuron::TopicFollowees>,
+    /// The neuron's positive reward shares from its most recent participating reward event,
+    /// tagged with that event's end timestamp. Consumers must compare this timestamp with
+    /// `latest_reward_event.end_timestamp_seconds`. An absent value or a different timestamp means
+    /// that the neuron had zero shares in the target event. A neuron might have a stale value here
+    /// from an earlier voting reward event because old values are not cleaned up.
+    #[prost(message, optional, tag = "20")]
+    pub latest_reward_event_participation: ::core::option::Option<neuron::RewardEventParticipation>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10e-8 of a governance token.
     ///
@@ -253,6 +260,28 @@ pub mod neuron {
     pub struct TopicFollowees {
         #[prost(btree_map = "int32, message", tag = "1")]
         pub topic_id_to_followees: ::prost::alloc::collections::BTreeMap<i32, FolloweesForTopic>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Message,
+    )]
+    pub struct RewardEventParticipation {
+        /// The end timestamp of the reward event that calculated these shares.
+        #[prost(uint64, tag = "1")]
+        pub reward_event_end_timestamp_seconds: u64,
+        /// The sum of the neuron's voting power over all
+        /// reward-eligible Yes and No ballots in proposals settled by this event.
+        ///
+        /// Encoded as the canonical big-endian unsigned integer magnitude produced
+        /// by BigUint::to_bytes_be().
+        #[prost(bytes = "vec", tag = "2")]
+        pub reward_shares: ::prost::alloc::vec::Vec<u8>,
     }
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
@@ -489,6 +518,42 @@ pub struct UpgradeSnsControlledCanister {
     /// empty, and this field should be set instead.
     #[prost(message, optional, tag = "5")]
     pub chunked_canister_wasm: ::core::option::Option<ChunkedCanisterWasm>,
+    /// Options that only apply when mode is upgrade.
+    #[prost(message, optional, tag = "6")]
+    pub canister_upgrade_options:
+        ::core::option::Option<upgrade_sns_controlled_canister::CanisterUpgradeOptions>,
+}
+/// Nested message and enum types in `UpgradeSnsControlledCanister`.
+pub mod upgrade_sns_controlled_canister {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Message,
+    )]
+    pub struct CanisterUpgradeOptions {
+        /// Whether to skip the canister's pre_upgrade hook. This would generally be
+        /// used in emergencies. See the corresponding field in the Management
+        /// canister API.
+        #[prost(bool, optional, tag = "1")]
+        pub skip_pre_upgrade: ::core::option::Option<bool>,
+        /// Whether to retain (keep) or drop (replace) the canister's Wasm main
+        /// memory across the upgrade. If the old WASM had a custom section named
+        /// "icp:private enhanced-orthogonal-persistence", then this must be set
+        /// (otherwise, the Management canister will block the upgrade). If keep is
+        /// used here, then the new WASM must also have the same custom section.
+        #[prost(
+            enumeration = "::ic_protobuf::types::v1::WasmMemoryPersistence",
+            optional,
+            tag = "2"
+        )]
+        pub wasm_memory_persistence: ::core::option::Option<i32>,
+    }
 }
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.
@@ -1530,6 +1595,11 @@ pub struct ProposalData {
     /// This proposal's topic.
     #[prost(enumeration = "Topic", optional, tag = "25")]
     pub topic: ::core::option::Option<i32>,
+    /// The raw reply bytes returned by the target canister for a successful
+    /// ExecuteGenericNervousSystemFunction call, truncated to at most
+    /// MAX_EXECUTION_REPLY_LEN_BYTES (5 KB).
+    #[prost(bytes = "vec", optional, tag = "26")]
+    pub execution_reply: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
     #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22, 23, 24")]

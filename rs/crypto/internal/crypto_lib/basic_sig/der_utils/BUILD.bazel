@@ -8,6 +8,7 @@ rust_library(
     visibility = [
         "//rs/crypto/iccsa:__subpackages__",
         "//rs/crypto/standalone-sig-verifier:__subpackages__",
+        "//rs/crypto/utils/threshold_sig_der:__subpackages__",
         "//rs/tests/crypto:__subpackages__",
         "//rs/validator:__subpackages__",
         "//rs/validator/http_request_test_utils:__subpackages__",

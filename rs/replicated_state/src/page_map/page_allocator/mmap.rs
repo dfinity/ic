@@ -7,7 +7,7 @@ use super::{
     ALLOCATED_PAGES, MmapPageSerialization, Page, PageAllocatorSerialization,
     PageDeltaSerialization, PageValidation,
 };
-use cvt::{cvt, cvt_r};
+use ic_sys::fs::{cvt, cvt_r};
 use ic_sys::{PAGE_SIZE, PageBytes, PageIndex, page_bytes_from_ptr};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use libc::{c_void, close};

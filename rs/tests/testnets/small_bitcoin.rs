@@ -7,7 +7,7 @@
 // You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/container-run.sh
-//   $ bazel run //rs/tests/testnets:small_bitcoin --test_tmpdir=./small_bitcoin -- --keepalive
+//   $ bazel run //rs/tests/testnets:small_bitcoin_farm --test_tmpdir=./small_bitcoin -- --keepalive
 //
 // The --test_tmpdir=./small_bitcoin will store the remaining test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -18,9 +18,9 @@
 //
 // To get access to P8s and Grafana look for the following lines in the output:
 //
-//     prometheus: Prometheus Web UI at http://prometheus.small_bitcoin--1692597750709.testnet.farm.dfinity.systems,
-//     grafana: Grafana at http://grafana.small_bitcoin--1692597750709.testnet.farm.dfinity.systems,
-//     progress_clock: IC Progress Clock at http://grafana.small_bitcoin--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
+//     prometheus: Prometheus Web UI at http://prometheus.small_bitcoin_farm--1692597750709.testnet.farm.dfinity.systems,
+//     grafana: Grafana at http://grafana.small_bitcoin_farm--1692597750709.testnet.farm.dfinity.systems,
+//     progress_clock: IC Progress Clock at http://grafana.small_bitcoin_farm--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
 //
 // Happy testing!
 

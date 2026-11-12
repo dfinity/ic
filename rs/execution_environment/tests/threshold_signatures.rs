@@ -10,7 +10,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError};
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use ic_types::{CanisterId, RegistryVersion, SubnetId, ingress::WasmResult};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{Cycles, NominalCycles};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
 use itertools::Itertools;
 use serde::Deserialize;
@@ -26,6 +26,28 @@ fn create_universal_canister(env: &StateMachine) -> CanisterId {
     )
     .unwrap();
     canister_id
+}
+
+/// The number of `sign_with_threshold` contexts currently queued for `method`.
+fn sign_with_threshold_contexts_len(env: &StateMachine, method: Method) -> usize {
+    match method {
+        Method::SignWithECDSA => env.sign_with_ecdsa_contexts().len(),
+        Method::SignWithSchnorr => env.sign_with_schnorr_contexts().len(),
+        Method::VetKdDeriveKey => env.vetkd_derive_key_contexts().len(),
+        _ => panic!("Unexpected method"),
+    }
+}
+
+/// The subnet-level cycles recorded as consumed by `method`'s use case.
+fn consumed_cycles_for_method(env: &StateMachine, method: Method) -> NominalCycles {
+    let state = env.get_latest_state();
+    let subnet_metrics = &state.metadata.subnet_metrics;
+    match method {
+        Method::SignWithECDSA => subnet_metrics.get_consumed_cycles_ecdsa_outcalls(),
+        Method::SignWithSchnorr => subnet_metrics.get_consumed_cycles_schnorr_outcalls(),
+        Method::VetKdDeriveKey => subnet_metrics.get_consumed_cycles_vetkd(),
+        _ => panic!("Unexpected method"),
+    }
 }
 
 fn make_ecdsa_key(name: &str) -> MasterPublicKeyId {
@@ -894,6 +916,23 @@ fn test_sign_with_threshold_key_queue_fills_up() {
                 payload.clone(),
             );
         }
+        // Tick until all the requests above have been queued. They are never
+        // answered (signing is disabled), so they cannot be awaited.
+        for _ in 0..100 {
+            if sign_with_threshold_contexts_len(&env, method) >= max_queue_size {
+                break;
+            }
+            env.tick();
+        }
+        assert_eq!(
+            sign_with_threshold_contexts_len(&env, method),
+            max_queue_size
+        );
+
+        // Every queued request was charged the fee.
+        let consumed_cycles = consumed_cycles_for_method(&env, method);
+        assert_eq!(consumed_cycles.get(), fee * max_queue_size as u128);
+
         let result = env.execute_ingress(canister_id, "update", payload.clone());
 
         assert_eq!(
@@ -902,5 +941,9 @@ fn test_sign_with_threshold_key_queue_fills_up() {
                 "{method} request failed: request queue for key {key_id} is full.",
             )))
         );
+
+        // The rejected request was refunded its full payment, so it must not
+        // have been recorded as consumed.
+        assert_eq!(consumed_cycles_for_method(&env, method), consumed_cycles);
     }
 }

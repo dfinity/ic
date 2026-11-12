@@ -1,14 +1,14 @@
 use anyhow::Context;
 use clap::Parser;
+use colored::Colorize;
 use ic_base_types::SubnetId;
 use ic_recovery::{NeuronArgs, RecoveryArgs, cli, util};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_subnet_splitting::{
-    post_split_estimations,
+    post_split_estimations::{self, Estimates, LoadEstimates, StateSizeEstimates},
     subnet_splitting::{SubnetSplitting, SubnetSplittingArgs},
-    utils::canister_id_ranges_to_strings,
-    validation::validate_artifacts,
 };
+use ic_subnet_tools::{utils::canister_id_ranges_to_strings, validation::validate_artifacts};
 use ic_types::ReplicaVersion;
 use slog::{Logger, info, warn};
 use url::Url;
@@ -202,7 +202,18 @@ fn do_validate(args: ValidateArgs, logger: Logger) -> anyhow::Result<()> {
 }
 
 fn do_estimate(args: EstimateArgs, _logger: Logger) -> anyhow::Result<()> {
-    let (state_size_estimates, load_estimates) = post_split_estimations::estimate(
+    let (
+        StateSizeEstimates { states_sizes_bytes },
+        LoadEstimates {
+            canisters_installed,
+            instructions_executed,
+            ingress_messages_executed,
+            remote_subnet_messages_executed_lower_bound,
+            local_subnet_messages_executed_upper_bound,
+            http_outcalls_executed,
+            heartbeats_and_global_timers_executed,
+        },
+    ) = post_split_estimations::estimate(
         args.canister_id_ranges_to_move,
         args.state_manifest_path,
         args.load_samples_path,
@@ -210,27 +221,83 @@ fn do_estimate(args: EstimateArgs, _logger: Logger) -> anyhow::Result<()> {
     )
     .context("Failed to estimate the load")?;
 
-    println!(
-        "States sizes in bytes: {}",
-        state_size_estimates.states_sizes_bytes
-    );
-
-    println!(
-        "Estimated instructions used on both subnet: {}",
-        load_estimates.instructions_executed
-    );
-
-    println!(
-        "Estimated ingress load on both subnet: {}",
-        load_estimates.ingress_messages_executed
-    );
-
-    println!(
-        "Estimated number of http outcalls made on both subnet: {}",
-        load_estimates.http_outcalls_executed
-    );
+    println!();
+    print_estimates(&[
+        ("States sizes in bytes", &states_sizes_bytes),
+        (
+            "Estimated canisters installed on both subnets",
+            &canisters_installed,
+        ),
+        (
+            "Estimated instructions used on both subnets",
+            &instructions_executed,
+        ),
+        (
+            "Estimated ingress load on both subnets",
+            &ingress_messages_executed,
+        ),
+        (
+            "Remote subnet messages executed on both subnets (lower bound)",
+            &remote_subnet_messages_executed_lower_bound,
+        ),
+        (
+            "Local subnet messages executed on both subnets (upper bound)",
+            &local_subnet_messages_executed_upper_bound,
+        ),
+        (
+            "Estimated number of http outcalls made on both subnets",
+            &http_outcalls_executed,
+        ),
+        (
+            "Estimated number of heartbeats and global timers made on both subnets",
+            &heartbeats_and_global_timers_executed,
+        ),
+    ]);
 
     Ok(())
+}
+
+/// Prints one row per estimate with pretty colors, weight, and alignment
+fn print_estimates(rows: &[(&str, &Estimates)]) {
+    let label_width = rows
+        .iter()
+        .map(|(label, _)| label.len() + 1)
+        .max()
+        .unwrap_or_default();
+    let source_width = rows
+        .iter()
+        .map(|(_, estimates)| estimates.source.to_string().len())
+        .max()
+        .unwrap_or_default();
+    let destination_width = rows
+        .iter()
+        .map(|(_, estimates)| estimates.destination.to_string().len())
+        .max()
+        .unwrap_or_default();
+
+    for (label, estimates) in rows {
+        let total = estimates.total();
+        let percentage = |value: u64| {
+            if total == 0 {
+                0.0
+            } else {
+                value as f64 / total as f64 * 100.0
+            }
+        };
+
+        println!(
+            "{}  {} {} {}  {} {} {}",
+            format!("{:<label_width$}", format!("{label}:")).bold(),
+            "source:".cyan(),
+            format!("{:>source_width$}", estimates.source).cyan().bold(),
+            format!("({:>6.2}%)", percentage(estimates.source)).cyan(),
+            "destination:".magenta(),
+            format!("{:>destination_width$}", estimates.destination)
+                .magenta()
+                .bold(),
+            format!("({:>6.2}%)", percentage(estimates.destination)).magenta(),
+        );
+    }
 }
 
 fn main() -> anyhow::Result<()> {

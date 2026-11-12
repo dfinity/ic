@@ -1,0 +1,62 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+rust_library(
+    name = "vsock_lib",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/bin/**"],
+    ),
+    deps = [
+        "@crate_index//:mockall",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:thiserror",
+    ] + select({
+        "@platforms//os:linux": [
+            "//rs/http_utils",
+            "@crate_index//:procfs",
+            "@crate_index//:rusb",
+            "@crate_index//:tempfile",
+            "@crate_index//:tokio",
+            "@crate_index//:tokio-util",
+            "@crate_index//:tokio-vsock",
+            "@crate_index//:vsock",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+rust_test(
+    name = "test",
+    size = "small",
+    crate = ":vsock_lib",
+)
+
+rust_binary(
+    name = "vsock_guest",
+    srcs = ["src/bin/guest.rs"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = [
+        ":vsock_lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:clap",
+    ],
+)
+
+rust_binary(
+    name = "vsock_host",
+    srcs = ["src/bin/host.rs"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = [
+        ":vsock_lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
+    ],
+)

@@ -52,6 +52,9 @@ fn forum_topic_kind(canister: &TargetCanister) -> ForumTopicKind {
         | TargetCanister::CkEthIndex
         | TargetCanister::CkEthLedger
         | TargetCanister::CkEthMinter
+        | TargetCanister::CkSolIndex
+        | TargetCanister::CkSolLedger
+        | TargetCanister::CkSolMinter
         | TargetCanister::EvmRpc
         | TargetCanister::LedgerSuiteOrchestrator
         | TargetCanister::SolRpc => ForumTopicKind::ApplicationCanisterManagement,

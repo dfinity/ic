@@ -15,7 +15,6 @@ rust_library(
         "//rs/crypto/internal/test_vectors",
         "//rs/protobuf",
         "//rs/types/types",
-        "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",

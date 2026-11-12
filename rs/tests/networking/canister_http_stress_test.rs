@@ -3,7 +3,7 @@ Title:: Stress test for the http_requests feature
 
 Goal:: Measure the qps of http_requests originating from one canister. The test should be run with the following command:
 ```
-bazel test //rs/tests/networking:canister_http_stress_test --test_tmpdir=./canister_http_stress_test
+bazel test //rs/tests/networking:canister_http_stress_test_farm --test_tmpdir=./canister_http_stress_test
 ```
 
 Runbook::
@@ -64,6 +64,8 @@ fn main() -> Result<()> {
         .add_test(systest!(test))
         // This test takes consistently around 20 mintues, so setting 30 minutes to be safe.
         .with_timeout_per_test(Duration::from_secs(30 * 60))
+        // Floods the adapter on purpose, so a full adapter queue is expected here.
+        .remove_metrics_to_check("canister_http_pool_manager_errors")
         .execute_from_args()?;
 
     Ok(())

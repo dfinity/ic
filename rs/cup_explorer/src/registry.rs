@@ -95,11 +95,12 @@ impl RegistryClient for RegistryCanisterClient {
 
 /// Returns the list of nodes assigned to the specified subnet_id at the latest registry version.
 pub(crate) async fn get_nodes(
-    registry_canister: &Arc<RegistryCanister>,
+    registry_canister: &RegistryCanisterClient,
     subnet_id: SubnetId,
 ) -> Vec<(NodeId, NodeRecord)> {
     let (subnet_record, version) = registry_canister
-        .get_value(make_subnet_record_key(subnet_id).as_bytes().to_vec(), None)
+        .0
+        .get_value_with_update(make_subnet_record_key(subnet_id).as_bytes().to_vec(), None)
         .await
         .expect("failed to fetch the list of nodes");
 
@@ -109,11 +110,11 @@ pub(crate) async fn get_nodes(
         .membership
         .into_iter()
         .map(|n| {
-            let registry_canister = Arc::clone(registry_canister);
+            let registry_canister = Arc::clone(&registry_canister.0);
             task::spawn(async move {
                 let node_id = NodeId::from(PrincipalId::try_from(&n[..]).unwrap());
                 let (node_record_bytes, _) = registry_canister
-                    .get_value(
+                    .get_value_with_update(
                         make_node_record_key(node_id).as_bytes().to_vec(),
                         Some(version),
                     )

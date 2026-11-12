@@ -147,6 +147,7 @@ DATA_DEPS = [
     "//rs/node_rewards/canister:node-rewards-canister",
     "//rs/registry/canister:registry-canister",
     "//rs/registry/canister:registry-canister-test",
+    "//rs/sns/governance:sns-governance-canister.wasm.gz",
     "//rs/sns/governance:sns-governance-canister-test.wasm.gz",
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",
@@ -168,7 +169,8 @@ ENV = {
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
     "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
-    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test.wasm.gz)",
+    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister.wasm.gz)",
+    "SNS_GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test.wasm.gz)",
     "SNS_GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/sns/integration_tests:sns-governance-mem-test-canister)",
     "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
     "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
@@ -200,7 +202,7 @@ rust_ic_test_suite_with_extra_srcs(
     crate_features = ["test"],
     data = DATA_DEPS,
     env = ENV,
-    exec_properties = {"cpu": "8"},
+    exec_properties = {"test.cpu": "8"},
     extra_srcs = [],
     proc_macro_deps = [
         # Keep sorted.
@@ -221,7 +223,7 @@ rust_ic_test(
     crate_features = ["test"],
     data = DATA_DEPS,
     env = ENV,
-    exec_properties = {"cpu": "8"},
+    exec_properties = {"test.cpu": "8"},
     #proc_macro_deps = [
     #    # Keep sorted.
     #    "@crate_index//:async-trait",
@@ -244,7 +246,7 @@ rust_ic_test(
     crate_features = ["test"],
     data = DATA_DEPS,
     env = ENV,
-    exec_properties = {"cpu": "8"},
+    exec_properties = {"test.cpu": "8"},
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:async-trait",
@@ -296,7 +298,7 @@ rust_ic_test_suite_with_extra_srcs(
         ("MAINNET_SNS_SWAP_CANISTER_WASM_PATH", "$(rootpath @mainnet_canisters//:swap.wasm.gz)"),
     ]),
     exec_properties = {
-        "cpu": "8",
+        "test.cpu": "8",
         # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)
         # so we need this Namespace.so-specific execution property to open up the network on RBE:
         "namespace_requires_network": "true",

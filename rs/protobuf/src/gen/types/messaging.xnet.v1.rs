@@ -50,6 +50,15 @@ pub struct CertificationContent {
     #[prost(bytes = "vec", tag = "2")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
+/// Certification of state tree root hash, as included in stream slices: minus the
+/// `height` and `height_witness` that the signature does not cover.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SignedCertificationContent {
+    #[prost(message, optional, tag = "2")]
+    pub content: ::core::option::Option<CertificationContent>,
+    #[prost(message, optional, tag = "3")]
+    pub signature: ::core::option::Option<super::super::super::types::v1::ThresholdSignature>,
+}
 /// Certification of state tree root hash.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Certification {
@@ -75,7 +84,7 @@ pub struct CertificationShare {
     pub height_witness: ::core::option::Option<Witness>,
 }
 /// XNet stream slice with certification and matching Merkle proof.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CertifiedStreamSlice {
     /// Serialized part of the state tree containing the stream data.
     #[prost(bytes = "vec", tag = "1")]
@@ -85,5 +94,5 @@ pub struct CertifiedStreamSlice {
     pub merkle_proof: ::prost::alloc::vec::Vec<u8>,
     /// Certification of the root hash.
     #[prost(message, optional, tag = "3")]
-    pub certification: ::core::option::Option<Certification>,
+    pub certification: ::core::option::Option<SignedCertificationContent>,
 }

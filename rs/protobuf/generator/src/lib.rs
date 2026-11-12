@@ -258,6 +258,10 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
+        ".registry.standard_engine_replica_version",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
         ".registry.node.v1.ConnectionEndpoint",
         "#[derive(PartialOrd, Ord)]",
     );
@@ -403,6 +407,7 @@ fn build_types_proto(def: &Path, out: &Path) {
         def.join("types/v1/canister_http.proto"),
         def.join("types/v1/artifact.proto"),
         def.join("types/v1/errors.proto"),
+        def.join("types/v1/upgrade.proto"),
     ];
     compile_protos(config, def, &files);
 }

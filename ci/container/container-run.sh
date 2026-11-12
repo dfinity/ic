@@ -108,21 +108,92 @@ if ! "${CONTAINER_CMD[@]}" info >/dev/null 2>&1; then
     exit 1
 fi
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
-IMAGE="ghcr.io/dfinity/$IMAGE_NAME:$IMAGE_TAG"
+die() {
+    warn "$@"
+    exit 1
+}
 
-# Check for a locally-available image (podman has `image exists`; docker doesn't,
-# so use `image inspect`) and pull or build it if it's missing.
-if [ "$RUNTIME" = docker ]; then
-    image_exists_cmd=("${CONTAINER_CMD[@]}" image inspect "$IMAGE")
-else
-    image_exists_cmd=("${CONTAINER_CMD[@]}" image exists "$IMAGE")
-fi
-if ! "${image_exists_cmd[@]}" >/dev/null 2>&1; then
-    if ! "${CONTAINER_CMD[@]}" pull "$IMAGE"; then
-        "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME"
+case "$IMAGE_NAME" in
+    ic-dev | ic-build) ;;
+    *) die "Unknown image '$IMAGE_NAME' (expected ic-dev or ic-build)" ;;
+esac
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+IMAGE_REPO="ghcr.io/dfinity/$IMAGE_NAME"
+IMAGE_TAG="$("$REPO_ROOT"/ci/container/get-image-tag.sh)"
+PINNED_TAG="$(<"$REPO_ROOT/ci/container/TAG")"
+DIGEST_FILE="$REPO_ROOT/ci/container/$IMAGE_NAME.digest"
+# By default the script refuses to run any image that is not verified against
+# the committed digest pin. CONTAINER_RUN_ALLOW_UNPINNED=1 opts out for this run:
+# build the image locally from the checkout when no reviewed pin exists for the
+# working tree, or reuse an existing local image when the pinned pull fails.
+# Only the exact value 1 opts out, so that 0, false or a typo cannot silently
+# disable the check.
+case "${CONTAINER_RUN_ALLOW_UNPINNED:-}" in
+    "") ALLOW_UNPINNED="" ;;
+    1) ALLOW_UNPINNED=1 ;;
+    *) die "CONTAINER_RUN_ALLOW_UNPINNED must be unset or exactly '1' (got '${CONTAINER_RUN_ALLOW_UNPINNED}')" ;;
+esac
+# Set when the image about to run is NOT verified against a reviewed digest pin
+# (built locally, or an existing local image reused because the pull failed).
+LOCAL_IMAGE=false
+
+image_exists() {
+    if [ "$RUNTIME" = docker ]; then
+        "${CONTAINER_CMD[@]}" image inspect "$1" >/dev/null 2>&1
+    else
+        "${CONTAINER_CMD[@]}" image exists "$1"
     fi
+}
+
+build_locally() {
+    if [ -z "$ALLOW_UNPINNED" ]; then
+        die "$1; refusing to build an unpinned image locally (set CONTAINER_RUN_ALLOW_UNPINNED=1 to run an image that is not verified against the committed digest)"
+    fi
+    warn "$1; building $IMAGE_REPO:$IMAGE_TAG locally from the checkout (this takes a while)"
+    "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME" --container-cmd "${CONTAINER_CMD[*]}"
+    IMAGE="$IMAGE_REPO:$IMAGE_TAG"
+    LOCAL_IMAGE=true
+}
+
+if [ "$IMAGE_TAG" = "$PINNED_TAG" ]; then
+    [ -f "$DIGEST_FILE" ] || die "$DIGEST_FILE is missing: refusing to pull an unpinned image"
+    IMAGE_DIGEST="$(<"$DIGEST_FILE")"
+    if ! [[ $IMAGE_DIGEST =~ ^sha256:[0-9a-f]{64}$ ]]; then
+        die "$DIGEST_FILE is malformed ('$IMAGE_DIGEST'): refusing to pull an unpinned image"
+    fi
+    IMAGE="$IMAGE_REPO@$IMAGE_DIGEST"
+    if ! image_exists "$IMAGE" && image_exists "$IMAGE_REPO:$IMAGE_TAG"; then
+        eprintln "Local image $IMAGE_REPO:$IMAGE_TAG is not verified against the pin (e.g. built locally); pulling the pinned image $IMAGE instead (one-time download)."
+    fi
+    if image_exists "$IMAGE" || "${CONTAINER_CMD[@]}" pull "$IMAGE"; then
+        "${CONTAINER_CMD[@]}" tag "$IMAGE" "$IMAGE_REPO:$IMAGE_TAG" \
+            || die "Failed to tag the verified image $IMAGE as $IMAGE_REPO:$IMAGE_TAG"
+    elif [ -n "$ALLOW_UNPINNED" ] && image_exists "$IMAGE_REPO:$IMAGE_TAG"; then
+        warn "Pinned image $IMAGE could not be pulled (offline?); reusing the existing local image $IMAGE_REPO:$IMAGE_TAG, which is NOT verified against the pin (CONTAINER_RUN_ALLOW_UNPINNED is set)."
+        IMAGE="$IMAGE_REPO:$IMAGE_TAG"
+        LOCAL_IMAGE=true
+    else
+        build_locally "Pinned image $IMAGE could not be pulled"
+    fi
+else
+    warn "ci/container/{Dockerfile,init.sh,files/*} differ from what ci/container/TAG was built from:"
+    warn "  computed tag: $IMAGE_TAG"
+    warn "  pinned tag:   $PINNED_TAG"
+    warn "No reviewed digest pin exists for the computed tag, and registry tags are mutable and unverified, so it is never pulled."
+    warn "If you pushed this change, wait for the 'Container IC Build Image' workflow to commit TAG and *.digest to your branch, then 'git pull' and re-run."
+    if [ -z "$ALLOW_UNPINNED" ]; then
+        die "No reviewed digest pin exists for tag $IMAGE_TAG; refusing to run an unpinned image (set CONTAINER_RUN_ALLOW_UNPINNED=1 to build it locally from the checkout, or to reuse an existing local $IMAGE_REPO:$IMAGE_TAG)"
+    fi
+    IMAGE="$IMAGE_REPO:$IMAGE_TAG"
+    image_exists "$IMAGE" || build_locally "No reviewed digest pin exists for tag $IMAGE_TAG"
+    LOCAL_IMAGE=true
+fi
+
+if [ "$LOCAL_IMAGE" = true ]; then
+    warn "Using image $IMAGE (NOT verified against a reviewed digest pin; CONTAINER_RUN_ALLOW_UNPINNED is set)"
+else
+    eprintln "Using image $IMAGE (verified against ci/container/$IMAGE_NAME.digest)"
 fi
 
 # On the devenv we issue a warning if the images start taking up a lot of space.
@@ -141,7 +212,22 @@ if [ "$DEVENV" = true ] && [ "$RUNTIME" = podman ]; then
     fi
 fi
 
-WORKDIR="/ic"
+# Mount the checkout at the same (canonical, symlink-resolved) absolute path
+# it has on the host, and use it as the working directory. This
+# - gives every checkout its own default bazel output base
+#   ($CTR_CACHE_DIR/bazel/_bazel_$CTR_USER/<md5 of the workspace path>) while
+#   the install base, repository cache and repo contents cache in the shared
+#   output_user_root stay shared. Bazel cannot recognize a server that runs in
+#   another container (separate PID namespaces), so two containers on one
+#   output base kill each other's server ("Server terminated abruptly (error
+#   code: 14 ...)");
+# - makes the absolute `gitdir:` pointers of linked git worktrees resolve
+#   (together with the GIT_COMMON_DIR mount below);
+# - keeps host paths valid inside the container.
+# The VS Code devcontainer (.devcontainer/devcontainer.json) mounts the
+# checkout the same way but pins its own output base, so the two never share
+# one.
+WORKDIR="$REPO_ROOT"
 
 # the docker image creates two users: ubuntu (1000) and buildifier (1001). Here we ensure the correct home is used.
 HOST_UID="$(id -u)"
@@ -167,9 +253,10 @@ CACHE_DIR="${CACHE_DIR:-${HOME}/.cache}"
 
 # make sure we have all bind-mounts
 # ~/.aws, ~/.ssh: credentials forwarded to the container
-# ~/.cache: used as cache persisted across containers (cargo, etc)
+# $CACHE_DIR (~/.cache or -c/--cache-dir): caches persisted across containers (bazel, cargo, etc)
 # ~/.claude: persisted claude settings
-mkdir -p ~/.{aws,ssh,cache,claude}
+# ~/.config: user tool configs, e.g. gh's login (~/.config/gh/hosts.yml)
+mkdir -p ~/.{aws,ssh,claude,config} "$CACHE_DIR"
 
 RUNTIME_RUN_ARGS=(
     -w "$WORKDIR"
@@ -194,16 +281,43 @@ RUNTIME_RUN_ARGS=(
     # ensures processes are reaped correctly
     --init
 
-    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"       # mount the local repo checkout
+    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"       # the checkout, at its host path
     --mount type=bind,source="${CACHE_DIR}",target="${CTR_CACHE_DIR}" # persisted root for caches (cargo, etc)
 
     # mount credentials & settings
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.claude",target="${CTR_HOME}/.claude"
+    --mount type=bind,source="${HOME}/.config",target="${CTR_HOME}/.config"
 
     --mount type=tmpfs,target="/tmp/containers" # expected by ic-os build
 )
+
+# Inside a container `git worktree list` reports worktrees other than the
+# current one as "prunable" because their host checkouts are not mounted, so
+# never run `git worktree prune|repair|move|remove` in a container. For the
+# same reason gc's automatic worktree pruning is disabled in every container,
+# not only when started from a linked worktree: `git gc --auto` in a
+# main-checkout container could otherwise prune host worktrees idle for longer
+# than gc.worktreePruneExpire (default: 3 months).
+RUNTIME_RUN_ARGS+=(
+    -e GIT_CONFIG_COUNT=1
+    -e GIT_CONFIG_KEY_0=gc.worktreePruneExpire
+    -e GIT_CONFIG_VALUE_0=never
+)
+
+# Support linked git worktrees (`git worktree add`).
+#
+# A linked worktree's .git is a file pointing into the main repository's .git
+# directory on the host, which is not otherwise visible in the container, so
+# git (and everything that uses it: --config=stamped, rust-lint.sh, ic-admin's
+# build script under cargo, ...) would fail with "not a git repository".
+# Bind-mount the common git dir at its host path so that the pointer resolves.
+GIT_COMMON_DIR="$(cd "$REPO_ROOT" && realpath "$(git rev-parse --git-common-dir)")"
+if [ "$GIT_COMMON_DIR" != "$REPO_ROOT/.git" ]; then
+    eprintln "Detected linked git worktree; mounting '$GIT_COMMON_DIR'"
+    RUNTIME_RUN_ARGS+=(--mount type=bind,source="$GIT_COMMON_DIR",target="$GIT_COMMON_DIR")
+fi
 
 # Privilege/isolation flags required by the IC-OS guest build, per runtime.
 if [ "$RUNTIME" = docker ]; then
@@ -237,7 +351,10 @@ if [ "$RUNTIME" = docker ]; then
 else
     # Privileged rootful podman is required due to requirements of IC-OS guest build;
     # additionally, we need to use hosts's cgroups and network.
-    RUNTIME_RUN_ARGS+=(--pids-limit=-1 --privileged --network=host --cgroupns=host)
+    #
+    # `--pids-limit=-1` turns into `--pids-limit=1` somewhere down the podman -> runc
+    # stack, so use a very high positive limit instead.
+    RUNTIME_RUN_ARGS+=(--pids-limit=4194304 --privileged --network=host --cgroupns=host)
 fi
 
 # In the devenv, inject some extra files into the container for convenience
@@ -298,4 +415,4 @@ if [ -f "$HOME/.container-run.conf" ]; then
 fi
 
 set -x
-exec "${CONTAINER_CMD[@]}" run "${RUNTIME_RUN_ARGS[@]}" "$IMAGE" "${cmd[@]}"
+exec "${CONTAINER_CMD[@]}" run "${RUNTIME_RUN_ARGS[@]}" --pull=never "$IMAGE" "${cmd[@]}"

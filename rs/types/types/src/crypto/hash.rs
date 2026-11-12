@@ -7,7 +7,7 @@ use crate::canister_http::{
 use crate::consensus::{
     Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
     CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent, UpgradeAuthorizationShare,
     certification::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
     },
@@ -128,6 +128,8 @@ mod private {
     impl CryptoHashDomainSeal for CanisterHttpResponse {}
     impl CryptoHashDomainSeal for CanisterHttpResponseMetadata {}
     impl CryptoHashDomainSeal for CanisterHttpResponseShare {}
+
+    impl CryptoHashDomainSeal for UpgradeAuthorizationShare {}
 
     impl CryptoHashDomainSeal for CryptoHashableTestDummy {}
 }
@@ -407,6 +409,12 @@ impl CryptoHashDomain for IDkgOpeningContent {
 impl CryptoHashDomain for Signed<IDkgOpeningContent, BasicSignature<IDkgOpeningContent>> {
     fn domain(&self) -> String {
         DomainSeparator::SignedIDkgOpening.to_string()
+    }
+}
+
+impl CryptoHashDomain for UpgradeAuthorizationShare {
+    fn domain(&self) -> String {
+        DomainSeparator::UpgradeAuthorizationShare.to_string()
     }
 }
 

@@ -46,6 +46,9 @@ pub const MEDIAN_TRANSACTION_FEE: u64 = 50_000_000;
 // 0.01 DOGE, ca 0.002 USD (2025.09.06)
 pub const LEDGER_TRANSFER_FEE: u64 = DOGE / 100;
 const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
+/// Interval of the minter's `ProcessLogic` task (`INTERVAL_PROCESSING` in
+/// `rs/bitcoin/ckbtc/minter/src/tasks.rs`).
+const PROCESS_LOGIC_INTERVAL: Duration = Duration::from_secs(5);
 pub const MIN_CONFIRMATIONS: u32 = 60;
 pub const BLOCK_TIME: Duration = Duration::from_secs(60);
 /// Must be at least the minter's `refresh_fee_percentiles_frequency` (currently `SIX_MINUTES`,

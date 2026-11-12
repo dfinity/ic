@@ -1,4 +1,5 @@
 use crate::BtcNetwork;
+use base64::prelude::*;
 use ic_btc_interface::Txid;
 use ic_cdk_management_canister::{
     HttpHeader, HttpMethod, HttpRequestArgs, TransformContext, TransformFunc,
@@ -188,7 +189,7 @@ pub(crate) fn parse_authorization_header_from_url(
     let mut url = url::Url::parse(json_rpc_url).map_err(|err| err.to_string())?;
     let username = url.username();
     let password = url.password().unwrap_or_default();
-    let authorization = base64::encode(format!(
+    let authorization = BASE64_STANDARD.encode(format!(
         "{}:{}",
         url::form_urlencoded::parse(username.as_bytes())
             .next()

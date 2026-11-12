@@ -29,7 +29,7 @@ impl Step for EnsureElectedVersion {
         let elected_versions = env.topology_snapshot().replica_version_records()?;
         if elected_versions
             .iter()
-            .any(|(k, _)| k == self.version.as_ref())
+            .any(|v| v.replica_version_id == self.version.as_ref())
         {
             info!(env.logger(), "Version `{}` already elected", self.version);
             return Ok(());
@@ -62,7 +62,7 @@ impl Step for EnsureElectedVersion {
 
         match elected_versions
             .iter()
-            .any(|(k, _)| k == self.version.as_ref())
+            .any(|v| v.replica_version_id == self.version.as_ref())
         {
             true => Ok(()),
             false => Err(anyhow::anyhow!("Version not found in the registry")),

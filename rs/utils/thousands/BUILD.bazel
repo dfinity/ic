@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "thousands",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_utils_thousands",
+    version = "0.1.0",
+)
+
+rust_test(
+    name = "thousands_test",
+    crate = ":thousands",
+)
+
+rust_doc_test(
+    name = "thousands_doc_test",
+    crate = ":thousands",
+)

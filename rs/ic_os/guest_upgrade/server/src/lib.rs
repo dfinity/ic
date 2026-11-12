@@ -1,18 +1,19 @@
-use crate::service::DiskEncryptionKeyExchangeServiceImpl;
-use attestation::attestation_package::SevRootCertificateVerification;
-use config_types::TrustedExecutionEnvironmentConfig;
-use ic_interfaces_registry::RegistryClient;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_types::ReplicaVersion;
-use server::DiskEncryptionKeyExchangeServer;
-use sev_guest::firmware::SevGuestFirmware;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+
+use crate::service::{DiskEncryptionKeyExchangeServiceImpl, ElectedGuestOsVersion};
+use attestation::attestation_package::SevRootCertificateVerification;
+use config_types::TrustedExecutionEnvironmentConfig;
+use ic_interfaces_registry::RegistryClient;
+use ic_registry_client_helpers::replica_version::ReplicaVersionRegistry;
+use ic_types::ReplicaVersion;
+use server::DiskEncryptionKeyExchangeServer;
+use sev_guest::firmware::SevGuestFirmware;
 use thiserror::Error;
 use tokio::runtime::Handle;
 use tokio::sync::watch;
-use vsock_lib::VSockClient;
+use vsock_lib::client::VsockClient;
 use vsock_lib::protocol::Command;
 
 pub mod orchestrator;
@@ -38,7 +39,7 @@ pub struct DiskEncryptionKeyExchangeServerAgent {
     sev_firmware_factory: SevFirmwareFactory,
     sev_root_certificate_verification: SevRootCertificateVerification,
     trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
-    vsock_client: Box<dyn VSockClient + Send + Sync>,
+    vsock_client: Box<dyn VsockClient + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     store_device_path: PathBuf,
     store_luks_header_path: PathBuf,
@@ -49,7 +50,7 @@ pub struct DiskEncryptionKeyExchangeServerAgent {
 impl DiskEncryptionKeyExchangeServerAgent {
     pub fn new(
         handle: Handle,
-        vsock_client: Box<dyn VSockClient + Send + Sync>,
+        vsock_client: Box<dyn VsockClient + Send + Sync>,
         sev_firmware_factory: SevFirmwareFactory,
         sev_root_certificate_verification: SevRootCertificateVerification,
         trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
@@ -101,6 +102,7 @@ impl DiskEncryptionKeyExchangeServerAgent {
             self.store_luks_header_path.clone(),
             status_sender,
             expected_measurements,
+            self.fetch_elected_guestos_versions(),
         ));
 
         // Start the server that the Upgrade VM can connect to for getting the keys.
@@ -117,6 +119,7 @@ impl DiskEncryptionKeyExchangeServerAgent {
         // Tell the host to start the Upgrade VM.
         self.vsock_client
             .send_command(Command::StartUpgradeGuestVM)
+            .map_err(|err| DiskEncryptionKeyExchangeError::UpgradeVmError(err.to_string()))?
             .map_err(|err| DiskEncryptionKeyExchangeError::UpgradeVmError(err.to_string()))?;
 
         // Wait for status.
@@ -143,7 +146,7 @@ impl DiskEncryptionKeyExchangeServerAgent {
         let registry_version = self.registry_client.get_latest_version();
         let expected_measurements = self
             .registry_client
-            .get_replica_version_record_from_version_id(replica_version, registry_version)
+            .get_replica_version_record(replica_version, registry_version)
             .map_err(|err| {
                 DiskEncryptionKeyExchangeError::ServerStartError(format!(
                     "Failed to get replica version record for {replica_version}: {err}"
@@ -165,5 +168,40 @@ impl DiskEncryptionKeyExchangeServerAgent {
             .map(|measurement| measurement.measurement)
             .collect();
         Ok(expected_measurements)
+    }
+
+    /// Returns the GuestOS versions elected in the local registry along with their launch
+    /// measurements. They tell the client which version we run, see
+    /// `GetDiskEncryptionKeyResponse::guestos_version`. That is only a hint, so a failure to read
+    /// them is logged and results in an empty list instead of failing the key exchange.
+    fn fetch_elected_guestos_versions(&self) -> Vec<ElectedGuestOsVersion> {
+        let registry_version = self.registry_client.get_latest_version();
+        let records = match self
+            .registry_client
+            .get_all_replica_version_records(registry_version)
+        {
+            Ok(records) => records.unwrap_or_default(),
+            Err(err) => {
+                eprintln!(
+                    "Failed to get elected GuestOS versions at registry version \
+                     {registry_version}: {err}"
+                );
+                vec![]
+            }
+        };
+
+        records
+            .into_iter()
+            .map(|record| ElectedGuestOsVersion {
+                guestos_version: record.replica_version_id,
+                launch_measurements: record
+                    .guest_launch_measurements
+                    .unwrap_or_default()
+                    .guest_launch_measurements
+                    .into_iter()
+                    .map(|measurement| measurement.measurement)
+                    .collect(),
+            })
+            .collect()
     }
 }

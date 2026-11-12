@@ -251,7 +251,7 @@ impl TestEnv {
         while retries > 0 {
             match rosetta_client.network_status(network.clone()).await {
                 Ok(_) => {
-                    println!("call to /network/status was successfull");
+                    println!("call to /network/status was successful");
                     break;
                 }
                 Err(Error(err)) if matches_blockchain_is_empty_or_still_syncing_error(&err) => {

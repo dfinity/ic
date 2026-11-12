@@ -11,8 +11,8 @@ rust_binary(
         "//rs/embedders",
         "//rs/replicated_state",
         "//rs/types/types",
+        "@crate_index//:anyhow",
         "@crate_index//:clap",
-        "@crate_index//:eyre",
         "@crate_index//:serde_json",
     ],
 )

@@ -1,0 +1,28 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_binary(
+    name = "alternative_guestos",
+    srcs = glob(["src/**/*.rs"]),
+    deps = [
+        "//rs/ic_os/alternative_guestos",
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/nns/governance/conversions",
+        "//rs/protobuf",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:clap",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-certification",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:serde_json",
+        "@crate_index//:tokio",
+    ],
+)
+
+rust_test(
+    name = "alternative_guestos_test",
+    crate = ":alternative_guestos",
+)

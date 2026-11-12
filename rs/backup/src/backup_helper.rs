@@ -246,7 +246,7 @@ impl BackupHelper {
             match self.rsync_remote_cmd(
                 remote_dir.clone(),
                 &self.spool_dir().into_os_string(),
-                &["-qam", "--ignore-existing", "--exclude='*.tmp'"],
+                &["-qam", "--ignore-existing", "--exclude=*.tmp"],
             ) {
                 Ok(_) => return true,
                 Err(e) => warn!(
@@ -1127,6 +1127,7 @@ mod tests {
     use ic_registry_client::client::RegistryClientImpl;
     use ic_registry_local_store::LocalStoreImpl;
     use ic_test_utilities_tmpdir::tmpdir;
+    use ic_test_utilities_types::ids::test_replica_version;
     use ic_types::PrincipalId;
     use rstest::rstest;
 
@@ -1455,7 +1456,7 @@ mod tests {
             subnet_id: PrincipalId::from_str(FAKE_SUBNET_ID)
                 .map(SubnetId::from)
                 .unwrap(),
-            initial_replica_version: ReplicaVersion::try_from("fake_replica_version").unwrap(),
+            initial_replica_version: test_replica_version(),
             root_dir: temp_dir.join("backup"),
             excluded_dirs: vec![],
             ssh_private_key: "fake_ssh_private_key".into(),

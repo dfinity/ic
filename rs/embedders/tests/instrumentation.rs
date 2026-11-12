@@ -1,5 +1,4 @@
 use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
-use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_embedders::wasm_utils;
 use ic_embedders::{
@@ -288,26 +287,16 @@ fn instr_used(instance: &mut WasmtimeInstance) -> u64 {
 ///   Each triggers `mark_wasm_page_accessed` + `mark_wasm_page_dirty`:
 ///   2 × (WASM_PAGE_SIZE / OS_PAGE_SIZE) = 2 × 16 = 32 instructions.
 /// - `n_stable_wasm_pages`: same as for heap: 32 instructions per page.
-///
-/// Returns 0 when the deterministic memory tracker is disabled.
 fn deterministic_tracker_overhead(n_heap_wasm_pages: u64, n_stable_wasm_pages: u64) -> u64 {
-    if EmbeddersConfig::default()
-        .feature_flags
-        .deterministic_memory_tracker
-        == FlagStatus::Enabled
-    {
-        let os_pages_per_wasm_page = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as u64;
-        n_heap_wasm_pages * 2 * os_pages_per_wasm_page
-            + n_stable_wasm_pages * 2 * os_pages_per_wasm_page
-    } else {
-        0
-    }
+    let os_pages_per_wasm_page = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as u64;
+    n_heap_wasm_pages * 2 * os_pages_per_wasm_page
+        + n_stable_wasm_pages * 2 * os_pages_per_wasm_page
 }
 
 #[allow(clippy::field_reassign_with_default)]
 fn new_instance(wat: &str, instruction_limit: u64) -> WasmtimeInstance {
     let mut config = EmbeddersConfig::default();
-    config.dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
+    config.page_overhead = SchedulerConfig::application_subnet().page_overhead;
     WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -319,7 +308,7 @@ fn new_instance(wat: &str, instruction_limit: u64) -> WasmtimeInstance {
 fn new_instance_for_stable_write(wat: &str, instruction_limit: u64) -> WasmtimeInstance {
     let mut config = EmbeddersConfig::default();
     config.metering_type = MeteringType::New;
-    config.dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
+    config.page_overhead = SchedulerConfig::application_subnet().page_overhead;
     WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -603,7 +592,7 @@ fn metering_if() {
         p4 = add_one().repeat(30)
     );
 
-    let mut instance = new_instance(&wat, 100);
+    let mut instance = new_instance(&wat, 1000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -775,7 +764,7 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
             {memory}
         )"#
     );
-    let mut instance = new_instance(&wat, 10000);
+    let mut instance = new_instance(&wat, 1_000_000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -811,9 +800,7 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
         },
         wasm_memory_type,
     );
-    let cd = SchedulerConfig::application_subnet()
-        .dirty_page_overhead
-        .get();
+    let cd = SchedulerConfig::application_subnet().page_overhead.get();
 
     // Both stores target Wasm page 0 (bytes 0 and 4096 are within the 64KB page),
     // so only one heap page-first-write event occurs.
@@ -910,9 +897,7 @@ fn run_charge_for_dirty_stable64_test() {
 
     let system_api = instance.store_data().system_api().unwrap();
 
-    let cd = SchedulerConfig::application_subnet()
-        .dirty_page_overhead
-        .get();
+    let cd = SchedulerConfig::application_subnet().page_overhead.get();
 
     let csg = system_api_complexity::overhead_native::STABLE_GROW.get();
     let csw = system_api_complexity::overhead_native::STABLE64_WRITE.get()
@@ -1010,9 +995,7 @@ fn run_charge_for_dirty_stable_test() {
 
     let system_api = instance.store_data().system_api().unwrap();
 
-    let cd = SchedulerConfig::application_subnet()
-        .dirty_page_overhead
-        .get();
+    let cd = SchedulerConfig::application_subnet().page_overhead.get();
 
     let csg = system_api_complexity::overhead_native::STABLE_GROW.get();
     let csw = system_api_complexity::overhead_native::STABLE_WRITE.get()
@@ -1129,11 +1112,11 @@ fn metering_wasm64_load_store_canister() {
             (memory i64 1000)
         )"#;
 
-    let dirty_page_overhead = NumInstructions::new(1000);
+    let page_overhead = NumInstructions::new(1000);
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_dirty_page_overhead(dirty_page_overhead)
+        .with_page_overhead(page_overhead)
         .with_wat(wat)
-        .with_num_instructions(NumInstructions::new(10000))
+        .with_num_instructions(NumInstructions::new(1_000_000))
         .build();
 
     instance.run(func_ref("test")).unwrap();
@@ -1190,7 +1173,7 @@ fn metering_wasm64_load_store_canister() {
         + 2 * store
         + load
         + drop
-        + overhead * dirty_page_overhead.get();
+        + overhead * page_overhead.get();
     assert_eq!(instr_used_wasm64, total_cost);
 
     // Compute cost in Wasm32 mode and compare.
@@ -1205,9 +1188,9 @@ fn metering_wasm64_load_store_canister() {
             (memory 1000)
         )"#;
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_dirty_page_overhead(dirty_page_overhead)
+        .with_page_overhead(page_overhead)
         .with_wat(wat_wasm32)
-        .with_num_instructions(NumInstructions::new(10000))
+        .with_num_instructions(NumInstructions::new(1_000_000))
         .build();
 
     instance.run(func_ref("test")).unwrap();
@@ -1260,7 +1243,7 @@ fn metering_wasm64_load_store_canister() {
         + 2 * store_wasm32
         + load_wasm32
         + drop_wasm32
-        + overhead * dirty_page_overhead.get();
+        + overhead * page_overhead.get();
     assert_eq!(wasm_32_instructions, total_cost_wasm32);
 
     // Check that the cost in Wasm64 mode is higher than in Wasm32 mode.
@@ -1496,4 +1479,31 @@ fn test_64bit_heap_existing_memory_limit_too_large() {
         )"#,
         10 * GB / WASM_PAGE_SIZE_IN_BYTES as u64
     ))
+}
+
+/// Compiles `wat` and returns whether the resulting module is recorded as
+/// declaring a Wasm heap (`SerializedModule::declares_wasm_memory`).
+fn declares_wasm_memory(wat: &str) -> bool {
+    let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
+    let wasm = wat::parse_str(wat).expect("failed to parse wat");
+    let (_cache, result) = wasm_utils::compile(&embedder, &BinaryEncodedWasm::new(wasm));
+    let (_compilation_result, serialized_module) = result.expect("compilation failed");
+    serialized_module.declares_wasm_memory
+}
+
+#[test]
+fn declares_wasm_memory_ignores_non_memory_export_named_memory() {
+    // Control: a module with a real Wasm memory declares a heap.
+    assert!(declares_wasm_memory(r#"(module (memory 1))"#));
+
+    // Control: a module with neither a memory nor a `memory` export does not.
+    assert!(!declares_wasm_memory(r#"(module (func))"#));
+
+    // Bug: a function named `memory` with no memory section must not be
+    // treated as declaring a heap.
+    assert!(
+        !declares_wasm_memory(r#"(module (func (export "memory")))"#),
+        "a module exporting a function named `memory` with no memory section \
+         must not be recorded as declaring a Wasm heap"
+    );
 }

@@ -53,8 +53,8 @@ name = "ic-systest-subnet-recovery-app-no-upgrade"
 path = "sr_app_no_upgrade_test.rs"
 
 [[bin]]
-name = "ic-systest-subnet-recovery-app-no-upgrade-local"
-path = "sr_app_no_upgrade_local_test.rs"
+name = "ic-systest-subnet-recovery-app-no-upgrade-locally"
+path = "sr_app_no_upgrade_locally_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-same-nodes-enable-chain-keys"

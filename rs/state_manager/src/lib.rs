@@ -62,7 +62,7 @@ use ic_sys::fs::Clobber;
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
     batch::BatchSummary,
-    consensus::certification::Certification,
+    consensus::certification::{Certification, SignedCertificationContent},
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
     state_manager::{StateManagerError, StateManagerResult},
@@ -121,6 +121,20 @@ pub(crate) const CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN: &str =
 /// Critical error tracking ReplicatedState altering after checkpoint.
 const CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT: &str =
     "state_manager_replicated_state_altered_after_checkpoint";
+
+/// Critical error tracking canister directories unexpectedly removed from tip by
+/// `TipRequest::FilterTipCanisters`, which is only meant to be a safety net: every
+/// canister directory removal should be covered by an explicit
+/// `UnflushedCheckpointOp::DeleteCanister`.
+pub(crate) const CRITICAL_ERROR_TIP_CANISTERS_FILTERED: &str =
+    "state_manager_tip_canisters_filtered";
+
+/// Critical error tracking snapshot directories unexpectedly removed from tip by
+/// `TipRequest::FilterTipCanisters`, which is only meant to be a safety net: every
+/// snapshot directory removal should be covered by an explicit
+/// `UnflushedCheckpointOp::DeleteSnapshot`.
+pub(crate) const CRITICAL_ERROR_TIP_SNAPSHOTS_FILTERED: &str =
+    "state_manager_tip_snapshots_filtered";
 
 /// How long to keep archived and diverged states.
 const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
@@ -236,6 +250,8 @@ pub struct CheckpointMetrics {
     load_canister_step_duration: HistogramVec,
     load_checkpoint_soft_invariant_broken: IntCounter,
     replicated_state_altered_after_checkpoint: IntCounter,
+    tip_canisters_filtered: IntCounter,
+    tip_snapshots_filtered: IntCounter,
     tip_handler_request_duration: HistogramVec,
     num_page_maps_by_load_status: IntGaugeVec,
     num_loaded_wasm_files_by_source: IntGaugeVec,
@@ -273,6 +289,12 @@ impl CheckpointMetrics {
         let replicated_state_altered_after_checkpoint = metrics_registry
             .error_counter(CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT);
 
+        let tip_canisters_filtered =
+            metrics_registry.error_counter(CRITICAL_ERROR_TIP_CANISTERS_FILTERED);
+
+        let tip_snapshots_filtered =
+            metrics_registry.error_counter(CRITICAL_ERROR_TIP_SNAPSHOTS_FILTERED);
+
         let tip_handler_request_duration = metrics_registry.histogram_vec(
             "state_manager_tip_handler_request_duration_seconds",
             "Duration to execute requests to Tip handling thread in seconds.",
@@ -298,6 +320,8 @@ impl CheckpointMetrics {
             load_canister_step_duration,
             load_checkpoint_soft_invariant_broken,
             replicated_state_altered_after_checkpoint,
+            tip_canisters_filtered,
+            tip_snapshots_filtered,
             tip_handler_request_duration,
             num_page_maps_by_load_status,
             num_loaded_wasm_files_by_source,
@@ -3539,6 +3563,12 @@ impl StateManager for StateManagerImpl {
             .observe(state.canister_states().hot_len() as f64);
         state.repartition_canister_states();
 
+        // Like the repartitioning above, this must stay unconditional: the aggregate
+        // is derived from the canisters at checkpoint load, so refreshing it here,
+        // right before the state is hashed, is what makes a replica that restarts
+        // from the checkpoint agree with one that keeps running.
+        state.refresh_consumed_cycles();
+
         let assert_tip_is_none = |states: &SharedState| {
             // The following assert validates that we don't have two clients
             // modifying TIP at the same time and that each commit_and_certify()
@@ -4168,6 +4198,8 @@ impl CertifiedStreamStore for StateManagerImpl {
             msg_from,
             to,
             byte_limit,
+            // For full slices, include one message (if any) regardless of `byte_limit`.
+            witness_from == msg_from,
         );
 
         let witness_partial_tree =
@@ -4179,7 +4211,7 @@ impl CertifiedStreamStore for StateManagerImpl {
         Ok(CertifiedStreamSlice {
             payload: stream_encoding::encode_tree(slice_as_tree),
             merkle_proof: v1::Witness::proxy_encode(witness),
-            certification,
+            certification: certification.signed,
         })
     }
 
@@ -4198,7 +4230,7 @@ impl CertifiedStreamStore for StateManagerImpl {
         fn verify_recomputed_digest(
             verifier: &Arc<dyn Verifier>,
             remote_subnet: SubnetId,
-            certification: &Certification,
+            certification: &SignedCertificationContent,
             registry_version: RegistryVersion,
             digest: Digest,
             metrics: &StateManagerMetrics,
@@ -4213,7 +4245,7 @@ impl CertifiedStreamStore for StateManagerImpl {
                 log,
             );
 
-            let hash_matches = digest.as_bytes() == certification.signed.content.hash.get_ref().0;
+            let hash_matches = digest.as_bytes() == certification.content.hash.get_ref().0;
             let verification_status =
                 verifier.validate(remote_subnet, certification, registry_version);
             let signature_verifies = verification_status.is_ok();
@@ -4278,19 +4310,18 @@ impl CertifiedStreamStore for StateManagerImpl {
 
 #[cfg(feature = "malicious_code")]
 fn maliciously_alter_certified_hash(
-    mut certification: Certification,
+    mut certification: SignedCertificationContent,
     malicious_flags: &MaliciousFlags,
     remote_subnet: &SubnetId,
     log: &ReplicaLogger,
-) -> Certification {
+) -> SignedCertificationContent {
     if malicious_flags.maliciously_alter_certified_hash {
         info!(
             log,
-            "[MALICIOUS] Corrupting root hash of certification at height {} in stream slice from {}",
-            certification.height,
+            "[MALICIOUS] Corrupting root hash of certification in stream slice from {}",
             remote_subnet
         );
-        certification.signed.content.hash = CryptoHashOfPartialState::from(CryptoHash(vec![0; 32]));
+        certification.content.hash = CryptoHashOfPartialState::from(CryptoHash(vec![0; 32]));
     }
     certification
 }

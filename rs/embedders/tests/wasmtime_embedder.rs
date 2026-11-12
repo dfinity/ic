@@ -1,15 +1,17 @@
 use assert_matches::assert_matches;
 use ic_config::{
-    embedders::{Config, StableMemoryPageLimit},
+    embedders::{Config, FeatureFlags, MemoryPageLimit},
     flag_status::FlagStatus,
 };
 use ic_embedders::{
+    InstanceRunResult,
     wasm_utils::instrumentation::WasmMemoryType,
     wasm_utils::instrumentation::instruction_to_cost,
     wasmtime_embedder::{CanisterMemoryType, system_api::ApiType, system_api_complexity},
 };
 use ic_interfaces::execution_environment::{
-    CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
+    CanisterBacktrace, Heap, HeapPageLimitRefusals, HypervisorError, HypervisorResult, SystemApi,
+    TrapCode,
 };
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
@@ -67,7 +69,6 @@ fn cannot_execute_wasm_without_memory() {
 fn correctly_count_instructions() {
     let data_size = 1024;
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
         .with_wat(
             format!(
                 r#"
@@ -212,7 +213,6 @@ fn correctly_report_performance_counter() {
         + system_api_complexity::overhead::PERFORMANCE_COUNTER.get();
     let expected_instructions = expected_instructions_counter2;
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
         .with_wat(
             format!(
                 r#"
@@ -580,69 +580,6 @@ fn zero_size_memory() {
     assert_eq!(message, std::str::from_utf8(&[0; 0]).unwrap().to_string());
 }
 
-#[cfg(target_os = "linux")]
-#[test]
-fn read_before_write_stats() {
-    // This wasm does a direct write to page 0.
-    let direct_wat = r#"
-            (module
-                (import "ic0" "msg_reply" (func $msg_reply))
-                (memory (export "memory") 1)
-                (func (export "canister_update write")
-                    (i32.store (i32.const 0) (i32.const 111))
-                    (call $msg_reply)
-                )
-            )"#;
-    let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .with_wat(direct_wat)
-        .with_api_type(ApiType::update(
-            UNIX_EPOCH,
-            vec![],
-            Cycles::zero(),
-            PrincipalId::new_user_test_id(0),
-            0.into(),
-            None,
-        ))
-        .build();
-    instance
-        .run(FuncRef::Method(WasmMethod::Update("write".to_string())))
-        .unwrap();
-    let stats = instance.get_stats();
-    assert_eq!(stats.wasm_direct_write_count, 1);
-    assert_eq!(stats.wasm_read_before_write_count, 0);
-
-    // This wasm does a read then write to page 0.
-    let read_then_write_wat = r#"
-            (module
-                (import "ic0" "msg_reply" (func $msg_reply))
-                (memory (export "memory") 1)
-                (func (export "canister_update write")
-                    (drop (i32.load (i32.const 4096)))
-                    (i32.store (i32.const 4096) (i32.const 111))
-                    (call $msg_reply)
-                )
-            )"#;
-    let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .with_wat(read_then_write_wat)
-        .with_api_type(ApiType::update(
-            UNIX_EPOCH,
-            vec![],
-            Cycles::zero(),
-            PrincipalId::new_user_test_id(0),
-            0.into(),
-            None,
-        ))
-        .build();
-    instance
-        .run(FuncRef::Method(WasmMethod::Update("write".to_string())))
-        .unwrap();
-    let stats = instance.get_stats();
-    assert_eq!(stats.wasm_direct_write_count, 0);
-    assert_eq!(stats.wasm_read_before_write_count, 1);
-}
-
 #[test]
 fn stable_write_and_read() {
     let wat = r#"
@@ -788,7 +725,7 @@ fn stable_read_accessed_pages_allowance() {
     use HypervisorError::*;
 
     let config = Config {
-        stable_memory_accessed_page_limit: StableMemoryPageLimit {
+        stable_memory_accessed_page_limit: MemoryPageLimit {
             message: ic_types::NumOsPages::new(3),
             upgrade: ic_types::NumOsPages::new(3),
             query: ic_types::NumOsPages::new(3),
@@ -882,7 +819,7 @@ fn stable64_read_accessed_pages_allowance() {
     use HypervisorError::*;
 
     let config = Config {
-        stable_memory_accessed_page_limit: StableMemoryPageLimit {
+        stable_memory_accessed_page_limit: MemoryPageLimit {
             message: ic_types::NumOsPages::new(3),
             upgrade: ic_types::NumOsPages::new(3),
             query: ic_types::NumOsPages::new(3),
@@ -914,6 +851,959 @@ fn stable64_read_accessed_pages_allowance() {
         .build();
     let err = instance.run(func_ref("write_above_limit")).unwrap_err();
     assert_matches!(err, MemoryAccessLimitExceeded(_));
+}
+
+/// A config that limits the number of accessed Wasm heap pages to
+/// `wasm_pages` for all message types.
+fn config_with_wasm_memory_accessed_page_limit(wasm_pages: u64) -> Config {
+    let os_pages = ic_types::NumOsPages::new(
+        wasm_pages * (WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE) as u64,
+    );
+    Config {
+        wasm_memory_accessed_page_limit: MemoryPageLimit {
+            message: os_pages,
+            upgrade: os_pages,
+            query: os_pages,
+        },
+        feature_flags: FeatureFlags {
+            wasm_memory_accessed_page_limit: FlagStatus::Enabled,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
+const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+#[test]
+fn wasm_memory_accessed_page_limit_for_loads_and_stores() {
+    fn func_ref(name: &str) -> FuncRef {
+        FuncRef::Method(WasmMethod::Update(name.to_string()))
+    }
+    let wat = r#"
+            (module
+                (func (export "canister_update within_limit")
+                    ;; page 0
+                    (drop (i32.load (i32.const 0)))
+                    ;; page 1
+                    (i32.store (i32.const 65536) (i32.const 1))
+                    ;; accessed pages can be used freely
+                    (i32.store (i32.const 4) (i32.const 1))
+                    (drop (i32.load (i32.const 65540)))
+                )
+                (func (export "canister_update above_limit")
+                    (drop (i32.load (i32.const 0)))
+                    (drop (i32.load (i32.const 65536)))
+                    ;; page 2 exceeds the limit
+                    (drop (i32.load (i32.const 131072)))
+                )
+                (func (export "canister_update store_above_limit")
+                    (i32.store (i32.const 0) (i32.const 1))
+                    (i32.store (i32.const 65536) (i32.const 1))
+                    ;; page 2 exceeds the limit
+                    (i32.store (i32.const 131072) (i32.const 1))
+                )
+                (memory (export "memory") 4)
+            )"#;
+
+    let config = config_with_wasm_memory_accessed_page_limit(2);
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config.clone())
+        .with_wat(wat)
+        .build();
+    instance.run(func_ref("within_limit")).unwrap();
+    assert_eq!(
+        instance.get_stats().wasm_accessed_pages,
+        2 * OS_PAGES_PER_WASM_PAGE
+    );
+
+    for method in ["above_limit", "store_above_limit"] {
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref(method)).unwrap_err();
+        let HypervisorError::MemoryAccessLimitExceeded(message) = err else {
+            panic!("Expected MemoryAccessLimitExceeded, got {err}");
+        };
+        assert!(message.contains("Wasm heap"), "{message}");
+        assert!(
+            message.contains("limit 128 KB for regular messages"),
+            "{message}"
+        );
+        // The third page was not mapped.
+        assert_eq!(
+            instance.get_stats().wasm_accessed_pages,
+            2 * OS_PAGES_PER_WASM_PAGE
+        );
+    }
+
+    // The default limit is never hit.
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+    instance.run(func_ref("above_limit")).unwrap();
+    assert_eq!(
+        instance.get_stats().wasm_accessed_pages,
+        3 * OS_PAGES_PER_WASM_PAGE
+    );
+}
+
+/// With the feature flag disabled, the limit is only observed: executions
+/// that exceed it succeed and every page they touch is mapped.
+#[test]
+fn wasm_memory_accessed_page_limit_is_not_enforced_when_the_feature_is_disabled() {
+    fn func_ref(name: &str) -> FuncRef {
+        FuncRef::Method(WasmMethod::Update(name.to_string()))
+    }
+    let wat = r#"
+            (module
+                (import "ic0" "msg_arg_data_copy"
+                    (func $msg_arg_data_copy (param i32 i32 i32)))
+                (func (export "canister_update wasm_above_limit")
+                    (drop (i32.load (i32.const 0)))
+                    (i32.store (i32.const 65536) (i32.const 1))
+                    ;; page 2 exceeds the limit
+                    (drop (i32.load (i32.const 131072)))
+                )
+                (func (export "canister_update host_above_limit")
+                    ;; host write to pages 0, 1 and 2
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 196608))
+                )
+                (memory (export "memory") 4)
+            )"#;
+    let mut config = config_with_wasm_memory_accessed_page_limit(2);
+    config.feature_flags.wasm_memory_accessed_page_limit = FlagStatus::Disabled;
+
+    for method in ["wasm_above_limit", "host_above_limit"] {
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_api_type(ApiType::update(
+                UNIX_EPOCH,
+                vec![7_u8; 3 * WASM_PAGE_SIZE_IN_BYTES],
+                Cycles::zero(),
+                user_test_id(24).get(),
+                call_context_test_id(13),
+                None,
+            ))
+            .with_wat(wat)
+            .build();
+        instance.run(func_ref(method)).unwrap();
+        assert_eq!(
+            instance.get_stats().wasm_accessed_pages,
+            3 * OS_PAGES_PER_WASM_PAGE,
+            "{method}"
+        );
+    }
+}
+
+#[test]
+fn wasm_memory_accessed_page_limit_for_host_functions() {
+    fn func_ref(name: &str) -> FuncRef {
+        FuncRef::Method(WasmMethod::Update(name.to_string()))
+    }
+    let wat = r#"
+            (module
+                (import "ic0" "msg_arg_data_copy"
+                    (func $msg_arg_data_copy (param i32 i32 i32)))
+                (import "ic0" "msg_reply_data_append"
+                    (func $msg_reply_data_append (param i32 i32)))
+                (import "ic0" "msg_reply" (func $msg_reply))
+
+                (func (export "canister_update within_limit")
+                    ;; host write to pages 0 and 1
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 131072))
+                    ;; host read of accessed pages is free
+                    (call $msg_reply_data_append (i32.const 0) (i32.const 131072))
+                    (call $msg_reply)
+                )
+                (func (export "canister_update write_above_limit")
+                    ;; host write to pages 0, 1 and 2
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 196608))
+                )
+                (func (export "canister_update read_above_limit")
+                    ;; host read of pages 0, 1 and 2
+                    (call $msg_reply_data_append (i32.const 0) (i32.const 196608))
+                    (call $msg_reply)
+                )
+                (func (export "canister_update host_access_counts")
+                    ;; host write to pages 0 and 1
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 131072))
+                    ;; a Wasm load from page 2 exceeds the limit
+                    (drop (i32.load (i32.const 131072)))
+                )
+                (func (export "canister_update wasm_access_counts")
+                    ;; Wasm stores to pages 0 and 1
+                    (i32.store (i32.const 0) (i32.const 1))
+                    (i32.store (i32.const 65536) (i32.const 1))
+                    ;; a host write spanning pages 1 and 2 exceeds the limit
+                    (call $msg_arg_data_copy (i32.const 131068) (i32.const 0) (i32.const 8))
+                )
+                (memory (export "memory") 4)
+            )"#;
+
+    let config = config_with_wasm_memory_accessed_page_limit(2);
+    let api_type = || {
+        ApiType::update(
+            UNIX_EPOCH,
+            vec![7_u8; 3 * WASM_PAGE_SIZE_IN_BYTES],
+            Cycles::zero(),
+            user_test_id(24).get(),
+            call_context_test_id(13),
+            None,
+        )
+    };
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config.clone())
+        .with_api_type(api_type())
+        .with_wat(wat)
+        .build();
+    instance.run(func_ref("within_limit")).unwrap();
+    assert_eq!(
+        instance.get_stats().wasm_accessed_pages,
+        2 * OS_PAGES_PER_WASM_PAGE
+    );
+
+    // The check happens before the first byte is touched, so nothing is mapped.
+    for method in ["write_above_limit", "read_above_limit"] {
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_api_type(api_type())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref(method)).unwrap_err();
+        assert_matches!(err, HypervisorError::MemoryAccessLimitExceeded(_));
+        assert_eq!(instance.get_stats().wasm_accessed_pages, 0);
+    }
+
+    // Pages accessed by host functions and by Wasm code count towards the
+    // same limit.
+    for method in ["host_access_counts", "wasm_access_counts"] {
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_api_type(api_type())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref(method)).unwrap_err();
+        assert_matches!(err, HypervisorError::MemoryAccessLimitExceeded(_));
+        assert_eq!(
+            instance.get_stats().wasm_accessed_pages,
+            2 * OS_PAGES_PER_WASM_PAGE
+        );
+    }
+}
+
+/// Straight-line code (no loops, no calls) accessing thousands of distinct
+/// pages stops at exactly the limit. Besides zero overshoot, this pins the
+/// assumption that plain loads and stores are wasmtime trap sites, so that the
+/// signal handler can refuse the page and unwind. It must stay green on every
+/// wasmtime upgrade.
+#[test]
+fn wasm_memory_accessed_page_limit_for_straight_line_code() {
+    const PAGES: usize = 4096;
+    const LIMIT: usize = 1000;
+    // `template` contains `ADDR` for the address of the page.
+    let access = |template: &str| {
+        (0..PAGES)
+            .map(|page| template.replace("ADDR", &(page * WASM_PAGE_SIZE_IN_BYTES).to_string()))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let wat = format!(
+        r#"
+            (module
+                (func (export "canister_update loads")
+                    {loads}
+                )
+                (func (export "canister_update stores")
+                    {stores}
+                )
+                (memory (export "memory") {PAGES})
+            )"#,
+        loads = access("(drop (i32.load (i32.const ADDR)))"),
+        stores = access("(i32.store (i32.const ADDR) (i32.const 1))"),
+    );
+    for method in ["loads", "stores"] {
+        let (result, accessed) = run_with_heap_page_limit(&wat, LIMIT as u64, method);
+        assert_matches!(result, Err(HypervisorError::MemoryAccessLimitExceeded(_)));
+        assert_eq!(accessed, LIMIT, "{method}");
+    }
+}
+
+/// A host call reading several heap ranges fails at the first range that
+/// does not fit; the ranges before it have been accessed.
+#[test]
+fn wasm_memory_accessed_page_limit_for_multi_range_host_call() {
+    // `ic0.call_new` reads the method name before the callee.
+    let wat = r#"
+            (module
+                (import "ic0" "call_new"
+                    (func $call_new
+                        (param $callee_src i32) (param $callee_size i32)
+                        (param $name_src i32) (param $name_size i32)
+                        (param $reply_fun i32) (param $reply_env i32)
+                        (param $reject_fun i32) (param $reject_env i32)))
+                (func (export "canister_update call_new")
+                    (call $call_new
+                        ;; callee on page 1
+                        (i32.const 65536) (i32.const 1)
+                        ;; method name on page 0
+                        (i32.const 0) (i32.const 4)
+                        (i32.const 0) (i32.const 0) (i32.const 0) (i32.const 0))
+                )
+                (memory (export "memory") 2)
+            )"#;
+    let api_type = || {
+        ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            user_test_id(24).get(),
+            call_context_test_id(13),
+            None,
+        )
+    };
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config_with_wasm_memory_accessed_page_limit(1))
+        .with_api_type(api_type())
+        .with_wat(wat)
+        .build();
+    let err = instance
+        .run(FuncRef::Method(WasmMethod::Update("call_new".to_string())))
+        .unwrap_err();
+    assert_matches!(err, HypervisorError::MemoryAccessLimitExceeded(_));
+    // The method name was read, the callee was not.
+    assert_eq!(
+        instance.get_stats().wasm_accessed_pages,
+        OS_PAGES_PER_WASM_PAGE
+    );
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config_with_wasm_memory_accessed_page_limit(2))
+        .with_api_type(api_type())
+        .with_wat(wat)
+        .build();
+    instance
+        .run(FuncRef::Method(WasmMethod::Update("call_new".to_string())))
+        .unwrap();
+    assert_eq!(
+        instance.get_stats().wasm_accessed_pages,
+        2 * OS_PAGES_PER_WASM_PAGE
+    );
+}
+
+/// For a host call into a partially accessed range only the pages that have
+/// not been accessed yet count towards the limit.
+#[test]
+fn wasm_memory_accessed_page_limit_counts_only_unaccessed_pages_for_host_calls() {
+    let wat = r#"
+            (module
+                (import "ic0" "msg_arg_data_copy"
+                    (func $msg_arg_data_copy (param i32 i32 i32)))
+
+                ;; page 1 by Wasm, then pages 0 and 1 by the host: 2 pages
+                (func (export "canister_update fits")
+                    (i32.store (i32.const 65536) (i32.const 1))
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 131072))
+                )
+                ;; page 1 by Wasm, then pages 0 to 2 by the host: 3 pages
+                (func (export "canister_update does_not_fit")
+                    (i32.store (i32.const 65536) (i32.const 1))
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 196608))
+                )
+                (memory (export "memory") 4)
+            )"#;
+    let config = config_with_wasm_memory_accessed_page_limit(2);
+    let api_type = || {
+        ApiType::update(
+            UNIX_EPOCH,
+            vec![7_u8; 3 * WASM_PAGE_SIZE_IN_BYTES],
+            Cycles::zero(),
+            user_test_id(24).get(),
+            call_context_test_id(13),
+            None,
+        )
+    };
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config.clone())
+        .with_api_type(api_type())
+        .with_wat(wat)
+        .build();
+    instance
+        .run(FuncRef::Method(WasmMethod::Update("fits".to_string())))
+        .unwrap();
+    assert_eq!(
+        instance.get_stats().wasm_accessed_pages,
+        2 * OS_PAGES_PER_WASM_PAGE
+    );
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_api_type(api_type())
+        .with_wat(wat)
+        .build();
+    let err = instance
+        .run(FuncRef::Method(WasmMethod::Update(
+            "does_not_fit".to_string(),
+        )))
+        .unwrap_err();
+    assert_matches!(err, HypervisorError::MemoryAccessLimitExceeded(_));
+    // Only the Wasm store was performed.
+    assert_eq!(
+        instance.get_stats().wasm_accessed_pages,
+        OS_PAGES_PER_WASM_PAGE
+    );
+}
+
+/// The heap page budget global always equals `limit - accessed pages`,
+/// independently of whether the pages were accessed by Wasm code or by host
+/// functions.
+#[test]
+fn heap_page_budget_equals_limit_minus_accessed_pages() {
+    fn func_ref(name: &str) -> FuncRef {
+        FuncRef::Method(WasmMethod::Update(name.to_string()))
+    }
+    let wat = r#"
+            (module
+                (import "ic0" "msg_arg_data_copy"
+                    (func $msg_arg_data_copy (param i32 i32 i32)))
+
+                (func (export "canister_update wasm_pages_0_and_1")
+                    (drop (i32.load (i32.const 0)))
+                    (i32.store (i32.const 65536) (i32.const 1))
+                    ;; accesses to already accessed pages do not use up budget,
+                    ;; including the write to the read-only mapped page 0
+                    (i32.store (i32.const 4) (i32.const 1))
+                    (drop (i32.load (i32.const 65540)))
+                )
+                (func (export "canister_update host_pages_2_and_3")
+                    (call $msg_arg_data_copy (i32.const 131072) (i32.const 0) (i32.const 131072))
+                )
+                (func (export "canister_update wasm_page_4")
+                    (drop (i32.load (i32.const 262144)))
+                )
+                (memory (export "memory") 8)
+            )"#;
+    const LIMIT: i64 = 4;
+    let config = config_with_wasm_memory_accessed_page_limit(LIMIT as u64);
+    let api_type = ApiType::update(
+        UNIX_EPOCH,
+        vec![7_u8; 2 * WASM_PAGE_SIZE_IN_BYTES],
+        Cycles::zero(),
+        user_test_id(24).get(),
+        call_context_test_id(13),
+        None,
+    );
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config.clone())
+        .with_api_type(api_type)
+        .with_wat(wat)
+        .build();
+    assert_eq!(instance.heap_page_budget(), LIMIT);
+
+    instance.run(func_ref("wasm_pages_0_and_1")).unwrap();
+    assert_eq!(instance.heap_page_budget(), LIMIT - 2);
+    assert_eq!(
+        instance.get_stats().wasm_accessed_pages,
+        2 * OS_PAGES_PER_WASM_PAGE
+    );
+
+    instance.run(func_ref("host_pages_2_and_3")).unwrap();
+    assert_eq!(instance.heap_page_budget(), 0);
+    assert_eq!(
+        instance.get_stats().wasm_accessed_pages,
+        4 * OS_PAGES_PER_WASM_PAGE
+    );
+
+    // Running out of budget means the next new page exceeds the limit, and a
+    // refused page does not change the budget.
+    let err = instance.run(func_ref("wasm_page_4")).unwrap_err();
+    assert_matches!(err, HypervisorError::MemoryAccessLimitExceeded(_));
+    assert_eq!(instance.heap_page_budget(), 0);
+    assert_eq!(
+        instance.get_stats().wasm_accessed_pages,
+        4 * OS_PAGES_PER_WASM_PAGE
+    );
+
+    // The budget is not persisted with the canister globals: only the
+    // instruction counter remains.
+    let globals = instance.get_exported_globals().unwrap();
+    assert_eq!(globals.len(), 1, "{globals:?}");
+
+    // With the default config the budget is the maximal heap size in pages.
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+    let default_config = Config::default();
+    let expected = default_config.wasm_memory_accessed_page_limit.message.get() as i64
+        / OS_PAGES_PER_WASM_PAGE as i64;
+    assert_eq!(instance.heap_page_budget(), expected);
+    instance.run(func_ref("wasm_page_4")).unwrap();
+    assert_eq!(instance.heap_page_budget(), expected - 1);
+}
+
+/// The instance stats report which check refused an access because of the
+/// heap page limit and how often the bulk pre-check took the slow path.
+#[test]
+fn heap_page_limit_stats_report_detector_and_slow_path() {
+    let wat = r#"
+            (module
+                (import "ic0" "msg_arg_data_copy"
+                    (func $msg_arg_data_copy (param i32 i32 i32)))
+
+                (func (export "canister_update load_pages_0_to_2")
+                    (drop (i32.load (i32.const 0)))
+                    (drop (i32.load (i32.const 65536)))
+                    (drop (i32.load (i32.const 131072)))
+                )
+                (func (export "canister_update host_write_pages_0_to_2")
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 196608))
+                )
+                ;; bound (len >> 16) + 2 = 4 pages > limit 2: slow path, refused
+                (func (export "canister_update fill_pages_0_to_2")
+                    (memory.fill (i32.const 0) (i32.const 1) (i32.const 196608))
+                )
+                ;; bound 3 pages > budget 2: slow path, fits exactly
+                (func (export "canister_update fill_pages_0_1")
+                    (memory.fill (i32.const 0) (i32.const 1) (i32.const 131072))
+                )
+                ;; bound 2 pages <= budget 2: fast path
+                (func (export "canister_update fill_page_0")
+                    (memory.fill (i32.const 0) (i32.const 1) (i32.const 8))
+                )
+                (memory (export "memory") 4)
+            )"#;
+    let config = config_with_wasm_memory_accessed_page_limit(2);
+    let run = |method: &str| {
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_api_type(ApiType::update(
+                UNIX_EPOCH,
+                vec![7_u8; 3 * WASM_PAGE_SIZE_IN_BYTES],
+                Cycles::zero(),
+                user_test_id(24).get(),
+                call_context_test_id(13),
+                None,
+            ))
+            .with_wat(wat)
+            .build();
+        let result = instance.run(FuncRef::Method(WasmMethod::Update(method.to_string())));
+        let stats = instance.get_stats();
+        (
+            result,
+            stats.wasm_page_limit_refusals,
+            stats.wasm_bulk_check_slow_path_calls,
+        )
+    };
+    let refusals = |handler, host_accessor, bulk_check| HeapPageLimitRefusals {
+        handler,
+        host_accessor,
+        bulk_check,
+    };
+
+    let (result, detected, slow_path_calls) = run("load_pages_0_to_2");
+    assert_matches!(result, Err(HypervisorError::MemoryAccessLimitExceeded(_)));
+    assert_eq!(detected, refusals(true, false, false));
+    assert_eq!(slow_path_calls, 0);
+
+    let (result, detected, slow_path_calls) = run("host_write_pages_0_to_2");
+    assert_matches!(result, Err(HypervisorError::MemoryAccessLimitExceeded(_)));
+    assert_eq!(detected, refusals(false, true, false));
+    assert_eq!(slow_path_calls, 0);
+
+    let (result, detected, slow_path_calls) = run("fill_pages_0_to_2");
+    assert_matches!(result, Err(HypervisorError::MemoryAccessLimitExceeded(_)));
+    assert_eq!(detected, refusals(false, false, true));
+    assert_eq!(slow_path_calls, 1);
+
+    let (result, detected, slow_path_calls) = run("fill_pages_0_1");
+    assert_matches!(result, Ok(_));
+    assert_eq!(detected, refusals(false, false, false));
+    assert_eq!(slow_path_calls, 1);
+
+    let (result, detected, slow_path_calls) = run("fill_page_0");
+    assert_matches!(result, Ok(_));
+    assert_eq!(detected, refusals(false, false, false));
+    assert_eq!(slow_path_calls, 0);
+}
+
+/// With the feature disabled nothing is refused, but the stats still report
+/// which check detected an access beyond the limit. The tracker's handler
+/// maps every page beyond the limit and counts it, whichever code touches
+/// it. Bulk memory operations are not checked at all, since no check is
+/// injected without the feature.
+#[test]
+fn heap_page_limit_stats_are_reported_when_the_feature_is_disabled() {
+    let wat = r#"
+            (module
+                (import "ic0" "msg_arg_data_copy"
+                    (func $msg_arg_data_copy (param i32 i32 i32)))
+
+                (func (export "canister_update load_pages_0_to_2")
+                    (drop (i32.load (i32.const 0)))
+                    (drop (i32.load (i32.const 65536)))
+                    (drop (i32.load (i32.const 131072)))
+                )
+                (func (export "canister_update host_write_pages_0_to_2")
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 196608))
+                )
+                (func (export "canister_update fill_pages_0_to_2")
+                    (memory.fill (i32.const 0) (i32.const 1) (i32.const 196608))
+                )
+                (memory (export "memory") 4)
+            )"#;
+    let mut config = config_with_wasm_memory_accessed_page_limit(2);
+    config.feature_flags.wasm_memory_accessed_page_limit = FlagStatus::Disabled;
+    let refusals = |handler, host_accessor, bulk_check| HeapPageLimitRefusals {
+        handler,
+        host_accessor,
+        bulk_check,
+    };
+
+    for (method, expected) in [
+        ("load_pages_0_to_2", refusals(true, false, false)),
+        ("host_write_pages_0_to_2", refusals(true, true, false)),
+        ("fill_pages_0_to_2", refusals(true, false, false)),
+    ] {
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_api_type(ApiType::update(
+                UNIX_EPOCH,
+                vec![7_u8; 3 * WASM_PAGE_SIZE_IN_BYTES],
+                Cycles::zero(),
+                user_test_id(24).get(),
+                call_context_test_id(13),
+                None,
+            ))
+            .with_wat(wat)
+            .build();
+        instance
+            .run(FuncRef::Method(WasmMethod::Update(method.to_string())))
+            .unwrap();
+        let stats = instance.get_stats();
+        assert_eq!(
+            stats.wasm_accessed_pages,
+            3 * OS_PAGES_PER_WASM_PAGE,
+            "{method}"
+        );
+        assert_eq!(stats.wasm_page_limit_refusals, expected, "{method}");
+        assert_eq!(stats.wasm_bulk_check_slow_path_calls, 0, "{method}");
+    }
+}
+
+/// Runs `method` of a fresh instance of `wat` with the given heap page limit
+/// and returns the result together with the number of accessed Wasm heap
+/// pages.
+fn run_with_heap_page_limit(
+    wat: &str,
+    limit_wasm_pages: u64,
+    method: &str,
+) -> (HypervisorResult<InstanceRunResult>, usize) {
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config_with_wasm_memory_accessed_page_limit(
+            limit_wasm_pages,
+        ))
+        .with_wat(wat)
+        .build();
+    let result = instance.run(FuncRef::Method(WasmMethod::Update(method.to_string())));
+    let accessed = instance.get_stats().wasm_accessed_pages / OS_PAGES_PER_WASM_PAGE;
+    (result, accessed)
+}
+
+/// The outcome of running a method under a heap page limit.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Expected {
+    Succeeds,
+    ExceedsLimit,
+    TrapsOutOfBounds,
+}
+
+/// Runs each case `(method, heap page limit, expected outcome, expected
+/// number of accessed Wasm pages afterwards)` on a fresh instance of `wat`.
+fn assert_heap_page_limit_cases(wat: &str, cases: &[(&str, u64, Expected, usize)]) {
+    use Expected::*;
+    for &(method, limit, expected, expected_accessed) in cases {
+        let (result, accessed) = run_with_heap_page_limit(wat, limit, method);
+        match (expected, &result) {
+            (Succeeds, Ok(_)) => {}
+            (ExceedsLimit, Err(HypervisorError::MemoryAccessLimitExceeded(_))) => {}
+            (
+                TrapsOutOfBounds,
+                Err(HypervisorError::Trapped {
+                    trap_code: TrapCode::HeapOutOfBounds,
+                    ..
+                }),
+            ) => {}
+            _ => panic!("{method} with limit {limit}: expected {expected:?}, got {result:?}"),
+        }
+        assert_eq!(
+            accessed, expected_accessed,
+            "{method} with limit {limit}: accessed pages"
+        );
+    }
+}
+
+/// The expectations shared by the Wasm32 and Wasm64 variants of the bulk
+/// memory tests.
+fn assert_bulk_memory_ops_respect_heap_page_limit(wat: &str) {
+    use Expected::*;
+    let cases = [
+        // Fast path: the bound of `(len >> 16) + 2` pages per heap range fits
+        // into the budget.
+        ("fill_pages_0_1", 4, Succeeds, 2),
+        ("copy_page_0_to_1", 6, Succeeds, 2),
+        ("init_page_0", 2, Succeeds, 1),
+        // Slow path: the bound exceeds the budget, so the host counts the
+        // pages exactly. Nothing is mapped if the check fails.
+        ("fill_pages_0_1", 2, Succeeds, 2),
+        ("fill_pages_0_1_2", 2, ExceedsLimit, 0),
+        ("fill_pages_0_1_2", 3, Succeeds, 3),
+        ("copy_page_0_to_1", 2, Succeeds, 2),
+        ("copy_page_0_to_2", 1, ExceedsLimit, 0),
+        ("copy_page_0_to_2", 2, Succeeds, 2),
+        ("init_page_0", 0, ExceedsLimit, 0),
+        // The exact check only counts distinct unaccessed pages: a copy whose
+        // source and destination share pages only touches pages 0 and 1.
+        ("copy_overlapping_pages_0_1", 2, Succeeds, 2),
+        ("copy_overlapping_pages_0_1", 1, ExceedsLimit, 0),
+        // Accessed pages do not count: loads from pages 0 and 1 use up the
+        // budget, but filling them again fits, filling a new page does not.
+        ("load_pages_0_1_then_fill_them", 2, Succeeds, 2),
+        ("load_pages_0_1_then_fill_page_2", 2, ExceedsLimit, 2),
+        // A short copy with a constant length is expanded inline by the
+        // compiler; it is checked all the same.
+        (
+            "load_pages_0_1_then_copy_8_bytes_to_page_2",
+            2,
+            ExceedsLimit,
+            2,
+        ),
+        (
+            "load_pages_0_1_then_copy_8_bytes_within_page_1",
+            2,
+            Succeeds,
+            2,
+        ),
+        // Zero-length operations touch no page, also when the host checks them.
+        ("fill_zero_bytes_at_page_3", 0, Succeeds, 0),
+        // Out-of-bounds operations trap without touching any page, also when
+        // they would exceed the limit.
+        // ... both on the fast path (bound 4, budget 4) ...
+        ("fill_out_of_bounds", 4, TrapsOutOfBounds, 0),
+        // ... and on the slow path (bound 4, budget 1).
+        ("fill_out_of_bounds", 1, TrapsOutOfBounds, 0),
+        ("copy_from_out_of_bounds", 2, TrapsOutOfBounds, 0),
+    ];
+    assert_heap_page_limit_cases(wat, &cases);
+}
+
+/// A module with a 4-page heap and one method per bulk memory operation
+/// under test, with `i32` or `i64` heap addresses.
+fn bulk_memory_ops_wat(wasm64: bool) -> String {
+    let (a, memory) = if wasm64 {
+        ("i64", "i64 4")
+    } else {
+        ("i32", "4")
+    };
+    format!(
+        r#"
+    (module
+        (func (export "canister_update fill_pages_0_1")
+            (memory.fill ({a}.const 0) (i32.const 1) ({a}.const 131072)))
+        (func (export "canister_update fill_pages_0_1_2")
+            (memory.fill ({a}.const 0) (i32.const 1) ({a}.const 196608)))
+        (func (export "canister_update copy_page_0_to_1")
+            (memory.copy ({a}.const 65536) ({a}.const 0) ({a}.const 65536)))
+        (func (export "canister_update copy_page_0_to_2")
+            (memory.copy ({a}.const 131072) ({a}.const 0) ({a}.const 65536)))
+        (func (export "canister_update copy_overlapping_pages_0_1")
+            ;; source [100, 65636), destination [1000, 66536)
+            (memory.copy ({a}.const 1000) ({a}.const 100) ({a}.const 65536)))
+        (func (export "canister_update init_page_0")
+            (memory.init 0 ({a}.const 0) (i32.const 0) (i32.const 4)))
+        (func (export "canister_update load_pages_0_1_then_fill_them")
+            (drop (i32.load ({a}.const 0)))
+            (drop (i32.load ({a}.const 65536)))
+            (memory.fill ({a}.const 0) (i32.const 1) ({a}.const 131072)))
+        (func (export "canister_update load_pages_0_1_then_fill_page_2")
+            (drop (i32.load ({a}.const 0)))
+            (drop (i32.load ({a}.const 65536)))
+            (memory.fill ({a}.const 131072) (i32.const 1) ({a}.const 1)))
+        (func (export "canister_update load_pages_0_1_then_copy_8_bytes_to_page_2")
+            (drop (i32.load ({a}.const 0)))
+            (drop (i32.load ({a}.const 65536)))
+            (memory.copy ({a}.const 131072) ({a}.const 0) ({a}.const 8)))
+        (func (export "canister_update load_pages_0_1_then_copy_8_bytes_within_page_1")
+            (drop (i32.load ({a}.const 0)))
+            (drop (i32.load ({a}.const 65536)))
+            (memory.copy ({a}.const 65600) ({a}.const 65536) ({a}.const 8)))
+        (func (export "canister_update fill_zero_bytes_at_page_3")
+            (memory.fill ({a}.const 196608) (i32.const 1) ({a}.const 0)))
+        (func (export "canister_update fill_out_of_bounds")
+            (memory.fill ({a}.const 196608) (i32.const 1) ({a}.const 131072)))
+        (func (export "canister_update copy_from_out_of_bounds")
+            (memory.copy ({a}.const 0) ({a}.const 196608) ({a}.const 131072)))
+        (memory (export "memory") {memory})
+        (data "\01\02\03\04")
+    )"#
+    )
+}
+
+#[test]
+fn wasm_memory_accessed_page_limit_for_bulk_memory_ops_wasm32() {
+    assert_bulk_memory_ops_respect_heap_page_limit(&bulk_memory_ops_wat(false));
+}
+
+#[test]
+fn wasm_memory_accessed_page_limit_for_bulk_memory_ops_wasm64() {
+    assert_bulk_memory_ops_respect_heap_page_limit(&bulk_memory_ops_wat(true));
+}
+
+/// A module with a 4-page heap and one method per stable memory operation
+/// under test. `wasm64` selects the heap address type, `api64` the 64-bit
+/// stable API (`stable64_read`/`stable64_write` with `i64` operands) instead
+/// of the 32-bit one; Wasm64 modules only have the 64-bit API.
+fn stable_memory_ops_wat(wasm64: bool, api64: bool) -> String {
+    let (a, memory) = if wasm64 {
+        ("i64", "i64 4")
+    } else {
+        ("i32", "4")
+    };
+    let (s, read, write) = if api64 {
+        ("i64", "stable64_read", "stable64_write")
+    } else {
+        ("i32", "stable_read", "stable_write")
+    };
+    format!(
+        r#"
+    (module
+        (import "ic0" "stable64_grow" (func $stable_grow (param i64) (result i64)))
+        (import "ic0" "{read}" (func $stable_read (param {s} {s} {s})))
+        (import "ic0" "{write}" (func $stable_write (param {s} {s} {s})))
+        (func $grow (drop (call $stable_grow (i64.const 4))))
+        ;; stable_read(dst, offset, len) writes to the heap at dst
+        (func (export "canister_update read_pages_0_1")
+            (call $grow)
+            (call $stable_read ({s}.const 0) ({s}.const 0) ({s}.const 131072)))
+        (func (export "canister_update read_pages_0_1_2")
+            (call $grow)
+            (call $stable_read ({s}.const 0) ({s}.const 0) ({s}.const 196608)))
+        ;; stable_write(offset, src, len) reads from the heap at src
+        (func (export "canister_update write_from_pages_0_1")
+            (call $grow)
+            (call $stable_write ({s}.const 0) ({s}.const 0) ({s}.const 131072)))
+        ;; The write marks stable page 0 as accessed, so the read takes the
+        ;; `memory.copy` branch instead of the first-access host call.
+        (func (export "canister_update write_page_0_then_read_into_page_2")
+            (call $grow)
+            (call $stable_write ({s}.const 0) ({s}.const 0) ({s}.const 4))
+            (call $stable_read ({s}.const 131072) ({s}.const 0) ({s}.const 4)))
+        (func (export "canister_update load_page_0_then_read_into_page_0")
+            (call $grow)
+            (drop (i32.load ({a}.const 0)))
+            (call $stable_read ({s}.const 8) ({s}.const 0) ({s}.const 4)))
+        (func (export "canister_update load_page_0_then_read_into_page_1")
+            (call $grow)
+            (drop (i32.load ({a}.const 0)))
+            (call $stable_read ({s}.const 65536) ({s}.const 0) ({s}.const 4)))
+        (func (export "canister_update load_page_0_then_write_from_page_0")
+            (call $grow)
+            (drop (i32.load ({a}.const 0)))
+            (call $stable_write ({s}.const 0) ({s}.const 8) ({s}.const 4)))
+        (func (export "canister_update read_zero_bytes_into_page_3")
+            (call $grow)
+            (call $stable_read ({s}.const 196608) ({s}.const 0) ({s}.const 0)))
+        (func (export "canister_update read_out_of_bounds")
+            (call $grow)
+            (call $stable_read ({s}.const 196608) ({s}.const 0) ({s}.const 131072)))
+        (func (export "canister_update write_from_out_of_bounds")
+            (call $grow)
+            (call $stable_write ({s}.const 0) ({s}.const 196608) ({s}.const 131072)))
+        (memory (export "memory") {memory})
+    )"#
+    )
+}
+
+/// The injected `stable_read`/`stable_write` bodies check their heap range
+/// against the heap page limit before copying, like bulk memory operations.
+fn assert_stable_memory_ops_respect_heap_page_limit(wat: &str) {
+    use Expected::*;
+    let cases = [
+        // Fast path: the bound of `(len >> 16) + 2` pages fits into the budget.
+        ("read_pages_0_1", 4, Succeeds, 2),
+        ("write_from_pages_0_1", 4, Succeeds, 2),
+        // Slow path: the host counts the pages exactly. Nothing is mapped if
+        // the check fails.
+        ("read_pages_0_1", 2, Succeeds, 2),
+        ("read_pages_0_1", 1, ExceedsLimit, 0),
+        ("read_pages_0_1_2", 3, Succeeds, 3),
+        ("read_pages_0_1_2", 2, ExceedsLimit, 0),
+        ("write_from_pages_0_1", 2, Succeeds, 2),
+        ("write_from_pages_0_1", 1, ExceedsLimit, 0),
+        // Both branches of `stable_read` are covered: the first-access host
+        // call (above) and the `memory.copy` of already accessed stable pages.
+        ("write_page_0_then_read_into_page_2", 2, Succeeds, 2),
+        ("write_page_0_then_read_into_page_2", 1, ExceedsLimit, 1),
+        // Accessed heap pages do not count.
+        ("load_page_0_then_read_into_page_0", 1, Succeeds, 1),
+        ("load_page_0_then_read_into_page_1", 1, ExceedsLimit, 1),
+        ("load_page_0_then_write_from_page_0", 1, Succeeds, 1),
+        // Zero-length operations touch no page.
+        ("read_zero_bytes_into_page_3", 0, Succeeds, 0),
+        // Out-of-bounds heap ranges trap without touching any page, on the
+        // fast path (bound 4, budget 4) and on the slow path (budget 1).
+        ("read_out_of_bounds", 4, TrapsOutOfBounds, 0),
+        ("read_out_of_bounds", 1, TrapsOutOfBounds, 0),
+        ("write_from_out_of_bounds", 4, TrapsOutOfBounds, 0),
+        ("write_from_out_of_bounds", 1, TrapsOutOfBounds, 0),
+    ];
+    assert_heap_page_limit_cases(wat, &cases);
+}
+
+#[test]
+fn wasm_memory_accessed_page_limit_for_stable_memory_ops_wasm32() {
+    assert_stable_memory_ops_respect_heap_page_limit(&stable_memory_ops_wat(false, false));
+}
+
+#[test]
+fn wasm_memory_accessed_page_limit_for_stable64_memory_ops_wasm32() {
+    assert_stable_memory_ops_respect_heap_page_limit(&stable_memory_ops_wat(false, true));
+}
+
+#[test]
+fn wasm_memory_accessed_page_limit_for_stable64_memory_ops_wasm64() {
+    assert_stable_memory_ops_respect_heap_page_limit(&stable_memory_ops_wat(true, true));
+}
+
+/// The injected check charges the same instructions for a bulk memory
+/// operation as before: its length.
+#[test]
+fn bulk_memory_ops_are_charged_for_their_length() {
+    let wat = r#"
+        (module
+            (func (export "canister_update nothing"))
+            (func (export "canister_update fill_1000")
+                (memory.fill (i32.const 0) (i32.const 1) (i32.const 1000)))
+            (func (export "canister_update fill_0")
+                (memory.fill (i32.const 0) (i32.const 1) (i32.const 0)))
+            (memory (export "memory") 1)
+        )"#;
+    let instructions_used = |method: &str| {
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let before = instance.instruction_counter();
+        instance
+            .run(FuncRef::Method(WasmMethod::Update(method.to_string())))
+            .unwrap();
+        before - instance.instruction_counter()
+    };
+    let nothing = instructions_used("nothing");
+    // The static cost of `memory.fill` and its three constant operands.
+    let fill_static_cost = instructions_used("fill_0") - nothing;
+    assert_eq!(
+        instructions_used("fill_1000") - nothing,
+        fill_static_cost + 1000
+    );
 }
 
 #[test]
@@ -1304,6 +2194,52 @@ fn stable64_read_out_of_bounds() {
     assert_eq!(trap_code, StableMemoryOutOfBounds);
 }
 
+/// A `stable64_read`/`stable64_write` with a `size` argument so large that
+/// `size + overhead` would overflow an `i64` must trap.
+#[test]
+fn stable64_read_write_huge_size_traps_on_bounds() {
+    fn func_ref(name: &str) -> FuncRef {
+        FuncRef::Method(WasmMethod::Update(name.to_string()))
+    }
+
+    // 2^63: `size + overhead` wraps to a negative i64, which previously forced
+    // the instruction counter to a hugely negative value before any bounds
+    // check ran.
+    let wat = r#"
+        (module
+            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+            (import "ic0" "stable64_read"
+                (func $stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+            (import "ic0" "stable64_write"
+                (func $stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+            (func (export "canister_update test_read")
+                (drop (call $stable_grow (i32.const 1)))
+                (call $stable64_read (i64.const 0) (i64.const 0) (i64.const 0x8000000000000000))
+            )
+            (func (export "canister_update test_write")
+                (drop (call $stable_grow (i32.const 1)))
+                (call $stable64_write (i64.const 0) (i64.const 0) (i64.const 0x8000000000000000))
+            )
+            (memory 1 1)
+        )"#;
+
+    use TrapCode::*;
+
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+    let err = instance.run(func_ref("test_read")).unwrap_err();
+    let HypervisorError::Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {err}");
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
+
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+    let err = instance.run(func_ref("test_write")).unwrap_err();
+    let HypervisorError::Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {err}");
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
+}
+
 #[test]
 fn stable_write_out_of_bounds() {
     fn func_ref(name: &str) -> FuncRef {
@@ -1655,6 +2591,8 @@ fn wasm_heap_oob_access() {
     let err = instance
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
+    // The function index accounts for the five functions imported by the
+    // instrumentation (the heap page limit is disabled by default).
     assert_eq!(
         err,
         HypervisorError::Trapped {
@@ -1803,7 +2741,6 @@ fn wasm_debug_print_instructions_charging() {
     for (rate_limiting, subnet_type, expected_instructions) in test_cases.clone() {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
-        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(subnet_type)
@@ -1825,7 +2762,6 @@ fn wasm_debug_print_instructions_charging() {
     for (rate_limiting, subnet_type, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
-        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(subnet_type)
@@ -1859,7 +2795,6 @@ fn wasm_canister_logging_instructions_charging() {
     for (message_len, expected_instructions) in test_cases.clone() {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(SubnetType::Application)
@@ -1878,7 +2813,6 @@ fn wasm_canister_logging_instructions_charging() {
     for (message_len, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(SubnetType::Application)
@@ -1937,7 +2871,6 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
 
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-    config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_subnet_type(SubnetType::Application)
@@ -1949,7 +2882,6 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
     // same for wasm64
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-    config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_subnet_type(SubnetType::Application)
@@ -2673,7 +3605,12 @@ fn wasm64_root_key() {
         .store_data_mut()
         .system_api_mut()
         .unwrap()
-        .ic0_root_key_copy(0, 0, expected_size, &mut expected_heap)
+        .ic0_root_key_copy(
+            0,
+            0,
+            expected_size,
+            &mut Heap::unchecked(&mut expected_heap),
+        )
         .unwrap();
     assert_eq!(wasm_heap, expected_heap);
 }
@@ -2923,7 +3860,12 @@ fn wasm64_subnet_self_copy() {
         .store_data()
         .system_api()
         .unwrap()
-        .ic0_subnet_self_copy(0, 0, subnet_id_size, &mut expected_heap)
+        .ic0_subnet_self_copy(
+            0,
+            0,
+            subnet_id_size,
+            &mut Heap::unchecked(&mut expected_heap),
+        )
         .unwrap();
 
     assert_eq!(wasm_heap, expected_heap);
@@ -3096,7 +4038,7 @@ fn wasm64_canister_liquid_cycle_balance128() {
         .store_data_mut()
         .system_api_mut()
         .unwrap()
-        .ic0_canister_liquid_cycle_balance128(0, &mut expected_heap)
+        .ic0_canister_liquid_cycle_balance128(0, &mut Heap::unchecked(&mut expected_heap))
         .unwrap();
     assert_eq!(wasm_heap, expected_heap);
 
@@ -3587,14 +4529,8 @@ fn test_environment_variable_system_api() {
 }
 
 #[cfg(target_os = "linux")]
-fn run_instance_and_check_stats(
-    wat: &str,
-    use_deterministic_tracker: bool,
-    expected_os_pages: usize,
-    expected_wasm_pages: usize,
-) {
+fn run_instance_and_check_stats(wat: &str, expected_os_pages: usize, expected_wasm_pages: usize) {
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(use_deterministic_tracker)
         .with_wat(wat)
         .with_api_type(ApiType::update(
             UNIX_EPOCH,
@@ -3612,129 +4548,15 @@ fn run_instance_and_check_stats(
 
     let stats = instance.get_stats();
 
-    if use_deterministic_tracker {
-        // Deterministic tracker gives exact counts
-        assert_eq!(
-            stats.wasm_accessed_os_pages_count, expected_os_pages,
-            "Expected exactly {} accessed OS pages, got {}",
-            expected_os_pages, stats.wasm_accessed_os_pages_count
-        );
-        assert_eq!(
-            stats.wasm_accessed_wasm_pages_count, expected_wasm_pages,
-            "Expected exactly {} accessed Wasm pages, got {}",
-            expected_wasm_pages, stats.wasm_accessed_wasm_pages_count
-        );
-    } else {
-        // Prefetching tracker gives at least the expected counts
-        assert!(
-            stats.wasm_accessed_os_pages_count >= expected_os_pages,
-            "Expected at least {} accessed OS pages, got {}",
-            expected_os_pages,
-            stats.wasm_accessed_os_pages_count
-        );
-        assert!(
-            stats.wasm_accessed_wasm_pages_count >= expected_wasm_pages,
-            "Expected at least {} accessed Wasm pages, got {}",
-            expected_wasm_pages,
-            stats.wasm_accessed_wasm_pages_count
-        );
-    }
-}
-
-#[cfg(target_os = "linux")]
-#[test]
-fn wasm_accessed_os_pages_count_is_correct() {
-    // Access a single OS page within the first Wasm page
-    // With prefetching enabled, accessing one page will prefetch multiple pages.
-    run_instance_and_check_stats(
-        r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (memory (export "memory") 2)
-            (func (export "canister_update test")
-                ;; Read from offset 0 (first OS page of first Wasm page)
-                (drop (i32.load (i32.const 0)))
-                (call $msg_reply)
-            )
-        )"#,
-        false,
-        1,
-        1,
+    assert_eq!(
+        stats.wasm_accessed_os_pages_count, expected_os_pages,
+        "Expected exactly {} accessed OS pages, got {}",
+        expected_os_pages, stats.wasm_accessed_os_pages_count
     );
-
-    // Access multiple OS pages within the same Wasm page
-    // With prefetching, we should access at least 3 OS pages, but likely more.
-    run_instance_and_check_stats(
-        r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (memory (export "memory") 2)
-            (func (export "canister_update test")
-                ;; Read from offset 0 (OS page 0)
-                (drop (i32.load (i32.const 0)))
-                ;; Read from offset 4096 (OS page 1)
-                (drop (i32.load (i32.const 4096)))
-                ;; Read from offset 8192 (OS page 2)
-                (drop (i32.load (i32.const 8192)))
-                (call $msg_reply)
-            )
-        )"#,
-        false,
-        3,
-        1,
-    );
-
-    // Access OS pages across multiple Wasm pages
-    // With prefetching, we should access at least 4 OS pages across 3 Wasm pages.
-    run_instance_and_check_stats(
-        &format!(
-            r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (memory (export "memory") 3)
-            (func (export "canister_update test")
-                ;; Access first OS page of first Wasm page (offset 0)
-                (drop (i32.load (i32.const 0)))
-                ;; Access first OS page of second Wasm page (offset 65536)
-                (drop (i32.load (i32.const {})))
-                ;; Access second OS page of second Wasm page (offset 65536 + 4096)
-                (drop (i32.load (i32.const {})))
-                ;; Access first OS page of third Wasm page (offset 131072)
-                (drop (i32.load (i32.const {})))
-                (call $msg_reply)
-            )
-        )"#,
-            WASM_PAGE_SIZE_IN_BYTES,
-            WASM_PAGE_SIZE_IN_BYTES + ic_sys::PAGE_SIZE,
-            2 * WASM_PAGE_SIZE_IN_BYTES
-        ),
-        false,
-        4,
-        3,
-    );
-
-    // Verify that both reads and writes are counted
-    // With prefetching, we should access at least 4 OS pages (2 reads + 2 writes).
-    run_instance_and_check_stats(
-        r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (memory (export "memory") 2)
-            (func (export "canister_update test")
-                ;; Read from OS page 0
-                (drop (i32.load (i32.const 100)))
-                ;; Write to OS page 1
-                (i32.store (i32.const 5000) (i32.const 42))
-                ;; Read from OS page 2
-                (drop (i32.load (i32.const 9000)))
-                ;; Write to OS page 3
-                (i32.store (i32.const 13000) (i32.const 43))
-                (call $msg_reply)
-            )
-        )"#,
-        false,
-        4,
-        1,
+    assert_eq!(
+        stats.wasm_accessed_wasm_pages_count, expected_wasm_pages,
+        "Expected exactly {} accessed Wasm pages, got {}",
+        expected_wasm_pages, stats.wasm_accessed_wasm_pages_count
     );
 }
 
@@ -3755,7 +4577,6 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
                 (call $msg_reply)
             )
         )"#,
-        true,
         OS_PAGES_PER_WASM_PAGE,
         1,
     );
@@ -3776,7 +4597,6 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
                 (call $msg_reply)
             )
         )"#,
-        true,
         OS_PAGES_PER_WASM_PAGE,
         1,
     );
@@ -3798,7 +4618,6 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
                 (call $msg_reply)
             )
         )"#,
-        true,
         OS_PAGES_PER_WASM_PAGE,
         1,
     );
@@ -3823,7 +4642,6 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
             WASM_PAGE_SIZE_IN_BYTES,
             2 * WASM_PAGE_SIZE_IN_BYTES
         ),
-        true,
         3 * OS_PAGES_PER_WASM_PAGE,
         3,
     );
@@ -3842,7 +4660,6 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
                 (call $msg_reply)
             )
         )"#,
-        true,
         2 * OS_PAGES_PER_WASM_PAGE,
         2,
     );
@@ -3851,15 +4668,14 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
 #[cfg(target_os = "linux")]
 fn run_wasm_and_get_instructions_used(
     wat: &str,
-    use_deterministic_tracker: bool,
+    page_overhead: NumInstructions,
 ) -> NumInstructions {
     let config = Config {
-        dirty_page_overhead: NumInstructions::new(1),
+        page_overhead,
         ..Default::default()
     };
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
-        .with_deterministic_memory_tracker_enabled(use_deterministic_tracker)
         .with_wat(wat)
         .with_api_type(ApiType::update(
             UNIX_EPOCH,
@@ -3882,16 +4698,20 @@ fn run_wasm_and_get_instructions_used(
     NumInstructions::from(instruction_limit.get() - remaining)
 }
 
+/// Asserts how many OS pages the memory tracker charges for while running
+/// `wat`, by running it twice and diffing: once with a per-OS-page overhead of
+/// zero (which isolates the rest of the message cost) and once with an overhead
+/// of one instruction per OS page (so the difference is the page count).
 #[cfg(target_os = "linux")]
 fn assert_deterministic_charges_extra(
     wat: &str,
     expected_extra_instructions: u64,
     description: &str,
 ) {
-    let prefetching_instructions = run_wasm_and_get_instructions_used(wat, false);
-    let deterministic_instructions = run_wasm_and_get_instructions_used(wat, true);
+    let uncharged = run_wasm_and_get_instructions_used(wat, NumInstructions::new(0));
+    let charged = run_wasm_and_get_instructions_used(wat, NumInstructions::new(1));
     assert_eq!(
-        deterministic_instructions.get() - prefetching_instructions.get(),
+        charged.get() - uncharged.get(),
         expected_extra_instructions,
         "{}",
         description
@@ -4196,7 +5016,6 @@ fn deterministic_tracker_exhausts_instructions_on_page_faults() {
     );
 
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(true)
         .with_wat(&wat)
         .with_api_type(ApiType::update(
             UNIX_EPOCH,
@@ -4262,7 +5081,6 @@ fn deterministic_tracker_reports_correct_page_stats() {
     let wat = make_memory_access_wat(&body);
 
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(true)
         .with_wat(&wat)
         .with_api_type(ApiType::update(
             UNIX_EPOCH,
@@ -4320,7 +5138,6 @@ fn deterministic_tracker_reports_zero_dirty_pages_for_reads() {
     let wat = make_memory_access_wat(&body);
 
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(true)
         .with_wat(&wat)
         .with_api_type(ApiType::update(
             UNIX_EPOCH,

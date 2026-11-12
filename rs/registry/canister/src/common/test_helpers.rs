@@ -2,6 +2,7 @@ use crate::mutations::do_create_subnet::CreateSubnetPayload;
 use crate::mutations::node_management::common::make_add_node_registry_mutations;
 use crate::mutations::node_management::do_add_node::connection_endpoint_from_string;
 use crate::registry::Registry;
+use attestation::LAUNCH_MEASUREMENT_LEN;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_test_utils::registry::{
     TEST_ID, create_subnet_threshold_signing_pubkey_and_cup_mutations,
@@ -27,7 +28,7 @@ use ic_registry_transport::pb::v1::{
 };
 use ic_registry_transport::{insert, upsert};
 use ic_test_utilities_types::ids::subnet_test_id;
-use ic_types::ReplicaVersion;
+use ic_test_utilities_types::ids::test_replica_version;
 use lazy_static::lazy_static;
 use prost::Message;
 use std::collections::BTreeMap;
@@ -47,8 +48,8 @@ lazy_static! {
     /// the SEV subnet and standard engine replica version invariants).
     pub static ref GUEST_LAUNCH_MEASUREMENTS: GuestLaunchMeasurements = GuestLaunchMeasurements {
         guest_launch_measurements: vec![GuestLaunchMeasurement {
-            // An SEV-SNP measurement is exactly 48 bytes long. The value itself does not matter here.
-            measurement: vec![0x42; 48],
+            // The value itself does not matter here.
+            measurement: vec![0x42; LAUNCH_MEASUREMENT_LEN],
             metadata: None,
         }],
     };
@@ -136,7 +137,7 @@ pub fn get_invariant_compliant_subnet_record(node_ids: Vec<NodeId>) -> SubnetRec
         gossip_max_duplicity: 1,
         gossip_max_chunk_wait_ms: 200,
         gossip_max_artifact_streams_per_peer: 1,
-        replica_version_id: ReplicaVersion::default().into(),
+        replica_version_id: test_replica_version().to_string(),
         node_ids,
         ..Default::default()
     }
@@ -284,7 +285,7 @@ pub fn prepare_registry_with_cloud_engine_subnet(
             .collect(),
         subnet_type: i32::from(SubnetType::CloudEngine),
         canister_cycles_cost_schedule: i32::from(CanisterCyclesCostSchedule::Free),
-        replica_version_id: ReplicaVersion::default().to_string(),
+        replica_version_id: test_replica_version().to_string(),
         unit_delay_millis: 600,
         ..Default::default()
     };

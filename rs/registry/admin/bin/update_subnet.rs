@@ -91,6 +91,12 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     #[clap(long)]
     pub halt_at_cup_height: Option<bool>,
 
+    /// If set, the subnet will start (`true`) or stop (`false`) "cooling down".
+    /// See `ic_replicated_state::SubnetTopology::cooling_down` for the exact
+    /// semantics.
+    #[clap(long)]
+    pub cooling_down: Option<bool>,
+
     #[clap(long)]
     /// Configuration for chain key:
     /// The key configurations to be added to (or edited) for this subnet. If a key configuration
@@ -364,6 +370,7 @@ impl ProposeToUpdateSubnetCmd {
 
             is_halted: self.is_halted,
             halt_at_cup_height: self.halt_at_cup_height,
+            cooling_down: self.cooling_down,
             features: self.features.map(|v| v.into()),
             resource_limits: resource_limits.map(|v| v.into()),
 
@@ -434,6 +441,7 @@ mod tests {
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
+            cooling_down: None,
             features: None,
             resource_limits: None,
             max_number_of_canisters: None,
@@ -468,6 +476,7 @@ mod tests {
             start_as_nns: None,
             is_halted: None,
             halt_at_cup_height: None,
+            cooling_down: None,
             chain_key_configs_to_generate: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,

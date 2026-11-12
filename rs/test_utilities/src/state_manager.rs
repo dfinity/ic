@@ -3,7 +3,7 @@ use ic_canonical_state::lazy_tree_conversion::{
 };
 use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tree_hash::{Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree, Witness};
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
@@ -331,7 +331,6 @@ impl StateReader for FakeStateManager {
         }
     }
 
-    // No certification support in FakeStateManager
     fn latest_certified_height(&self) -> Height {
         let real = self
             .states
@@ -351,9 +350,8 @@ impl StateReader for FakeStateManager {
             .expect("latest state is always available in FakeStateManager")
     }
 
-    // No certification support in FakeStateManager
     fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>> {
-        None
+        self.get_state_at(self.latest_certified_height()).ok()
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {
@@ -650,7 +648,6 @@ impl CertifiedStreamStore for FakeStateManager {
 
         Ok(encode_certified_stream_slice(
             stream.slice(begin_index, msg_limit),
-            state.height(),
         ))
     }
 
@@ -684,10 +681,7 @@ impl CertifiedStreamStore for FakeStateManager {
 ///
 /// This is useful for generating a `CertifiedStreamSlice` where
 /// `slice.header().begin() != `slice.messages().begin()` for use in tests.
-pub fn encode_certified_stream_slice(
-    slice: StreamSlice,
-    state_height: Height,
-) -> CertifiedStreamSlice {
+pub fn encode_certified_stream_slice(slice: StreamSlice) -> CertifiedStreamSlice {
     use ic_types::{
         consensus::certification::CertificationContent,
         crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signed},
@@ -699,23 +693,17 @@ pub fn encode_certified_stream_slice(
     CertifiedStreamSlice {
         payload: serde_cbor::to_vec(&slice).expect("failed to serialize stream slice"),
         merkle_proof: vec![],
-        certification: Certification {
-            height: state_height,
-            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
-            signed: Signed {
-                signature: ThresholdSignature {
-                    signer: NiDkgId {
-                        start_block_height: Height::from(0),
-                        dealer_subnet: subnet_test_id(0),
-                        dkg_tag: NiDkgTag::HighThreshold,
-                        target_subnet: NiDkgTargetSubnet::Local,
-                    },
-                    signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+        certification: Signed {
+            signature: ThresholdSignature {
+                signer: NiDkgId {
+                    start_block_height: Height::from(0),
+                    dealer_subnet: subnet_test_id(0),
+                    dkg_tag: NiDkgTag::HighThreshold,
+                    target_subnet: NiDkgTargetSubnet::Local,
                 },
-                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                    vec![],
-                ))),
+                signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
             },
+            content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
         },
     }
 }

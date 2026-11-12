@@ -1,0 +1,14 @@
+[package]
+name = "ic-consensus-upgrade"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-interfaces = { path = "../../interfaces" }
+ic-types = { path = "../../types/types" }
+
+[dev-dependencies]
+ic-types-test-utils = { path = "../../types/types_test_utils" }

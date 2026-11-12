@@ -6,7 +6,26 @@ use lazy_static::lazy_static;
 use phantom_newtype::Id;
 
 lazy_static! {
-    pub static ref IS_WSL: bool = wsl::is_wsl();
+    pub static ref IS_WSL: bool = is_wsl();
+}
+
+/// Returns `true` if the program is running under the Windows Subsystem for
+/// Linux (WSL), as reported by `/proc/sys/kernel/osrelease`.
+#[cfg(target_os = "linux")]
+fn is_wsl() -> bool {
+    std::fs::read("/proc/sys/kernel/osrelease")
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .map(|release| {
+            let release = release.to_ascii_lowercase();
+            release.contains("microsoft") || release.contains("wsl")
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn is_wsl() -> bool {
+    false
 }
 
 /// The size of an OS memory page.

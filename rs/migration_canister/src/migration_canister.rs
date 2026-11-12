@@ -133,14 +133,12 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Number of currently ongoing migration requests.",
     )?;
 
-    // This gauge is not set if there is no request in flight.
-    if let Some(age_nanos) = oldest_request_age_nanos() {
-        w.encode_gauge(
-            "migration_canister_oldest_request_in_flight_age_seconds",
-            age_nanos as f64 / 1_000_000_000_f64,
-            "Age in seconds of the migration request that has been in flight the longest.",
-        )?;
-    }
+    // This gauge is 0 if there is no request in flight.
+    w.encode_gauge(
+        "migration_canister_oldest_request_in_flight_age_seconds",
+        oldest_request_age_nanos() as f64 / 1_000_000_000_f64,
+        "Age in seconds of the migration request that has been in flight the longest.",
+    )?;
 
     w.encode_gauge(
         "migration_canister_num_successes_in_past_24_h",

@@ -26,7 +26,7 @@ use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CA
 use ic_nns_governance_api::{
     BlessAlternativeGuestOsVersion, FulfillSubnetRentalRequest, MakeProposalRequest,
     ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction,
-    ProposalActionRequest, ProposalInfo, ProposalStatus, Vote,
+    ProposalActionRequest, ProposalInfo, ProposalStatus, UpdateStandardEngineReplicaVersion, Vote,
     manage_neuron::{NeuronIdOrSubaccount, RegisterVote},
     manage_neuron_response,
     subnet_rental::{RentalConditionId, SubnetRentalRequest},
@@ -1033,6 +1033,59 @@ pub async fn submit_bless_alternative_guest_os_version_proposal(
         .await
         .expect("Error calling the manage_neuron api.");
 
+    match response.command.unwrap() {
+        manage_neuron_response::Command::MakeProposal(resp) => {
+            ProposalId::from(resp.proposal_id.unwrap())
+        }
+        other => panic!("Unexpected response: {other:?}"),
+    }
+}
+
+/// Submits (but does not vote on) a proposal to change what replica
+/// version(s) Cloud Engines run, per `UpdateStandardEngineReplicaVersion`.
+///
+/// Returns the identifier of the newly submitted proposal.
+pub async fn submit_update_standard_engine_replica_version_proposal(
+    governance: &Canister<'_>,
+    sender: Sender,
+    neuron_id: NeuronId,
+    new_replica_version_id: String,
+    old_replica_version_id: String,
+    deployment_progress: f64,
+) -> ProposalId {
+    // Assemble the request.
+    let proposal = MakeProposalRequest {
+        title: Some(format!(
+            "Update {:.1}% the Cloud Engine fleet to {new_replica_version_id}",
+            100.0 * deployment_progress,
+        )),
+        summary: "".to_string(),
+        url: "".to_string(),
+        action: Some(ProposalActionRequest::UpdateStandardEngineReplicaVersion(
+            UpdateStandardEngineReplicaVersion {
+                new_replica_version_id: Some(new_replica_version_id),
+                old_replica_version_id: Some(old_replica_version_id),
+                deployment_progress: Some(deployment_progress),
+            },
+        )),
+    };
+
+    // Send the request.
+    let response: ManageNeuronResponse = governance
+        .update_from_sender(
+            "manage_neuron",
+            candid_one,
+            ManageNeuronRequest {
+                id: None,
+                command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(proposal))),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id.into())),
+            },
+            &sender,
+        )
+        .await
+        .expect("Error calling the manage_neuron api.");
+
+    // Unpack the proposal ID from the response.
     match response.command.unwrap() {
         manage_neuron_response::Command::MakeProposal(resp) => {
             ProposalId::from(resp.proposal_id.unwrap())

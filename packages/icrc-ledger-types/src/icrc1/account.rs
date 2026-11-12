@@ -4,7 +4,6 @@ use std::{
     str::FromStr,
 };
 
-use base32::Alphabet;
 use candid::{CandidType, Deserialize, Principal, types::principal::PrincipalError};
 use minicbor::{Decode, Encode};
 use serde::Serialize;
@@ -72,7 +71,29 @@ fn full_account_checksum(owner: &[u8], subaccount: &[u8]) -> String {
     crc32hasher.update(owner);
     crc32hasher.update(subaccount);
     let checksum = crc32hasher.finalize().to_be_bytes();
-    base32::encode(Alphabet::RFC4648 { padding: false }, &checksum).to_lowercase()
+    base32_encode_lowercase_no_padding(&checksum)
+}
+
+/// Encodes `data` using the base32 alphabet of RFC 4648 (section 6), in lower
+/// case and without `=` padding.
+fn base32_encode_lowercase_no_padding(data: &[u8]) -> String {
+    const ALPHABET: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
+
+    let mut output = String::with_capacity(data.len().div_ceil(5) * 8);
+    // Each group of 5 input bytes (40 bits) yields 8 output characters (5 bits
+    // each). A trailing partial group is zero-padded on the right, and only
+    // as many characters as needed to cover its bits are emitted.
+    for chunk in data.chunks(5) {
+        let mut group = [0_u8; 8];
+        group[3..3 + chunk.len()].copy_from_slice(chunk);
+        let bits = u64::from_be_bytes(group);
+        let num_chars = (chunk.len() * 8).div_ceil(5);
+        for i in 0..num_chars {
+            let index = (bits >> (35 - 5 * i)) & 0x1f;
+            output.push(ALPHABET[index as usize] as char);
+        }
+    }
+    output
 }
 
 impl fmt::Display for Account {
@@ -249,9 +270,47 @@ mod tests {
     use std::str::FromStr;
 
     use crate::icrc1::account::{
-        Account, ICRC1TextReprError, principal_to_subaccount, subaccount_to_principal,
-        try_from_subaccount_to_principal,
+        Account, ICRC1TextReprError, base32_encode_lowercase_no_padding, principal_to_subaccount,
+        subaccount_to_principal, try_from_subaccount_to_principal,
     };
+
+    #[test]
+    fn test_base32_encode_rfc4648_vectors() {
+        // Test vectors from RFC 4648, section 10 (lower-cased, padding removed).
+        for (input, expected) in [
+            ("", ""),
+            ("f", "my"),
+            ("fo", "mzxq"),
+            ("foo", "mzxw6"),
+            ("foob", "mzxw6yq"),
+            ("fooba", "mzxw6ytb"),
+            ("foobar", "mzxw6ytboi"),
+        ] {
+            assert_eq!(
+                base32_encode_lowercase_no_padding(input.as_bytes()),
+                expected,
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_base32_encode_checksums() {
+        // Checksums (4 bytes) are always encoded as 7 characters.
+        for (input, expected) in [
+            ([0x00, 0x00, 0x00, 0x00], "aaaaaaa"),
+            ([0xff, 0xff, 0xff, 0xff], "777777y"),
+            // The checksums from the account textual representation tests below.
+            ([0xf0, 0x85, 0xed, 0x7d], "6cc627i"),
+            ([0x19, 0x6e, 0x64, 0x63], "dfxgiyy"),
+        ] {
+            assert_eq!(
+                base32_encode_lowercase_no_padding(&input),
+                expected,
+                "{input:?}"
+            );
+        }
+    }
 
     pub fn principal_strategy() -> impl Strategy<Value = Principal> {
         let bytes_strategy = prop::collection::vec(0..=255_u8, 29);

@@ -378,8 +378,25 @@ impl SnsCanisters<'_> {
     /// Creates and installs all of the SNS canisters
     pub async fn set_up(
         runtime: &'_ Runtime,
-        mut init_payloads: SnsCanisterInitPayloads,
+        init_payloads: SnsCanisterInitPayloads,
     ) -> SnsCanisters<'_> {
+        Self::set_up_with_governance_features(runtime, init_payloads, &[]).await
+    }
+
+    /// Like `set_up`, but installs the governance canister built with the "test" feature, which
+    /// exposes test-only methods such as `set_time_warp` and `run_periodic_tasks_now`.
+    pub async fn set_up_with_test_governance(
+        runtime: &'_ Runtime,
+        init_payloads: SnsCanisterInitPayloads,
+    ) -> SnsCanisters<'_> {
+        Self::set_up_with_governance_features(runtime, init_payloads, &["test"]).await
+    }
+
+    async fn set_up_with_governance_features<'a>(
+        runtime: &'a Runtime,
+        mut init_payloads: SnsCanisterInitPayloads,
+        governance_features: &[&str],
+    ) -> SnsCanisters<'a> {
         let since_start_secs = {
             let s = SystemTime::now();
             move || (SystemTime::now().duration_since(s).unwrap()).as_secs_f32()
@@ -450,7 +467,11 @@ impl SnsCanisters<'_> {
 
         // Install canisters
         futures::join!(
-            install_governance_canister(&mut governance, init_payloads.governance.clone()),
+            install_governance_canister_with_features(
+                &mut governance,
+                init_payloads.governance.clone(),
+                governance_features,
+            ),
             install_ledger_canister(&mut ledger, init_payloads.ledger),
             install_root_canister(&mut root, init_payloads.root),
             install_swap_canister(&mut swap, init_payloads.swap),
@@ -1373,10 +1394,18 @@ where
 /// Compiles the governance canister, builds it's initial payload and installs
 /// it
 pub async fn install_governance_canister(canister: &mut Canister<'_>, init_payload: Governance) {
+    install_governance_canister_with_features(canister, init_payload, &[]).await;
+}
+
+async fn install_governance_canister_with_features(
+    canister: &mut Canister<'_>,
+    init_payload: Governance,
+    features: &[&str],
+) {
     install_rust_canister_with_memory_allocation(
         canister,
         "sns-governance-canister",
-        &[],
+        features,
         Some(CandidOne(init_payload).into_bytes().unwrap()),
         SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
     )

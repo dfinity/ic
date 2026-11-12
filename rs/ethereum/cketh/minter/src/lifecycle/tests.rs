@@ -97,6 +97,16 @@ mod init {
 
         assert_matches!(
             State::try_from(InitArg {
+                next_sweeper_transaction_nonce: Some(Nat(BigUint::from_bytes_be(
+                    &ethnum::u256::MAX.to_be_bytes()
+                ) + 1_u8)),
+                ..valid_init_arg()
+            }),
+            Err(InvalidStateError::InvalidTransactionNonce(_))
+        );
+
+        assert_matches!(
+            State::try_from(InitArg {
                 last_scraped_block_number: Nat(BigUint::from_bytes_be(
                     &ethnum::u256::MAX.to_be_bytes(),
                 )),
@@ -131,12 +141,45 @@ mod init {
             Wei::new(10_000_000_000_000_000)
         );
         assert_eq!(
-            state.eth_transactions.next_transaction_nonce(),
+            state.withdrawal_transactions.next_transaction_nonce(),
             TransactionNonce::ZERO
         );
         assert_eq!(
             state.sweeper_contract_address,
             Some(Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap())
+        );
+    }
+
+    #[test]
+    fn should_start_sweeper_nonce_at_zero_when_unspecified() {
+        let state = State::try_from(InitArg {
+            next_sweeper_transaction_nonce: None,
+            ..valid_init_arg()
+        })
+        .expect("valid init args");
+
+        assert_eq!(
+            state.automatic_deposits.next_sweeper_transaction_nonce(),
+            TransactionNonce::ZERO
+        );
+    }
+
+    #[test]
+    fn should_use_given_sweeper_nonce_independently_of_the_main_one() {
+        let state = State::try_from(InitArg {
+            next_transaction_nonce: Nat::from(7_u8),
+            next_sweeper_transaction_nonce: Some(Nat::from(42_u8)),
+            ..valid_init_arg()
+        })
+        .expect("valid init args");
+
+        assert_eq!(
+            state.withdrawal_transactions.next_transaction_nonce(),
+            TransactionNonce::from(7_u8)
+        );
+        assert_eq!(
+            state.automatic_deposits.next_sweeper_transaction_nonce(),
+            TransactionNonce::from(42_u8)
         );
     }
 }

@@ -1,7 +1,7 @@
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::{Config as ExecutionConfig, TEST_DEFAULT_LOG_MEMORY_USAGE};
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SubnetConfig;
+use ic_config::subnet_config::{DEFAULT_CANISTER_LOG_RESIZE_INSTRUCTIONS_PER_BYTE, SubnetConfig};
 use ic_execution_environment::units::{KIB, MIB};
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
@@ -31,6 +31,23 @@ const TIME_STEP: Duration = Duration::from_nanos(111_111);
 /// with messages of the given length.
 fn records_to_fill(buffer_size: u64, message_len: usize) -> u32 {
     (buffer_size / LogMemoryStore::estimate_record_size(message_len) as u64 + 1) as u32
+}
+
+/// Returns the largest log content that still fits a log memory store of the given size.
+fn max_content_len(log_memory_limit: u64) -> usize {
+    log_memory_limit as usize - LogMemoryStore::estimate_record_size(0)
+}
+
+/// Asserts that lowering the log memory limit to `log_memory_limit` truncated the stored
+/// records to fit the smaller buffer instead of dropping them.
+fn assert_logs_truncated_to_limit(logs: &[CanisterLogRecord], log_memory_limit: u64) {
+    assert!(
+        !logs.is_empty(),
+        "records were dropped instead of truncated"
+    );
+    for record in logs {
+        assert_le!(record.content.len(), max_content_len(log_memory_limit));
+    }
 }
 
 // Change limits in order not to duplicate prod values.
@@ -412,6 +429,65 @@ fn test_fetch_canister_logs_via_inter_canister_update_call_enabled() {
             (1, timestamp2, "message".to_string()),
             (2, timestamp3, "message".to_string()),
         ]
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_via_inter_canister_update_call_enabled_not_allowed() {
+    // Test fetch_canister_logs call fails for inter-canister update call if the
+    // caller is not allowed to read the logs.
+    // There are 3 actors with the following controller relationships: user -> canister_a and user -> canister_b.
+    // The user uses update call to canister_a to fetch logs of canister_b, which should fail
+    // since canister_a is not a controller of canister_b.
+    let replicated_inter_canister_log_fetch = FlagStatus::Enabled;
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let log_visibility = LogVisibilityV2::Controllers;
+    let env = setup_env_with(replicated_inter_canister_log_fetch);
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(log_visibility.clone())
+            .with_controllers(vec![user_controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    // Create canister_b controlled by the user.
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(log_visibility)
+            .with_controllers(vec![user_controller])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+    // Record some logs in canister_b.
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    // Fetch logs of canister_b via canister_a.
+    let result = env.execute_ingress(
+        canister_a,
+        "update",
+        wasm()
+            .call_with_cycles(
+                CanisterId::ic_00(),
+                "fetch_canister_logs",
+                call_args()
+                    .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
+                    .on_reject(wasm().reject_message().reject()),
+                Cycles::new(50_000_000_000),
+            )
+            .build(),
+    );
+    let reject_message = get_reject(result);
+    let expected_message = format!(
+        "Caller {} is not allowed to access canister logs",
+        canister_a.get()
+    );
+    assert!(
+        reject_message.contains(&expected_message),
+        "Expected: {expected_message}\nActual: {reject_message}"
     );
 }
 
@@ -2255,6 +2331,101 @@ fn test_canister_resize_down_preserves_logs() {
 }
 
 #[test]
+fn test_canister_resize_down_below_record_size_truncates_logs() {
+    let log_memory_limit = TEST_DEFAULT_LOG_MEMORY_LIMIT as u64;
+
+    let env = setup_env();
+    let controller = PrincipalId::new_anonymous();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .with_log_memory_limit(64 * KIB)
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+
+    // Store records that do not fit the smallest accepted log memory limit.
+    let message = [b'a'; MAX_LOG_MESSAGE_LEN];
+    for _ in 0..2 {
+        let _ = env.execute_ingress(
+            canister_id,
+            "update",
+            wasm().debug_print(&message).reply().build(),
+        );
+    }
+    let logs_before = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(logs_before.len(), 2);
+    assert_gt!(
+        logs_before[0].content.len(),
+        max_content_len(log_memory_limit)
+    );
+
+    // Shrinking the limit below a single stored record makes `LogMemoryStore::resize_impl`
+    // migrate the records into a buffer they no longer fit. They must be truncated.
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(log_memory_limit)
+            .build(),
+    );
+
+    let logs_after = fetch_log_records(&env, controller, canister_id);
+    assert_logs_truncated_to_limit(&logs_after, log_memory_limit);
+}
+
+#[test]
+fn test_canister_resize_down_truncates_logs_of_long_execution() {
+    let log_memory_limit = TEST_DEFAULT_LOG_MEMORY_LIMIT as u64;
+
+    let env = setup_env();
+    let controller = PrincipalId::new_anonymous();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .with_log_memory_limit(2 * MIB)
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+
+    // A long execution that logs a record not fitting the smallest accepted log memory
+    // limit and only then runs long enough to be paused. The record is created against
+    // the delta log capacity snapshotted when the message started executing, i.e. 2 MiB.
+    // Slice #0 is processed inside `send_ingress`, leaving the execution paused.
+    let message = [b'a'; MAX_LOG_MESSAGE_LEN];
+    let _msg_id = env.send_ingress(
+        controller,
+        canister_id,
+        "update",
+        wasm()
+            .debug_print(&message)
+            .instruction_counter_is_at_least(MAX_INSTRUCTIONS_PER_SLICE.get())
+            .reply()
+            .build(),
+    );
+
+    // Request a smaller limit while the execution is in flight. `update_settings` cannot
+    // run on a canister with a paused execution (only with an aborted one, see
+    // `Ic00MethodPermissions`), so it is applied after the execution has completed and
+    // `apply_changes` has appended its delta log to the still 2 MiB store. Shrinking then
+    // makes `LogMemoryStore::resize_impl` migrate that record into a buffer it no longer
+    // fits. It must be truncated.
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(log_memory_limit)
+            .build(),
+    );
+
+    let logs_after = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(logs_after.len(), 1);
+    assert_logs_truncated_to_limit(&logs_after, log_memory_limit);
+}
+
+#[test]
 fn test_canister_log_resize_deducts_cycles() {
     let log_memory_limit = 2 * MIB;
 
@@ -2292,8 +2463,7 @@ fn test_canister_log_resize_deducts_cycles() {
 
     // The resize cost is proportional to bytes_used. With a full 2 MiB buffer,
     // expect at least 1.5 MiB * cost_per_byte (allowing slack for partial fill).
-    // Must match LOG_RESIZE_COST_PER_BYTE in canister_manager.rs.
-    let log_resize_cost_per_byte: u64 = 32;
+    let log_resize_cost_per_byte = DEFAULT_CANISTER_LOG_RESIZE_INSTRUCTIONS_PER_BYTE.get();
     let cycles_deducted = balance_before - balance_after;
     let min_expected = 3 * MIB / 2 * log_resize_cost_per_byte;
     assert_gt!(
@@ -2347,9 +2517,12 @@ fn test_canister_log_resize_rejected_insufficient_cycles() {
                 .build(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+    // The cycles for the resize instructions are charged before the freezing
+    // threshold is checked against the new memory usage, so the frozen canister
+    // already fails to pay for the instructions.
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
     assert!(
-        err.description().contains("insufficient cycles"),
+        err.description().contains("out of cycles"),
         "Unexpected error message: {}",
         err.description(),
     );
@@ -2530,11 +2703,16 @@ fn test_canister_log_with_zero_log_memory_limit() {
 
     // Produce a second log with no ring buffer. persistent_next_idx advances
     // to next_idx == 2.
+    const METRIC: &str = "canister_log_delta_memory_usage_bytes";
+    let before = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
     let _ = env.execute_ingress(
         canister_id,
         "update",
         wasm().debug_print(b"log").reply().build(),
     );
+    let after = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+    // The delta must be consumed and observed only once, even without a ring buffer.
+    assert_eq!(after.count, before.count + 1);
 
     // lms.next_idx() must be 2 before and after a checkpoint/reload cycle.
     let check_next_idx = |env: &StateMachine| {

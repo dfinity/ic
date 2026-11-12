@@ -109,8 +109,13 @@ impl<K: DeterministicHeapBytes, V: DeterministicHeapBytes> DeterministicHeapByte
 }
 
 impl<T: DeterministicHeapBytes> DeterministicHeapBytes for std::sync::Arc<T> {
+    /// `Arc<T>` stores only a pointer inline; the heap holds an `ArcInner<T>`
+    /// with the strong and weak reference counters (`usize`-sized each) plus the
+    /// `T` value. That pointee is counted here — as the `Vec<T>` impl counts its
+    /// heap-resident elements — ignoring any alignment padding between the
+    /// counters and `T`.
     fn deterministic_heap_bytes(&self) -> usize {
-        self.as_ref().deterministic_heap_bytes()
+        2 * size_of::<usize>() + size_of::<T>() + self.as_ref().deterministic_heap_bytes()
     }
 }
 

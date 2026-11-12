@@ -1,6 +1,5 @@
 use crate::consensus::payload_builder::test::make_test_payload_impl;
 use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
-use ic_crypto_tree_hash::{Digest, Witness};
 use ic_interfaces::{batch_payload::ProposalContext, consensus::PayloadBuilder};
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
@@ -14,10 +13,8 @@ use ic_types::{
     CryptoHashOfPartialState, Height, RegistryVersion, SubnetId,
     batch::{BatchPayload, ValidationContext},
     consensus::{
-        BlockPayload, DataPayload, Payload,
-        block_maker::SubnetRecords,
-        certification::{Certification, CertificationContent},
-        dkg::DkgDataPayload,
+        BlockPayload, DataPayload, Payload, block_maker::SubnetRecords,
+        certification::CertificationContent, dkg::DkgDataPayload,
     },
     crypto::{CryptoHash, Signed},
     messages::SignedIngress,
@@ -137,15 +134,9 @@ fn make_xnet_slice(size: usize) -> CertifiedStreamSlice {
     CertifiedStreamSlice {
         payload: vec![0; size],
         merkle_proof: vec![],
-        certification: Certification {
-            height: Height::from(0),
-            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
-            signed: Signed {
-                signature: ThresholdSignature::fake(),
-                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                    vec![],
-                ))),
-            },
+        certification: Signed {
+            signature: ThresholdSignature::fake(),
+            content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
         },
     }
 }

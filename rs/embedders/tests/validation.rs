@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::time::Duration;
 
 use assert_matches::assert_matches;
 use ic_config::embedders::Config as EmbeddersConfig;
@@ -7,8 +8,8 @@ use ic_embedders::{
     wasm_utils::{
         Complexity, WasmImportsDetails, WasmValidationDetails, validate_and_instrument_for_testing,
         validation::{
-            MAX_WASM_FUNCTION_NAME_LENGTH, MAX_WASM_FUNCTION_NUM_LOCALS, RESERVED_SYMBOLS,
-            extract_custom_section_name,
+            MAX_RAW_CUSTOM_SECTIONS, MAX_WASM_FUNCTION_NAME_LENGTH, MAX_WASM_FUNCTION_NUM_LOCALS,
+            RESERVED_SYMBOLS, extract_custom_section_name,
         },
     },
 };
@@ -549,6 +550,7 @@ fn can_validate_invalid_export_with_canister_prefix() {
 }
 
 fn many_exported_functions(n: usize) -> String {
+    use std::fmt::Write;
     let mut ret: String = "(module\n  (func $read)\n".to_string();
     for i in 0..n {
         let typ = if i % 3 == 0 {
@@ -558,9 +560,10 @@ fn many_exported_functions(n: usize) -> String {
         } else {
             "composite_query"
         };
-        ret = format!("{ret}  (export \"canister_{typ} xxx{i}\" (func $read))\n");
+        writeln!(ret, "  (export \"canister_{typ} xxx{i}\" (func $read))").unwrap();
     }
-    format!("{ret}\n)")
+    ret.push_str("\n)");
+    ret
 }
 
 #[test]
@@ -584,6 +587,31 @@ fn can_validate_too_many_exported_functions() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Err(WasmValidationError::TooManyExports {
             defined: 1001,
+            allowed: 1000
+        })
+    );
+}
+
+#[test]
+fn validating_many_exports_is_fast() {
+    const NUM_EXPORTS: usize = 499_999;
+    const BUDGET: Duration = Duration::from_secs(10);
+
+    let wasm = wat2wasm(&many_exported_functions(NUM_EXPORTS)).unwrap();
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(validate_wasm_binary(&wasm, &EmbeddersConfig::default()));
+    });
+
+    let result = rx
+        .recv_timeout(BUDGET)
+        .unwrap_or_else(|_| panic!("validation did not finish within {BUDGET:?}"));
+
+    assert_eq!(
+        result,
+        Err(WasmValidationError::TooManyExports {
+            defined: NUM_EXPORTS,
             allowed: 1000
         })
     );
@@ -936,6 +964,41 @@ fn can_reject_module_with_too_many_custom_sections() {
             allowed: 1
         })
     );
+}
+
+/// Wasm magic + version, followed by `count` custom sections encoded as
+/// `00 01 00` (section id 0, size 1, empty name, empty payload).
+fn wasm_with_empty_custom_sections(count: usize) -> BinaryEncodedWasm {
+    let mut bytes = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+    for _ in 0..count {
+        bytes.extend_from_slice(&[0x00, 0x01, 0x00]);
+    }
+    BinaryEncodedWasm::new(bytes)
+}
+
+// Empty-name sections are not `icp:` metadata, so `max_custom_sections` does
+// not apply to them. The streaming pre-check still rejects a module once the
+// raw custom-section count exceeds `MAX_RAW_CUSTOM_SECTIONS`, before Wasmtime
+// or Wirm materialize the sections.
+#[test]
+fn can_reject_module_with_too_many_raw_custom_sections() {
+    let defined = MAX_RAW_CUSTOM_SECTIONS + 1;
+    let wasm = wasm_with_empty_custom_sections(defined);
+
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::TooManyCustomSections {
+            defined,
+            allowed: MAX_RAW_CUSTOM_SECTIONS,
+        })
+    );
+}
+
+#[test]
+fn can_validate_module_with_max_raw_custom_sections() {
+    let wasm = wasm_with_empty_custom_sections(MAX_RAW_CUSTOM_SECTIONS);
+    let validation_details = validate_wasm_binary(&wasm, &EmbeddersConfig::default()).unwrap();
+    assert_eq!(validation_details.wasm_metadata, WasmMetadata::default());
 }
 
 #[test]
@@ -1485,7 +1548,7 @@ fn wasm_with_many_locals_is_invalid() {
     let wat = format!(
         r#"
           (module
-            (func $f (export "canister_update f") 
+            (func $f (export "canister_update f")
               (local {})
             )
           )"#,

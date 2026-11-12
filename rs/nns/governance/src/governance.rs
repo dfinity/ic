@@ -3664,7 +3664,7 @@ impl Governance {
     pub fn ready_to_be_settled_proposal_ids(
         &self,
         as_of_timestamp_seconds: u64,
-    ) -> impl Iterator<Item = ProposalId> + '_ {
+    ) -> impl Iterator<Item = ProposalId> {
         self.heap_data
             .proposals
             .iter()

@@ -115,6 +115,23 @@ enum Opt {
         bytes: String,
     },
 
+    /// Assembles the merged state, as part of a subnet merge.
+    #[clap(name = "merge")]
+    Merge {
+        /// Path to the checkpoint of the destination subnet, which the merged
+        /// state is based on.
+        #[clap(long, required = true)]
+        base: PathBuf,
+        /// Path to the checkpoint of the source subnet, whose canisters and
+        /// canister snapshots are added to those of the destination subnet.
+        #[clap(long, required = true)]
+        source: PathBuf,
+        /// Path the merged checkpoint is written to. Must not exist yet, and
+        /// must be outside the base and source checkpoints.
+        #[clap(long, required = true)]
+        output: PathBuf,
+    },
+
     /// Prunes a replicated state, as part of a subnet split.
     #[clap(name = "split")]
     #[clap(group(
@@ -173,17 +190,22 @@ enum Opt {
         path: PathBuf,
     },
 
-    /// Extracts canister metrics from the replicated state and prints them in CSV format to the
-    /// specified file.
+    /// Extracts canister metrics from the replicated state and writes them in CSV format to two
+    /// files: per-canister load metrics to `--canister-load-output` and canister-to-canister
+    /// connection counts to `--canister-connections-output`.
     #[clap(name = "canister_metrics")]
     CanisterMetrics {
         /// Path to a checkpoint.
         #[clap(long = "checkpoint")]
         path: PathBuf,
 
-        /// Output path.
+        /// Canister load output path.
         #[clap(long)]
-        output: PathBuf,
+        canister_load_output: PathBuf,
+
+        /// Canister connections output path.
+        #[clap(long)]
+        canister_connections_output: PathBuf,
     },
 }
 
@@ -268,6 +290,11 @@ pub(crate) fn main_inner(args: Vec<String>) {
         Opt::PrincipalFromBytes { bytes } => {
             commands::convert_ids::do_principal_from_byte_string(bytes)
         }
+        Opt::Merge {
+            base,
+            source,
+            output,
+        } => commands::merge::do_merge(base, source, output),
         Opt::Split {
             root,
             subnet_id,
@@ -298,7 +325,15 @@ pub(crate) fn main_inner(args: Vec<String>) {
             &mut std::io::stdout(),
         ),
         Opt::ParseOverlay { path } => commands::parse_overlay::do_parse_overlay(path),
-        Opt::CanisterMetrics { path, output } => commands::canister_metrics::get(path, &output),
+        Opt::CanisterMetrics {
+            path,
+            canister_load_output,
+            canister_connections_output,
+        } => commands::canister_metrics::get(
+            path,
+            &canister_load_output,
+            &canister_connections_output,
+        ),
     };
 
     if let Err(e) = result {

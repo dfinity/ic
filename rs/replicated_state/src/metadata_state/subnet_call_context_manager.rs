@@ -33,11 +33,9 @@ const MESSAGE_HASH_SIZE: usize = 32;
 const NONCE_SIZE: usize = 32;
 
 /// How long a `CanisterHttpRequestContext` whose response was already delivered
-/// to execution is retained before being removed.
-///
-/// The timeout is measured against the `time` of the original
-/// `CanisterHttpRequestContext` and the batch time.
-pub const DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT: Duration = Duration::from_secs(2 * 60);
+/// to execution is retained at most before being removed; it is removed earlier
+/// once all replicas assigned to its request have reported their spend.
+pub const DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub enum SubnetCallContext {
     SetupInitialDKG(SetupInitialDkgContext),
@@ -226,7 +224,8 @@ pub struct SubnetCallContextManager {
     pub sign_with_threshold_contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
     /// `CanisterHttpRequestContext`s whose responses have already been delivered to execution.
-    /// They are kept here such that asynchronous refunds may continue to be processed.
+    /// They are kept here such that asynchronous refunds may continue to be processed, until
+    /// all replicas assigned to the request have been accounted for, or they time out.
     pub delivered_canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
     pub reshare_chain_key_contexts: BTreeMap<CallbackId, ReshareChainKeyContext>,
     pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,
@@ -274,9 +273,15 @@ impl SubnetCallContextManager {
         callback_id
     }
 
+    /// Removes and returns the context for the given `callback_id`, if any.
+    ///
+    /// `current_time` is the batch time; it is stamped onto retained
+    /// `CanisterHttpRequestContext`, so that the retention timeout
+    /// runs from the point the response was delivered.
     pub fn retrieve_context(
         &mut self,
         callback_id: CallbackId,
+        current_time: Time,
         logger: &ReplicaLogger,
     ) -> Option<SubnetCallContext> {
         self.setup_initial_dkg_contexts
@@ -331,8 +336,10 @@ impl SubnetCallContextManager {
                             // to the delivered contexts. This lets us keep accounting
                             // late per-replica spend reports (and refund cycles from the
                             // replicas that never responded on timeout).
+                            let mut delivered_context = context.clone();
+                            delivered_context.time = current_time;
                             self.delivered_canister_http_request_contexts
-                                .insert(callback_id, context.clone());
+                                .insert(callback_id, delivered_context);
                         }
                         SubnetCallContext::CanisterHttpRequest(context)
                     })
@@ -370,9 +377,9 @@ impl SubnetCallContextManager {
     /// returns them along with their callback IDs, so that the caller can refund
     /// the per-replica allowance of the replicas that never responded.
     ///
-    /// The timeout is measured against the `time` recorded in the original
-    /// `CanisterHttpRequestContext` and the provided `current_time` (the batch
-    /// time).
+    /// The timeout is measured against the `time` recorded in the retained
+    /// `CanisterHttpRequestContext` -- the batch time at the point its response
+    /// was delivered -- and the provided `current_time` (the batch time).
     pub fn time_out_delivered_canister_http_request_contexts(
         &mut self,
         current_time: Time,
@@ -637,7 +644,7 @@ impl ThresholdArguments {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SignWithThresholdContext {
-    pub request: Request,
+    pub request: Arc<Request>,
     pub args: ThresholdArguments,
     pub derivation_path: Arc<Vec<Vec<u8>>>,
     pub batch_time: Time,

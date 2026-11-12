@@ -1,4 +1,5 @@
-use cargo_metadata::{DependencyKind, Metadata, Node, Package, PackageId, Version};
+use cargo_metadata::semver::Version;
+use cargo_metadata::{DependencyKind, Metadata, Node, Package, PackageId};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 
@@ -23,7 +24,7 @@ impl PackageSpec {
     fn applies_to(&self, pkg: &Package) -> bool {
         match self {
             Self::Wildcard => true,
-            Self::Name(name) => &pkg.name == name,
+            Self::Name(name) => pkg.name.as_str() == name,
         }
     }
 }
@@ -125,7 +126,7 @@ fn search_for_violation(
                     .iter()
                     .map(|n| {
                         let p = &metadata[&n.id];
-                        (p.name.clone(), p.version.clone())
+                        (p.name.to_string(), p.version.clone())
                     })
                     .collect();
                 return Some(dependency_path);
@@ -164,7 +165,7 @@ pub fn run(metadata: &Metadata, rules: &[Rule]) -> Vec<Violation> {
             PackageSpec::Name(n) => {
                 for node in resolve.nodes.iter() {
                     let package = &metadata[&node.id];
-                    if n != &package.name {
+                    if n.as_str() != package.name.as_str() {
                         continue;
                     }
                     if let Some(dependency_path) =

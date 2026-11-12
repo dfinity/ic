@@ -1,14 +1,20 @@
 # General
 
-All commands should be run from the repository root (`/ic`).
+All commands should be run from the repository root (`git rev-parse --show-toplevel`).
+Inside the dev container (`ci/container/container-run.sh` or the VS Code
+devcontainer) the checkout is mounted at the same absolute path as on the host
+(canonical, i.e. with symlinks resolved) and is the working directory.
 
-Never manually edit `ci/container/TAG`. It is bumped only by the
+Never manually edit `ci/container/TAG`, `ci/container/ic-dev.digest` or
+`ci/container/ic-build.digest`. They are written only by the
 `container-autobuild.yml` GitHub Actions workflow, which builds the new
-dev-container image and pushes it to the registry *before* the tag change
-takes effect. Hand-editing it points the tag at an image that was never built
-or published, breaking CI for everyone. If the dev container image genuinely
-needs to change (e.g. `ci/container/Dockerfile` was edited), let that workflow
-bump `TAG` — don't do it in your commit.
+dev-container image and pushes it to the registry *before* the new tag and
+digests take effect. A hand-edited `TAG` names an image that was never built or
+published, and a hand-edited `.digest` names content the registry does not
+serve, so `container-run.sh` refuses to run; either way CI breaks for everyone.
+If the dev container image genuinely needs to change (e.g.
+`ci/container/Dockerfile` was edited), let that workflow bump `TAG` and the
+digests — don't do it in your commit.
 
 # Rust
 
@@ -114,3 +120,15 @@ After the PR has been created or updated, request a review from the GitHub Copil
 gh api repos/dfinity/ic/pulls/<PULL_REQUEST_NUMBER>/requested_reviewers --method POST --raw-field 'reviewers[]=copilot-pull-request-reviewer[bot]'
 ```
 where `<PULL_REQUEST_NUMBER>` is the number of the Pull Request.
+
+To confirm the request landed, check the issue timeline for a `review_requested`
+event naming `Copilot`:
+```
+gh api repos/dfinity/ic/issues/<PULL_REQUEST_NUMBER>/timeline --paginate \
+  --jq '.[] | select(.event == "review_requested") | "\(.created_at) \(.requested_reviewer.login // .requested_team.name)"'
+```
+It prints one line per request, e.g. `2026-08-20T12:22:24Z Copilot`. The timeline
+names the bot `Copilot`, not the `copilot-pull-request-reviewer[bot]` you posted.
+
+Don't check the requested-reviewers list instead: it reports only users and
+teams, and Copilot is a bot, so a request that worked still reads back empty.

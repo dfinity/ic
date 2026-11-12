@@ -42,9 +42,10 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    CanisterId, CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
+    CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
-    crypto::{BasicSigOf, CryptoHashOf},
+    consensus::get_faults_tolerated,
+    crypto::{BasicSigOf, CryptoHashOf, crypto_hash},
     messages::{CallbackId, RejectContext, Request},
     node_id_into_protobuf, node_id_try_from_protobuf,
     signature::*,
@@ -54,10 +55,10 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
-    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS, CanisterHttpRequestArgs,
-    DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, DataSize, FlexibleCanisterHttpRequestArgs, HttpHeader,
-    HttpMethod, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts,
-    TransformContext,
+    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS,
+    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO, CanisterHttpRequestArgs,
+    DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, FlexibleCanisterHttpRequestArgs, HttpHeader, HttpMethod,
+    PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts, TransformContext,
 };
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
@@ -72,10 +73,11 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{TryFrom, TryInto},
     mem::size_of,
+    sync::Arc,
     time::Duration,
 };
 use strum::FromRepr;
-use strum_macros::EnumIter;
+use strum_macros::{EnumCount, EnumIter};
 
 /// Time after which a response is considered timed out and a timeout error will be returned to execution
 pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
@@ -83,7 +85,8 @@ pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
 /// Number of CanisterHttpResponses to be included in a block.
 ///
 /// Limiting the number of responses can improve performance, as otherwise validation times
-/// could become too large.
+/// could become too large. Timeouts, which are cheap to validate, do not count towards this
+/// limit. Neither do asynchronous receipts, as the response they belong to already did.
 pub const CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK: usize = 500;
 
 /// Maximum number of request bytes for a canister http request.
@@ -143,16 +146,15 @@ impl From<TransformContext> for Transform {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CanisterHttpRequestContext {
-    pub request: Request,
+    pub request: Arc<Request>,
     pub url: String,
     pub max_response_bytes: Option<NumBytes>,
-    pub headers: Vec<CanisterHttpHeader>,
-    #[serde(with = "serde_bytes", skip_serializing_if = "Option::is_none", default)]
-    pub body: Option<Vec<u8>>,
+    pub headers: Arc<Vec<CanisterHttpHeader>>,
+    pub body: Option<Arc<Vec<u8>>>,
     pub http_method: CanisterHttpMethod,
-    pub transform: Option<Transform>,
+    pub transform: Option<Arc<Transform>>,
     pub time: Time,
     /// The replication strategy for this request.
     pub replication: Replication,
@@ -236,7 +238,7 @@ impl Replication {
 }
 
 /// The kind of replication of a request.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, EnumCount, Eq, PartialEq)]
 pub enum ReplicationKind {
     FullyReplicated,
     Flexible {
@@ -254,6 +256,24 @@ impl ReplicationKind {
             ReplicationKind::Flexible { .. } => "flexible",
             ReplicationKind::NonReplicated => "non_replicated",
         }
+    }
+
+    /// Every value [`Self::as_str`] can return, e.g. to initialize the label values
+    /// of a metric labeled by replication kind.
+    pub fn all_as_str() -> [&'static str; 3] {
+        // A new variant has to be listed below, and the array's length bumped.
+        const _: () = assert!(<ReplicationKind as strum::EnumCount>::COUNT == 3);
+        [
+            Self::FullyReplicated.as_str(),
+            // `as_str` does not look at the counts, so they are irrelevant here.
+            Self::Flexible {
+                total_requests: 0,
+                min_responses: 0,
+                max_responses: 0,
+            }
+            .as_str(),
+            Self::NonReplicated.as_str(),
+        ]
     }
 
     /// The response counts for a flexible request that does not specify its own:
@@ -284,6 +304,13 @@ impl ReplicationKind {
     }
 }
 
+/// The number of agreeing replicas required to deliver a fully-replicated HTTP outcall
+/// response on a canister-http committee of `committee_size` nodes.
+pub fn canister_http_threshold(committee_size: usize) -> usize {
+    let committee_size = committee_size.max(1);
+    committee_size - get_faults_tolerated(committee_size)
+}
+
 impl From<&ReplicationCounts> for ReplicationKind {
     fn from(counts: &ReplicationCounts) -> Self {
         Self::Flexible {
@@ -294,11 +321,20 @@ impl From<&ReplicationCounts> for ReplicationKind {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, FromRepr)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, EnumIter, Serialize, FromRepr)]
 #[repr(u32)]
 pub enum PricingVersion {
     Legacy = PRICING_VERSION_LEGACY,
     PayAsYouGo = PRICING_VERSION_PAY_AS_YOU_GO,
+}
+
+impl PricingVersion {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PricingVersion::Legacy => "legacy",
+            PricingVersion::PayAsYouGo => "pay_as_you_go",
+        }
+    }
 }
 
 impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestContext {
@@ -356,21 +392,20 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
         };
 
         pb_metadata::CanisterHttpRequestContext {
-            request: Some((&context.request).into()),
+            request: Some(context.request.as_ref().into()),
             url: context.url.clone(),
             max_response_bytes: context
                 .max_response_bytes
                 .map(|max_response_bytes| max_response_bytes.get()),
             headers: context
                 .headers
-                .clone()
-                .into_iter()
+                .iter()
                 .map(|h| pb_metadata::HttpHeader {
-                    name: h.name,
-                    value: h.value,
+                    name: h.name.clone(),
+                    value: h.value.clone(),
                 })
                 .collect(),
-            body: context.body.clone(),
+            body: context.body.as_ref().map(|body| body.as_ref().clone()),
             transform_method_name: context
                 .transform
                 .as_ref()
@@ -488,18 +523,20 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
         };
 
         Ok(CanisterHttpRequestContext {
-            request,
+            request: Arc::new(request),
             url: context.url,
             max_response_bytes: context.max_response_bytes.map(NumBytes::from),
-            headers: context
-                .headers
-                .into_iter()
-                .map(|h| CanisterHttpHeader {
-                    name: h.name,
-                    value: h.value,
-                })
-                .collect(),
-            body: context.body,
+            headers: Arc::new(
+                context
+                    .headers
+                    .into_iter()
+                    .map(|h| CanisterHttpHeader {
+                        name: h.name,
+                        value: h.value,
+                    })
+                    .collect(),
+            ),
+            body: context.body.map(Arc::new),
             http_method: pb_metadata::HttpMethod::try_from(context.http_method)
                 .map_err(|_| ProxyDecodeError::ValueOutOfRange {
                     typ: "ic_protobuf::state::system_metadata::v1::HttpMethod",
@@ -509,7 +546,7 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
                     ),
                 })?
                 .try_into()?,
-            transform,
+            transform: transform.map(Arc::new),
             time: Time::from_nanos_since_unix_epoch(context.time),
             replication,
             pricing_version,
@@ -657,6 +694,7 @@ impl CanisterHttpRequestContext {
         registry_version: RegistryVersion,
         cost_schedule: CanisterCyclesCostSchedule,
         rng: &mut dyn RngCore,
+        pay_as_you_go_enabled: bool,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
         validate_url_length(&args.url)?;
@@ -698,19 +736,24 @@ impl CanisterHttpRequestContext {
         };
 
         Ok(CanisterHttpRequestContext {
-            request: request.clone(),
+            request: Arc::new(request.clone()),
             url: args.url,
             max_response_bytes,
-            headers: args.headers.get().iter().cloned().map(From::from).collect(),
-            body: args.body,
+            headers: Arc::new(args.headers.get().iter().cloned().map(From::from).collect()),
+            body: args.body.map(Arc::new),
             http_method: args.method.into(),
-            transform: args.transform.map(From::from),
+            transform: args.transform.map(|transform| Arc::new(transform.into())),
             time,
             replication,
             pricing_version: {
+                let allowed_versions = if pay_as_you_go_enabled {
+                    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO
+                } else {
+                    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS
+                };
                 let final_version_u32 = args
                     .pricing_version
-                    .filter(|v| ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS.contains(v))
+                    .filter(|v| allowed_versions.contains(v))
                     .unwrap_or(DEFAULT_HTTP_OUTCALLS_PRICING_VERSION);
                 PricingVersion::from_repr(final_version_u32).unwrap_or(PricingVersion::Legacy)
             },
@@ -813,13 +856,13 @@ impl CanisterHttpRequestContext {
             .collect();
 
         Ok(CanisterHttpRequestContext {
-            request: request.clone(),
+            request: Arc::new(request.clone()),
             url: args.url,
             max_response_bytes,
-            headers: args.headers.get().iter().cloned().map(Into::into).collect(),
-            body: args.body,
+            headers: Arc::new(args.headers.get().iter().cloned().map(Into::into).collect()),
+            body: args.body.map(Arc::new),
             http_method: args.method.into(),
-            transform: args.transform.map(From::from),
+            transform: args.transform.map(|transform| Arc::new(transform.into())),
             time,
             replication: Replication::Flexible {
                 committee,
@@ -959,25 +1002,20 @@ pub struct CanisterHttpRequest {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponse {
     pub id: CanisterHttpRequestId,
-    pub canister_id: CanisterId,
     pub content: CanisterHttpResponseContent,
 }
 
 impl CanisterHttpResponse {
     /// Same calculation as `Self::count_bytes` but from decomposed parts.
-    pub fn count_bytes_from_parts(canister_id: &CanisterId, content_size: usize) -> usize {
-        size_of::<CanisterHttpRequestId>() + canister_id.get_ref().data_size() + content_size
+    pub const fn count_bytes_from_parts(content_size: usize) -> usize {
+        size_of::<CanisterHttpRequestId>() + content_size
     }
 }
 
 impl CountBytes for CanisterHttpResponse {
     fn count_bytes(&self) -> usize {
-        let CanisterHttpResponse {
-            id: _,
-            canister_id,
-            content,
-        } = &self;
-        Self::count_bytes_from_parts(canister_id, content.count_bytes())
+        let CanisterHttpResponse { id: _, content } = &self;
+        Self::count_bytes_from_parts(content.count_bytes())
     }
 }
 
@@ -1397,7 +1435,9 @@ pub type CanisterHttpResponseShare = BasicSigned<CanisterHttpResponseReceipt>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct CanisterHttpResponseArtifact {
     pub share: CanisterHttpResponseShare,
-    // The response should not be included in the case of fully replicated outcalls.
+    // The response should not be included in the case of fully replicated outcalls, where
+    // every replica produces it itself; nor in the case of an outcall that has already been
+    // responded to, where the share is nothing but a receipt for the cycles that were spent.
     pub response: Option<CanisterHttpResponse>,
 }
 
@@ -1414,12 +1454,19 @@ impl PbArtifact for CanisterHttpResponseArtifact {
     type PbIdError = ProxyDecodeError;
     type PbMessage = ic_protobuf::types::v1::CanisterHttpArtifact;
     type PbMessageError = ProxyDecodeError;
+
+    fn check_integrity(&self) -> bool {
+        self.response
+            .as_ref()
+            .is_none_or(|response| &crypto_hash(response) == self.share.content.content_hash())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        crypto::{CryptoHash, SignedBytesWithoutDomainSeparator},
+        CanisterId,
+        crypto::{BasicSig, CryptoHash, Signed, SignedBytesWithoutDomainSeparator},
         messages::NO_DEADLINE,
         time::UNIX_EPOCH,
     };
@@ -1435,7 +1482,23 @@ mod tests {
     };
     use ic_types_test_utils::ids::node_test_id;
     use rstest::rstest;
+    use std::str::FromStr;
     use strum::IntoEnumIterator;
+
+    #[test]
+    fn replication_kind_all_as_str_is_stable_and_distinct() {
+        assert_eq!(
+            ReplicationKind::all_as_str(),
+            ["fully_replicated", "flexible", "non_replicated"]
+        );
+
+        let distinct: BTreeSet<&str> = ReplicationKind::all_as_str().into_iter().collect();
+        assert_eq!(
+            distinct.len(),
+            <ReplicationKind as strum::EnumCount>::COUNT,
+            "every replication kind must have its own label value"
+        );
+    }
 
     /// The signed bytes of a [`CanisterHttpResponseReceipt`] must round-trip, for
     /// any `spent` amount in the whole `Cycles` (`u128`) range.
@@ -1475,7 +1538,7 @@ mod tests {
                     content_hash: CryptoHashOf::new(CryptoHash(vec![0; 32])),
                     content_size: 0,
                     is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                    replica_version: ReplicaVersion::from_str("foobar_version").unwrap(),
                 },
                 payment_receipt: CanisterHttpPaymentReceipt { spent },
             }
@@ -1492,6 +1555,89 @@ mod tests {
         ];
         let encodings: BTreeSet<_> = amounts.iter().map(|spent| signed_bytes(*spent)).collect();
         assert_eq!(encodings.len(), amounts.len());
+    }
+
+    /// A share of `response`, as the replica that made the outcall would sign it.
+    fn share_of(response: &CanisterHttpResponse) -> CanisterHttpResponseShare {
+        Signed {
+            content: CanisterHttpResponseReceipt {
+                metadata: CanisterHttpResponseMetadata {
+                    id: response.id,
+                    content_hash: crypto_hash(response),
+                    content_size: response.content.count_bytes() as u32,
+                    is_reject: response.content.is_reject(),
+                    replica_version: ReplicaVersion::from_str("foobar_version").unwrap(),
+                },
+                payment_receipt: CanisterHttpPaymentReceipt {
+                    spent: Cycles::zero(),
+                },
+            },
+            signature: BasicSignature {
+                signature: BasicSigOf::new(BasicSig(vec![])),
+                signer: node_test_id(1),
+            },
+        }
+    }
+
+    /// The share covers the response only by its hash, so an artifact passes the integrity check
+    /// only with the response that hash is of, or without one.
+    #[test]
+    fn artifact_integrity_check_covers_the_response() {
+        let response = CanisterHttpResponse {
+            id: CallbackId::new(1),
+            content: CanisterHttpResponseContent::Success(b"response".to_vec()),
+        };
+        let share = share_of(&response);
+        let artifact = |response| CanisterHttpResponseArtifact {
+            share: share.clone(),
+            response,
+        };
+        let other_response = CanisterHttpResponse {
+            id: CallbackId::new(1),
+            content: CanisterHttpResponseContent::Success(b"other response".to_vec()),
+        };
+
+        assert!(artifact(Some(response)).check_integrity());
+        assert!(artifact(None).check_integrity());
+        assert!(!artifact(Some(other_response)).check_integrity());
+    }
+
+    #[test]
+    fn canister_http_threshold_tolerates_a_third_of_the_committee() {
+        // The concrete quorums, including the subnet sizes the pricing tests use.
+        for (committee_size, expected) in [
+            (0, 1),
+            (1, 1),
+            (2, 2),
+            (3, 3),
+            (4, 3),
+            (7, 5),
+            (13, 9),
+            (28, 19),
+            (34, 23),
+            (40, 27),
+        ] {
+            assert_eq!(
+                canister_http_threshold(committee_size),
+                expected,
+                "committee of {committee_size}"
+            );
+        }
+        for committee_size in 0..=64 {
+            let threshold = canister_http_threshold(committee_size);
+            // Never zero, so that a fee can be split into that many shares ...
+            assert!(threshold >= 1, "committee of {committee_size}");
+            // ... never more than the committee that has to reach it ...
+            assert!(
+                threshold <= committee_size.max(1),
+                "committee of {committee_size}"
+            );
+            // ... and always a strict majority, so two disjoint sets cannot both reach it.
+            assert!(
+                2 * threshold > committee_size,
+                "committee of {committee_size}"
+            );
+        }
     }
 
     #[test]
@@ -1511,18 +1657,18 @@ mod tests {
     fn test_request_arg_variable_size() {
         let context = CanisterHttpRequestContext {
             url: "https://example.com".to_string(),
-            headers: vec![CanisterHttpHeader {
+            headers: Arc::new(vec![CanisterHttpHeader {
                 name: "hi".to_string(),
                 value: "bye".to_string(),
-            }],
-            body: Some(vec![0; 1024]),
+            }]),
+            body: Some(Arc::new(vec![0; 1024])),
             max_response_bytes: None,
             http_method: CanisterHttpMethod::GET,
-            transform: Some(Transform {
+            transform: Some(Arc::new(Transform {
                 method_name: "willchange".to_string(),
                 context: vec![],
-            }),
-            request: Request {
+            })),
+            request: Arc::new(Request {
                 receiver: CanisterId::ic_00(),
                 sender: CanisterId::ic_00(),
                 sender_reply_callback: CallbackId::from(3),
@@ -1531,7 +1677,7 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
-            },
+            }),
             time: UNIX_EPOCH,
             replication: Replication::FullyReplicated,
             pricing_version: PricingVersion::Legacy,
@@ -1562,15 +1708,15 @@ mod tests {
     fn test_request_arg_variable_size_some_empty() {
         let context = CanisterHttpRequestContext {
             url: "https://example.com".to_string(),
-            headers: vec![],
+            headers: Arc::new(vec![]),
             body: None,
             max_response_bytes: None,
             http_method: CanisterHttpMethod::GET,
-            transform: Some(Transform {
+            transform: Some(Arc::new(Transform {
                 method_name: "willchange".to_string(),
                 context: vec![],
-            }),
-            request: Request {
+            })),
+            request: Arc::new(Request {
                 receiver: CanisterId::ic_00(),
                 sender: CanisterId::ic_00(),
                 sender_reply_callback: CallbackId::from(3),
@@ -1579,7 +1725,7 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
-            },
+            }),
             time: UNIX_EPOCH,
             replication: Replication::FullyReplicated,
             pricing_version: PricingVersion::Legacy,
@@ -1637,18 +1783,18 @@ mod tests {
             for pricing_version in [PricingVersion::Legacy, PricingVersion::PayAsYouGo] {
                 let initial = CanisterHttpRequestContext {
                     url: "https://example.com".to_string(),
-                    headers: vec![CanisterHttpHeader {
+                    headers: Arc::new(vec![CanisterHttpHeader {
                         name: "Content-Type".to_string(),
                         value: "application/json".to_string(),
-                    }],
-                    body: Some(b"{\"hello\":\"world\"}".to_vec()),
+                    }]),
+                    body: Some(Arc::new(b"{\"hello\":\"world\"}".to_vec())),
                     max_response_bytes: Some(NumBytes::from(1234)),
                     http_method: CanisterHttpMethod::POST,
-                    transform: Some(Transform {
+                    transform: Some(Arc::new(Transform {
                         method_name: "transform_response".to_string(),
                         context: vec![1, 2, 3],
-                    }),
-                    request: Request {
+                    })),
+                    request: Arc::new(Request {
                         receiver: CanisterId::ic_00(),
                         sender: CanisterId::ic_00(),
                         sender_reply_callback: CallbackId::from(3),
@@ -1657,7 +1803,7 @@ mod tests {
                         method_payload: Vec::new(),
                         metadata: Default::default(),
                         deadline: NO_DEADLINE,
-                    },
+                    }),
                     time: UNIX_EPOCH,
                     replication: replication.clone(),
                     pricing_version,
@@ -1682,7 +1828,7 @@ mod tests {
     #[test]
     fn canister_http_request_context_cost_schedule_proto_round_trip() {
         let base = CanisterHttpRequestContext {
-            request: Request {
+            request: Arc::new(Request {
                 receiver: CanisterId::ic_00(),
                 sender: CanisterId::ic_00(),
                 sender_reply_callback: CallbackId::from(3),
@@ -1691,10 +1837,10 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
-            },
+            }),
             url: "https://example.com".to_string(),
             max_response_bytes: None,
-            headers: vec![],
+            headers: Arc::new(vec![]),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,
@@ -2238,6 +2384,7 @@ mod tests {
             RegistryVersion::from(1),
             CanisterCyclesCostSchedule::Normal,
             &mut ReproducibleRng::new(),
+            /* pay_as_you_go_enabled = */ false,
         )
     }
 

@@ -1,4 +1,5 @@
 use crate::state::event::{Event, EventType};
+use crate::time::TimeProvider;
 use ic_stable_structures::{
     DefaultMemoryImpl,
     log::Log as StableLog,
@@ -47,11 +48,11 @@ thread_local! {
 }
 
 /// Appends the event to the event log.
-pub fn record_event(payload: EventType) {
+pub fn record_event<T: TimeProvider>(payload: EventType, time_provider: &T) {
     EVENTS
         .with(|events| {
             events.borrow().append(&Event {
-                timestamp: ic_cdk::api::time(),
+                timestamp: time_provider.time(),
                 payload,
             })
         })
@@ -96,7 +97,7 @@ mod benches {
         assert_eq!(event_count, 62_006, "expected events in stable memory");
 
         canbench_rs::bench_fn(|| {
-            crate::lifecycle::upgrade::post_upgrade(None);
+            crate::lifecycle::upgrade::post_upgrade(None, &crate::time::IC_TIME_PROVIDER);
         })
     }
 }

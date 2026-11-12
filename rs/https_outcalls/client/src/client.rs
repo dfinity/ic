@@ -23,7 +23,7 @@ use ic_types::{
         MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, Transform, validate_http_headers_and_body,
     },
     ingress::WasmResult,
-    messages::{Query, QuerySource, Request},
+    messages::{Query, QuerySource},
 };
 use ic_utils::str::StrEllipsize;
 use std::{
@@ -69,6 +69,9 @@ pub struct CanisterHttpAdapterClientImpl {
     metrics: Metrics,
     pricing_factory: PricingFactory,
     log: ReplicaLogger,
+    /// The response time to charge for instead of the time an outcall actually
+    /// took, if any. See [`Self::without_response_time_charge`].
+    charged_response_time: Option<Duration>,
 }
 
 impl CanisterHttpAdapterClientImpl {
@@ -92,7 +95,21 @@ impl CanisterHttpAdapterClientImpl {
             metrics,
             pricing_factory,
             log,
+            charged_response_time: None,
         }
+    }
+
+    /// Charges every outcall as if its response had arrived instantaneously,
+    /// instead of charging for the time it actually took.
+    ///
+    /// The time an outcall took is wall-clock time, so what it is charged for
+    /// depends on how fast and how loaded the machine running it is. A test
+    /// framework that answers outcalls itself has no meaningful response time to
+    /// charge for, and wants the cost of an outcall to be reproducible, so it
+    /// charges for none.
+    pub fn without_response_time_charge(mut self) -> Self {
+        self.charged_response_time = Some(Duration::ZERO);
+        self
     }
 }
 
@@ -128,6 +145,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let metrics = self.metrics.clone();
         let pricing_factory = self.pricing_factory.clone();
         let log = self.log.clone();
+        let charged_response_time = self.charged_response_time;
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
         // After receiving the response from the adapter an optional transform is applied by doing an upcall to execution.
@@ -142,19 +160,14 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             let mut budget = pricing_factory.new_tracker(&request_context);
             let request_size = request_context.variable_parts_size();
 
+            let request_sender = request_context.request.sender;
+            let reply_callback_id = request_context.request.sender_reply_callback;
             let CanisterHttpRequestContext {
-                request:
-                    Request {
-                        sender: request_sender,
-                        sender_reply_callback: reply_callback_id,
-                        ..
-                    },
                 url: request_url,
                 headers: request_headers,
                 body: request_body,
                 http_method: request_http_method,
                 transform: request_transform,
-                pricing_version: request_pricing_version,
                 replication: request_replication,
                 max_response_bytes: request_max_response_bytes,
                 ..
@@ -165,41 +178,17 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             let max_response_size_bytes = request_max_response_bytes
                 .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get());
 
-            if request_pricing_version == ic_types::canister_http::PricingVersion::PayAsYouGo {
-                warn!(
-                    log,
-                    "Canister HTTP request with PayAsYouGo pricing is not supported yet: \
-                    request_id {}, sender {}, process_id: {}",
-                    request_id,
-                    request_sender,
-                    std::process::id(),
-                );
-                let _ = permit.send((
-                    CanisterHttpResponse {
-                        id: request_id,
-                        canister_id: request_sender,
-                        content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                            reject_code: RejectCode::SysFatal,
-                            message:
-                                "Canister HTTP request with PayAsYouGo pricing is not supported"
-                                    .to_string(),
-                        }),
-                    },
-                    budget.create_payment_receipt(),
-                ));
-                return;
-            }
-
             let mut payload = async {
                 // Execute the HTTP request and get the adapter response.
                 let (adapter_response, downloaded_bytes, elapsed) = execute_http_request(
                     &mut http_adapter_client,
                     request_url,
                     request_http_method,
-                    request_headers,
-                    request_body,
+                    &request_headers,
+                    request_body.as_deref().map(Vec::as_slice),
                     socks_proxy_addrs,
                     &mut *budget,
+                    charged_response_time,
                 )
                 .await?;
 
@@ -226,6 +215,9 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             transform,
                         )
                         .await;
+                        metrics
+                            .transform_instructions
+                            .observe(instruction_count as f64);
                         let transform_result_size = match &transform_result {
                             Ok(data) => data.len(),
                             Err(reject) => reject.message.len(),
@@ -313,7 +305,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             permit.send((
                 CanisterHttpResponse {
                     id: request_id,
-                    canister_id: request_sender,
                     content: match payload {
                         Ok(resp) => {
                             metrics
@@ -366,10 +357,11 @@ async fn execute_http_request(
     adapter_client: &mut HttpsOutcallsServiceClient<Channel>,
     url: String,
     http_method: CanisterHttpMethod,
-    headers: Vec<CanisterHttpHeader>,
-    body: Option<Vec<u8>>,
+    headers: &[CanisterHttpHeader],
+    body: Option<&[u8]>,
     socks_proxy_addrs: Vec<String>,
     budget: &mut dyn BudgetTracker,
+    charged_response_time: Option<Duration>,
 ) -> Result<(HttpsOutcallResponse, NumBytes, Duration), CanisterHttpReject> {
     let AdapterLimits {
         max_response_size,
@@ -388,13 +380,13 @@ async fn execute_http_request(
         },
         max_response_size_bytes: max_response_size.get(),
         headers: headers
-            .into_iter()
+            .iter()
             .map(|h| HttpHeader {
-                name: h.name,
-                value: h.value,
+                name: h.name.clone(),
+                value: h.value.clone(),
             })
             .collect(),
-        body: body.unwrap_or_default(),
+        body: body.unwrap_or_default().to_vec(),
         socks_proxy_addrs,
     };
 
@@ -431,7 +423,9 @@ async fn execute_http_request(
     budget
         .subtract_network_usage(NetworkUsage {
             response_size: downloaded_bytes,
-            response_time: elapsed,
+            // The measured time is still what the metrics and the log report; only
+            // what the request is charged for can be overridden.
+            response_time: charged_response_time.unwrap_or(elapsed),
         })
         .map_err(|PricingError::InsufficientCycles| CanisterHttpReject {
             reject_code: RejectCode::CanisterReject,
@@ -621,6 +615,7 @@ mod tests {
     };
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
     use ic_logger::replica_logger::no_op_logger;
+    use ic_test_utilities_metrics::{HistogramStats, fetch_histogram_stats};
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::{
         NumberOfNodes, RegistryVersion,
@@ -768,10 +763,11 @@ mod tests {
             &mut HttpsOutcallsServiceClient::new(grpc_channel),
             "http://notused.invalid".to_string(),
             CanisterHttpMethod::GET,
-            Vec::new(),
+            &[],
             None,
             Vec::new(),
             budget,
+            None,
         )
         .await
     }
@@ -826,15 +822,17 @@ mod tests {
                 request: RequestBuilder::default()
                     .receiver(CanisterId::from(1))
                     .sender(CanisterId::from(1))
-                    .build(),
+                    .build_arc(),
                 url: "http://notused.com".to_string(),
                 max_response_bytes: None,
-                headers: Vec::new(),
+                headers: Arc::new(Vec::new()),
                 body: None,
                 http_method: CanisterHttpMethod::GET,
-                transform: transform_method.map(|method_name| Transform {
-                    method_name,
-                    context: vec![],
+                transform: transform_method.map(|method_name| {
+                    Arc::new(Transform {
+                        method_name,
+                        context: vec![],
+                    })
                 }),
                 time: UNIX_EPOCH,
                 replication: Replication::FullyReplicated,
@@ -855,7 +853,6 @@ mod tests {
     ) -> CanisterHttpResponse {
         CanisterHttpResponse {
             id: CallbackId::from(request_id),
-            canister_id: ic_types::CanisterId::from(1),
             content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
                 reject_code,
                 message: reject_message,
@@ -871,7 +868,6 @@ mod tests {
     ) -> CanisterHttpResponse {
         CanisterHttpResponse {
             id: CallbackId::from(request_id),
-            canister_id: ic_types::CanisterId::from(1),
             content: CanisterHttpResponseContent::Success(
                 Encode!(
                     &ic_management_canister_types_private::CanisterHttpResponsePayload {
@@ -1311,6 +1307,66 @@ mod tests {
             }
         }
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
+    }
+
+    // Test that the instructions executed by a transform are recorded, and that
+    // requests without a transform are not.
+    #[tokio::test]
+    async fn test_client_records_transform_instructions() {
+        let response = HttpsOutcallResponse {
+            status: 200,
+            headers: vec![],
+            content: vec![],
+        };
+        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
+        let (svc, mut handle) = setup_system_query_mock();
+
+        // Report the executed instructions like the query handler does.
+        tokio::spawn(async move {
+            let (request, rsp) = handle.next_request().await.unwrap();
+            request
+                .instruction_observation
+                .fetch_add(1_234_567, std::sync::atomic::Ordering::Relaxed);
+            rsp.send_response(Ok((Ok(WasmResult::Reply(vec![])), current_time())));
+        });
+
+        let metrics_registry = MetricsRegistry::default();
+        let mut client = CanisterHttpAdapterClientImpl::new(
+            tokio::runtime::Handle::current(),
+            mock_grpc_channel,
+            svc,
+            100,
+            metrics_registry.clone(),
+            no_op_logger(),
+        );
+
+        assert_eq!(
+            client.send(build_mock_canister_http_request(420, None)),
+            Ok(())
+        );
+        assert_eq!(
+            client.send(build_mock_canister_http_request(
+                421,
+                Some("transform".to_string())
+            )),
+            Ok(())
+        );
+        // Yield to execute both requests on the client.
+        let mut received = 0;
+        while received < 2 {
+            match client.try_receive() {
+                Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
+                Ok(_) => received += 1,
+            }
+        }
+
+        assert_eq!(
+            fetch_histogram_stats(&metrics_registry, "canister_http_transform_instructions"),
+            Some(HistogramStats {
+                count: 1,
+                sum: 1_234_567.0
+            })
+        );
     }
 
     // Test that an oversized reject message is truncated (char-boundary-safe)

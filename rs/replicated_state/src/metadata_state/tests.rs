@@ -470,14 +470,7 @@ fn network_topology_roundtrip_encoding() {
         ..Default::default()
     };
 
-    let filtered_routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            range(10, 19) => app_subnet_id,
-        })
-        .unwrap(),
-    );
-
-    let full_routing_table = Arc::new(
+    let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
             range(10, 19) => app_subnet_id,
             range(20, 29) => engine_subnet_id,
@@ -503,16 +496,17 @@ fn network_topology_roundtrip_encoding() {
     let bitcoin_testnet_canister_id = Some(canister_test_id(100));
     let bitcoin_mainnet_canister_id = Some(canister_test_id(101));
 
-    // NetworkTopology without full_topology (non-NNS subnet).
     let network_topology = NetworkTopology::new(
-        btreemap! { app_subnet_id => app_subnet_topo.clone() },
-        filtered_routing_table.clone(),
-        canister_migrations.clone(),
+        btreemap! {
+            app_subnet_id => app_subnet_topo,
+            engine_subnet_id => engine_subnet_topo,
+        },
+        routing_table,
+        canister_migrations,
         nns_subnet_id,
-        chain_key_enabled_subnets.clone(),
+        chain_key_enabled_subnets,
         bitcoin_testnet_canister_id,
         bitcoin_mainnet_canister_id,
-        None,
         Some(app_subnet_id),
         Default::default(),
     );
@@ -520,30 +514,6 @@ fn network_topology_roundtrip_encoding() {
     let proto = pb::NetworkTopology::from(&network_topology);
     let round_trip = NetworkTopology::try_from(proto).unwrap();
     assert_eq!(network_topology, round_trip);
-
-    // NetworkTopology with full_topology (NNS subnet).
-    let network_topology_with_full = NetworkTopology::new(
-        btreemap! { app_subnet_id => app_subnet_topo.clone() },
-        filtered_routing_table,
-        canister_migrations,
-        nns_subnet_id,
-        chain_key_enabled_subnets,
-        bitcoin_testnet_canister_id,
-        bitcoin_mainnet_canister_id,
-        Some(FullTopology {
-            subnets: btreemap! {
-                app_subnet_id => app_subnet_topo,
-                engine_subnet_id => engine_subnet_topo,
-            },
-            routing_table: full_routing_table,
-        }),
-        Some(app_subnet_id),
-        Default::default(),
-    );
-
-    let proto = pb::NetworkTopology::from(&network_topology_with_full);
-    let round_trip = NetworkTopology::try_from(proto).unwrap();
-    assert_eq!(network_topology_with_full, round_trip);
 }
 
 #[test]
@@ -893,10 +863,10 @@ fn subnet_call_contexts_metric() {
     };
     let call = || CanisterCall::Request(Arc::new(request()));
     let canister_http_request_context = || CanisterHttpRequestContext {
-        request: request(),
+        request: Arc::new(request()),
         url: "https://".to_string(),
         max_response_bytes: None,
-        headers: Vec::new(),
+        headers: Arc::new(Vec::new()),
         body: None,
         http_method: CanisterHttpMethod::GET,
         transform: None,
@@ -941,7 +911,7 @@ fn subnet_call_contexts_metric() {
         (
             "sign_with_threshold",
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
-                request: request(),
+                request: Arc::new(request()),
                 args: ThresholdArguments::Ecdsa(EcdsaArguments {
                     key_id: make_key_id(),
                     message_hash: [0_u8; 32],
@@ -1012,7 +982,7 @@ fn subnet_call_contexts_metric() {
             state
                 .metadata
                 .subnet_call_context_manager
-                .retrieve_context(callback_id, &no_op_logger())
+                .retrieve_context(callback_id, UNIX_EPOCH, &no_op_logger())
                 .is_some()
         );
         assert_eq!(
@@ -1156,13 +1126,13 @@ fn subnet_call_contexts_deserialization() {
         request: RequestBuilder::default()
             .sender(canister_test_id(1))
             .receiver(canister_test_id(2))
-            .build(),
+            .build_arc(),
         url: url.clone(),
         max_response_bytes: None,
-        headers: Vec::new(),
+        headers: Arc::new(Vec::new()),
         body: None,
         http_method: CanisterHttpMethod::GET,
-        transform: Some(transform.clone()),
+        transform: Some(Arc::new(transform.clone())),
         time: UNIX_EPOCH,
         replication: Replication::FullyReplicated,
         pricing_version: PricingVersion::Legacy,
@@ -1233,7 +1203,10 @@ fn subnet_call_contexts_deserialization() {
         deserialized_http_request_context.http_method,
         CanisterHttpMethod::GET
     );
-    assert_eq!(deserialized_http_request_context.transform, Some(transform));
+    assert_eq!(
+        deserialized_http_request_context.transform,
+        Some(Arc::new(transform))
+    );
 
     // Check install code call deserialization.
     assert_eq!(
@@ -1278,16 +1251,16 @@ fn canister_http_request_context(
             .sender(canister_test_id(1))
             .receiver(IC_00)
             .method_payload(vec![1, 2, 3])
-            .build(),
+            .build_arc(),
         url: "https://example.com".into(),
         max_response_bytes: None,
-        headers: vec![],
-        body: Some(vec![4, 5, 6]),
+        headers: Arc::new(vec![]),
+        body: Some(Arc::new(vec![4, 5, 6])),
         http_method: CanisterHttpMethod::GET,
-        transform: Some(Transform {
+        transform: Some(Arc::new(Transform {
             method_name: "transform".into(),
             context: vec![7, 8, 9],
-        }),
+        })),
         time,
         replication: Replication::FullyReplicated,
         pricing_version,
@@ -1304,19 +1277,24 @@ fn canister_http_request_context(
 }
 
 /// Retrieving the response for a pay-as-you-go priced HTTP outcall retains the
-/// context for refund accounting; a legacy priced one is not retained.
+/// context for refund accounting; a legacy priced one is not retained. The
+/// retained copy is stamped with the delivery time, while the returned context
+/// keeps the time the request was made.
 #[test]
 fn retrieve_canister_http_context_retains_pay_as_you_go_contexts() {
+    const REQUEST_TIME: Time = UNIX_EPOCH;
+    let delivery_time = REQUEST_TIME + Duration::from_secs(7);
+
     for (pricing_version, retained) in [
         (PricingVersion::PayAsYouGo, true),
         (PricingVersion::Legacy, false),
     ] {
         let mut manager = SubnetCallContextManager::default();
-        let context = canister_http_request_context(pricing_version, UNIX_EPOCH);
+        let context = canister_http_request_context(pricing_version, REQUEST_TIME);
         let callback_id =
             manager.push_context(SubnetCallContext::CanisterHttpRequest(context.clone()));
 
-        match manager.retrieve_context(callback_id, &no_op_logger()) {
+        match manager.retrieve_context(callback_id, delivery_time, &no_op_logger()) {
             Some(SubnetCallContext::CanisterHttpRequest(retrieved)) => {
                 assert_eq!(context, retrieved)
             }
@@ -1327,7 +1305,13 @@ fn retrieve_canister_http_context_retains_pay_as_you_go_contexts() {
 
         let delivered = manager.delivered_canister_http_request_contexts;
         if retained {
-            assert_eq!(btreemap! { callback_id => context }, delivered);
+            // Identical to the original context, except for the `time`, which is
+            // restamped with the delivery time.
+            let expected = CanisterHttpRequestContext {
+                time: delivery_time,
+                ..context
+            };
+            assert_eq!(btreemap! { callback_id => expected }, delivered);
         } else {
             assert!(delivered.is_empty());
         }
@@ -1335,23 +1319,29 @@ fn retrieve_canister_http_context_retains_pay_as_you_go_contexts() {
 }
 
 /// Delivered contexts are timed out (and returned along with their callback IDs)
-/// once `DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT` has elapsed since the
-/// request was made, and retained until then.
+/// once `DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT` has elapsed since their
+/// response was delivered, and retained until then.
 #[test]
 fn time_out_delivered_canister_http_request_contexts() {
     let mut manager = SubnetCallContextManager::default();
-    // Two contexts, made 1 second apart.
+    // Two contexts, both made at `UNIX_EPOCH` but delivered 1 second apart. The
+    // retention timeout runs from the delivery time, so the delivered contexts
+    // carry that time rather than the request time.
     let contexts: Vec<_> = [0, 1]
         .iter()
         .map(|i| {
-            let context = canister_http_request_context(
-                PricingVersion::PayAsYouGo,
-                UNIX_EPOCH + Duration::from_secs(*i),
-            );
+            let delivery_time = UNIX_EPOCH + Duration::from_secs(*i);
+            let context = canister_http_request_context(PricingVersion::PayAsYouGo, UNIX_EPOCH);
             let callback_id =
                 manager.push_context(SubnetCallContext::CanisterHttpRequest(context.clone()));
-            manager.retrieve_context(callback_id, &no_op_logger());
-            (callback_id, context)
+            manager.retrieve_context(callback_id, delivery_time, &no_op_logger());
+            (
+                callback_id,
+                CanisterHttpRequestContext {
+                    time: delivery_time,
+                    ..context
+                },
+            )
         })
         .collect();
     assert_eq!(2, manager.delivered_canister_http_request_contexts.len());
@@ -1555,7 +1545,7 @@ fn sign_with_threshold_context_roundtrip() {
             contexts.insert(
                 CallbackId::new(id),
                 SignWithThresholdContext {
-                    request: RequestBuilder::new().build(),
+                    request: RequestBuilder::new().build_arc(),
                     args,
                     derivation_path: Arc::new(vec![]),
                     batch_time: UNIX_EPOCH,
@@ -1619,11 +1609,11 @@ fn network_topology_ecdsa_subnets() {
 }
 
 #[test]
-fn network_topology_route_uses_filtered_topology() {
+fn network_topology_routing() {
     let subnet_a = subnet_test_id(1);
     let subnet_b = subnet_test_id(2);
 
-    // The filtered routing table only contains subnet_a's range.
+    // The routing table only contains subnet_a's range.
     let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
             CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
@@ -1631,8 +1621,7 @@ fn network_topology_route_uses_filtered_topology() {
         .unwrap(),
     );
 
-    // The filtered subnets map only contains subnet_a.
-    // subnet_b exists in the network but is not visible to this subnet.
+    // The subnets map only contains subnet_a.
     let network_topology = NetworkTopology {
         subnets: btreemap! {
             subnet_a => SubnetTopology::default(),
@@ -1645,101 +1634,20 @@ fn network_topology_route_uses_filtered_topology() {
 
     // --- Canister ID routing ---
 
-    // Canister on subnet_a: resolvable via the filtered routing table.
+    // Canister on subnet_a: resolvable via the routing table.
     assert_eq!(
         network_topology.route(canister_test_id(50).get()),
         Some(subnet_a),
     );
-    // Canister 150 is not in the filtered routing table at all.
+    // Canister 150 is not in the routing table at all.
     assert_eq!(network_topology.route(canister_test_id(150).get()), None);
 
     // --- Subnet ID routing ---
 
-    // subnet_a is in the filtered subnets map.
+    // subnet_a is in the subnets map.
     assert_eq!(network_topology.route(subnet_a.get()), Some(subnet_a));
-    // subnet_b is NOT in the filtered subnets map.
+    // subnet_b is NOT in the subnets map.
     assert_eq!(network_topology.route(subnet_b.get()), None);
-}
-
-#[test]
-fn subnets_for_certification_falls_back_to_filtered() {
-    let subnet_a = subnet_test_id(1);
-
-    let routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
-        })
-        .unwrap(),
-    );
-
-    let network_topology = NetworkTopology {
-        subnets: btreemap! {
-            subnet_a => SubnetTopology::default(),
-        },
-        routing_table: routing_table.clone(),
-        ..Default::default()
-    };
-
-    // Without full_topology, subnets_for_certification returns the filtered map.
-    assert_eq!(
-        network_topology.subnets_for_certification(),
-        network_topology.subnets()
-    );
-    assert_eq!(network_topology.routing_table(), &routing_table);
-    assert_eq!(
-        network_topology.routing_table_for_certification(),
-        network_topology.routing_table()
-    );
-}
-
-#[test]
-fn subnets_for_certification_returns_full_topology_when_set() {
-    use crate::metadata_state::testing::NetworkTopologyTesting;
-
-    let subnet_a = subnet_test_id(1);
-    let subnet_b = subnet_test_id(2); // e.g., a cloud engine
-
-    let full_subnets = btreemap! {
-        subnet_a => SubnetTopology::default(),
-        subnet_b => SubnetTopology::default(),
-    };
-    let full_routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
-            CanisterIdRange { start: CanisterId::from(100_u64), end: CanisterId::from(199_u64) } => subnet_b,
-        })
-        .unwrap(),
-    );
-
-    let filtered_subnets = btreemap! {
-        subnet_a => SubnetTopology::default(),
-    };
-    let filtered_routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
-        })
-        .unwrap(),
-    );
-
-    let mut network_topology = NetworkTopology {
-        subnets: filtered_subnets.clone(),
-        routing_table: filtered_routing_table.clone(),
-        ..Default::default()
-    };
-    network_topology.set_full_topology(Some(FullTopology {
-        subnets: full_subnets.clone(),
-        routing_table: full_routing_table.clone(),
-    }));
-
-    // subnets() and routing_table() return the filtered view.
-    assert_eq!(network_topology.subnets(), &filtered_subnets);
-    assert_eq!(network_topology.routing_table(), &filtered_routing_table);
-    // subnets_for_certification() and routing_table_for_certification() return the full view.
-    assert_eq!(network_topology.subnets_for_certification(), &full_subnets);
-    assert_eq!(
-        network_topology.routing_table_for_certification(),
-        &full_routing_table
-    );
 }
 
 /// Test fixture that will produce an ingress status of type completed or failed,
@@ -1932,7 +1840,7 @@ fn ingress_history_respects_limits() {
     let run_test = |num_statuses, max_num_terminal| {
         let mut ingress_history = IngressHistoryState::default();
 
-        assert_eq!(ingress_history.memory_usage, 0);
+        assert_eq!(ingress_history.stats.memory_usage, 0);
 
         let terminal_size =
             NumBytes::from(max_num_terminal * test_status_terminal(0).payload_bytes() as u64);
@@ -2550,6 +2458,82 @@ fn stream_discard_signals_before_drops_all_signals() {
 }
 
 #[test]
+fn stream_next_reject_signal_index() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+
+    // With no reject signals, `None` is returned for any `from_index`.
+    assert_eq!(None, stream.next_reject_signal_index(0.into()));
+    assert_eq!(None, stream.next_reject_signal_index(153.into()));
+
+    stream.reject_signals = VecDeque::from([
+        RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+        RejectSignal::new(RejectReason::QueueFull, 139.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 142.into()),
+    ]);
+
+    // Before the first reject signal: the first reject signal.
+    assert_eq!(Some(138.into()), stream.next_reject_signal_index(0.into()));
+    assert_eq!(
+        Some(138.into()),
+        stream.next_reject_signal_index(137.into())
+    );
+    // At a reject signal: that same reject signal.
+    assert_eq!(
+        Some(138.into()),
+        stream.next_reject_signal_index(138.into())
+    );
+    assert_eq!(
+        Some(139.into()),
+        stream.next_reject_signal_index(139.into())
+    );
+    assert_eq!(
+        Some(142.into()),
+        stream.next_reject_signal_index(142.into())
+    );
+    // Between reject signals: the following reject signal.
+    assert_eq!(
+        Some(142.into()),
+        stream.next_reject_signal_index(140.into())
+    );
+    // Past all reject signals: `None`.
+    assert_eq!(None, stream.next_reject_signal_index(143.into()));
+    assert_eq!(None, stream.next_reject_signal_index(153.into()));
+}
+
+#[test]
+fn stream_has_reject_signal_between() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+    stream.reject_signals = VecDeque::from([
+        RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 142.into()),
+    ]);
+
+    // Inclusive of `from`, exclusive of `to`.
+    assert!(stream.has_reject_signal_between(138.into(), 139.into()));
+    assert!(!stream.has_reject_signal_between(137.into(), 138.into()));
+    // Between reject signals.
+    assert!(!stream.has_reject_signal_between(139.into(), 142.into()));
+    assert!(stream.has_reject_signal_between(139.into(), 143.into()));
+    // Empty ranges.
+    assert!(!stream.has_reject_signal_between(138.into(), 138.into()));
+    assert!(!stream.has_reject_signal_between(142.into(), 0.into()));
+    // Past all reject signals.
+    assert!(!stream.has_reject_signal_between(143.into(), 153.into()));
+}
+
+#[test]
 fn stream_pushing_signals_increments_signals_end() {
     let mut stream = generate_stream(
         MessageConfig {
@@ -2609,7 +2593,6 @@ fn stream_roundtrip_encoding() {
 
     let mut stream = Stream::with_signals(
         messages,
-        130.into(),
         153.into(),
         [RejectSignal::new(
             RejectReason::CanisterMigrating,
@@ -2631,7 +2614,6 @@ fn deserializing_stream_fails_for_bad_signals() {
     let stream = pb_queues::Stream {
         messages_begin: 0,
         messages: Vec::new(),
-        signals_begin: 150,
         signals_end: 153,
         reject_signals: Vec::new(),
         reverse_stream_flags: None,
@@ -2676,15 +2658,6 @@ fn deserializing_stream_fails_for_bad_signals() {
         "reject signals not strictly sorted, received [151, 150]",
     );
 
-    // Deserializing a stream with reject signals before `signals_begin` should fail.
-    assert_invalid_reject_signals(
-        vec![pb_queues::RejectSignal {
-            reason: 1,
-            index: 149,
-        }],
-        "first reject signal RejectSignal { reason: CanisterMigrating, index: 149 } before signals_begin 150",
-    );
-
     // Deserializing a stream with reject signals after `signals_end` should fail.
     assert_invalid_reject_signals(
         vec![pb_queues::RejectSignal {
@@ -2693,14 +2666,6 @@ fn deserializing_stream_fails_for_bad_signals() {
         }],
         "reject signals not strictly sorted, received [153, 153]",
     );
-
-    let bad_stream = pb_queues::Stream {
-        signals_begin: 153,
-        signals_end: 150,
-        ..stream
-    };
-    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
-    assert_matches!(deserialized_result, Err(ProxyDecodeError::Other(err_msg)) if err_msg == "signals_begin 153 after signals_end 150");
 }
 
 #[test]
@@ -2815,10 +2780,11 @@ fn consumed_cycles_total_calculates_the_right_amount() {
     // skipped, or vice versa) changes the total by a unique amount that cannot
     // be masked by other entries cancelling out.
     let mut consumed_cycles_by_use_case = BTreeMap::new();
-    // Use cases covered by a dedicated scalar metric below; these must not be
-    // added to the total again (otherwise the cycles consumed by deleted
-    // canisters / outcalls would be double counted).
+    // Covered by the deleted canisters scalar metric below; must not be added to
+    // the total again (otherwise the cycles consumed by deleted canisters would
+    // be double counted).
     consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(1));
+    // Subnet-level outcall use cases; added to the total.
     consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(2));
     consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(4));
     // Canister-level use cases that only ever enter the map when a canister is
@@ -2853,44 +2819,48 @@ fn consumed_cycles_total_calculates_the_right_amount() {
 
     let subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(16384),
-        consumed_cycles_http_outcalls: NominalCycles::new(32768),
-        consumed_cycles_ecdsa_outcalls: NominalCycles::new(65536),
         consumed_cycles_by_use_case,
         ..Default::default()
     };
 
-    // 16384 (deleted canisters) + 32768 (HTTP outcalls) + 65536 (ECDSA outcalls)
+    // 16384 (deleted canisters) + 2 (HTTP outcalls) + 4 (ECDSA outcalls)
     // + 2048 (Schnorr outcalls) + 4096 (VetKd) + 8192 (dropped messages).
     assert_eq!(
         subnet_metrics.consumed_cycles_total(),
-        NominalCycles::new(129024)
+        NominalCycles::new(30726)
     );
 
     // The legacy computation additionally sums the per-use-case entries that a
     // deleted canister contributes to the map (already covered by the deleted
-    // canisters scalar), hence the double counting. On top of the 129024 from
+    // canisters scalar), hence the double counting. On top of the 30726 from
     // the fixed `consumed_cycles_total` above:
-    // 129024 + 8 (memory) + 16 (compute allocation) + 32 (ingress induction)
+    // 30726 + 8 (memory) + 16 (compute allocation) + 32 (ingress induction)
     // + 64 (instructions) + 128 (request and response transmission)
     // + 256 (uninstall) + 512 (canister creation) + 1024 (burned cycles).
     assert_eq!(
         subnet_metrics.consumed_cycles_total_v28(),
-        NominalCycles::new(131064)
+        NominalCycles::new(32766)
     );
 }
 
-/// The `replicated_state_consumed_cycles_since_replica_started` gauge is
-/// computed in `ReplicatedStateMetrics::observe` by summing the per-canister
-/// totals with the subnet-level use cases. This test exercises every
-/// subnet-level use case that contributes to the total, so that omitting any of
-/// them (as the `SchnorrOutcalls`/`VetKd`/`DroppedMessages` use cases once were)
-/// would change the reported value and fail the assertion. Distinct powers of
-/// two are used so that a missing use case is always detectable in the total.
+/// The `replicated_state_consumed_cycles_since_replica_started` gauge is set in
+/// `ReplicatedStateMetrics::observe` from
+/// [`SubnetMetrics::consumed_cycles_total_including_canisters_monotonic`]. This
+/// test exercises every subnet-level use case that contributes to the total, so
+/// that omitting any of them (as the `SchnorrOutcalls`/`VetKd`/`DroppedMessages`
+/// use cases once were) would change the reported value and fail the assertion,
+/// plus the canisters' (monotonic) part of the total. Distinct powers of two are
+/// used so that a missing contribution is always detectable in the total.
 #[test]
 fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
-    // The three use cases with a dedicated scalar field are also mirrored in the
-    // by-use-case map (as they are in production), while `SchnorrOutcalls`,
-    // `VetKd` and `DroppedMessages` live only in the map.
+    // `DeletedCanisters` (the leftover balances of deleted canisters) is already
+    // included in the `consumed_cycles_by_deleted_canisters` scalar below, which
+    // additionally covers the cycles those canisters had consumed; so the gauge
+    // counts the scalar and skips this entry. The scalar (64) is set higher than
+    // the entry (1), as for a deleted canister that consumed 63 cycles and had 1
+    // cycle left, so that counting the entry instead of (or on top of) the scalar
+    // would change the total. The remaining subnet-level use cases live only in
+    // the map.
     let mut consumed_cycles_by_use_case = BTreeMap::new();
     consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(1));
     consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(2));
@@ -2901,7 +2871,7 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
 
     // The canister-level use cases are also present in the by-use-case map (in
     // production they end up there via deleted canisters), but the gauge derives
-    // their contribution from the per-canister totals and the
+    // their contribution from the canisters' part of the stored aggregate and the
     // `consumed_cycles_by_deleted_canisters` scalar rather than from the map.
     // Insert them with a large value to ensure they are *not* double-counted
     // into the gauge total from the map.
@@ -2918,13 +2888,14 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
         consumed_cycles_by_use_case.insert(use_case, NominalCycles::new(1024));
     }
 
-    let subnet_metrics = SubnetMetrics {
-        consumed_cycles_by_deleted_canisters: NominalCycles::new(1),
-        consumed_cycles_ecdsa_outcalls: NominalCycles::new(2),
-        consumed_cycles_http_outcalls: NominalCycles::new(4),
+    let mut subnet_metrics = SubnetMetrics {
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(64),
         consumed_cycles_by_use_case,
         ..Default::default()
     };
+    // The canisters' non-monotonic part only feeds the non-monotonic total, never
+    // the gauge.
+    subnet_metrics.refresh_consumed_cycles(NominalCycles::new(128), NominalCycles::new(256));
 
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
     state.metadata.subnet_metrics = subnet_metrics;
@@ -2938,128 +2909,48 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
         &no_op_logger(),
     );
 
-    // Deleted canisters (1) + ECDSA (2) + HTTP (4) + Schnorr (8) + VetKd (16)
-    // + dropped messages (32) = 63. There are no canisters, so the per-canister
-    // contribution is zero, and the canister-level use cases inserted into the
-    // map above (each worth 1024) must not appear in the total.
+    // Deleted canisters (64) + ECDSA (2) + HTTP (4) + Schnorr (8) + VetKd (16)
+    // + dropped messages (32) + the canisters' monotonic part (256) = 382. The
+    // canister-level use cases inserted into the map above (each worth 1024)
+    // must not appear in the total.
     let gauge = fetch_gauge(
         &registry,
         "replicated_state_consumed_cycles_since_replica_started",
     )
     .unwrap();
-    assert_eq!(gauge, 63.0);
-}
+    assert_eq!(gauge, 382.0);
 
-#[test]
-fn observe_use_case_migrates_outcalls_scalar_fields_into_use_cases() {
-    let mut subnet_metrics = SubnetMetrics {
-        // Simulate a state persisted before use-case tracking existed: the scalar
-        // fields hold the full history while the use-case entries only cover a
-        // more recent (smaller) subset.
-        consumed_cycles_http_outcalls: NominalCycles::new(100),
-        consumed_cycles_ecdsa_outcalls: NominalCycles::new(200),
-        consumed_cycles_by_use_case: BTreeMap::from([
-            (CyclesUseCase::HTTPOutcalls, NominalCycles::new(60)),
-            (CyclesUseCase::ECDSAOutcalls, NominalCycles::new(150)),
-        ]),
-        consumed_cycles_by_use_case_as_counters: BTreeMap::from([
-            (CyclesUseCase::HTTPOutcalls, NominalCycles::new(60)),
-            (CyclesUseCase::ECDSAOutcalls, NominalCycles::new(150)),
-        ]),
-        ..Default::default()
-    };
-
-    // Observing an *unrelated* use case triggers the migration, i.e. it runs
-    // independently of whether the HTTP/ECDSA scalar fields are observed.
-    subnet_metrics
-        .observe_consumed_cycles_with_use_case(CyclesUseCase::Instructions, NominalCycles::new(5));
-
-    let by_use_case = subnet_metrics.get_consumed_cycles_by_use_case();
-
-    // The HTTP/ECDSA use-case entries have been brought up to the (superset)
-    // scalar values, even though no outcall was observed.
+    // The non-monotonic total shares the subnet-level part (126) but adds the
+    // canisters' non-monotonic part (128) instead.
     assert_eq!(
-        by_use_case[&CyclesUseCase::HTTPOutcalls],
-        NominalCycles::new(100)
-    );
-    assert_eq!(
-        by_use_case[&CyclesUseCase::ECDSAOutcalls],
-        NominalCycles::new(200)
-    );
-    // The observed use case was recorded as usual.
-    assert_eq!(
-        by_use_case[&CyclesUseCase::Instructions],
-        NominalCycles::new(5)
-    );
-
-    // The migration must NOT touch the monotonic counters map: its HTTP/ECDSA
-    // entries stay at their original values (only the just-observed use case
-    // grew).
-    let counters = subnet_metrics.get_consumed_cycles_by_use_case_as_counters();
-    assert_eq!(
-        counters[&CyclesUseCase::HTTPOutcalls],
-        NominalCycles::new(60)
-    );
-    assert_eq!(
-        counters[&CyclesUseCase::ECDSAOutcalls],
-        NominalCycles::new(150)
-    );
-    assert_eq!(
-        counters[&CyclesUseCase::Instructions],
-        NominalCycles::new(5)
-    );
-
-    // The scalar fields are not zeroed (kept as the source of truth / for
-    // downgrade compatibility).
-    assert_eq!(
-        subnet_metrics.get_consumed_cycles_http_outcalls(),
-        NominalCycles::new(100)
-    );
-    assert_eq!(
-        subnet_metrics.get_consumed_cycles_ecdsa_outcalls(),
-        NominalCycles::new(200)
+        state
+            .metadata
+            .subnet_metrics
+            .consumed_cycles_total_including_canisters(),
+        NominalCycles::new(254)
     );
 }
 
 #[test]
-fn observe_http_outcall_use_case_stays_in_lockstep_with_scalar() {
-    let mut subnet_metrics = SubnetMetrics {
-        // Pre-use-case-tracking history: the scalar (100) is a superset of the
-        // use-case entry (60).
-        consumed_cycles_http_outcalls: NominalCycles::new(100),
-        consumed_cycles_by_use_case: BTreeMap::from([(
-            CyclesUseCase::HTTPOutcalls,
-            NominalCycles::new(60),
-        )]),
-        consumed_cycles_by_use_case_as_counters: BTreeMap::from([(
-            CyclesUseCase::HTTPOutcalls,
-            NominalCycles::new(60),
-        )]),
+fn subnet_metrics_round_instructions_total_decodes_as_zero_when_absent() {
+    let populated = SubnetMetrics {
+        round_instructions_total: 42,
         ..Default::default()
     };
+    let proto = pb_metadata::SubnetMetrics::from(&populated);
+    assert_eq!(proto.round_instructions_total, Some(42));
 
-    // Production order for an HTTP outcall: the scalar is bumped first, then the
-    // matching use case is observed.
-    subnet_metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(5));
-    subnet_metrics
-        .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, NominalCycles::new(5));
-
-    // The use-case entry caught up to the (superset) scalar and grew by 5, with
-    // no double counting.
+    // Checkpoints written before the field existed carry no field 13, and must
+    // still load.
+    let without_field = pb_metadata::SubnetMetrics {
+        round_instructions_total: None,
+        ..proto
+    };
     assert_eq!(
-        subnet_metrics.get_consumed_cycles_by_use_case()[&CyclesUseCase::HTTPOutcalls],
-        NominalCycles::new(105)
-    );
-    assert_eq!(
-        subnet_metrics.get_consumed_cycles_http_outcalls(),
-        NominalCycles::new(105)
-    );
-
-    // The counters map is not migrated: it only reflects its own increment (5),
-    // not the backfilled history.
-    assert_eq!(
-        subnet_metrics.get_consumed_cycles_by_use_case_as_counters()[&CyclesUseCase::HTTPOutcalls],
-        NominalCycles::new(65)
+        SubnetMetrics::try_from(without_field)
+            .unwrap()
+            .round_instructions_total,
+        0
     );
 }
 
@@ -3157,7 +3048,7 @@ fn blockmaker_metrics_time_series_check_observe_works() {
             .is_none()
     );
 
-    // Check `observe()` does nothing with a batch time before the last obseration.
+    // Check `observe()` does nothing with a batch time before the last observation.
     let metrics_before = metrics.clone();
     metrics.observe(
         batch_time,

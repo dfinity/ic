@@ -1,16 +1,17 @@
 use super::{
-    AccessList, SignableTransaction, Signed, compute_recovery_id, encode_u256, split_in_two,
+    AccessList, SignableTransaction, Signed, TransactionPrice, TransactionSignature, encode_u256,
 };
 use crate::{
+    deposit_address::AddressSchema,
     eth_rpc::Hash,
     numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas},
-    state::read_state,
 };
 use ethnum::u256;
 use ic_ethereum_types::Address;
-use ic_management_canister_types_private::DerivationPath;
+use icrc_ledger_types::icrc1::account::Account;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
+use serde_bytes::ByteBuf;
 
 const SET_CODE_TX_ID: u8 = 4;
 const EIP7702_AUTHORIZATION_MAGIC: u8 = 5;
@@ -18,8 +19,6 @@ const EIP7702_AUTHORIZATION_MAGIC: u8 = 5;
 /// Immutable signed EIP-7702 transaction.
 /// Use [`sign`](super::sign) to create a newly signed transaction or
 /// `SignedEip7702TransactionRequest::from()` if the signature is already known.
-// TODO(DEFI-2926): mirror the `Resubmittable`/fee-bump machinery used for EIP-1559 transactions
-// once EIP-7702 transactions are wired into the resubmission path.
 pub type SignedEip7702TransactionRequest = Signed<Eip7702TransactionRequest>;
 
 /// <https://eips.ethereum.org/EIPS/eip-7702>
@@ -53,6 +52,67 @@ impl AsRef<Eip7702TransactionRequest> for Eip7702TransactionRequest {
     }
 }
 
+/// What a deposit address authorizes, and what a stored signature over it is valid for: the tuple
+/// itself, plus the account whose deposit address signed it.
+///
+/// This is the key an authorization is cached under, so any change to what is authorized — another
+/// chain, another sweeper contract, another nonce — misses the cache and is signed afresh instead
+/// of reusing a tuple that no longer says what the minter means.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
+pub struct AuthorizationRequest {
+    #[n(0)]
+    account: Account,
+    #[n(1)]
+    chain_id: u64,
+    #[n(2)]
+    delegate: Address,
+    #[n(3)]
+    nonce: TransactionNonce,
+}
+
+impl AuthorizationRequest {
+    pub fn new(
+        account: Account,
+        chain_id: u64,
+        delegate: Address,
+        nonce: TransactionNonce,
+    ) -> Self {
+        Self {
+            account,
+            chain_id,
+            delegate,
+            nonce,
+        }
+    }
+
+    pub fn account(&self) -> Account {
+        self.account
+    }
+
+    pub fn derivation_path(&self) -> Vec<ByteBuf> {
+        AddressSchema::Deposit(self.account).derivation_path()
+    }
+
+    pub fn authorization(&self) -> Authorization {
+        Authorization {
+            chain_id: self.chain_id,
+            delegate: self.delegate,
+            nonce: self.nonce,
+        }
+    }
+
+    pub fn signed_with(&self, signature: TransactionSignature) -> SignedAuthorization {
+        SignedAuthorization {
+            chain_id: self.chain_id,
+            delegate: self.delegate,
+            nonce: self.nonce,
+            y_parity: signature.signature_y_parity,
+            r: signature.r,
+            s: signature.s,
+        }
+    }
+}
+
 /// An unsigned EIP-7702 authorization signed over by an authority to delegate its code.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Authorization {
@@ -80,36 +140,6 @@ impl Authorization {
         let mut bytes = self.rlp_bytes().to_vec();
         bytes.insert(0, EIP7702_AUTHORIZATION_MAGIC);
         Hash(ic_sha3::Keccak256::hash(bytes))
-    }
-
-    pub async fn sign(
-        self,
-        derivation_path: DerivationPath,
-    ) -> Result<SignedAuthorization, String> {
-        if self.chain_id == 0 {
-            return Err(
-                "BUG: EIP-7702 authorization chain_id must be set explicitly and never 0"
-                    .to_string(),
-            );
-        }
-        let hash = self.hash();
-        let key_name = read_state(|s| s.ecdsa_key_name.clone());
-        let signature = crate::management::sign_with_ecdsa(key_name, derivation_path, hash.0)
-            .await
-            .map_err(|e| format!("failed to sign authorization: {e}"))?;
-        let recid = compute_recovery_id(&hash, &signature).await;
-        if recid.is_x_reduced() {
-            return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
-        }
-        let (r_bytes, s_bytes) = split_in_two(signature);
-        Ok(SignedAuthorization {
-            chain_id: self.chain_id,
-            delegate: self.delegate,
-            nonce: self.nonce,
-            y_parity: recid.is_y_odd(),
-            r: u256::from_be_bytes(r_bytes),
-            s: u256::from_be_bytes(s_bytes),
-        })
     }
 }
 
@@ -173,6 +203,10 @@ impl SignableTransaction for Eip7702TransactionRequest {
         rlp.append_list(&self.authorization_list);
     }
 
+    fn chain_id(&self) -> u64 {
+        self.chain_id
+    }
+
     fn nonce(&self) -> TransactionNonce {
         self.nonce
     }
@@ -187,5 +221,31 @@ impl SignableTransaction for Eip7702TransactionRequest {
 
     fn max_priority_fee_per_gas(&self) -> WeiPerGas {
         self.max_priority_fee_per_gas
+    }
+
+    fn destination(&self) -> &Address {
+        &self.destination
+    }
+
+    fn amount(&self) -> &Wei {
+        &self.amount
+    }
+
+    fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    fn access_list(&self) -> &AccessList {
+        &self.access_list
+    }
+
+    fn with_price_and_amount(&self, price: TransactionPrice, amount: Wei) -> Self {
+        Self {
+            max_priority_fee_per_gas: price.max_priority_fee_per_gas,
+            max_fee_per_gas: price.max_fee_per_gas,
+            gas_limit: price.gas_limit,
+            amount,
+            ..self.clone()
+        }
     }
 }

@@ -74,14 +74,10 @@ impl StateMachineImpl {
     /// original `own_subnet_id`).
     fn online_split(
         &self,
-        mut state: ReplicatedState,
+        state: ReplicatedState,
         new_subnet_id: SubnetId,
         other_subnet_id: SubnetId,
     ) -> ReplicatedState {
-        // Abort all paused executions and wipe `SystemMetadata` caches.
-        self.scheduler
-            .checkpoint_round_with_no_execution(&mut state);
-
         let old_subnet_id = state.metadata.own_subnet_id;
         state
             .online_split(new_subnet_id, other_subnet_id)
@@ -151,7 +147,20 @@ impl StateMachine for StateMachineImpl {
                 new_subnet_id,
                 other_subnet_id,
             } => {
+                // Abort all paused executions and wipe `SystemMetadata` caches.
+                self.scheduler
+                    .checkpoint_round_with_no_execution(&mut state);
                 return self.online_split(state, new_subnet_id, other_subnet_id);
+            }
+
+            // Consensus is telling us to checkpoint the state as it is, without
+            // executing a round: only abort paused executions and wipe
+            // `SystemMetadata` caches, so that the checkpoint holds the state
+            // produced by the preceding rounds.
+            BatchContent::CheckpointingWithoutExecution => {
+                self.scheduler
+                    .checkpoint_round_with_no_execution(&mut state);
+                return state;
             }
         };
 

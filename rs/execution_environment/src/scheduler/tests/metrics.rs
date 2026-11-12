@@ -1,7 +1,8 @@
 //! Tests for scheduler metrics.
 
 use super::super::test_utilities::{
-    SchedulerTestBuilder, TestInstallCode, ingress, instructions, on_response, other_side,
+    SchedulerTest, SchedulerTestBuilder, TestInstallCode, ingress, instructions, on_response,
+    other_side,
 };
 use super::super::*;
 use super::{
@@ -19,12 +20,13 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::OutstandingPrepayments;
 use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting};
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
 use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
 use ic_test_utilities_metrics::{
     HistogramStats, MetricVec, fetch_counter_vec, fetch_gauge, fetch_gauge_vec,
-    fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec,
+    fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, labels,
     metric_vec, nonzero_values,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
@@ -37,11 +39,26 @@ use ic_types::messages::{
 };
 use ic_types::time::UNIX_EPOCH;
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Instructions, NominalCycles, NominalCyclesTesting,
+    CanisterCyclesCostSchedule, CompoundCycles, CyclesUseCase, Instructions, NominalCycles,
+    NominalCyclesTesting,
 };
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
 use std::time::Duration;
+
+/// Observes the state metrics at `height`, having first refreshed the derived
+/// consumed-cycles total that the `replicated_state_consumed_cycles_since_replica_started`
+/// gauge reads. Production refreshes it on every `commit_and_certify`, which this
+/// harness never does.
+fn observe_state_metrics(test: &mut SchedulerTest, height: u64) {
+    test.state_mut().refresh_consumed_cycles();
+    test.state_metrics().observe(
+        test.state().metadata.own_subnet_id,
+        test.state(),
+        height.into(),
+        &no_op_logger(),
+    );
+}
 
 #[test]
 fn validate_consumed_instructions_metric() {
@@ -885,19 +902,13 @@ fn threshold_signature_agreements_metric_is_updated() {
     let schnorr_key_id = make_schnorr_key_id(0);
     let master_schnorr_key_id = MasterPublicKeyId::Schnorr(schnorr_key_id.clone());
     let mut test = SchedulerTestBuilder::new()
-        .with_replica_version(ReplicaVersion::default())
         .with_chain_keys(vec![
             master_ecdsa_key_id.clone(),
             master_schnorr_key_id.clone(),
         ])
         .build();
 
-    test.state_metrics().observe(
-        test.state().metadata.own_subnet_id,
-        test.state(),
-        1.into(),
-        &no_op_logger(),
-    );
+    observe_state_metrics(&mut test, 1);
 
     let canister_id = test.create_canister();
 
@@ -1056,12 +1067,7 @@ fn threshold_signature_agreements_metric_is_updated() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    test.state_metrics().observe(
-        test.state().metadata.own_subnet_id,
-        test.state(),
-        2.into(),
-        &no_op_logger(),
-    );
+    observe_state_metrics(&mut test, 2);
 
     let threshold_signature_agreements_after = &test
         .state()
@@ -1099,6 +1105,105 @@ fn threshold_signature_agreements_metric_is_updated() {
     assert!(sign_with_threshold_contexts.is_empty());
 }
 
+/// Asserts the invariants that tie `CanisterMetrics::consumed_cycles` and
+/// `CanisterMetrics::consumed_cycles_by_use_cases` to their monotonic counterparts:
+/// a gauge exceeds its monotonic counterpart by exactly the prepayments that are
+/// still outstanding for it. Returns the outstanding prepayments.
+fn assert_consumed_cycles_invariant(
+    test: &SchedulerTest,
+    canister_id: CanisterId,
+) -> OutstandingPrepayments {
+    /// Asserts that `gauge` exceeds `monotonic` by exactly `outstanding`; `what`
+    /// names the amount.
+    fn assert_invariant(
+        what: &str,
+        gauge: NominalCycles,
+        monotonic: NominalCycles,
+        outstanding: NominalCycles,
+    ) {
+        assert!(
+            outstanding <= gauge,
+            "the {outstanding} outstanding prepayments must not exceed the {what} \
+             gauge {gauge}",
+        );
+        assert_eq!(
+            gauge - outstanding,
+            monotonic,
+            "{what} gauge {gauge} minus the {outstanding} outstanding prepayments \
+             must equal the monotonic {monotonic}",
+        );
+    }
+
+    let system_state = &test.canister_state(canister_id).system_state;
+    let outstanding = system_state
+        .outstanding_prepayments()
+        .expect("Canister has a paused execution");
+    let metrics = system_state.canister_metrics();
+
+    assert_invariant(
+        "consumed cycles",
+        metrics.consumed_cycles(),
+        metrics.consumed_cycles_monotonic(),
+        outstanding.total(),
+    );
+    for (use_case, gauge) in metrics.consumed_cycles_by_use_cases() {
+        // An absent monotonic entry reads as zero.
+        let monotonic = metrics
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(use_case)
+            .copied()
+            .unwrap_or_else(NominalCycles::zero);
+        assert_invariant(
+            &format!("{} consumed cycles", use_case.as_str()),
+            *gauge,
+            monotonic,
+            outstanding.for_use_case(*use_case),
+        );
+    }
+
+    // The loop above covers the gauge map's use cases; `HTTPOutcalls` is the only
+    // monotonic entry allowed to have no gauge counterpart, as HTTPS outcalls are
+    // only tracked as a gauge at the subnet level.
+    let extra: Vec<_> = metrics
+        .consumed_cycles_by_use_cases_monotonic()
+        .keys()
+        .filter(|use_case| {
+            **use_case != CyclesUseCase::HTTPOutcalls
+                && !metrics
+                    .consumed_cycles_by_use_cases()
+                    .contains_key(use_case)
+        })
+        .collect();
+    assert!(
+        extra.is_empty(),
+        "Canister {canister_id}: monotonic consumed cycles with no gauge: {extra:?}",
+    );
+
+    outstanding
+}
+
+/// Opens a call to an xnet canister, so that the caller is left with an outstanding
+/// prepayment for the response.
+fn call_xnet_canister(test: &mut SchedulerTest, canister: CanisterId) {
+    let xnet_canister = test.xnet_canister_id();
+    test.send_ingress(
+        canister,
+        ingress(1).call(other_side(xnet_canister, 1), on_response(1)),
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+}
+
+#[test]
+fn consumed_cycles_monotonic_matches_the_gauge_net_of_outstanding_prepayments() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister();
+
+    call_xnet_canister(&mut test, canister);
+
+    let outstanding = assert_consumed_cycles_invariant(&test, canister);
+    assert_ne!(outstanding, OutstandingPrepayments::default());
+}
+
 #[test]
 fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
     for cost_schedule in [
@@ -1116,12 +1221,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
 
         let canister_id = test.create_canister();
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
 
         let consumed_cycles_before = NominalCycles::new(
             fetch_gauge(
@@ -1153,12 +1253,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
             .sign_with_ecdsa_contexts();
         assert_eq!(sign_with_ecdsa_contexts.len(), 1);
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
         let consumed_cycles_after = NominalCycles::new(
             fetch_gauge(
                 test.metrics_registry(),
@@ -1197,12 +1292,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             .subnet_features
             .http_requests = true;
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
 
         let consumed_cycles_before = NominalCycles::new(
             fetch_gauge(
@@ -1263,12 +1353,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             Some(NumBytes::from(response_size_limit)),
         );
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
         let consumed_cycles_after = NominalCycles::new(
             fetch_gauge(
                 test.metrics_registry(),
@@ -1393,12 +1478,26 @@ fn consumed_cycles_for_instructions_are_updated_from_valid_canisters() {
             .system_state
             .consume_cycles(removed_cycles);
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
+        // As long as the prepayment is outstanding, nothing counts as consumed yet.
+        observe_state_metrics(&mut test, 0);
+        assert_eq!(
+            fetch_gauge_vec(
+                test.metrics_registry(),
+                "replicated_state_consumed_cycles_from_replica_start",
+            ),
+            metric_vec(&[(&[("use_case", "Instructions")], 0.0)]),
         );
+
+        // Settle the prepayment with a zero refund, as finishing the execution would,
+        // so that the cycles count as actually consumed.
+        test.canister_state_mut(canister_id)
+            .system_state
+            .refund_cycles(
+                removed_cycles,
+                CompoundCycles::<Instructions>::new(Cycles::zero(), cost_schedule),
+            );
+
+        observe_state_metrics(&mut test, 1);
 
         assert_eq!(
             fetch_gauge_vec(
@@ -1439,12 +1538,7 @@ fn consumed_cycles_for_resource_allocations_are_updated_from_valid_canisters() {
         test.advance_time(duration);
         test.charge_for_resource_allocations();
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
 
         let expected_memory_cycles = (test.memory_cost(memory_allocation, duration)
             + test.canister_base_cost(memory_allocation, duration))
@@ -1504,9 +1598,14 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
 
         let removed_cycles =
             CompoundCycles::<Instructions>::new(Cycles::from(1000_u128), cost_schedule);
-        test.canister_state_mut(canister_id)
-            .system_state
-            .consume_cycles(removed_cycles);
+        let system_state = &mut test.canister_state_mut(canister_id).system_state;
+        system_state.consume_cycles(removed_cycles);
+        // Settle the prepayment with a zero refund, as finishing the execution would,
+        // so that the cycles count as actually consumed.
+        system_state.refund_cycles(
+            removed_cycles,
+            CompoundCycles::<Instructions>::new(Cycles::zero(), cost_schedule),
+        );
 
         test.inject_call_to_ic00(
             Method::DeleteCanister,
@@ -1517,12 +1616,7 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         );
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
 
         assert_eq!(
             fetch_gauge_vec(
@@ -1543,6 +1637,78 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
             ]),
         );
     }
+}
+
+/// HTTPS outcalls are recorded at the subnet level when they are charged, so
+/// deleting the canister that made them must not record them there again: that would
+/// double count them in the subnet's consumed cycles total and metrics.
+#[test]
+fn http_outcalls_consumed_cycles_are_not_double_counted_on_canister_deletion() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister_id = test.create_canister_with(
+        Cycles::from(5_000_000_000_000_u128),
+        ComputeAllocation::zero(),
+        MemoryAllocation::default(),
+        None,
+        None,
+        Some(CanisterStatusType::Stopped),
+    );
+
+    // Record an HTTPS outcall the way charging for one does: at the subnet level and
+    // in the canister's monotonic amounts.
+    let outcalls = NominalCycles::new(1_000_000);
+    let subnet_metrics = &mut test.state_mut().metadata.subnet_metrics;
+    subnet_metrics.observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, outcalls);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .observe_consumed_cycles_for_https_outcall(outcalls);
+
+    test.state_mut().refresh_consumed_cycles();
+    let total_before = test
+        .state()
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_total_including_canisters();
+    let leftover_cycles = test.canister_state(canister_id).system_state.balance();
+
+    test.inject_call_to_ic00(
+        Method::DeleteCanister,
+        CanisterIdRecord::from(canister_id).encode(),
+        Cycles::zero(),
+        CanisterId::try_from(user_test_id(1).get()).unwrap(),
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(test.state().canister_state(&canister_id).is_none());
+
+    observe_state_metrics(&mut test, 0);
+
+    // The subnet-level `HTTPOutcalls` entry still holds just the outcall above.
+    let subnet_metrics = &test.state().metadata.subnet_metrics;
+    assert_eq!(subnet_metrics.get_consumed_cycles_http_outcalls(), outcalls);
+    // The deletion only adds the canister's leftover balance to the total.
+    assert_eq!(
+        subnet_metrics.consumed_cycles_total_including_canisters(),
+        total_before + NominalCycles::new(leftover_cycles.get())
+    );
+    // And the exported metrics report the outcall once.
+    let http_outcalls = labels(&[("use_case", "HTTPOutcalls")]);
+    assert_eq!(
+        fetch_gauge_vec(
+            test.metrics_registry(),
+            "replicated_state_consumed_cycles_from_replica_start",
+        )
+        .get(&http_outcalls),
+        Some(&(outcalls.get() as f64))
+    );
+    assert_eq!(
+        fetch_counter_vec(
+            test.metrics_registry(),
+            "replicated_state_consumed_cycles_from_replica_start_as_counters",
+        )
+        .get(&http_outcalls),
+        Some(&(outcalls.get() as f64))
+    );
 }
 
 #[test]

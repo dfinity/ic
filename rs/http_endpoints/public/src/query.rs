@@ -6,6 +6,7 @@ use crate::{
         Cbor, WithTimeout, build_validator, certified_state_unavailable_error,
         validation_error_to_http_error,
     },
+    metrics::HttpHandlerMetrics,
 };
 
 use axum::{
@@ -14,7 +15,7 @@ use axum::{
     extract::{DefaultBodyLimit, State},
     response::{IntoResponse, Response},
 };
-use crossbeam::atomic::AtomicCell;
+use crossbeam_utils::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
@@ -60,6 +61,7 @@ pub enum Version {
 #[derive(Clone)]
 pub struct QueryService {
     log: ReplicaLogger,
+    metrics: HttpHandlerMetrics,
     node_id: NodeId,
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
@@ -75,6 +77,7 @@ pub struct QueryService {
 
 pub struct QueryServiceBuilder {
     log: ReplicaLogger,
+    metrics: HttpHandlerMetrics,
     node_id: NodeId,
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
@@ -102,6 +105,7 @@ impl QueryService {
 impl QueryServiceBuilder {
     pub fn builder(
         log: ReplicaLogger,
+        metrics: HttpHandlerMetrics,
         node_id: NodeId,
         signer: Arc<dyn BasicSigner<QueryResponseHash>>,
         registry_client: Arc<dyn RegistryClient>,
@@ -113,6 +117,7 @@ impl QueryServiceBuilder {
     ) -> Self {
         Self {
             log,
+            metrics,
             node_id,
             signer,
             health_status: None,
@@ -158,6 +163,7 @@ impl QueryServiceBuilder {
         let log = self.log;
         let state = QueryService {
             log: log.clone(),
+            metrics: self.metrics,
             node_id: self.node_id,
             signer: self.signer,
             health_status: self
@@ -190,6 +196,7 @@ pub(crate) async fn query(
     axum::extract::Path(id): axum::extract::Path<PrincipalId>,
     State(QueryService {
         log,
+        metrics,
         node_id,
         registry_client,
         time_source,
@@ -292,6 +299,7 @@ pub(crate) async fn query(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
+    metrics.observe_validated_sender_info("query", request.sender_info());
 
     let user_query = request.take_content();
 

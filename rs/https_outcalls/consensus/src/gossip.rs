@@ -89,11 +89,11 @@ mod tests {
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
     use ic_test_utilities::state_manager::RefMockStateManager;
     use ic_test_utilities_types::{
-        ids::{node_test_id, subnet_test_id},
+        ids::{node_test_id, subnet_test_id, test_replica_version},
         messages::RequestBuilder,
     };
     use ic_types::{
-        Height, NumberOfNodes, RegistryVersion, ReplicaVersion,
+        Height, NumberOfNodes, RegistryVersion,
         canister_http::{
             CanisterHttpMethod, CanisterHttpPaymentReceipt, CanisterHttpRequestContext,
             CanisterHttpResponseMetadata, CanisterHttpResponseReceipt, PricingVersion,
@@ -108,10 +108,10 @@ mod tests {
 
     fn request_context() -> CanisterHttpRequestContext {
         CanisterHttpRequestContext {
-            request: RequestBuilder::new().build(),
+            request: RequestBuilder::new().build_arc(),
             url: String::new(),
             max_response_bytes: None,
-            headers: vec![],
+            headers: Arc::new(vec![]),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,
@@ -133,7 +133,7 @@ mod tests {
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                     content_size: 0,
                     is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                    replica_version: test_replica_version(),
                 },
                 payment_receipt: CanisterHttpPaymentReceipt::default(),
             },

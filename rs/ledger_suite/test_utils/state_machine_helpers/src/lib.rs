@@ -24,7 +24,7 @@ use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{
-    BlockRange, GetBlocksRequest, GetBlocksResponse, GetBlocksResult, SupportedBlockType,
+    BlockRange, GetBlocksResponse, GetBlocksResult, SupportedBlockType,
 };
 use icrc_ledger_types::icrc3::transactions::GetTransactionsRequest;
 use icrc_ledger_types::icrc3::transactions::GetTransactionsResponse;
@@ -375,55 +375,67 @@ pub fn get_all_ledger_and_archive_blocks<Tokens: TokensType>(
 ) -> Vec<Block<Tokens>> {
     let start_index = start_index.unwrap_or(0);
     let num_blocks = num_blocks.unwrap_or(u32::MAX as u64);
-    let req = GetBlocksRequest {
-        start: icrc_ledger_types::icrc1::transfer::BlockIndex::from(start_index),
-        length: Nat::from(num_blocks),
-    };
-    let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
-    let res = state_machine
-        .query(ledger_id, "get_blocks", req)
-        .expect("Failed to send get_blocks request")
-        .bytes();
-    let res = Decode!(&res, GetBlocksResponse).expect("Failed to decode GetBlocksResponse");
-    // Assume that all blocks in the ledger can be retrieved in a single call. This should hold for
-    // most tests.
-    let blocks_in_ledger = res
-        .chain_length
-        .saturating_sub(res.first_index.0.to_u64().unwrap());
-    assert!(
-        blocks_in_ledger <= res.blocks.len() as u64,
-        "Chain length: {}, first block index: {}, retrieved blocks: {}",
-        res.chain_length,
-        res.first_index,
-        res.blocks.len()
-    );
+    let ledger_principal = Principal::from(ledger_id);
+    // The ledger returns at most a limited number of blocks per `get_blocks` call, so determine
+    // how many blocks should be retrieved in total, and then keep requesting blocks until they
+    // have all been retrieved.
+    let chain_length = get_blocks(state_machine, ledger_principal, start_index, 0).chain_length;
+    let length = num_blocks.min(chain_length.saturating_sub(start_index));
     let mut blocks = vec![];
-    for archived in res.archived_blocks {
-        let mut remaining = archived.length.clone();
-        let mut next_archived_txid = archived.start.clone();
-        while remaining > 0_u32 {
-            let req = GetTransactionsRequest {
-                start: next_archived_txid.clone(),
-                length: remaining.clone(),
-            };
-            let req =
-                Encode!(&req).expect("Failed to encode GetTransactionsRequest for archive node");
-            let canister_id = archived.callback.canister_id;
-            let res = state_machine
-                .query(
-                    CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
-                    archived.callback.method.clone(),
-                    req,
-                )
-                .expect("Failed to send get_blocks request to archive")
-                .bytes();
-            let res = Decode!(&res, BlockRange).unwrap();
-            next_archived_txid += res.blocks.len() as u64;
-            remaining -= res.blocks.len() as u32;
-            blocks.extend(res.blocks);
+    while length > blocks.len() as u64 {
+        let curr_start = start_index + blocks.len() as u64;
+        let remaining_length = length - blocks.len() as u64;
+        let res = get_blocks(
+            state_machine,
+            ledger_principal,
+            curr_start,
+            remaining_length as usize,
+        );
+        // The blocks returned by a single `get_blocks` call form a contiguous range starting at
+        // `curr_start`, with the archived blocks preceding the blocks held by the ledger itself.
+        let mut new_blocks = vec![];
+        for archived in res.archived_blocks {
+            let mut remaining = archived.length.clone();
+            let mut next_archived_txid = archived.start.clone();
+            while remaining > 0_u32 {
+                let req = GetTransactionsRequest {
+                    start: next_archived_txid.clone(),
+                    length: remaining.clone(),
+                };
+                let req = Encode!(&req)
+                    .expect("Failed to encode GetTransactionsRequest for archive node");
+                let canister_id = archived.callback.canister_id;
+                let res = state_machine
+                    .query(
+                        CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
+                        archived.callback.method.clone(),
+                        req,
+                    )
+                    .expect("Failed to send get_blocks request to archive")
+                    .bytes();
+                let res = Decode!(&res, BlockRange).unwrap();
+                assert!(
+                    !res.blocks.is_empty(),
+                    "Archive {} returned no blocks for the range [{}, {})",
+                    canister_id,
+                    next_archived_txid,
+                    next_archived_txid.clone() + remaining.clone()
+                );
+                next_archived_txid += res.blocks.len() as u64;
+                remaining -= res.blocks.len() as u32;
+                new_blocks.extend(res.blocks);
+            }
         }
+        new_blocks.extend(res.blocks);
+        assert!(
+            !new_blocks.is_empty(),
+            "Ledger {} returned no blocks for the range [{}, {})",
+            ledger_principal,
+            curr_start,
+            curr_start + remaining_length
+        );
+        blocks.extend(new_blocks);
     }
-    blocks.extend(res.blocks);
     blocks
         .into_iter()
         .map(ic_icrc1::Block::try_from)

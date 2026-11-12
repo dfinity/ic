@@ -34,6 +34,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             interrupted_during_execution: item.interrupted_during_execution,
             certified_data: item.certified_data.clone(),
             consumed_cycles: Some((&item.consumed_cycles).into()),
+            consumed_cycles_monotonic: Some((&item.consumed_cycles_monotonic).into()),
             stable_memory_size64: item.stable_memory_size.get() as u64,
             heap_delta_debit: item.heap_delta_debit.get(),
             install_code_debit: item.install_code_debit.get(),
@@ -51,8 +52,8 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                     },
                 )
                 .collect(),
-            consumed_cycles_by_use_cases_as_counters: item
-                .consumed_cycles_by_use_cases_as_counters
+            consumed_cycles_by_use_cases_monotonic: item
+                .consumed_cycles_by_use_cases_monotonic
                 .into_iter()
                 .map(
                     |(use_case, cycles)| pb_canister_state_bits::ConsumedCyclesByUseCase {
@@ -86,6 +87,25 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             local_subnet_messages_executed: item.local_subnet_messages_executed,
             http_outcalls_executed: item.http_outcalls_executed,
             heartbeats_and_global_timers_executed: item.heartbeats_and_global_timers_executed,
+            connection_metrics: item
+                .connection_metrics
+                .into_iter()
+                .map(
+                    |(
+                        sender_canister_id,
+                        ConnectionMetrics {
+                            last_access_timestamp,
+                            count,
+                        },
+                    )| {
+                        pb_canister_state_bits::CanisterToCanisterMetrics {
+                            sender_canister_id: Some(sender_canister_id.into()),
+                            timestamp_nanos: last_access_timestamp.as_nanos_since_unix_epoch(),
+                            count,
+                        }
+                    },
+                )
+                .collect(),
         }
     }
 }
@@ -102,6 +122,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
         let consumed_cycles =
             try_from_option_field(value.consumed_cycles, "CanisterStateBits::consumed_cycles")
                 .unwrap_or_default();
+        let consumed_cycles_monotonic = try_from_option_field(
+            value.consumed_cycles_monotonic,
+            "CanisterStateBits::consumed_cycles_monotonic",
+        )
+        .unwrap_or_default();
 
         let mut controllers = BTreeSet::new();
         for controller in value.controllers.into_iter() {
@@ -138,9 +163,9 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             );
         }
 
-        let mut consumed_cycles_by_use_cases_as_counters = BTreeMap::new();
-        for x in value.consumed_cycles_by_use_cases_as_counters.into_iter() {
-            consumed_cycles_by_use_cases_as_counters.insert(
+        let mut consumed_cycles_by_use_cases_monotonic = BTreeMap::new();
+        for x in value.consumed_cycles_by_use_cases_monotonic.into_iter() {
+            consumed_cycles_by_use_cases_monotonic.insert(
                 CyclesUseCase::try_from(
                     pb_canister_state_bits::CyclesUseCase::try_from(x.use_case).map_err(|_| {
                         ProxyDecodeError::ValueOutOfRange {
@@ -191,6 +216,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             interrupted_during_execution: value.interrupted_during_execution,
             certified_data: value.certified_data,
             consumed_cycles,
+            consumed_cycles_monotonic,
             stable_memory_size: NumWasmPages::from(value.stable_memory_size64 as usize),
             heap_delta_debit: NumBytes::from(value.heap_delta_debit),
             install_code_debit: NumInstructions::from(value.install_code_debit),
@@ -202,7 +228,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             canister_version: value.canister_version,
             canister_creation_timestamp_nanos: value.canister_creation_timestamp_nanos,
             consumed_cycles_by_use_cases,
-            consumed_cycles_by_use_cases_as_counters,
+            consumed_cycles_by_use_cases_monotonic,
             // TODO(MR-412): replace `unwrap_or_default` by returning an error on missing canister_history field
             canister_history: try_from_option_field(
                 value.canister_history,
@@ -246,6 +272,31 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             local_subnet_messages_executed: value.local_subnet_messages_executed,
             http_outcalls_executed: value.http_outcalls_executed,
             heartbeats_and_global_timers_executed: value.heartbeats_and_global_timers_executed,
+            connection_metrics: value
+                .connection_metrics
+                .into_iter()
+                .map(
+                    |pb_canister_state_bits::CanisterToCanisterMetrics {
+                         sender_canister_id,
+                         timestamp_nanos,
+                         count,
+                     }| {
+                        let sender_canister_id = try_from_option_field(
+                            sender_canister_id,
+                            "CanisterStateBits::CanisterToCanisterMetrics::sender_canister_id",
+                        )?;
+                        Ok((
+                            sender_canister_id,
+                            ConnectionMetrics {
+                                last_access_timestamp: Time::from_nanos_since_unix_epoch(
+                                    timestamp_nanos,
+                                ),
+                                count,
+                            },
+                        ))
+                    },
+                )
+                .collect::<Result<BTreeMap<_, _>, Self::Error>>()?,
         })
     }
 }

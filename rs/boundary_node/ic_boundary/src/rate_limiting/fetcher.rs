@@ -160,6 +160,7 @@ mod test {
                             rule_raw: Some(indoc! {"
                                 canister_id: aaaaa-aa
                                 subnet_id: 3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe
+                                sender_id: 2vxsx-fae
                                 methods_regex: ^foo|bar$
                                 limit: block
                             "}.into()),
@@ -259,6 +260,7 @@ mod test {
                     subnet_id: Some(principal!(
                         "3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"
                     )),
+                    sender_id: Some(principal!("2vxsx-fae")),
                     methods_regex: Some(Regex::new("^foo|bar$").unwrap()),
                     request_types: None,
                     ip_prefix_group: None,
@@ -270,6 +272,7 @@ mod test {
                     subnet_id: Some(principal!(
                         "3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"
                     )),
+                    sender_id: None,
                     methods_regex: Some(Regex::new("^baz|bax$").unwrap()),
                     request_types: None,
                     ip_prefix_group: None,
@@ -279,6 +282,7 @@ mod test {
                 RateLimitRule {
                     canister_id: Some(principal!("aaaaa-aa")),
                     subnet_id: None,
+                    sender_id: None,
                     methods_regex: Some(Regex::new("^foo|bax$").unwrap()),
                     request_types: None,
                     ip_prefix_group: None,

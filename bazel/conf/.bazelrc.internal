@@ -6,8 +6,11 @@ build:bes --bes_backend=bes.idx.dfinity.network
 build:bes --bes_timeout=180s # Default is no timeout.
 build:bes --remote_build_event_upload=minimal
 
-# DFINITY internal remote cache setup
-build --remote_cache=bazel-remote.idx.dfinity.network
+# DFINITY internal remote cache setup. The cache and the remote downloader below are
+# scoped to `common` instead of `build` so that repository fetches triggered by other
+# commands like `bazel query` and `bazel fetch` go through them as well (the remote
+# downloader requires a gRPC remote cache on the same command).
+common --remote_cache=bazel-remote.idx.dfinity.network
 build --remote_cache_async
 build --remote_cache_compression # If enabled, compress/decompress cache blobs with zstd.
 # TODO: re-enable after fixing the error like this:
@@ -31,10 +34,10 @@ common --remote_download_all
 # up-to-date" and --check_up_to_date aborted the upload.
 common --noexperimental_inmemory_dotd_files
 
-build --experimental_remote_downloader=bazel-remote.idx.dfinity.network
-build:local --experimental_remote_downloader=
+common --experimental_remote_downloader=bazel-remote.idx.dfinity.network
+common:local --experimental_remote_downloader=
 build --remote_local_fallback
 build    --remote_upload_local_results=false
 
-# Run `bazel build ... --config=local` to build targets without cache
-build:local --remote_cache=
+# Run `bazel <command> ... --config=local` to work without the remote cache and downloader
+common:local --remote_cache=

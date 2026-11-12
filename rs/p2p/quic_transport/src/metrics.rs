@@ -27,6 +27,9 @@ const ERROR_LOCALLY_CLOSED_CONN: &str = "locally_closed_conn";
 
 pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";
 
+/// Label value used for inbound requests whose path did not match any registered route.
+pub(crate) const LABEL_UNMATCHED_PATH: &str = "unmatched_path";
+
 #[derive(Clone, Debug)]
 pub struct QuicTransportMetrics {
     // Connection manager
@@ -41,6 +44,7 @@ pub struct QuicTransportMetrics {
     pub connecting_connections: IntGauge,
     pub delay_queue_size: IntGauge,
     pub closed_request_handlers_total: IntCounter,
+    pub short_lived_connections_total: IntCounter,
     // Request handler
     pub request_task_monitor: TaskMonitor,
     pub request_handle_errors_total: IntCounterVec,
@@ -112,6 +116,10 @@ impl QuicTransportMetrics {
             closed_request_handlers_total: metrics_registry.int_counter(
                 "quic_transport_closed_request_handler_total",
                 "Number of closed request handlers.",
+            ),
+            short_lived_connections_total: metrics_registry.int_counter(
+                "quic_transport_short_lived_connections_total",
+                "Number of connections that closed shortly after being established.",
             ),
             // Request handler
             request_task_monitor,

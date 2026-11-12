@@ -818,8 +818,9 @@ pub fn load_canister_state(
         canister_state_bits.executed,
         canister_state_bits.interrupted_during_execution,
         canister_state_bits.consumed_cycles,
+        canister_state_bits.consumed_cycles_monotonic,
         canister_state_bits.consumed_cycles_by_use_cases,
-        canister_state_bits.consumed_cycles_by_use_cases_as_counters,
+        canister_state_bits.consumed_cycles_by_use_cases_monotonic,
         canister_state_bits.instructions_executed,
         LoadMetrics::new(
             canister_state_bits.ingress_messages_executed,
@@ -828,6 +829,7 @@ pub fn load_canister_state(
             canister_state_bits.http_outcalls_executed,
             canister_state_bits.heartbeats_and_global_timers_executed,
         ),
+        canister_state_bits.connection_metrics,
     );
 
     let starting_time = Instant::now();

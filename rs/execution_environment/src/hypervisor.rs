@@ -1,11 +1,16 @@
 use ic_canister_sandbox_backend_lib::replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
 use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
-use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
+use ic_cycles_account_manager::{
+    CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
+};
 use ic_embedders::{
     CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
     WasmtimeEmbedder,
-    wasm_executor::{CreatedExecutionState, WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
+    wasm_executor::{
+        CreatedExecutionState, PausedWasmExecution, WasmExecutionResult, WasmExecutor,
+        WasmExecutorImpl,
+    },
     wasm_utils::decoding::decoded_wasm_size,
     wasmtime_embedder::system_api::{
         ApiType, ExecutionParameters, sandbox_safe_system_state::SandboxSafeSystemState,
@@ -21,12 +26,12 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{binary_buckets_with_zero, decimal_buckets_with_zero, linear_buckets};
 use ic_replicated_state::{
     ExecutionState, Memory, NetworkTopology, NumWasmPages, ReplicatedState, SystemState,
-    canister_state::{execution_state::WasmExecutionMode, num_bytes_try_from},
+    canister_state::num_bytes_try_from,
 };
 use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
-    CanisterId, DiskBytes, MAX_WASM_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES, NumBytes,
-    NumInstructions, SubnetId, Time, messages::RequestMetadata, methods::FuncRef,
+    CanisterId, DiskBytes, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
+    messages::RequestMetadata, methods::FuncRef,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
@@ -38,6 +43,51 @@ use crate::execution_environment::{CompilationCostHandling, RoundLimits, as_roun
 use crate::metrics::CallTreeMetrics;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use more_asserts::assert_ge;
+
+fn remove_backtrace(err: &mut HypervisorError) {
+    match err {
+        HypervisorError::Trapped { backtrace, .. }
+        | HypervisorError::CalledTrap { backtrace, .. } => *backtrace = None,
+        HypervisorError::Cleanup {
+            callback_err,
+            cleanup_err,
+        } => {
+            remove_backtrace(callback_err);
+            remove_backtrace(cleanup_err);
+        }
+        _ => {}
+    }
+}
+
+fn remove_backtrace_from_execution_result(result: WasmExecutionResult) -> WasmExecutionResult {
+    match result {
+        WasmExecutionResult::Finished(slice, mut output, changes) => {
+            if let Err(err) = &mut output.wasm_result {
+                remove_backtrace(err);
+            }
+            WasmExecutionResult::Finished(slice, output, changes)
+        }
+        WasmExecutionResult::Paused(slice, paused_execution) => WasmExecutionResult::Paused(
+            slice,
+            Box::new(BacktraceFilteringPausedWasmExecution { paused_execution }),
+        ),
+    }
+}
+
+#[derive(Debug)]
+struct BacktraceFilteringPausedWasmExecution {
+    paused_execution: Box<dyn PausedWasmExecution>,
+}
+
+impl PausedWasmExecution for BacktraceFilteringPausedWasmExecution {
+    fn resume(self: Box<Self>, execution_state: &ExecutionState) -> WasmExecutionResult {
+        remove_backtrace_from_execution_result(self.paused_execution.resume(execution_state))
+    }
+
+    fn abort(self: Box<Self>) {
+        self.paused_execution.abort();
+    }
+}
 
 #[doc(hidden)] // pub for usage in tests
 pub struct HypervisorMetrics {
@@ -227,7 +277,7 @@ impl Hypervisor {
         let compilation_cost = self.cost_to_compile_wasm_instruction * wasm_size as u64;
         if let Err(err) = wasm_size_result {
             let total_cost = self.create_execution_state_base_cost + compilation_cost;
-            round_limits.instructions -= as_round_instructions(total_cost);
+            round_limits.deduct_instructions(as_round_instructions(total_cost));
             self.compilation_cache
                 .insert_err(&canister_module, err.clone().into());
             return (total_cost, Err(err.into()));
@@ -289,7 +339,7 @@ impl Hypervisor {
                 }
                 let total_cost = self.create_execution_state_base_cost
                     + compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
-                round_limits.instructions -= as_round_instructions(total_cost);
+                round_limits.deduct_instructions(as_round_instructions(total_cost));
                 let result =
                     Self::validate_wasm_memory(&execution_state, declared_wasm_memory_size)
                         .map(|()| execution_state);
@@ -297,7 +347,7 @@ impl Hypervisor {
             }
             Err(err) => {
                 let total_cost = self.create_execution_state_base_cost + compilation_cost;
-                round_limits.instructions -= as_round_instructions(total_cost);
+                round_limits.deduct_instructions(as_round_instructions(total_cost));
                 (total_cost, Err(err))
             }
         }
@@ -311,10 +361,7 @@ impl Hypervisor {
         execution_state: &ExecutionState,
         declared_wasm_memory_size: Option<NumWasmPages>,
     ) -> HypervisorResult<()> {
-        let max_wasm_memory_size = match execution_state.wasm_execution_mode {
-            WasmExecutionMode::Wasm32 => NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
-            WasmExecutionMode::Wasm64 => NumBytes::new(MAX_WASM64_MEMORY_IN_BYTES),
-        };
+        let max_wasm_memory_size = execution_state.wasm_execution_mode.max_wasm_memory_size();
         let wasm_memory_size = execution_state.wasm_memory_usage();
         if wasm_memory_size > max_wasm_memory_size {
             return Err(HypervisorError::InvalidWasmMemory {
@@ -361,13 +408,13 @@ impl Hypervisor {
         own_subnet_id: SubnetId,
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
-        dirty_page_overhead: NumInstructions,
+        page_overhead: NumInstructions,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         temp_dir: &Path,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
-        embedder_config.dirty_page_overhead = dirty_page_overhead;
+        embedder_config.page_overhead = page_overhead;
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
             FlagStatus::Enabled => {
@@ -448,7 +495,9 @@ impl Hypervisor {
     }
 
     /// Wrapper around the standalone `execute`.
-    /// NOTE: this is public to enable integration testing.
+    ///
+    /// Only used for non-replicated executions without DTS: (composite) queries
+    /// including their callbacks and `canister_inspect_message`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn execute(
         &self,
@@ -484,6 +533,11 @@ impl Hypervisor {
                 | ApiType::CompositeRejectCallback { .. }
                 | ApiType::CompositeCleanup { .. }
         );
+        // Default to the anonymous principal for `(start)` (only API with no caller).
+        // This is safe because the caller only determines whether an error for
+        // insufficient cycles to reserve storage cycles reveals the number of
+        // missing cycles, but no storage cycles are reserved here (see below).
+        let caller = api_type.caller().unwrap_or_else(PrincipalId::new_anonymous);
         let execution_result = self.execute_dts(
             api_type,
             &execution_state,
@@ -512,6 +566,13 @@ impl Hypervisor {
             &mut system_state,
             &mut output,
             round_limits,
+            &self.cycles_account_manager,
+            subnet_cycles_config,
+            // Effectively disable storage reservation: this function only executes
+            // non-replicated messages whose state changes are discarded, so the
+            // Wasm executor does not reserve storage cycles and neither do we here.
+            &ResourceSaturation::default(),
+            caller,
             time,
             &network_topology,
             self.own_subnet_id,
@@ -571,7 +632,7 @@ impl Hypervisor {
             execution_state.wasm_execution_mode.is_wasm64(),
             subnet_cycles_config,
         );
-        let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(
+        let (compilation_result, execution_result) = Arc::clone(&self.wasm_executor).execute(
             WasmExecutionInput {
                 api_type,
                 sandbox_safe_system_state: static_system_state,
@@ -592,38 +653,20 @@ impl Hypervisor {
             );
         }
 
-        // If the caller does not have permission to view this canister's logs,
-        // then it shouldn't get a backtrace either. So in that case we remove
-        // the backtrace from the error.
-        fn remove_backtrace(err: &mut HypervisorError) {
-            match err {
-                HypervisorError::Trapped { backtrace, .. }
-                | HypervisorError::CalledTrap { backtrace, .. } => *backtrace = None,
-                HypervisorError::Cleanup {
-                    callback_err,
-                    cleanup_err,
-                } => {
-                    remove_backtrace(callback_err);
-                    remove_backtrace(cleanup_err);
-                }
-                _ => {}
-            }
+        // Apply the caller's log visibility permission to errors even when
+        // execution pauses and finishes in a later slice.
+        if caller.is_some_and(|caller| {
+            check_log_visibility_permission(
+                &caller,
+                &system_state.log_visibility,
+                &system_state.controllers,
+            )
+            .is_err()
+        }) {
+            remove_backtrace_from_execution_result(execution_result)
+        } else {
+            execution_result
         }
-        if let WasmExecutionResult::Finished(_, result, _) = &mut execution_result {
-            // If execution fails, remove the backtrace when the caller is not allowed to see logs.
-            if let (Some(caller), Err(err)) = (caller, &mut result.wasm_result)
-                && check_log_visibility_permission(
-                    &caller,
-                    &system_state.log_visibility,
-                    &system_state.controllers,
-                )
-                .is_err()
-            {
-                remove_backtrace(err);
-            }
-        }
-
-        execution_result
     }
 
     pub(crate) fn clear_compilation_cache_for_testing(&self) {
@@ -646,3 +689,6 @@ impl Hypervisor {
         &self.metrics
     }
 }
+
+#[cfg(test)]
+mod tests;

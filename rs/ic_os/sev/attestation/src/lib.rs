@@ -12,6 +12,14 @@ mod e2e_tests;
 pub use proto_gen::*;
 pub use verification_error::Detail as VerificationErrorDetail;
 
+/// Length in bytes of an SEV-SNP launch measurement.
+///
+/// The launch measurement is a SHA-384 digest (48 bytes) of how the guest VM was launched
+/// (firmware, kernel, initrd, kernel command line, ...) and is reported in the `MEASUREMENT` field
+/// of the attestation report, see the "SEV Secure Nested Paging Firmware ABI Specification"
+/// (<https://www.amd.com/content/dam/amd/en/documents/developer/56860.pdf>).
+pub const LAUNCH_MEASUREMENT_LEN: usize = 48;
+
 impl VerificationError {
     pub fn internal(err: impl Display) -> Self {
         VerificationErrorDetail::Internal(VerificationErrorDescription {

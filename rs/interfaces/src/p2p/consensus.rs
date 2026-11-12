@@ -52,7 +52,7 @@ pub struct ArtifactTransmits<T: IdentifiableArtifact> {
     /// The list of replication transmits returned by the client. Mutations are applied in order by P2P-replication.
     pub transmits: Vec<ArtifactTransmit<T>>,
     /// The field instructs the polling component (the one that calls `on_state_change` + `apply_changes`)
-    /// that polling immediately can be benefitial. For example, polling consensus when the field is set to
+    /// that polling immediately can be beneficial. For example, polling consensus when the field is set to
     /// true results in lower consensus latencies.
     pub poll_immediately: bool,
 }
@@ -75,14 +75,18 @@ pub trait MutablePool<T: IdentifiableArtifact> {
 /// ValidatedPoolReader trait is the generic interface used by P2P to interact
 /// with the validated portion of an artifact pool without resulting in any transmits.
 /// Every pool needs to implement this trait.
-pub trait ValidatedPoolReader<T: IdentifiableArtifact> {
+pub trait ValidatedPoolReader<T: IdentifiableArtifact>: Send + Sync {
     /// Get a validated artifact by its identifier
     ///
-    /// #Returns:
-    /// - 'Some`: Artifact from the validated pool.
+    /// # Returns
+    /// - `Some`: Artifact from the validated pool.
     /// - `None`: Artifact does not exist in the validated pool.
     fn get(&self, id: &T::Id) -> Option<T>;
+}
 
+/// InitialBroadcastSource trait is the interface used by the artifact manager to
+/// learn which artifacts of a pool to broadcast when it starts.
+pub trait InitialBroadcastSource<T: IdentifiableArtifact> {
     /// Returns all artifacts that need to be broadcasted.
     /// This is used only whenever a node is restarted.
     fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = T> + '_>;

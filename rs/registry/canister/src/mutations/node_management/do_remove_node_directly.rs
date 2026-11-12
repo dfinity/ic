@@ -230,7 +230,7 @@ mod tests {
     };
     use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
     use ic_registry_transport::{insert, update};
-    use ic_types::ReplicaVersion;
+    use ic_test_utilities_types::ids::test_replica_version;
     use maplit::btreemap;
     use prost::Message;
     use std::str::FromStr;
@@ -287,7 +287,7 @@ mod tests {
 
         // Add API BN to registry
         let api_bn = ApiBoundaryNodeRecord {
-            version: ReplicaVersion::default().to_string(),
+            version: test_replica_version().to_string(),
         };
         registry.maybe_apply_mutation_internal(vec![insert(
             make_api_boundary_node_record_key(node_id),
@@ -306,7 +306,7 @@ mod tests {
 
         // turn first node into an API BN by adding the record to the registry
         let api_bn = ApiBoundaryNodeRecord {
-            version: ReplicaVersion::default().to_string(),
+            version: test_replica_version().to_string(),
         };
         registry.maybe_apply_mutation_internal(vec![insert(
             make_api_boundary_node_record_key(old_node_id),
@@ -367,7 +367,7 @@ mod tests {
 
         // turn first node into an API BN by adding the record to the registry
         let api_bn = ApiBoundaryNodeRecord {
-            version: ReplicaVersion::default().to_string(),
+            version: test_replica_version().to_string(),
         };
         registry.maybe_apply_mutation_internal(vec![insert(
             make_api_boundary_node_record_key(old_node_id),

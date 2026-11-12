@@ -215,7 +215,6 @@ fn split_resources_for_type_4(
     /* topology */ Topology,
 ) {
     let (memory, vcpus) = match &config.icos_settings.node_reward_type {
-        Some(val) if val == "type4.0" => (memory / 32, vcpus / 32),
         Some(val) if val == "type4.1" => (memory / 60, 2 /* Overcommit vCPUs */),
         Some(val) if val == "type4.2" => (memory / 15, 8 /* Overcommit vCPUs */),
         Some(val) if val == "type4.3" => (memory / 4, vcpus / 4),
@@ -224,7 +223,7 @@ fn split_resources_for_type_4(
     };
 
     let topology = match &config.icos_settings.node_reward_type {
-        Some(val) if val == "type4.1" || val == "type4.0" => Topology {
+        Some(val) if val == "type4.1" => Topology {
             nr_of_sockets: 1,
             nr_of_cores: vcpus,
             nr_of_threads: 1,
@@ -284,7 +283,6 @@ mod tests {
         DeterministicIpv6Config, HostOSConfig, HostOSDevSettings, HostOSSettings, ICOSSettings,
         Ipv6Config, NetworkSettings,
     };
-    use goldenfile::Mint;
     use std::env;
     use std::os::unix::prelude::MetadataExt;
     use tempfile::{NamedTempFile, tempdir};
@@ -369,6 +367,44 @@ mod tests {
         path
     }
 
+    /// Compares `actual` with the golden file `filename` in the `golden/` directory.
+    ///
+    /// If the `UPDATE_GOLDENFILES` environment variable is set to `1`, the golden file is
+    /// (re)generated from `actual` instead (resolved against `BUILD_WORKSPACE_DIRECTORY` when
+    /// running under Bazel, so that the checked-in file gets updated). This is also how a golden
+    /// file for a new test case is created in the first place. See the comment on the test
+    /// target in BUILD.bazel for the exact command.
+    fn assert_matches_goldenfile(filename: &str, actual: &str) {
+        let golden_path = goldenfiles_path().join(filename);
+
+        if env::var("UPDATE_GOLDENFILES").is_ok_and(|v| v == "1") {
+            let path = match env::var("BUILD_WORKSPACE_DIRECTORY") {
+                Ok(workspace) => PathBuf::from(workspace).join(&golden_path),
+                Err(_) => golden_path,
+            };
+            println!("Updating {}", path.display());
+            std::fs::write(&path, actual)
+                .unwrap_or_else(|e| panic!("failed to write {}: {e}", path.display()));
+            return;
+        }
+
+        let expected = std::fs::read_to_string(&golden_path).unwrap_or_else(|e| {
+            panic!(
+                "failed to read goldenfile {}: {e}\n\
+                 note: if the goldenfile does not exist yet, generate it by running the test \
+                 with `UPDATE_GOLDENFILES=1`",
+                golden_path.display()
+            )
+        });
+        assert!(
+            expected == actual,
+            "goldenfile changed: {}\n\
+             note: run with `UPDATE_GOLDENFILES=1` to update goldenfiles\n\
+             --- expected ---\n{expected}\n--- actual ---\n{actual}",
+            golden_path.display()
+        );
+    }
+
     fn test_vm_config(
         filename: &str,
         hostos_settings: HostOSSettings,
@@ -378,7 +414,6 @@ mod tests {
         available_hugepages_gib: u64,
         slot: VmSlot,
     ) {
-        let mut mint = Mint::new(goldenfiles_path());
         let mut config = create_test_hostos_config();
         config.icos_settings.enable_trusted_execution_environment =
             enable_trusted_execution_environment;
@@ -411,7 +446,7 @@ mod tests {
             &metrics,
         )
         .unwrap();
-        std::fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
+        assert_matches_goldenfile(filename, &vm_config);
     }
 
     #[test]

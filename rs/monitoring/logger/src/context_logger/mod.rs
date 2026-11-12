@@ -420,4 +420,120 @@ mod tests {
     test_log_macro!(test_warn, warn, Warning);
     test_log_macro!(test_error, error, Error);
     test_log_macro!(test_crit, crit, Critical);
+
+    /// Check that every form of every macro also accepts a trailing comma.
+    ///
+    /// These are purely compile-time checks of the macro arms.
+    macro_rules! test_trailing_commas {
+        ($name:ident, $log_macro:ident) => {
+            #[test]
+            fn $name() {
+                let inner_logger = DisabledLogger;
+                let logger = ContextLogger::<TestContext, DisabledLogger>::new(inner_logger);
+
+                $log_macro!(logger,);
+                $log_macro!(logger, "message",);
+                $log_macro!(logger, "{} {}", 1, 2,);
+                $log_macro!(logger; sub_context1.field_u64 => 12_u64,);
+                $log_macro!(logger, "message"; sub_context1.field_u64 => 12_u64,);
+                $log_macro!(logger, "{} {}", 1, 2; sub_context1.field_u64 => 12_u64,);
+            }
+        };
+    }
+
+    test_trailing_commas!(test_trace_trailing_commas, trace);
+    test_trailing_commas!(test_debug_trailing_commas, debug);
+    test_trailing_commas!(test_info_trailing_commas, info);
+    test_trailing_commas!(test_warn_trailing_commas, warn);
+    test_trailing_commas!(test_error_trailing_commas, error);
+    test_trailing_commas!(test_crit_trailing_commas, crit);
+
+    /// Same as above, for the `every_n_seconds` forms.
+    macro_rules! test_every_n_seconds_trailing_commas {
+        ($name:ident, $log_macro:ident) => {
+            #[test]
+            fn $name() {
+                let inner_logger = DisabledLogger;
+                let logger = ContextLogger::<TestContext, DisabledLogger>::new(inner_logger);
+
+                $log_macro!(every_n_seconds => 1, logger, "message",);
+                $log_macro!(every_n_seconds => 1, logger, "{} {}", 1, 2,);
+                $log_macro!(every_n_seconds => 1, logger, "message"; sub_context1.field_u64 => 12_u64,);
+                $log_macro!(every_n_seconds => 1, logger, "{} {}", 1, 2; sub_context1.field_u64 => 12_u64,);
+            }
+        };
+    }
+
+    test_every_n_seconds_trailing_commas!(test_debug_every_n_seconds_trailing_commas, debug);
+    test_every_n_seconds_trailing_commas!(test_info_every_n_seconds_trailing_commas, info);
+    test_every_n_seconds_trailing_commas!(test_warn_every_n_seconds_trailing_commas, warn);
+
+    #[test]
+    fn test_remaining_trailing_commas() {
+        let inner_logger = DisabledLogger;
+        let logger = ContextLogger::<TestContext, DisabledLogger>::new(inner_logger);
+
+        // `error!` only has an `every_n_seconds` form without context fields.
+        error!(every_n_seconds => 1, logger, "message",);
+        error!(every_n_seconds => 1, logger, "{} {}", 1, 2,);
+
+        // `info!` and `warn!` also have an `every_n_seconds` form without a message.
+        info!(every_n_seconds => 1, logger; sub_context1.field_u64 => 12_u64,);
+        warn!(every_n_seconds => 1, logger; sub_context1.field_u64 => 12_u64,);
+
+        let logger = new_logger!(logger,);
+        let logger = new_logger!(logger; sub_context1.field_u64 => 12_u64,);
+
+        log!(logger, slog::Level::Info, "message",);
+        log!(logger, slog::Level::Info, "{} {}", 1, 2,);
+        log!(logger, slog::Level::Info; sub_context1.field_u64 => 12_u64,);
+        log!(logger, slog::Level::Info, "message"; sub_context1.field_u64 => 12_u64,);
+        log!(logger, slog::Level::Info, "{} {}", 1, 2; sub_context1.field_u64 => 12_u64,);
+
+        let mut context = TestContext::default();
+        update_context!(context; sub_context1.field_u64 => 12_u64,);
+        let _ = log_metadata!(slog::Level::Info,);
+    }
+
+    /// `fatal!` always panics, so each of its forms needs its own test.
+    macro_rules! fatal_test_logger {
+        () => {
+            ContextLogger::<TestContext, DisabledLogger>::new(DisabledLogger)
+        };
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_fatal_logger_trailing_comma() {
+        let logger = fatal_test_logger!();
+        fatal!(logger,);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_fatal_message_trailing_comma() {
+        let logger = fatal_test_logger!();
+        fatal!(logger, "message",);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_fatal_args_trailing_comma() {
+        let logger = fatal_test_logger!();
+        fatal!(logger, "{} {}", 1, 2,);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_fatal_context_trailing_comma() {
+        let logger = fatal_test_logger!();
+        fatal!(logger; sub_context1.field_u64 => 12_u64,);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_fatal_message_and_context_trailing_comma() {
+        let logger = fatal_test_logger!();
+        fatal!(logger, "message"; sub_context1.field_u64 => 12_u64,);
+    }
 }

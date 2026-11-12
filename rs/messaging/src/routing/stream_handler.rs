@@ -492,7 +492,7 @@ impl StreamHandlerImpl {
     /// message of (an earlier state of) the remote stream).
     ///
     /// For received `CertifiedStreamSlice` _s_:
-    ///  * remove all outgoing signals at i <=_s.begin()_
+    ///  * remove all outgoing signals at i < _s.begin()_
     ///
     /// Panics if the outgoing `Signals` do not left overlap or touch the
     /// `[stream_slice.header.begin, stream_slice.messages.end)` range; or
@@ -504,12 +504,6 @@ impl StreamHandlerImpl {
         stream_slice: &StreamSlice,
     ) {
         assert_valid_signals(
-            stream.signals_end(),
-            stream.reject_signals(),
-            StreamComponent::SignalsTo(remote_subnet),
-        );
-        assert_valid_signals_begin(
-            stream.signals_begin(),
             stream.signals_end(),
             stream.reject_signals(),
             StreamComponent::SignalsTo(remote_subnet),
@@ -682,7 +676,15 @@ impl StreamHandlerImpl {
                 #[cfg(debug_assertions)]
                 let (balance_before, msg_cycles, reject_signals_before) = (
                     state.balance_with_messages(),
-                    msg.cycles(),
+                    // An accepted message is expected to add its cycles to the subnet
+                    // balance. Cycles attached to messages crossing an engine boundary are
+                    // not added (see `induct_message`), so an accepted message crossing an
+                    // engine boundary leaves the subnet balance unchanged.
+                    if self.is_at_engine_boundary(remote_subnet_id, &state) {
+                        Cycles::zero()
+                    } else {
+                        msg.cycles()
+                    },
                     stream.reject_signals().len(),
                 );
 
@@ -753,21 +755,16 @@ impl StreamHandlerImpl {
         //   * Best-effort requests without cycles are inducted normally.
         //   * Best-effort responses without cycles are inducted normally.
         //   * Responses that should not exist (guaranteed-response, or carrying cycles) are
-        //     dropped and a critical error is raised; any cycles are accounted as lost.
-        //   * `Refund` messages are dropped and a critical error is raised; their cycles
-        //     are accounted as lost.
+        //     dropped (best-effort) or stripped of their cycles (guaranteed-response) and a
+        //     critical error is raised.
+        //   * `Refund` messages are dropped and a critical error is raised.
         // Loopback (own-subnet) messages are excluded: an engine's own messages are always
         // inducted normally.
-        let remote_is_engine = state
-            .metadata
-            .network_topology
-            .subnets()
-            .get(&remote_subnet_id)
-            .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
-        let own_is_engine = state.metadata.own_subnet_type == SubnetType::CloudEngine;
-        // At an engine boundary iff this is a cross-subnet message and either side is an engine.
-        let is_at_engine_boundary =
-            remote_subnet_id != self.subnet_id && (own_is_engine || remote_is_engine);
+        //
+        // No cycles are allowed to be attached to messages crossing an engine boundary, so
+        // any such cycles are illegitimate: if such a message is dropped (or its cycles are
+        // stripped), its cycles are not accounted for as lost.
+        let is_at_engine_boundary = self.is_at_engine_boundary(remote_subnet_id, state);
 
         let (mut msg, msg_type) = match msg {
             StreamMessage::Request(req) => {
@@ -791,10 +788,6 @@ impl StreamHandlerImpl {
                         LABEL_VALUE_TYPE_REFUND,
                         LABEL_VALUE_ENGINE_NOT_ALLOWED,
                     );
-                    state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-                        refund.amount(),
-                        own_cost_schedule,
-                    ));
                     stream.push_accept_signal();
                     return;
                 }
@@ -841,7 +834,7 @@ impl StreamHandlerImpl {
                         // come from a buggy or malicious peer, so raise a critical error. Any
                         // attached cycles are stripped here, before induction, so that none
                         // cross the boundary -- not even as anonymous refunds credited while
-                        // inducting; the stripped cycles are lost.
+                        // inducting; the stripped cycles are not accounted for as lost.
                         RequestOrResponse::Response(rep)
                             if rep.deadline == NO_DEADLINE || rep.refund > Cycles::zero() =>
                         {
@@ -853,11 +846,6 @@ impl StreamHandlerImpl {
                                 rep,
                             );
                             self.metrics.critical_error_engine_message.inc();
-                            if rep.refund > Cycles::zero() {
-                                state.observe_lost_cycles_due_to_dropped_messages(
-                                    CompoundCycles::new(rep.refund, own_cost_schedule),
-                                );
-                            }
                             if rep.deadline != NO_DEADLINE {
                                 // Best-effort illegal response: drop it. The caller will time
                                 // out on its own, so there is no need to deliver it.
@@ -950,11 +938,13 @@ impl StreamHandlerImpl {
                 self.observe_inducted_message_status(msg_type, LABEL_VALUE_SENDER_SUBNET_MISMATCH);
                 self.metrics.critical_error_sender_subnet_mismatch.inc();
                 stream.push_accept_signal();
-                // Cycles are lost.
-                state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-                    rep.refund,
-                    own_cost_schedule,
-                ));
+                // Cycles are only accounted for as lost if not at an engine boundary.
+                if !is_at_engine_boundary {
+                    state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                        rep.refund,
+                        own_cost_schedule,
+                    ));
+                }
             }
         }
     }
@@ -1171,6 +1161,20 @@ impl StreamHandlerImpl {
                 stream.push_reject_signal(RejectReason::CanisterMigrating);
             }
         }
+    }
+
+    /// Returns `true` iff messages from `remote_subnet_id` cross an engine boundary,
+    /// i.e. iff `remote_subnet_id` is not this subnet and either this subnet or
+    /// `remote_subnet_id` is a CloudEngine subnet.
+    fn is_at_engine_boundary(&self, remote_subnet_id: SubnetId, state: &ReplicatedState) -> bool {
+        let remote_is_engine = state
+            .metadata
+            .network_topology
+            .subnets()
+            .get(&remote_subnet_id)
+            .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
+        let own_is_engine = state.metadata.own_subnet_type == SubnetType::CloudEngine;
+        remote_subnet_id != self.subnet_id && (own_is_engine || remote_is_engine)
     }
 
     /// Checks whether `actual_subnet_id` is a valid host subnet for `msg.sender()`
@@ -1401,25 +1405,6 @@ fn assert_valid_signals_for_messages(
         messages_begin <= signals_end && signals_end <= messages_end,
         "Invalid {stream_component}: signals_end {signals_end}, messages [{messages_begin}, {messages_end})",
     );
-}
-
-fn assert_valid_signals_begin(
-    signals_begin: StreamIndex,
-    signals_end: StreamIndex,
-    reject_signals: &VecDeque<RejectSignal>,
-    stream_component: StreamComponent,
-) {
-    assert!(
-        signals_begin <= signals_end,
-        "Invalid {stream_component}: signals_begin {signals_begin} after signals_end {signals_end}"
-    );
-    if let Some(first_reject_signal) = reject_signals.front() {
-        assert!(
-            signals_begin <= first_reject_signal.index,
-            "Invalid {stream_component}: first reject signal {} before signals_begin {signals_begin}",
-            first_reject_signal.index
-        );
-    }
 }
 
 /// Ensures that the given slice messages (if non-empty) begin where the reverse

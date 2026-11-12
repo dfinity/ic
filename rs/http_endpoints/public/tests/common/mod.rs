@@ -7,12 +7,16 @@ use hyper_util::rt::TokioIo;
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
 use ic_canonical_state_tree_hash::lazy_tree::materialize::materialize_partial;
+use ic_certification_test_utils::{
+    CertificateBuilder, CertificateData, create_certificate_labeled_tree,
+};
 use ic_config::http_handler::Config;
 use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_crypto_tree_hash::{Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness};
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_http_endpoints_public::{query, start_server};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
@@ -41,14 +45,18 @@ use ic_registry_keys::{
     make_crypto_threshold_signing_pubkey_key, make_provisional_whitelist_record_key,
     make_subnet_record_key,
 };
-use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
+use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterQueues, NetworkTopology, RefundPool, ReplicatedState, SystemMetadata,
+    metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
 };
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{
+    canister_test_id, node_test_id, subnet_test_id, test_platform_version,
+};
 use ic_types::{
-    CanisterId, CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
+    CanisterId, CryptoHashOfPartialState, Height, NumBytes, PlatformVersion, PrincipalId,
+    RegistryVersion, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     batch::RawQueryStats,
     consensus::certification::{Certification, CertificationContent},
@@ -60,7 +68,7 @@ use ic_types::{
         },
     },
     malicious_flags::MaliciousFlags,
-    messages::{CertificateDelegation, MessageId, SignedIngress},
+    messages::{Blob, CertificateDelegation, MessageId, SignedIngress},
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
 };
@@ -107,9 +115,12 @@ impl UpdateEndpoint {
         }
     }
 
+    /// A message to `canister_test_id(0)`, which the default [`DelegatedSubnet`] hosts, or to the
+    /// management canister for the subnet endpoint.
     pub fn default_ingress_message(&self) -> ic_http_endpoints_test_agent::IngressMessage {
         match self {
-            UpdateEndpoint::Canister(_) => ic_http_endpoints_test_agent::IngressMessage::default(),
+            UpdateEndpoint::Canister(_) => ic_http_endpoints_test_agent::IngressMessage::default()
+                .with_canister_id(canister_test_id(0).get(), canister_test_id(0).get()),
             UpdateEndpoint::Subnet(_) => ic_http_endpoints_test_agent::IngressMessage::default()
                 .with_canister_id(CanisterId::ic_00().get(), CanisterId::ic_00().get())
                 .with_method_name("create_canister".to_string()),
@@ -192,7 +203,7 @@ pub fn default_read_certified_state(
     let mht = hash_tree.witness::<MixedHashTree>(&partial_tree).unwrap();
     let cert = Certification {
         height,
-        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: Signed {
             signature: ThresholdSignature {
                 signer: NiDkgId {
@@ -244,6 +255,126 @@ pub fn default_certified_state_reader(
     )))
 }
 
+/// The threshold public key of the subnet under test, `subnet_test_id(1)`, as the registry
+/// records it (see [`basic_registry_client`]).
+fn subnet_public_key_proto() -> PublicKeyProto {
+    PublicKeyProto {
+        algorithm: AlgorithmIdProto::ThresBls12381 as i32,
+        key_value: [42; ThresholdSigPublicKey::SIZE].to_vec(),
+        version: 0,
+        proof_data: None,
+        timestamp: Some(42),
+    }
+}
+
+/// The subnet under test, as an NNS delegation certifies it: its threshold public key and the
+/// canister ranges which the routing table assigns to it. The endpoints serve a delegation only if
+/// their certified state records the same public key and canister ranges (see [`Self::record_in`]).
+#[derive(Clone, Debug)]
+pub struct DelegatedSubnet {
+    subnet_id: SubnetId,
+    public_key: ThresholdSigPublicKey,
+    routing_table: RoutingTable,
+}
+
+impl Default for DelegatedSubnet {
+    fn default() -> Self {
+        let subnet_id = subnet_test_id(1);
+
+        let mut routing_table = RoutingTable::new();
+        routing_table
+            .insert(
+                CanisterIdRange {
+                    start: canister_test_id(0),
+                    end: canister_test_id(10),
+                },
+                subnet_id,
+            )
+            .expect("The routing table should be well-formed.");
+
+        Self {
+            subnet_id,
+            public_key: ThresholdSigPublicKey::try_from(subnet_public_key_proto())
+                .expect("The registry should record a valid threshold public key."),
+            routing_table,
+        }
+    }
+}
+
+impl DelegatedSubnet {
+    /// Replaces the threshold public key of the subnet.
+    pub fn with_public_key(mut self, public_key: ThresholdSigPublicKey) -> Self {
+        self.public_key = public_key;
+        self
+    }
+
+    /// Migrates `canister_id` to another subnet.
+    pub fn with_canister_migrated(mut self, canister_id: CanisterId) -> Self {
+        assert!(
+            self.routing_table
+                .lookup_entry(canister_id)
+                .map(|(_, subnet)| subnet == self.subnet_id)
+                .unwrap_or(false),
+            "The canister to migrate must be assigned to the subnet under test."
+        );
+        assert_ne!(
+            self.subnet_id,
+            subnet_test_id(999),
+            "The subnet under test should not be the target of a migration."
+        );
+        self.routing_table
+            .assign_canister(canister_id, subnet_test_id(999));
+        self
+    }
+
+    /// Builds an NNS delegation certifying the public key and the canister ranges of the subnet,
+    /// the latter under both formats (`tree` and `flat`).
+    pub fn nns_delegation(&self) -> CertificateDelegation {
+        const MAX_RANGES_PER_ROUTING_TABLE_LEAF: usize = 5;
+
+        let canister_ranges: Vec<(CanisterId, CanisterId)> = self
+            .routing_table
+            .ranges(self.subnet_id)
+            .iter()
+            .map(|range| (range.start, range.end))
+            .collect();
+        let certificate_tree = create_certificate_labeled_tree(
+            &canister_ranges,
+            self.subnet_id,
+            self.public_key,
+            MAX_RANGES_PER_ROUTING_TABLE_LEAF,
+            /*time=*/ 42,
+            /*with_tree_canister_ranges=*/ true,
+            /*with_flat_canister_ranges=*/ true,
+        );
+        // The delegation is signed with a random root key, which the endpoints don't verify.
+        let (_certificate, _root_public_key, cbor) =
+            CertificateBuilder::new(CertificateData::CustomTree(certificate_tree)).build();
+
+        CertificateDelegation {
+            subnet_id: Blob(self.subnet_id.get().to_vec()),
+            certificate: Blob(cbor),
+        }
+    }
+
+    /// Records the public key of the subnet and the routing table in the network topology of
+    /// `state`.
+    pub fn record_in(&self, state: &mut ReplicatedState) {
+        let public_key = threshold_sig_public_key_to_der(self.public_key)
+            .expect("The public key should be DER-encodable.");
+        state.metadata.modify_network_topology(|topology| {
+            topology
+                .subnets_mut()
+                .entry(self.subnet_id)
+                .or_default()
+                .public_key = public_key;
+            topology.set_routing_table(self.routing_table.clone());
+        });
+    }
+}
+
+/// The state of the subnet under test at height 1. It records the default [`DelegatedSubnet`], so
+/// it is consistent with the NNS delegation which the latter certifies.
 pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
     let mut metadata = SystemMetadata::new(subnet_test_id(1), SubnetType::Application);
 
@@ -256,23 +387,22 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
         None,
         None,
         None,
-        None,
         Default::default(),
     );
 
     metadata.network_topology = Arc::new(network_topology);
     metadata.batch_time = UNIX_EPOCH;
 
-    Labeled::new(
-        Height::from(1),
-        Arc::new(ReplicatedState::new_from_checkpoint(
-            BTreeMap::new(),
-            metadata,
-            CanisterQueues::default(),
-            RefundPool::default(),
-            RawQueryStats::default(),
-        )),
-    )
+    let mut state = ReplicatedState::new_from_checkpoint(
+        BTreeMap::new(),
+        metadata,
+        CanisterQueues::default(),
+        RefundPool::default(),
+        RawQueryStats::default(),
+    );
+    DelegatedSubnet::default().record_in(&mut state);
+
+    Labeled::new(Height::from(1), Arc::new(state))
 }
 
 /// Basic state manager with one subnet (nns) at height 1.
@@ -306,6 +436,34 @@ pub fn basic_state_manager_mock() -> (MockStateManager, Arc<Mutex<Labeled<Arc<Re
     (mock_state_manager, state)
 }
 
+/// Applies `modify` to the state which a [`basic_state_manager_mock`] serves.
+pub fn modify_latest_state(
+    latest_state: &Mutex<Labeled<Arc<ReplicatedState>>>,
+    modify: impl FnOnce(&mut ReplicatedState),
+) {
+    let mut latest_state = latest_state.lock().unwrap();
+    let height = latest_state.height();
+    let mut state = (**latest_state.get_ref()).clone();
+    modify(&mut state);
+    *latest_state = Labeled::new(height, Arc::new(state));
+}
+
+/// Records `message` as completed in the state which a [`basic_state_manager_mock`] serves, as
+/// the replica does once it executed the message.
+pub fn complete_message_in_latest_state(
+    latest_state: &Mutex<Labeled<Arc<ReplicatedState>>>,
+    message: &ic_http_endpoints_test_agent::IngressMessage,
+) {
+    modify_latest_state(latest_state, |state| {
+        state.set_ingress_status(
+            message.message_id(),
+            message.known_ingress_status(),
+            NumBytes::new(4 << 30), // INGRESS_HISTORY_MEMORY_CAPACITY
+            |_| {},
+        );
+    });
+}
+
 // Basic mock consensus pool cache at height 1.
 fn basic_consensus_pool_cache() -> MockConsensusPoolCache {
     let mut mock_consensus_cache = MockConsensusPoolCache::new();
@@ -337,15 +495,8 @@ pub fn basic_registry_client() -> MockRegistryClient {
                 && version == &RegistryVersion::from(1)
         })
         .return_const({
-            let pk = PublicKeyProto {
-                algorithm: AlgorithmIdProto::ThresBls12381 as i32,
-                key_value: [42; ThresholdSigPublicKey::SIZE].to_vec(),
-                version: 0,
-                proof_data: None,
-                timestamp: Some(42),
-            };
             let mut v = Vec::new();
-            pk.encode(&mut v).unwrap();
+            subnet_public_key_proto().encode(&mut v).unwrap();
             Ok(Some(v))
         });
     // Needed for call requests.
@@ -434,6 +585,13 @@ pub struct HttpEndpointHandles {
     pub query_execution: QueryExecutionHandle,
     pub terminal_state_ingress_messages: Sender<(MessageId, Height)>,
     pub certified_height_watcher: watch::Sender<Height>,
+    pub metrics: MetricsRegistry,
+    pub nns_delegation_watcher: watch::Sender<Option<NNSDelegationBuilder>>,
+}
+
+pub fn nns_delegation_builder(delegation: CertificateDelegation) -> NNSDelegationBuilder {
+    NNSDelegationBuilder::try_new(delegation.certificate, subnet_test_id(1), &no_op_logger())
+        .expect("The NNS delegation should be well-formed.")
 }
 
 pub struct HttpEndpointBuilder {
@@ -448,6 +606,8 @@ pub struct HttpEndpointBuilder {
     certified_height: Option<Height>,
     ingress_pool_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_channel_capacity: usize,
+    platform_version: Option<PlatformVersion>,
+    malicious_flags: MaliciousFlags,
 }
 
 impl HttpEndpointBuilder {
@@ -464,7 +624,14 @@ impl HttpEndpointBuilder {
             tls_config: Arc::new(MockTlsConfig::new()),
             certified_height: None,
             ingress_channel_capacity: MAX_P2P_IO_CHANNEL_SIZE,
+            platform_version: None,
+            malicious_flags: MaliciousFlags::default(),
         }
+    }
+
+    pub fn with_platform_version(mut self, platform_version: PlatformVersion) -> Self {
+        self.platform_version = Some(platform_version);
+        self
     }
 
     pub fn with_state_manager(
@@ -521,6 +688,11 @@ impl HttpEndpointBuilder {
         self
     }
 
+    pub fn with_malicious_flags(mut self, malicious_flags: MaliciousFlags) -> Self {
+        self.malicious_flags = malicious_flags;
+        self
+    }
+
     pub fn run(self) -> HttpEndpointHandles {
         let metrics = MetricsRegistry::new();
         let log = no_op_logger();
@@ -533,16 +705,18 @@ impl HttpEndpointBuilder {
         let (query_exe, query_exe_handler) = setup_query_execution_mock();
         let (certified_height_watcher_tx, certified_height_watcher_rx) =
             watch::channel(self.certified_height.unwrap_or_default());
-        let builder = self.delegation_from_nns.map(|delegation| {
-            NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &log).unwrap()
-        });
-        let (_nns_delegation_watcher_tx, nns_delegation_watcher_rx) = watch::channel(builder);
+        let builder = self.delegation_from_nns.map(nns_delegation_builder);
+        let (nns_delegation_watcher_tx, nns_delegation_watcher_rx) = watch::channel(None);
         let nns_delegation_reader =
             NNSDelegationReader::new(nns_delegation_watcher_rx, log.clone());
+        nns_delegation_watcher_tx
+            .send(builder)
+            .expect("The NNS delegation receiver should be alive.");
 
         let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
 
         let node_id = node_test_id(1);
+        let platform_version = self.platform_version.unwrap_or_else(test_platform_version);
 
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
@@ -564,11 +738,12 @@ impl HttpEndpointBuilder {
             sig_verifier,
             node_id,
             subnet_id,
+            platform_version,
             nns_subnet_id,
             log,
             self.consensus_cache,
             SubnetType::Application,
-            MaliciousFlags::default(),
+            self.malicious_flags,
             nns_delegation_reader,
             self.pprof_collector,
             ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
@@ -583,6 +758,8 @@ impl HttpEndpointBuilder {
             query_execution: query_exe_handler,
             terminal_state_ingress_messages: terminal_state_ingress_messages_tx,
             certified_height_watcher: certified_height_watcher_tx,
+            metrics,
+            nns_delegation_watcher: nns_delegation_watcher_tx,
         }
     }
 }

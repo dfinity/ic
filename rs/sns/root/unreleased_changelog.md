@@ -9,11 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
-- Support for `snapshot_visibility` in `ManageDappCanisterSettingsRequest`.
-
-- Support for upgrade options. The one of greatest interest is
-  wasm_memory_persistence, which is needed for modern Motoko canisters that use
-  Enhanced Orthogonal Persistence.
+* New methods `take_canister_snapshot` and `load_canister_snapshot`. Like
+  `change_canister`, they can only be called by SNS Governance. They only
+  accept registered dapp canisters as targets. Governance will use them for
+  canister snapshot proposals (e.g. to roll a dapp canister back to how it was
+  before an upgrade).
 
 ## Changed
 

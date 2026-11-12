@@ -3,12 +3,11 @@ use crate::{
     complaints::{IDkgComplaintHandlerImpl, IDkgTranscriptLoader, TranscriptLoadStatus},
     pre_signer::{IDkgPreSignerImpl, IDkgTranscriptBuilder},
     signer::ThresholdSignerImpl,
-    utils::build_thread_pool,
 };
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
-use ic_consensus_utils::crypto::ConsensusCrypto;
+use ic_consensus_utils::{build_thread_pool, crypto::ConsensusCrypto};
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgParticipants, IntoBuilder,

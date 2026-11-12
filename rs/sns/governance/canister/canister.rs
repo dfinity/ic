@@ -6,7 +6,7 @@ use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
 use ic_cdk::{
     api::{canister_self, msg_caller},
-    call::{Call, Error as IcCdkCallError, RejectCode},
+    call::{Call, Error as IcCdkCallError},
     init, post_upgrade, pre_upgrade, println, query, update,
 };
 use ic_cdk_timers::TimerId;
@@ -126,32 +126,8 @@ impl CanisterEnv {
 
 /// Translates a failed call into the `(error code, message)` pair that
 /// [`Environment::call_canister`] reports to its callers.
-///
-/// The match is deliberately exhaustive (rather than using a catch-all arm) so
-/// that a new [`IcCdkCallError`] variant forces us to revisit this mapping
-/// instead of silently classifying it as [`RejectCode::SysTransient`].
 fn into_reject_code_and_message(err: IcCdkCallError) -> (Option<i32>, String) {
-    let (code, message) = match err {
-        IcCdkCallError::CallRejected(rejected) => (
-            rejected.raw_reject_code() as i32,
-            rejected.reject_message().to_string(),
-        ),
-
-        // A response that cannot be decoded means the callee misbehaved.
-        IcCdkCallError::CandidDecodeFailed(err) => {
-            (RejectCode::CanisterError as i32, err.to_string())
-        }
-
-        // Neither of these ever left this canister, so the call may well succeed
-        // if retried.
-        IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
-            (RejectCode::SysTransient as i32, err.to_string())
-        }
-        IcCdkCallError::CallPerformFailed(err) => {
-            (RejectCode::SysTransient as i32, err.to_string())
-        }
-    };
-
+    let (code, message) = ic_nervous_system_runtime::into_reject_code_and_message(err);
     (Some(code), message)
 }
 

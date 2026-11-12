@@ -7,8 +7,9 @@ pub mod deploy;
 
 pub use deploy::SshAuthMethod;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use config_types::VmSlot;
+use configparser::ini::{Ini, IniDefault};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{DeploymentEnvironment, MacAddr6Ext};
 use macaddr::MacAddr6;
@@ -201,37 +202,83 @@ impl LoginInfo {
 }
 
 pub fn parse_login_info_from_ini(data: &str) -> Result<LoginInfo> {
-    let ini = ini::Ini::load_from_str(data)?;
-    let host_section = ini
-        .section(Some("host"))
-        .context("No [host] section in INI")?;
-    let host = host_section
-        .get("ipmi_addr")
-        .context("No ipmi_addr in [host] section")?;
-    let username = host_section
-        .get("username")
-        .context("No username in [host] section")?;
-    let password = host_section
-        .get("password")
-        .context("No password in [host] section")?;
-    let mgmt_mac = host_section
-        .get("mgmt_mac")
-        .context("No mgmt_mac in [host] section")?
-        .parse::<MacAddr6>()
-        .context("Failed to parse mgmt_mac")?;
-    let addr_prefix = host_section
-        .get("addr_prefix")
-        .context("No addr_prefix in [host] section")?;
-    let chip_id_hex = host_section
-        .get("chip_id_hex")
-        .context("No chip_id_hex in [host] section")?;
+    let mut defaults = IniDefault::default();
+    defaults.case_sensitive = true;
+    // Only `=` separates keys from values (the default also accepts `:`, which appears in the
+    // MAC address and IPv6 prefix values).
+    defaults.delimiters = vec!['='];
+    let mut ini = Ini::new_from_defaults(defaults);
+    ini.read(data.to_string())
+        .map_err(|err| anyhow!("Failed to parse INI: {err}"))?;
+    if !ini.sections().iter().any(|section| section == "host") {
+        bail!("No [host] section in INI");
+    }
+    let get = |key: &str| {
+        ini.get("host", key)
+            .with_context(|| format!("No {key} in [host] section"))
+    };
 
     Ok(LoginInfo {
-        host: host.to_string(),
-        username: username.to_string(),
-        password: password.to_string(),
-        mgmt_mac,
-        addr_prefix: addr_prefix.to_string(),
-        chip_id_hex: chip_id_hex.to_string(),
+        host: get("ipmi_addr")?,
+        username: get("username")?,
+        password: get("password")?,
+        mgmt_mac: get("mgmt_mac")?
+            .parse::<MacAddr6>()
+            .context("Failed to parse mgmt_mac")?,
+        addr_prefix: get("addr_prefix")?,
+        chip_id_hex: get("chip_id_hex")?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const LOGIN_INI: &str = "\
+# IPMI login information.
+[host]
+ipmi_addr = 10.0.0.1
+username = admin
+; passwords may contain '=' and ':'
+password = s3cr=t:pw
+mgmt_mac = 00:11:22:33:44:55
+addr_prefix = 2a00:fb01:400:44
+chip_id_hex = deadbeef
+";
+
+    #[test]
+    fn parse_login_info_from_ini_reads_the_host_section() {
+        let info = parse_login_info_from_ini(LOGIN_INI).unwrap();
+        assert_eq!(info.host, "10.0.0.1");
+        assert_eq!(info.username, "admin");
+        assert_eq!(info.password, "s3cr=t:pw");
+        assert_eq!(
+            info.mgmt_mac,
+            "00:11:22:33:44:55".parse::<MacAddr6>().unwrap()
+        );
+        assert_eq!(info.addr_prefix, "2a00:fb01:400:44");
+        assert_eq!(info.chip_id_hex, "deadbeef");
+    }
+
+    #[test]
+    fn parse_login_info_from_ini_accepts_crlf() {
+        let info = parse_login_info_from_ini(&LOGIN_INI.replace('\n', "\r\n")).unwrap();
+        assert_eq!(info.host, "10.0.0.1");
+    }
+
+    #[test]
+    fn parse_login_info_from_ini_reports_missing_section_and_keys() {
+        let Err(err) = parse_login_info_from_ini("ipmi_addr = 10.0.0.1\n") else {
+            panic!("expected an error for a missing [host] section");
+        };
+        assert!(err.to_string().contains("No [host] section"), "{err}");
+
+        let Err(err) = parse_login_info_from_ini("[host]\nipmi_addr = 10.0.0.1\n") else {
+            panic!("expected an error for a missing key");
+        };
+        assert!(
+            err.to_string().contains("No username in [host] section"),
+            "{err}"
+        );
+    }
 }

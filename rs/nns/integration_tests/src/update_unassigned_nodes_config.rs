@@ -13,7 +13,7 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
 use ic_registry_keys::make_unassigned_nodes_config_record_key;
-use ic_types::ReplicaVersion;
+use ic_test_utilities_types::ids::test_replica_version;
 use registry_canister::mutations::{
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
@@ -29,9 +29,8 @@ fn test_submit_update_ssh_readonly_access_for_all_unassigned_nodes() {
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
 
         // first we need to make sure that the unassigned nodes config contains an elected replica version
-        let replica_version = ReplicaVersion::default().to_string();
         let payload = DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: replica_version.clone(),
+            elected_replica_version: test_replica_version().to_string(),
         };
 
         let proposal_id: ProposalId = submit_external_update_proposal(
@@ -143,10 +142,8 @@ fn test_submit_deploy_guestos_to_all_unassigned_nodes_proposal() {
             .build();
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
 
-        let replica_version = ReplicaVersion::default().to_string();
-
         let payload = DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: replica_version.clone(),
+            elected_replica_version: test_replica_version().to_string(),
         };
 
         let proposal_id: ProposalId = submit_external_update_proposal(
@@ -179,7 +176,10 @@ fn test_submit_deploy_guestos_to_all_unassigned_nodes_proposal() {
         )
         .await;
 
-        assert_eq!(unassigned_nodes_config.replica_version, replica_version);
+        assert_eq!(
+            unassigned_nodes_config.replica_version,
+            test_replica_version().as_ref()
+        );
 
         Ok(())
     })

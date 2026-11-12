@@ -86,14 +86,6 @@ impl NnsCanisters<'_> {
         maybe_canisters.unwrap_or_else(|e| panic!("At least one canister creation failed: {e}"));
         eprintln!("NNS canisters created after {:.1} s", since_start_secs());
 
-        // TODO (after deploying SNS-WASMs to mainnet) update ALL_NNS_CANISTER_IDS to the resulting
-        // SNS-WASMs canister and delete following line. We avoid that so the canister ID is not added
-        // to a whitelist before it is deployed.  But we need one more canister for our tests.
-        runtime
-            .create_canister_max_cycles_with_retries()
-            .await
-            .expect("Failed creating last canister");
-
         // Create canisters.
 
         let mut registry = Canister::new(runtime, REGISTRY_CANISTER_ID);
