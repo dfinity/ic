@@ -85,6 +85,26 @@ The root canister can set or restore controllers of registered dapp canisters.
 - **AND** unregistered canister IDs in the request cause a validation error
 - **AND** the controllers field in settings is always None (cannot be changed through this path)
 
+### Requirement: Dapp Canister Snapshots
+
+SNS Root can take and load snapshots of registered dapp canisters on behalf of SNS Governance, which uses them for canister snapshot proposals (e.g. rolling a dapp canister back to how it was before an upgrade).
+
+#### Scenario: Take a snapshot of a dapp canister
+- **WHEN** `take_canister_snapshot` is called with a `TakeCanisterSnapshotRequest` (`canister_id`, optional `replace_snapshot`)
+- **THEN** the caller must be SNS Governance, as for `change_canister`; any other caller traps
+- **AND** a target that is not a registered dapp canister (in `dapp_canister_ids`) is refused with `Err { code: null, description: "<id> is not a registered dapp canister of this SNS." }` before anything else is done; the SNS framework canisters (Root, Governance, Ledger, Index, Swap, archives) and extensions are never dapp canisters, so they are always refused
+- **AND** otherwise Root takes the snapshot through the management canister and returns `Ok { id, taken_at_timestamp, total_size }` or `Err { code, description }`
+
+#### Scenario: Load a snapshot into a dapp canister
+- **WHEN** `load_canister_snapshot` is called with a `LoadCanisterSnapshotRequest` (`canister_id`, `snapshot_id`)
+- **THEN** the same caller and target checks apply as for `take_canister_snapshot`
+- **AND** Root loads the snapshot through the management canister, replacing the canister's code and memory with the snapshot's contents, and returns `Ok {}` or `Err { code, description }`
+
+#### Scenario: Snapshot calls reply only after completion
+- **WHEN** `take_canister_snapshot` or `load_canister_snapshot` runs
+- **THEN** unlike `change_canister`, Root replies only once the operation has finished or failed, so that Governance learns the new snapshot's ID
+- **AND** this is safe only because the target can never be Governance: Root has to stop the target, and Governance cannot stop while it is waiting for this reply
+
 ### Requirement: Extension Canister Registration
 
 The root canister supports registering extension canisters that augment SNS functionality.
