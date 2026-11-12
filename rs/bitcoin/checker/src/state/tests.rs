@@ -69,10 +69,10 @@ fn test_fetch_status() {
         Some(FetchTxStatus::Fetched(_))
     ));
     let address = Address::from_script(&tx.output[0].script_pubkey, Network::Bitcoin).unwrap();
-    set_fetched_address(txid_1, 0, address.clone());
+    set_fetched_addresses(txid_1, 0, vec![address.clone()]);
     match get_fetch_status(txid_1) {
         Some(FetchTxStatus::Fetched(fetched)) => {
-            assert_eq!(fetched.input_addresses[0], Some(address))
+            assert_eq!(fetched.input_addresses[0], Some(vec![address]))
         }
         _ => {
             panic!("txid {txid_1} is not found")
@@ -153,6 +153,140 @@ fn cache_should_have_same_size() {
     cache.set_status_with(txid_0, Status::Status2, 2);
     assert_eq!(cache.status.len(), 1);
     assert_eq!(cache.created.len(), 1);
+}
+
+mod output_addresses {
+    use crate::state::output_addresses;
+    use bitcoin::{Address, Network, PublicKey, ScriptBuf, opcodes::all::*, script::Builder};
+    use std::str::FromStr;
+
+    const COMPRESSED_PUBLIC_KEY: &str =
+        "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+    const COMPRESSED_PUBLIC_KEY_P2PKH: &str = "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH";
+    const UNCOMPRESSED_PUBLIC_KEY: &str = "0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8";
+    const UNCOMPRESSED_PUBLIC_KEY_P2PKH: &str = "1EHNa6Q4Jz2uvNExL497mE43ikXhwF6kZm";
+    // There is no point on the curve with x-coordinate 0.
+    const INVALID_PUBLIC_KEY: [u8; 33] = {
+        let mut key = [0; 33];
+        key[0] = 0x02;
+        key
+    };
+
+    fn public_key(hex: &str) -> PublicKey {
+        PublicKey::from_str(hex).unwrap()
+    }
+
+    fn address(address: &str) -> Address {
+        Address::from_str(address).unwrap().assume_checked()
+    }
+
+    #[test]
+    fn should_return_standard_address() {
+        let expected = address("bc1q6xmv92ujqs2szzlpz4hhtn8dfzvpev72zv8zv7");
+
+        assert_eq!(
+            output_addresses(&expected.script_pubkey(), Network::Bitcoin),
+            vec![expected]
+        );
+    }
+
+    #[test]
+    fn should_return_p2pkh_address_of_p2pk_output() {
+        for (key, expected) in [
+            (COMPRESSED_PUBLIC_KEY, COMPRESSED_PUBLIC_KEY_P2PKH),
+            (UNCOMPRESSED_PUBLIC_KEY, UNCOMPRESSED_PUBLIC_KEY_P2PKH),
+        ] {
+            let script = ScriptBuf::new_p2pk(&public_key(key));
+            assert!(script.is_p2pk());
+            assert!(Address::from_script(&script, Network::Bitcoin).is_err());
+
+            assert_eq!(
+                output_addresses(&script, Network::Bitcoin),
+                vec![address(expected)]
+            );
+        }
+    }
+
+    #[test]
+    fn should_return_p2pkh_addresses_of_bare_multisig_output() {
+        let script = Builder::new()
+            .push_opcode(OP_PUSHNUM_1)
+            .push_key(&public_key(COMPRESSED_PUBLIC_KEY))
+            .push_key(&public_key(UNCOMPRESSED_PUBLIC_KEY))
+            .push_slice(INVALID_PUBLIC_KEY)
+            .push_opcode(OP_PUSHNUM_3)
+            .push_opcode(OP_CHECKMULTISIG)
+            .into_script();
+        assert!(script.is_multisig());
+
+        assert_eq!(
+            output_addresses(&script, Network::Bitcoin),
+            vec![
+                address(COMPRESSED_PUBLIC_KEY_P2PKH),
+                address(UNCOMPRESSED_PUBLIC_KEY_P2PKH)
+            ]
+        );
+    }
+
+    #[test]
+    fn should_return_no_address_for_script_without_public_key() {
+        let op_return = ScriptBuf::new_op_return([0xaa; 32]);
+        let invalid_p2pk = ScriptBuf::from_bytes(
+            [
+                &[OP_PUSHBYTES_33.to_u8()][..],
+                &INVALID_PUBLIC_KEY,
+                &[OP_CHECKSIG.to_u8()],
+            ]
+            .concat(),
+        );
+        let anyone_can_spend = Builder::new().push_opcode(OP_PUSHNUM_1).into_script();
+
+        for script in [op_return, invalid_p2pk, anyone_can_spend] {
+            assert_eq!(output_addresses(&script, Network::Bitcoin), vec![]);
+        }
+    }
+}
+
+#[test]
+fn should_not_require_fetching_coinbase_input() {
+    use bitcoin::{
+        Amount, OutPoint, ScriptBuf, Sequence, TxIn, TxOut, Witness, absolute::LockTime,
+        hashes::Hash, transaction::Version,
+    };
+    let input = |previous_output| TxIn {
+        previous_output,
+        script_sig: ScriptBuf::new(),
+        sequence: Sequence::MAX,
+        witness: Witness::new(),
+    };
+    let coinbase = Transaction {
+        version: Version::ONE,
+        lock_time: LockTime::ZERO,
+        input: vec![input(OutPoint::null())],
+        output: vec![TxOut {
+            value: Amount::from_sat(50_0000_0000),
+            script_pubkey: ScriptBuf::new_op_return([0; 4]),
+        }],
+    };
+    assert!(coinbase.is_coinbase());
+    let other = Transaction {
+        input: vec![
+            input(OutPoint::null()),
+            input(OutPoint::new(bitcoin::Txid::from_byte_array([1; 32]), 0)),
+        ],
+        ..coinbase.clone()
+    };
+
+    let fetched = FetchedTx::new(
+        TransactionCheckData::from_transaction(&BtcNetwork::Mainnet, coinbase).unwrap(),
+    );
+    assert!(fetched.tx.inputs[0].is_coinbase());
+    assert_eq!(fetched.input_addresses, vec![Some(vec![])]);
+
+    let fetched = FetchedTx::new(
+        TransactionCheckData::from_transaction(&BtcNetwork::Mainnet, other).unwrap(),
+    );
+    assert_eq!(fetched.input_addresses, vec![Some(vec![]), None]);
 }
 
 mod schema_upgrades {

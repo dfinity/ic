@@ -2,7 +2,7 @@ use crate::{
     BtcNetwork, CheckMode,
     providers::{Provider, parse_authorization_header_from_url},
 };
-use bitcoin::{Address, Transaction};
+use bitcoin::{Address, PublicKey, Script, Transaction, script::Instruction};
 use ic_btc_interface::Txid;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{Cell, DefaultMemoryImpl, Storable, storable::Bound};
@@ -60,13 +60,34 @@ pub struct FetchTxStatusError {
 
 /// Once the transaction data is successfully fetched, we create
 /// a list of `input_addresses` (matching the number of inputs)
-/// that is initialized as `None`. Once a corresponding input
-/// transaction is fetched (see function `check_fetched`), its
-/// input address will be computed and filled in.
+/// that is initialized as `None`, except for coinbase inputs, which
+/// do not spend any previous output and therefore have no address.
+/// Once a corresponding input transaction is fetched (see function
+/// `check_fetched`), its input addresses will be computed and filled in.
 #[derive(Clone, Debug)]
 pub struct FetchedTx {
     pub tx: TransactionCheckData,
-    pub input_addresses: Vec<Option<Address>>,
+    pub input_addresses: Vec<Option<Vec<Address>>>,
+}
+
+impl FetchedTx {
+    pub fn new(tx: TransactionCheckData) -> Self {
+        let input_addresses = tx
+            .inputs
+            .iter()
+            .map(|input| {
+                if input.is_coinbase() {
+                    Some(Vec::new())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        Self {
+            tx,
+            input_addresses,
+        }
+    }
 }
 
 /// Instead of storing the full transaction data, we only
@@ -75,7 +96,8 @@ pub struct FetchedTx {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TransactionCheckData {
     pub inputs: Vec<PreviousOutput>,
-    pub outputs: Vec<Option<Address>>,
+    /// The addresses to check for each output, see [`output_addresses`].
+    pub outputs: Vec<Vec<Address>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -84,11 +106,19 @@ pub struct PreviousOutput {
     pub vout: u32,
 }
 
+impl PreviousOutput {
+    /// A coinbase input refers to the null outpoint (all-zero txid and `vout` equal to `u32::MAX`).
+    pub fn is_coinbase(&self) -> bool {
+        self.txid == Txid::from([0; 32]) && self.vout == u32::MAX
+    }
+}
+
 impl TransactionCheckData {
     pub fn from_transaction(
         btc_network: &BtcNetwork,
         tx: Transaction,
     ) -> Result<Self, bitcoin::address::FromScriptError> {
+        let network = bitcoin::Network::from(btc_network.clone());
         let inputs = tx
             .input
             .iter()
@@ -97,20 +127,36 @@ impl TransactionCheckData {
                 vout: input.previous_output.vout,
             })
             .collect();
-        let mut outputs = Vec::new();
-        for output in tx.output.iter() {
-            // Some outputs do not have addresses. These outputs will never be
-            // inputs of other transactions, so it is okay to treat them as `None`.
-            outputs.push(
-                Address::from_script(
-                    &output.script_pubkey,
-                    bitcoin::Network::from(btc_network.clone()),
-                )
-                .ok(),
-            )
-        }
+        let outputs = tx
+            .output
+            .iter()
+            .map(|output| output_addresses(&output.script_pubkey, network))
+            .collect();
         Ok(Self { inputs, outputs })
     }
+}
+
+/// Return the addresses to check when the output with the given `script_pubkey` is spent:
+/// - If the script has a standard address (P2PKH, P2SH, or a witness program), return it.
+/// - Otherwise, return the P2PKH address of every valid public key pushed by the script,
+///   in the same (compressed or uncompressed) encoding. In particular, a P2PK output yields
+///   the P2PKH address of its public key, and a bare multisig output yields the P2PKH
+///   addresses of all its public keys.
+/// - If the script contains no valid public key (e.g. `OP_RETURN` or other non-standard
+///   scripts), return an empty list, i.e. spending such an output does not fail the check.
+pub fn output_addresses(script_pubkey: &Script, network: bitcoin::Network) -> Vec<Address> {
+    if let Ok(address) = Address::from_script(script_pubkey, network) {
+        return vec![address];
+    }
+    script_pubkey
+        .instructions()
+        .map_while(Result::ok)
+        .filter_map(|instruction| match instruction {
+            Instruction::PushBytes(bytes) => PublicKey::from_slice(bytes.as_bytes()).ok(),
+            Instruction::Op(_) => None,
+        })
+        .map(|public_key| Address::p2pkh(public_key.pubkey_hash(), network))
+        .collect()
 }
 
 // Max number of concurrent http outcalls.
@@ -221,13 +267,13 @@ pub fn clear_fetch_status(txid: Txid) {
     FETCH_TX_CACHE.with(|cache| cache.borrow_mut().clear_status(txid))
 }
 
-/// Set the address at the given `index` in the `Fetched` status of the given `txid`.
+/// Set the addresses of the input at the given `index` in the `Fetched` status of the given `txid`.
 /// Pre-condition: the status of `txid` is `Fetched`, and `index` is within bounds.
-pub fn set_fetched_address(txid: Txid, index: usize, address: Address) {
+pub fn set_fetched_addresses(txid: Txid, index: usize, addresses: Vec<Address>) {
     FETCH_TX_CACHE.with(|s| {
         s.borrow_mut().status.entry(txid).and_modify(|status| {
             if let FetchTxStatus::Fetched(fetched) = status {
-                fetched.input_addresses[index] = Some(address);
+                fetched.input_addresses[index] = Some(addresses);
             };
         });
     })
