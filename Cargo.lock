@@ -14610,7 +14610,9 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "futures",
+ "hex",
  "ic-base-types",
+ "ic-cup-explorer",
  "ic-interfaces-registry",
  "ic-protobuf",
  "ic-recovery",
@@ -14619,6 +14621,7 @@ dependencies = [
  "ic-subnet-tools",
  "ic-types",
  "prometheus-parse",
+ "prost",
  "reqwest",
  "serde",
  "serde_json",

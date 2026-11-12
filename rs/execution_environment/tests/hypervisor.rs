@@ -2449,6 +2449,52 @@ fn ic0_msg_caller_info_works_in_non_replicated_query() {
 }
 
 #[test]
+fn universal_canister_if_eq_and_if_neq() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let mut run = |payload: Vec<u8>| test.ingress(canister_id, "update", payload);
+
+    // The branch is taken iff the comparison holds.
+    let append_then = || wasm().push_bytes(b"then").reply_data_append();
+    for (data, eq_expected, neq_expected) in [(b"a", &b"then"[..], &b""[..]), (b"b", b"", b"then")]
+    {
+        let result = run(wasm()
+            .push_bytes(b"a")
+            .if_eq(data, append_then())
+            .reply()
+            .build());
+        assert_eq!(result.unwrap(), WasmResult::Reply(eq_expected.to_vec()));
+        let result = run(wasm()
+            .push_bytes(b"a")
+            .if_neq(data, append_then())
+            .reply()
+            .build());
+        assert_eq!(result.unwrap(), WasmResult::Reply(neq_expected.to_vec()));
+    }
+
+    // The branch runs on a fresh stack: values it leaves on its stack are
+    // discarded and the outer values remain. The branch also ends in a literal
+    // push, which must not trap.
+    let result = run(wasm()
+        .push_bytes(b"outer")
+        .push_bytes(b"a")
+        .if_eq(b"a", wasm().push_bytes(b"inner"))
+        .reply_data_append()
+        .reply()
+        .build());
+    assert_eq!(result.unwrap(), WasmResult::Reply(b"outer".to_vec()));
+
+    // The branch cannot pop the outer values.
+    let err = run(wasm()
+        .push_bytes(b"outer")
+        .push_bytes(b"a")
+        .if_eq(b"a", wasm().reply_data_append().reply())
+        .build())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+}
+
+#[test]
 fn ic0_msg_caller_info_works_in_inspect_message() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();

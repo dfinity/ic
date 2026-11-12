@@ -15,8 +15,8 @@ use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{
     CanisterStatusType, CreateCanisterArgs, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, RenameCanisterArgs, UninstallCodeArgs,
-    UpdateSettingsArgs,
+    ProvisionalCreateCanisterWithCyclesArgs, RenameCanisterArgs, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -323,6 +323,8 @@ impl SystemStateModifications {
                 .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::RenameCanister) => RenameCanisterArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
+            Ok(Ic00Method::TakeCanisterSnapshot) => TakeCanisterSnapshotArgs::decode(payload)
+                .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::CanisterStatus)
             | Ok(Ic00Method::CanisterInfo)
@@ -357,7 +359,6 @@ impl SystemStateModifications {
             | Ok(Ic00Method::UploadChunk)
             | Ok(Ic00Method::StoredChunks)
             | Ok(Ic00Method::ClearChunkStore)
-            | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::ListCanisterSnapshots)
             | Ok(Ic00Method::DeleteCanisterSnapshot)
             | Ok(Ic00Method::ReadCanisterSnapshotMetadata)

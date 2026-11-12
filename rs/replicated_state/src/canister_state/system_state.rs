@@ -201,7 +201,7 @@ enum ConsumingCycles {
     Refund,
 }
 
-/// Maximum number of per-receiver entries kept in a canister's `LruConnectionMetrics`.
+/// Maximum number of per-sender entries kept in a canister's `LruConnectionMetrics`.
 pub(crate) const MAX_CONNECTION_METRICS_ENTRIES: usize = 100;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -210,59 +210,58 @@ pub struct ConnectionMetrics {
     pub count: u64,
 }
 
-/// Keeps track of the number of requests sent to each canister, and the last time a request
-/// was sent to that canister.
+/// Keeps track of the number of requests received from each canister, and the last time a request
+/// was received from that canister.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct LruConnectionMetrics {
     /// Cheaply cloneable, underlying `BTreeMap` potentially cloned in `increment()`.
-    metrics_per_receiver: Arc<BTreeMap<CanisterId, ConnectionMetrics>>,
+    metrics_per_sender: Arc<BTreeMap<CanisterId, ConnectionMetrics>>,
 }
 
 impl LruConnectionMetrics {
     /// Creates the metrics from the given map, evicting entries if it holds more than
     /// `MAX_CONNECTION_METRICS_ENTRIES` of them.
-    pub fn new(mut metrics_per_receiver: BTreeMap<CanisterId, ConnectionMetrics>) -> Self {
-        Self::evict(&mut metrics_per_receiver);
+    pub fn new(mut metrics_per_sender: BTreeMap<CanisterId, ConnectionMetrics>) -> Self {
+        Self::evict(&mut metrics_per_sender);
 
         Self {
-            metrics_per_receiver: Arc::new(metrics_per_receiver),
+            metrics_per_sender: Arc::new(metrics_per_sender),
         }
     }
 
     pub fn get(&self) -> &BTreeMap<CanisterId, ConnectionMetrics> {
-        &self.metrics_per_receiver
+        &self.metrics_per_sender
     }
 
-    /// Increments the message count for `receiver` and updates its last access timestamp.
-    pub fn increment(&mut self, receiver: CanisterId, access_timestamp: Time) {
-        let metrics_per_receiver = Arc::make_mut(&mut self.metrics_per_receiver);
-        let metrics_entry =
-            metrics_per_receiver
-                .entry(receiver)
-                .or_insert_with(|| ConnectionMetrics {
-                    last_access_timestamp: access_timestamp,
-                    count: 0,
-                });
+    /// Increments the message count for `sender` and updates its last access timestamp.
+    pub fn increment(&mut self, sender: CanisterId, access_timestamp: Time) {
+        let metrics_per_sender = Arc::make_mut(&mut self.metrics_per_sender);
+        let metrics_entry = metrics_per_sender
+            .entry(sender)
+            .or_insert_with(|| ConnectionMetrics {
+                last_access_timestamp: access_timestamp,
+                count: 0,
+            });
         metrics_entry.last_access_timestamp = access_timestamp;
         metrics_entry.count += 1;
 
-        Self::evict(metrics_per_receiver);
+        Self::evict(metrics_per_sender);
     }
 
     /// Evicts entries until at most `MAX_CONNECTION_METRICS_ENTRIES` remain by:
     /// 1. `last_access_timestamp`: least recently accessed entries are evicted first.
     /// 2. `count`: among equally old entries, the one with the fewest messages is evicted first.
-    /// 3. receiver: deterministic final tie-breaker.
-    fn evict(metrics_per_receiver: &mut BTreeMap<CanisterId, ConnectionMetrics>) {
-        while metrics_per_receiver.len() > MAX_CONNECTION_METRICS_ENTRIES
-            && let Some(receiver) = metrics_per_receiver
+    /// 3. sender: deterministic final tie-breaker.
+    fn evict(metrics_per_sender: &mut BTreeMap<CanisterId, ConnectionMetrics>) {
+        while metrics_per_sender.len() > MAX_CONNECTION_METRICS_ENTRIES
+            && let Some(sender) = metrics_per_sender
                 .iter()
-                .min_by_key(|(receiver, metrics)| {
-                    (metrics.last_access_timestamp, metrics.count, **receiver)
+                .min_by_key(|(sender, metrics)| {
+                    (metrics.last_access_timestamp, metrics.count, **sender)
                 })
-                .map(|(receiver, _)| *receiver)
+                .map(|(sender, _)| *sender)
         {
-            metrics_per_receiver.remove(&receiver);
+            metrics_per_sender.remove(&sender);
         }
     }
 }
@@ -482,8 +481,10 @@ impl CanisterMetrics {
         &self.connection_metrics
     }
 
-    pub fn connection_metrics_mut(&mut self) -> &mut LruConnectionMetrics {
-        &mut self.connection_metrics
+    pub fn load_and_connection_metrics_mut(
+        &mut self,
+    ) -> (&mut LoadMetrics, &mut LruConnectionMetrics) {
+        (&mut self.load_metrics, &mut self.connection_metrics)
     }
 }
 

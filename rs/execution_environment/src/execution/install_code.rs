@@ -65,6 +65,7 @@ pub(crate) enum InstallCodeStep {
         origin: CanisterChangeOrigin,
         mode: CanisterInstallModeV2,
         module_hash: WasmHash,
+        args_hash: [u8; 32],
     },
     HandleWasmExecution {
         canister_state_changes: CanisterStateChanges,
@@ -172,14 +173,20 @@ impl InstallCodeHelper {
         origin: CanisterChangeOrigin,
         mode: CanisterInstallModeV2,
         module_hash: WasmHash,
+        args_hash: [u8; 32],
     ) {
         self.steps.push(InstallCodeStep::AddCanisterChange {
             timestamp_nanos,
             origin: origin.clone(),
             mode,
             module_hash: module_hash.clone(),
+            args_hash,
         });
-        let details = CanisterChangeDetails::code_deployment(mode.into(), module_hash.to_slice());
+        let details = CanisterChangeDetails::code_deployment(
+            mode.into(),
+            module_hash.to_slice(),
+            Some(args_hash),
+        );
         // Recording the canister history entry changes the canister's allocated
         // memory; accumulate that change so it is accounted for across the steps.
         let old_allocated_bytes = self.canister.memory_allocated_bytes();
@@ -905,8 +912,9 @@ impl InstallCodeHelper {
                 origin,
                 mode,
                 module_hash,
+                args_hash,
             } => {
-                self.add_canister_change(timestamp_nanos, origin, mode, module_hash);
+                self.add_canister_change(timestamp_nanos, origin, mode, module_hash, args_hash);
                 Ok(())
             }
             InstallCodeStep::HandleWasmExecution {

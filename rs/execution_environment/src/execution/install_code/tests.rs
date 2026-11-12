@@ -2335,7 +2335,8 @@ fn install_chunked_recorded_in_history() {
             CanisterChangeOrigin::from_user(test.user_id().get()),
             CanisterChangeDetails::code_deployment(
                 CanisterInstallMode::Install,
-                wasm_module_hash.try_into().unwrap()
+                wasm_module_hash.try_into().unwrap(),
+                Some(ic_crypto_sha2::Sha256::hash(&[])),
             ),
         ))
     )

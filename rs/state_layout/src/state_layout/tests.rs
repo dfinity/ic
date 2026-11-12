@@ -198,19 +198,27 @@ fn test_encode_decode_non_empty_history() {
         222,
         2,
         CanisterChangeOrigin::from_canister(canister_test_id(123).get(), Some(777)),
-        CanisterChangeDetails::code_deployment(CanisterInstallMode::Install, [0; 32]),
+        CanisterChangeDetails::code_deployment(CanisterInstallMode::Install, [0; 32], None),
     ));
     canister_history.add_canister_change(CanisterChange::new(
         222,
         3,
         CanisterChangeOrigin::from_canister(canister_test_id(123).get(), Some(888)),
-        CanisterChangeDetails::code_deployment(CanisterInstallMode::Upgrade, [1; 32]),
+        CanisterChangeDetails::code_deployment(
+            CanisterInstallMode::Upgrade,
+            [1; 32],
+            Some([3; 32]),
+        ),
     ));
     canister_history.add_canister_change(CanisterChange::new(
         222,
         4,
         CanisterChangeOrigin::from_canister(canister_test_id(123).get(), Some(999)),
-        CanisterChangeDetails::code_deployment(CanisterInstallMode::Reinstall, [2; 32]),
+        CanisterChangeDetails::code_deployment(
+            CanisterInstallMode::Reinstall,
+            [2; 32],
+            Some([4; 32]),
+        ),
     ));
     canister_history.add_canister_change(CanisterChange::new(
         333,
@@ -367,7 +375,7 @@ fn test_decode_connection_metrics_without_canister_id_fails() {
     pb_bits
         .connection_metrics
         .push(pb_canister_state_bits::CanisterToCanisterMetrics {
-            receiver_canister_id: None,
+            sender_canister_id: None,
             timestamp_nanos: 1_000,
             count: 7,
         });
