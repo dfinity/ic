@@ -1,13 +1,13 @@
 //! Local (QEMU) system-test backend.
 //!
 //! Counterpart to [`crate::driver::farm::Farm`] for tests run on a developer or
-//! CI host instead of the Farm cluster. Selected via `SYSTEM_TEST_INFRA=local`.
+//! CI host instead of the Farm cluster. Selected via `SYSTEM_TEST_BACKEND=local`.
 //!
 //! Boots each VM as a per-VM daemonized `qemu-system-x86_64` process, controlled
 //! afterwards through its pid-file (destroy) and a per-VM QMP unix socket
 //! (reboot). Networking (per-group Linux bridge + per-VM TAPs, `dnsmasq`
-//! RA/DHCPv4) and disk images (qcow2 overlays over a shared base) are managed
-//! directly by this backend.
+//! RA/DHCPv4/DNS, an `ntpd-rs` NTS time server) and disk images (qcow2 overlays
+//! over a shared base) are managed directly by this backend.
 //!
 //! Many Farm features have no local equivalent (managed playnet DNS, TLS
 //! issuance, HTTP file upload, multi-tenant scheduling); those operations warn
@@ -19,23 +19,64 @@
 //! `enp2s0`).
 
 use crate::driver::farm::{VMCreateResponse, VmSpec};
+use crate::driver::ic_gateway_vm::dev_root_ca;
 use crate::driver::resource::DiskImage;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::get_dependency_path_from_env;
 use anyhow::{Context, Result, anyhow, bail};
 use deterministic_ips::MacAddr6Ext;
 use macaddr::MacAddr6;
+use network::systemd::IPV6_NAME_SERVERS;
+use rcgen::{CertificateParams, KeyPair};
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info, warn};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
-use std::net::Ipv6Addr;
+use std::net::{IpAddr, Ipv6Addr, SocketAddr, TcpStream};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+/// The domain under which the group's `dnsmasq` synthesises a DNS name for every
+/// address in the group's `/64`, by writing the address with `:` replaced by `-`
+/// (e.g. `2a00-fb01-400-2c--3.ipv6.nip.io`).
+///
+/// This mirrors the public `nip.io` wildcard DNS service, which is what system
+/// tests use when they need to reach a VM by a *name* rather than by an address
+/// literal — see `rs/tests/networking/canister_http_socks_test.rs`. Answering
+/// for it locally is what makes those tests work without external DNS; on the
+/// Farm backend the real service resolves the same names to the same addresses.
+const NIP_IO_DOMAIN: &str = "ipv6.nip.io";
+
+/// The domain suffix under which the group's `dnsmasq` answers for names the
+/// driver registers explicitly with [`LocalBackend::add_dns_record`], as opposed
+/// to the addresses it synthesises under [`NIP_IO_DOMAIN`].
+///
+/// Resolvable only from inside a test group. Used for the API boundary nodes
+/// (`apibn-{idx}.ic.net`, see `InternetComputer::setup_api_bn_local_playnet`) and
+/// for the IC gateway (`<vm name>.ic.net`, see
+/// `IcGatewayVm::load_or_create_local_playnet`). On Farm those names are handed
+/// out without DNS records, or replaced by a playnet FQDN.
+///
+/// It must not be a `.local` name: both GuestOS and HostOS resolve through
+/// `systemd-resolved`, which routes `*.local` to mDNS and never to the unicast
+/// `DNS=` servers the group's `dnsmasq` answers on.
+pub const IN_GROUP_DOMAIN_SUFFIX: &str = "ic.net";
+
+/// The NTS server the group's time server poses as (see
+/// [`LocalBackend::start_time_server`]). It must be one of the `nts` servers in
+/// `ic-os/components/misc/chrony/chrony.conf`.
+const NTS_SERVER_NAME: &str = "time.cloudflare.com";
+
+/// The TCP port of the NTS key exchange (RFC 8915).
+const NTS_KE_PORT: u16 = 4460;
+
+/// How long [`LocalBackend::start_time_server`] waits for the time server to
+/// accept connections.
+const TIME_SERVER_STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Environment variables holding the runfiles paths of the split OVMF (UEFI)
 /// firmware images, provided by the `@ovmf` Bazel repo (extracted from the
@@ -245,7 +286,7 @@ impl LocalBackend {
         // a *non-zero* inner uid/gid instead of `0`.
         //
         // The reason: the backend relies on `dnsmasq` staying unprivileged so it
-        // skips its privilege-drop path (see `start_ra_daemon`). That path is
+        // skips its privilege-drop path (see `start_dnsmasq`). That path is
         // gated purely on `getuid() == 0`, and when taken it fails in this
         // namespace — `setgroups` is denied (below) and the default `dip` gid is
         // unmapped. This normally holds because the action runs as an ordinary
@@ -394,15 +435,41 @@ impl LocalBackend {
         sanitize_name(&format!("ictest-{group_name}-{vm_name}"))
     }
 
-    /// Returns the per-group IPv6 prefix (a deterministic /64 in the
-    /// ULA range `fd00::/8`).
+    /// Returns the `/64` the group's *nodes* are addressed out of, i.e. subnet-id
+    /// 0 of [`group_subnet_prefix`](Self::group_subnet_prefix).
     fn group_ipv6_prefix(group_name: &str) -> String {
+        Self::group_subnet_prefix(group_name, 0)
+    }
+
+    /// Returns `2a00:fb01:400:<group><subnet>::`, the group's `/64` for
+    /// `subnet_id` (0 for the nodes, 1..=3 for the driver's own addresses).
+    ///
+    /// The range is deliberately an ordinary global unicast prefix rather than a
+    /// reserved one. It must not be a ULA or link-local address, because the
+    /// orchestrator reads those as a sign that it is running in a cloud and
+    /// blocks on cloud metadata discovery before it can register itself
+    /// (`assemble_add_node_message` in `rs/orchestrator/src/registration.rs`),
+    /// which never completes here. But reserved ranges are no good either: they
+    /// are exactly the ones software special-cases. `2001:db8::/32` (RFC 3849)
+    /// looks appealing for a fake network and breaks `bitcoind`, whose
+    /// `CNetAddr::IsValid()` rejects documentation addresses outright, so every
+    /// RPC from the driver is refused with "Client network is not allowed RPC
+    /// access" even under `-rpcallowip='::/0'`. A boring routable-looking prefix
+    /// has no such classifier to trip over. Nothing leaves the group's network
+    /// namespace, so real-world routability is irrelevant — only how software
+    /// *classifies* the bits.
+    ///
+    /// [`GROUP_PREFIX`](Self::GROUP_PREFIX) is a `/56`, which leaves one byte
+    /// before the `/64` boundary: 6 bits of group digest and 2 bits of
+    /// subnet-id. The digest is therefore much shorter than the bridge's and
+    /// TAP's (see [`bridge_name`](Self::bridge_name)), but a collision between
+    /// two groups is unobservable: each test owns a private network namespace
+    /// (see [`ensure_administrable_netns`](Self::ensure_administrable_netns)).
+    fn group_subnet_prefix(group_name: &str, subnet_id: u8) -> String {
         use ic_crypto_sha2::Sha256;
+        debug_assert!(subnet_id < 4, "subnet-id must fit in 2 bits");
         let hash = Sha256::hash(group_name.as_bytes());
-        format!(
-            "fd00:{:02x}{:02x}:{:02x}{:02x}::",
-            hash[0], hash[1], hash[2], hash[3]
-        )
+        format!("2a00:fb01:400:{:02x}::", (hash[0] & 0xfc) | subnet_id)
     }
 
     /// Returns the per-group IPv6 gateway address (`<prefix>1`). Assigned to the
@@ -419,8 +486,9 @@ impl LocalBackend {
     /// (vs the nodes' `0`), so it lies *outside* every node `/64` — meaning the
     /// GuestOS firewall's hard-coded accept for a node's own prefix does not
     /// match the driver, letting registry-derived deny rules actually be
-    /// exercised — while staying in the ULA range `fd00::/8` the backend
-    /// whitelists at bootstrap.
+    /// exercised. `init_ic` whitelists it (see
+    /// [`group_driver_ipv6_prefixes`](Self::group_driver_ipv6_prefixes)) so the
+    /// driver can still reach the nodes once the firewall is active.
     ///
     /// It is reserved for the driver's *own* host→node traffic; journald
     /// streaming ([`group_logs_ipv6`](Self::group_logs_ipv6)) and the file
@@ -433,12 +501,7 @@ impl LocalBackend {
     /// SLAAC; [`create_group`](Self::create_group) overrides the node `/64`'s
     /// connected-route source to it.
     pub fn group_mgmt_ipv6(group_name: &str) -> String {
-        use ic_crypto_sha2::Sha256;
-        let hash = Sha256::hash(group_name.as_bytes());
-        format!(
-            "fd00:{:02x}{:02x}:{:02x}{:02x}:1::1",
-            hash[0], hash[1], hash[2], hash[3]
-        )
+        format!("{}1", Self::group_subnet_prefix(group_name, 1))
     }
 
     /// Returns the per-group IPv6 address the driver streams the nodes' journald
@@ -454,12 +517,7 @@ impl LocalBackend {
     /// Like the management address it is assigned to `lo` in
     /// [`create_group`](Self::create_group).
     pub fn group_logs_ipv6(group_name: &str) -> String {
-        use ic_crypto_sha2::Sha256;
-        let hash = Sha256::hash(group_name.as_bytes());
-        format!(
-            "fd00:{:02x}{:02x}:{:02x}{:02x}:2::1",
-            hash[0], hash[1], hash[2], hash[3]
-        )
+        format!("{}1", Self::group_subnet_prefix(group_name, 2))
     }
 
     /// Returns the per-group IPv6 address the file server
@@ -477,12 +535,50 @@ impl LocalBackend {
     /// own traffic. Like it, this is assigned to `lo` in
     /// [`create_group`](Self::create_group).
     pub fn group_files_ipv6(group_name: &str) -> String {
-        use ic_crypto_sha2::Sha256;
-        let hash = Sha256::hash(group_name.as_bytes());
-        format!(
-            "fd00:{:02x}{:02x}:{:02x}{:02x}:3::1",
-            hash[0], hash[1], hash[2], hash[3]
-        )
+        format!("{}1", Self::group_subnet_prefix(group_name, 3))
+    }
+
+    /// The IPv6 range every address the local backend hands out lives in: the
+    /// nodes' `/64`, the driver's own addresses and any other VM in the group.
+    /// Offered to tests that have to whitelist the *whole* group on the nodes'
+    /// firewall; see
+    /// [`InternetComputer::with_group_wide_firewall_whitelist`](crate::driver::ic::InternetComputer::with_group_wide_firewall_whitelist).
+    ///
+    /// `2a00:fb01:400::/56` is DFINITY's Zurich DC prefix. The addresses never
+    /// leave the group's network namespace, so nothing is actually routed there;
+    /// it is used because an ordinary global unicast prefix is the one thing no
+    /// classifier special-cases — see
+    /// [`group_subnet_prefix`](Self::group_subnet_prefix).
+    pub const GROUP_PREFIX: &'static str = "2a00:fb01:400::/56";
+
+    /// The three addresses the test driver reaches the group's VMs from: the
+    /// management source ([`group_mgmt_ipv6`](Self::group_mgmt_ipv6)), the
+    /// journald-streaming source ([`group_logs_ipv6`](Self::group_logs_ipv6))
+    /// and the file server's listen address
+    /// ([`group_files_ipv6`](Self::group_files_ipv6)).
+    ///
+    /// Kept as one list so that the places which have to know the full set —
+    /// assigning them to `lo` in [`create_group`](Self::create_group), removing
+    /// them again in [`delete_group`](Self::delete_group), and whitelisting them
+    /// on the nodes' firewall via
+    /// [`group_driver_ipv6_prefixes`](Self::group_driver_ipv6_prefixes) — cannot
+    /// drift apart when a fourth one is added.
+    fn group_driver_ipv6s(group_name: &str) -> [String; 3] {
+        [
+            Self::group_mgmt_ipv6(group_name),
+            Self::group_logs_ipv6(group_name),
+            Self::group_files_ipv6(group_name),
+        ]
+    }
+
+    /// [`group_driver_ipv6s`](Self::group_driver_ipv6s) as `/128` prefixes, for
+    /// the firewall whitelist `init_ic` seeds into the initial registry (see
+    /// `rs/tests/driver/src/driver/bootstrap.rs`).
+    pub fn group_driver_ipv6_prefixes(group_name: &str) -> Vec<String> {
+        Self::group_driver_ipv6s(group_name)
+            .into_iter()
+            .map(|addr| format!("{addr}/128"))
+            .collect()
     }
 
     /// Returns the per-group private IPv4 `/24` (a deterministic subnet in
@@ -539,28 +635,32 @@ impl LocalBackend {
     ///
     /// IC GuestOS nodes statically configure their global IPv6: the test driver
     /// hands each node a fixed address plus the `<prefix>::1` gateway (which
-    /// lives on the bridge), so they need neither RA nor SLAAC. We still run a
-    /// minimal `dnsmasq` as an RA daemon on the bridge for non-IC-node VMs (e.g.
-    /// universal VMs), which bring up only a link-local address and derive their
-    /// global one via SLAAC from the RA; the RA's non-zero router lifetime also
-    /// installs the bridge (the host) as their default router.
+    /// lives on the bridge), so they need neither RA nor SLAAC. The group's
+    /// `dnsmasq` still advertises the prefix on the bridge for non-IC-node VMs
+    /// (e.g. universal VMs), which bring up only a link-local address and derive
+    /// their global one via SLAAC from the RA; the RA's non-zero router lifetime
+    /// also installs the bridge (the host) as their default router.
     ///
     /// Either way the host is each guest's default router, which lets a guest
     /// reply to the driver's off-`/64` management address
     /// ([`group_mgmt_ipv6`](Self::group_mgmt_ipv6)). No IP forwarding is
     /// involved — the management address is on `lo`, so traffic to it terminates
     /// on the host.
+    ///
+    /// The bridge additionally carries the name-server addresses GuestOS is
+    /// hard-coded to query ([`IPV6_NAME_SERVERS`]), so that the group's
+    /// `dnsmasq` can answer DNS on them; see
+    /// [`start_dnsmasq`](Self::start_dnsmasq).
     pub fn create_group(&self, group_name: &str) -> Result<()> {
         let bridge = Self::bridge_name(group_name);
+        let mac = bridge_mac(group_name);
         let prefix = Self::group_ipv6_prefix(group_name);
         // The gateway address (`<prefix>1`) lives on the bridge.
         let gateway = Self::group_gateway_ipv6(group_name);
         // Driver addresses, all assigned to `lo`: the management source for
         // host→node traffic, the dedicated journald-streaming source, and the
-        // file server's listen address. See the respective `group_*_ipv6`.
-        let mgmt = Self::group_mgmt_ipv6(group_name);
-        let logs = Self::group_logs_ipv6(group_name);
-        let files = Self::group_files_ipv6(group_name);
+        // file server's listen address. See `group_driver_ipv6s`.
+        let [mgmt, logs, files] = Self::group_driver_ipv6s(group_name);
         // The IPv4 gateway (`<ipv4_prefix>.1`) also lives on the bridge so
         // `dnsmasq` can serve DHCPv4 to VMs that requested a second NIC.
         let ipv4_prefix = Self::group_ipv4_prefix(group_name);
@@ -569,6 +669,19 @@ impl LocalBackend {
             self.logger,
             "Creating local bridge {bridge} for group {group_name} ({prefix}/64, {ipv4_prefix}.0/24)"
         );
+
+        // The name-server addresses GuestOS sends its DNS queries to. They are
+        // globally routable addresses owned by Cloudflare and Google, but the
+        // backend runs in its own network namespace with no external
+        // connectivity (see `ensure_administrable_netns`), so nothing else can
+        // claim them and no query can escape. Assigning them here — rather than
+        // reconfiguring the guests, which have no name-server knob and boot with
+        // `IPv6AcceptRA=no` — is what gives every node a working resolver
+        // without touching IC-OS.
+        let name_server_addrs: String = IPV6_NAME_SERVERS
+            .iter()
+            .map(|name_server| format!("ip -6 addr add {name_server}/128 dev {bridge} nodad && "))
+            .collect();
 
         // (Re)create the bridge, assign the gateway, and bring it up. Deleting
         // first makes this idempotent across an interrupted run that leaked the
@@ -584,29 +697,41 @@ impl LocalBackend {
         // `ip -6 addr add {gateway}/64` auto-creates (`proto kernel metric 256`):
         // replacing it in place sets its source. A separate route would land at
         // metric 1024 and lose to the metric-256 kernel route.
+        //
+        // The `lo` addresses need `nodad`: the kernel flags every new IPv6
+        // address tentative and only clears that flag from a workqueue item
+        // (loopback skips DAD, but in that same deferred step), while `ip -6
+        // route ... src` rejects a tentative source with "Invalid source
+        // address". Without `nodad` the route command races the workqueue, which
+        // it loses on a loaded host. `nodad` skips the tentative state entirely.
         let create_script = format!(
             "ip link del {bridge} 2>/dev/null; \
-             ip link add name {bridge} type bridge && \
+             ip link add name {bridge} address {mac} type bridge && \
              ip link set dev {bridge} up && \
              ip -6 addr add {gateway}/64 dev {bridge} nodad && \
              ip addr add {ipv4_gateway}/24 dev {bridge} && \
-             ip -6 addr replace {mgmt}/128 dev lo && \
-             ip -6 addr replace {logs}/128 dev lo && \
-             ip -6 addr replace {files}/128 dev lo && \
+             {name_server_addrs}\
+             ip -6 addr replace {mgmt}/128 dev lo nodad && \
+             ip -6 addr replace {logs}/128 dev lo nodad && \
+             ip -6 addr replace {files}/128 dev lo nodad && \
              ip -6 route replace {prefix}/64 dev {bridge} proto kernel metric 256 src {mgmt}"
         );
         Self::run_shell(&create_script, "create group bridge")?;
 
-        // Start the RA daemon. Non-IC-node VMs (e.g. universal VMs) SLAAC their
-        // global address from it; IC GuestOS nodes use a static config instead.
+        // Start the time server before any VM can boot and query it.
+        self.start_time_server(&gateway)?;
+
+        // Start `dnsmasq`. Non-IC-node VMs (e.g. universal VMs) SLAAC their
+        // global address from its RA; IC GuestOS nodes use a static config instead.
         // The same `dnsmasq` also serves DHCPv4 on the group's IPv4 `/24` for
-        // VMs that requested a second NIC.
-        self.start_ra_daemon(group_name, &bridge, &prefix, &ipv4_prefix)?;
+        // VMs that requested a second NIC, and DNS on the name-server addresses
+        // assigned above.
+        self.start_dnsmasq(group_name, &bridge, &prefix, &ipv4_prefix)?;
 
         Ok(())
     }
 
-    /// Path of the pid-file for the group's `dnsmasq` RA daemon.
+    /// Path of the pid-file for the group's `dnsmasq`.
     fn dnsmasq_pid_path(&self, bridge: &str) -> PathBuf {
         self.active_local_backend
             .working_dir
@@ -614,13 +739,28 @@ impl LocalBackend {
             .join(format!("{bridge}.pid"))
     }
 
-    /// Spawn a minimal `dnsmasq` as an IPv6 Router Advertisement daemon on
-    /// `bridge`, advertising the group's `/64` for SLAAC with a non-zero router
-    /// lifetime (installing the host as the default router for VMs that use the
-    /// RA; IC GuestOS nodes use a static config instead). The same daemon serves
-    /// DHCPv4 on the group's IPv4 `/24` for VMs with a second NIC. See
-    /// [`create_group`](Self::create_group) for the rationale.
-    fn start_ra_daemon(
+    /// Path of the extra hosts-file the group's `dnsmasq` serves DNS records
+    /// from (`--addn-hosts`), seeded by [`start_dnsmasq`](Self::start_dnsmasq)
+    /// and appended to by [`add_dns_record`](Self::add_dns_record).
+    fn dnsmasq_hosts_path(&self, bridge: &str) -> PathBuf {
+        self.active_local_backend
+            .working_dir
+            .join("dnsmasq")
+            .join(format!("{bridge}.hosts"))
+    }
+
+    /// Spawn a minimal `dnsmasq` on `bridge` serving three roles:
+    ///
+    /// * an IPv6 Router Advertisement daemon advertising the group's `/64` for
+    ///   SLAAC with a non-zero router lifetime (installing the host as the
+    ///   default router for VMs that use the RA; IC GuestOS nodes use a static
+    ///   config instead),
+    /// * a DHCPv4 server on the group's IPv4 `/24` for VMs with a second NIC,
+    /// * the group's DNS server, answering on the name-server addresses
+    ///   [`create_group`](Self::create_group) put on the bridge.
+    ///
+    /// See [`create_group`](Self::create_group) for the rationale.
+    fn start_dnsmasq(
         &self,
         group_name: &str,
         bridge: &str,
@@ -632,26 +772,54 @@ impl LocalBackend {
             format!("creating dnsmasq working dir at {}", dnsmasq_dir.display())
         })?;
         let pid_path = self.dnsmasq_pid_path(bridge);
+        let hosts_path = self.dnsmasq_hosts_path(bridge);
         let lease_path = dnsmasq_dir.join(format!("{bridge}.leases"));
         let log_path = dnsmasq_dir.join(format!("{bridge}.log"));
         // Remove a stale pid-file from a previous interrupted run.
         let _ = std::fs::remove_file(&pid_path);
+        // Truncate the hosts-file, both to drop any records such a run left and
+        // so it exists before `dnsmasq` starts: a missing `--addn-hosts` file is
+        // tolerated, but relying on it being picked up later is needless risk.
+        // Its one initial record points `NTS_SERVER_NAME` at the time server.
+        let gateway = Self::group_gateway_ipv6(group_name);
+        std::fs::write(&hosts_path, format!("{gateway} {NTS_SERVER_NAME}\n"))
+            .with_context(|| format!("creating {}", hosts_path.display()))?;
 
         info!(
             self.logger,
-            "Starting RA daemon (dnsmasq) for group {group_name} on bridge {bridge}"
+            "Starting dnsmasq for group {group_name} on bridge {bridge}"
         );
 
         // `dnsmasq` needs `CAP_NET_RAW`/`CAP_NET_ADMIN` to open the ICMPv6 raw
         // socket and send RAs, and `CAP_NET_BIND_SERVICE` to bind UDP port 67 for
-        // DHCPv4; it inherits them from the ambient capability set the driver set
-        // up (see `ensure_administrable_netns`).
+        // DHCPv4 and port 53 for DNS; it inherits them from the ambient
+        // capability set the driver set up (see `ensure_administrable_netns`).
         // `--ra-param=<bridge>,10,1800` sends an RA every 10s with a 1800s router
         // lifetime; `--dhcp-range=<prefix>,ra-only` advertises the autonomous
         // prefix for SLAAC without stateful leases. The second `--dhcp-range`
         // enables stateful DHCPv4 on the IPv4 `/24` for the guest's second NIC
-        // (`enp2s0`). `--port=0` disables DNS. `dnsmasq` daemonizes (writing its
-        // pid-file) and is signalled via it in teardown.
+        // (`enp2s0`). `dnsmasq` daemonizes (writing its pid-file) and is
+        // signalled via it in teardown.
+        //
+        // DNS: `--no-resolv --no-hosts` keeps the resolver hermetic — it neither
+        // reads the driver host's `/etc/resolv.conf` nor its `/etc/hosts`. With
+        // no upstream server left to forward to, anything it cannot answer is
+        // REFUSED rather than leaked. It answers from two sources:
+        //
+        // * `--addn-hosts` — the [`NTS_SERVER_NAME`] record seeded above and the
+        //   records tests register through [`add_dns_record`](Self::add_dns_record).
+        // * `--synth-domain` — synthesises `<address>.ipv6.nip.io` for the
+        //   group's `/64`, with `:` written as `-`, mirroring the public
+        //   `nip.io` wildcard service that tests use to name a VM by its
+        //   address. `dnsmasq` parses the label with `inet_pton`, so it accepts
+        //   exactly the form Rust's `Ipv6Addr` Display produces.
+        //
+        // `--local` makes it answer the A query for the AAAA-only
+        // [`NTS_SERVER_NAME`] with an empty NOERROR instead of REFUSED.
+        //
+        // `--bind-interfaces` binds the bridge's addresses as they are at
+        // startup, which is why `create_group` assigns the name-server addresses
+        // before calling this.
         //
         // `dnsmasq` runs unprivileged: `ensure_administrable_netns` guarantees a
         // non-zero uid inside the driver's user namespace (identity-mapped, or
@@ -667,27 +835,77 @@ impl LocalBackend {
                  --pid-file={pid} \
                  --dhcp-leasefile={lease} \
                  --log-facility={log} \
-                 --port=0 \
                  --bind-interfaces \
                  --interface={bridge} \
                  --except-interface=lo \
                  --enable-ra \
                  --dhcp-range={prefix},ra-only \
                  --dhcp-range={ipv4_prefix}.2,{ipv4_prefix}.254,255.255.255.0,1h \
-                 --ra-param={bridge},10,1800",
+                 --ra-param={bridge},10,1800 \
+                 --no-resolv \
+                 --no-hosts \
+                 --addn-hosts={hosts} \
+                 --local=/{NTS_SERVER_NAME}/ \
+                 --synth-domain={NIP_IO_DOMAIN},{prefix}/64",
             pid = pid_path.display(),
             lease = lease_path.display(),
             log = log_path.display(),
+            hosts = hosts_path.display(),
         );
-        Self::run_shell(&dnsmasq_script, "start dnsmasq RA daemon")?;
+        Self::run_shell(&dnsmasq_script, "start dnsmasq")?;
 
         Ok(())
     }
 
-    /// Stop the group's `dnsmasq` RA daemon, if running. It runs as the current
-    /// user, so it is signalled directly via its pid-file. Best-effort and
-    /// idempotent.
-    fn stop_ra_daemon(&self, bridge: &str) {
+    /// Register a DNS record with the group's `dnsmasq`, so that `name` resolves
+    /// to `addr` on every VM in the group.
+    ///
+    /// Appends to the `--addn-hosts` file and signals `dnsmasq` with `SIGHUP`,
+    /// which makes it flush its cache and re-read that file. Records therefore
+    /// accumulate across calls.
+    ///
+    /// This is how the local backend replaces Farm's playnet DNS: see
+    /// `InternetComputer::setup_api_bn_local_playnet`.
+    pub fn add_dns_record(&self, group_name: &str, name: &str, addr: IpAddr) -> Result<()> {
+        let bridge = Self::bridge_name(group_name);
+        let hosts_path = self.dnsmasq_hosts_path(&bridge);
+
+        info!(
+            self.logger,
+            "Registering DNS record {name} -> {addr} with the dnsmasq of group {group_name}"
+        );
+
+        let mut hosts_file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&hosts_path)
+            .with_context(|| format!("opening {}", hosts_path.display()))?;
+        writeln!(hosts_file, "{addr} {name}")
+            .with_context(|| format!("appending to {}", hosts_path.display()))?;
+        drop(hosts_file);
+
+        // `dnsmasq` runs as the current user, so it can be signalled directly via
+        // its pid-file.
+        let pid_path = self.dnsmasq_pid_path(&bridge);
+        let pid = std::fs::read_to_string(&pid_path)
+            .with_context(|| format!("reading {}", pid_path.display()))?
+            .trim()
+            .parse::<i32>()
+            .with_context(|| format!("parsing the pid in {}", pid_path.display()))?;
+        let status = Command::new("kill")
+            .args(["-HUP", &pid.to_string()])
+            .status()
+            .context("signalling dnsmasq with SIGHUP")?;
+        if !status.success() {
+            bail!("failed to SIGHUP dnsmasq (pid {pid}): {status}");
+        }
+
+        Ok(())
+    }
+
+    /// Stop the group's `dnsmasq`, if running. It runs as the current user, so
+    /// it is signalled directly via its pid-file. Best-effort and idempotent.
+    fn stop_dnsmasq(&self, bridge: &str) {
         let pid_path = self.dnsmasq_pid_path(bridge);
         if let Ok(contents) = std::fs::read_to_string(&pid_path)
             && let Ok(pid) = contents.trim().parse::<i32>()
@@ -696,6 +914,130 @@ impl LocalBackend {
             let _ = Command::new("kill").arg(pid.to_string()).status();
         }
         let _ = std::fs::remove_file(&pid_path);
+    }
+
+    /// Working dir of the group's time server: its config, certificate,
+    /// pid-file and log.
+    fn time_server_dir(&self) -> PathBuf {
+        self.active_local_backend.working_dir.join("ntp")
+    }
+
+    /// Start the group's time server: an `ntpd-rs` daemon that serves the
+    /// host's clock over NTS on `gateway` as [`NTS_SERVER_NAME`], with a
+    /// certificate from the dev root CA, which dev GuestOS and HostOS images
+    /// trust. `dnsmasq` resolves that name to `gateway` (see `start_dnsmasq`).
+    ///
+    /// Both sockets are bound to `gateway` itself: `create_group` makes the
+    /// management address the source of host-to-node traffic, and chrony drops
+    /// replies from any other address than the one it queried.
+    fn start_time_server(&self, gateway: &str) -> Result<()> {
+        let dir = self.time_server_dir();
+        std::fs::create_dir_all(&dir)
+            .with_context(|| format!("creating time server dir {}", dir.display()))?;
+
+        let ca = dev_root_ca()?;
+        let key = KeyPair::generate().context("generating the time server certificate key")?;
+        let cert = CertificateParams::new(vec![NTS_SERVER_NAME.to_string()])
+            .context("building the time server certificate parameters")?
+            .signed_by(&key, &ca.cert, &ca.key)
+            .context("signing the time server certificate")?;
+        let chain_path = dir.join("chain.pem");
+        let key_path = dir.join("key.pem");
+        std::fs::write(&chain_path, format!("{}{}", cert.pem(), ca.cert_pem))
+            .with_context(|| format!("writing {}", chain_path.display()))?;
+        std::fs::write(&key_path, key.serialize_pem())
+            .with_context(|| format!("writing {}", key_path.display()))?;
+
+        // `log-level`: logs each completed key exchange (see `stop_time_server`).
+        // `local-stratum`: serves the host's clock without sources, so it never
+        // adjusts it. `key-exchange-timeout-ms`: chrony backs off for 1024s
+        // after a failed key exchange.
+        let config_path = dir.join("ntp.toml");
+        let config = format!(
+            r#"[observability]
+log-level = "debug"
+ansi-colors = false
+
+[synchronization]
+local-stratum = 1
+
+[[server]]
+listen = "[{gateway}]:123"
+
+[[nts-ke-server]]
+listen = "[{gateway}]:{NTS_KE_PORT}"
+certificate-chain-path = "{chain}"
+private-key-path = "{key}"
+key-exchange-timeout-ms = 10000
+"#,
+            chain = chain_path.display(),
+            key = key_path.display(),
+        );
+        std::fs::write(&config_path, config)
+            .with_context(|| format!("writing {}", config_path.display()))?;
+
+        info!(
+            self.logger,
+            "Starting the time server on [{gateway}] as {NTS_SERVER_NAME}"
+        );
+        // It inherits the capabilities to bind port 123 (see
+        // `ensure_administrable_netns`) and outlives the `Child` handle;
+        // `delete_group` stops it via its pid-file.
+        let log_path = dir.join("ntp-daemon.log");
+        let log = std::fs::File::create(&log_path)
+            .with_context(|| format!("creating {}", log_path.display()))?;
+        let child = Command::new(get_dependency_path_from_env("ENV_DEPS__NTP_DAEMON_PATH"))
+            .arg("-c")
+            .arg(&config_path)
+            .stdin(Stdio::null())
+            .stdout(log.try_clone()?)
+            .stderr(log)
+            .spawn()
+            .context("spawning the time server")?;
+        let pid_path = dir.join("ntp-daemon.pid");
+        std::fs::write(&pid_path, child.id().to_string())
+            .with_context(|| format!("writing {}", pid_path.display()))?;
+
+        // chrony connects to the key exchange port before it sends any NTP
+        // request, so wait for that one. Each probe shows up in the server's log
+        // as a failed key exchange from `gateway`.
+        let ke_addr = SocketAddr::new(
+            gateway
+                .parse()
+                .with_context(|| format!("parsing gateway address {gateway}"))?,
+            NTS_KE_PORT,
+        );
+        let deadline = Instant::now() + TIME_SERVER_STARTUP_TIMEOUT;
+        while TcpStream::connect_timeout(&ke_addr, Duration::from_secs(1)).is_err() {
+            if Instant::now() >= deadline {
+                bail!(
+                    "the time server did not accept connections on {ke_addr} within {:?}: {}",
+                    TIME_SERVER_STARTUP_TIMEOUT,
+                    std::fs::read_to_string(&log_path)
+                        .unwrap_or_default()
+                        .trim()
+                );
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        Ok(())
+    }
+
+    /// Stop the group's time server, if running, and report its log, which lists
+    /// every VM that completed a key exchange, including VMs whose journals are
+    /// not streamed. Best-effort and idempotent.
+    fn stop_time_server(&self) {
+        let dir = self.time_server_dir();
+        let pid_path = dir.join("ntp-daemon.pid");
+        if let Ok(contents) = std::fs::read_to_string(&pid_path)
+            && let Ok(pid) = contents.trim().parse::<i32>()
+        {
+            let _ = Command::new("kill").arg(pid.to_string()).status();
+        }
+        let _ = std::fs::remove_file(&pid_path);
+        if let Ok(log) = std::fs::read_to_string(dir.join("ntp-daemon.log")) {
+            info!(self.logger, "Time server log:\n{}", log.trim_end());
+        }
     }
 
     /// Path of a VM's QEMU pid-file (written via `-pidfile` in [`start_vm`]).
@@ -720,13 +1062,13 @@ impl LocalBackend {
     /// Stop the QEMU process recorded in `pid_path`, if running. Best-effort and
     /// idempotent.
     ///
-    /// Sends SIGTERM (QEMU powers the guest off and exits), waits briefly for a
-    /// graceful exit, then escalates to SIGKILL. Signalling via the pid-file
-    /// (rather than a `Child` handle) lets any process tear a VM down: QEMU is
-    /// daemonized and reparented to an init-like ancestor (PID 1 of the test
-    /// action's execution environment), so no process holds a handle on it. The
-    /// teardown of that environment (bazel's `linux-sandbox`) remains the final
-    /// safety net.
+    /// Sends SIGTERM (QEMU exits at once without shutting the guest down),
+    /// waits briefly for it to exit, then escalates to SIGKILL. Signalling via
+    /// the pid-file (rather than a `Child` handle) lets any process tear a VM
+    /// down: QEMU is daemonized and reparented to an init-like ancestor (PID 1
+    /// of the test action's execution environment), so no process holds a
+    /// handle on it. The teardown of that environment (bazel's `linux-sandbox`)
+    /// remains the final safety net.
     fn stop_qemu(&self, pid_path: &Path) {
         let Ok(contents) = std::fs::read_to_string(pid_path) else {
             return;
@@ -746,14 +1088,11 @@ impl LocalBackend {
         while Path::new(&format!("/proc/{pid}")).exists() {
             if Instant::now() >= deadline {
                 // Guard against PID reuse before force-killing: the pid-file may
-                // be old, so confirm the process still looks like QEMU (exec
-                // basename truncated to `qemu-system-x86` in `comm`, hence a
-                // prefix match). Failing closed just defers to the teardown of
-                // the test action's execution environment.
-                let still_qemu = std::fs::read_to_string(format!("/proc/{pid}/comm"))
-                    .map(|c| c.trim_end().starts_with("qemu-"))
-                    .unwrap_or(false);
-                if still_qemu {
+                // be old, so confirm the process is the QEMU that `start_vm`
+                // launched for this VM, i.e. its command line names this
+                // pid-file. Failing closed just defers to the teardown of the
+                // test action's execution environment.
+                if qemu_cmdline_names_pidfile(pid, pid_path) {
                     warn!(
                         self.logger,
                         "QEMU (pid {pid}) survived the SIGTERM grace period; sending SIGKILL"
@@ -762,6 +1101,12 @@ impl LocalBackend {
                         .arg("-KILL")
                         .arg(pid.to_string())
                         .status();
+                } else {
+                    warn!(
+                        self.logger,
+                        "Process {pid} survived the SIGTERM grace period but is not the QEMU of {}; not killing it",
+                        pid_path.display()
+                    );
                 }
                 break;
             }
@@ -775,30 +1120,35 @@ impl LocalBackend {
     /// journald-streaming and file-server) from `lo`.
     pub fn delete_group(&self, group_name: &str) -> Result<()> {
         let bridge = Self::bridge_name(group_name);
-        let mgmt = Self::group_mgmt_ipv6(group_name);
-        let logs = Self::group_logs_ipv6(group_name);
-        let files = Self::group_files_ipv6(group_name);
+        let [mgmt, logs, files] = Self::group_driver_ipv6s(group_name);
         info!(
             self.logger,
             "Deleting local group {group_name} (bridge {bridge})"
         );
 
-        // Stop the RA daemon before removing the bridge it listens on.
-        self.stop_ra_daemon(&bridge);
+        // Stop `dnsmasq` and the time server before removing the bridge they
+        // listen on.
+        self.stop_dnsmasq(&bridge);
+        self.stop_time_server();
 
         // Best effort: stop every VM QEMU process started for this group. Each
         // VM records its pid under `working_dir/vms/<vm>/qemu.pid`; killing it
         // closes QEMU, which releases the TAP device it had open. A backend
         // hosts a single group per `bazel test` invocation, so every VM dir
-        // belongs to this group.
+        // belongs to this group. The VMs are stopped concurrently: a stop can
+        // take the whole SIGTERM grace period, which should not add up per VM.
         let vms_dir = self.active_local_backend.working_dir.join("vms");
         if let Ok(entries) = std::fs::read_dir(&vms_dir) {
-            for entry in entries.flatten() {
-                let pid_path = Self::qemu_pid_path(&entry.path());
-                if pid_path.exists() {
-                    self.stop_qemu(&pid_path);
+            let pid_paths: Vec<PathBuf> = entries
+                .flatten()
+                .map(|entry| Self::qemu_pid_path(&entry.path()))
+                .filter(|pid_path| pid_path.exists())
+                .collect();
+            std::thread::scope(|scope| {
+                for pid_path in &pid_paths {
+                    scope.spawn(move || self.stop_qemu(pid_path));
                 }
-            }
+            });
         }
 
         // Delete every TAP enslaved to the bridge, then the bridge itself. TAPs
@@ -1023,6 +1373,15 @@ impl LocalBackend {
                 .arg("raw")
                 .arg("-b")
                 .arg(&base)
+                // Pin the qcow2 version instead of inheriting `qemu-img`'s
+                // default, because `detect-zeroes=unmap` on the `-drive` below
+                // depends on it: only v3 (`compat=1.1`) can record a *zero
+                // cluster*, which is what makes a zeroed range read back as
+                // zeros rather than falling through to the backing file. On v2
+                // qcow2 would have to write the zeros out instead, silently
+                // giving up the space saving.
+                .arg("-o")
+                .arg("compat=1.1")
                 .arg(&primary_disk);
             // Grow the overlay's virtual size to `min_gib`, but only when it
             // exceeds the base image's size (the base is raw, so its byte length
@@ -1209,11 +1568,24 @@ impl LocalBackend {
 
         // Primary boot disk (qcow2 overlay), then any extra (raw) disks. Disks go
         // on later root ports so they never take the NICs' bus numbers.
+        //
+        // `detect-zeroes=unmap` keeps upgrade tests from filling the host's disk.
+        // A GuestOS upgrade `dd`s the whole update image onto the inactive slot
+        // (see `manageboot.sh`), and that image is mostly holes: ~11 GiB of
+        // `boot.img` + `root.img` for ~1.2 GiB of content. Without zero
+        // detection every one of those zero blocks allocates a qcow2 cluster, so
+        // a single 4-node upgrade/downgrade test — which writes both slots on
+        // every node — grows its overlays by ~87 GiB. Paired with the
+        // `discard=unmap` on the same drive, zero writes instead become unmaps,
+        // bringing that down to ~11 GiB. That is safe over a backing
+        // file because the overlay is created with `compat=1.1` above: qcow2 v3
+        // records a *zero cluster* rather than deallocating, so reads keep
+        // returning zeros instead of falling through to the base image.
         let rp = root_port!();
         arg!(
             "-drive",
             format!(
-                "if=none,id=disk0,file={},format=qcow2,cache=none,discard=unmap",
+                "if=none,id=disk0,file={},format=qcow2,cache=none,discard=unmap,detect-zeroes=unmap",
                 primary_disk.display()
             )
         );
@@ -1237,9 +1609,14 @@ impl LocalBackend {
             );
         }
 
-        // virtio-balloon and virtio-rng, each on its own root port.
+        // virtio-balloon and virtio-rng, each on its own root port. Free page reporting
+        // hands the memory a guest frees back to the host, e.g. all of it when the guest
+        // reboots, rather than QEMU holding on to the guest's high-water mark.
         let rp = root_port!();
-        arg!("-device", format!("virtio-balloon-pci,bus={rp},addr=0x0"));
+        arg!(
+            "-device",
+            format!("virtio-balloon-pci,bus={rp},addr=0x0,free-page-reporting=on")
+        );
         let rp = root_port!();
         arg!("-object", "rng-random,id=rng0,filename=/dev/urandom");
         arg!(
@@ -1402,6 +1779,20 @@ impl LocalBackend {
     }
 }
 
+/// Deterministic MAC address for `group_name`'s bridge, i.e. of the gateway.
+///
+/// A bridge without an explicitly set MAC takes the lowest MAC among its ports,
+/// so attaching or removing a TAP could change the gateway's MAC under the
+/// running guests, whose neighbour caches keep the old one for up to a minute,
+/// cutting them off from the host until then.
+fn bridge_mac(group_name: &str) -> MacAddr6 {
+    use ic_crypto_sha2::Sha256;
+    let hash = Sha256::hash(group_name.as_bytes());
+    // 0x6a as in `vm_mac`, but a second byte that is no `NodeType` index (see
+    // `calculate_deterministic_mac`), so it never equals a VM's MAC.
+    [0x6a, 0xff, hash[0], hash[1], hash[2], hash[3]].into()
+}
+
 /// Deterministic MAC address for a `(group, vm)` pair.
 fn vm_mac(group_name: &str, vm_name: &str) -> MacAddr6 {
     use ic_crypto_sha2::Sha256;
@@ -1454,7 +1845,7 @@ fn vm_uuid(group_name: &str, vm_name: &str) -> String {
 
 /// Sanitize a name for use in filesystem paths and the QEMU `-name`
 /// (alphanumeric, `-` and `_`; every other character maps to `-`).
-fn sanitize_name(s: &str) -> String {
+pub(crate) fn sanitize_name(s: &str) -> String {
     s.chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
@@ -1621,9 +2012,9 @@ fn extract_image(src: &Path, dst: &Path, logger: &Logger) -> Result<()> {
 /// (`rs/tests/driver/assets/create-universal-vm-config-image.sh`), and prebuilt
 /// UVM config images need not be aligned either, so pad them here. They carry a
 /// FAT filesystem that records its own length and ignores trailing bytes, so the
-/// padding is inert. Only these extra (config) disks are padded; boot disks are
-/// already block aligned and may use a GPT backup header at the last sector,
-/// which padding would displace.
+/// padding is inert.
+///
+/// Unaligned GPT-partitioned images cannot be padded and return an error instead.
 fn pad_to_request_alignment(path: &Path) -> Result<()> {
     /// Upper bound on the host block size (covers 512- and 4096-byte sectors).
     const DISK_REQUEST_ALIGNMENT: u64 = 4096;
@@ -1631,18 +2022,106 @@ fn pad_to_request_alignment(path: &Path) -> Result<()> {
         .with_context(|| format!("stat {} for alignment padding", path.display()))?
         .len();
     let aligned = len.next_multiple_of(DISK_REQUEST_ALIGNMENT);
-    if aligned != len {
-        std::fs::OpenOptions::new()
-            .write(true)
-            .open(path)
-            .with_context(|| format!("opening {} to pad for alignment", path.display()))?
-            .set_len(aligned)
-            .with_context(|| {
-                format!(
-                    "padding {} from {len} to {aligned} bytes for request alignment",
-                    path.display()
-                )
-            })?;
+    if aligned == len {
+        return Ok(());
     }
+    if has_gpt_header(path)? {
+        bail!(
+            "{} is GPT-partitioned and its length ({len} bytes) is not a multiple of the \
+             {DISK_REQUEST_ALIGNMENT}-byte request alignment: it can neither be padded (that \
+             would displace the GPT backup header in the last sector) nor opened writable with \
+             `cache=none`",
+            path.display()
+        );
+    }
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(path)
+        .with_context(|| format!("opening {} to pad for alignment", path.display()))?
+        .set_len(aligned)
+        .with_context(|| {
+            format!(
+                "padding {} from {len} to {aligned} bytes for request alignment",
+                path.display()
+            )
+        })?;
     Ok(())
+}
+
+/// Whether the disk image at `path` carries a GPT: its primary header sits in
+/// LBA 1 and starts with the `EFI PART` signature (UEFI spec 5.3.2).
+fn has_gpt_header(path: &Path) -> Result<bool> {
+    use std::os::unix::fs::FileExt;
+
+    /// LBA size assumed by the GPT signature's location. Every image the backend
+    /// attaches uses 512-byte logical sectors.
+    const LBA_SIZE: u64 = 512;
+    const GPT_SIGNATURE: &[u8; 8] = b"EFI PART";
+
+    let file = std::fs::File::open(path)
+        .with_context(|| format!("opening {} to look for a GPT", path.display()))?;
+    let mut signature = [0_u8; GPT_SIGNATURE.len()];
+    match file.read_exact_at(&mut signature, LBA_SIZE) {
+        Ok(()) => Ok(&signature == GPT_SIGNATURE),
+        // An image shorter than two sectors cannot hold a GPT.
+        Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => Ok(false),
+        Err(err) => {
+            Err(err).with_context(|| format!("reading the GPT signature of {}", path.display()))
+        }
+    }
+}
+
+/// Whether `/proc/<pid>/cmdline` has the argument pair `-pidfile <pid_path>`,
+/// i.e. the process is the QEMU that `start_vm` launched for this VM.
+fn qemu_cmdline_names_pidfile(pid: i32, pid_path: &Path) -> bool {
+    let pid_path = pid_path.display().to_string();
+    std::fs::read(format!("/proc/{pid}/cmdline"))
+        .map(|cmdline| {
+            cmdline
+                .split(|b| *b == 0)
+                .collect::<Vec<_>>()
+                .windows(2)
+                .any(|pair| pair[0] == b"-pidfile" && pair[1] == pid_path.as_bytes())
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Read;
+
+    #[test]
+    fn qemu_cmdline_names_pidfile_requires_the_pidfile_argument_pair() {
+        let pid_path = Path::new("/nonexistent/vms/vm/qemu.pid");
+        let path = pid_path.to_str().unwrap();
+        // `read` is a builtin, so `sh` blocks in it itself (no child process to
+        // orphan) until killed, with the positional arguments after `$0` in its argv.
+        // `spawn` can return before `/proc/<pid>/cmdline` shows the new argv, so wait
+        // for the newline that `sh` echoes once it runs.
+        let spawn = |args: &[&str]| {
+            let mut child = std::process::Command::new("sh")
+                .args(["-c", "echo; read _", "sh"])
+                .args(args)
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            child.stdout.as_mut().unwrap().read_exact(&mut [0]).unwrap();
+            child
+        };
+        let mut children = [
+            spawn(&["-pidfile", path]),
+            spawn(&[path]),
+            spawn(&["-pidfile", "/other/qemu.pid"]),
+        ];
+        let matches = children
+            .each_ref()
+            .map(|child| qemu_cmdline_names_pidfile(child.id() as i32, pid_path));
+        for child in &mut children {
+            child.kill().unwrap();
+            child.wait().unwrap();
+        }
+        assert_eq!(matches, [true, false, false]);
+    }
 }

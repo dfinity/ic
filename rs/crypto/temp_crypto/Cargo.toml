@@ -7,7 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-async-trait = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-config = { path = "../../config" }
 ic-crypto = { path = ".." }
@@ -36,6 +35,5 @@ tokio = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 ic-crypto-test-utils = { path = "../test_utils" }
-ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
 ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }

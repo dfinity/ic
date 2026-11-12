@@ -1,5 +1,4 @@
 mod partitions;
-mod proposal;
 mod recovery;
 mod verity;
 

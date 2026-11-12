@@ -5,8 +5,8 @@ use crate::{
 use ic_interfaces::{
     dkg::{ChangeAction, DkgPool, Mutations},
     p2p::consensus::{
-        ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
-        ValidatedPoolReader,
+        ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, InitialBroadcastSource, MutablePool,
+        UnvalidatedArtifact, ValidatedPoolReader,
     },
 };
 use ic_logger::{ReplicaLogger, warn};
@@ -58,27 +58,12 @@ impl DkgPoolImpl {
     /// purged
     fn purge(&mut self, height: Height) -> Vec<DkgMessageId> {
         self.current_start_height = height;
-        // TODO: use drain_filter once it's stable.
-        let unvalidated_keys: Vec<_> = self
-            .unvalidated
-            .keys()
-            .filter(|id| id.height < height)
-            .cloned()
-            .collect();
-        for id in unvalidated_keys {
-            self.unvalidated.remove(&id);
-        }
 
-        let validated_keys: Vec<_> = self
-            .validated
-            .keys()
-            .filter(|id| id.height < height)
-            .cloned()
-            .collect();
-        for hash in &validated_keys {
-            self.validated.remove(hash);
-        }
-        validated_keys
+        let _ = self
+            .unvalidated
+            .extract_keys_below(&DkgMessageId::smallest_at_height(height));
+        self.validated
+            .extract_keys_below(&DkgMessageId::smallest_at_height(height))
     }
 }
 
@@ -154,7 +139,9 @@ impl ValidatedPoolReader<dkg::Message> for DkgPoolImpl {
     fn get(&self, id: &DkgMessageId) -> Option<dkg::Message> {
         self.validated.get(id).cloned()
     }
+}
 
+impl InitialBroadcastSource<dkg::Message> for DkgPoolImpl {
     fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = dkg::Message> + '_> {
         // NiDKG artifacts are not persisted.
         Box::new(std::iter::empty())
@@ -202,7 +189,7 @@ mod test {
     use ic_interfaces::dkg::DkgPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_consensus::fake::FakeSigner;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::{
         NodeId,
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -218,7 +205,7 @@ mod test {
             target_subnet: NiDkgTargetSubnet::Local,
         };
         dkg::Message {
-            content: dkg::DealingContent::new(dummy_dealing(0), dkg_id),
+            content: dkg::DealingContent::new(dummy_dealing(0), dkg_id, test_replica_version()),
             signature: BasicSignature::fake(node_id),
         }
     }

@@ -3,6 +3,16 @@ GitHub CI for the IC Repo
 ## Using custom CI labels
 CI labels trigger various behavior. You can reference the labels that start with `CI_` and see available options.
 
+The labels read by `.github/workflows/ci-main.yml`, `.github/workflows/ci-rbe-evaluation.yml` and `.github/workflows/ci-pr-only.yml` are:
+
+| Label | Effect |
+| --- | --- |
+| `CI_ALL_BAZEL_TARGETS` | Build and test all bazel targets, including tests tagged `long_test`, like on `master`. Mutually exclusive with `CI_SKIP_SYSTEM_TESTS`. |
+| `CI_SKIP_SYSTEM_TESTS` | Don't build or run any test tagged `system_test` (every test declared via `rs/tests/system_tests.bzl`), even when listed in `PULL_REQUEST_BAZEL_TARGETS`. Meant for Software Factory agents that already ran the system-tests locally while working on their task. Only affects `pull_request` runs; the merge queue never runs system-tests anyway (`--test_timeout_filters=short,moderate`). Mutually exclusive with `CI_ALL_BAZEL_TARGETS`: the `Set Config` job fails when both are set. |
+| `CI_OVERRIDE_BUF_BREAKING` | Skip the buf breaking-change (protobuf) check. Explain in the PR description why. |
+| `CI_OVERRIDE_DIDC_CHECK` | Skip the backwards compatibility didc check. Explain in the PR description why. |
+| `CI_RUN_CARGO_JOBS` | Run the Cargo build and lint jobs even when no Rust files were modified. |
+
 Adding a label alone will not trigger CI, you will need to retrigger it by either opening & closing the PR or adding an empty commit with `git commit -m 'retrigger CI' --allow-empty`.
 
 ## Using GitHub Apps in CI

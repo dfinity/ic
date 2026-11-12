@@ -64,7 +64,8 @@ pub struct NNSRecoveryFailoverNodesArgs {
     pub replica_version: Option<ReplicaVersion>,
 
     #[clap(long)]
-    /// The replay will stop at this height and make a checkpoint.
+    /// The replay will stop at this height and create a checkpoint of the state sitting one height
+    /// above the last replayed height.
     pub replay_until_height: Option<u64>,
 
     /// IP address of the auxiliary host the registry is uploaded to
@@ -364,7 +365,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
 
             StepType::ValidateReplayOutput => Ok(Box::new(
                 self.recovery
-                    .get_validate_replay_step(self.params.subnet_id, 0),
+                    .get_validate_replay_step(self.params.subnet_id),
             )),
 
             StepType::UpdateRegistryLocalStore => Ok(Box::new(
@@ -403,7 +404,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                     self.params.registry_url.clone()
                 };
                 if let Some(url) = url {
-                    let state_params = self.recovery.get_replay_output()?;
+                    let state_params = self.recovery.get_replay_output()?.state_params;
                     let recovery_height = Recovery::get_recovery_height(state_params.height);
 
                     let store_tar = self.get_local_store_tar();

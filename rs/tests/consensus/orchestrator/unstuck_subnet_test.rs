@@ -5,9 +5,9 @@ Goal:: Ensure that an upgrade with a wrong hash can be fixed by downloading the 
 Runbook::
 . Setup an IC with 4-node NNS.
 . Initiate upgrade on the replicas with a wrong hash.
-. Prove subnet is stuck - "wrong SHA" log message and inability to create a canister.
-. On 3/4 of nodes download the proper image via done providers admin SSH access.
-. Restart the orchestrator on those nodes.
+. Prove subnet is stuck - every node logs a "wrong SHA" message and the certified state stops advancing.
+. On 3/4 of nodes download the proper image via node providers admin SSH access.
+. Restart the orchestrator on those nodes and wait until they run the target version.
 
 Success:: The subnet is unstuck as we can write a message to it.
 
@@ -28,10 +28,9 @@ use ic_consensus_system_test_utils::{
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::{
-    ic::{AmountOfMemoryKiB, InternetComputer, Subnet, VmResourceOverrides},
+    ic::{InternetComputer, Subnet},
     test_env::TestEnv,
     test_env_api::*,
-    test_setup::SystemTestBackend,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{JournalStreamer, block_on};
@@ -42,32 +41,14 @@ const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
 const NUM_READ_RETRIES: usize = 10;
 
-// Per-VM memory used on the local backend. There all VMs run on a single host,
-// so the Farm default of 24 GiB per VM would let the 4 System VMs collectively
-// exceed the host's RAM. Under Namespace remote execution the host is an even
-// smaller RBE worker, so the VMs thrash and freeze while the orchestrator
-// unpacks and writes the ~579 MiB update image to disk during the upgrade. The
-// frozen nodes never rejoin, so the test times out waiting for them to report
-// the new version. 4 GiB per VM keeps all 4 VMs comfortably within the host's
-// RAM (matching the sibling `upgrade_downgrade_*_subnet_test`s).
-const LOCAL_BACKEND_VM_MEMORY: AmountOfMemoryKiB = AmountOfMemoryKiB::new(4 * 1024 * 1024);
-
 fn config(env: TestEnv) {
-    let mut ic = InternetComputer::new().add_subnet(
-        Subnet::new(SubnetType::System)
-            .add_nodes(SUBNET_SIZE)
-            .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
-    );
-    // On the local backend, cap the per-VM memory so all VMs fit within the
-    // single host's RAM (see `LOCAL_BACKEND_VM_MEMORY`). On Farm, keep the
-    // generous default.
-    if SystemTestBackend::from_env() == SystemTestBackend::Local {
-        ic = ic.with_resource_overrides(VmResourceOverrides {
-            memory_kibibytes: Some(LOCAL_BACKEND_VM_MEMORY),
-            ..Default::default()
-        });
-    }
-    ic.setup_and_start(&env)
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .add_nodes(SUBNET_SIZE)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
+        )
+        .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
@@ -110,15 +91,26 @@ fn test(test_env: TestEnv) {
     info!(logger, "Upgrade started");
 
     for nns_node in test_env.topology_snapshot().root_subnet().nodes() {
-        assert!(
-            JournalStreamer::new(nns_node.block_on_ssh_session().unwrap())
-                .follow()
-                .max_lines(1)
-                .contains("FileHashMismatchError")
-                .unwrap_or_default(),
-            "No hash mismatch error in the logs of node {}",
-            nns_node.node_id
+        let journal = JournalStreamer::new(
+            nns_node
+                .block_on_ssh_session()
+                .expect("Failed to establish SSH session"),
         );
+        ic_system_test_driver::retry_with_msg!(
+            format!(
+                "check for FileHashMismatchError in the logs of node {}",
+                nns_node.node_id
+            ),
+            logger.clone(),
+            secs(300),
+            secs(5),
+            || match journal.contains("FileHashMismatchError") {
+                Ok(true) => Ok(()),
+                Ok(false) => bail!("No hash mismatch error in the logs yet"),
+                Err(err) => bail!("No hash mismatch error in the logs yet: {err:#}"),
+            }
+        )
+        .expect("No hash mismatch error in the logs");
     }
 
     info!(logger, "Check that system does not make progress");
@@ -154,14 +146,33 @@ fn test(test_env: TestEnv) {
         sudo chown --reference=. image.bin
         "#,
     );
-    for n in &nodes {
-        let s = n
-            .block_on_ssh_session()
-            .expect("Failed to establish SSH session");
-        if let Err(err) = execute_bash_command(&s, command.clone()) {
-            panic!("{}", err)
+    let command = &command;
+    std::thread::scope(|scope| {
+        let downloads: Vec<_> = nodes
+            .iter()
+            .map(|node| {
+                scope.spawn(move || {
+                    let session = node.block_on_ssh_session().map_err(|err| {
+                        format!(
+                            "Failed to establish SSH session to {}: {err:#}",
+                            node.get_ip_addr()
+                        )
+                    })?;
+                    execute_bash_command(&session, command.clone()).map_err(|err| {
+                        format!(
+                            "Failed to download the image on {}: {err}",
+                            node.get_ip_addr()
+                        )
+                    })
+                })
+            })
+            .collect();
+        for download in downloads {
+            if let Err(err) = download.join().expect("Download thread panicked") {
+                panic!("{}", err)
+            }
         }
-    }
+    });
 
     info!(logger, "Starting orchestrator...");
     for n in &nodes {
@@ -177,7 +188,7 @@ fn test(test_env: TestEnv) {
             format!("check if all 3 nodes have version {}", target_version),
             test_env.logger(),
             secs(1800),
-            secs(60),
+            secs(10),
             || match get_assigned_replica_version(n) {
                 Ok(current_version) => {
                     info!(

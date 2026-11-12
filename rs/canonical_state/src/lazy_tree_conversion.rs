@@ -35,7 +35,6 @@ use ic_types::{
     messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId, Refund, Request, Response, StreamMessage},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
 };
-use ic_types_cycles::NominalCycles;
 use std::convert::{AsRef, TryFrom, TryInto};
 use std::iter::once;
 use std::sync::Arc;
@@ -446,10 +445,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
     );
     let own_subnet_id = state.metadata.own_subnet_id;
     let inverted_routing_table = Arc::new(invert_routing_table(
-        state
-            .metadata
-            .network_topology
-            .routing_table_for_certification(),
+        state.metadata.network_topology.routing_table(),
     ));
     let split_routing_table = Arc::new(split_inverted_routing_table(
         &inverted_routing_table,
@@ -479,12 +475,11 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
             )
             .with("subnet", move || {
                 subnets_as_tree(
-                    state.metadata.network_topology.subnets_for_certification(),
+                    state.metadata.network_topology.subnets(),
                     own_subnet_id,
                     &state.metadata.own_subnet_info.node_public_keys,
                     inverted_routing_table.clone(),
                     &state.metadata.subnet_metrics,
-                    state.canister_states(),
                     certification_version,
                 )
             })
@@ -497,7 +492,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
                 "canister_ranges",
                 move || {
                     canister_ranges_as_tree(
-                        state.metadata.network_topology.subnets_for_certification(),
+                        state.metadata.network_topology.subnets(),
                         Arc::clone(&split_routing_table),
                         certification_version,
                     )
@@ -602,6 +597,7 @@ macro_rules! message_expander {
                 CertificationVersion::V27 => $expand::<{ CertificationVersion::V27 as u32 }>,
                 CertificationVersion::V28 => $expand::<{ CertificationVersion::V28 as u32 }>,
                 CertificationVersion::V29 => $expand::<{ CertificationVersion::V29 as u32 }>,
+                CertificationVersion::V30 => $expand::<{ CertificationVersion::V30 as u32 }>,
             }
         }
     };
@@ -1029,6 +1025,7 @@ fn select_canister_expander(version: CertificationVersion) -> SubtreeExpander {
         CertificationVersion::V27 => expand_canister::<{ CertificationVersion::V27 as u32 }>,
         CertificationVersion::V28 => expand_canister::<{ CertificationVersion::V28 as u32 }>,
         CertificationVersion::V29 => expand_canister::<{ CertificationVersion::V29 as u32 }>,
+        CertificationVersion::V30 => expand_canister::<{ CertificationVersion::V30 as u32 }>,
     }
 }
 
@@ -1123,7 +1120,6 @@ fn subnets_as_tree<'a>(
     own_subnet_node_public_keys: &'a BTreeMap<NodeId, Vec<u8>>,
     inverted_routing_table: Arc<BTreeMap<SubnetId, Vec<(PrincipalId, PrincipalId)>>>,
     metrics: &'a SubnetMetrics,
-    canisters: &'a CanisterStates,
     certification_version: CertificationVersion,
 ) -> LazyTree<'a> {
     fork(MapTransformFork {
@@ -1149,24 +1145,10 @@ fn subnets_as_tree<'a>(
                     .with_tree_if(
                         subnet_id == &own_subnet_id,
                         "metrics",
-                        blob(move || {
-                            // Starting with `V29`, the reported total also
-                            // includes the cycles consumed by all non-deleted
-                            // canisters. `total_consumed_cycles` is
-                            // `O(|hot canisters|)` thanks to the precomputed
-                            // cold-pool aggregate; only compute it when needed.
-                            let consumed_cycles_by_canisters =
-                                if certification_version >= CertificationVersion::V29 {
-                                    canisters.total_consumed_cycles()
-                                } else {
-                                    NominalCycles::zero()
-                                };
-                            encode_subnet_metrics(
-                                metrics,
-                                consumed_cycles_by_canisters,
-                                certification_version,
-                            )
-                        }),
+                        // Starting with `V29`, the reported total also includes
+                        // the cycles consumed by all non-deleted canisters
+                        // (starting with `V30`, as monotonic amounts).
+                        blob(move || encode_subnet_metrics(metrics, certification_version)),
                     )
                     .with_tree_if(
                         certification_version >= CertificationVersion::V25,

@@ -16,8 +16,11 @@ use bytes::Bytes;
 use candid::Principal;
 use http::header::CONTENT_TYPE;
 use humantime::format_rfc3339;
-use ic_bn_lib::http::{body::CountingBody, cache::CacheStatus, http_version};
 use ic_bn_lib::{http::server::conn::ConnInfo, tasks::Run};
+use ic_bn_lib::{
+    http::{body::CountingBody, cache::CacheStatus, http_version},
+    truncate,
+};
 use ic_bn_lib::{
     prometheus::{
         Encoder, HistogramOpts, HistogramVec, IntCounterVec, IntGauge, IntGaugeVec, Registry,
@@ -159,25 +162,21 @@ impl MetricsRunner {
         health: Arc<dyn Health>,
     ) -> Self {
         let mem_allocated = register_int_gauge_with_registry!(
-            format!("memory_allocated"),
-            format!("Allocated memory in bytes"),
+            "memory_allocated",
+            "Allocated memory in bytes",
             registry
         )
         .unwrap();
 
         let mem_resident = register_int_gauge_with_registry!(
-            format!("memory_resident"),
-            format!("Resident memory in bytes"),
+            "memory_resident",
+            "Resident memory in bytes",
             registry
         )
         .unwrap();
 
-        let healthy = register_int_gauge_with_registry!(
-            format!("healthy"),
-            format!("Node health status"),
-            registry
-        )
-        .unwrap();
+        let healthy =
+            register_int_gauge_with_registry!("healthy", "Node health status", registry).unwrap();
 
         Self {
             metrics_cache,
@@ -242,16 +241,16 @@ impl MetricParamsPersist {
         Self {
             // Number of ranges
             ranges: register_int_gauge_with_registry!(
-                format!("persist_ranges"),
-                format!("Number of canister ranges currently published"),
+                "persist_ranges",
+                "Number of canister ranges currently published",
                 registry
             )
             .unwrap(),
 
             // Number of nodes
             nodes: register_int_gauge_with_registry!(
-                format!("persist_nodes"),
-                format!("Number of nodes currently published"),
+                "persist_nodes",
+                "Number of nodes currently published",
                 registry
             )
             .unwrap(),
@@ -390,15 +389,15 @@ impl MetricParamsSnapshot {
     pub fn new(registry: &Registry) -> Self {
         Self {
             version: register_int_gauge_with_registry!(
-                format!("registry_version"),
-                format!("Currently published registry version"),
+                "registry_version",
+                "Currently published registry version",
                 registry
             )
             .unwrap(),
 
             timestamp: register_int_gauge_with_registry!(
-                format!("registry_timestamp"),
-                format!("Timestamp of the last registry update"),
+                "registry_timestamp",
+                "Timestamp of the last registry update",
                 registry
             )
             .unwrap(),
@@ -415,8 +414,8 @@ impl HttpMetricParamsStatus {
     pub fn new(registry: &Registry) -> Self {
         Self {
             counter: register_int_counter_vec_with_registry!(
-                format!("http_request_status_total"),
-                format!("Counts occurrences of status calls"),
+                "http_request_status_total",
+                "Counts occurrences of status calls",
                 &["health"],
                 registry
             )
@@ -431,14 +430,11 @@ pub async fn metrics_middleware_status(
     next: Next,
 ) -> impl IntoResponse {
     let response = next.run(request).await;
-    let health = response
-        .extensions()
-        .get::<ReplicaHealthStatus>()
-        .unwrap()
-        .as_ref();
 
-    let HttpMetricParamsStatus { counter } = metric_params;
-    counter.with_label_values(&[health]).inc();
+    if let Some(health) = response.extensions().get::<ReplicaHealthStatus>().as_ref() {
+        let HttpMetricParamsStatus { counter } = metric_params;
+        counter.with_label_values(&[health]).inc();
+    }
 
     response
 }
@@ -624,10 +620,10 @@ pub async fn metrics_middleware(
         let remote_addr_hashed = hash_fn(&remote_addr);
         let sender_hashed = hash_fn(&sender);
 
-        let method_name = ctx.method_name.as_ref().map(|name| {
-            let truncated_len = name.len().min(MAX_LOGGING_METHOD_NAME_LENGTH);
-            name[..truncated_len].to_string()
-        });
+        let method_name = ctx
+            .method_name
+            .as_ref()
+            .map(|name| truncate(name, MAX_LOGGING_METHOD_NAME_LENGTH));
 
         // Log
         if !log_failed_requests_only || failed {

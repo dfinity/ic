@@ -35,6 +35,12 @@ pub struct SubnetTopology {
     pub canister_cycles_cost_schedule: i32,
     #[prost(message, repeated, tag = "8")]
     pub subnet_admins: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+    /// Whether the subnet is "cooling down", i.e. quiescing.
+    ///
+    /// See `ic_replicated_state::SubnetTopology::cooling_down` for the exact
+    /// semantics.
+    #[prost(bool, tag = "9")]
+    pub cooling_down: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetsEntry {
@@ -71,21 +77,11 @@ pub struct NetworkTopology {
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "8")]
     pub chain_key_enabled_subnets: ::prost::alloc::vec::Vec<ChainKeySubnetEntry>,
-    #[prost(message, optional, tag = "9")]
-    pub full_topology: ::core::option::Option<FullTopology>,
     #[prost(message, optional, tag = "10")]
     pub default_initial_dkg_subnet_id:
         ::core::option::Option<super::super::super::types::v1::SubnetId>,
     #[prost(message, repeated, tag = "11")]
     pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FullTopology {
-    #[prost(message, repeated, tag = "1")]
-    pub subnets: ::prost::alloc::vec::Vec<SubnetsEntry>,
-    #[prost(message, optional, tag = "2")]
-    pub routing_table:
-        ::core::option::Option<super::super::super::registry::routing_table::v1::RoutingTable>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetupInitialDkgContext {
@@ -473,12 +469,6 @@ pub struct SubnetMetrics {
     #[prost(message, optional, tag = "1")]
     pub consumed_cycles_by_deleted_canisters:
         ::core::option::Option<super::super::super::types::v1::NominalCycles>,
-    #[prost(message, optional, tag = "2")]
-    pub consumed_cycles_http_outcalls:
-        ::core::option::Option<super::super::super::types::v1::NominalCycles>,
-    #[prost(message, optional, tag = "3")]
-    pub consumed_cycles_ecdsa_outcalls:
-        ::core::option::Option<super::super::super::types::v1::NominalCycles>,
     #[prost(message, repeated, tag = "5")]
     pub consumed_cycles_by_use_case:
         ::prost::alloc::vec::Vec<super::super::canister_state_bits::v1::ConsumedCyclesByUseCase>,
@@ -490,9 +480,8 @@ pub struct SubnetMetrics {
     pub update_transactions_total: ::core::option::Option<u64>,
     #[prost(message, repeated, tag = "11")]
     pub threshold_signature_agreements: ::prost::alloc::vec::Vec<ThresholdSignatureAgreementsEntry>,
-    #[prost(message, repeated, tag = "12")]
-    pub consumed_cycles_by_use_case_as_counters:
-        ::prost::alloc::vec::Vec<super::super::canister_state_bits::v1::ConsumedCyclesByUseCase>,
+    #[prost(uint64, optional, tag = "13")]
+    pub round_instructions_total: ::core::option::Option<u64>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BitcoinGetSuccessorsFollowUpResponses {
@@ -651,6 +640,14 @@ pub struct SplitFrom {
     /// subnet that this was split from.
     #[prost(message, optional, tag = "1")]
     pub subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SubnetMerged {
+    /// Whether the subnet is the result of a subnet merge. Because `false` is
+    /// encoded as an empty message, the enclosing file is not written at all in
+    /// that case.
+    #[prost(bool, tag = "1")]
+    pub merged: bool,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

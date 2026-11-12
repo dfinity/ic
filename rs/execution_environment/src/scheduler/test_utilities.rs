@@ -14,8 +14,8 @@ use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnet
 use ic_embedders::{
     CompilationCache, CompilationResult, WasmExecutionInput,
     wasm_executor::{
-        CanisterStateChanges, ExecutionStateChanges, PausedWasmExecution, SliceExecutionOutput,
-        WasmExecutionResult, WasmExecutor,
+        CanisterStateChanges, CreatedExecutionState, ExecutionStateChanges, PausedWasmExecution,
+        SliceExecutionOutput, WasmExecutionResult, WasmExecutor,
     },
     wasmtime_embedder::system_api::{
         ApiType, ExecutionParameters,
@@ -52,7 +52,7 @@ use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::{generate_subnets, test_registry_settings};
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, subnet_test_id, user_test_id},
+    ids::{canister_test_id, subnet_test_id, test_replica_version, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
@@ -284,8 +284,7 @@ impl SchedulerTest {
         let wasm_source = system_task
             .map(|x| x.to_string().as_bytes().to_vec())
             .unwrap_or(EMPTY_WASM.to_vec());
-        let time_of_last_allocation_charge =
-            time_of_last_allocation_charge.map_or(UNIX_EPOCH, |time| time);
+        let time_of_last_allocation_charge = time_of_last_allocation_charge.unwrap_or(UNIX_EPOCH);
         let controller = controller.unwrap_or(self.user_id.get());
         let mut builder = CanisterStateBuilder::new()
             .with_canister_id(canister_id)
@@ -306,7 +305,7 @@ impl SchedulerTest {
             wasm_executor
                 .create_execution_state(CanisterModule::new(wasm_source), canister_id)
                 .unwrap()
-                .0,
+                .execution_state,
         );
         canister_state
             .system_state
@@ -858,7 +857,7 @@ impl Default for SchedulerTestBuilder {
             master_public_key_ids: vec![],
             metrics_registry: MetricsRegistry::new(),
             round_summary: None,
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
             subnet_admins: BTreeSet::new(),
         }
@@ -958,13 +957,6 @@ impl SchedulerTestBuilder {
     pub fn with_round_summary(self, round_summary: ExecutionRoundSummary) -> Self {
         Self {
             round_summary: Some(round_summary),
-            ..self
-        }
-    }
-
-    pub fn with_replica_version(self, replica_version: ReplicaVersion) -> Self {
-        Self {
-            replica_version,
             ..self
         }
     }
@@ -1287,7 +1279,7 @@ impl WasmExecutor for TestWasmExecutor {
         canister_module: CanisterModule,
         canister_id: CanisterId,
         _compilation_cache: Arc<CompilationCache>,
-    ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
+    ) -> HypervisorResult<CreatedExecutionState> {
         let mut guard = self.core.lock().unwrap();
         guard.create_execution_state(canister_module, canister_id)
     }
@@ -1397,7 +1389,6 @@ impl TestWasmExecutorCore {
         let instance_stats = InstanceStats {
             wasm_accessed_pages: message.dirty_pages,
             wasm_dirty_pages: message.dirty_pages,
-            wasm_read_before_write_count: message.dirty_pages,
             ..Default::default()
         };
         let slice = SliceExecutionOutput {
@@ -1429,7 +1420,7 @@ impl TestWasmExecutorCore {
         &mut self,
         canister_module: CanisterModule,
         _canister_id: CanisterId,
-    ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
+    ) -> HypervisorResult<CreatedExecutionState> {
         let mut exported_functions = vec![
             WasmMethod::Update("update".into()),
             WasmMethod::System(SystemMethod::CanisterPostUpgrade),
@@ -1451,11 +1442,12 @@ impl TestWasmExecutorCore {
             WasmMetadata::default(),
         );
         let compilation_result = CompilationResult::empty_for_testing();
-        Ok((
+        Ok(CreatedExecutionState {
             execution_state,
-            NumInstructions::from(0),
-            Some(compilation_result),
-        ))
+            compilation_cost: NumInstructions::from(0),
+            compilation_result: Some(compilation_result),
+            declares_wasm_memory: true,
+        })
     }
 
     fn perform_calls(

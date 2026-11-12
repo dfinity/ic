@@ -1,6 +1,6 @@
 <domain type='qemu' id='1'>
   <name>upgrade-guestos</name>
-  <uuid>1ea49839-7f46-4560-a4c7-fce677bbfbbd</uuid>
+  <uuid>1ea49839-7f46-4560-a4c7-fce677bbfb00</uuid>
   <metadata>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
       <libosinfo:os id="http://ubuntu.com/ubuntu/26.04"/>

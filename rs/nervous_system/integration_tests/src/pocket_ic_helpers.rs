@@ -1064,6 +1064,7 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
                 wasm_module: Some(wasm.bytes()),
                 arg: Some(vec![]),
                 skip_stopping_before_installing: None,
+                canister_upgrade_options: None,
             })),
         },
     )

@@ -231,6 +231,7 @@ impl NiDkgTag {
 pub enum EcdsaCurve {
     Unspecified = 0,
     Secp256k1 = 1,
+    Secp256r1 = 2,
 }
 impl EcdsaCurve {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -241,6 +242,7 @@ impl EcdsaCurve {
         match self {
             Self::Unspecified => "ECDSA_CURVE_UNSPECIFIED",
             Self::Secp256k1 => "ECDSA_CURVE_SECP256K1",
+            Self::Secp256r1 => "ECDSA_CURVE_SECP256R1",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -248,6 +250,7 @@ impl EcdsaCurve {
         match value {
             "ECDSA_CURVE_UNSPECIFIED" => Some(Self::Unspecified),
             "ECDSA_CURVE_SECP256K1" => Some(Self::Secp256k1),
+            "ECDSA_CURVE_SECP256R1" => Some(Self::Secp256r1),
             _ => None,
         }
     }
@@ -381,7 +384,7 @@ pub struct PostSplitArgs {
     #[prost(message, optional, tag = "1")]
     pub new_subnet_id: ::core::option::Option<SubnetId>,
 }
-/// next id: 16
+/// next id: 17
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Summary {
     #[prost(uint64, tag = "1")]
@@ -396,8 +399,6 @@ pub struct Summary {
     pub configs: ::prost::alloc::vec::Vec<NiDkgConfig>,
     #[prost(message, repeated, tag = "9")]
     pub remote_dkg_attempts: ::prost::alloc::vec::Vec<RemoteDkgAttemptCount>,
-    #[prost(message, repeated, tag = "10")]
-    pub transcripts_for_remote_subnets: ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
     #[prost(message, repeated, tag = "11")]
     pub current_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
     #[prost(message, repeated, tag = "12")]
@@ -569,8 +570,6 @@ pub struct CanisterHttpRequest {
 pub struct CanisterHttpResponse {
     #[prost(uint64, tag = "1")]
     pub id: u64,
-    #[prost(message, optional, tag = "4")]
-    pub canister_id: ::core::option::Option<CanisterId>,
     #[prost(message, optional, tag = "3")]
     pub content: ::core::option::Option<CanisterHttpResponseContent>,
 }
@@ -647,6 +646,17 @@ pub struct CanisterHttpResponseDivergence {
     #[prost(message, repeated, tag = "1")]
     pub shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpOutOfCycles {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(message, repeated, tag = "2")]
+    pub shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+    #[prost(message, optional, tag = "3")]
+    pub min_cost: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+    #[prost(message, optional, tag = "4")]
+    pub unspent_allowance: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FlexibleCanisterHttpResponseWithProof {
     #[prost(message, optional, tag = "1")]
@@ -662,6 +672,8 @@ pub struct FlexibleCanisterHttpResponses {
     pub responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
     #[prost(message, optional, tag = "3")]
     pub initial_spent: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+    #[prost(message, repeated, tag = "4")]
+    pub extra_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FlexibleCanisterHttpTimeout {}
@@ -680,12 +692,26 @@ pub struct FlexibleCanisterHttpTooManyRejects {
     pub reject_responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
     #[prost(message, optional, tag = "2")]
     pub initial_spent: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+    #[prost(message, repeated, tag = "3")]
+    pub extra_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpOutOfCycles {
+    #[prost(message, repeated, tag = "1")]
+    pub all_seen_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+    #[prost(message, optional, tag = "2")]
+    pub min_cost: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+    #[prost(message, optional, tag = "3")]
+    pub unspent_allowance: ::core::option::Option<super::super::state::queues::v1::Cycles>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FlexibleCanisterHttpError {
     #[prost(uint64, tag = "1")]
     pub callback_id: u64,
-    #[prost(oneof = "flexible_canister_http_error::ErrorDetails", tags = "2, 3, 4")]
+    #[prost(
+        oneof = "flexible_canister_http_error::ErrorDetails",
+        tags = "2, 3, 4, 5"
+    )]
     pub error_details: ::core::option::Option<flexible_canister_http_error::ErrorDetails>,
 }
 /// Nested message and enum types in `FlexibleCanisterHttpError`.
@@ -698,13 +724,15 @@ pub mod flexible_canister_http_error {
         ResponsesTooLarge(super::FlexibleCanisterHttpResponsesTooLarge),
         #[prost(message, tag = "4")]
         TooManyRejects(super::FlexibleCanisterHttpTooManyRejects),
+        #[prost(message, tag = "5")]
+        OutOfCycles(super::FlexibleCanisterHttpOutOfCycles),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseMessage {
     #[prost(
         oneof = "canister_http_response_message::MessageType",
-        tags = "1, 2, 3, 4, 5"
+        tags = "1, 2, 3, 4, 5, 6, 7"
     )]
     pub message_type: ::core::option::Option<canister_http_response_message::MessageType>,
 }
@@ -722,6 +750,10 @@ pub mod canister_http_response_message {
         FlexibleResponses(super::FlexibleCanisterHttpResponses),
         #[prost(message, tag = "5")]
         FlexibleError(super::FlexibleCanisterHttpError),
+        #[prost(message, tag = "6")]
+        OutOfCycles(super::CanisterHttpOutOfCycles),
+        #[prost(message, tag = "7")]
+        AsyncReceipt(super::CanisterHttpShare),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1277,6 +1309,13 @@ pub struct DkgMessageId {
     pub height: u64,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradeAuthorizationShareId {
+    #[prost(bytes = "vec", tag = "1")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ConsensusMessageId {
     #[prost(message, optional, tag = "1")]
     pub hash: ::core::option::Option<ConsensusMessageHash>,
@@ -1449,6 +1488,8 @@ pub struct Block {
     pub query_stats_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "17")]
     pub chain_key_payload_bytes: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "18")]
+    pub upgrade_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "11")]
     pub payload_hash: ::prost::alloc::vec::Vec<u8>,
 }
@@ -1624,7 +1665,7 @@ pub struct EquivocationProof {
     #[prost(bytes = "vec", tag = "8")]
     pub signature2: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SubnetStreamSlice {
     #[prost(message, optional, tag = "1")]
     pub subnet_id: ::core::option::Option<SubnetId>,
@@ -1732,6 +1773,20 @@ pub struct GetIDkgDealingInBlockResponse {
     pub signed_dealing:
         ::core::option::Option<super::super::registry::subnet::v1::IDkgSignedDealingTuple>,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetCanisterHttpResponseInBlockRequest {
+    /// The hash of the stripped `CanisterHttpResponse`, i.e. the `content_hash` that
+    /// the block's own metadata for that response carries.
+    #[prost(bytes = "vec", tag = "1")]
+    pub content_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "2")]
+    pub block_proposal_id: ::core::option::Option<ConsensusMessageId>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetCanisterHttpResponseInBlockResponse {
+    #[prost(message, optional, tag = "1")]
+    pub response: ::core::option::Option<CanisterHttpResponse>,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StrippedBlockProposal {
     /// The original block proposal proto but all \[`Strippable`\] data is removed.
@@ -1746,6 +1801,17 @@ pub struct StrippedBlockProposal {
     /// The stripped IDKG dealings, i.e. the IDs of IDKG dealings that were pruned from the block proposal.
     #[prost(message, repeated, tag = "4")]
     pub stripped_idkg_dealings: ::prost::alloc::vec::Vec<StrippedIDkgDealing>,
+    /// The stripped canister HTTP responses, i.e. the response contents that were pruned from the
+    /// canister HTTP payload of the block proposal. Deduplicated: two committee members of a flexible
+    /// outcall that produced the very same response share one entry.
+    #[prost(message, repeated, tag = "5")]
+    pub stripped_canister_http_responses: ::prost::alloc::vec::Vec<StrippedCanisterHttpResponse>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct StrippedCanisterHttpResponse {
+    /// The hash of the response content that was pruned from the canister HTTP payload.
+    #[prost(bytes = "vec", tag = "1")]
+    pub content_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StrippedIDkgDealing {
@@ -1811,4 +1877,52 @@ impl ChainKeyErrorCode {
             _ => None,
         }
     }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpgradePermitAction {
+    #[prost(oneof = "upgrade_permit_action::Action", tags = "1, 2, 3")]
+    pub action: ::core::option::Option<upgrade_permit_action::Action>,
+}
+/// Nested message and enum types in `UpgradePermitAction`.
+pub mod upgrade_permit_action {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Action {
+        #[prost(message, tag = "1")]
+        RequestPermit(super::RequestUpgradePermit),
+        #[prost(message, tag = "2")]
+        AuthorizePermit(super::AuthorizeUpgradePermit),
+        #[prost(message, tag = "3")]
+        ReturnPermit(super::ReturnUpgradePermit),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradePermitRequest {
+    #[prost(message, optional, tag = "1")]
+    pub requestor: ::core::option::Option<NodeId>,
+    #[prost(uint64, tag = "2")]
+    pub request_height: u64,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RequestUpgradePermit {
+    #[prost(message, optional, tag = "1")]
+    pub request: ::core::option::Option<UpgradePermitRequest>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AuthorizeUpgradePermit {
+    #[prost(message, optional, tag = "1")]
+    pub request: ::core::option::Option<UpgradePermitRequest>,
+    #[prost(message, repeated, tag = "2")]
+    pub signatures: ::prost::alloc::vec::Vec<BasicSignature>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ReturnUpgradePermit {
+    #[prost(message, optional, tag = "1")]
+    pub node: ::core::option::Option<NodeId>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradeAuthorizationShare {
+    #[prost(message, optional, tag = "1")]
+    pub request: ::core::option::Option<UpgradePermitRequest>,
+    #[prost(message, optional, tag = "2")]
+    pub signature: ::core::option::Option<BasicSignature>,
 }

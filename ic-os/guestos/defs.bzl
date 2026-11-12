@@ -2,7 +2,11 @@
 Hold manifest common to all GuestOS variants.
 """
 
-load("//ic-os/components:guestos.bzl", "component_files")
+load(
+    "//ic-os/components:guestos.bzl",
+    "component_files",
+    "upgrade_overlay_component_files",
+)
 
 # Declare the dependencies that we will have for the built filesystem images.
 # This needs to be done separately from the build rules because we want to
@@ -51,7 +55,7 @@ def image_deps(mode, malicious = False):
             "//rs/ic_os/os_tools/guest_disk": "/opt/ic/bin/guest_disk:0755",
             "//rs/ic_os/release:nft-exporter": "/opt/ic/bin/nft-exporter:0755",  # Firewall (NFTables) counter exporter for observability.
             "//rs/ic_os/release:vsock_guest": "/opt/ic/bin/vsock_guest:0755",  # HostOS <--> GuestOS communication client.
-            "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",  # Terminal manager that replaces the login shell.
+            "//rs/ic_os/release:infogetty": "/opt/ic/bin/infogetty:0755",  # Terminal manager that replaces the login shell.
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",  # Proxies, filters, and serves public node metrics.
             "//rs/ic_os/release:custom_metrics": "/opt/ic/bin/custom_metrics:0755",  # Collects and reports custom metrics.
             "//rs/ic_os/remote_attestation/server": "/opt/ic/bin/remote_attestation_server:0755",  # Remote Attestation service
@@ -65,6 +69,8 @@ def image_deps(mode, malicious = False):
         # Set various configuration values
         "container_context_files": Label("//ic-os/guestos/context:context-files"),
         "component_files": component_files(mode),
+        "upgrade_overlay_binaries": UPGRADE_OVERLAY_BINARIES,
+        "upgrade_overlay_files": upgrade_overlay_component_files,
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
         "rootfs_size": "3G",
@@ -126,3 +132,16 @@ def image_deps(mode, malicious = False):
         })
 
     return deps
+
+# Binaries hot-swapped by the fast-upgrade overlay. Each must also be present
+# in the rootfs install list below; the overlay reuses its install path.
+UPGRADE_OVERLAY_BINARIES = [
+    "//publish/binaries:replica",
+    "//publish/binaries:orchestrator",
+    "//publish/binaries:ic-crypto-csp",
+    "//publish/binaries:ic-btc-adapter",
+    "//publish/binaries:ic-https-outcalls-adapter-https-only",
+    "//publish/binaries:canister_sandbox",
+    "//publish/binaries:compiler_sandbox",
+    "//publish/binaries:sandbox_launcher",
+]

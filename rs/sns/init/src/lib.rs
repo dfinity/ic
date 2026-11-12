@@ -36,7 +36,7 @@ use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue, icrc::metadata_key::MetadataKey,
     icrc1::account::Account,
 };
-use isocountry::CountryCode;
+use iso_3166_1_alpha_2::{ISO_3166_1_ALPHA_2, is_iso_3166_1_alpha_2};
 use maplit::btreemap;
 use pb::v1::DappCanisters;
 use serde::{Deserialize, Serialize};
@@ -49,6 +49,7 @@ use std::{
 
 mod create_service_nervous_system;
 pub mod distributions;
+pub mod iso_3166_1_alpha_2;
 pub mod pb;
 
 /// The maximum count of dapp canisters that can be initially decentralized.
@@ -253,7 +254,7 @@ impl std::fmt::Display for RestrictedCountriesValidationError {
             Self::TooManyItems(num_items) => {
                 format!(
                     "must include fewer than {} country codes, given country code count: {}",
-                    CountryCode::num_country_codes(),
+                    ISO_3166_1_ALPHA_2.len(),
                     num_items,
                 )
             }
@@ -1416,7 +1417,7 @@ impl SnsInitPayload {
                 return RestrictedCountriesValidationError::EmptyList.into();
             }
             let num_items = restricted_countries.iso_codes.len();
-            if CountryCode::num_country_codes() < num_items {
+            if ISO_3166_1_ALPHA_2.len() < num_items {
                 return RestrictedCountriesValidationError::TooManyItems(
                     restricted_countries.iso_codes.len(),
                 )
@@ -1424,7 +1425,7 @@ impl SnsInitPayload {
             }
             let mut unique_iso_codes = BTreeSet::<String>::new();
             for item in &restricted_countries.iso_codes {
-                if CountryCode::for_alpha2(item).is_err() {
+                if !is_iso_3166_1_alpha_2(item) {
                     return RestrictedCountriesValidationError::NotIsoCompliant(item.clone())
                         .into();
                 }
@@ -1930,6 +1931,7 @@ impl SnsInitPayload {
 
 #[cfg(test)]
 mod test {
+    use crate::iso_3166_1_alpha_2::ISO_3166_1_ALPHA_2;
     use crate::{
         FractionalDeveloperVotingPower, ICRC1_TOKEN_LOGO_KEY, MAX_CONFIRMATION_TEXT_LENGTH,
         MAX_DAPP_CANISTERS_COUNT, MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP,
@@ -1962,7 +1964,6 @@ mod test {
         NeuronBasketConstructionParameters, NeuronsFundParticipationConstraints,
     };
     use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
-    use isocountry::CountryCode;
     use pretty_assertions::assert_eq;
     use std::{
         collections::{BTreeMap, HashSet},
@@ -2420,9 +2421,7 @@ initial_token_distribution: !FractionalDeveloperVotingPower
         {
             let sns_init_payload = SnsInitPayload {
                 restricted_countries: Some(Countries {
-                    iso_codes: CountryCode::as_array_alpha2()
-                        .map(|x| x.alpha2().to_string())
-                        .to_vec(),
+                    iso_codes: ISO_3166_1_ALPHA_2.map(str::to_string).to_vec(),
                 }),
                 ..SnsInitPayload::with_valid_values_for_testing_post_execution()
             };
@@ -2432,7 +2431,7 @@ initial_token_distribution: !FractionalDeveloperVotingPower
         }
         // Check that item count is checked before duplicate analysis.
         {
-            let num_items = CountryCode::num_country_codes() + 1;
+            let num_items = ISO_3166_1_ALPHA_2.len() + 1;
             let sns_init_payload = SnsInitPayload {
                 restricted_countries: Some(Countries {
                     iso_codes: (0..num_items).map(|x| x.to_string()).collect(),

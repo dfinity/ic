@@ -24,8 +24,8 @@ use ic_types::{
     xnet::{CertifiedStreamSlice, StreamIndex},
 };
 use ic_xnet_payload_builder::certified_slice_pool::{
-    METRIC_POOL_SIZE_BYTES, METRIC_TAKE_COUNT, METRIC_TAKE_GCED_MESSAGES, METRIC_TAKE_MESSAGES,
-    METRIC_TAKE_SIZE_BYTES, UnpackedStreamSlice,
+    METRIC_POOL_SIZE_BYTES, METRIC_PUT_COUNT, METRIC_TAKE_COUNT, METRIC_TAKE_GCED_MESSAGES,
+    METRIC_TAKE_MESSAGES, METRIC_TAKE_SIZE_BYTES, UnpackedStreamSlice,
 };
 use std::{convert::TryFrom, sync::Arc};
 use tempfile::{Builder, TempDir};
@@ -85,8 +85,7 @@ impl StateManagerFixture {
         }
     }
 
-    /// Adds a stream to the wrapped state, creates a new checkpoint and
-    /// certifies it.
+    /// Adds a stream to the wrapped state and certifies it.
     pub fn with_stream(mut self, destination_subnet: SubnetId, stream: Stream) -> Self {
         let (mut height, mut state) = self.state_manager.take_tip();
 
@@ -142,6 +141,11 @@ impl StateManagerFixture {
         fetch_gauge(&self.metrics, METRIC_POOL_SIZE_BYTES).unwrap() as usize
     }
 
+    /// Returns the value of the `METRIC_PUT_COUNT` counters.
+    pub fn fetch_pool_put_count(&self) -> MetricVec<u64> {
+        fetch_int_counter_vec(&self.metrics, METRIC_PUT_COUNT)
+    }
+
     /// Returns the value of the `METRIC_TAKE_COUNT` counters.
     pub fn fetch_pool_take_count(&self) -> MetricVec<u64> {
         fetch_int_counter_vec(&self.metrics, METRIC_TAKE_COUNT)
@@ -180,7 +184,7 @@ fn certify_height(state_manager: &impl StateManager, h: Height) -> Certification
 
     let certification = Certification {
         height: h,
-        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: Signed {
             content: CertificationContent::new(hash),
             signature: ThresholdSignature::fake(),

@@ -121,6 +121,10 @@ message SubnetRecord {
   // Limits on resource consumption (e.g., memory usage).
   ResourceLimits resource_limits = 34;
 
+  // See `ic_replicated_state::SubnetTopology::cooling_down` for the exact
+  // semantics.
+  bool cooling_down = 35;
+
   reserved 1, 2, 4, 6, 13, 20, 21, 22, 27;
   reserved "ic_version_id";
   reserved "initial_dkg_transcript";
@@ -147,25 +151,17 @@ message ChainKeyInitialization {
 
 // Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
 // a CUP with no dependencies on previous CUPs or blocks). Such CUP materials can be used to
-// construct the genesis CUP or a recovery CUP in the event of a subnet stall.
+// construct the genesis CUP, a recovery CUP in the event of a subnet stall, or a post-split CUP
+// when the subnet is split in two.
 message CatchUpPackageContents {
+  reserved 3, 4, 5;
+  reserved "height", "time", "state_hash";
+
   // Initial non-interactive low-threshold DKG transcript
   InitialNiDkgTranscriptRecord initial_ni_dkg_transcript_low_threshold = 1;
 
   // Initial non-interactive high-threshold DKG transcript
   InitialNiDkgTranscriptRecord initial_ni_dkg_transcript_high_threshold = 2;
-
-  // The blockchain height that the CUP should have
-  // TODO(CON-1671): deprecate this field in favor of `cup_type`
-  uint64 height = 3;
-
-  // Block time for the CUP's block
-  // TODO(CON-1671): deprecate this field in favor of `cup_type`
-  uint64 time = 4;
-
-  // The hash of the state that the subnet should use
-  // TODO(CON-1671): deprecate this field in favor of `cup_type`
-  bytes state_hash = 5;
 
   // A uri from which data to replace the registry local store should be downloaded
   RegistryStoreUri registry_store_uri = 6;
@@ -188,8 +184,8 @@ message CatchUpPackageContents {
 }
 
 message GenesisArgs {
-  // Initial height of the subnet
-  uint64 height = 1;
+  reserved 1;
+  reserved "height";
 }
 
 message RecoveryArgs {
@@ -419,5 +415,16 @@ enum CanisterCyclesCostSchedule {
 // Limits on resource consumption (e.g., memory usage).
 message ResourceLimits {
   optional uint64 maximum_state_size = 1;
+
   optional uint64 maximum_state_delta = 2;
+
+  // The maximum number of instructions a query may consume. This applies both to a single
+  // (non-composite) query method execution and to the total across an entire composite query
+  // call graph.
+  // The protocol uses a default value if the limit of `0` is specified.
+  optional uint64 maximum_query_instructions = 3;
+  // The maximum wall-clock time, in seconds, that a composite query call graph is allowed to
+  // run.
+  // The protocol uses a default value if the limit of `0` is specified.
+  optional uint64 maximum_query_walltime_seconds = 4;
 }

@@ -11,6 +11,7 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
+use ic_replicated_state::metadata_state::UnflushedCheckpointOp;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
@@ -541,6 +542,16 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
             .is_some()
     );
 
+    let snapshot_id = *test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .canister_snapshots
+        .iter()
+        .next()
+        .unwrap()
+        .0;
+
     // Uninstall canister due to `out_of_cycles`.
     test.set_time(initial_time + 1000 * test.duration_between_allocation_charges());
     // Checkpoint round, to force charging for storage.
@@ -567,6 +578,15 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
             .unwrap()
             .execution_state
             .is_none()
+    );
+    // Taking and deleting the snapshot were recorded as checkpoint operations, so that
+    // the snapshot's directory is created in and then deleted from the tip.
+    assert_eq!(
+        test.state_mut().metadata.unflushed_checkpoint_ops.take(),
+        vec![
+            UnflushedCheckpointOp::TakeSnapshot(canister_id, snapshot_id),
+            UnflushedCheckpointOp::DeleteSnapshot(snapshot_id),
+        ]
     );
 }
 

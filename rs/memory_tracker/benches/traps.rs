@@ -1,30 +1,62 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use ic_types::NumBytes;
+use ic_types::{NumBytes, NumOsPages};
 use memory_tracker::{
-    DirtyPageTracking, MemoryLimits, MemoryTracker, PrefetchingMemoryTracker, basic_signal_handler,
+    AccessKind, AccessedWasmPagesLimit, DeterministicMemoryTracker, DirtyPageTracking,
+    MemoryLimits, signal_mutex::SignalMutex,
 };
 
 use libc::{self, c_void};
-use memory_tracker::signal_mutex::SignalMutex;
 use nix::sys::mman::{MapFlags, ProtFlags, mmap_anonymous};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;
 
-use lazy_static::lazy_static;
-
 use ic_logger::replica_logger::no_op_logger;
-use ic_replicated_state::PageMap;
+use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
+use ic_replicated_state::{NumWasmPages, PageMap};
 use ic_sys::PAGE_SIZE;
-
-lazy_static! {
-    static ref ZEROED_PAGE: Vec<u8> = vec![0; PAGE_SIZE];
-}
 
 struct BenchData {
     ptr: *mut c_void,
-    tracker: PrefetchingMemoryTracker,
-    page_map: PageMap,
+    tracker: DeterministicMemoryTracker,
+}
+
+/// The tracker maps memory in units of Wasm pages, so the tracked region must
+/// span a whole Wasm page.
+fn tracked_region() -> *mut c_void {
+    unsafe {
+        mmap_anonymous(
+            None,
+            NonZeroUsize::new(WASM_PAGE_SIZE_IN_BYTES).expect("mmap length must be non-zero"),
+            ProtFlags::PROT_NONE,
+            MapFlags::MAP_PRIVATE,
+        )
+        .unwrap()
+    }
+    .as_ptr()
+}
+
+/// Creates a tracker over `ptr`, which resets the whole region to `PROT_NONE`.
+fn new_tracker(
+    ptr: *mut c_void,
+    accessed_wasm_pages_limit: AccessedWasmPagesLimit,
+) -> DeterministicMemoryTracker {
+    DeterministicMemoryTracker::new(
+        ptr,
+        NumBytes::new(WASM_PAGE_SIZE_IN_BYTES as u64),
+        no_op_logger(),
+        DirtyPageTracking::Track,
+        PageMap::new_for_testing(),
+        MemoryLimits {
+            max_memory_size: NumBytes::new(WASM_PAGE_SIZE_IN_BYTES as u64),
+            max_dirty_pages: NumOsPages::new((WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as u64),
+            accessed_wasm_pages_limit,
+        },
+        /* page_overhead */ 0,
+        Arc::new(SignalMutex::new(|_| {})),
+        Arc::new(SignalMutex::new(|| {})),
+    )
+    .unwrap()
 }
 
 /// Test the first execution of the sigsegv handler for a memory address.
@@ -33,45 +65,34 @@ struct BenchData {
 fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("fault_handler");
 
-    let ptr: *mut c_void = unsafe {
-        mmap_anonymous(
-            None,
-            NonZeroUsize::new(PAGE_SIZE).expect("mmap length must be non-zero"),
-            ProtFlags::PROT_NONE,
-            MapFlags::MAP_PRIVATE,
-        )
-        .unwrap()
-    }
-    .as_ptr();
+    let ptr = tracked_region();
 
     group.bench_function("fault handler sim read", |bench| {
         bench.iter_with_setup(
             // Setup input data for measurement
-            || {
-                let page_map = PageMap::new_for_testing();
-                BenchData {
-                    ptr,
-                    tracker: PrefetchingMemoryTracker::new(
-                        ptr,
-                        NumBytes::new(PAGE_SIZE as u64),
-                        no_op_logger(),
-                        DirtyPageTracking::Track,
-                        page_map.clone(),
-                        MemoryLimits::default(),
-                        /* prefetching does not use this anyway */ 0,
-                        Arc::new(SignalMutex::new(|_| {})),
-                    )
-                    .unwrap(),
-                    page_map,
-                }
+            || BenchData {
+                ptr,
+                tracker: new_tracker(ptr, AccessedWasmPagesLimit::Unlimited),
             },
             // Do the actual measurement
             |data| {
-                basic_signal_handler(
-                    black_box(&data.tracker),
-                    &data.page_map,
-                    black_box(data.ptr),
-                )
+                black_box(&data.tracker).handle_sigsegv(Some(AccessKind::Read), black_box(data.ptr))
+            },
+        )
+    });
+
+    // As in production: the accessed page limit is checked before the page is
+    // mapped and the page budget callback runs afterwards.
+    group.bench_function("fault handler sim read with page limit", |bench| {
+        bench.iter_with_setup(
+            // Setup input data for measurement
+            || BenchData {
+                ptr,
+                tracker: new_tracker(ptr, AccessedWasmPagesLimit::Enforce(NumWasmPages::new(1))),
+            },
+            // Do the actual measurement
+            |data| {
+                black_box(&data.tracker).handle_sigsegv(Some(AccessKind::Read), black_box(data.ptr))
             },
         )
     });
@@ -83,49 +104,26 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
 fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("fault_handler");
 
-    let ptr: *mut c_void = unsafe {
-        mmap_anonymous(
-            None,
-            NonZeroUsize::new(PAGE_SIZE).expect("mmap length must be non-zero"),
-            ProtFlags::PROT_NONE,
-            MapFlags::MAP_PRIVATE,
-        )
-        .unwrap()
-    }
-    .as_ptr();
+    let ptr = tracked_region();
 
     group.bench_function("fault handler sim write", |bench| {
         bench.iter_with_setup(
             // Setup input data for measurement
             || {
-                let page_map = PageMap::new_for_testing();
                 let data = BenchData {
                     ptr,
-                    tracker: PrefetchingMemoryTracker::new(
-                        ptr,
-                        NumBytes::new(PAGE_SIZE as u64),
-                        no_op_logger(),
-                        DirtyPageTracking::Track,
-                        page_map.clone(),
-                        MemoryLimits::default(),
-                        /* prefetching does not use this anyway */ 0,
-                        Arc::new(SignalMutex::new(|_| {})),
-                    )
-                    .unwrap(),
-                    page_map,
+                    tracker: new_tracker(ptr, AccessedWasmPagesLimit::Unlimited),
                 };
 
-                basic_signal_handler(&data.tracker, &data.page_map, data.ptr);
+                data.tracker
+                    .handle_sigsegv(Some(AccessKind::Read), data.ptr);
 
                 data
             },
             // Do the actual measurement
             |data| {
-                basic_signal_handler(
-                    black_box(&data.tracker),
-                    &data.page_map,
-                    black_box(data.ptr),
-                )
+                black_box(&data.tracker)
+                    .handle_sigsegv(Some(AccessKind::Write), black_box(data.ptr))
             },
         )
     });

@@ -4,6 +4,7 @@ use crate::ExecutionTask;
 use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
 use ic_types::CanisterId;
 use ic_types::NumBytes;
+use ic_types_cycles::{CompoundCycles, Instructions};
 use std::collections::VecDeque;
 
 /// `TaskQueue` represents the implementation of queue structure for canister tasks satisfying the following conditions:
@@ -168,10 +169,20 @@ impl TaskQueue {
         }
     }
 
-    /// Removes aborted install code task.
-    pub fn remove_aborted_install_code_task(&mut self) {
-        if let Some(ExecutionTask::AbortedInstallCode { .. }) = &self.paused_or_aborted_task {
-            self.paused_or_aborted_task = None;
+    /// Removes the aborted install code task, if any, returning the execution cycles
+    /// that were prepaid for it. The caller is responsible for settling them, as the
+    /// execution they paid for will not happen.
+    pub fn remove_aborted_install_code_task(&mut self) -> Option<CompoundCycles<Instructions>> {
+        match &self.paused_or_aborted_task {
+            Some(ExecutionTask::AbortedInstallCode {
+                prepaid_execution_cycles,
+                ..
+            }) => {
+                let prepaid_execution_cycles = *prepaid_execution_cycles;
+                self.paused_or_aborted_task = None;
+                Some(prepaid_execution_cycles)
+            }
+            _ => None,
         }
     }
 

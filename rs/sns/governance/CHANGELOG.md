@@ -11,6 +11,39 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-10-23: Proposal 144563
+
+http://dashboard.internetcomputer.org/proposal/144563
+
+## Fixed
+
+* Proposals that execute a generic (non-native) nervous system function now
+  store the raw reply bytes from the target canister in the proposal itself
+  (`ProposalData.execution_reply`). Previously, the reply was just discarded.
+  To avoid using too much space, only the first 5 KB of the reply is stored.
+
+
+# 2026-10-02: Proposal 144202
+
+http://dashboard.internetcomputer.org/proposal/144202
+
+## Added
+
+- Expose each neuron's exact voting reward shares for its latest participating reward event through
+  `get_neuron` and `list_neurons`.
+
+
+# 2026-08-31: Proposal 143747
+
+http://dashboard.internetcomputer.org/proposal/143747
+
+## Added
+
+* Added support for upgrade options to `UpgradeSnsControlledCanister` proposals.
+  In particular, added `wasm_memory_persistence` and `skip_pre_upgrade`. The
+  former is of particular interest to Motoko canisters.
+
+
 # 2026-04-10: Proposal 141333
 
 http://dashboard.internetcomputer.org/proposal/141333

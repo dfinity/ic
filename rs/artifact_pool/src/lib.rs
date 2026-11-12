@@ -43,10 +43,13 @@ pub fn set_replica_version<P: AsRef<Path>>(filepath: P, replica_version: &Replic
 /// Check that the replica version of the pool matches that of this process. If
 /// it does not, delete the contents of the old pool directory and create a new
 /// one.
-pub fn ensure_persistent_pool_replica_version_compatibility(pool_path: PathBuf) {
+pub fn ensure_persistent_pool_replica_version_compatibility(
+    pool_path: PathBuf,
+    replica_version: &ReplicaVersion,
+) {
     let mut replica_version_file_path = pool_path.clone();
     replica_version_file_path.push("replica_version");
-    if get_replica_version(&replica_version_file_path) != Some(ReplicaVersion::default()) {
+    if get_replica_version(&replica_version_file_path).as_ref() != Some(replica_version) {
         if pool_path.exists() {
             for entry in fs::read_dir(&pool_path).expect("Couldn't read the directory") {
                 let path = entry.expect("Couldn't read the metadata").path();
@@ -58,7 +61,7 @@ pub fn ensure_persistent_pool_replica_version_compatibility(pool_path: PathBuf) 
             }
         }
         std::fs::create_dir_all(&pool_path).expect("Couldn't create a directory");
-        set_replica_version(replica_version_file_path, &ReplicaVersion::default());
+        set_replica_version(replica_version_file_path, replica_version);
     }
 }
 
@@ -99,36 +102,46 @@ impl<T> IntoInner<T> for UnvalidatedArtifact<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::convert::TryFrom;
+    use std::str::FromStr;
 
     #[test]
     fn test_ensure_persistent_pool_replica_version_compatibility() {
+        let replica_version = ReplicaVersion::from_str("12344556").unwrap();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|config| {
-            ensure_persistent_pool_replica_version_compatibility(config.persistent_pool_db_path());
+            ensure_persistent_pool_replica_version_compatibility(
+                config.persistent_pool_db_path(),
+                &replica_version,
+            );
             let mut replica_version_file_path = config.persistent_pool_db_path();
             replica_version_file_path.push("replica_version");
 
             // Ensure that a file was added indicating which replica version the
             // directory was made with.
             assert_eq!(
-                ReplicaVersion::default(),
+                replica_version,
                 get_replica_version(&replica_version_file_path).unwrap()
             );
             let mut random_file_path = config.persistent_pool_db_path();
             random_file_path.push("random_file");
             std::fs::write(&random_file_path, "stuff").unwrap();
 
-            ensure_persistent_pool_replica_version_compatibility(config.persistent_pool_db_path());
+            ensure_persistent_pool_replica_version_compatibility(
+                config.persistent_pool_db_path(),
+                &replica_version,
+            );
 
             // Ensure that the directory was not deleted by checking for the file.
             assert_eq!(std::fs::read_to_string(&random_file_path).unwrap(), "stuff");
 
             set_replica_version(
                 &replica_version_file_path,
-                &ReplicaVersion::try_from("somerandomversion").unwrap(),
+                &ReplicaVersion::from_str("somerandomversion").unwrap(),
             );
 
-            ensure_persistent_pool_replica_version_compatibility(config.persistent_pool_db_path());
+            ensure_persistent_pool_replica_version_compatibility(
+                config.persistent_pool_db_path(),
+                &replica_version,
+            );
 
             // Now that the folder has a different replica version it should
             // have been deleted and created with the new replica version.
@@ -141,7 +154,7 @@ mod tests {
             }
 
             assert_eq!(
-                ReplicaVersion::default(),
+                replica_version,
                 get_replica_version(replica_version_file_path).unwrap()
             );
         })

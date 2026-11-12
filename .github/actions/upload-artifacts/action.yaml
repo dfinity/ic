@@ -1,36 +1,154 @@
 name: Upload Artifacts
 description: |
-  Run an artifact upload command and set a step summary. This expects the upload command to write one line per artifact to stdout.
+  Builds an artifact uploader with bazel, runs it and sets a step summary. The uploader must write one
+  sha256sum-format line per uploaded file ("<sha256>  ic/<path>") to stdout; the collected lines form
+  the upload manifest exposed through the `manifest-path` output, which the calling job attests.
+
+  bazel only builds the uploader (`bazel run --script_path`, see build-uploader.sh); the uploader runs
+  in a separate step, the only one whose environment holds the upload credentials. A Build Event
+  Protocol (BEP) file records the environment of the bazel client, and on Namespace runners
+  `nsc bazel setup` streams the build events of every bazel command to Namespace's Build Event Service.
 inputs:
-  upload-command:
-    required: true
   name:
     required: true
+    description: Names the uploaded artifacts in the step summary.
+  target:
+    required: true
+    description: The uploader target, e.g. //:upload-artifacts or //:artifact-uploader.
+  bazel-args:
+    required: false
+    default: ''
+    description: |
+      Options for the bazel run, whitespace separated. Pass the options of the
+      job's build step (e.g. its --config=stamped): a different --workspace_status_command would
+      re-stamp //bazel:version.txt and rebuild everything that depends on it, like the IC-OS images.
+  check-up-to-date:
+    required: false
+    default: 'false'
+    description: |
+      'true' passes --check_up_to_date to the bazel run, so that bazel errors out if the artifacts to be
+      uploaded were not built by the job's build step (this ensures that the exact artifacts built there
+      are uploaded). 'false' is meant for uploaders of files that bazel doesn't build, like
+      //:artifact-uploader: under Build-without-the-Bytes (bazel-namespace) bazel would re-run whatever
+      the build step didn't leave up to date, and that would be uploaded.
+  program-args:
+    required: false
+    default: ''
+    description: Arguments for the uploader, whitespace separated, e.g. the bundle directories of //:artifact-uploader.
+  bazel-action:
+    required: false
+    default: bazel
+    description: |
+      The action that runs the bazel commands: `bazel` (./.github/actions/bazel, DFINITY's runners) or
+      `bazel-namespace` (./.github/actions/bazel-namespace, Namespace runners with Remote Build
+      Execution). Both use the job's bazel server, so `bazel run` sees the outputs of the job's build step.
+  timeout-minutes:
+    required: false
+    default: ''
+    description: The timeout-minutes input of ./.github/actions/bazel-namespace, for its bazel commands.
+  aws-access-key-id:
+    required: true
+    description: |
+      The credentials of ci/src/artifacts/upload.sh: the AWS session of the job's Configure AWS
+      credentials step and the Cloudflare R2 keys of the upload-artifacts environment. Only the step
+      that runs the uploader gets them, as environment variables.
+  aws-secret-access-key:
+    required: true
+    description: See aws-access-key-id.
+  aws-session-token:
+    required: true
+    description: See aws-access-key-id.
+  cf-aws-access-key-id:
+    required: true
+    description: See aws-access-key-id.
+  cf-aws-secret-access-key:
+    required: true
+    description: See aws-access-key-id.
+outputs:
+  manifest-path:
+    description: |
+      Path of the upload manifest: one "<sha256>  ic/<path>" line per uploaded file
+      (sha256sum format, suitable for actions/attest's `subject-checksums` input).
+    value: ${{ steps.manifest.outputs.path }}
 
 runs:
   using: "composite"
   steps:
-    - name: Upload to S3
+    # Composite steps can't vary `uses:` by an expression, hence one step per bazel action.
+    - name: Build the uploader
+      if: inputs.bazel-action == 'bazel'
       uses: ./.github/actions/bazel
+      env:
+        TARGET: ${{ inputs.target }}
+        BAZEL_ARGS: ${{ inputs.bazel-args }}
+        CHECK_UP_TO_DATE: ${{ inputs.check-up-to-date }}
       with:
-        run: |
-          echo uploading artifacts to remote storage
-          upload_output=$(mktemp) # used in summary
+        run: ./.github/actions/upload-artifacts/build-uploader.sh
 
-          ${{ inputs.upload-command }} >"$upload_output"
+    - name: Build the uploader on Namespace
+      if: inputs.bazel-action == 'bazel-namespace'
+      uses: ./.github/actions/bazel-namespace
+      env:
+        TARGET: ${{ inputs.target }}
+        BAZEL_ARGS: ${{ inputs.bazel-args }}
+        CHECK_UP_TO_DATE: ${{ inputs.check-up-to-date }}
+        # Build-without-the-Bytes: a blob lost by the remote cache must fail the bazel run, see
+        # build-uploader.sh.
+        NO_EVICTION_RETRIES: '1'
+      with:
+        timeout-minutes: ${{ inputs.timeout-minutes }}
+        # Stable name: github.action of a nested composite step is not a stable id.
+        artifact-name: ${{ github.job }}-upload-artifacts-${{ github.run_attempt }}
+        run: ./.github/actions/upload-artifacts/build-uploader.sh
 
-          n_uploaded=$(wc -l <"$upload_output")
-          echo "'$n_uploaded' artifacts uploaded"
+    - name: Run the uploader
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        PROGRAM_ARGS: ${{ inputs.program-args }}
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-access-key }}
+        AWS_SESSION_TOKEN: ${{ inputs.aws-session-token }}
+        CF_AWS_ACCESS_KEY_ID: ${{ inputs.cf-aws-access-key-id }}
+        CF_AWS_SECRET_ACCESS_KEY: ${{ inputs.cf-aws-secret-access-key }}
+      run: |
+        set -euo pipefail
+        echo uploading artifacts to remote storage
+        manifest="$RUNNER_TEMP/upload-manifest.sha256sums"
 
-          # the upload list can get quite big, so we wrap it in details/summary
-          {
-            echo '<details><summary>Uploaded '"$n_uploaded"' Artifacts for ${{ inputs.name }}</summary>';
-            echo
-            echo '```'
-            cat "$upload_output"
-            echo '```'
-            echo
-            echo '</details>';
-          } >>"$GITHUB_STEP_SUMMARY"
+        read -r -a program_args <<<"$PROGRAM_ARGS"
+        "$RUNNER_TEMP/upload-artifacts.sh" "${program_args[@]}" >"$manifest"
 
-          rm "$upload_output"
+        n_uploaded=$(wc -l <"$manifest")
+        echo "'$n_uploaded' artifacts uploaded"
+
+        # the upload list can get quite big, so we wrap it in details/summary
+        {
+          echo "<details><summary>Uploaded $n_uploaded Artifacts for $NAME</summary>"
+          echo
+          echo '```'
+          cat "$manifest"
+          echo '```'
+          echo
+          echo '</details>'
+        } >>"$GITHUB_STEP_SUMMARY"
+
+    - name: Check manifest
+      id: manifest
+      shell: bash
+      run: |
+        set -euo pipefail
+        manifest="$RUNNER_TEMP/upload-manifest.sha256sums"
+
+        # Fail rather than attest garbage: the manifest must be
+        # non-empty and every line must be "<64-hex>  ic/<path>".
+        if ! [ -s "$manifest" ]; then
+          echo "upload manifest is missing or empty: $manifest" >&2
+          exit 1
+        fi
+        if grep -Ev '^[0-9a-f]{64}  ic/[A-Za-z0-9._/-]+$' "$manifest"; then
+          echo "upload manifest contains malformed lines (printed above)" >&2
+          exit 1
+        fi
+
+        echo "path=$manifest" >>"$GITHUB_OUTPUT"

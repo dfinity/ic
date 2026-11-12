@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_management_canister_types_private::CanisterInstallMode::Upgrade;
+use ic_management_canister_types_private::CanisterInstallModeV2::Upgrade;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
@@ -99,7 +99,7 @@ fn test_the_anonymous_user_cannot_change_an_nns_canister() {
             .unwrap();
 
         let change_canister_request =
-            ChangeCanisterRequest::new(false, Upgrade, universal.canister_id())
+            ChangeCanisterRequest::new(false, Upgrade(None), universal.canister_id())
                 .with_wasm(UNIVERSAL_CANISTER_WASM.to_vec());
 
         // The anonymous end-user tries to upgrade an NNS canister a subnet, bypassing
@@ -152,7 +152,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_change_an_nns_canis
             ic_nns_constants::GOVERNANCE_CANISTER_ID
         );
         let change_canister_request =
-            ChangeCanisterRequest::new(false, Upgrade, universal.canister_id())
+            ChangeCanisterRequest::new(false, Upgrade(None), universal.canister_id())
                 .with_wasm(UNIVERSAL_CANISTER_WASM.to_vec());
 
         assert!(

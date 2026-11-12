@@ -37,7 +37,7 @@ files_mountpoint(ic_canister_mem_t)
 # Type for the root volatile data directory at /run/ic-node.
 type ic_var_run_t;
 files_type(ic_var_run_t)
-systemd_tmpfilesd_managed(ic_var_run_t, dir)
+systemd_tmpfilesd_managed(ic_var_run_t)
 
 # To dynamically create /var, need right to read the template fs tree
 require { type fsadm_t; }
@@ -239,7 +239,7 @@ type ic_replica_conffile_t;
 files_type(ic_replica_conffile_t)
 
 # Allow tmpfilesd to manage the directory
-systemd_tmpfilesd_managed(ic_replica_conffile_t, dir)
+systemd_tmpfilesd_managed(ic_replica_conffile_t)
 require { type systemd_tmpfiles_t; }
 list_dirs_pattern(systemd_tmpfiles_t, ic_replica_conffile_t, ic_replica_conffile_t)
 
@@ -252,8 +252,7 @@ type ic_nftables_ruleset_t;
 files_type(ic_nftables_ruleset_t)
 
 # Allow tmpfiles to set this up for us.
-systemd_tmpfilesd_managed(ic_nftables_ruleset_t, dir)
-systemd_tmpfilesd_managed(ic_nftables_ruleset_t, file)
+systemd_tmpfilesd_managed(ic_nftables_ruleset_t)
 require { type systemd_tmpfiles_t; }
 create_files_pattern(systemd_tmpfiles_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
 list_dirs_pattern(systemd_tmpfiles_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)

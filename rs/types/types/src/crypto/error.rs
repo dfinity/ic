@@ -1,7 +1,7 @@
 //! Defines crypto error types.
 pub mod conversions;
 pub use super::CryptoError;
-use crate::crypto::AlgorithmId;
+use crate::crypto::{AlgorithmId, ellipsized_hex};
 use serde::{Deserialize, Serialize};
 use std::fmt; // Probably move all the errors into this file
 
@@ -29,6 +29,15 @@ impl fmt::Display for InternalError {
     }
 }
 
+/// Renders optional byte strings for an error message, hex-encoding and
+/// ellipsizing the bytes if they are present.
+fn optional_bytes_for_error(bytes: Option<&[u8]>) -> String {
+    match bytes {
+        Some(bytes) => format!("0x{}", ellipsized_hex(bytes)),
+        None => "<none>".to_string(),
+    }
+}
+
 /// Occurs if a public key is malformed.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct MalformedPublicKeyError {
@@ -41,9 +50,9 @@ impl fmt::Display for MalformedPublicKeyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Malformed {:?} public key: 0x{:?}. Internal error: {}",
+            "Malformed {:?} public key: {}. Internal error: {}",
             self.algorithm,
-            self.key_bytes.as_ref().map(hex::encode),
+            optional_bytes_for_error(self.key_bytes.as_deref()),
             self.internal_error
         )
     }
@@ -61,9 +70,9 @@ impl fmt::Display for MalformedDataError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Malformed {:?} data: 0x{:?}. Internal error: {}",
+            "Malformed {:?} data: {}. Internal error: {}",
             self.algorithm,
-            self.data.as_ref().map(hex::encode),
+            optional_bytes_for_error(self.data.as_deref()),
             self.internal_error
         )
     }

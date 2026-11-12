@@ -15,7 +15,6 @@ Success::
 2. Http request to invalid http endpoint returns a transient timeout error.
 
 end::catalog[] */
-#![allow(deprecated)]
 
 use anyhow::Result;
 use anyhow::bail;

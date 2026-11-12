@@ -23,8 +23,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{CallbackId, CanisterMessage, Ingress, RequestOrResponse, Response};
 use ic_types::methods::{SystemMethod, WasmMethod};
 use ic_types::{
-    CanisterId, CanisterLog, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, Time,
+    CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, PrincipalId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -628,19 +627,16 @@ impl CanisterState {
 
     /// Clears the canister log.
     pub fn clear_log(&mut self) {
-        self.system_state.canister_log.clear();
         self.system_state.log_memory_store.clear();
     }
 
     /// Removes the canister log.
     pub fn remove_log(&mut self) {
-        self.system_state.canister_log.clear();
         self.system_state.log_memory_store.deallocate();
     }
 
     /// Sets the new canister log.
-    pub fn set_log(&mut self, (canister_log, log_memory_store): (CanisterLog, LogMemoryStore)) {
-        self.system_state.canister_log = canister_log;
+    pub fn set_log(&mut self, log_memory_store: LogMemoryStore) {
         self.system_state.log_memory_store = log_memory_store;
     }
 
@@ -681,13 +677,7 @@ impl CanisterState {
 
     /// Adds a canister change to canister history.
     ///
-    /// The additional canister history increases the canister's memory usage, which
-    /// the caller is responsible for accounting for in the subnet available
-    /// execution memory (and the canister's cycles). Callers typically record the
-    /// change and then pass the memory usage *including* it to
-    /// `cycles_and_memory_usage_checks_and_updates`; callers that update the subnet
-    /// available execution memory directly can instead read the change in
-    /// `memory_allocated_bytes()` across this call.
+    /// The additional canister history increases the canister's memory usage.
     pub fn add_canister_change(
         &mut self,
         timestamp_nanos: Time,

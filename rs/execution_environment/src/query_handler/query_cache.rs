@@ -37,6 +37,7 @@ pub(crate) struct QueryCacheMetrics {
     pub invalidated_entries_by_canister_version: IntCounter,
     pub invalidated_entries_by_canister_balance: IntCounter,
     pub invalidated_entries_by_transient_error: IntCounter,
+    pub invalidated_entries_by_ic00_call: IntCounter,
     pub invalidated_entries_duration: Histogram,
     pub count_bytes: IntGauge,
     pub len: IntGauge,
@@ -99,6 +100,10 @@ impl QueryCacheMetrics {
             invalidated_entries_by_transient_error: metrics_registry.int_counter(
                 "execution_query_cache_invalidated_entries_by_transient_error_total",
                 "The total number of invalidated entries due to a transient error",
+            ),
+            invalidated_entries_by_ic00_call: metrics_registry.int_counter(
+                "execution_query_cache_invalidated_entries_by_ic00_call_total",
+                "The total number of invalidated entries due to a call to the management canister",
             ),
             invalidated_entries_duration: duration_histogram(
                 "execution_query_cache_invalidated_entries_duration_seconds",
@@ -231,7 +236,8 @@ impl EntryValue {
         let ignore_batch_time = system_api_call_counters.time == 0;
         // It's safe to ignore `canister_balance` changes if the query never checks the balance.
         let ignore_canister_balances = system_api_call_counters.canister_cycle_balance == 0
-            && system_api_call_counters.canister_cycle_balance128 == 0;
+            && system_api_call_counters.canister_cycle_balance128 == 0
+            && system_api_call_counters.canister_liquid_cycle_balance128 == 0;
         EntryValue {
             env,
             result,
@@ -434,6 +440,7 @@ impl QueryCache {
         system_api_counters: &SystemApiCallCounters,
         evaluated_stats: &BTreeMap<CanisterId, QueryStats>,
         transient_errors: usize,
+        ic00_calls: usize,
     ) {
         let now = state.metadata.batch_time;
         // Push is always a cache miss.
@@ -445,6 +452,19 @@ impl QueryCache {
             self.metrics.invalidated_entries.inc();
             self.metrics.invalidated_entries_duration.observe(0_f64);
             self.metrics.invalidated_entries_by_transient_error.inc();
+            return;
+        }
+
+        // The result should not be saved if the management canister was called:
+        // such a result might depend on parts of the canister state which are
+        // not covered by the cache entry environment, e.g. the canister
+        // balance of a canister other than the queried one.
+        if ic00_calls > 0 {
+            // Because of the call to the management canister,
+            // the cache entry is immediately invalidated.
+            self.metrics.invalidated_entries.inc();
+            self.metrics.invalidated_entries_duration.observe(0_f64);
+            self.metrics.invalidated_entries_by_ic00_call.inc();
             return;
         }
 

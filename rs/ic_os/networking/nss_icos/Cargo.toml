@@ -16,5 +16,5 @@ crate-type = ["cdylib"]
 lazy_static = { workspace = true }
 libc = { workspace = true }
 libnss = { workspace = true }
-local-ip-address = { workspace = true }
+nix = { workspace = true }
 paste = { workspace = true }

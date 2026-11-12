@@ -3,14 +3,17 @@ use ic_types::{
     consensus::*,
     crypto::{CryptoHash, CryptoHashOf},
 };
-use std::collections::BTreeMap;
-use std::time::Instant;
+use std::{
+    collections::{BTreeMap, HashMap},
+    marker::PhantomData,
+    time::Instant,
+};
 
-pub struct HeightIndex<T: Eq> {
+pub struct HeightIndex<T> {
     buckets: BTreeMap<Height, Vec<T>>,
 }
 
-impl<T: Eq> Default for HeightIndex<T> {
+impl<T> Default for HeightIndex<T> {
     fn default() -> Self {
         Self {
             buckets: BTreeMap::new(),
@@ -20,20 +23,15 @@ impl<T: Eq> Default for HeightIndex<T> {
 
 /// Provides a thin wrapper around a sorted map of buckets and provides
 /// height-indexed access to the buckets.
-impl<T: Eq + Clone> HeightIndex<T> {
+impl<T: Eq> HeightIndex<T> {
     pub fn new() -> HeightIndex<T> {
         HeightIndex::default()
     }
 
-    /// Inserts `value` at `height`. Returns `true` if `value` was inserted,
-    /// `false` if already present.
-    pub fn insert(&mut self, height: Height, value: &T) -> bool {
-        let values = self.buckets.entry(height).or_default();
-        if !values.contains(value) {
-            values.push(value.clone());
-            return true;
-        }
-        false
+    /// Inserts `value` at `height`. Does not check for duplicates, this
+    /// responsibility is left to the caller.
+    pub fn insert(&mut self, height: Height, value: T) {
+        self.buckets.entry(height).or_default().push(value);
     }
 
     pub fn remove_all(&mut self, height: Height) -> Vec<T> {
@@ -46,22 +44,22 @@ impl<T: Eq + Clone> HeightIndex<T> {
 
     /// Removes `value` from `height`. Returns `true` if `value` was removed,
     /// `false` if not present.
-    pub fn remove(&mut self, height: Height, value: &T) -> bool {
+    pub fn remove(&mut self, height: &Height, value: &T) -> bool {
         self.retain(height, |x| x != value)
     }
 
     /// Retains only the elements of the given height that match the predicate.
     /// Returns `true` if any value was removed, otherwise `false`.
-    pub fn retain<F>(&mut self, height: Height, f: F) -> bool
+    pub fn retain<F>(&mut self, height: &Height, f: F) -> bool
     where
         F: FnMut(&T) -> bool,
     {
-        if let Some(bucket) = self.buckets.get_mut(&height) {
+        if let Some(bucket) = self.buckets.get_mut(height) {
             let len = bucket.len();
             bucket.retain(f);
             let removed = len != bucket.len();
             if bucket.is_empty() {
-                self.buckets.remove(&height);
+                self.buckets.remove(height);
             }
             return removed;
         }
@@ -72,8 +70,8 @@ impl<T: Eq + Clone> HeightIndex<T> {
         self.buckets.get(&height).into_iter().flatten()
     }
 
-    pub fn get_all(&self) -> Box<dyn Iterator<Item = &T> + '_> {
-        Box::new(self.buckets.values().flat_map(|bucket| bucket.iter()))
+    pub fn get_all(&self) -> impl Iterator<Item = &T> {
+        self.buckets.values().flat_map(|bucket| bucket.iter())
     }
 
     pub fn size(&self) -> usize {
@@ -81,8 +79,8 @@ impl<T: Eq + Clone> HeightIndex<T> {
     }
 
     /// Returns all heights of the index, in sorted order.
-    pub fn heights(&self) -> Box<dyn Iterator<Item = &Height> + '_> {
-        Box::new(self.buckets.keys())
+    pub fn heights(&self) -> impl Iterator<Item = &Height> {
+        self.buckets.keys()
     }
 
     pub fn range<R>(&self, range: R) -> std::collections::btree_map::Range<'_, Height, Vec<T>>
@@ -127,85 +125,65 @@ impl Indexes {
         }
     }
 
-    pub fn insert(&mut self, msg: &ConsensusMessage, hash: &CryptoHash) {
-        match msg {
-            ConsensusMessage::RandomBeacon(artifact) => self
-                .random_beacon
-                .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::Finalization(artifact) => self
-                .finalization
-                .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::Notarization(artifact) => self
-                .notarization
-                .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::BlockProposal(artifact) => self
-                .block_proposal
-                .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::RandomBeaconShare(artifact) => self
-                .random_beacon_share
-                .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::NotarizationShare(artifact) => self
-                .notarization_share
-                .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::FinalizationShare(artifact) => self
-                .finalization_share
-                .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::RandomTape(artifact) => self
-                .random_tape
-                .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::RandomTapeShare(artifact) => self
-                .random_tape_share
-                .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::CatchUpPackage(artifact) => self
-                .catch_up_package
-                .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::CatchUpPackageShare(artifact) => self
-                .catch_up_package_share
-                .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::EquivocationProof(artifact) => self
-                .equivocation_proof
-                .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
+    pub fn insert(&mut self, height: Height, cm_hash: ConsensusMessageHash) {
+        match cm_hash {
+            ConsensusMessageHash::RandomBeacon(hash) => self.random_beacon.insert(height, hash),
+            ConsensusMessageHash::Finalization(hash) => self.finalization.insert(height, hash),
+            ConsensusMessageHash::Notarization(hash) => self.notarization.insert(height, hash),
+            ConsensusMessageHash::BlockProposal(hash) => self.block_proposal.insert(height, hash),
+            ConsensusMessageHash::RandomBeaconShare(hash) => {
+                self.random_beacon_share.insert(height, hash)
+            }
+            ConsensusMessageHash::NotarizationShare(hash) => {
+                self.notarization_share.insert(height, hash)
+            }
+            ConsensusMessageHash::FinalizationShare(hash) => {
+                self.finalization_share.insert(height, hash)
+            }
+            ConsensusMessageHash::RandomTape(hash) => self.random_tape.insert(height, hash),
+            ConsensusMessageHash::RandomTapeShare(hash) => {
+                self.random_tape_share.insert(height, hash)
+            }
+            ConsensusMessageHash::CatchUpPackage(hash) => {
+                self.catch_up_package.insert(height, hash)
+            }
+            ConsensusMessageHash::CatchUpPackageShare(hash) => {
+                self.catch_up_package_share.insert(height, hash)
+            }
+            ConsensusMessageHash::EquivocationProof(hash) => {
+                self.equivocation_proof.insert(height, hash)
+            }
         };
     }
 
-    pub fn remove(&mut self, msg: &ConsensusMessage, hash: &CryptoHash) {
-        match msg {
-            ConsensusMessage::RandomBeacon(artifact) => self
-                .random_beacon
-                .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::Finalization(artifact) => self
-                .finalization
-                .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::Notarization(artifact) => self
-                .notarization
-                .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::BlockProposal(artifact) => self
-                .block_proposal
-                .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::RandomBeaconShare(artifact) => self
-                .random_beacon_share
-                .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::NotarizationShare(artifact) => self
-                .notarization_share
-                .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::FinalizationShare(artifact) => self
-                .finalization_share
-                .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::RandomTape(artifact) => self
-                .random_tape
-                .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::RandomTapeShare(artifact) => self
-                .random_tape_share
-                .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::CatchUpPackage(artifact) => self
-                .catch_up_package
-                .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::CatchUpPackageShare(artifact) => self
-                .catch_up_package_share
-                .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
-            ConsensusMessage::EquivocationProof(artifact) => self
-                .equivocation_proof
-                .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
+    pub fn remove(&mut self, height: &Height, cm_hash: &ConsensusMessageHash) {
+        match cm_hash {
+            ConsensusMessageHash::RandomBeacon(hash) => self.random_beacon.remove(height, hash),
+            ConsensusMessageHash::Finalization(hash) => self.finalization.remove(height, hash),
+            ConsensusMessageHash::Notarization(hash) => self.notarization.remove(height, hash),
+            ConsensusMessageHash::BlockProposal(hash) => self.block_proposal.remove(height, hash),
+            ConsensusMessageHash::RandomBeaconShare(hash) => {
+                self.random_beacon_share.remove(height, hash)
+            }
+            ConsensusMessageHash::NotarizationShare(hash) => {
+                self.notarization_share.remove(height, hash)
+            }
+            ConsensusMessageHash::FinalizationShare(hash) => {
+                self.finalization_share.remove(height, hash)
+            }
+            ConsensusMessageHash::RandomTape(hash) => self.random_tape.remove(height, hash),
+            ConsensusMessageHash::RandomTapeShare(hash) => {
+                self.random_tape_share.remove(height, hash)
+            }
+            ConsensusMessageHash::CatchUpPackage(hash) => {
+                self.catch_up_package.remove(height, hash)
+            }
+            ConsensusMessageHash::CatchUpPackageShare(hash) => {
+                self.catch_up_package_share.remove(height, hash)
+            }
+            ConsensusMessageHash::EquivocationProof(hash) => {
+                self.equivocation_proof.remove(height, hash)
+            }
         };
     }
 }
@@ -286,42 +264,45 @@ impl SelectIndex for CryptoHashOf<EquivocationProof> {
     }
 }
 
-/// Stores instants for any object, and indexes them by height
-pub struct HeightIndexedInstants<T: Eq + Ord + Clone> {
-    instants: BTreeMap<T, Instant>,
-    index: HeightIndex<T>,
+/// Stores instants for any object that has a height and a hash.
+/// We use [`CryptoHash`] and [`PhantomData<T>`] separately instead of
+/// [`CryptoHashOf<T>`] because [`HasHash`] returns a type-erased
+/// [`CryptoHash`]. The [`PhantomData<T>`] still ensures that we are
+/// always storing instants for the same type `T`.
+pub struct HeightIndexedInstants<T: HasHeight + HasHash> {
+    instants: BTreeMap<Height, HashMap<CryptoHash, Instant>>,
+    phantom: PhantomData<T>,
 }
 
-impl<T: Eq + Ord + Clone> Default for HeightIndexedInstants<T> {
+impl<T: HasHeight + HasHash> Default for HeightIndexedInstants<T> {
     fn default() -> Self {
         Self {
             instants: Default::default(),
-            index: Default::default(),
+            phantom: PhantomData,
         }
     }
 }
 
-impl<T: Eq + Ord + Clone> HeightIndexedInstants<T> {
+impl<T: HasHeight + HasHash> HeightIndexedInstants<T> {
     pub fn get(&self, key: &T) -> Option<&Instant> {
-        self.instants.get(key)
+        let height = key.height();
+        let hash = key.hash();
+
+        self.instants.get(&height).and_then(|m| m.get(hash))
     }
 
     /// Inserts the key-value pair at the given height. If the key
     /// already exists, the value is *not* updated.
-    pub fn insert(&mut self, key: &T, value: Instant, height: Height) {
-        if self.index.insert(height, key) {
-            self.instants.entry(key.clone()).or_insert(value);
-        }
+    pub fn insert(&mut self, key: &T, value: Instant) {
+        let height = key.height();
+        let hash = key.hash();
+
+        let bucket = self.instants.entry(height).or_default();
+        bucket.entry(hash.clone()).or_insert(value);
     }
 
     pub fn clear(&mut self, h: Height) {
-        let range = self.index.range(Height::new(0)..h);
-        for (_, bucket) in range {
-            for hash in bucket {
-                self.instants.remove(hash);
-            }
-        }
-        self.index.remove_all_below(h);
+        self.instants = self.instants.split_off(&h);
     }
 }
 
@@ -334,8 +315,8 @@ mod tests {
         let mut index = HeightIndex::new();
         let fifteen = Height::from(15);
         let one_hundred = Height::from(100);
-        index.insert(fifteen, &12);
-        index.insert(one_hundred, &13);
+        index.insert(fifteen, 12);
+        index.insert(one_hundred, 13);
 
         let mut expected = vec![13];
         assert_eq!(
@@ -343,7 +324,7 @@ mod tests {
             &expected
         );
 
-        index.insert(one_hundred, &17);
+        index.insert(one_hundred, 17);
         expected.push(17);
 
         assert_eq!(
@@ -352,7 +333,7 @@ mod tests {
         );
 
         let sixty_six = Height::from(66);
-        index.insert(sixty_six, &44);
+        index.insert(sixty_six, 44);
 
         assert_eq!(
             vec![fifteen, sixty_six, one_hundred],
@@ -365,8 +346,8 @@ mod tests {
         assert_eq!(actual_values, expected_values);
 
         let twelve = Height::from(12);
-        index.insert(twelve, &1);
-        index.insert(twelve, &2);
+        index.insert(twelve, 1);
+        index.insert(twelve, 2);
 
         let mut expected = vec![1, 2];
         assert_eq!(
@@ -374,7 +355,7 @@ mod tests {
             &expected
         );
 
-        index.remove(twelve, &1);
+        index.remove(&twelve, &1);
 
         expected.retain(|x| x != &1);
         assert_eq!(
@@ -383,7 +364,7 @@ mod tests {
         );
         assert_eq!(index.buckets.len(), 4);
 
-        index.remove(twelve, &2);
+        index.remove(&twelve, &2);
         assert_eq!(index.buckets.len(), 3);
     }
 
@@ -404,13 +385,32 @@ mod tests {
         let elems: Vec<_> = elems.iter().collect(); // shuffled vector
 
         for (i, e) in elems.iter().enumerate() {
-            index.insert(Height::from((i % num_heights) as u64), e);
+            index.insert(Height::from((i % num_heights) as u64), *e);
         }
 
         for (i, e) in elems.iter().enumerate() {
-            index.remove(Height::from((i % num_heights) as u64), e);
+            index.remove(&Height::from((i % num_heights) as u64), e);
         }
 
+        assert!(index.buckets.is_empty());
+    }
+
+    #[test]
+    fn test_height_index_insert_does_not_dedup() {
+        let mut index = HeightIndex::new();
+        let height = Height::from(10);
+
+        // `insert` does not deduplicate
+        index.insert(height, 1);
+        index.insert(height, 1);
+        assert_eq!(
+            index.lookup(height).cloned().collect::<Vec<i32>>(),
+            vec![1, 1]
+        );
+        assert_eq!(index.size(), 2);
+
+        // `remove` removes all copies at once.
+        index.remove(&height, &1);
         assert!(index.buckets.is_empty());
     }
 
@@ -421,11 +421,11 @@ mod tests {
         let height = Height::from(0);
 
         for i in 0..max {
-            index.insert(height, &i);
+            index.insert(height, i);
         }
 
-        assert!(!index.retain(height, |&x| x < max));
-        assert!(index.retain(height, |&x| x % 2 == 0));
+        assert!(!index.retain(&height, |&x| x < max));
+        assert!(index.retain(&height, |&x| x % 2 == 0));
 
         assert!(
             !index
@@ -435,5 +435,91 @@ mod tests {
                 .iter()
                 .any(|x| x % 2 != 0)
         );
+    }
+
+    struct FakeArtifact {
+        height: Height,
+        hash: CryptoHash,
+    }
+
+    impl FakeArtifact {
+        fn new(height: u64, hash: u8) -> Self {
+            Self {
+                height: Height::from(height),
+                hash: CryptoHash(vec![hash]),
+            }
+        }
+    }
+
+    impl HasHeight for FakeArtifact {
+        fn height(&self) -> Height {
+            self.height
+        }
+    }
+
+    impl HasHash for FakeArtifact {
+        fn hash(&self) -> &CryptoHash {
+            &self.hash
+        }
+    }
+
+    #[test]
+    fn test_instants_insert_and_get() {
+        let mut instants = HeightIndexedInstants::default();
+        let now = Instant::now();
+
+        assert_eq!(instants.get(&FakeArtifact::new(10, 1)), None);
+
+        instants.insert(&FakeArtifact::new(10, 1), now);
+        assert_eq!(instants.get(&FakeArtifact::new(10, 1)), Some(&now));
+
+        // Entries are keyed by height *and* hash: neither a different hash at
+        // the same height nor the same hash at a different height matches.
+        assert_eq!(instants.get(&FakeArtifact::new(10, 2)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(11, 1)), None);
+    }
+
+    #[test]
+    fn test_instants_insert_does_not_overwrite() {
+        let mut instants = HeightIndexedInstants::default();
+        let earlier = Instant::now();
+        let later = earlier + std::time::Duration::from_secs(1);
+
+        // The first recorded instant wins; a repeated insert is a no-op.
+        instants.insert(&FakeArtifact::new(10, 1), earlier);
+        instants.insert(&FakeArtifact::new(10, 1), later);
+        assert_eq!(instants.get(&FakeArtifact::new(10, 1)), Some(&earlier));
+        assert_eq!(instants.instants.len(), 1);
+    }
+
+    #[test]
+    fn test_instants_clear_removes_strictly_below() {
+        let mut instants = HeightIndexedInstants::default();
+        let now = Instant::now();
+
+        instants.insert(&FakeArtifact::new(9, 1), now);
+        instants.insert(&FakeArtifact::new(9, 2), now);
+        instants.insert(&FakeArtifact::new(10, 1), now);
+        instants.insert(&FakeArtifact::new(11, 1), now);
+        instants.insert(&FakeArtifact::new(11, 2), now);
+        instants.insert(&FakeArtifact::new(12, 1), now);
+
+        instants.clear(Height::from(11));
+        assert_eq!(instants.get(&FakeArtifact::new(9, 1)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(9, 2)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(10, 1)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(11, 1)), Some(&now));
+        assert_eq!(instants.get(&FakeArtifact::new(11, 2)), Some(&now));
+        assert_eq!(instants.get(&FakeArtifact::new(12, 1)), Some(&now));
+
+        // Clearing is idempotent and tolerates heights above everything.
+        instants.clear(Height::from(11));
+        assert_eq!(instants.get(&FakeArtifact::new(10, 1)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(11, 1)), Some(&now));
+        assert_eq!(instants.get(&FakeArtifact::new(11, 2)), Some(&now));
+        instants.clear(Height::from(100));
+        assert_eq!(instants.get(&FakeArtifact::new(11, 1)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(11, 2)), None);
+        assert_eq!(instants.get(&FakeArtifact::new(12, 1)), None);
     }
 }

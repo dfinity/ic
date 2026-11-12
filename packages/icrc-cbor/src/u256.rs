@@ -1,5 +1,5 @@
 use ethnum::u256;
-use minicbor::data::Tag;
+use minicbor::data::{IanaTag, Tag};
 use minicbor::decode::{Decoder, Error};
 use minicbor::encode::{Encoder, Write};
 
@@ -17,7 +17,7 @@ pub fn decode<Ctx>(d: &mut Decoder<'_>, _ctx: &mut Ctx) -> Result<u256, Error> {
     }
 
     let tag: Tag = d.tag()?;
-    if tag != Tag::PosBignum {
+    if tag != Tag::from(IanaTag::PosBignum) {
         return Err(Error::message(
             "failed to parse u256: expected a PosBignum tag",
         ));
@@ -49,7 +49,8 @@ pub fn encode<Ctx, W: Write>(
             .iter()
             .position(|x| *x != 0)
             .unwrap_or(be_bytes.len());
-        e.tag(Tag::PosBignum)?.bytes(&be_bytes[non_zero_pos..])?;
+        e.tag(IanaTag::PosBignum)?
+            .bytes(&be_bytes[non_zero_pos..])?;
     }
     Ok(())
 }

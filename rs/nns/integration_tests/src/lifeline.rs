@@ -78,6 +78,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
             install_mode: Some(GovernanceCanisterInstallMode::Upgrade as i32),
             arg: Some(magic.to_vec()),
             skip_stopping_before_installing: None,
+            canister_upgrade_options: None,
         })),
     };
 
@@ -175,6 +176,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
             install_mode: Some(GovernanceCanisterInstallMode::Upgrade as i32),
             arg: Some(init_arg.to_vec()),
             skip_stopping_before_installing: Some(true),
+            canister_upgrade_options: None,
         })),
     };
 
@@ -272,6 +274,7 @@ fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
             install_mode: Some(GovernanceCanisterInstallMode::Upgrade as i32),
             arg: Some(vec![]),
             skip_stopping_before_installing: None,
+            canister_upgrade_options: None,
         })),
     };
     let neuron_id = NeuronId {

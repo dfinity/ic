@@ -113,6 +113,13 @@ const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_MESSAGE: NumOsPages =
 const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
     NumOsPages::new(GIB / (PAGE_SIZE as u64));
 
+// Maximum number of Wasm heap OS pages (4KiB) that a single message execution
+// is allowed to access. The default equals the maximum heap size, so the limit
+// is never hit; it is lowered through the config once all heap accesses are
+// covered by the limit checks.
+const WASM_MEMORY_ACCESSED_PAGE_LIMIT: NumOsPages =
+    NumOsPages::new(MAX_WASM64_MEMORY_IN_BYTES / (PAGE_SIZE as u64));
+
 /// The maximum size in bytes for an uncompressed Wasm module. This value is
 /// also used as the maximum size for the Wasm chunk store of each canister.
 pub const WASM_MAX_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024); // 100 MiB
@@ -122,15 +129,19 @@ pub struct FeatureFlags {
     /// If this flag is enabled, then the output of the `debug_print` system-api
     /// call will be skipped based on heuristics.
     pub rate_limiting_of_debug_prints: FlagStatus,
-    /// Use deterministic memory tracker.
-    pub deterministic_memory_tracker: FlagStatus,
+    /// If this flag is enabled, the limit on the number of Wasm heap pages a
+    /// single message execution may access is enforced: an execution that
+    /// would access one more page fails with `MemoryAccessLimitExceeded`.
+    /// If it is disabled, accesses beyond the limit are only counted in the
+    /// metrics and no checks are injected into the canister code.
+    pub wasm_memory_accessed_page_limit: FlagStatus,
 }
 
 impl FeatureFlags {
     const fn const_default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            deterministic_memory_tracker: FlagStatus::Enabled,
+            wasm_memory_accessed_page_limit: FlagStatus::Disabled,
         }
     }
 }
@@ -149,7 +160,7 @@ pub enum MeteringType {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-pub struct StableMemoryPageLimit {
+pub struct MemoryPageLimit {
     // Regular message (e.g., update) execution dirty/accessed page limit.
     pub message: NumOsPages,
     // Longer message (e.g., upgrade) execution dirty/accessed page limit.
@@ -205,11 +216,16 @@ pub struct Config {
 
     // Maximum number of stable memory pages that a single message execution
     // can access.
-    pub stable_memory_accessed_page_limit: StableMemoryPageLimit,
+    pub stable_memory_accessed_page_limit: MemoryPageLimit,
 
     /// Maximum number of stable memory dirty pages that a single message
     /// execution is allowed to produce.
-    pub stable_memory_dirty_page_limit: StableMemoryPageLimit,
+    pub stable_memory_dirty_page_limit: MemoryPageLimit,
+
+    /// Maximum number of Wasm heap pages (in OS pages) that a single message
+    /// execution is allowed to access. Accessing one more page fails the
+    /// execution with `MemoryAccessLimitExceeded`.
+    pub wasm_memory_accessed_page_limit: MemoryPageLimit,
 
     /// Sandbox process eviction ensures that the number of sandbox processes is
     /// always below this threshold.
@@ -225,11 +241,12 @@ pub struct Config {
     /// overridden at runtime by the registry's `maximum_state_delta`.
     pub default_subnet_heap_delta_capacity: NumBytes,
 
-    /// Dirty page overhead. The number of instructions to charge for each dirty
-    /// page created by a write to stable memory. The default value should be
+    /// The number of instructions to charge for every OS page of heap or stable
+    /// memory that a message touches: once when the page is first accessed and
+    /// once more when it is first written to. The default value should be
     /// replaced with the correct value at runtime when the hypervisor is
     /// created.
-    pub dirty_page_overhead: NumInstructions,
+    pub page_overhead: NumInstructions,
 
     /// If this flag is enabled, then execution of a slice will produce a log
     /// entry with the number of executed instructions and the duration.
@@ -271,20 +288,25 @@ impl Config {
             num_rayon_page_allocator_threads: DEFAULT_PAGE_ALLOCATOR_THREADS,
             feature_flags: FeatureFlags::const_default(),
             metering_type: MeteringType::New,
-            stable_memory_dirty_page_limit: StableMemoryPageLimit {
+            stable_memory_dirty_page_limit: MemoryPageLimit {
                 message: STABLE_MEMORY_DIRTY_PAGE_LIMIT_MESSAGE,
                 upgrade: STABLE_MEMORY_DIRTY_PAGE_LIMIT_UPGRADE,
                 query: STABLE_MEMORY_DIRTY_PAGE_LIMIT_QUERY,
             },
-            stable_memory_accessed_page_limit: StableMemoryPageLimit {
+            stable_memory_accessed_page_limit: MemoryPageLimit {
                 message: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_MESSAGE,
                 upgrade: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_UPGRADE,
                 query: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY,
             },
+            wasm_memory_accessed_page_limit: MemoryPageLimit {
+                message: WASM_MEMORY_ACCESSED_PAGE_LIMIT,
+                upgrade: WASM_MEMORY_ACCESSED_PAGE_LIMIT,
+                query: WASM_MEMORY_ACCESSED_PAGE_LIMIT,
+            },
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
             default_subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
-            dirty_page_overhead: NumInstructions::new(0),
+            page_overhead: NumInstructions::new(0),
             trace_execution: FlagStatus::Disabled,
             max_dirty_pages_without_optimization: DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION,
             dirty_page_copy_overhead: DIRTY_PAGE_COPY_OVERHEAD,

@@ -441,6 +441,14 @@ impl CheckpointLoader {
             );
         }
 
+        // Like the split marker, the "subnet was merged" marker is persisted
+        // separately from `SystemMetadata`.
+        metadata.subnet_merged = self
+            .checkpoint_layout
+            .subnet_merged_marker()
+            .deserialize()?
+            .merged;
+
         Ok(metadata)
     }
 
@@ -810,8 +818,9 @@ pub fn load_canister_state(
         canister_state_bits.executed,
         canister_state_bits.interrupted_during_execution,
         canister_state_bits.consumed_cycles,
+        canister_state_bits.consumed_cycles_monotonic,
         canister_state_bits.consumed_cycles_by_use_cases,
-        canister_state_bits.consumed_cycles_by_use_cases_as_counters,
+        canister_state_bits.consumed_cycles_by_use_cases_monotonic,
         canister_state_bits.instructions_executed,
         LoadMetrics::new(
             canister_state_bits.ingress_messages_executed,
@@ -820,6 +829,7 @@ pub fn load_canister_state(
             canister_state_bits.http_outcalls_executed,
             canister_state_bits.heartbeats_and_global_timers_executed,
         ),
+        canister_state_bits.connection_metrics,
     );
 
     let starting_time = Instant::now();
@@ -872,7 +882,6 @@ pub fn load_canister_state(
         canister_state_bits.log_visibility,
         canister_state_bits.snapshot_visibility,
         canister_state_bits.status_visibility,
-        canister_state_bits.canister_log,
         log_memory_store_data,
         canister_state_bits.log_memory_store_persistent_next_idx,
         canister_state_bits.wasm_memory_limit,
@@ -880,15 +889,6 @@ pub fn load_canister_state(
         canister_state_bits.environment_variables,
         metrics,
     );
-
-    let lms_next_idx = system_state.log_memory_store.next_idx();
-    let log_next_idx = system_state.canister_log.next_idx();
-    if lms_next_idx != log_next_idx {
-        metrics.observe_broken_soft_invariant(format!(
-            "canister {canister_id}: log_memory_store.next_idx ({lms_next_idx}) \
-             != canister_log.next_idx ({log_next_idx})",
-        ));
-    }
 
     let canister_state = CanisterState {
         system_state,
@@ -1013,6 +1013,7 @@ pub fn load_snapshot(
         wasm_chunk_store,
         execution_snapshot,
         canister_snapshot_bits.total_size,
+        canister_snapshot_bits.restored,
     );
 
     let metrics = LoadCanisterMetrics { durations };

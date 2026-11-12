@@ -1,0 +1,73 @@
+# The options for running bazel on the Remote Build Execution (RBE) cluster @ Namespace.
+#
+# bin/bazel passes this file to every bazel command of the bazel-namespace action, after
+# bazel/conf/.bazelrc.build and after /tmp/bazel-rbe.bazelrc, the endpoints and credentials that
+# `nsc bazel setup --command=common` writes.
+#
+# The lines are scoped to `build` and `test`, never `common`. Bazel applies `build` lines to the
+# commands that inherit build's options (test, run and coverage, and info, cquery and aquery, which
+# accept them) and `test` lines to test and coverage. None of them apply to `bazel query`, which
+# rejects e.g. --jobs and --spawn_strategy.
+#
+# Precedence: Bazel applies all `common` lines first, then `build` lines, then `test` lines, each
+# from all rc files in order. So these lines override the `common` lines of /tmp/bazel-rbe.bazelrc
+# (e.g. its --spawn_strategy=remote and --jobs), and the command line overrides them all.
+#
+# To reproduce a CI invocation elsewhere, e.g. on a Namespace devbox:
+#   nsc bazel setup --command=common --enable_remote_asset_api --bazelrc=/tmp/bazel-rbe.bazelrc
+#   bazel --noworkspace_rc --bazelrc=bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-rbe.bazelrc \
+#       --bazelrc=.github/actions/bazel-namespace/rbe.bazelrc test //some:test
+
+# Run actions remotely, falling back to the sandbox or to local execution for actions that can't
+# run remotely, like the ic-os image builds that bazel/conf/.bazelrc.build forces to run locally
+# with --strategy_regexp.
+build --spawn_strategy=remote,sandboxed,local
+build --strategy=Genrule=remote,sandboxed,local
+
+# The isolation and the container image of the RBE workers.
+# Bazel adds these default exec properties, in order, to its action execution salt: if they differ
+# between two commands on the same server, all actions are invalidated. Defining them once, here,
+# gives build, test, run and coverage the same ones.
+# The image must equal the container.image of the bazel-test-all-rbe job in
+# .github/workflows/ci-rbe-evaluation.yml, so actions run in the same environment locally (like the
+# ic-os image builds) and remotely. The update-image-references job of
+# .github/workflows/container-autobuild.yml rewrites both.
+build --remote_default_exec_properties=namespace_action_isolation=sandboxed
+build --remote_default_exec_properties=container-image=docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:b897752c4c05ee6f26bf17e4dfb42f2f64ad409cbfb0b95203eeaa00ed1bd95c
+
+# Namespace currently deploys 30 RBE workers that each can run 16 actions concurrently:
+build --jobs=480
+
+# Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action outputs live
+# only in the remote CAS. When a still-needed blob is missing from the CAS, the actions that need it
+# lose their inputs (under BwoB Bazel has no local copy to re-upload): without action rewinding they
+# fail with "Lost inputs no longer available remotely". Some fail with "Exec failed due to
+# IOException: Missing digest" instead, which neither rewinding nor the retries below handle.
+#
+# Lease extension: while a command runs, Bazel re-issues FindMissingBlobs for the remote blobs it
+# references, so that the CAS extends their lifetime. It does so when the first action of the
+# command finishes and then whenever the earliest lease expires (--experimental_remote_cache_ttl,
+# 3 hours by default), and stops at the end of the command: nothing extends leases between commands.
+build --experimental_remote_cache_lease_extension
+# Action rewinding, on trial in this non-blocking job: when an action lost inputs, Bazel reruns the
+# actions that produced them and then the action itself, within the same command. Without it the
+# action fails, the command runs on to its end (--keep_going) and only then reruns as a whole (the
+# retries below), after dropping what it knew about all remote outputs: on 2026-11-06 that turned a
+# 40-minute test step into 83 minutes. Rewinding gives up, failing the action, when the same input
+# of an action is lost more than 20 times, e.g. if the remote action cache keeps returning a result
+# whose outputs are gone. The bazel-namespace action reports the rewinds as a warning annotation.
+build --rewind_lost_inputs
+# With rewinding, this reruns the whole command only when downloading the inputs of a local action
+# fails for another reason than lost inputs (exit code 39).
+build --experimental_remote_cache_eviction_retries=10
+
+build --remote_download_minimal
+
+# Force the test logs of every test to be downloaded from the remote CAS. Under BwoB
+# (--remote_download_minimal) test outputs stay remote, and --test_output=errors can't even echo
+# the failing logs because multi-MB (system-)test logs exceed --experimental_ui_max_stdouterr_bytes
+# (default 1 MiB), leaving only unreachable CAS paths in the console. Downloading them lets the
+# bazel-namespace action upload the logs of the tests that ran (the ones of cached tests are
+# downloaded too, but not uploaded) to GitHub, where they are public: never pass secrets to tests,
+# e.g. with --test_env.
+test --remote_download_regex=.*/testlogs/.*

@@ -24,6 +24,8 @@ rust_library(
 rust_test(
     name = "host_test",
     crate = ":host",
+    # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)
+    # so we need this Namespace.so-specific execution property to open up the network on RBE:
     exec_properties = {"namespace_requires_network": "true"},
     tags = ["requires-network"],
     deps = [

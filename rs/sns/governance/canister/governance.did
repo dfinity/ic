@@ -584,6 +584,11 @@ type FolloweesForTopic = record {
   topic : opt Topic;
 };
 
+type RewardEventParticipation = record {
+  reward_event_end_timestamp_seconds : opt nat64;
+  reward_shares : opt nat;
+};
+
 type Neuron = record {
   id : opt NeuronId;
   staked_maturity_e8s_equivalent : opt nat64;
@@ -602,6 +607,7 @@ type Neuron = record {
   topic_followees : opt record {
     topic_id_to_followees : vec record { int32; FolloweesForTopic };
   };
+  latest_reward_event_participation : opt RewardEventParticipation;
   neuron_fees_e8s : nat64;
 };
 
@@ -703,6 +709,7 @@ type ProposalData = record {
   is_eligible_for_rewards : bool;
   executed_timestamp_seconds : nat64;
   topic : opt Topic;
+  execution_reply : opt blob;
 };
 
 type ProposalId = record {
@@ -906,8 +913,14 @@ type ChunkedCanisterWasm = record {
   chunk_hashes_list : vec blob;
 };
 
+type CanisterUpgradeOptions = record {
+  skip_pre_upgrade : opt bool;
+  wasm_memory_persistence : opt int32;
+};
+
 type UpgradeSnsControlledCanister = record {
   new_canister_wasm : blob;
+  canister_upgrade_options : opt CanisterUpgradeOptions;
   chunked_canister_wasm : opt ChunkedCanisterWasm;
   mode : opt int32;
   canister_id : opt principal;

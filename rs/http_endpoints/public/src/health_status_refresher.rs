@@ -1,6 +1,6 @@
 use crate::metrics::HttpHandlerMetrics;
 use axum::body::Body;
-use crossbeam::atomic::AtomicCell;
+use crossbeam_utils::atomic::AtomicCell;
 use http::Request;
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_state_manager::StateReader;

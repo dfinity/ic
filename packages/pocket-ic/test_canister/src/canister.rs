@@ -1,17 +1,16 @@
-#![allow(deprecated)]
 use candid::{CandidType, Nat, Principal, define_function};
 use ic_cdk::api::{
     accept_message, canister_self, debug_print, instruction_counter, msg_arg_data, msg_reject,
 };
-use ic_cdk::call::Error as CallError;
-use ic_cdk::management_canister::{
+use ic_cdk::call::{Call, Error as CallError, RejectCode};
+use ic_cdk::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
+use ic_cdk::{inspect_message, query, trap, update};
+use ic_cdk_management_canister::{
     EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, EcdsaPublicKeyResult, HttpMethod, HttpRequestArgs,
     HttpRequestResult, SignWithEcdsaArgs, SignWithEcdsaResult, TransformArgs, TransformContext,
     TransformFunc, ecdsa_public_key as ic_cdk_ecdsa_public_key,
     http_request as canister_http_outcall,
 };
-use ic_cdk::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
-use ic_cdk::{inspect_message, query, trap, update};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use serde::{Deserialize, Serialize};
@@ -21,7 +20,7 @@ use serde_bytes::ByteBuf;
 ///
 /// The variants and their ordering define the `RejectionCode` variant declared in
 /// `canister.did`, so the numbering must stay in sync with the reject codes of the
-/// [IC interface specification](https://internetcomputer.org/docs/references/ic-interface-spec#reject-codes).
+/// [IC interface specification](https://docs.internetcomputer.org/references/ic-interface-spec/https-interface/#reject-codes).
 #[derive(Copy, Clone, Debug, CandidType, Deserialize)]
 pub enum RejectionCode {
     NoError,
@@ -30,6 +29,9 @@ pub enum RejectionCode {
     DestinationInvalid,
     CanisterReject,
     CanisterError,
+    SysUnknown,
+    /// The reject code reported by the system is not one the interface
+    /// specification defines.
     Unknown,
 }
 
@@ -44,21 +46,29 @@ impl RejectionCode {
             3 => Self::DestinationInvalid,
             4 => Self::CanisterReject,
             5 => Self::CanisterError,
+            6 => Self::SysUnknown,
             _ => Self::Unknown,
         }
     }
 }
 
-/// Translates a failed call into the reject code and message `canister_http`
-/// reports back over Candid.
-fn map_call_error(err: CallError) -> (RejectionCode, String) {
-    match err {
+/// Translates a failed call into the reject code and message the endpoints below
+/// report back over Candid.
+///
+/// The match is deliberately exhaustive (rather than using a catch-all arm) so
+/// that a new [`CallError`] variant forces us to revisit this mapping.
+fn map_call_error(err: impl Into<CallError>) -> (RejectionCode, String) {
+    match err.into() {
+        // The call was rejected and the system assigned a reject code; report it.
         CallError::CallRejected(rejected) => (
             RejectionCode::from_raw(rejected.raw_reject_code()),
             rejected.reject_message().to_string(),
         ),
-        // Nothing reached the callee, so there is no reject code to report.
-        other => (RejectionCode::Unknown, other.to_string()),
+        // None of these carry a system-assigned reject code, so there is no
+        // faithful code to report; surface them as `Unknown`.
+        err @ (CallError::CandidDecodeFailed(_)
+        | CallError::InsufficientLiquidCycleBalance(_)
+        | CallError::CallPerformFailed(_)) => (RejectionCode::Unknown, err.to_string()),
     }
 }
 
@@ -189,13 +199,13 @@ async fn schnorr_public_key(
         key_id,
     };
 
-    let (res,): (SchnorrPublicKeyResponse,) = ic_cdk::call(
-        Principal::management_canister(),
-        "schnorr_public_key",
-        (request,),
-    )
-    .await
-    .map_err(|e| format!("schnorr_public_key failed {}", e.1))?;
+    let res: SchnorrPublicKeyResponse =
+        Call::unbounded_wait(Principal::management_canister(), "schnorr_public_key")
+            .with_arg(&request)
+            .await
+            .map_err(|err| format!("schnorr_public_key failed: {err}"))?
+            .candid()
+            .map_err(|err| format!("could not decode the schnorr_public_key reply: {err}"))?;
 
     Ok(res)
 }
@@ -219,14 +229,14 @@ async fn sign_with_schnorr(
         aux,
     };
 
-    let (reply,): (SignWithSchnorrResponse,) = ic_cdk::api::call::call_with_payment(
-        Principal::management_canister(),
-        "sign_with_schnorr",
-        (request,),
-        fee,
-    )
-    .await
-    .map_err(|e| format!("sign_with_schnorr failed {e:?}"))?;
+    let reply: SignWithSchnorrResponse =
+        Call::unbounded_wait(Principal::management_canister(), "sign_with_schnorr")
+            .with_arg(&request)
+            .with_cycles(fee)
+            .await
+            .map_err(|err| format!("sign_with_schnorr failed: {err}"))?
+            .candid()
+            .map_err(|err| format!("could not decode the sign_with_schnorr reply: {err}"))?;
 
     Ok(reply.signature)
 }
@@ -271,14 +281,15 @@ async fn sign_with_ecdsa(
             name,
         },
     };
-    let (res,): (SignWithEcdsaResult,) = ic_cdk::api::call::call_with_payment128(
-        Principal::management_canister(),
-        "sign_with_ecdsa",
-        (arg,),
-        fee,
-    )
-    .await
-    .map_err(|(code, msg)| format!("Reject code: {code:?}; Reject message: {msg}"))?;
+    let res: SignWithEcdsaResult =
+        Call::unbounded_wait(Principal::management_canister(), "sign_with_ecdsa")
+            .with_arg(&arg)
+            .with_cycles(fee)
+            .await
+            .map_err(|err| format!("sign_with_ecdsa failed: {err}"))?
+            .candid()
+            .map_err(|err| format!("could not decode the sign_with_ecdsa reply: {err}"))?;
+
     Ok(res.signature)
 }
 
@@ -337,13 +348,13 @@ async fn vetkd_public_key(
         },
     };
 
-    let (res,): (VetKdPublicKeyResponse,) = ic_cdk::call(
-        Principal::management_canister(),
-        "vetkd_public_key",
-        (request,),
-    )
-    .await
-    .map_err(|e| format!("vetkd_public_key failed {}", e.1))?;
+    let res: VetKdPublicKeyResponse =
+        Call::unbounded_wait(Principal::management_canister(), "vetkd_public_key")
+            .with_arg(&request)
+            .await
+            .map_err(|err| format!("vetkd_public_key failed: {err}"))?
+            .candid()
+            .map_err(|err| format!("could not decode the vetkd_public_key reply: {err}"))?;
 
     Ok(res.public_key)
 }
@@ -370,14 +381,14 @@ async fn vetkd_derive_key(
         transport_public_key,
     };
 
-    let (reply,): (VetKdDeriveKeyResponse,) = ic_cdk::api::call::call_with_payment(
-        Principal::management_canister(),
-        "vetkd_derive_key",
-        (request,),
-        fee,
-    )
-    .await
-    .map_err(|e| format!("vetkd_derive_key failed {e:?}"))?;
+    let reply: VetKdDeriveKeyResponse =
+        Call::unbounded_wait(Principal::management_canister(), "vetkd_derive_key")
+            .with_arg(&request)
+            .with_cycles(fee)
+            .await
+            .map_err(|err| format!("vetkd_derive_key failed: {err}"))?
+            .candid()
+            .map_err(|err| format!("could not decode the vetkd_derive_key reply: {err}"))?;
 
     Ok(reply.encrypted_key)
 }
@@ -431,6 +442,29 @@ async fn canister_http_with_transform(http_server_addr: String) -> HttpRequestRe
 
 // inter-canister calls
 
+/// Proxies a call to `method` of `callee`, passing the already Candid-encoded
+/// `args` verbatim and attaching `cycles` cycles.
+///
+/// Both the argument and the reply are passed through undecoded, so a test can use
+/// the callee's authoritative Candid types instead of copies maintained here. That
+/// is what makes it possible to call a management canister endpoint
+/// `ic-cdk-management-canister` does not expose (`flexible_http_request`) or to set
+/// a field it does not expose (`http_request`'s `pricing_version`).
+#[update]
+async fn proxy_call(
+    callee: Principal,
+    method: String,
+    args: ByteBuf,
+    cycles: u128,
+) -> Result<ByteBuf, (RejectionCode, String)> {
+    Call::unbounded_wait(callee, &method)
+        .with_raw_args(&args)
+        .with_cycles(cycles)
+        .await
+        .map(|response| ByteBuf::from(response.into_bytes()))
+        .map_err(map_call_error)
+}
+
 #[update]
 async fn whoami() -> String {
     canister_self().to_string()
@@ -438,17 +472,28 @@ async fn whoami() -> String {
 
 #[update]
 async fn whois(canister: Principal) -> String {
-    ic_cdk::call::<_, (String,)>(canister, "whoami", ((),))
+    Call::unbounded_wait(canister, "whoami")
+        .with_arg(())
         .await
         .unwrap()
-        .0
+        .candid()
+        .unwrap()
 }
 
 #[update]
 async fn call_and_get_rejection_code(canister: Principal) -> u32 {
-    match ic_cdk::call::<_, (String,)>(canister, "whoami", ((),)).await {
+    let result = Call::unbounded_wait(canister, "whoami")
+        .with_arg(())
+        .await
+        .map_err(CallError::from)
+        .and_then(|response| response.candid::<String>().map_err(CallError::from));
+
+    match result {
         Ok(_) => 0,
-        Err((code, _)) => code as u32,
+        Err(CallError::CallRejected(rejected)) => rejected.raw_reject_code(),
+        Err(CallError::CandidDecodeFailed(_)) => RejectCode::CanisterError as u32,
+        // The call never left this canister, so it may well succeed if retried.
+        Err(_) => RejectCode::SysTransient as u32,
     }
 }
 
@@ -459,10 +504,12 @@ async fn blob_len(blob: Vec<u8>) -> usize {
 
 #[update]
 async fn call_with_large_blob(canister: Principal, blob_len: usize) -> usize {
-    ic_cdk::call::<_, (usize,)>(canister, "blob_len", (vec![42_u8; blob_len],))
+    Call::unbounded_wait(canister, "blob_len")
+        .with_arg(vec![42_u8; blob_len])
         .await
         .unwrap()
-        .0
+        .candid()
+        .unwrap()
 }
 
 #[derive(CandidType, Deserialize)]
@@ -488,15 +535,15 @@ pub struct NodeMetricsHistoryArgs {
 async fn node_metrics_history_proxy(
     args: NodeMetricsHistoryArgs,
 ) -> Vec<NodeMetricsHistoryResponse> {
-    ic_cdk::api::call::call_with_payment128::<_, (Vec<NodeMetricsHistoryResponse>,)>(
+    Call::unbounded_wait(
         candid::Principal::management_canister(),
         "node_metrics_history",
-        (args,),
-        0_u128,
     )
+    .with_arg(&args)
     .await
     .unwrap()
-    .0
+    .candid()
+    .unwrap()
 }
 
 // executing many instructions
@@ -576,14 +623,13 @@ async fn deposit_cycles_to_cycles_ledger(beneficiary: Principal, cycles: u128) {
         },
         memo: None,
     };
-    ic_cdk::api::call::call_with_payment128::<_, (DepositResult,)>(
-        cycles_ledger_id,
-        "deposit",
-        (deposit_arg,),
-        cycles,
-    )
-    .await
-    .unwrap();
+    let _deposit_result: DepositResult = Call::unbounded_wait(cycles_ledger_id, "deposit")
+        .with_arg(&deposit_arg)
+        .with_cycles(cycles)
+        .await
+        .unwrap()
+        .candid()
+        .unwrap();
 }
 
 #[query]

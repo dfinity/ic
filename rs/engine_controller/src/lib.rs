@@ -28,15 +28,40 @@ pub struct EngineControllerInitArgs {
     pub initial_dkg_subnet_id: Option<Principal>,
 }
 
+/// State limits for a new engine subnet, in bytes. `None` (or `0`) keeps the
+/// protocol default. The query limits are deliberately absent: they stay
+/// with governance.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, CandidType, Deserialize)]
+pub struct EngineResourceLimits {
+    pub maximum_state_size: Option<u64>,
+    pub maximum_state_delta: Option<u64>,
+}
+
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct CreateEngineArgs {
     pub node_ids: Vec<Principal>,
     pub subnet_admins: Vec<Principal>,
     /// Elected replica version that the new engine subnet should run.
     pub replica_version_id: String,
+    /// State limits for the new subnet. `None` keeps the protocol defaults.
+    pub resource_limits: Option<EngineResourceLimits>,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct DeleteEngineArgs {
     pub subnet_id: Principal,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct CreateCanisterArgs {
+    /// The cloud engine subnet to create the canister on.
+    pub subnet_id: Principal,
+    /// The new canister's controllers, 1 to 10 of them. The engine controller
+    /// is not made a controller unless it is listed here.
+    pub controllers: Vec<Principal>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
+pub struct NewCanister {
+    pub canister_id: Principal,
 }

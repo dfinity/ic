@@ -21,18 +21,15 @@ or violation of integrity.
 end::catalog[] */
 
 use anyhow::Result;
-use ic_recovery::file_sync_helper::download_binary;
 use ic_system_test_driver::driver::test_env_api::{
-    READY_WAIT_TIMEOUT, RETRY_BACKOFF, get_mainnet_application_subnet_revision,
-    get_mainnet_nns_revision,
+    get_dependency_path_from_env, get_mainnet_application_subnet_revision, get_mainnet_nns_revision,
 };
 use ic_system_test_driver::driver::{group::SystemTestGroup, test_env::TestEnv};
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::block_on;
 use ic_types::ReplicaVersion;
 use slog::{Logger, error, info};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 const SANITY_CHECK_ARTIFACTS_COUNT: usize = 46;
@@ -100,33 +97,27 @@ and the custom `ExhaustiveSet` implementation is removed at the same time.
     }
 }
 
-/// TODO: Instead of downloading the mainnet binary, declare it as a bazel
-/// dependency such that it is downloaded ahead of time. This should be done
-/// once the following blockers are resolved:
-/// 1. It is possible to declare a dependency that can download and extract
-///    g-zipped archives, and make them executable.
-/// 2. There is a way to automatically update the version of this dependency,
-///    Ideally such that it is in sync with mainnet-icos-revisions.json
-fn download_mainnet_binary(version: &ReplicaVersion, log: &Logger, target_dir: &Path) -> PathBuf {
-    block_on(ic_system_test_driver::retry_with_msg_async!(
-        "download mainnet binary",
-        log,
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
-        || async { Ok(download_binary(log, version, "types-test".into(), target_dir,).await?) }
-    ))
-    .expect("Failed to Download")
-}
-
 fn nns_version_test(env: TestEnv) {
-    test(env, &get_mainnet_nns_revision().unwrap())
+    test(
+        env,
+        &get_mainnet_nns_revision().unwrap(),
+        "MAINNET_NNS_TYPES_TEST_PATH",
+    )
 }
 
 fn application_subnet_version_test(env: TestEnv) {
-    test(env, &get_mainnet_application_subnet_revision().unwrap())
+    test(
+        env,
+        &get_mainnet_application_subnet_revision().unwrap(),
+        "MAINNET_APP_TYPES_TEST_PATH",
+    )
 }
 
-fn test(env: TestEnv, mainnet_version: &ReplicaVersion) {
+/// `mainnet_test_env_var` names the runtime dependency holding the `types-test`
+/// binary built at `mainnet_version` (see `runtime_deps` in BUILD.bazel).
+/// `mainnet_version` itself is only used for logging: which binary we get is
+/// determined by the bazel dependency, not resolved from the version at runtime.
+fn test(env: TestEnv, mainnet_version: &ReplicaVersion, mainnet_test_env_var: &str) {
     let log = env.logger();
 
     info!(log, "Continuing with mainnet version {mainnet_version}");
@@ -137,9 +128,8 @@ fn test(env: TestEnv, mainnet_version: &ReplicaVersion) {
         fs::remove_dir_all(&output_dir)
             .expect("Should have all the permissions to remove the existing directory");
     }
-    let branch_test = PathBuf::from(&std::env::var("TYPES_TEST_PATH").unwrap());
-    let tmp_dir = tempfile::tempdir().unwrap();
-    let mainnet_test = download_mainnet_binary(mainnet_version, &log, tmp_dir.path());
+    let branch_test = get_dependency_path_from_env("TYPES_TEST_PATH");
+    let mainnet_test = get_dependency_path_from_env(mainnet_test_env_var);
 
     info!(log, "Creating artifacts with mainnet version...");
     call_unit_test(&log, &mainnet_test, Action::Serialize);

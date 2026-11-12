@@ -35,9 +35,6 @@ system_test_nns(
         "transaction_ledger_correctness.wasm",
     ],
     cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs * 6 vCPUs.
-    proc_macro_deps = [
-        "@crate_index//:async-recursion",
-    ],
     deps = [
         "//rs/canister_client/sender",
         "//rs/ledger_suite/common/ledger_core",

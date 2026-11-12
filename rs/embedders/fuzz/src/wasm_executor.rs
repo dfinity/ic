@@ -85,7 +85,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
         // Compilation can fail!
         return;
     }
-    let mut execution_state = result.unwrap().0;
+    let mut execution_state = result.unwrap().execution_state;
 
     // For determinism, all methods are executed
     for wasm_method in wasm_methods.iter() {

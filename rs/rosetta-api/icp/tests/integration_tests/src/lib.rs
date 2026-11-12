@@ -34,7 +34,7 @@ impl Drop for KillOnDrop {
     fn drop(&mut self) {
         match self.0.kill() {
             Ok(_) => println!("Rosetta has been successfully stopped"),
-            Err(err) => println!("Rosetta was NOT sucessfully stopped: {err:?}"),
+            Err(err) => println!("Rosetta was NOT successfully stopped: {err:?}"),
         }
     }
 }
@@ -105,8 +105,14 @@ pub async fn start_rosetta(
     let port = std::fs::read_to_string(port_file).expect("Expected port in port file");
     let port = u16::from_str(&port).expect("Expected port in port file");
 
-    let rosetta_client = RosettaClient::from_str_url(&format!("http://localhost:{port}"))
+    let mut rosetta_client = RosettaClient::from_str_url(&format!("http://localhost:{port}"))
         .expect("Unable to create the RosettaClient");
+    rosetta_client.http_client = reqwest::Client::builder()
+        // actix closes idle connections after ~5 s; a pooled connection reused at that moment gets IncompleteMessage, so don't pool. See:
+        // https://github.com/hyperium/hyper/issues/2136#issuecomment-861826148
+        .pool_max_idle_per_host(0)
+        .build()
+        .expect("Unable to create the HTTP client");
 
     // wait because rosetta may be recovering from existing state
     let mut tries_left = NUM_TRIES;

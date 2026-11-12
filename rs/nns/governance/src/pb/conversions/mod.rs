@@ -2632,6 +2632,9 @@ impl From<pb::InstallCode> for api::InstallCode {
             skip_stopping_before_installing: item.skip_stopping_before_installing,
             wasm_module_hash: item.wasm_module_hash,
             arg_hash: item.arg_hash,
+            canister_upgrade_options: item
+                .canister_upgrade_options
+                .map(api::install_code::CanisterUpgradeOptions::from),
         }
     }
 }
@@ -2647,6 +2650,9 @@ impl From<api::InstallCode> for pb::InstallCode {
             arg: None,
             wasm_module_hash: item.wasm_module_hash,
             arg_hash: item.arg_hash,
+            canister_upgrade_options: item
+                .canister_upgrade_options
+                .map(pb::install_code::CanisterUpgradeOptions::from),
         }
     }
 }
@@ -2678,6 +2684,26 @@ impl From<api::InstallCodeRequest> for pb::InstallCode {
             skip_stopping_before_installing: item.skip_stopping_before_installing,
             wasm_module_hash,
             arg_hash,
+            canister_upgrade_options: item
+                .canister_upgrade_options
+                .map(pb::install_code::CanisterUpgradeOptions::from),
+        }
+    }
+}
+
+impl From<pb::install_code::CanisterUpgradeOptions> for api::install_code::CanisterUpgradeOptions {
+    fn from(item: pb::install_code::CanisterUpgradeOptions) -> Self {
+        Self {
+            skip_pre_upgrade: item.skip_pre_upgrade,
+            wasm_memory_persistence: item.wasm_memory_persistence,
+        }
+    }
+}
+impl From<api::install_code::CanisterUpgradeOptions> for pb::install_code::CanisterUpgradeOptions {
+    fn from(item: api::install_code::CanisterUpgradeOptions) -> Self {
+        Self {
+            skip_pre_upgrade: item.skip_pre_upgrade,
+            wasm_memory_persistence: item.wasm_memory_persistence,
         }
     }
 }
@@ -2892,6 +2918,7 @@ impl From<pb::CanisterSettings> for api::CanisterSettings {
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
             snapshot_visibility: item.snapshot_visibility,
+            reserved_cycles_limit: item.reserved_cycles_limit,
         }
     }
 }
@@ -2907,6 +2934,7 @@ impl From<api::CanisterSettings> for pb::CanisterSettings {
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
             snapshot_visibility: item.snapshot_visibility,
+            reserved_cycles_limit: item.reserved_cycles_limit,
         }
     }
 }
@@ -3914,6 +3942,7 @@ impl From<pb::NnsFunction> for api::NnsFunction {
                 api::NnsFunction::SetSubnetOperationalLevel
             }
             pb::NnsFunction::SplitSubnet => api::NnsFunction::SplitSubnet,
+            pb::NnsFunction::MergeSubnets => api::NnsFunction::MergeSubnets,
             pb::NnsFunction::DeleteSubnet => api::NnsFunction::DeleteSubnet,
             pb::NnsFunction::SetDefaultInitialDkgSubnet => {
                 api::NnsFunction::SetDefaultInitialDkgSubnet
@@ -4014,6 +4043,7 @@ impl From<api::NnsFunction> for pb::NnsFunction {
                 pb::NnsFunction::SetSubnetOperationalLevel
             }
             api::NnsFunction::SplitSubnet => pb::NnsFunction::SplitSubnet,
+            api::NnsFunction::MergeSubnets => pb::NnsFunction::MergeSubnets,
             api::NnsFunction::DeleteSubnet => pb::NnsFunction::DeleteSubnet,
             api::NnsFunction::SetDefaultInitialDkgSubnet => {
                 pb::NnsFunction::SetDefaultInitialDkgSubnet

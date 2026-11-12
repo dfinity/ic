@@ -92,13 +92,44 @@ impl DisplayerOf<NumBytes> for NumBytesTag {
     ///
     /// There will be no decimals iff the chosen unit is 'bytes'.
     fn display(num_bytes: &NumBytes, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            byte_unit::Byte::from_bytes(num_bytes.get().into())
-                .get_appropriate_unit(true)
-                .format(2)
-        )
+        format_num_bytes(num_bytes.get(), f)
+    }
+}
+
+/// Binary byte units, in ascending order, together with their size in bytes.
+const BINARY_BYTE_UNITS: [(&str, u64); 7] = [
+    ("B", 1),
+    ("KiB", 1 << 10),
+    ("MiB", 1 << 20),
+    ("GiB", 1 << 30),
+    ("TiB", 1 << 40),
+    ("PiB", 1 << 50),
+    ("EiB", 1 << 60),
+];
+
+/// Formats `bytes` using the largest binary unit that is strictly smaller than
+/// `bytes` (so `1024` is rendered as `1024 B` and `1025` as `1.00 KiB`), with
+/// two decimals unless the unit is plain bytes.
+///
+/// This replicates the output of `byte_unit::Byte::from_bytes(bytes)
+/// .get_appropriate_unit(true).format(2)` (byte-unit 4.x) byte for byte,
+/// which used to be used here and whose format is relied upon by logs and
+/// metrics.
+fn format_num_bytes(bytes: u64, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let (unit, unit_bytes) = BINARY_BYTE_UNITS
+        .iter()
+        .rev()
+        .find(|(_, unit_bytes)| bytes > *unit_bytes)
+        .copied()
+        .unwrap_or(BINARY_BYTE_UNITS[0]);
+
+    if unit_bytes == 1 {
+        write!(f, "{bytes} B")
+    } else {
+        // The conversion to f64 is lossy above 2^53 bytes, in the same way as
+        // in the original byte-unit implementation.
+        let value = bytes as f64 / unit_bytes as f64;
+        write!(f, "{value:.2} {unit}")
     }
 }
 
@@ -344,11 +375,46 @@ impl TryFrom<pbSnapshot> for SnapshotId {
 mod tests {
     use candid::{Decode, Encode};
 
-    pub use crate::{CanisterId, SnapshotId};
+    pub use crate::{CanisterId, NumBytes, SnapshotId};
 
     #[test]
     fn invalid_snapshot_id_fails() {
         SnapshotId::try_from(vec![4, 5, 6, 6]).unwrap_err();
+    }
+
+    #[test]
+    fn num_bytes_display() {
+        for (bytes, expected) in [
+            (0, "0 B"),
+            (1, "1 B"),
+            (999, "999 B"),
+            (1023, "1023 B"),
+            // The unit only changes when the value is strictly greater than
+            // the unit itself.
+            (1024, "1024 B"),
+            (1025, "1.00 KiB"),
+            (1536, "1.50 KiB"),
+            (1_048_576, "1024.00 KiB"),
+            (1_048_577, "1.00 MiB"),
+            (1_572_864, "1.50 MiB"),
+            (123_456_789, "117.74 MiB"),
+            (1 << 30, "1024.00 MiB"),
+            ((1 << 30) + 1, "1.00 GiB"),
+            (3 << 30, "3.00 GiB"),
+            (1 << 40, "1024.00 GiB"),
+            ((1 << 40) + 1, "1.00 TiB"),
+            (1 << 50, "1024.00 TiB"),
+            ((1 << 50) + 1, "1.00 PiB"),
+            (1 << 60, "1024.00 PiB"),
+            ((1 << 60) + 1, "1.00 EiB"),
+            (u64::MAX, "16.00 EiB"),
+        ] {
+            assert_eq!(
+                NumBytes::new(bytes).display().to_string(),
+                expected,
+                "{bytes}"
+            );
+        }
     }
 
     #[test]

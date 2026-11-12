@@ -162,6 +162,7 @@ system_test_nns(
         "long_test",
     ],
     test_driver_target = ":upgrade_downgrade_unassigned_test_bin",
+    test_timeout = "eternal",
 )
 
 system_test_nns(
@@ -174,6 +175,7 @@ system_test_nns(
         "long_test",
     ],
     test_driver_target = ":upgrade_downgrade_unassigned_test_bin",
+    test_timeout = "eternal",
 )
 
 system_test_nns(

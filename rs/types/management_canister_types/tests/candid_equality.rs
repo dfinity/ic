@@ -16,6 +16,7 @@ type CanisterInfoResult = CanisterInfoResponse;
 type CanisterMetadataArgs = CanisterMetadataRequest;
 type CanisterMetadataResult = CanisterMetadataResponse;
 type SubnetInfoResult = SubnetInfoResponse;
+type SubnetMetricsResult = SubnetMetricsResponse;
 type DeleteCanisterArgs = CanisterIdRecord;
 type DepositCyclesArgs = CanisterIdRecord;
 type RawRandResult = Vec<u8>;
@@ -35,6 +36,7 @@ type ListCanisterSnapshotsResult = Vec<CanisterSnapshotResponse>;
 type FetchCanisterLogsArgs = FetchCanisterLogsRequest;
 type FetchCanisterLogsResult = FetchCanisterLogsResponse;
 type ListCanistersResult = ListCanistersResponse;
+type FlexibleHttpRequestArgs = FlexibleCanisterHttpRequestArgs;
 
 #[candid_method(update)]
 fn create_canister(_: CreateCanisterArgs) -> CreateCanisterResult {
@@ -86,12 +88,17 @@ fn stop_canister(_: StopCanisterArgs) {
     unreachable!()
 }
 
-#[candid_method(update)]
+#[candid_method(query)]
 fn canister_status(_: CanisterStatusArgs) -> CanisterStatusResult {
     unreachable!()
 }
 
-#[candid_method(update)]
+#[candid_method(query)]
+fn canister_metrics(_: CanisterMetricsArgs) -> CanisterMetricsResult {
+    unreachable!()
+}
+
+#[candid_method(query)]
 fn canister_info(_: CanisterInfoArgs) -> CanisterInfoResult {
     unreachable!()
 }
@@ -127,6 +134,11 @@ fn http_request(_: HttpRequestArgs) -> HttpRequestResult {
 }
 
 #[candid_method(update)]
+fn flexible_http_request(_: FlexibleHttpRequestArgs) -> FlexibleHttpRequestResult {
+    unreachable!()
+}
+
+#[candid_method(update)]
 fn ecdsa_public_key(_: EcdsaPublicKeyArgs) -> EcdsaPublicKeyResult {
     unreachable!()
 }
@@ -147,7 +159,22 @@ fn sign_with_schnorr(_: SignWithSchnorrArgs) -> SignWithSchnorrResult {
 }
 
 #[candid_method(update)]
+fn vetkd_public_key(_: VetKdPublicKeyArgs) -> VetKdPublicKeyResult {
+    unreachable!()
+}
+
+#[candid_method(update)]
+fn vetkd_derive_key(_: VetKdDeriveKeyArgs) -> VetKdDeriveKeyResult {
+    unreachable!()
+}
+
+#[candid_method(update)]
 fn node_metrics_history(_: NodeMetricsHistoryArgs) -> NodeMetricsHistoryResult {
+    unreachable!()
+}
+
+#[candid_method(update)]
+fn subnet_metrics(_: SubnetMetricsArgs) -> SubnetMetricsResult {
     unreachable!()
 }
 

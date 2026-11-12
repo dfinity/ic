@@ -1,4 +1,6 @@
-use ic_crypto_internal_threshold_sig_canister_threshold_sig::IDkgTranscriptInternal;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    DerivationPath, IDkgTranscriptInternal,
+};
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptType::{Masked, Unmasked};
@@ -12,6 +14,16 @@ pub(crate) mod test_utils;
 mod tests;
 
 pub use idkg::{MegaKeyFromRegistryError, retrieve_mega_public_key_from_registry};
+
+// Before a derivation path reaches threshold key derivation, exactly one element
+// is prepended to it: the caller's principal when signing, and the target canister
+// id for the public key APIs.
+//
+// Were the two bounds equal, then a request at the maximum length would be rejected.
+static_assertions::const_assert_eq!(
+    ic_management_canister_types_private::MAXIMUM_DERIVATION_PATH_LENGTH + 1,
+    DerivationPath::MAXIMUM_DERIVATION_PATH_LENGTH
+);
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub enum MasterPublicKeyExtractionError {

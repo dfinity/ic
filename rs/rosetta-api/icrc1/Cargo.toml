@@ -52,7 +52,6 @@ strum_macros = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tower-http = { workspace = true }
-tower-request-id = "^0.3.0"
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -72,8 +71,6 @@ ic-ledger-canister-core = { path = "../../ledger_suite/common/ledger_canister_co
 ic-management-canister-types = { workspace = true }
 ic-rosetta-test-utils = { path = "../icp/test_utils" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
-ic-utils = { workspace = true }
-once_cell = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 prometheus-parse = { workspace = true }
 url = { workspace = true }

@@ -1,7 +1,8 @@
-#![allow(deprecated)]
-use ic_cdk::api::call::ManualReply;
+use ic_cdk::api::{msg_reject, msg_reply};
+use ic_cdk::call::Call;
 use ic_message::ForwardParams;
 use std::cell::RefCell;
+use std::marker::PhantomData;
 
 thread_local! {
     static MSG: RefCell<Option<String>> = const { RefCell::new(None) };
@@ -26,11 +27,19 @@ pub async fn forward(
         cycles,
         payload,
     }: ForwardParams,
-) -> ManualReply<Vec<u8>> {
-    match ic_cdk::api::call::call_raw128(receiver, &method, &payload, cycles).await {
-        Ok(res) => ManualReply::one(res),
-        Err((_, err)) => ManualReply::reject(err),
+) -> PhantomData<Vec<u8>> {
+    match Call::unbounded_wait(receiver, &method)
+        .with_raw_args(&payload)
+        .with_cycles(cycles)
+        .await
+    {
+        Ok(response) => msg_reply(
+            candid::encode_one(response.into_bytes()).expect("Failed to encode the reply."),
+        ),
+        Err(err) => msg_reject(err.to_string()),
     }
+
+    PhantomData
 }
 
 #[ic_cdk::pre_upgrade]

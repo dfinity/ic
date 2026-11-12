@@ -5,7 +5,6 @@
 //! as a canister message to client if the call was successful and agreed by majority nodes,
 //! otherwise errors out.
 //!
-#![allow(deprecated)]
 use candid::Principal;
 use futures::future::join_all;
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -13,14 +12,15 @@ use ic_cdk::api::{
     data_certificate, in_replicated_execution, msg_caller, msg_cycles_refunded, time,
 };
 use ic_cdk::call::{Call, CallFailed};
-use ic_cdk::spawn;
+use ic_cdk::futures::spawn_017_compat;
 use ic_cdk::{query, update};
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
 };
 use proxy_canister::{
-    FlexibleRemoteHttpRequest, RejectionCode, RemoteHttpRequest, RemoteHttpResponse,
-    RemoteHttpStressRequest, RemoteHttpStressResponse, ResponseWithRefundedCycles,
+    FlexibleRemoteHttpRequest, FlexibleResponseWithRefundedCycles, RejectionCode,
+    RemoteHttpRequest, RemoteHttpResponse, RemoteHttpStressRequest, RemoteHttpStressResponse,
+    ResponseWithRefundedCycles,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -37,27 +37,36 @@ const MAX_TRANSFORM_SIZE: usize = 2_000_000;
 /// reports back over Candid.
 fn map_call_error(err: CallFailed) -> (RejectionCode, String) {
     match err {
+        // The call was rejected and the system assigned a reject code; report it.
         CallFailed::CallRejected(rejected) => (
             RejectionCode::from_raw(rejected.raw_reject_code()),
             rejected.reject_message().to_string(),
         ),
-        // Nothing reached the callee, so there is no reject code to report.
-        other => (RejectionCode::Unknown, other.to_string()),
+        // Neither of these produced a response from the callee, so there is no
+        // callee-assigned reject code to report; surface them as `Unknown`.
+        CallFailed::InsufficientLiquidCycleBalance(e) => (RejectionCode::Unknown, e.to_string()),
+        CallFailed::CallPerformFailed(e) => (RejectionCode::Unknown, e.to_string()),
     }
 }
 
 #[update]
 async fn send_flexible_request(
     request: FlexibleRemoteHttpRequest,
-) -> Result<Vec<u8>, (RejectionCode, String)> {
+) -> FlexibleResponseWithRefundedCycles {
     let FlexibleRemoteHttpRequest { request, cycles } = request;
 
-    Call::unbounded_wait(Principal::management_canister(), "flexible_http_request")
+    let result = Call::unbounded_wait(Principal::management_canister(), "flexible_http_request")
         .with_raw_args(&request.encode())
         .with_cycles(u128::from(cycles))
         .await
         .map(|response| response.into_bytes())
-        .map_err(map_call_error)
+        .map_err(map_call_error);
+    // As in `send_request_with_refund_callback`: readable here because the call
+    // came back through a reply or reject callback.
+    FlexibleResponseWithRefundedCycles {
+        result,
+        refunded_cycles: msg_cycles_refunded() as u64,
+    }
 }
 
 #[update]
@@ -108,7 +117,7 @@ pub async fn start_continuous_requests(
     // This request establishes the session to the target server.
     let _ = send_request(request.clone()).await;
 
-    spawn(async move {
+    spawn_017_compat(async move {
         run_continuous_request_loop(request).await;
     });
 
@@ -217,6 +226,12 @@ async fn check_response(
             None => None,
         }
     })
+}
+
+/// This canister's own cycle balance.
+#[query]
+fn cycle_balance() -> u128 {
+    ic_cdk::api::canister_cycle_balance()
 }
 
 #[query]

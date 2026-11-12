@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-#   targets.py [-h] [--skip_long_tests] [--base BASE] [--head HEAD] {build,test,check}
+#   targets.py [-h] [--skip_long_tests] [--exclude_tags TAG]... [--base BASE] [--head HEAD] {build,test,check}
 #
 # This script determines which Bazel targets should be built or tested and writes them separated by newlines to stdout.
 #
@@ -11,14 +11,18 @@
 #
 # However, long_tests of which a direct source file has been modified will be included.
 #
+# bazel is looked up on PATH, so CI can put a wrapper in front of it that adds startup options, like
+# .github/actions/bazel-namespace/bin/bazel does.
+#
 # Finally ./PULL_REQUEST_BAZEL_TARGETS is taken into account to explicitly return targets based on modified files
 # even though they're not an explicit dependency of a bazel target or are tagged as `long_test`.
 #
-# When the command is `check` the PULL_REQUEST_BAZEL_TARGETS file is checked for correctness.
+# When the command is `check` the PULL_REQUEST_BAZEL_TARGETS file is checked for correctness,
+# taking --exclude_tags into account like `test` does.
 #
 # The script will print the bazel query to stderr which is useful for debugging:
 #   ci/scripts/targets.py --skip_long_tests --base=master test
-#   bazel query --keep_going '((((kind(".*_test", rdeps(//..., set("ci/scripts/targets.py")))) except attr(tags, long_test, //...)) + attr(tags, long_test, rdeps(//..., set("ci/scripts/targets.py"), 2))) + set(//pre-commit:ruff-lint)) except attr(tags, "manual|system_test_large|system_test_benchmark|fuzz_test|fi_tests_nightly|nns_tests_nightly|pocketic_tests_nightly", //...)'
+#   bazel query --keep_going 'filter("^//", ((((kind(".*_test", rdeps(//..., set("ci/scripts/targets.py")))) except attr(tags, long_test, //...)) + attr(tags, long_test, rdeps(//..., set("ci/scripts/targets.py"), 2))) + set(//pre-commit:ruff-lint)) except attr(tags, "manual|system_test_large|system_test_benchmark|fuzz_test|fi_tests_nightly|nns_tests_nightly|pocketic_tests_nightly", //...))'
 
 import argparse
 import fnmatch
@@ -53,6 +57,8 @@ ALL_TARGETS_BLOBS = [
     "*.bzl",
     "bazel/*",
     "ci/container/TAG",
+    "ci/container/ic-build.digest",
+    "ci/container/ic-dev.digest",
     "mainnet-*-revisions.json",
 ]
 
@@ -199,14 +205,22 @@ def targets(
     excluded_tags_regex = "|".join(EXCLUDED_TAGS + exclude_tags)
     query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
 
+    # rdeps over //... can also return targets of external repositories (e.g. the
+    # @mainnet_*_images//:guest-img genrules via //rs/ic_os/build_tools/partition_tools)
+    # and the tag exclusions above only cover //.... CI never intends to build external
+    # targets, so keep only main-repository labels:
+    query = f'filter("^//", {query})'
+
     args = ["bazel", "query", "--keep_going", query]
     log(shlex.join(args))
-    result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # bazel's stderr is passed through so that its warnings (e.g. remote downloader fallbacks),
+    # the files ignored by --keep_going and the "Starting local Bazel server" line end up in our log.
+    result = subprocess.run(args, stdout=subprocess.PIPE, text=True)
 
     # As described above, when the query contains files not tracked by bazel,
     # --keep_going will ignore them but will return the special exit code 3 which we ignore:
     if result.returncode not in (0, 3):
-        log(f"Error running `bazel query --keep_going '{query}'`:\n" + result.stderr)
+        log(f"`{shlex.join(args)}` failed with exit code {result.returncode}!")
         sys.exit(result.returncode)
 
     result_targets = result.stdout.splitlines()
@@ -218,13 +232,14 @@ def targets(
         print("\n".join(result_targets))
 
 
-def check():
+def check(exclude_tags: list[str]):
     """
     Exit successfully with 0 if PULL_REQUEST_BAZEL_TARGETS:
     * can be read and parsed.
     * each pattern matches at least one file tracked by git.
     * each pattern has at least one explicit target.
-    * each target is valid and when queried results in at least one target after excluding all excluded targets.
+    * each target is valid and when queried results in at least one test target after excluding all targets
+      tagged with any of EXCLUDED_TAGS or the --exclude_tags (CI can pass the same ones it passes to `test`).
     Otherwise print all errors to stderr and exit erroneously with 1.
     """
     try:
@@ -236,6 +251,7 @@ def check():
 
     errors = []
     indentation = "    "
+    excluded_tags_regex = "|".join(EXCLUDED_TAGS + exclude_tags)
     for pattern, explicit_targets_for_pattern in explicit_targets.items():
         matches = fnmatch.filter(all_files, pattern)
         n = len(matches)
@@ -253,21 +269,23 @@ def check():
             errors.append(f"Pattern '{pattern}' has no explicit targets!")
 
         for target in explicit_targets_for_pattern:
-            excluded_tags_regex = "|".join(EXCLUDED_TAGS)
-            query = f'({target}) except attr(tags, "{excluded_tags_regex}", //...)'
+            query = f'kind(".*_test|test_suite", ({target}) except attr(tags, "{excluded_tags_regex}", //...))'
             result = subprocess.run(["bazel", "query", query], capture_output=True, text=True)
             if result.returncode != 0:
                 indented_error_msg = f"{indentation}" + f"\n{indentation}".join(result.stderr.strip().splitlines())
                 errors.append(f"Pattern '{pattern}' has problematic target '{target}':\n{indented_error_msg}")
             elif len(result.stdout.splitlines()) == 0:
-                errors.append(
-                    f"Pattern '{pattern}' with target '{target}' results in no targets after excluding all manual targets!"
-                    + (
-                        f"\n{indentation}It might be you're including the manual non-colocated variant of a system-test."
-                        + f"\n{indentation}Try '{target}_colocate' instead."
+                hint = ""
+                if target.startswith("//rs/tests"):
+                    hint = (
+                        f"\n{indentation}Only test targets without any of these tags count. A system-test has a Farm variant"
+                        f"\n{indentation}('<test>_farm', or '<test>_farm_colocate' for tests tagged 'colocate') and a local variant"
+                        f"\n{indentation}('<test>_local'), of which CI runs the one that isn't excluded here. A system-test declared with"
+                        f'\n{indentation}backend = "farm" has no runnable local variant.'
                     )
-                    if target.startswith("//rs/tests")
-                    else ""
+                errors.append(
+                    f"Pattern '{pattern}' with target '{target}' results in no targets after excluding all targets tagged"
+                    f" with any of: {excluded_tags_regex}!" + hint
                 )
 
     n = len(errors)
@@ -296,7 +314,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "check":
-        check()
+        check(args.exclude_tags)
 
     targets(args.command, args.skip_long_tests, args.exclude_tags, args.base, args.head)
 

@@ -1,46 +1,138 @@
 use super::*;
 use bytes::Bytes;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
-use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
+use ic_logger::no_op_logger;
+use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_protobuf::{messaging::xnet::v1 as pb, proxy::ProtoProxy};
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_keys::make_subnet_record_key;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_replicated_state::testing::{ReplicatedStateTesting, StreamTesting};
 use ic_replicated_state::{ReplicatedState, Stream};
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count, metric_vec,
+    HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count,
+    fetch_int_counter_vec, metric_vec,
 };
-use ic_test_utilities_types::{
-    ids::{SUBNET_6, SUBNET_7, canister_test_id},
-    messages::RequestBuilder,
+use ic_test_utilities_types::ids::{
+    NODE_3, NODE_5, NODE_42, SUBNET_6, SUBNET_7, SUBNET_12, canister_test_id,
 };
-use ic_types::{SubnetId, messages::CallbackId, xnet::StreamIndexedQueue};
+use ic_test_utilities_types::messages::RequestBuilder;
+use ic_types::{
+    NodeId, RegistryVersion, SubnetId,
+    messages::CallbackId,
+    xnet::{CertifiedStreamSlice, StreamIndexedQueue},
+};
 use maplit::btreemap;
-use std::sync::Barrier;
+use std::sync::{Barrier, OnceLock};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 use url::Url;
 
 const SRC_CANISTER: u64 = 2;
 const DST_CANISTER: u64 = 3;
 const CALLBACK_ID: u64 = 4;
 const DST_SUBNET: SubnetId = SUBNET_6;
-const UNKNOWN_SUBNET: SubnetId = SUBNET_7;
+/// An existent subnet for which we have no stream.
+const NO_STREAM_SUBNET: SubnetId = SUBNET_7;
+/// A nonexistent subnet (no registry record).
+const UNKNOWN_SUBNET: SubnetId = SUBNET_12;
 
 const STREAM_BEGIN: StreamIndex = StreamIndex::new(7);
 const STREAM_COUNT: u64 = 3;
 
+/// A node of `DST_SUBNET`, i.e. the only one allowed to fetch its stream.
+const DST_SUBNET_NODE: NodeId = NODE_3;
+/// A node of `NO_STREAM_SUBNET`.
+const NO_STREAM_SUBNET_NODE: NodeId = NODE_5;
+/// A node not belonging to any subnet.
+const UNASSIGNED_NODE: NodeId = NODE_42;
+
+const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
+
 pub(crate) struct EndpointTestFixture {
     pub state_manager: Arc<FakeStateManager>,
-    pub registry_client: Arc<MockRegistryClient>,
+    pub registry_client: Arc<FakeRegistryClient>,
     pub metrics: MetricsRegistry,
     pub tls_handshake: Arc<MockTlsConfig>,
+    pub advert_handler: Arc<FakeAdvertHandler>,
+    /// The `Context` backing `route_request()`, created on first use. A second one,
+    /// or a `XNetEndpoint` alongside it, would panic on registering a second
+    /// `XNetEndpointMetrics` with `metrics`.
+    context: OnceLock<Context<FakeStateManager>>,
 }
 
 impl EndpointTestFixture {
     pub fn with_replicated_state() -> Self {
-        let fixture = EndpointTestFixture::default();
+        Self::with_advert_outcome(|| Ok(XNetAdvertOutcome::Actionable))
+    }
+
+    /// As `with_replicated_state()`, but with an advert handler returning
+    /// `outcome` for every advert.
+    fn with_advert_outcome(
+        outcome: impl Fn() -> Result<XNetAdvertOutcome, XNetAdvertError> + Send + Sync + 'static,
+    ) -> Self {
+        let fixture = EndpointTestFixture {
+            metrics: MetricsRegistry::new(),
+            state_manager: Arc::new(FakeStateManager::new()),
+            registry_client: Arc::new(registry_with_subnet_memberships()),
+            tls_handshake: Arc::new(MockTlsConfig::new()),
+            advert_handler: FakeAdvertHandler::new(move |_, _| outcome()),
+            context: OnceLock::new(),
+        };
         put_replicated_state_for_testing(&*fixture.state_manager);
         fixture
+    }
+
+    /// Starts a `XNetEndpoint` listening on a free localhost port.
+    fn new_endpoint(&self, runtime_handle: runtime::Handle, log: ReplicaLogger) -> XNetEndpoint {
+        let addr = get_free_localhost_socket_addr();
+        XNetEndpoint::new(
+            runtime_handle,
+            self.state_manager.clone(),
+            self.advert_handler.clone(),
+            self.tls_handshake.clone(),
+            self.registry_client.clone(),
+            Config {
+                xnet_ip_addr: addr.ip().to_string(),
+                xnet_port: addr.port(),
+            },
+            &self.metrics,
+            log,
+        )
+    }
+
+    /// Routes a GET for the given URL on behalf of `peer_node_id`.
+    fn route_request(&self, url: Url, peer_node_id: Option<NodeId>) -> Response<Body> {
+        let body = Bytes::new();
+        route_request(url, Method::GET, Ok(body), peer_node_id, self.context())
+    }
+
+    /// Posts the given advert on behalf of `peer_node_id`.
+    fn post_advert(
+        &self,
+        source_subnet: SubnetId,
+        advert: &CertifiedStreamSlice,
+        peer_node_id: Option<NodeId>,
+    ) -> Response<Body> {
+        let url = Url::parse(&format!("http://localhost/api/v1/advert/{source_subnet}")).unwrap();
+        let body = Bytes::from(pb::CertifiedStreamSlice::proxy_encode(advert.clone()));
+        route_request(url, Method::POST, Ok(body), peer_node_id, self.context())
+    }
+
+    fn context(&self) -> &Context<FakeStateManager> {
+        self.context.get_or_init(|| Context {
+            log: no_op_logger(),
+            semaphore: Semaphore::new(XNetEndpoint::num_workers()).into(),
+            metrics: XNetEndpointMetrics::new(&self.metrics).into(),
+            certified_stream_store: self.state_manager.clone(),
+            registry_client: self.registry_client.clone(),
+            advert_handler: self.advert_handler.clone(),
+            advert_rate_limiter: Default::default(),
+            base_url: "http://localhost".try_into().unwrap(),
+        })
     }
 
     /// Returns the values of the `METRIC_REQUEST_DURATION` histograms' `count`
@@ -59,17 +151,109 @@ impl EndpointTestFixture {
     pub fn response_size_counts(&self) -> MetricVec<u64> {
         fetch_histogram_vec_count(&self.metrics, METRIC_RESPONSE_SIZE)
     }
+
+    /// Returns the values of the `METRIC_ADVERTS` counters.
+    pub fn advert_counts(&self) -> MetricVec<u64> {
+        fetch_int_counter_vec(&self.metrics, METRIC_ADVERTS)
+    }
+
+    /// Returns the values of the `METRIC_ADVERT_VERIFICATION_FAILURES` counters.
+    pub fn advert_verification_failure_counts(&self) -> MetricVec<u64> {
+        fetch_int_counter_vec(&self.metrics, METRIC_ADVERT_VERIFICATION_FAILURES)
+    }
 }
 
-impl Default for EndpointTestFixture {
-    fn default() -> EndpointTestFixture {
-        EndpointTestFixture {
-            metrics: MetricsRegistry::new(),
-            state_manager: Arc::new(FakeStateManager::new()),
-            registry_client: Arc::new(MockRegistryClient::new()),
-            tls_handshake: Arc::new(MockTlsConfig::new()),
-        }
+/// A `XNetAdvertHandler` producing a canned outcome and recording the adverts
+/// it was handed.
+pub(crate) struct FakeAdvertHandler {
+    #[allow(clippy::type_complexity)]
+    outcome: Box<
+        dyn Fn(SubnetId, CertifiedStreamSlice) -> Result<XNetAdvertOutcome, XNetAdvertError>
+            + Send
+            + Sync,
+    >,
+
+    adverts: Mutex<Vec<(SubnetId, CertifiedStreamSlice)>>,
+
+    /// Canned reply to a `NothingNew` outcome.
+    certified_header: Option<CertifiedStreamSlice>,
+}
+
+impl FakeAdvertHandler {
+    fn new(
+        outcome: impl Fn(SubnetId, CertifiedStreamSlice) -> Result<XNetAdvertOutcome, XNetAdvertError>
+        + Send
+        + Sync
+        + 'static,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            outcome: Box::new(outcome),
+            adverts: Default::default(),
+            certified_header: None,
+        })
     }
+
+    fn with_certified_header(
+        outcome: impl Fn(SubnetId, CertifiedStreamSlice) -> Result<XNetAdvertOutcome, XNetAdvertError>
+        + Send
+        + Sync
+        + 'static,
+        certified_header: CertifiedStreamSlice,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            outcome: Box::new(outcome),
+            adverts: Default::default(),
+            certified_header: Some(certified_header),
+        })
+    }
+
+    /// The adverts handled so far, in order.
+    fn adverts(&self) -> Vec<(SubnetId, CertifiedStreamSlice)> {
+        self.adverts.lock().unwrap().clone()
+    }
+}
+
+impl XNetAdvertHandler for FakeAdvertHandler {
+    fn handle_advert(
+        &self,
+        source_subnet: SubnetId,
+        advert: CertifiedStreamSlice,
+    ) -> Result<XNetAdvertOutcome, XNetAdvertError> {
+        self.adverts
+            .lock()
+            .unwrap()
+            .push((source_subnet, advert.clone()));
+        (self.outcome)(source_subnet, advert)
+    }
+
+    fn certified_header(&self, _subnet_id: SubnetId) -> Option<CertifiedStreamSlice> {
+        self.certified_header.clone()
+    }
+}
+
+/// Returns a registry holding records for `DST_SUBNET` and `NO_STREAM_SUBNET`,
+/// each with a single member; `UNASSIGNED_NODE` is a member of neither.
+fn registry_with_subnet_memberships() -> FakeRegistryClient {
+    let data_provider = ProtoRegistryDataProvider::new();
+    for (subnet_id, node) in [
+        (DST_SUBNET, DST_SUBNET_NODE),
+        (NO_STREAM_SUBNET, NO_STREAM_SUBNET_NODE),
+    ] {
+        data_provider
+            .add(
+                &make_subnet_record_key(subnet_id),
+                REGISTRY_VERSION,
+                Some(SubnetRecord {
+                    membership: vec![node.get().into_vec()],
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+    }
+
+    let registry_client = FakeRegistryClient::new(Arc::new(data_provider));
+    registry_client.update_to_latest_version();
+    registry_client
 }
 
 // Get a free port on this host to which we can connect transport to.
@@ -90,21 +274,7 @@ fn query_streams() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let fixture = EndpointTestFixture::with_replicated_state();
 
-        let addr = get_free_localhost_socket_addr();
-        let config = Config {
-            xnet_ip_addr: addr.ip().to_string(),
-            xnet_port: addr.port(),
-        };
-
-        let xnet_endpoint = XNetEndpoint::new(
-            rt.handle().clone(),
-            fixture.state_manager.clone(),
-            fixture.tls_handshake.clone(),
-            fixture.registry_client.clone(),
-            config,
-            &fixture.metrics,
-            log,
-        );
+        let xnet_endpoint = fixture.new_endpoint(rt.handle().clone(), log);
 
         let resp = rt
             .block_on(async move { http_get(&http_url("/api/v1/streams", &xnet_endpoint)).await });
@@ -131,21 +301,7 @@ fn query_stream() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let fixture = EndpointTestFixture::with_replicated_state();
 
-        let addr = get_free_localhost_socket_addr();
-        let config = Config {
-            xnet_ip_addr: addr.ip().to_string(),
-            xnet_port: addr.port(),
-        };
-
-        let xnet_endpoint = XNetEndpoint::new(
-            rt.handle().clone(),
-            fixture.state_manager.clone(),
-            fixture.tls_handshake.clone(),
-            fixture.registry_client.clone(),
-            config,
-            &fixture.metrics,
-            log,
-        );
+        let xnet_endpoint = fixture.new_endpoint(rt.handle().clone(), log);
 
         let resp = rt.block_on(async move {
             http_get(&http_url(
@@ -201,21 +357,7 @@ fn query_stream_parallel() {
             .write()
             .unwrap() = Barrier::new(XNetEndpoint::num_workers() + 1);
 
-        let addr = get_free_localhost_socket_addr();
-        let config = Config {
-            xnet_ip_addr: addr.ip().to_string(),
-            xnet_port: addr.port(),
-        };
-
-        let xnet_endpoint = XNetEndpoint::new(
-            endpoint_rt.handle().clone(),
-            fixture.state_manager.clone(),
-            fixture.tls_handshake.clone(),
-            fixture.registry_client.clone(),
-            config,
-            &fixture.metrics,
-            log,
-        );
+        let xnet_endpoint = fixture.new_endpoint(endpoint_rt.handle().clone(), log);
 
         let http_url = http_url(
             &format!(
@@ -247,17 +389,37 @@ fn query_stream_parallel() {
     });
 }
 
+/// A connection that sends nothing for `CONNECTION_READ_TIMEOUT` is closed.
+///
+/// Heavyweight test that starts an `XNetEndpoint` and talks to it over TCP.
+#[test]
+fn silent_connection() {
+    with_test_replica_logger(|log| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let fixture = EndpointTestFixture::with_replicated_state();
+        let xnet_endpoint = fixture.new_endpoint(rt.handle().clone(), log);
+
+        rt.block_on(async {
+            let mut connection = TcpStream::connect(("127.0.0.1", xnet_endpoint.server_port()))
+                .await
+                .unwrap();
+
+            let mut buf = [0; 1];
+            let read = tokio::time::timeout(CONNECTION_READ_TIMEOUT * 5, connection.read(&mut buf))
+                .await
+                .expect("Timed out waiting for the connection to be closed");
+            assert_eq!(0, read.unwrap());
+        });
+    });
+}
+
 #[tokio::test]
 async fn handle_streams() {
     let fixture = EndpointTestFixture::with_replicated_state();
 
     let url = Url::parse("http://localhost/api/v1/streams").unwrap();
 
-    let response = route_request(
-        url,
-        &*fixture.state_manager,
-        &XNetEndpointMetrics::new(&fixture.metrics),
-    );
+    let response = fixture.route_request(url, Some(DST_SUBNET_NODE));
     let (parsed_status, body) = parse_response(response).await;
 
     assert_eq!(
@@ -288,11 +450,7 @@ async fn handle_existing_stream_impl(
     ))
     .unwrap();
 
-    let response = route_request(
-        url,
-        &*fixture.state_manager,
-        &XNetEndpointMetrics::new(&fixture.metrics),
-    );
+    let response = fixture.route_request(url, Some(DST_SUBNET_NODE));
     (parse_response(response).await, fixture)
 }
 
@@ -438,11 +596,7 @@ async fn handle_stream_with_witness_begin() {
     ))
     .unwrap();
 
-    let response = route_request(
-        url,
-        &*fixture.state_manager,
-        &XNetEndpointMetrics::new(&fixture.metrics),
-    );
+    let response = fixture.route_request(url, Some(DST_SUBNET_NODE));
     let (status_code, body) = parse_response(response).await;
 
     assert_response_is_slice(status_code, body, witness_begin, msg_begin, msg_limit, None);
@@ -467,11 +621,7 @@ async fn handle_stream_no_index() {
     ))
     .unwrap();
 
-    let response = route_request(
-        url,
-        &*fixture.state_manager,
-        &XNetEndpointMetrics::new(&fixture.metrics),
-    );
+    let response = fixture.route_request(url, Some(DST_SUBNET_NODE));
     let (status_code, body) = parse_response(response).await;
 
     assert_response_is_slice(
@@ -503,11 +653,7 @@ async fn handle_stream_with_byte_limit() {
     ))
     .unwrap();
 
-    let response = route_request(
-        url,
-        &*fixture.state_manager,
-        &XNetEndpointMetrics::new(&fixture.metrics),
-    );
+    let response = fixture.route_request(url, Some(DST_SUBNET_NODE));
     let (status_code, body) = parse_response(response).await;
 
     assert_response_is_slice(
@@ -533,13 +679,12 @@ async fn handle_stream_with_byte_limit() {
 async fn handle_stream_nonexistent() {
     let fixture = EndpointTestFixture::with_replicated_state();
 
-    let url = Url::parse(&format!("http://localhost/api/v1/stream/{UNKNOWN_SUBNET}")).unwrap();
+    let url = Url::parse(&format!(
+        "http://localhost/api/v1/stream/{NO_STREAM_SUBNET}"
+    ))
+    .unwrap();
 
-    let response = route_request(
-        url,
-        &*fixture.state_manager,
-        &XNetEndpointMetrics::new(&fixture.metrics),
-    );
+    let response = fixture.route_request(url, Some(NO_STREAM_SUBNET_NODE));
     let (status_code, body) = parse_response(response).await;
 
     assert_eq!((204, &b""[..]), (status_code, body.as_slice()));
@@ -551,16 +696,57 @@ async fn handle_stream_nonexistent() {
     assert!(fixture.response_size_counts().is_empty());
 }
 
+/// Common implementation for all `handle_stream` tests that expect a request
+/// for `DST_SUBNET`'s stream to be refused.
+async fn handle_refused_stream_impl(peer_node_id: NodeId) {
+    let fixture = EndpointTestFixture::with_replicated_state();
+
+    let url = Url::parse(&format!(
+        "http://localhost/api/v1/stream/{DST_SUBNET}?msg_begin={STREAM_BEGIN}"
+    ))
+    .unwrap();
+
+    let response = fixture.route_request(url, Some(peer_node_id));
+    let (status_code, _body) = parse_response(response).await;
+
+    assert_eq!(403, status_code);
+    assert_eq!(
+        metric_vec(&[(&[("resource", "stream"), ("status", "403")], 1)]),
+        fixture.request_counts()
+    );
+    assert_eq!(0, fixture.slice_payload_size_stats().count);
+    assert!(fixture.response_size_counts().is_empty());
+}
+
+#[tokio::test]
+async fn handle_stream_for_other_subnet() {
+    handle_refused_stream_impl(NO_STREAM_SUBNET_NODE).await;
+}
+
+#[tokio::test]
+async fn handle_stream_from_unassigned_node() {
+    handle_refused_stream_impl(UNASSIGNED_NODE).await;
+}
+
+/// Tests that a caller whose membership the registry cannot confirm is refused,
+/// rather than assumed to be a member.
+#[tokio::test]
+async fn handle_stream_for_subnet_without_registry_record() {
+    let fixture = EndpointTestFixture::with_replicated_state();
+
+    let url = Url::parse(&format!("http://localhost/api/v1/stream/{UNKNOWN_SUBNET}")).unwrap();
+
+    let response = fixture.route_request(url, Some(DST_SUBNET_NODE));
+
+    assert_eq!(403, parse_response(response).await.0);
+}
+
 #[tokio::test]
 async fn handle_bad_api_path() {
     let fixture = EndpointTestFixture::with_replicated_state();
     let url = Url::parse("http://localhost/api/v1/bad/api/path").unwrap();
 
-    let response = route_request(
-        url,
-        &*fixture.state_manager,
-        &XNetEndpointMetrics::new(&fixture.metrics),
-    );
+    let response = fixture.route_request(url, Some(DST_SUBNET_NODE));
     let (status_code, body) = parse_response(response).await;
 
     assert_eq!((404, &b"Not Found"[..]), (status_code, body.as_slice()));
@@ -570,6 +756,286 @@ async fn handle_bad_api_path() {
     );
     assert_eq!(0, fixture.slice_payload_size_stats().count);
     assert!(fixture.response_size_counts().is_empty());
+}
+
+#[tokio::test]
+async fn handle_advert_actionable() {
+    let fixture = EndpointTestFixture::with_advert_outcome(|| Ok(XNetAdvertOutcome::Actionable));
+    let advert = header_only_slice();
+
+    let response = fixture.post_advert(NO_STREAM_SUBNET, &advert, Some(NO_STREAM_SUBNET_NODE));
+
+    assert_eq!((204, vec![]), parse_response(response).await);
+    assert_eq!(
+        vec![(NO_STREAM_SUBNET, advert)],
+        fixture.advert_handler.adverts()
+    );
+    assert_eq!(
+        metric_vec(&[(&[("status", &"actionable".to_string())], 1)]),
+        fixture.advert_counts()
+    );
+}
+
+#[tokio::test]
+async fn handle_advert_nothing_new() {
+    // A minimally different slice from the advertised one, to ensure this is what
+    // actually gets returned, not the reflected back advert.
+    let expected_reply = CertifiedStreamSlice {
+        merkle_proof: vec![1, 2, 3],
+        ..header_only_slice()
+    };
+    let fixture = EndpointTestFixture {
+        advert_handler: FakeAdvertHandler::with_certified_header(
+            |_, _| Ok(XNetAdvertOutcome::NothingNew),
+            expected_reply.clone(),
+        ),
+        ..EndpointTestFixture::with_replicated_state()
+    };
+
+    let response = fixture.post_advert(
+        NO_STREAM_SUBNET,
+        &header_only_slice(),
+        Some(NO_STREAM_SUBNET_NODE),
+    );
+
+    let (status_code, body) = parse_response(response).await;
+    assert_eq!(
+        (200, expected_reply),
+        (
+            status_code,
+            pb::CertifiedStreamSlice::proxy_decode(body.as_slice()).unwrap()
+        )
+    );
+    assert_eq!(
+        metric_vec(&[(&[("status", &"nothing_new".to_string())], 1)]),
+        fixture.advert_counts()
+    );
+}
+
+/// Nothing new, but no stream to reply with: no content, no reply.
+#[tokio::test]
+async fn handle_advert_nothing_new_no_stream() {
+    let fixture = EndpointTestFixture::with_advert_outcome(|| Ok(XNetAdvertOutcome::NothingNew));
+
+    let response = fixture.post_advert(
+        NO_STREAM_SUBNET,
+        &header_only_slice(),
+        Some(NO_STREAM_SUBNET_NODE),
+    );
+
+    assert_eq!((204, vec![]), parse_response(response).await);
+}
+
+/// Only a node of the source subnet may advertise for it.
+#[tokio::test]
+async fn handle_advert_from_non_member() {
+    let fixture =
+        EndpointTestFixture::with_advert_outcome(|| panic!("advert must not reach the handler"));
+
+    let response = fixture.post_advert(
+        NO_STREAM_SUBNET,
+        &header_only_slice(),
+        Some(DST_SUBNET_NODE),
+    );
+
+    assert_eq!(403, response.status().as_u16());
+    assert!(fixture.advert_handler.adverts().is_empty());
+    assert_eq!(
+        metric_vec(&[(&[("status", &"403".to_string())], 1)]),
+        fixture.advert_counts()
+    );
+}
+
+/// A well-formed `CertifiedStreamSlice` whose payload / witness the handler
+/// cannot decode is not a verification failure: it is only counted as a
+/// `decode_error` status.
+#[tokio::test]
+async fn handle_advert_handler_decode_error() {
+    let fixture = EndpointTestFixture::with_advert_outcome(|| {
+        Err(XNetAdvertError::DecodeError("not a stream slice".into()))
+    });
+
+    let response = fixture.post_advert(
+        NO_STREAM_SUBNET,
+        &header_only_slice(),
+        Some(NO_STREAM_SUBNET_NODE),
+    );
+
+    assert_eq!(400, response.status().as_u16());
+    assert_eq!(
+        metric_vec(&[(&[("status", &"decode_error".to_string())], 1)]),
+        fixture.advert_counts()
+    );
+    assert!(fixture.advert_verification_failure_counts().is_empty());
+}
+
+/// An advert that fails to verify is attributed to the subnet that sent it.
+#[tokio::test]
+async fn handle_advert_invalid_signature() {
+    let fixture =
+        EndpointTestFixture::with_advert_outcome(|| Err(XNetAdvertError::InvalidSignature));
+
+    let response = fixture.post_advert(
+        NO_STREAM_SUBNET,
+        &header_only_slice(),
+        Some(NO_STREAM_SUBNET_NODE),
+    );
+
+    assert_eq!(400, response.status().as_u16());
+    assert_eq!(
+        metric_vec(&[(&[("status", &"invalid_signature".to_string())], 1)]),
+        fixture.advert_counts()
+    );
+    assert_eq!(
+        metric_vec(&[(&[("remote", &NO_STREAM_SUBNET.to_string())], 1)]),
+        fixture.advert_verification_failure_counts()
+    );
+}
+
+/// A body that is not a valid `CertifiedStreamSlice` proto is rejected before
+/// reaching the handler.
+#[tokio::test]
+async fn handle_advert_undecodable() {
+    let fixture = EndpointTestFixture::with_replicated_state();
+    let url = Url::parse(&format!(
+        "http://localhost/api/v1/advert/{NO_STREAM_SUBNET}"
+    ))
+    .unwrap();
+
+    let response = route_request(
+        url,
+        Method::POST,
+        Ok(Bytes::from_static(b"garbage")),
+        Some(NO_STREAM_SUBNET_NODE),
+        fixture.context(),
+    );
+
+    assert_eq!(400, response.status().as_u16());
+    assert!(fixture.advert_handler.adverts().is_empty());
+    assert_eq!(
+        metric_vec(&[(&[("status", &"400".to_string())], 1)]),
+        fixture.advert_counts()
+    );
+}
+
+/// An advert whose body did not arrive within `ADVERT_BODY_TIMEOUT` is rejected
+/// without reaching the handler.
+#[tokio::test]
+async fn handle_advert_body_timeout() {
+    let fixture = EndpointTestFixture::with_replicated_state();
+    let url = Url::parse(&format!(
+        "http://localhost/api/v1/advert/{NO_STREAM_SUBNET}"
+    ))
+    .unwrap();
+    let elapsed = tokio::time::timeout(Duration::ZERO, std::future::pending::<()>())
+        .await
+        .unwrap_err();
+
+    let response = route_request(
+        url,
+        Method::POST,
+        Err(axum::Error::new(elapsed)),
+        Some(NO_STREAM_SUBNET_NODE),
+        fixture.context(),
+    );
+
+    assert_eq!(408, response.status().as_u16());
+    assert!(fixture.advert_handler.adverts().is_empty());
+    assert_eq!(
+        metric_vec(&[(&[("status", &"408".to_string())], 1)]),
+        fixture.advert_counts()
+    );
+}
+
+/// Adverts whose bodies are withheld tie up neither the permits nor, beyond
+/// `ADVERT_BODY_TIMEOUT`, their requests: other requests are served meanwhile;
+/// and the adverts are rejected once their bodies time out.
+///
+/// Heavyweight test that starts an `XNetEndpoint` and talks to it over TCP.
+#[test]
+fn withheld_advert_bodies() {
+    with_test_replica_logger(|log| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let fixture = EndpointTestFixture::with_replicated_state();
+        let xnet_endpoint = fixture.new_endpoint(rt.handle().clone(), log);
+
+        rt.block_on(async {
+            // As many adverts as there are permits, promising bodies they never send.
+            let request = format!(
+                "POST {API_URL_ADVERT_PREFIX}{NO_STREAM_SUBNET} HTTP/1.1\r\n\
+                 Host: localhost\r\n\
+                 Content-Length: 100\r\n\r\n"
+            );
+            let mut connections = Vec::new();
+            for _ in 0..XNET_ENDPOINT_MAX_CONCURRENT_REQUESTS {
+                let mut connection = TcpStream::connect(("127.0.0.1", xnet_endpoint.server_port()))
+                    .await
+                    .unwrap();
+                connection.write_all(request.as_bytes()).await.unwrap();
+                connections.push(connection);
+            }
+            // Give the endpoint time to start waiting for their bodies.
+            tokio::time::sleep(ADVERT_BODY_TIMEOUT / 5).await;
+
+            // Concurrent request does not get an HTTP 503 response.
+            let response = http_get(&http_url("/api/v1/streams", &xnet_endpoint)).await;
+            assert_eq!(format!("[\"{DST_SUBNET}\"]"), response);
+
+            for mut connection in connections {
+                let mut status_line = [0; 12];
+                tokio::time::timeout(
+                    ADVERT_BODY_TIMEOUT * 10,
+                    connection.read_exact(&mut status_line),
+                )
+                .await
+                .expect("Timed out waiting for the advert to be rejected")
+                .unwrap();
+                // Rejected as coming from no known node, as tests have no TLS. Not worth
+                // trading off rate limiting of timed out requests just to get a 408 here.
+                assert_eq!(b"HTTP/1.1 403", &status_line);
+            }
+        });
+
+        assert_eq!(
+            metric_vec(&[
+                (
+                    &[("resource", "advert"), ("status", "403")],
+                    XNET_ENDPOINT_MAX_CONCURRENT_REQUESTS as u64
+                ),
+                (&[("resource", "streams"), ("status", "200")], 1),
+            ]),
+            fixture.request_counts()
+        );
+    });
+}
+
+/// A node may only advertise at the configured rate; the adverts beyond it are
+/// rejected without reaching the handler.
+#[tokio::test]
+async fn handle_advert_rate_limited() {
+    let fixture = EndpointTestFixture::with_replicated_state();
+    let burst = ADVERT_RATE_LIMIT_BURST as usize;
+
+    let advert = header_only_slice();
+    let status_codes = (0..burst + 1)
+        .map(|_| {
+            fixture
+                .post_advert(NO_STREAM_SUBNET, &advert, Some(NO_STREAM_SUBNET_NODE))
+                .status()
+                .as_u16()
+        })
+        .collect::<Vec<_>>();
+    let mut expected = vec![204; burst];
+    expected.push(429);
+    assert_eq!(expected, status_codes);
+    assert_eq!(burst, fixture.advert_handler.adverts().len());
+    assert_eq!(
+        metric_vec(&[
+            (&[("status", &"actionable".to_string())], burst as u64),
+            (&[("status", &"429".to_string())], 1)
+        ]),
+        fixture.advert_counts()
+    );
 }
 
 /// Commits a `ReplicatedState` containing a single stream for DST_SUBNET.
@@ -627,4 +1093,12 @@ async fn parse_response(response: Response<Body>) -> (u16, Vec<u8>) {
         .unwrap()
         .to_vec();
     (status, body)
+}
+
+/// A header-only certified slice, to be used as an advert.
+fn header_only_slice() -> CertifiedStreamSlice {
+    EndpointTestFixture::with_replicated_state()
+        .state_manager
+        .encode_certified_stream_slice(DST_SUBNET, None, None, Some(0), None)
+        .unwrap()
 }

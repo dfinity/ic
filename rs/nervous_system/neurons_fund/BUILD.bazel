@@ -40,7 +40,6 @@ rust_test(
         "@crate_index//:lazy_static",
         "@crate_index//:rust_decimal",
         "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
     ],
 )

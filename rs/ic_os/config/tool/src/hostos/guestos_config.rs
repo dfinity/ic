@@ -2,6 +2,7 @@ use anyhow::{Result, bail, ensure};
 use config_types::{
     CONFIG_VERSION, DeterministicIpv6Config, FixedIpv6Config, GuestOSConfig, GuestOSUpgradeConfig,
     GuestVMType, HostOSConfig, Ipv6Config, RecoveryConfig, TrustedExecutionEnvironmentConfig,
+    VmSlot,
 };
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
@@ -16,6 +17,7 @@ const DEFAULT_GUESTOS_RECOVERY_FILE_PATH: &str = "/run/config/guestos_recovery_h
 /// sev_certificate_chain_pem must be provided.
 pub fn generate_guestos_config(
     hostos_config: &HostOSConfig,
+    guest_vm_slot: VmSlot,
     guest_vm_type: GuestVMType,
     sev_certificate_chain_pem: Option<String>,
 ) -> Result<GuestOSConfig> {
@@ -47,9 +49,14 @@ pub fn generate_guestos_config(
         }
     };
 
-    let guestos_ipv6_address =
-        node_ipv6_address(node_type, hostos_config, deterministic_ipv6_config)?;
+    let guestos_ipv6_address = node_ipv6_address(
+        guest_vm_slot,
+        node_type,
+        hostos_config,
+        deterministic_ipv6_config,
+    )?;
     let peer_ipv6_address = node_ipv6_address(
+        VmSlot::Plain,
         upgrade_peer_node_type,
         hostos_config,
         deterministic_ipv6_config,
@@ -90,6 +97,7 @@ pub fn generate_guestos_config(
 }
 
 fn node_ipv6_address(
+    slot: VmSlot,
     node_type: NodeType,
     hostos_config: &HostOSConfig,
     deterministic_config: &DeterministicIpv6Config,
@@ -98,6 +106,7 @@ fn node_ipv6_address(
         &hostos_config.icos_settings.mgmt_mac,
         hostos_config.icos_settings.deployment_environment,
         node_type,
+        slot,
     );
 
     mac.calculate_slaac(&deterministic_config.prefix)
@@ -148,7 +157,8 @@ mod tests {
         let hostos_config = hostos_config_for_test();
 
         let guestos_config =
-            generate_guestos_config(&hostos_config, GuestVMType::Default, None).unwrap();
+            generate_guestos_config(&hostos_config, VmSlot::Plain, GuestVMType::Default, None)
+                .unwrap();
 
         assert_eq!(guestos_config.config_version, CONFIG_VERSION.to_string());
         assert_eq!(
@@ -190,7 +200,8 @@ mod tests {
             });
 
         let guestos_config =
-            generate_guestos_config(&hostos_config, GuestVMType::Upgrade, None).unwrap();
+            generate_guestos_config(&hostos_config, VmSlot::Plain, GuestVMType::Upgrade, None)
+                .unwrap();
 
         if let Ipv6Config::Fixed(fixed) = &guestos_config.network_settings.ipv6_config {
             assert_eq!(fixed.address, "2001:db8::6802:94ff:feef:2978/64");
@@ -215,7 +226,8 @@ mod tests {
             gateway: "2001:db8::1".parse().unwrap(),
         });
 
-        let result = generate_guestos_config(&hostos_config, GuestVMType::Default, None);
+        let result =
+            generate_guestos_config(&hostos_config, VmSlot::Plain, GuestVMType::Default, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Deterministic"));
     }
@@ -226,6 +238,7 @@ mod tests {
 
         let result = generate_guestos_config(
             &hostos_config,
+            VmSlot::Plain,
             GuestVMType::Default,
             Some("abc".to_string()),
         )

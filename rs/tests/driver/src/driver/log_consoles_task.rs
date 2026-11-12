@@ -262,6 +262,7 @@ async fn stream_console_file(logger: Logger, label: String, path: PathBuf) {
         .into_event_stream([0_u8; INOTIFY_BUF_LEN])
         .expect("failed to create inotify event stream");
 
+    // Start of the current line, so a reopen re-reads it in full.
     let mut offset: u64 = 0;
     loop {
         let mut file = match tokio::fs::File::open(&path).await {
@@ -290,9 +291,9 @@ async fn stream_console_file(logger: Logger, label: String, path: PathBuf) {
         let mut reader = BufReader::new(file);
         // Accumulates the current line across reads so that a line that is only
         // partially flushed at EOF is printed once, in full, rather than split.
-        let mut line = String::new();
+        let mut line = Vec::new();
         loop {
-            match reader.read_line(&mut line).await {
+            match reader.read_until(b'\n', &mut line).await {
                 Ok(0) => {
                     // EOF: block until the file is appended to, then read again.
                     // The `MODIFY` watch was armed before this read, so an append
@@ -311,10 +312,12 @@ async fn stream_console_file(logger: Logger, label: String, path: PathBuf) {
                         None => return,
                     }
                 }
-                Ok(n) => {
-                    offset += n as u64;
-                    if line.ends_with('\n') {
-                        let trimmed = line.trim_end_matches(['\n', '\r']);
+                Ok(_) => {
+                    if line.ends_with(b"\n") {
+                        offset += line.len() as u64;
+                        // The kernel can print in the middle of a multi-byte character.
+                        let decoded = String::from_utf8_lossy(&line);
+                        let trimmed = decoded.trim_end_matches(['\n', '\r']);
                         let cleaned = strip_control_codes(trimmed);
                         info!(logger, "[console={label}] {cleaned}");
                         line.clear();
@@ -335,5 +338,56 @@ async fn stream_console_file(logger: Logger, label: String, path: PathBuf) {
         // The inner loop only breaks on a read/watch error; pause briefly before
         // reopening to avoid a hot loop.
         tokio::time::sleep(RETRY_DELAY_WAIT_CONSOLE).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossbeam_channel::{Sender, unbounded};
+    use slog::{Drain, OwnedKVList, Record, o};
+    use std::io::Write;
+
+    // A slog Drain that sends each log message to a crossbeam channel.
+    struct MessageDrain(Sender<String>);
+
+    impl Drain for MessageDrain {
+        type Ok = ();
+        type Err = slog::Never;
+
+        fn log(&self, record: &Record<'_>, _values: &OwnedKVList) -> Result<Self::Ok, Self::Err> {
+            let _ = self.0.send(record.msg().to_string());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn stream_console_file_decodes_invalid_utf8_lossily() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("console.log");
+        let mut console = std::fs::File::create(&path).unwrap();
+        // A kernel message in the middle of a `…` (E2 80 A6), then a `…` split across two writes.
+        console
+            .write_all(b"Starting \xe2\x80[   12.345678] kernel message\r\n\xa6\r\nsplit \xe2\x80")
+            .unwrap();
+
+        #[allow(clippy::disallowed_methods)]
+        let (sender, receiver) = unbounded();
+        let rt = Runtime::new().unwrap();
+        rt.spawn(stream_console_file(
+            Logger::root(MessageDrain(sender), o!()),
+            "vm".to_string(),
+            path,
+        ));
+        let next = || receiver.recv_timeout(Duration::from_secs(30)).unwrap();
+
+        assert_eq!(
+            next(),
+            "[console=vm] Starting \u{FFFD}[   12.345678] kernel message"
+        );
+        assert_eq!(next(), "[console=vm] \u{FFFD}");
+        console.write_all(b"\xa6 done\r\nafter\r\n").unwrap();
+        assert_eq!(next(), "[console=vm] split \u{2026} done");
+        assert_eq!(next(), "[console=vm] after");
     }
 }

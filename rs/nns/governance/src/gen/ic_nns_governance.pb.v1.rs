@@ -2840,9 +2840,42 @@ pub struct InstallCode {
     /// The hash of the arg to pass to the canister. Calculated from `arg` when proposal is created.
     #[prost(bytes = "vec", optional, tag = "7")]
     pub arg_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Options that only apply when install_mode is upgrade.
+    #[prost(message, optional, tag = "8")]
+    pub canister_upgrade_options: ::core::option::Option<install_code::CanisterUpgradeOptions>,
 }
 /// Nested message and enum types in `InstallCode`.
 pub mod install_code {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Message,
+    )]
+    pub struct CanisterUpgradeOptions {
+        /// Whether to skip the canister's pre_upgrade hook. This would generally be
+        /// used in emergencies. See the corresponding field in the Management
+        /// canister API.
+        #[prost(bool, optional, tag = "1")]
+        pub skip_pre_upgrade: ::core::option::Option<bool>,
+        /// Whether to retain (keep) or drop (replace) the canister's Wasm main
+        /// memory across the upgrade. If the old WASM had a custom section named
+        /// "icp:private enhanced-orthogonal-persistence", then this must be set
+        /// (otherwise, the Management canister will block the upgrade). If keep is
+        /// used here, then the new WASM must also have the same custom section.
+        #[prost(
+            enumeration = "::ic_protobuf::types::v1::WasmMemoryPersistence",
+            optional,
+            tag = "2"
+        )]
+        pub wasm_memory_persistence: ::core::option::Option<i32>,
+    }
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -2992,6 +3025,8 @@ pub struct CanisterSettings {
         tag = "8"
     )]
     pub snapshot_visibility: ::core::option::Option<i32>,
+    #[prost(uint64, optional, tag = "9")]
+    pub reserved_cycles_limit: ::core::option::Option<u64>,
 }
 /// Nested message and enum types in `CanisterSettings`.
 pub mod canister_settings {
@@ -5515,6 +5550,9 @@ pub enum NnsFunction {
     /// `SetupInitialDKG` requests without an explicit subnet id are routed to the
     /// calling subnet (NNS).
     SetDefaultInitialDkgSubnet = 58,
+    /// Merge a subnet into another subnet: in the routing table, reassigns all
+    /// canister ranges hosted by the source subnet to the destination subnet.
+    MergeSubnets = 59,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5591,6 +5629,7 @@ impl NnsFunction {
             Self::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
             Self::DeleteSubnet => "NNS_FUNCTION_DELETE_SUBNET",
             Self::SetDefaultInitialDkgSubnet => "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET",
+            Self::MergeSubnets => "NNS_FUNCTION_MERGE_SUBNETS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5674,6 +5713,7 @@ impl NnsFunction {
             "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
             "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
             "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET" => Some(Self::SetDefaultInitialDkgSubnet),
+            "NNS_FUNCTION_MERGE_SUBNETS" => Some(Self::MergeSubnets),
             _ => None,
         }
     }

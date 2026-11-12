@@ -1,12 +1,12 @@
 use candid::CandidType;
 use futures::future::join_all;
 use ic_cdk::call::CallResult;
-use ic_cdk::management_canister::{
+use ic_cdk::{api::canister_self, update};
+use ic_cdk_management_canister::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, CanisterStatusType,
     CreateCanisterArgs, InstallCodeArgs, canister_status, create_canister_with_extra_cycles,
     install_code,
 };
-use ic_cdk::{api::canister_self, update};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::BTreeSet;

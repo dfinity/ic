@@ -189,9 +189,21 @@ pub enum HypervisorError {
         threshold: Cycles,
         reveal_top_up: bool,
     },
+    /// The canister exceeded its `wasm_memory_limit` setting. `bytes` is the
+    /// peak Wasm memory usage, `limit` the setting, and `max_wasm_memory_size`
+    /// the hard upper bound on the Wasm memory for the canister's Wasm
+    /// execution mode (4GiB for Wasm32, 6GiB for Wasm64).
     WasmMemoryLimitExceeded {
         bytes: NumBytes,
         limit: NumBytes,
+        max_wasm_memory_size: NumBytes,
+    },
+    /// The Wasm memory of the canister is incompatible with its Wasm module,
+    /// e.g. because it exceeds the maximum Wasm memory size for the module's
+    /// Wasm execution mode or because it does not match the Wasm memory
+    /// declared by the module.
+    InvalidWasmMemory {
+        message: String,
     },
     EnvironmentVariableIndexOutOfBounds {
         index: usize,
@@ -380,18 +392,30 @@ impl std::fmt::Display for HypervisorError {
                     "Canister cannot grow message memory by {bytes} bytes due to insufficient cycles.{msg}",
                 )
             }
-            Self::WasmMemoryLimitExceeded { bytes, limit } => {
+            Self::WasmMemoryLimitExceeded {
+                bytes,
+                limit,
+                max_wasm_memory_size,
+            } => {
                 write!(
                     f,
                     "Canister exceeded its current Wasm memory limit of {} bytes. \
                         The peak Wasm memory usage was {} bytes. \
-                        If the canister reaches 4GiB, then it may stop functioning and may become unrecoverable. \
+                        If the canister reaches its maximum Wasm memory size of {} bytes, \
+                        then it may stop functioning and may become unrecoverable. \
                         Please reach out to the canister owner to investigate the reason for the increased memory usage. \
                         It might be necessary to move data from the Wasm memory to the stable memory. \
                         If such high Wasm memory usage is expected and safe, then the developer can increase \
                         the Wasm memory limit in the canister settings.",
                     limit.get(),
-                    bytes.get()
+                    bytes.get(),
+                    max_wasm_memory_size.get()
+                )
+            }
+            Self::InvalidWasmMemory { message } => {
+                write!(
+                    f,
+                    "Canister Wasm memory is incompatible with its Wasm module: {message}"
                 )
             }
             Self::EnvironmentVariableIndexOutOfBounds { index, length } => {
@@ -481,8 +505,8 @@ impl AsErrorHelp for HypervisorError {
                 doc_link: doc_ref("slice-overrun"),
             },
             Self::MemoryAccessLimitExceeded(_) => ErrorHelp::UserError {
-                suggestion: "Try optimizing the use of stable memory so that individual \
-                messages don't need to access as much stable memory."
+                suggestion: "Try optimizing the use of memory so that individual \
+                messages don't need to access as much heap or stable memory."
                     .to_string(),
                 doc_link: doc_ref("memory-access-limit-exceeded"),
             },
@@ -514,6 +538,10 @@ impl AsErrorHelp for HypervisorError {
             },
             Self::InvalidWasm(inner) => inner.error_help(),
             Self::InstrumentationFailed(inner) => inner.error_help(),
+            Self::InvalidWasmMemory { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
             Self::EnvironmentVariableIndexOutOfBounds { .. } => ErrorHelp::UserError {
                 suggestion: "".to_string(),
                 doc_link: "".to_string(),
@@ -571,6 +599,7 @@ impl HypervisorError {
                 E::InsufficientCyclesInMessageMemoryGrow
             }
             Self::WasmMemoryLimitExceeded { .. } => E::CanisterWasmMemoryLimitExceeded,
+            Self::InvalidWasmMemory { .. } => E::CanisterContractViolation,
             Self::EnvironmentVariableIndexOutOfBounds { .. } => E::CanisterContractViolation,
             Self::EnvironmentVariableNotFound { .. } => E::CanisterContractViolation,
         };
@@ -611,6 +640,7 @@ impl HypervisorError {
                 "InsufficientCyclesInMessageMemoryGrow"
             }
             HypervisorError::WasmMemoryLimitExceeded { .. } => "WasmMemoryLimitExceeded",
+            HypervisorError::InvalidWasmMemory { .. } => "InvalidWasmMemory",
             HypervisorError::EnvironmentVariableIndexOutOfBounds { .. } => {
                 "EnvironmentVariableIndexOutOfBounds"
             }

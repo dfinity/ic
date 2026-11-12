@@ -77,6 +77,7 @@ enum Decision {
 pub struct Context<'a> {
     subnet_id: Principal,
     canister_id: Option<Principal>,
+    sender: Option<Principal>,
     method: Option<&'a str>,
     request_type: RequestType,
     ip: IpAddr,
@@ -116,6 +117,13 @@ impl Bucket {
             }
         }
 
+        if let Some(v) = self.rule.sender_id {
+            // If we have a sender id - compare it, otherwise ignore this rule
+            if ctx.sender? != v {
+                return None;
+            }
+        }
+
         if let Some(v) = &self.rule.request_types
             && !v.contains(&convert_request_type(ctx.request_type))
         {
@@ -150,7 +158,7 @@ impl Bucket {
                     };
 
                     // We assume that the prefix is correct, assert is safe
-                    let net = IpNet::new_assert(ctx.ip, prefix);
+                    let net = IpNet::new_assert(ctx.ip, prefix).trunc();
                     v.acquire(net)
                 }
             };
@@ -188,45 +196,45 @@ impl Metrics {
     fn new(registry: &Registry) -> Self {
         Self {
             scale: register_int_gauge_with_registry!(
-                format!("generic_limiter_scale"),
-                format!("Current scale that's applied to the rules"),
+                "generic_limiter_scale",
+                "Current scale that's applied to the rules",
                 registry,
             )
             .unwrap(),
 
             last_successful_fetch: register_int_gauge_with_registry!(
-                format!("generic_limiter_last_successful_fetch"),
-                format!("How many seconds ago the last successful fetch happened"),
+                "generic_limiter_last_successful_fetch",
+                "How many seconds ago the last successful fetch happened",
                 registry
             )
             .unwrap(),
 
             active_rules: register_int_gauge_with_registry!(
-                format!("generic_limiter_rules"),
-                format!("Number of rules currently installed"),
+                "generic_limiter_rules",
+                "Number of rules currently installed",
                 registry
             )
             .unwrap(),
 
             fetches: register_int_counter_vec_with_registry!(
-                format!("generic_limiter_fetches"),
-                format!("Count of rule fetches and their outcome"),
+                "generic_limiter_fetches",
+                "Count of rule fetches and their outcome",
                 &["result"],
                 registry
             )
             .unwrap(),
 
             decisions: register_int_counter_vec_with_registry!(
-                format!("generic_limiter_decisions"),
-                format!("Count of decisions made by the ratelimiter"),
+                "generic_limiter_decisions",
+                "Count of decisions made by the ratelimiter",
                 &["decision"],
                 registry
             )
             .unwrap(),
 
             shards_count: register_int_gauge_with_registry!(
-                format!("generic_limiter_shards_count"),
-                format!("Number of dynamic shards if the corresponding rules are used"),
+                "generic_limiter_shards_count",
+                "Number of dynamic shards if the corresponding rules are used",
                 registry,
             )
             .unwrap(),
@@ -477,6 +485,7 @@ pub async fn middleware(
     let ctx = Context {
         subnet_id: subnet.id,
         canister_id: canister_id.map(|x| x.get().into()),
+        sender: ctx.sender,
         method: ctx.method_name.as_deref(),
         request_type: ctx.request_type,
         ip: conn_info.remote_addr.ip(),
@@ -530,6 +539,7 @@ mod test {
     async fn test_ratelimit() {
         let ip1 = IpAddr::from_str("10.0.0.1").unwrap();
         let ip2 = IpAddr::from_str("192.168.0.1").unwrap();
+        let ip3 = IpAddr::from_str("192.168.0.2").unwrap();
         let ip_local4 = IpAddr::from_str("127.0.0.1").unwrap();
         let ip_local6 = IpAddr::from_str("::1").unwrap();
 
@@ -537,13 +547,25 @@ mod test {
         let id1 = principal!("aaaaa-aa");
         let id2 = principal!("5s2ji-faaaa-aaaaa-qaaaq-cai");
         let id3 = principal!("qoctq-giaaa-aaaaa-aaaea-cai");
+        let id4 = principal!("ryjl3-tyaaa-aaaaa-aaaba-cai");
 
         let subnet_id =
             principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe");
         let subnet_id2 =
             principal!("6pbhf-qzpdk-kuqbr-pklfa-5ehhf-jfjps-zsj6q-57nrl-kzhpd-mu7hc-vae");
 
+        // Senders used by the sender-based rules below
+        let sender_blocked = principal!("2vxsx-fae");
+        let sender_limited = principal!("sqjm4-qahae-aq");
+
         let rules = indoc! {"
+        - sender_id: 2vxsx-fae
+          limit: block
+
+        - sender_id: sqjm4-qahae-aq
+          canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
+          limit: 2/1h
+
         - canister_id: pawub-syaaa-aaaam-qb7zq-cai
           limit: block
 
@@ -595,7 +617,7 @@ mod test {
             &Registry::new(),
         ));
         assert!(limiter.refresh().await.is_ok());
-        assert_eq!(limiter.active_rules.load().len(), 7);
+        assert_eq!(limiter.active_rules.load().len(), 9);
 
         // Check id1 limiting with any method
         // 10 pass
@@ -603,6 +625,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id1),
                     method: Some("foo"),
                     request_type: RequestType::QueryV2,
@@ -617,6 +640,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id1),
                     method: Some("bar"),
                     request_type: RequestType::QueryV2,
@@ -661,6 +685,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id0),
                     method: None,
                     request_type: RequestType::QueryV2,
@@ -675,6 +700,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: None,
                     method: None,
                     request_type: RequestType::QueryV2,
@@ -689,6 +715,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id0),
                     method: None,
                     request_type: RequestType::QueryV2,
@@ -701,6 +728,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id0),
                     method: None,
                     request_type: RequestType::QueryV2,
@@ -716,6 +744,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id1),
                     method: Some("foo"),
                     request_type: RequestType::QueryV2,
@@ -730,6 +759,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id1),
                     method: Some("bar"),
                     request_type: RequestType::QueryV2,
@@ -746,6 +776,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id: subnet_id2,
+                    sender: None,
                     canister_id: Some(id2),
                     method: Some("foo"),
                     request_type: RequestType::QueryV2,
@@ -760,6 +791,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id: subnet_id2,
+                    sender: None,
                     canister_id: Some(id2),
                     method: Some("bar"),
                     request_type: RequestType::QueryV2,
@@ -773,6 +805,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id: subnet_id2,
+                    sender: None,
                     canister_id: Some(id2),
                     method: Some("lol"),
                     request_type: RequestType::QueryV2,
@@ -785,6 +818,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id: subnet_id2,
+                    sender: None,
                     canister_id: Some(id2),
                     method: Some("rofl"),
                     request_type: RequestType::QueryV2,
@@ -799,6 +833,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id2),
                     method: Some("baz"),
                     request_type: RequestType::QueryV2,
@@ -814,6 +849,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id3),
                     method: Some("rofl"),
                     request_type: RequestType::CallV2,
@@ -827,6 +863,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id3),
                     method: Some("bar"),
                     request_type: RequestType::CallV2,
@@ -842,6 +879,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id3),
                     method: Some("baz"),
                     request_type: RequestType::QueryV2,
@@ -855,6 +893,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id3),
                     method: Some("zob"),
                     request_type: RequestType::QueryV2,
@@ -871,6 +910,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id3),
                     method: None,
                     request_type: RequestType::ReadStateV2,
@@ -884,6 +924,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id3),
                     method: None,
                     request_type: RequestType::ReadStateV2,
@@ -898,6 +939,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id3),
                     method: None,
                     request_type: RequestType::ReadStateV2,
@@ -911,12 +953,88 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id3),
                     method: None,
                     request_type: RequestType::ReadStateV2,
                     ip: ip2,
                 }),
                 Decision::Limit
+            );
+        }
+        // Then all limited with IP3 too since it's in the same /24 subnet
+        for _ in 0..10 {
+            assert_eq!(
+                limiter.evaluate(Context {
+                    subnet_id,
+                    sender: None,
+                    canister_id: Some(id3),
+                    method: None,
+                    request_type: RequestType::ReadStateV2,
+                    ip: ip3,
+                }),
+                Decision::Limit
+            );
+        }
+
+        // Check sender-based rules.
+        // sender_blocked matches the sender-only block rule (before any canister
+        // rule), so it is blocked regardless of canister/method.
+        for _ in 0..100 {
+            assert_eq!(
+                limiter.evaluate(Context {
+                    subnet_id,
+                    sender: Some(sender_blocked),
+                    canister_id: Some(id2),
+                    method: Some("foo"),
+                    request_type: RequestType::QueryV2,
+                    ip: ip1,
+                }),
+                Decision::Block
+            );
+        }
+
+        // sender_limited is limited to 2/1h on id2 (5s2ji): 2 pass, then limited
+        for _ in 0..2 {
+            assert_eq!(
+                limiter.evaluate(Context {
+                    subnet_id,
+                    sender: Some(sender_limited),
+                    canister_id: Some(id2),
+                    method: Some("foo"),
+                    request_type: RequestType::QueryV2,
+                    ip: ip1,
+                }),
+                Decision::Pass
+            );
+        }
+        for _ in 0..100 {
+            assert_eq!(
+                limiter.evaluate(Context {
+                    subnet_id,
+                    sender: Some(sender_limited),
+                    canister_id: Some(id2),
+                    method: Some("foo"),
+                    request_type: RequestType::QueryV2,
+                    ip: ip1,
+                }),
+                Decision::Limit
+            );
+        }
+
+        // The sender+canister rule is scoped: the same sender on a canister with no
+        // matching rule always passes
+        for _ in 0..100 {
+            assert_eq!(
+                limiter.evaluate(Context {
+                    subnet_id,
+                    sender: Some(sender_limited),
+                    canister_id: Some(id4),
+                    method: Some("foo"),
+                    request_type: RequestType::QueryV2,
+                    ip: ip1,
+                }),
+                Decision::Pass
             );
         }
 
@@ -928,6 +1046,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id1),
                     method: Some("foo"),
                     request_type: RequestType::QueryV2,
@@ -942,6 +1061,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id1),
                     method: Some("bar"),
                     request_type: RequestType::QueryV2,
@@ -959,6 +1079,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id1),
                     method: Some("foo"),
                     request_type: RequestType::QueryV2,
@@ -973,6 +1094,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id1),
                     method: Some("bar"),
                     request_type: RequestType::QueryV2,
@@ -989,6 +1111,7 @@ mod test {
         assert_eq!(
             limiter.evaluate(Context {
                 subnet_id,
+                sender: None,
                 canister_id: Some(id1),
                 method: Some("foo"),
                 request_type: RequestType::QueryV2,
@@ -1002,6 +1125,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id1),
                     method: Some("bar"),
                     request_type: RequestType::QueryV2,
@@ -1021,6 +1145,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id1),
                     method: Some("foo"),
                     request_type: RequestType::QueryV2,
@@ -1035,6 +1160,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id1),
                     method: Some("bar"),
                     request_type: RequestType::QueryV2,
@@ -1054,6 +1180,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id1),
                     method: Some("foo"),
                     request_type: RequestType::QueryV2,
@@ -1068,6 +1195,7 @@ mod test {
             assert_eq!(
                 limiter.evaluate(Context {
                     subnet_id,
+                    sender: None,
                     canister_id: Some(id1),
                     method: Some("bar"),
                     request_type: RequestType::QueryV2,

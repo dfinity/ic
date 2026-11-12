@@ -9,7 +9,12 @@ rust_library(
     crate_name = "ic_test_utilities_privileges",
     proc_macro_deps = ["//rs/test_utilities/privileges/macros"],
     version = "0.9.0",
-    deps = ["@crate_index//:nix"],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:libc",
+        "@crate_index//:static_assertions",
+        "@crate_index//:tempfile",
+    ],
 )
 
 rust_test(
@@ -20,5 +25,6 @@ rust_test(
         # Keep sorted.
         ":privileges",
         "@crate_index//:tempfile",
+        "@crate_index//:tokio",
     ],
 )

@@ -6,6 +6,7 @@ use bytes::Bytes;
 use candid::{Decode, Principal};
 use http::header::{CONTENT_TYPE, HeaderValue, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
 use ic_bn_lib::http::{cache::CacheStatus, headers::*};
+use ic_bn_lib::truncate;
 use ic_types::messages::Blob;
 use serde::de::Error as SerdeDeError;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -260,13 +261,13 @@ pub async fn postprocess_response(request: Request, next: Next) -> impl IntoResp
             )
         });
 
-        ctx.method_name.as_ref().and_then(|v| {
-            let truncated = &v[..v.len().min(MAX_LOGGING_METHOD_NAME_LENGTH)];
-            response.headers_mut().insert(
-                X_IC_METHOD_NAME,
-                HeaderValue::from_maybe_shared(Bytes::from(truncated.to_string())).unwrap(),
-            )
-        });
+        if let Some(v) = ctx.method_name.as_ref() {
+            let truncated = truncate(v, MAX_LOGGING_METHOD_NAME_LENGTH);
+
+            if let Ok(hval) = HeaderValue::from_maybe_shared(Bytes::from(truncated.to_string())) {
+                response.headers_mut().insert(X_IC_METHOD_NAME, hval);
+            }
+        }
     }
 
     let retry_result = response.extensions().get::<RetryResult>().cloned();

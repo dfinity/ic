@@ -70,6 +70,7 @@ use slog::{Logger, info};
 use std::{
     collections::{BTreeMap, HashMap},
     convert::TryFrom,
+    str::FromStr,
 };
 use std::{io::Read, time::Duration};
 use std::{io::Write, path::Path};
@@ -816,6 +817,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
             assert_node_is_unassigned_with_ssh_session(
                 &n,
                 admin_ssh_sessions.get(&n.node_id),
+                1, // expected_fstrim_count
                 &logger,
             );
         });
@@ -907,7 +909,7 @@ fn corrupt_latest_cup(
         CupCorruption::CorruptedWithValidNiDkgId => {
             info!(logger, "Modifying CUP replica version");
             cup.content.block.as_mut().version =
-                ReplicaVersion::try_from("invalid_version").unwrap();
+                ReplicaVersion::from_str("invalid_version").unwrap();
             pb::CatchUpPackage::from(cup)
         }
         CupCorruption::CorruptedIncludingInvalidNiDkgId => {

@@ -112,7 +112,9 @@ impl BudgetTracker for DarkLaunchTracker {
     }
 
     fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt {
-        self.real.create_payment_receipt()
+        // Return the shadow's receipt for observability.
+        // This is safe because receipts are unused under legacy pricing.
+        self.shadow.create_payment_receipt()
     }
 }
 
@@ -132,6 +134,7 @@ mod tests {
     };
     use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
     use std::collections::BTreeSet;
+    use std::sync::Arc;
     use std::time::Duration;
 
     fn flexible() -> Replication {
@@ -150,7 +153,7 @@ mod tests {
     /// sender (canister id) and replication kind are read by `DarkLaunchTracker`.
     fn context(replication: Replication) -> CanisterHttpRequestContext {
         CanisterHttpRequestContext {
-            request: Request {
+            request: Arc::new(Request {
                 receiver: CanisterId::from_u64(7),
                 sender: CanisterId::from_u64(7),
                 sender_reply_callback: CallbackId::from(1),
@@ -159,10 +162,10 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
-            },
+            }),
             url: String::new(),
             max_response_bytes: None,
-            headers: vec![],
+            headers: Arc::new(vec![]),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,

@@ -4,7 +4,7 @@ use crate::{
     artifact::ConsensusMessageId,
     batch::{BatchPayload, ValidationContext},
     consensus::dkg::DkgPayload,
-    crypto::threshold_sig::ni_dkg::NiDkgId,
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag},
     crypto::*,
     replica_version::ReplicaVersion,
     signature::*,
@@ -14,6 +14,7 @@ use ic_base_types::PrincipalIdError;
 use ic_base_types::subnet_id_try_from_option;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_management_canister_types_private::VetKdKeyId;
 use ic_protobuf::types::v1::{self as pb, consensus_message::Msg};
 use ic_protobuf::{
     log::block_log_entry::v1::BlockLogEntry,
@@ -32,6 +33,9 @@ pub mod hashed;
 pub mod idkg;
 mod payload;
 pub mod thunk;
+pub mod upgrade;
+
+pub use upgrade::{UpgradeAuthorizationShare, UpgradePermitRequest};
 
 pub use catchup::*;
 use hashed::Hashed;
@@ -102,6 +106,12 @@ impl<T: HasCommittee, S> HasCommittee for Signed<T, S> {
 impl<T: HasVersion, S> HasVersion for Signed<T, S> {
     fn version(&self) -> &ReplicaVersion {
         self.content.version()
+    }
+}
+
+impl<T> HasHash for Hashed<CryptoHashOf<T>, T> {
+    fn hash(&self) -> &CryptoHash {
+        self.hash.get_ref()
     }
 }
 
@@ -287,9 +297,10 @@ impl Block {
         height: Height,
         rank: Rank,
         context: ValidationContext,
+        version: ReplicaVersion,
     ) -> Self {
         Block {
-            version: ReplicaVersion::default(),
+            version,
             parent,
             payload,
             height,
@@ -429,9 +440,9 @@ pub struct NotarizationContent {
 
 impl NotarizationContent {
     /// Create a new notarization content from a height and a block hash
-    pub fn new(height: Height, block: CryptoHashOf<Block>) -> Self {
+    pub fn new(height: Height, block: CryptoHashOf<Block>, version: ReplicaVersion) -> Self {
         NotarizationContent {
-            version: ReplicaVersion::default(),
+            version,
             height,
             block,
         }
@@ -529,9 +540,9 @@ pub struct FinalizationContent {
 }
 
 impl FinalizationContent {
-    pub fn new(height: Height, block: CryptoHashOf<Block>) -> Self {
+    pub fn new(height: Height, block: CryptoHashOf<Block>, version: ReplicaVersion) -> Self {
         FinalizationContent {
-            version: ReplicaVersion::default(),
+            version,
             height,
             block,
         }
@@ -637,9 +648,13 @@ pub type HashedRandomBeacon = Hashed<CryptoHashOf<RandomBeacon>, RandomBeacon>;
 impl RandomBeaconContent {
     /// Create a new RandomBeaconContent with a given height and parent
     /// RandomBeacon
-    pub fn new(height: Height, parent: CryptoHashOf<RandomBeacon>) -> Self {
+    pub fn new(
+        height: Height,
+        parent: CryptoHashOf<RandomBeacon>,
+        version: ReplicaVersion,
+    ) -> Self {
         Self {
-            version: ReplicaVersion::default(),
+            version,
             height,
             parent,
         }
@@ -741,11 +756,8 @@ impl SignedBytesWithoutDomainSeparator for RandomTapeContent {
 
 impl RandomTapeContent {
     /// Create a new RandomTapeContent from a given height
-    pub fn new(height: Height) -> Self {
-        RandomTapeContent {
-            version: ReplicaVersion::default(),
-            height,
-        }
+    pub fn new(height: Height, version: ReplicaVersion) -> Self {
+        RandomTapeContent { version, height }
     }
 }
 
@@ -919,6 +931,27 @@ pub enum ConsensusMessage {
     EquivocationProof(EquivocationProof),
 }
 
+impl ConsensusMessage {
+    /// Loads whatever the message holds lazily, i.e. the payload of the block that a
+    /// block proposal or a catch-up package carries (see [`Payload::load`]).
+    pub fn load(&self) {
+        match self {
+            ConsensusMessage::BlockProposal(proposal) => proposal.as_ref().payload.load(),
+            ConsensusMessage::CatchUpPackage(cup) => cup.content.block.as_ref().payload.load(),
+            ConsensusMessage::RandomBeacon(_)
+            | ConsensusMessage::Finalization(_)
+            | ConsensusMessage::Notarization(_)
+            | ConsensusMessage::RandomBeaconShare(_)
+            | ConsensusMessage::NotarizationShare(_)
+            | ConsensusMessage::FinalizationShare(_)
+            | ConsensusMessage::RandomTape(_)
+            | ConsensusMessage::RandomTapeShare(_)
+            | ConsensusMessage::CatchUpPackageShare(_)
+            | ConsensusMessage::EquivocationProof(_) => {}
+        }
+    }
+}
+
 impl IdentifiableArtifact for ConsensusMessage {
     const NAME: &'static str = "consensus";
     type Id = ConsensusMessageId;
@@ -932,6 +965,10 @@ impl PbArtifact for ConsensusMessage {
     type PbIdError = ProxyDecodeError;
     type PbMessage = ic_protobuf::types::v1::ConsensusMessage;
     type PbMessageError = ProxyDecodeError;
+
+    fn check_integrity(&self) -> bool {
+        ConsensusMessageHashable::check_integrity(self)
+    }
 }
 
 impl From<ConsensusMessage> for pb::ConsensusMessage {
@@ -1296,6 +1333,7 @@ impl From<&Block> for pb::Block {
             canister_http_payload_bytes,
             query_stats_payload_bytes,
             chain_key_payload_bytes,
+            upgrade_payload_bytes,
             idkg_payload,
         ) = if payload.is_summary() {
             (
@@ -1303,6 +1341,7 @@ impl From<&Block> for pb::Block {
                 None,
                 None,
                 None,
+                vec![],
                 vec![],
                 vec![],
                 vec![],
@@ -1318,6 +1357,7 @@ impl From<&Block> for pb::Block {
                 batch.canister_http.clone(),
                 batch.query_stats.clone(),
                 batch.chain_key.clone(),
+                batch.upgrade.clone(),
                 payload.as_data().idkg.as_ref().map(|idkg| idkg.into()),
             )
         };
@@ -1336,6 +1376,7 @@ impl From<&Block> for pb::Block {
             canister_http_payload_bytes,
             query_stats_payload_bytes,
             chain_key_payload_bytes,
+            upgrade_payload_bytes,
             idkg_payload,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
@@ -1367,6 +1408,7 @@ impl TryFrom<pb::Block> for Block {
             canister_http: block.canister_http_payload_bytes,
             query_stats: block.query_stats_payload_bytes,
             chain_key: block.chain_key_payload_bytes,
+            upgrade: block.upgrade_payload_bytes,
         };
 
         let payload = match dkg_payload {
@@ -1420,7 +1462,20 @@ impl TryFrom<pb::Block> for Block {
 
 impl CountBytes for NiDkgId {
     fn count_bytes(&self) -> usize {
-        std::mem::size_of::<Self>()
+        let Self {
+            start_block_height: _,
+            dealer_subnet: _,
+            dkg_tag,
+            target_subnet: _,
+        } = self;
+        let key_name_bytes = match dkg_tag {
+            NiDkgTag::LowThreshold | NiDkgTag::HighThreshold => 0,
+            NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+                curve: _,
+                name,
+            })) => name.len(),
+        };
+        std::mem::size_of::<Self>() + key_name_bytes
     }
 }
 
@@ -1436,11 +1491,11 @@ pub trait ConsensusMessageHashable: Clone {
     fn assert(msg: &ConsensusMessage) -> Option<&Self>;
     fn into_message(self) -> ConsensusMessage;
 
-    /// Check integrity of a message. Default is false.
+    /// Check integrity of a message. Default is true.
     /// This should be implemented for those that have `Hashed<H, V>`.
     /// Note that if lazy loading is also used, it will force evaluation.
     fn check_integrity(&self) -> bool {
-        false
+        true
     }
 }
 

@@ -2,18 +2,22 @@ use crate::execution_environment::{RoundContext, RoundLimits};
 use crate::types::Response;
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, HypervisorError};
+use ic_interfaces::execution_environment::{
+    CanisterOutOfCyclesError, HypervisorError, SubnetAvailableMemoryError,
+};
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterInstallModeV2, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    Method as Ic00Method,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState,
     canister_state::canister_snapshots::CanisterSnapshotError,
     canister_state::system_state::wasm_chunk_store::{WasmChunkStore, chunk_size},
-    metadata_state::UnflushedCheckpointOp,
+    metadata_state::UnflushedCheckpointOps,
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
 use ic_types::{
@@ -75,6 +79,7 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) wasm_chunk_store_max_size: NumBytes,
     pub(crate) canister_snapshot_baseline_instructions: NumInstructions,
     pub(crate) canister_snapshot_data_baseline_instructions: NumInstructions,
+    pub(crate) canister_log_resize_instructions_per_byte: NumInstructions,
     pub(crate) default_wasm_memory_limit: NumBytes,
     pub(crate) max_number_of_snapshots_per_canister: usize,
     pub(crate) max_environment_variables: usize,
@@ -99,6 +104,7 @@ impl CanisterMgrConfig {
         wasm_chunk_store_max_size: NumBytes,
         canister_snapshot_baseline_instructions: NumInstructions,
         canister_snapshot_data_baseline_instructions: NumInstructions,
+        canister_log_resize_instructions_per_byte: NumInstructions,
         default_wasm_memory_limit: NumBytes,
         max_number_of_snapshots_per_canister: usize,
         max_environment_variables: usize,
@@ -120,6 +126,7 @@ impl CanisterMgrConfig {
             wasm_chunk_store_max_size,
             canister_snapshot_baseline_instructions,
             canister_snapshot_data_baseline_instructions,
+            canister_log_resize_instructions_per_byte,
             default_wasm_memory_limit,
             max_number_of_snapshots_per_canister,
             max_environment_variables,
@@ -225,6 +232,8 @@ impl WasmSource {
 
 #[derive(Clone, Debug)]
 pub struct InstallCodeContext {
+    /// The management canister method (`InstallCode` or `InstallChunkedCode`).
+    pub method: Ic00Method,
     pub origin: CanisterChangeOrigin,
     pub mode: CanisterInstallModeV2,
     pub canister_id: CanisterId,
@@ -266,6 +275,7 @@ impl InstallCodeContext {
             InstallCodeContextError::InvalidHash(format!("Invalid wasm hash {hash:?}"))
         })?;
         Ok(InstallCodeContext {
+            method: Ic00Method::InstallChunkedCode,
             origin,
             mode: args.mode,
             canister_id,
@@ -291,6 +301,7 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
         let canister_id = CanisterId::unchecked_from_principal(args.canister_id);
 
         Ok(InstallCodeContext {
+            method: Ic00Method::InstallCode,
             origin,
             mode: args.mode,
             canister_id,
@@ -316,9 +327,13 @@ pub(crate) struct CanisterManagerResponse {
     /// The heap delta increase produced by processing
     /// the current request.
     pub heap_delta_increase: NumBytes,
-    /// An unflushed checkpoint operation that must be handled
+    /// Unflushed checkpoint operations that must be handled
     /// before the next checkpoint.
-    pub unflushed_checkpoint_op: Option<UnflushedCheckpointOp>,
+    pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
+    /// Instructions used by the current request that should only be charged
+    /// upon success. These cover work that is not done while executing the
+    /// request itself, but only later, at checkpoint time.
+    pub instructions_to_charge_on_success: NumInstructions,
     /// (Reject) responses from call contexts that were marked as "deleted" while processing the current request.
     /// Note. A call context is marked as "deleted" when a canister is uninstalled.
     pub deleted_call_context_responses: Vec<Response>,
@@ -328,6 +343,27 @@ pub(crate) struct CanisterManagerResponse {
     /// Stop canister request contexts (for requests other than the current request)
     /// that must be rejected (because the canister was restarted by the current request).
     pub stop_contexts_to_reject: Vec<StopCanisterContext>,
+    /// A snapshot that must be marked as immutable (because it was loaded onto
+    /// a canister by the current request). The snapshot may belong to a canister
+    /// other than the target canister of the current request.
+    pub snapshot_to_make_immutable: Option<SnapshotId>,
+}
+
+/// The role of the canister whose controllers a `CanisterInvalidController`
+/// error refers to.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub(crate) enum ControlledCanisterRole {
+    /// The canister targeted by the call.
+    Target,
+    /// The store canister whose chunks `install_chunked_code` uses to install
+    /// code on the canister `target_canister_id`.
+    ChunkStore { target_canister_id: CanisterId },
+    /// The canister owning the snapshot `snapshot_id` that is loaded into the
+    /// different canister `target_canister_id`.
+    SnapshotOwner {
+        target_canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+    },
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -338,6 +374,8 @@ pub(crate) enum CanisterManagerError {
     },
     CanisterInvalidController {
         canister_id: CanisterId,
+        // Boxed to keep `CanisterManagerError` small.
+        role: Box<ControlledCanisterRole>,
         controllers_expected: BTreeSet<PrincipalId>,
         controller_provided: PrincipalId,
     },
@@ -428,11 +466,6 @@ pub(crate) enum CanisterManagerError {
         value: NumBytes,
         limit: NumBytes,
     },
-    CanisterSnapshotNotController {
-        sender: PrincipalId,
-        canister_id: CanisterId,
-        snapshot_id: SnapshotId,
-    },
     CanisterSnapshotNotLoadable {
         canister_id: CanisterId,
         snapshot_id: SnapshotId,
@@ -494,6 +527,10 @@ pub(crate) enum CanisterManagerError {
         bytes: NumBytes,
         limit: NumBytes,
     },
+    CanisterLogMemoryLimitIsTooLow {
+        bytes: NumBytes,
+        limit: NumBytes,
+    },
     CanisterSnapshotAccessDenied {
         caller: PrincipalId,
         method_name: String,
@@ -504,6 +541,38 @@ pub(crate) enum CanisterManagerError {
     FetchCanisterLogsAccessDenied {
         caller: PrincipalId,
     },
+}
+
+impl From<SubnetAvailableMemoryError> for CanisterManagerError {
+    fn from(err: SubnetAvailableMemoryError) -> Self {
+        let SubnetAvailableMemoryError::InsufficientMemory {
+            execution_requested,
+            guaranteed_response_message_requested,
+            wasm_custom_sections_requested,
+            available_execution,
+            available_guaranteed_response_messages: _,
+            available_wasm_custom_sections,
+        } = err;
+        debug_assert_eq!(
+            guaranteed_response_message_requested,
+            NumBytes::new(0),
+            "no guaranteed response message memory is requested by the `try_decrement` \
+             calls whose error is converted here"
+        );
+        if wasm_custom_sections_requested.get() != 0
+            && wasm_custom_sections_requested.get() as i128 > available_wasm_custom_sections as i128
+        {
+            Self::SubnetWasmCustomSectionCapacityOverSubscribed {
+                requested: wasm_custom_sections_requested,
+                available: NumBytes::new(available_wasm_custom_sections.max(0) as u64),
+            }
+        } else {
+            Self::SubnetMemoryCapacityOverSubscribed {
+                requested: execution_requested,
+                available: NumBytes::new(available_execution.max(0) as u64),
+            }
+        }
+    }
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -520,12 +589,28 @@ impl AsErrorHelp for CanisterManagerError {
                             or add the current caller as a subnet admin.".to_string(),
                 doc_link: doc_ref("invalid-subnet-admin"),
             },
-            CanisterManagerError::CanisterInvalidController { .. } => ErrorHelp::UserError {
-                suggestion: "Execute this call from a controller of the target canister or \
-                add the current caller as a controller."
-                    .to_string(),
-                doc_link: doc_ref("invalid-controller"),
-            },
+            CanisterManagerError::CanisterInvalidController { role, .. } => {
+                let suggestion = match **role {
+                    ControlledCanisterRole::Target => {
+                        "Execute this call from a controller of the target canister or \
+                        add the current caller as a controller."
+                    }
+                    // The store canister itself can also use its chunks.
+                    ControlledCanisterRole::ChunkStore { .. } => {
+                        "Execute this call from the store canister itself or a controller \
+                        of the store canister, or add the current caller as a controller \
+                        of the store canister."
+                    }
+                    ControlledCanisterRole::SnapshotOwner { .. } => {
+                        "Execute this call from a controller of the canister owning the \
+                        snapshot or add the current caller as a controller of that canister."
+                    }
+                };
+                ErrorHelp::UserError {
+                    suggestion: suggestion.to_string(),
+                    doc_link: doc_ref("invalid-controller"),
+                }
+            }
             CanisterManagerError::CanisterInvalidControllerOrSubnetAdmin { .. } => ErrorHelp::UserError {
                 suggestion: "Execute this call from a controller of the target canister or subnet admin \
                             or add the current caller as a controller or subnet admin.".to_string(),
@@ -651,13 +736,6 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion: "Try waiting a few seconds before retrying the operation.".to_string(),
                 doc_link: doc_ref("canister-heap-delta-rate-limited"),
             },
-            CanisterManagerError::CanisterSnapshotNotController { .. } => {
-                ErrorHelp::UserError {
-                    suggestion: "Make sure you are a controller of the canister that the snapshot belongs to."
-                        .to_string(),
-                    doc_link: "canister-snapshot-not-controller".to_string(),
-                }
-            }
             CanisterManagerError::CanisterSnapshotNotLoadable { .. } => {
                 ErrorHelp::UserError {
                     suggestion: "Snapshot is not currently loadable on the specified canister. Try again later. The call should succeed if you wait sufficiently long (usually ten minutes)."
@@ -680,7 +758,7 @@ impl AsErrorHelp for CanisterManagerError {
                 doc_link: "not-enough-cycles".to_string(),
             },
             CanisterManagerError::CanisterSnapshotImmutable => ErrorHelp::UserError {
-                suggestion: "Only canister snapshots created by metadata upload can be mutated.".to_string(),
+                suggestion: "Only canister snapshots created by metadata upload can be mutated, and only until they are loaded onto a canister.".to_string(),
                 doc_link: "".to_string(),
             },
             CanisterManagerError::LongExecutionAlreadyInProgress { .. } => ErrorHelp::UserError {
@@ -772,6 +850,12 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion: "Set a lower canister log memory limit.".to_string(),
                 doc_link: "".to_string(),
             },
+            CanisterManagerError::CanisterLogMemoryLimitIsTooLow { .. } => ErrorHelp::UserError {
+                suggestion: "Set a higher canister log memory limit, \
+                or zero to disable canister logging."
+                    .to_string(),
+                doc_link: "".to_string(),
+            },
         }
     }
 }
@@ -860,6 +944,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             CanisterInvalidController {
                 canister_id,
+                role,
                 controllers_expected,
                 controller_provided,
             } => {
@@ -868,10 +953,27 @@ impl From<CanisterManagerError> for UserError {
                     .map(|id| format!("{id}"))
                     .collect::<Vec<String>>()
                     .join(" ");
+                let requirement = match *role {
+                    ControlledCanisterRole::Target => {
+                        format!("Only the controllers of the canister {canister_id} can control it")
+                    }
+                    // The store canister itself can also use its chunks.
+                    ControlledCanisterRole::ChunkStore { target_canister_id } => format!(
+                        "Only the canister {canister_id} itself and its controllers can use its \
+                        chunks to install code on the canister {target_canister_id}"
+                    ),
+                    ControlledCanisterRole::SnapshotOwner {
+                        target_canister_id,
+                        snapshot_id,
+                    } => format!(
+                        "Only the controllers of the canister {canister_id} can load its snapshot \
+                        {snapshot_id} into the canister {target_canister_id}"
+                    ),
+                };
                 Self::new(
                     ErrorCode::CanisterInvalidController,
                     format!(
-                        "Only the controllers of the canister {canister_id} can control it.\n\
+                        "{requirement}.\n\
                         Canister's controllers: {controllers_expected}\n\
                         Sender's ID: {controller_provided}{additional_help}"
                     ),
@@ -1082,18 +1184,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             CanisterSnapshotImmutable => Self::new(
                 ErrorCode::CanisterSnapshotImmutable,
-                "Only canister snapshots created by metadata upload can be mutated.".to_string(),
-            ),
-            CanisterSnapshotNotController {
-                sender,
-                canister_id,
-                snapshot_id,
-            } => Self::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "Only a controller of the canister that snapshot {} belongs to can load it on canister {}. Sender: {}.{additional_help}",
-                    snapshot_id, canister_id, sender,
-                ),
+                "Only canister snapshots created by metadata upload can be mutated, and only until they are loaded onto a canister.".to_string(),
             ),
             CanisterSnapshotNotLoadable {
                 canister_id,
@@ -1213,6 +1304,13 @@ impl From<CanisterManagerError> for UserError {
                     "The canister log memory limit {bytes} is too high. It must be at most {limit}."
                 ),
             ),
+            CanisterLogMemoryLimitIsTooLow { bytes, limit } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister log memory limit {bytes} is too low. \
+                    It must be either zero or at least {limit}."
+                ),
+            ),
             FetchCanisterLogsAccessDenied { caller } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!("Caller {caller} is not allowed to access canister logs"),
@@ -1254,11 +1352,13 @@ impl From<CanisterManagerError> for RejectContext {
 /// install code. Install code can be executed in three modes - install,
 /// reinstall and upgrade.
 pub(crate) trait PausedInstallCodeExecution: Send + std::fmt::Debug {
+    /// Resumes a paused execution given the current subnet memory saturation.
     fn resume(
         self: Box<Self>,
         canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
     ) -> DtsInstallCodeResult;
 
     /// Aborts the paused execution.

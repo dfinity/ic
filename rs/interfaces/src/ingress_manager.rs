@@ -73,6 +73,8 @@ pub enum InvalidIngressPayloadReason {
     CanisterStopping(CanisterId),
     CanisterStopped(CanisterId),
     InvalidManagementMessage,
+    /// The subnet is cooling down, so it must not induct any ingress messages.
+    SubnetCoolingDown,
 }
 
 /// Reasons for validation failures.

@@ -20,6 +20,7 @@ hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { workspace = true }
 ic-cdk = { workspace = true }
+ic-cdk-management-canister = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ethereum-types = { path = "../../../packages/ic-ethereum-types" }
 ic-http-types = { path = "../../../packages/ic-http-types" }
@@ -43,10 +44,10 @@ assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-ledger-suite-orchestrator-test-utils = { path = "test_utils" }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
 maplit = { workspace = true }
 mockall = { workspace = true }
 paste = { workspace = true }
+pocket-ic = { path = "../../../packages/pocket-ic" }
 proptest = { workspace = true }
 scraper = { workspace = true }
 tokio = { workspace = true }

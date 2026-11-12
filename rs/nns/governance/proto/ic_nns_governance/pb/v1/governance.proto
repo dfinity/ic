@@ -8,6 +8,7 @@ import "ic_nervous_system/pb/v1/nervous_system.proto";
 import "ic_nns_common/pb/v1/types.proto";
 import "ic_sns_swap/pb/v1/swap.proto";
 import "registry/replica_version/v1/replica_version.proto";
+import "types/v1/management_canister_types.proto";
 
 // The entity that owns the nodes that run the network.
 //
@@ -512,6 +513,10 @@ enum NnsFunction {
   // `SetupInitialDKG` requests without an explicit subnet id are routed to the
   // calling subnet (NNS).
   NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET = 58;
+
+  // Merge a subnet into another subnet: in the routing table, reassigns all
+  // canister ranges hosted by the source subnet to the destination subnet.
+  NNS_FUNCTION_MERGE_SUBNETS = 59;
 }
 
 // Payload of a proposal that calls a function on another NNS
@@ -1935,6 +1940,23 @@ message InstallCode {
   optional bytes wasm_module_hash = 6;
   // The hash of the arg to pass to the canister. Calculated from `arg` when proposal is created.
   optional bytes arg_hash = 7;
+
+  message CanisterUpgradeOptions {
+    // Whether to skip the canister's pre_upgrade hook. This would generally be
+    // used in emergencies. See the corresponding field in the Management
+    // canister API.
+    optional bool skip_pre_upgrade = 1;
+
+    // Whether to retain (keep) or drop (replace) the canister's Wasm main
+    // memory across the upgrade. If the old WASM had a custom section named
+    // "icp:private enhanced-orthogonal-persistence", then this must be set
+    // (otherwise, the Management canister will block the upgrade). If keep is
+    // used here, then the new WASM must also have the same custom section.
+    optional types.v1.WasmMemoryPersistence wasm_memory_persistence = 2;
+  }
+
+  // Options that only apply when install_mode is upgrade.
+  optional CanisterUpgradeOptions canister_upgrade_options = 8;
 }
 
 message StopOrStartCanister {
@@ -1987,6 +2009,7 @@ message CanisterSettings {
   optional uint64 wasm_memory_limit = 6;
   optional uint64 wasm_memory_threshold = 7;
   optional SnapshotVisibility snapshot_visibility = 8;
+  optional uint64 reserved_cycles_limit = 9;
 }
 
 message UpdateCanisterSettings {

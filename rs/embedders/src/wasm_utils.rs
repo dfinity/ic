@@ -224,6 +224,7 @@ fn validate_and_instrument(
         config.metering_type,
         max_wasm_memory_size,
         config.max_stable_memory_size,
+        config.feature_flags.wasm_memory_accessed_page_limit,
     )?;
     Ok((wasm_validation_details, instrumentation_output))
 }
@@ -253,14 +254,23 @@ fn compile_inner(
     let code_section_size = wasm_validation_details.code_section_size;
     let max_num_locals = wasm_validation_details.max_num_locals;
 
-    let is_wasm64 = module
-        .get_export(crate::wasmtime_embedder::WASM_HEAP_MEMORY_NAME)
-        .is_some_and(|export| export.memory().is_some_and(|mem| mem.is_64()));
+    // Instrumentation exports the Wasm memory under this name if and only if
+    // the module declares one. A canister may also export some other item
+    // (e.g. a function) under the same name, so the export only indicates a
+    // declared heap if it is actually a memory export; checking the kind here
+    // avoids treating such a non-memory export as a declared heap.
+    let wasm_memory = module.get_export(crate::wasmtime_embedder::WASM_HEAP_MEMORY_NAME);
+    let declares_wasm_memory = wasm_memory
+        .as_ref()
+        .is_some_and(|export| export.memory().is_some());
+    let is_wasm64 =
+        wasm_memory.is_some_and(|export| export.memory().is_some_and(|mem| mem.is_64()));
 
     let serialized_module = SerializedModule::new(
         &module,
         instrumentation_output,
         wasm_validation_details,
+        declares_wasm_memory,
         is_wasm64,
     )?;
     Ok((

@@ -7,7 +7,7 @@ use ic_protobuf::registry::subnet::v1::{
 use ic_protobuf::types::v1 as pb_types;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::{NodeId, ReplicaVersion, SubnetId};
+use ic_types::{NodeId, SubnetId};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
 use rand_chacha::ChaCha20Rng;
@@ -1122,13 +1122,14 @@ impl EcdsaSubnetConfig {
                 max_block_payload_size: 2 * 1024 * 1024,
                 unit_delay_millis: 500,
                 initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
-                replica_version_id: ReplicaVersion::default().into(),
+                replica_version_id: "replica_version_for_ecdsa_subnet".to_string(),
                 dkg_interval_length: 59,
                 dkg_dealings_per_block: 1,
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
                 halt_at_cup_height: false,
+                cooling_down: false,
                 features: None,
                 max_number_of_canisters: 0,
                 ssh_readonly_access: vec![],

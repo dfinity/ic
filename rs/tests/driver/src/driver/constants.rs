@@ -23,6 +23,14 @@ use std::time::Duration;
 ///   |- tear_down/
 ///         |- ic_prep
 ///         |- test.log          <-- prefix :: finalization_log
+///   |- journald_logs/          <-- journald records persisted by logs_stream_task
+///      |- nodes/<node_id>.jsonl   (scanned by assert_no_unallowed_log_patterns on the local backend)
+///      |- uvms/<vm_name>.jsonl
+///   |- local_backend/          <-- local backend state (VM disks, consoles, sockets)
+///
+/// Only the `*_env`/`setup`/`tests/<test>` directories are test environments
+/// (and get copied on fork); `journald_logs/` and `local_backend/` are siblings
+/// that are never copied.
 ///
 /// Username for the ssh session.
 pub const SSH_USERNAME: &str = "admin";

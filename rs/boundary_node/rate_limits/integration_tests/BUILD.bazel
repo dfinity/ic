@@ -26,8 +26,6 @@ rust_library(
         # Keep sorted.
         "//rs/boundary_node/rate_limits/api:rate_limits_api",
         "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
-        "//rs/types/base_types",
-        "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:serde",
@@ -39,7 +37,6 @@ rust_library(
             "//rs/crypto/sha2",
             "//rs/nns/constants",
             "//rs/nns/test_utils",
-            "//rs/registry/keys",
             "//rs/registry/transport",
             "//rs/rust_canisters/canister_test",
         ],
@@ -58,8 +55,6 @@ rust_test_suite(
         # Keep sorted.
         "//rs/boundary_node/rate_limits/api:rate_limits_api",
         "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
-        "//rs/types/base_types",
-        "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:serde",
@@ -71,7 +66,6 @@ rust_test_suite(
             "//rs/crypto/sha2",
             "//rs/nns/constants",
             "//rs/nns/test_utils",
-            "//rs/registry/keys",
             "//rs/registry/transport",
             "//rs/rust_canisters/canister_test",
         ],

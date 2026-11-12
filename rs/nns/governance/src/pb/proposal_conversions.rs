@@ -93,6 +93,7 @@ fn convert_install_code(item: &pb::InstallCode) -> api::InstallCode {
         skip_stopping_before_installing,
         wasm_module_hash,
         arg_hash,
+        canister_upgrade_options,
     } = item;
 
     let canister_id = *canister_id;
@@ -100,6 +101,8 @@ fn convert_install_code(item: &pb::InstallCode) -> api::InstallCode {
     let skip_stopping_before_installing = *skip_stopping_before_installing;
     let wasm_module_hash = wasm_module_hash.clone();
     let arg_hash = arg_hash.clone();
+    let canister_upgrade_options =
+        (*canister_upgrade_options).map(api::install_code::CanisterUpgradeOptions::from);
 
     api::InstallCode {
         canister_id,
@@ -107,6 +110,7 @@ fn convert_install_code(item: &pb::InstallCode) -> api::InstallCode {
         skip_stopping_before_installing,
         wasm_module_hash,
         arg_hash,
+        canister_upgrade_options,
     }
 }
 
@@ -841,6 +845,7 @@ mod tests {
                     skip_stopping_before_installing: None,
                     wasm_module: Some(vec![1, 2, 3]),
                     arg: Some(vec![]),
+                    canister_upgrade_options: None,
                 },
                 pb::InstallCode {
                     canister_id: Some(PrincipalId::new_user_test_id(1)),
@@ -850,6 +855,7 @@ mod tests {
                     arg: Some(vec![]),
                     wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
                     arg_hash: Some(vec![]),
+                    canister_upgrade_options: None,
                 },
             ),
             (
@@ -859,6 +865,7 @@ mod tests {
                     skip_stopping_before_installing: Some(true),
                     wasm_module: Some(vec![1, 2, 3]),
                     arg: Some(vec![4, 5, 6]),
+                    canister_upgrade_options: None,
                 },
                 pb::InstallCode {
                     canister_id: Some(PrincipalId::new_user_test_id(1)),
@@ -868,6 +875,7 @@ mod tests {
                     arg: Some(vec![4, 5, 6]),
                     wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
                     arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
+                    canister_upgrade_options: None,
                 },
             ),
         ];

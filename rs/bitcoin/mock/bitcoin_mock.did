@@ -27,7 +27,7 @@ type OutPoint = record { txid : vec nat8; vout : nat32 };
 type PushUtxosToAddress = record { utxos : vec Utxo; address : text };
 type SendTransactionRequest = record {
   transaction : vec nat8;
-  network : Network;
+  network : NetworkInRequest;
 };
 type Utxo = record { height : nat32; value : nat64; outpoint : OutPoint };
 type UtxosFilterInRequest = variant {

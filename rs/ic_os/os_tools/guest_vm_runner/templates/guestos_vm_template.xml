@@ -20,7 +20,7 @@
   {% else %}
   <cpu mode='host-passthrough' migratable='off'>
     <cache mode='passthrough'/>
-    <topology sockets='2' cores='{{nr_of_vcpus / 4}}' threads='2'/>
+    <topology sockets='{{topology.nr_of_sockets}}' cores='{{topology.nr_of_cores}}' threads='{{topology.nr_of_threads}}'/>
     <feature policy='require' name='topoext'/>
   </cpu>
   {%- if enable_sev %}
@@ -191,7 +191,11 @@
       <alias name='console1'/>
     </console>
     <vsock model='virtio'>
+  {%- if let Some(vsock_cid) = vsock_cid %}
+      <cid address='{{vsock_cid}}'/>
+  {%- else %}
       <cid auto='yes'/>
+  {%- endif %}
     </vsock>
     <input type='mouse' bus='ps2'>
       <alias name='input0'/>

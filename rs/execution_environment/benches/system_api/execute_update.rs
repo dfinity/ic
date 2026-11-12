@@ -20,6 +20,7 @@ use ic_execution_environment::{
     as_num_instructions, as_round_instructions,
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_management_canister_types_private::ReplicationCounts;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::CanisterMessageOrTask,
@@ -35,6 +36,18 @@ struct CostHttpRequestV2Params {
     raw_response_bytes: u64,
     transformed_response_bytes: u64,
     transform_instructions: u64,
+    outcall_type: Option<CostHttpRequestOutcallType>,
+}
+
+#[derive(CandidType, Deserialize)]
+#[allow(dead_code)]
+enum CostHttpRequestOutcallType {
+    #[serde(rename = "fully_replicated")]
+    FullyReplicated(candid::Reserved),
+    #[serde(rename = "non_replicated")]
+    NonReplicated(candid::Reserved),
+    #[serde(rename = "flexible")]
+    Flexible(Option<ReplicationCounts>),
 }
 
 const COST_HTTP_REQUEST_V2_PARAMS: CostHttpRequestV2Params = CostHttpRequestV2Params {
@@ -43,6 +56,13 @@ const COST_HTTP_REQUEST_V2_PARAMS: CostHttpRequestV2Params = CostHttpRequestV2Pa
     raw_response_bytes: 3_000,
     transformed_response_bytes: 2_000,
     transform_instructions: 1_000_000,
+    outcall_type: Some(CostHttpRequestOutcallType::Flexible(Some(
+        ReplicationCounts {
+            total_requests: 13,
+            min_responses: 9,
+            max_responses: 13,
+        },
+    ))),
 };
 
 pub fn execute_update_bench(c: &mut Criterion) {

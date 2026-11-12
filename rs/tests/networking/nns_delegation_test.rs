@@ -57,7 +57,7 @@ use ic_system_test_driver::{
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
             get_guestos_img_version, get_guestos_update_img_sha256, get_guestos_update_img_url,
-            get_guestos_update_img_version,
+            get_guestos_update_img_version, get_guestos_update_launch_measurements,
         },
     },
     systest,
@@ -776,7 +776,7 @@ fn upgrade_non_nns_subnets_if_necessary(env: &TestEnv) {
         &target_version,
         &env.logger(),
         sha256,
-        /*guest_launch_measurements=*/ None,
+        Some(get_guestos_update_launch_measurements()),
         vec![upgrade_url.to_string()],
     ));
 

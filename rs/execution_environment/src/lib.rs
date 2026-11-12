@@ -16,6 +16,9 @@ mod types;
 pub mod units;
 pub mod util;
 
+#[cfg(test)]
+mod tests;
+
 pub use crate::canister_logs::fetch_canister_logs_response_for_bench;
 pub use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::ingress_filter::IngressFilterServiceImpl;
@@ -27,11 +30,14 @@ pub use execution_environment::{
     as_round_instructions, execute_canister,
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
-pub use hypervisor::{Hypervisor, HypervisorMetrics};
-use ic_base_types::PrincipalId;
+pub use hypervisor::{
+    CanisterMemoryHandling, Hypervisor, HypervisorMetrics, MemoryHandling, MemorySource,
+};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::WasmExecutor;
+use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     IngressFilterService, IngressHistoryReader, QueryExecutionService, Scheduler,
     TransformExecutionService,
@@ -57,6 +63,18 @@ pub use scheduler::{
 };
 use std::{path::Path, sync::Arc};
 use tokio::sync::mpsc::Sender;
+
+/// Checks that the receiver of a request exists on this subnet.
+fn receiver_exists(state: &ReplicatedState, receiver: CanisterId) -> Result<(), UserError> {
+    if receiver == CanisterId::ic_00() || state.canister_state(&receiver).is_some() {
+        Ok(())
+    } else {
+        Err(UserError::new(
+            ErrorCode::CanisterNotFound,
+            format!("Canister {receiver} not found"),
+        ))
+    }
+}
 
 /// When executing a wasm method of query type, this enum indicates if we are
 /// running in an replicated or non-replicated context. This information is
@@ -329,7 +347,7 @@ fn setup_execution_helper(
             own_subnet_id,
             logger.clone(),
             Arc::clone(&cycles_account_manager),
-            scheduler_config.dirty_page_overhead,
+            scheduler_config.page_overhead,
             Arc::clone(&fd_factory),
             Arc::clone(&state_reader),
             temp_dir,
@@ -373,6 +391,7 @@ fn setup_execution_helper(
         config.embedders_config.wasm_max_size,
         scheduler_config.canister_snapshot_baseline_instructions,
         scheduler_config.canister_snapshot_data_baseline_instructions,
+        scheduler_config.canister_log_resize_instructions_per_byte,
         config.default_wasm_memory_limit,
         config.max_number_of_snapshots_per_canister,
         config.max_environment_variables,

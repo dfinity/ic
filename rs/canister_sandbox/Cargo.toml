@@ -32,7 +32,6 @@ memory_tracker = { path = "../memory_tracker" }
 nix = { workspace = true }
 num-traits = { workspace = true }
 object = { workspace = true, optional = true }
-once_cell = { workspace = true }
 prometheus = { workspace = true }
 rayon = { workspace = true }
 regex = { workspace = true }
@@ -42,7 +41,6 @@ serde_json = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
 threadpool = { workspace = true }
-which = "4.2.2"
 
 [dev-dependencies]
 ic-error-types = { path = "../../packages/ic-error-types" }

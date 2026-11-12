@@ -40,7 +40,6 @@ quinn-udp = { workspace = true }
 rcgen = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }
-slog = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 turmoil = { workspace = true }

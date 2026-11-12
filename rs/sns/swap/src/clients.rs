@@ -1,10 +1,10 @@
-#![allow(deprecated)]
 use crate::pb::v1::{
     CanisterCallError, SetDappControllersRequest, SetDappControllersResponse,
     SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
 };
 use async_trait::async_trait;
 use ic_base_types::CanisterId;
+use ic_cdk::call::{Call, Error as IcCdkCallError};
 use ic_sns_governance::pb::v1::{
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode,
     SetModeResponse,
@@ -34,9 +34,15 @@ impl SnsRootClient for RealSnsRootClient {
         &mut self,
         request: SetDappControllersRequest,
     ) -> Result<SetDappControllersResponse, CanisterCallError> {
-        ic_cdk::call(self.canister_id.get().0, "set_dapp_controllers", (request,))
+        Call::unbounded_wait(self.canister_id.get().0, "set_dapp_controllers")
+            .with_arg(&request)
             .await
-            .map(|response: (SetDappControllersResponse,)| response.0)
+            .map_err(IcCdkCallError::from)
+            .and_then(|response| {
+                response
+                    .candid::<SetDappControllersResponse>()
+                    .map_err(IcCdkCallError::from)
+            })
             .map_err(CanisterCallError::from)
     }
 }
@@ -72,19 +78,31 @@ impl SnsGovernanceClient for RealSnsGovernanceClient {
         &mut self,
         request: ManageNeuron,
     ) -> Result<ManageNeuronResponse, CanisterCallError> {
-        ic_cdk::call(self.canister_id.get().0, "manage_neuron", (request,))
+        Call::unbounded_wait(self.canister_id.get().0, "manage_neuron")
+            .with_arg(&request)
             .await
-            .map(|response: (ManageNeuronResponse,)| response.0)
+            .map_err(IcCdkCallError::from)
+            .and_then(|response| {
+                response
+                    .candid::<ManageNeuronResponse>()
+                    .map_err(IcCdkCallError::from)
+            })
             .map_err(CanisterCallError::from)
     }
 
     async fn set_mode(&mut self, request: SetMode) -> Result<SetModeResponse, CanisterCallError> {
         // TODO: Eliminate repetitive code. At least textually, the only
         // difference is the second argument that gets passed to
-        // ic_cdk::call (the name of the method).
-        ic_cdk::call(self.canister_id.get().0, "set_mode", (request,))
+        // Call::unbounded_wait (the name of the method).
+        Call::unbounded_wait(self.canister_id.get().0, "set_mode")
+            .with_arg(request)
             .await
-            .map(|response: (SetModeResponse,)| response.0)
+            .map_err(IcCdkCallError::from)
+            .and_then(|response| {
+                response
+                    .candid::<SetModeResponse>()
+                    .map_err(IcCdkCallError::from)
+            })
             .map_err(CanisterCallError::from)
     }
 
@@ -92,9 +110,15 @@ impl SnsGovernanceClient for RealSnsGovernanceClient {
         &mut self,
         request: ClaimSwapNeuronsRequest,
     ) -> Result<ClaimSwapNeuronsResponse, CanisterCallError> {
-        ic_cdk::call(self.canister_id.get().0, "claim_swap_neurons", (request,))
+        Call::unbounded_wait(self.canister_id.get().0, "claim_swap_neurons")
+            .with_arg(&request)
             .await
-            .map(|response: (ClaimSwapNeuronsResponse,)| response.0)
+            .map_err(IcCdkCallError::from)
+            .and_then(|response| {
+                response
+                    .candid::<ClaimSwapNeuronsResponse>()
+                    .map_err(IcCdkCallError::from)
+            })
             .map_err(CanisterCallError::from)
     }
 }
@@ -123,13 +147,18 @@ impl NnsGovernanceClient for RealNnsGovernanceClient {
         &mut self,
         request: SettleNeuronsFundParticipationRequest,
     ) -> Result<SettleNeuronsFundParticipationResponse, CanisterCallError> {
-        ic_cdk::call(
+        Call::unbounded_wait(
             self.canister_id.get().0,
             "settle_neurons_fund_participation",
-            (request,),
         )
+        .with_arg(&request)
         .await
-        .map(|response: (SettleNeuronsFundParticipationResponse,)| response.0)
+        .map_err(IcCdkCallError::from)
+        .and_then(|response| {
+            response
+                .candid::<SettleNeuronsFundParticipationResponse>()
+                .map_err(IcCdkCallError::from)
+        })
         .map_err(CanisterCallError::from)
     }
 }

@@ -17,14 +17,14 @@
     // Configuration of IPv4 networking (provided at first boot)
     // =========================================================
     initial_ipv4_config: {
-        public_address: "{{ ipv4_address }}",
-        public_gateway: "{{ ipv4_gateway }}",
+        public_address: {{ ipv4_address|json }},
+        public_gateway: {{ ipv4_gateway|json }},
     },
 
     // ============================================
     // Configuration of the domain name
     // ============================================
-    domain: "{{ domain_name }}",
+    domain: {{ domain_name|json }},
 
     // ============================================
     // Configuration of registry client
@@ -111,7 +111,7 @@
     // ==================================
 
     tracing: {
-        jaeger_addr: "{{ jaeger_addr }}",
+        jaeger_addr: {{ jaeger_addr|json }},
     },
 
     // ====================================
@@ -119,6 +119,7 @@
     // ====================================
     http_handler: {
         listen_addr: "[::]:8080",
+        extra_api_boundary_node_trust_anchors_pem: {{ extra_api_boundary_node_trust_anchors_pem }},
     },
 
     // ====================================
@@ -212,6 +213,9 @@ table filter {\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
+    # Mitigation for CVE-2026-98432: drop IPv4 packets carrying IP options (IHL > 5).\n\
+    # TODO: remove once IC-OS ships an Ubuntu kernel with the CVE-2026-98432 fix.\n\
+    ip hdrlength != 5 counter drop\n\
     ct state new add @rate_limit { ip saddr limit rate over 1000/minute burst 500 packets } counter name rate_limit_v4_counter drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
@@ -247,6 +251,7 @@ table ip6 filter {\n\
     nd-router-advert,\n\
     nd-neighbor-solicit,\n\
     nd-neighbor-advert,\n\
+    mld-listener-query,\n\
   }\n\
 \n\
   set rate_limit {\n\
@@ -278,7 +283,11 @@ table ip6 filter {\n\
     # DHCPv6\n\
     udp dport { 546 } accept\n\
     # TCP ports required for GuestOS functionality\n\
-    ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 7070, 9090, 9091, 9100, 19531, 19100, 19522 } accept\n\
+    ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 7070, 9090, 9091, 9100, 19531, 19100 } accept\n\
+{%- if let Some(peer_guest_vm_address) = peer_guest_vm_address %}
+    # Disk encryption key exchange: only the peer Guest VM may connect\n\
+    ip6 saddr { {{ peer_guest_vm_address }} } ct state { new } tcp dport { 19522 } accept\n\
+{%- endif %}
     # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS\n\
     ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept\n\
     # Custom templated rules\n\
@@ -361,6 +370,9 @@ table filter {\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
+    # Mitigation for CVE-2026-98432: drop IPv4 packets carrying IP options (IHL > 5).\n\
+    # TODO: remove once IC-OS ships an Ubuntu kernel with the CVE-2026-98432 fix.\n\
+    ip hdrlength != 5 counter drop\n\
     ct state new add @rate_limit { ip saddr limit rate over 1000/minute burst 500 packets } counter name rate_limit_v4_counter drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
@@ -371,7 +383,7 @@ table filter {\n\
     <<IPv4_UDP_RULES>>\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\
-    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport 80 accept\n\
+    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport { 80, 443 } accept\n\
     log prefix \"Drop - default policy: \"\n\
   }\n\
 \n\
@@ -396,6 +408,7 @@ table ip6 filter {\n\
     nd-router-advert,\n\
     nd-neighbor-solicit,\n\
     nd-neighbor-advert,\n\
+    mld-listener-query,\n\
   }\n\
 \n\
   set rate_limit {\n\
@@ -427,10 +440,14 @@ table ip6 filter {\n\
     # DHCPv6\n\
     udp dport { 546 } accept\n\
     # TCP ports required for GuestOS functionality\n\
-    ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 7070, 9090, 9091, 9100, 9314, 19531, 19100, 19522 } accept\n\
+    ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 7070, 9090, 9091, 9100, 9314, 19531, 19100 } accept\n\
+{%- if let Some(peer_guest_vm_address) = peer_guest_vm_address %}
+    # Disk encryption key exchange: only the peer Guest VM may connect\n\
+    ip6 saddr { {{ peer_guest_vm_address }} } ct state { new } tcp dport { 19522 } accept\n\
+{%- endif %}
     # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS\n\
     ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept\n\
-    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport 80 accept\n\
+    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport { 80, 443 } accept\n\
     # Custom templated rules\n\
     <<IPv6_TCP_RULES>>\n\
     <<IPv6_UDP_RULES>>\n\
@@ -509,6 +526,9 @@ table filter {\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
+    # Mitigation for CVE-2026-98432: drop IPv4 packets carrying IP options (IHL > 5).\n\
+    # TODO: remove once IC-OS ships an Ubuntu kernel with the CVE-2026-98432 fix.\n\
+    ip hdrlength != 5 counter drop\n\
     ip saddr @blackhole drop\n\
     ct state new add @rate_limit { ip saddr limit rate over 2000/minute burst 1000 packets } counter name rate_limit_v4_counter drop\n\
     #  Notes about the rule below:\n\
@@ -569,10 +589,14 @@ table ip6 filter {\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip6 address.\n\
     #   - The rule drops all new connections that goes over the configured limit.\n\
     ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } counter name connection_limit_v6_counter drop\n\
-    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
+    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert, mld-listener-query } accept\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\
-    ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 7070, 9091, 9100, 9324, 19531, 19100, 19522 } accept\n\
+    ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 7070, 9091, 9100, 9324, 19531, 19100 } accept\n\
+{%- if let Some(peer_guest_vm_address) = peer_guest_vm_address %}
+    # Disk encryption key exchange: only the peer Guest VM may connect\n\
+    ip6 saddr { {{ peer_guest_vm_address }} } ct state { new } tcp dport { 19522 } accept\n\
+{%- endif %}
     ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport 443 accept\n\
 \n\
     <<IPv6_TCP_RULES>>\n\
@@ -620,10 +644,14 @@ table ip6 filter {\n\
     },
 
     registration: {
-        node_reward_type: "{{ node_reward_type }}",
-        nns_url: "{{ nns_urls }}",
+        node_reward_type: {{ node_reward_type|json }},
+        nns_url: {{ nns_urls|json }},
         nns_pub_key_pem: "/run/config/nns_public_key.pem",
         node_operator_pem: "/var/lib/ic/data/node_operator_private_key.pem"
+    },
+
+    cloud_engine: {
+        engine_management_canister_id: {{ engine_management_canister_id }},
     },
 
     malicious_behavior: {{ malicious_behavior }},

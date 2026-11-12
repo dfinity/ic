@@ -90,9 +90,9 @@ use disburse_maturity::initiate_maturity_disbursement;
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
-use ic_cdk::spawn;
+use ic_cdk::futures::spawn_017_compat;
+use ic_cdk::println;
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::{
@@ -1250,7 +1250,7 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
 fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
     #[cfg(target_arch = "wasm32")]
     {
-        spawn(future);
+        spawn_017_compat(future);
     }
     // This is needed for tests
     #[cfg(not(target_arch = "wasm32"))]
@@ -3664,7 +3664,7 @@ impl Governance {
     pub fn ready_to_be_settled_proposal_ids(
         &self,
         as_of_timestamp_seconds: u64,
-    ) -> impl Iterator<Item = ProposalId> + '_ {
+    ) -> impl Iterator<Item = ProposalId> {
         self.heap_data
             .proposals
             .iter()
@@ -5018,13 +5018,22 @@ impl Governance {
             }
         };
 
-        if decoded_payload.node_provider_principal_id.is_none() {
+        let Some(node_provider_id_of_node_operator) = decoded_payload.node_provider_principal_id
+        else {
             return Err("The payload's node_provider_principal_id field was None".to_string());
-        }
+        };
 
-        let is_registered = node_providers
-            .iter()
-            .any(|np| np.id.unwrap() == decoded_payload.node_provider_principal_id.unwrap());
+        let is_registered = node_providers.iter().any(|np| {
+            let Some(np_id) = np.id else {
+                println!(
+                    "{}Skipping node provider with no id while checking registration.",
+                    LOG_PREFIX,
+                );
+                return false;
+            };
+
+            np_id == node_provider_id_of_node_operator
+        });
         if !is_registered {
             return Err("The node provider specified in the payload is not registered".to_string());
         }

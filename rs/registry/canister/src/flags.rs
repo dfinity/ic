@@ -9,7 +9,6 @@ thread_local! {
     static IS_SUBNET_SPLITTING_ENABLED: Cell<bool> = const { Cell::new(false) };
     static IS_CHUNKIFYING_LARGE_VALUES_ENABLED: Cell<bool> = const { Cell::new(true) };
     static IS_NODE_SWAPPING_ENABLED: Cell<bool> = const { Cell::new(true) };
-    static IS_BLANK_REPLICA_VERSION_ID_FOR_CLOUD_ENGINES_ENABLED: Cell<bool> = const { Cell::new(false) };
 
     // Temporary flags related to the node swapping feature.
     //
@@ -63,23 +62,6 @@ pub(crate) fn is_subnet_splitting_enabled() -> bool {
     IS_SUBNET_SPLITTING_ENABLED.get()
 }
 
-pub(crate) fn is_blank_replica_version_id_for_cloud_engines_enabled() -> bool {
-    IS_BLANK_REPLICA_VERSION_ID_FOR_CLOUD_ENGINES_ENABLED.get()
-}
-
-#[cfg(test)]
-pub(crate) fn temporarily_enable_blank_replica_version_id_for_cloud_engines() -> Temporary {
-    Temporary::new(&IS_BLANK_REPLICA_VERSION_ID_FOR_CLOUD_ENGINES_ENABLED, true)
-}
-
-#[cfg(test)]
-pub(crate) fn temporarily_disable_blank_replica_version_id_for_cloud_engines() -> Temporary {
-    Temporary::new(
-        &IS_BLANK_REPLICA_VERSION_ID_FOR_CLOUD_ENGINES_ENABLED,
-        false,
-    )
-}
-
 #[cfg(any(test, feature = "test"))]
 pub mod temporary_overrides {
     use super::*;
@@ -96,6 +78,10 @@ pub mod temporary_overrides {
     pub fn test_set_swapping_enabled_subnets(override_subnets: Vec<SubnetId>) {
         let policy = AccessList::allow(override_subnets);
         NODE_SWAPPING_SUBNETS_POLICY.replace(policy);
+    }
+
+    pub fn test_set_subnet_splitting_enabled(override_value: bool) {
+        IS_SUBNET_SPLITTING_ENABLED.replace(override_value);
     }
 }
 

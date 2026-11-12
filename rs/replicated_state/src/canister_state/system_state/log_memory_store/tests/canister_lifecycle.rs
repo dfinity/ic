@@ -16,8 +16,7 @@ use more_asserts::{assert_gt, assert_lt};
 const KIB: u64 = 1024;
 const MIB: u64 = 1024 * KIB;
 
-/// Minimal non-zero log memory limit.
-/// Must be rounded up to at least one OS page.
+/// Minimal non-zero log memory limit: at least one OS page.
 const TEST_MINIMAL_LOG_MEMORY_LIMIT: NumBytes = NumBytes::new(4 * KIB);
 
 /// Default log memory limit.
@@ -122,14 +121,12 @@ fn test_canister_creation_initially_default_size() {
 fn test_canister_minimal_log_memory_limit() {
     let mut canister = MockCanister::create_canister();
 
-    // Small non-zero value.
+    // Smallest allowed non-zero value: exactly one OS page.
     canister.update_settings(CanisterSettings {
-        log_memory_limit: Some(NumBytes::new(1)),
+        log_memory_limit: Some(TEST_MINIMAL_LOG_MEMORY_LIMIT),
         ..Default::default()
     });
 
-    // Small non-zero value must be rounded up to at
-    // least one OS page.
     assert_eq!(canister.fetch_canister_logs().len(), 0);
     assert_eq!(
         canister.log_memory_usage(),

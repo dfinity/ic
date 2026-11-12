@@ -1,11 +1,12 @@
-#![allow(deprecated)]
 //! This module contains a canister used for XNet integration test.
 use candid::{CandidType, Principal};
-use ic_cdk::api::{call::call_raw, canister_self};
+use ic_cdk::api::canister_self;
+use ic_cdk::call::Call;
 use ic_cdk::query;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::cmp::min;
+use std::future::IntoFuture;
 use std::str::FromStr;
 
 const MB: usize = 1 << 20;
@@ -101,12 +102,11 @@ async fn start(arguments: Arguments) -> Vec<Message> {
                 receiver: entry.canister_id.clone(),
             });
         }
-        futures.push(call_raw(
-            Principal::from_str(&entry.canister_id).unwrap(),
-            "start",
-            msg,
-            0,
-        ));
+        futures.push(
+            Call::unbounded_wait(Principal::from_str(&entry.canister_id).unwrap(), "start")
+                .take_raw_args(msg)
+                .into_future(),
+        );
     }
 
     for f in futures::future::join_all(futures).await {
@@ -115,7 +115,7 @@ async fn start(arguments: Arguments) -> Vec<Message> {
             Ok(response) => {
                 if arguments.debug {
                     let mut returned_messages: Vec<Message> =
-                        serde_json::from_slice(&response).unwrap();
+                        serde_json::from_slice(&response.into_bytes()).unwrap();
                     messages.append(&mut returned_messages);
                 }
             }

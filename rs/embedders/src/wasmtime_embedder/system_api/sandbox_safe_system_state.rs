@@ -15,8 +15,8 @@ use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{
     CanisterStatusType, CreateCanisterArgs, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, RenameCanisterArgs, UninstallCodeArgs,
-    UpdateSettingsArgs,
+    ProvisionalCreateCanisterWithCyclesArgs, RenameCanisterArgs, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -152,6 +152,19 @@ impl Default for SystemStateModifications {
             should_bump_canister_version: false,
         }
     }
+}
+
+/// Appends the given canister log records produced by an execution to the
+/// canister log of the given system state, leaving `delta_log` empty.
+pub fn append_canister_log<Metrics: CanisterLogMetrics>(
+    delta_log: &mut CanisterLog,
+    system_state: &mut SystemState,
+    metrics: &Metrics,
+) {
+    if !delta_log.is_empty() {
+        metrics.observe_delta_log_size(delta_log.bytes_used());
+    }
+    system_state.log_memory_store.append_delta_log(delta_log);
 }
 
 impl SystemStateModifications {
@@ -310,6 +323,8 @@ impl SystemStateModifications {
                 .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::RenameCanister) => RenameCanisterArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
+            Ok(Ic00Method::TakeCanisterSnapshot) => TakeCanisterSnapshotArgs::decode(payload)
+                .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::CanisterStatus)
             | Ok(Ic00Method::CanisterInfo)
@@ -338,12 +353,12 @@ impl SystemStateModifications {
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
             | Ok(Ic00Method::NodeMetricsHistory)
+            | Ok(Ic00Method::SubnetMetrics)
             | Ok(Ic00Method::SubnetInfo)
             | Ok(Ic00Method::FetchCanisterLogs)
             | Ok(Ic00Method::UploadChunk)
             | Ok(Ic00Method::StoredChunks)
             | Ok(Ic00Method::ClearChunkStore)
-            | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::ListCanisterSnapshots)
             | Ok(Ic00Method::DeleteCanisterSnapshot)
             | Ok(Ic00Method::ReadCanisterSnapshotMetadata)
@@ -379,31 +394,64 @@ impl SystemStateModifications {
         }
     }
 
+    /// Appends the canister log records produced by the execution to the
+    /// canister log of the given system state, leaving the delta log empty.
+    ///
+    /// Canister logs must be persisted even if the execution fails at any
+    /// point, so this is called on whichever system state is persisted
+    /// eventually, also in case the other changes are not applied.
+    pub fn apply_canister_log<Metrics: CanisterLogMetrics>(
+        &mut self,
+        system_state: &mut SystemState,
+        metrics: &Metrics,
+    ) {
+        append_canister_log(&mut self.canister_log, system_state, metrics);
+    }
+
+    /// Takes the canister log records produced by the execution, leaving the
+    /// delta log empty.
+    ///
+    /// The caller is responsible for persisting the returned canister log
+    /// records (see `append_canister_log()`).
+    pub fn take_canister_log(&mut self) -> CanisterLog {
+        self.canister_log.take()
+    }
+
+    /// Like `apply_canister_log()`, but appends the canister log records to
+    /// the canister logs of two system states, e.g., if it is not known yet
+    /// which of them is persisted eventually. Both canister logs must be equal
+    /// before the records are appended.
+    pub fn apply_canister_log_to_both<Metrics: CanisterLogMetrics>(
+        &mut self,
+        system_state: &mut SystemState,
+        other_system_state: &mut SystemState,
+        metrics: &Metrics,
+    ) {
+        debug_assert!(
+            system_state.log_memory_store == other_system_state.log_memory_store,
+            "Both system states must have the same canister log before applying the delta log"
+        );
+        self.apply_canister_log(system_state, metrics);
+        // `apply_canister_log()` drains the delta log, so calling it again would
+        // not append the records. Copy the updated canister log instead.
+        other_system_state.log_memory_store = system_state.log_memory_store.clone();
+    }
+
     /// Verify that the changes to the system state are sound and apply them to
     /// the system state if they are.
-    pub fn apply_changes<Metrics: CanisterLogMetrics>(
-        mut self,
+    pub fn apply_changes(
+        self,
         time: Time,
         system_state: &mut SystemState,
         network_topology: &NetworkTopology,
         own_subnet_id: SubnetId,
         is_composite_query: bool,
-        metrics: &Metrics,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
-        // Append delta logs.
-        if !self.canister_log.is_empty() {
-            // TODO(DSM-11): Move this into append_delta_log() once there is only one of it.
-            metrics.observe_delta_log_size(self.canister_log.bytes_used());
-        }
-        system_state
-            .log_memory_store
-            .append_delta_log(&mut self.canister_log.clone());
-        // Keep the legacy `canister_log` store up to date so that checkpoints
-        // remain readable by replicas that predate the log memory store.
-        system_state
-            .canister_log
-            .append_delta_log(&mut self.canister_log);
+        debug_assert!(
+            self.canister_log.is_empty(),
+            "Canister logs must be applied via `apply_canister_log()` before applying the other changes"
+        );
 
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id() == CYCLES_MINTING_CANISTER_ID)?;
@@ -456,18 +504,18 @@ impl SystemStateModifications {
         let subnet_ids: BTreeSet<PrincipalId> =
             network_topology.subnets().keys().map(|s| s.get()).collect();
         for mut msg in self.requests {
-            if msg.receiver == IC_00 {
+            if !is_composite_query && msg.receiver == IC_00 {
                 match Self::validate_sender_canister_version(&msg, system_state.canister_version())
                 {
                     Ok(()) => {
-                        // This is a request to ic:00. Update the receiver to the appropriate subnet.
+                        // This is a request to the management canister.
+                        // Update the receiver to the appropriate subnet.
                         match routing::resolve_destination(
                             network_topology,
                             msg.method_name.as_str(),
                             msg.method_payload.as_slice(),
                             own_subnet_id,
                             system_state.canister_id(),
-                            is_composite_query,
                             logger,
                         )
                         .map(CanisterId::unchecked_from_principal)
@@ -497,7 +545,7 @@ impl SystemStateModifications {
                         )?;
                     }
                 }
-            } else if subnet_ids.contains(&msg.receiver.get()) {
+            } else if !is_composite_query && subnet_ids.contains(&msg.receiver.get()) {
                 match Self::validate_sender_canister_version(&msg, system_state.canister_version())
                 {
                     Ok(()) => {
@@ -527,6 +575,20 @@ impl SystemStateModifications {
                     }
                 }
             } else {
+                // A request made by a composite query (including from its callbacks) is
+                // neither validated nor routed here, no matter its receiver: if it is
+                // addressed to `IC_00`, it is executed by the query handler against the
+                // state of the own subnet (or rejected by it if the method cannot be
+                // executed in non-replicated mode; note that composite queries are
+                // always executed in non-replicated mode); if it provides a subnet ID
+                // directly as the receiver, it is rejected by the query handler with
+                // `CanisterNotFound` since only requests addressed to `IC_00` are executed
+                // as management canister calls in a composite query.
+                //
+                // In particular, such a request must not be rejected here: the reject
+                // response would be pushed onto the canister's input queue, which is
+                // never inducted while evaluating a query call graph, and hence the
+                // composite query would fail with `CanisterDidNotReply`.
                 Self::push_message(system_state, time, msg, logger)?;
             }
         }

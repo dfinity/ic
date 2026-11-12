@@ -23,7 +23,7 @@ use crate::driver::{
     ic_gateway_vm::{HasIcGatewayVm, Playnet},
     log_events,
     nested::HasNestedVms,
-    resource::{DiskImage, ImageType},
+    resource::DiskImage,
     test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
         CreateDnsRecords, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr,
@@ -42,7 +42,7 @@ const PROMETHEUS_VM_NAME: &str = "prometheus";
 /// Following through to the "Upload UVM images to S3" job and copying the <SHA256-HASH> from the line:
 /// upload: ../../../../../nix/store/...-nixos-disk-image-out-refs-discarded/nixos.img.zst to s3://dfinity-download/farm/prometheus-vm/<SHA256-HASH>/x86_64-linux/prometheus-vm.img.zst
 const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
-    "3568d6e7e8176636bcbd29f5469dec6b036345e61d2b57c276a0941df0b31c4a";
+    "fde6f2a624bdbf7e40fc47a5cadb96a7d007364744bd6fe6e322d142912d584e";
 
 fn get_default_prometheus_vm_img_url() -> String {
     format!(
@@ -116,22 +116,27 @@ impl TestEnvAttribute for PrometheusConfigHash {
     }
 }
 
-impl Default for PrometheusVm {
-    fn default() -> Self {
-        PrometheusVm::new(PROMETHEUS_VM_NAME.to_string())
-    }
-}
-
 impl PrometheusVm {
-    pub fn new(name: String) -> Self {
+    pub fn new(env: &TestEnv) -> Self {
+        let disk_image = match SystemTestBackend::read_attribute(env) {
+            SystemTestBackend::Farm => DiskImage::Url {
+                ic_os_image: false,
+                url: Url::parse(&get_default_prometheus_vm_img_url()).expect("should not fail!"),
+                sha256: String::from(DEFAULT_PROMETHEUS_VM_IMG_SHA256),
+            },
+            SystemTestBackend::Local => {
+                let var = "ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH";
+                DiskImage::Local {
+                    path: PathBuf::from(
+                        std::env::var(var)
+                            .unwrap_or_else(|_| panic!("Failed to read '{var}' for Local backend")),
+                    ),
+                }
+            }
+        };
         PrometheusVm {
-            universal_vm: UniversalVm::new(name)
-                .with_primary_image(DiskImage::Url {
-                    image_type: ImageType::PrometheusImage,
-                    url: Url::parse(&get_default_prometheus_vm_img_url())
-                        .expect("should not fail!"),
-                    sha256: String::from(DEFAULT_PROMETHEUS_VM_IMG_SHA256),
-                })
+            universal_vm: UniversalVm::new(PROMETHEUS_VM_NAME.to_string())
+                .with_primary_image(disk_image)
                 .with_resource_overrides(VmResourceOverrides {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB

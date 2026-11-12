@@ -1,0 +1,242 @@
+digraph NNSBackendCanisterCalls {
+  graph [fontname="Helvetica", fontsize=11, labelloc=t, splines=line, label="NNS backend canisters: inter-canister call graph\nGenerated in Aug, 2026 with tons of help from Claude.\nReviewed by Daniel Wong."];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, fillcolor="#eef2ff", color="#3b4b8c"];
+  edge [fontname="Helvetica", fontsize=9, color="#555555"];
+
+  // Node declaration order below (left-to-right in the rendered layout) is
+  // chosen for two things at once: (1) balance visual weight on either side
+  // of the GTC -> Governance -> Registry -> IC Management trunk (see
+  // weight=10 edges on those edges), and (2) place canisters that are more
+  // central to NNS operation closer to that trunk, with narrower/rarer-use
+  // canisters pushed toward the left/right peripheries. Root is treated as
+  // effectively part of the trunk itself, not just adjacent to it -- it
+  // installs/upgrades every other NNS canister -- and its Governance -> Root
+  // / Root -> Registry edges are weighted (weight=20, see below) to actually
+  // pull it onto the trunk line. This is a judgment call, not a rigid
+  // formula -- see PR discussion for the reasoning. Note that dot's layout
+  // is driven mostly by actual edge structure rather than pure declaration
+  // order once a node has more than one real edge, so getting this ring
+  // structure to render as intended also requires the invisible ordering
+  // edges down by the real edges (see below).
+  //
+  // Moving Cmc/Ledger to the left (tried in an earlier pass, to numerically
+  // rebalance the two sides after Root was pulled fully onto the trunk) was
+  // reverted: it improved the raw left/right balance measurement (imbalance
+  // -0.493 vs the +4.007 below), but visually packed several edges nearly on
+  // top of each other next to the Ledger node -- a real mess of edge
+  // overlaps (per Daniel Wong's review). Cleanliness matters more than
+  // numeric balance, so Cmc/Ledger are back on their original right side,
+  // next to the trunk. Moving Migration to the left instead of/alongside
+  // Cmc/Ledger was also tried in that same earlier pass (per PR discussion)
+  // but consistently broke the trunk's straightness or collapsed the whole
+  // layout to one side.
+  //
+  // Lifeline was tried on the left side instead, using the same
+  // declaration-order technique (moved in next to SnsWasm, the other
+  // trunk-adjacent left canister) plus an invisible NodeRewards -> Lifeline
+  // ordering edge (weight=5, matching the existing NodeRewards ->
+  // ArbitraryCanister one) to keep it grouped with the left periphery
+  // instead of drifting. Without that invisible edge, or with Lifeline's
+  // declaration placed anywhere closer to Root's, the trunk bent or SnsWasm
+  // flipped to the wrong side; this combination was the one that kept the
+  // trunk straight, kept SnsWasm's distance from the trunk unchanged (1.889,
+  // same as before), and rendered with no edge overlaps -- see PR discussion
+  // for the rendered comparison. It also nudges the balance in the right
+  // direction (imbalance +3.701, an ~8% reduction from +4.007) without the
+  // Cmc/Ledger move's visual cost. So Lifeline now sits on the left with
+  // NodeRewards/ArbitraryCanister, and Migration is the sole remaining
+  // peripheral canister on the right (with Cmc/Ledger next to the trunk).
+  NodeRewards  [label="Node Rewards canister", fillcolor="#dfe9ff"];
+  ArbitraryCanister [label="Bitcoin canister\n(or other proposal-specified target)", fillcolor="#dfe9ff"];
+  SnsWasm      [label="SNS-WASM", fillcolor="#dfe9ff"];
+  Lifeline     [fillcolor="#dfe9ff"];
+  Root         [fillcolor="#dfe9ff"];
+  Gtc          [label="GTC\n(Genesis Token Canister)", fillcolor="#dfe9ff"];
+  Governance   [fillcolor="#dfe9ff"];
+  Registry     [fillcolor="#dfe9ff"];
+  IcManagement [label="IC Management Canister\n(ic00 / aaaaa-aa)", shape=octagon, fillcolor="#ffe9cc", color="#b06a00"];
+  Cmc          [label="CMC\n(Cycles Minting Canister)", fillcolor="#dfe9ff"];
+  Ledger       [label="ICP Ledger", fillcolor="#dfe9ff"];
+  Migration    [label="(Canister) Migration", fillcolor="#dfe9ff"];
+
+  // ---- Governance outbound ----
+  // Governance -> Root: change_nns_canister, call_canister, stop_or_start_nns_canister,
+  // create_canister_and_install_code, take_canister_snapshot, load_canister_snapshot,
+  // update_canister_settings, add_nns_canister
+  // See: rs/nns/governance/src/proposals/install_code.rs:158-166 (change_nns_canister);
+  // execute_nns_function.rs:495 (add_nns_canister), :563 (call_canister);
+  // stop_or_start_canister.rs:84-86; create_canister_and_install_code.rs:220-222;
+  // take_canister_snapshot.rs:42-44; load_canister_snapshot.rs:50-52;
+  // update_canister_settings.rs:143-149
+  // weight=20 (along with the matching weight on Root -> Registry below) pulls
+  // Root fully onto the Gtc -> Governance -> Registry -> IC Management trunk
+  // line -- Root is conceptually part of that control-plane trunk (it
+  // installs/upgrades every other NNS canister), so this edge and Root ->
+  // Registry are weighted higher than a typical edge to reflect that. Lower
+  // weights (e.g. 5-17) pull Root partway in but leave the trunk itself
+  // visibly bent; empirically (via `dot -Tplain` coordinates) weight=18+ is
+  // where the layout snaps to a straight trunk with Root sitting exactly on
+  // it, and it stays stable well past 20, so 20 was chosen with margin rather
+  // than sitting on the edge of that transition.
+  Governance -> Root     [label="manages NNS canister lifecycle\n(install, upgrade, stop/start, snapshot)", weight=20];
+  // Governance -> Registry: create_subnet, add_node_operator, recover_subnet,
+  // update_node_rewards_table, reroute_canister_ranges, ... (ExecuteNnsFunction dispatch)
+  // See: rs/nns/governance/src/proposals/execute_nns_function.rs:483-595
+  // (ValidNnsFunction::canister_and_function dispatch table); e.g. create_subnet:487,
+  // add_node_operator:485, recover_subnet:499, update_node_rewards_table:532-534,
+  // reroute_canister_ranges:541-543
+  Governance -> Registry [label="manages network topology\n(subnets, nodes, rewards config)", weight=10];
+  // Governance -> SnsWasm: deploy_new_sns, list_deployed_snses, add_wasm,
+  // update_sns_subnet_list, insert_upgrade_path_entries, update_canister_settings target
+  // See: rs/nns/governance/src/governance.rs:8164-8210 (deploy_new_sns), :8243-8259
+  // (list_deployed_snses); proposals/execute_nns_function.rs:550 (add_wasm), :557-559
+  // (update_sns_subnet_list), :560-562 (insert_upgrade_path_entries);
+  // proposals/update_canister_settings.rs:143-149 (target-dispatch logic; note this
+  // actually routes through Root/Lifeline, not directly to SnsWasm)
+  // NOTE: deliberately left at the default weight (no weight= attribute here).
+  // SnsWasm's own x-coordinate did not move at all in `dot -Tplain` measurements
+  // when this edge's weight was raised (tried 5 through 10) -- SnsWasm is only
+  // pulled inward as a side effect of Root moving onto the trunk (via the
+  // SnsWasm -> Root edge below), and raising *this* edge's weight instead just
+  // bent the Gtc -> Governance -> Registry -> IC Management trunk for no
+  // benefit. So the real lever for SnsWasm turned out to be the Root -> trunk
+  // weights, not this edge.
+  Governance -> SnsWasm  [label="manages SNS deployment\nand upgrade path"];
+  // Governance -> Cmc: get_average_icp_xdr_conversion_rate, set_authorized_subnetwork_list,
+  // update_subnet_type, change_subnet_type_assignment
+  // See: rs/nns/governance/src/governance.rs:7891-7913 (get_average_icp_xdr_conversion_rate);
+  // proposals/execute_nns_function.rs:519-521 (set_authorized_subnetwork_list),
+  // :551-553 (update_subnet_type), :554-556 (change_subnet_type_assignment)
+  Governance -> Cmc      [label="manages ICP/XDR rate\nand subnet cycle policy"];
+  // Governance -> Ledger: transfer_funds, account_balance, total_supply
+  // (disburse, spawn, refunds, metrics)
+  // See: rs/nns/governance/src/governance/ledger_helper.rs:32-40,104-112,189-190
+  // (transfer_funds call sites); rs/nervous_system/canisters/src/ledger.rs:106-146
+  // (transfer_funds -> "transfer"), :186-202 (total_supply), :204-225 (account_balance)
+  Governance -> Ledger   [label="moves ICP for neuron operations"];
+  // Governance -> Lifeline: upgrade_root, hard_reset_root_to_version
+  // See: rs/nns/governance/src/proposals/install_code.rs:158-183 (dispatches upgrade_root);
+  // proposals/execute_nns_function.rs:496-498 (dispatches hard_reset_root_to_version)
+  Governance -> Lifeline [label="triggers Root upgrade/recovery"];
+  // Governance -> Migration: disable_api, enable_api
+  // (PauseCanisterMigrations / Unpause)
+  // See: rs/nns/governance/src/proposals/execute_nns_function.rs:585-586
+  Governance -> Migration [label="pauses/resumes canister migrations"];
+  // Governance -> NodeRewards: get_node_providers_rewards,
+  // get_node_providers_monthly_xdr_rewards
+  // See: rs/nns/governance/src/governance.rs:7601-7610 (get_node_providers_rewards),
+  // :7836-7845 (get_node_providers_monthly_xdr_rewards)
+  Governance -> NodeRewards [label="queries node provider rewards"];
+  // Governance -> IcManagement: raw_rand (RNG seeding),
+  // canister_metadata (proposal validation)
+  // See: rs/nns/governance/src/timer_tasks/seeding.rs:26-32 (raw_rand);
+  // proposals/execute_nns_function.rs:125-140 (canister_metadata)
+  Governance -> IcManagement [label="gets randomness and\ncanister metadata"];
+
+  // ---- Root outbound ----
+  // Root -> IcManagement: create_canister, install_code, canister_status,
+  // update_settings, stop/start_canister
+  // See: rs/nns/handlers/root/impl/src/canister_management.rs:143-165
+  // (create_canister/install_code for add_nns_canister), :235-256
+  // (update_canister_settings -> update_settings); rs/nervous_system/root/src/change_canister.rs:277-329
+  // (install_code for change_nns_canister), :334-372 (start_canister/stop_canister);
+  // rs/nns/handlers/root/impl/src/root_proposals.rs:146-153 (canister_status)
+  Root -> IcManagement [label="installs/upgrades/stops/starts\nNNS canisters"];
+  // Root -> Registry: get_subnet_for_canister
+  // See: rs/nns/handlers/root/impl/src/root_proposals.rs:465-482
+  // weight=20: see the matching comment on Governance -> Root above -- this
+  // is Root's other trunk-anchoring edge and needs the same weight to pull
+  // Root fully onto the trunk line instead of just partway.
+  Root -> Registry     [label="looks up canister's subnet", weight=20];
+  // Root -> ArbitraryCanister (was Root -> IcManagement call_canister(*)):
+  // call_canister(*) (arbitrary proposal-specified target, routed as an
+  // ic00-style raw call)
+  // See: rs/nns/handlers/root/impl/src/canister_management.rs:181-211 (call_canister);
+  // dispatched from rs/nns/governance/src/proposals/execute_nns_function.rs:563
+  // (ValidNnsFunction::BitcoinSetConfig)
+  Root -> ArbitraryCanister [label="configures Bitcoin integration\n(or other proposal-specified target)"];
+
+  // ---- Root -> Governance: NOT a real Candid call ----
+  // (No confirmed rs/nns/handlers/root call into Governance's own API.)
+  // Root's Governance -> Root change_nns_canister edge above can result in
+  // Root calling ic00.install_code with canister_id=Governance -- but that's
+  // already covered by the generic "Root -> IcManagement" lifecycle edge.
+  // NOTE: Governance's #[post_upgrade] (rs/nns/governance/canister/canister.rs:150-151)
+  // takes NO argument and restores state purely from stable memory, so there is
+  // no "upgrade arg passed from Root to Governance" to depict -- omitted.
+
+  // ---- Lifeline outbound ----
+  // Lifeline -> IcManagement: install_code, start_canister,
+  // stop_canister, uninstall_code, update_settings (target: Root)
+  // See: rs/nns/handlers/lifeline/impl/lifeline.mo:55-81 (upgrade_root: stop_canister
+  // line 61, start_canister lines 64/79, install_code line 70), :83-96
+  // (hard_reset_root_to_version: uninstall_code line 89, install_code line 92),
+  // :98-108 (update_root_settings: update_settings line 107)
+  Lifeline -> IcManagement [label="upgrades/recovers Root"];
+
+  // ---- SNS-WASM outbound ----
+  // SnsWasm -> IcManagement: create_canister, install_code,
+  // set_controllers (candidate SNS canisters)
+  // See: rs/nns/sns-wasm/canister/canister.rs:69-93 (create_canister), :114-131
+  // (install_wasm -> ic00 install_code), :140-158 (set_controllers -> ic00 update_settings)
+  SnsWasm -> IcManagement [label="creates and installs\ncandidate SNS canisters"];
+  // SnsWasm -> Root: canister_status, change_canister_controllers
+  // See: rs/nns/sns-wasm/src/sns_wasm.rs:1619-1628 (canister_status via
+  // NnsRootCanisterClient), :1525-1553 (change_canister_controllers dispatch)
+  SnsWasm -> Root         [label="checks/transfers control\nof SNS canisters"];
+
+  // ---- GTC outbound ----
+  // weight=10 pulls this edge straight so the GTC -> Governance -> Registry ->
+  // IC Management spine renders centered instead of drifting to one side.
+  // Gtc -> Governance: claim_gtc_neurons, transfer_gtc_neuron
+  // See: rs/nns/gtc/src/lib.rs:216-236 (claim_gtc_neurons), :238-259 (transfer_gtc_neuron)
+  Gtc -> Governance [label="claims/transfers Genesis neurons", weight=10];
+
+  // ---- CMC outbound ----
+  // Cmc -> IcManagement: raw_rand, deposit_cycles,
+  // create_canister (on target subnet)
+  // See: rs/nns/cmc/src/main.rs:2348-2353 (raw_rand), :2123-2131 (deposit_cycles),
+  // :2267-2277 (create_canister on target subnet)
+  Cmc -> IcManagement [label="creates canisters and\nmanages cycles"];
+  // Cmc -> Ledger: send_pb (burn ICP on mint / refund)
+  // See: rs/nns/cmc/src/main.rs:2044 (send_pb, burn), :2093 (send_pb, refund)
+  Cmc -> Ledger       [label="burns ICP for cycle minting"];
+
+  // ---- Migration canister outbound ----
+  // Migration -> IcManagement: update_settings, canister_status
+  // See: rs/migration_canister/src/external_interfaces/management.rs:34-49
+  // (set_exclusive_controller -> update_settings), :60-80 (set_controllers ->
+  // update_settings), :129-140 (canister_status)
+  Migration -> IcManagement [label="adjusts settings during migration"];
+  // Migration -> Registry: get_subnet_for_canister, get_subnet, migrate_canisters
+  // See: rs/migration_canister/src/external_interfaces/registry.rs:33-45
+  // (get_subnet_for_canister), :88-100 (get_subnet), :135-149 (migrate_canister ->
+  // "migrate_canisters")
+  Migration -> Registry     [label="changes which subnet\ncanisters are hosted on"];
+
+  // ---- Registry outbound ----
+  // Registry -> IcManagement: setup_initial_dkg, reshare_chain_key
+  // (create_subnet, split_subnet, recover_subnet)
+  // See: rs/registry/canister/src/mutations/do_create_subnet.rs:61-73 (setup_initial_dkg);
+  // do_recover_subnet.rs:118 and do_split_subnet.rs:127 (same, other subnet-change flows);
+  // mutations/subnet.rs:245-256 (reshare_chain_key)
+  Registry -> IcManagement [label="runs subnet DKG /\nkey operations", weight=10];
+
+  // Node Rewards canister: no confirmed outbound calls found (read-only via caller checks).
+
+  // ---- layout-only ordering hints (no real calls) ----
+  // ArbitraryCanister (Bitcoin) only has a real edge to Root, which pulls it
+  // toward the trunk despite it being one of the most peripheral, narrowest-
+  // scope canisters (a single proposal-specified relay target). This
+  // invisible edge to Node Rewards canister -- the other peripheral,
+  // narrow-scope canister on this side of the trunk -- keeps them grouped
+  // together at the periphery instead.
+  NodeRewards -> ArbitraryCanister [style=invis, weight=5];
+  // Lifeline's only real edges are Governance -> Lifeline and Lifeline ->
+  // IcManagement, both of which also pull toward the trunk; without this
+  // invisible edge to Node Rewards canister, Lifeline drifts away from the
+  // NodeRewards/ArbitraryCanister group it was declared next to (and, in
+  // some orderings tried, bends the trunk or pulls SnsWasm to the wrong
+  // side). This keeps Lifeline grouped with the rest of the left periphery.
+  NodeRewards -> Lifeline [style=invis, weight=5];
+}

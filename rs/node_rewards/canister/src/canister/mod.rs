@@ -2,6 +2,7 @@ use crate::chrono_utils::last_unix_timestamp_nanoseconds;
 use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::{NaiveDateStorable, VM};
+use crate::telemetry;
 use candid::Principal;
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{PrincipalId, SubnetId};
@@ -233,11 +234,21 @@ impl NodeRewardsCanister {
 //   * Each window is expressed as fixed UTC calendar dates. Reward calculation is deterministic
 //     given the stored daily metrics, so querying any past day always returns the same result, and
 //     each entry's reduction reverts automatically at its `end` without a further upgrade.
-//   * Entries are only ever APPENDED, never edited or removed — not even once their window has
-//     passed. Nothing in this canister persists computed rewards: every query recomputes the
-//     requested days from the stored raw metrics using the table compiled into the running Wasm.
-//     Editing or deleting a past entry therefore silently rewrites the canister's account of days
-//     that have already been minted.
+//   * An entry MUST NOT be changed once any day in its window has been minted. Nothing in this
+//     canister persists computed rewards: every query recomputes the requested days from the
+//     stored raw metrics using the table compiled into the running Wasm. Editing or deleting an
+//     entry that covers a minted day therefore silently rewrites this canister's account of what
+//     was paid, in either direction: a removed provider reads as never reduced, an added one as
+//     reduced on days it was in fact paid in full.
+//   * In practice that makes the table append-only. A window that has already started is normally
+//     partly minted, so correcting a live entry is admissible only in the narrow case where no day
+//     of its window has been minted yet, and only until the open reward period is minted. The
+//     second round was corrected under exactly that exception on 2026-08-12; see the note on that
+//     entry. Treat it as the exception rather than the precedent: when in doubt, append.
+//   * A wrongly INCLUDED provider cannot be made whole through this table once its days are
+//     minted, because multipliers are constrained to (0, 1) and no entry can raise rewards. A
+//     wrongly OMITTED provider can always be added by a later entry, though its window then starts
+//     later than the rest of its cohort's.
 //   * A new entry's `start` must not predate the first day of the current, not-yet-minted reward
 //     period. Governance advances its reward period past every day it has minted and never
 //     recomputes those days, so a reduction reaching further back is a no-op in terms of tokens
@@ -259,7 +270,8 @@ struct RewardReduction {
     providers: &'static [&'static str],
 }
 
-/// The reward reductions applied so far, in the order they were introduced. Append-only; see the
+/// The reward reductions applied so far, in the order they were introduced. Entries are appended,
+/// not edited: an entry covering a day that has already been minted must never change. See the
 /// design notes above before touching an existing entry.
 const REWARD_REDUCTIONS: &[RewardReduction] = &[
     // First round: 50% for three months for the node providers that failed to respond within the
@@ -291,12 +303,22 @@ const REWARD_REDUCTIONS: &[RewardReduction] = &[
             "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG
         ],
     },
-    // Second round: 50% for three months for the node providers that failed the incident-response
-    // requirement in the follow-up review. Providers from the round above that have since recovered
-    // are deliberately absent here, so their reduction ends with that round's window on 2026-10-15
-    // and they are rewarded in full from the second half of October on. Providers in both rounds
-    // are reduced continuously from 2026-07-15 to 2026-11-01 — at 50%, not 25%, on the overlapping
-    // days.
+    // Second round: 50% for three months for the node providers that failed to respond within the
+    // 24h window in BOTH of the incident-response smoke tests of June 13 and July 27, 2026 — the
+    // same "two consecutive misses" rule as the first round, applied to the drill pair that follows
+    // it. A late (>24h) response counts as a failure. Providers from the round above that have
+    // since recovered are deliberately absent here, so their reduction ends with that round's
+    // window on 2026-10-15 and they are rewarded in full from the second half of October on.
+    // Providers in both rounds are reduced continuously from 2026-07-15 to 2026-11-01 — at 50%,
+    // not 25%, on the overlapping days.
+    //
+    // Corrected on 2026-08-12: this cohort was originally populated from the July 27 drill alone
+    // rather than the June 13 + July 27 pair. That wrongly included MI Servers, which replied in
+    // time in June and so never missed two in a row, and wrongly omitted ParaFi Technologies NS
+    // LLC, which was late in both. This edit fell under the narrow exception described in the
+    // design notes above: no day of this window had been minted yet, since the
+    // 2026-07-15..2026-08-15 reward period was still open, so nothing already paid out was
+    // rewritten.
     RewardReduction {
         start: (2026, 8, 1),
         end: (2026, 11, 1),
@@ -314,11 +336,31 @@ const REWARD_REDUCTIONS: &[RewardReduction] = &[
             "7ryes-jnj73-bsyu4-lo6h7-lbxk5-x4ien-lylws-5qwzl-hxd5f-xjh3w-mqe", // Extragone SA
             "i7dto-bgkj2-xo5dx-cyrb7-zkk5y-q46eh-gz6iq-qkgyc-w4qte-scgtb-6ae", // Iancu Aurel
             "7ws2n-wqorv-vmo4m-5e222-n42c3-hk43s-ei3kp-4hpbn-xlkzo-jgv7i-tqe", // InfoObjects
-            "izmhk-lpjum-uo4oy-lviba-yctpc-arg4b-2ywim-vgoiu-gqaj2-gskmw-2qe", // MI Servers
             "4dibr-2alzr-h6kva-bvwn2-yqgsl-o577t-od46o-v275p-a2zov-tcw4f-eae", // Neptune Partners
+            "2hl5k-umjdt-ykii4-goecz-kkps6-nvl53-l7ost-p4mcp-qmnmw-rzrfc-mqe", // ParaFi Technologies NS LLC
             "ma7dp-gz4tg-3c2wv-pgnsv-wna7u-czvhu-fpu47-t4dr6-gzxql-wr2m2-qae", // Reist Telecom AG
             "sixix-2nyqd-t2k2v-vlsyz-dssko-ls4hl-hyij4-y7mdp-ja6cj-nsmpf-yae", // Starbase
             "glrjs-2dbzh-owbdd-fpp5e-eweoz-nsuto-e3jmk-tl42c-wem4f-qfpfa-qqe", // Zarety
+            "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG
+        ],
+    },
+    // Third round: 50% for three months for the node providers that failed to respond within the
+    // 24h window in BOTH of the incident-response smoke tests of July 27 and October 2, 2026. A
+    // late (>24h) response counts as a failure. The window starts on 2026-10-15, the first day
+    // after the round 1 window, and the three-month clock restarts there. All providers in this
+    // round are also in the second round, whose window runs until 2026-11-01; on the overlapping
+    // days they are reduced to 50%, not 25%, so this entry only changes their rewards from
+    // 2026-11-01 on, and they are reduced continuously until 2027-01-15. Providers from the second
+    // round that responded in time on October 2 are absent here, so their reduction ends with that
+    // round's window on 2026-11-01.
+    RewardReduction {
+        start: (2026, 10, 15),
+        end: (2027, 1, 15),
+        multiplier: (5, 1), // 0.5
+        providers: &[
+            "i7dto-bgkj2-xo5dx-cyrb7-zkk5y-q46eh-gz6iq-qkgyc-w4qte-scgtb-6ae", // Iancu Aurel
+            "7ws2n-wqorv-vmo4m-5e222-n42c3-hk43s-ei3kp-4hpbn-xlkzo-jgv7i-tqe", // InfoObjects
+            "sixix-2nyqd-t2k2v-vlsyz-dssko-ls4hl-hyij4-y7mdp-ja6cj-nsmpf-yae", // Starbase
             "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG
         ],
     },
@@ -536,6 +578,14 @@ impl NodeRewardsCanister {
 
         let mut rewards_per_node_provider: BTreeMap<Principal, u64> = BTreeMap::new();
 
+        // The self-call at the end of each iteration ends that message, so one day is computed per
+        // message. That makes a day's instructions the number the subnet's instruction limits
+        // apply to — a message pauses until a later round above the per-slice limit, and traps
+        // above the per-message limit — whereas nothing bounds their sum across the call context.
+        // The costliest day is therefore what says how much headroom is left.
+        let mut instruction_counter = telemetry::InstructionCounter::default();
+        let mut max_message_instructions = 0;
+
         let algorithm_version = request.algorithm_version.unwrap_or_default();
         for day in from_date.iter_days().take_while(|d| *d <= to_date) {
             let result_for_day = canister
@@ -560,7 +610,19 @@ impl NodeRewardsCanister {
             )
             .await
             .unwrap();
+
+            // Lapped after the self-call rather than before it: issuing the call is itself part of
+            // the message that the call ends, and the counter keeps accumulating across the
+            // boundary, so reading it here closes the measurement where the message actually
+            // ended.
+            max_message_instructions = max_message_instructions.max(instruction_counter.lap());
         }
+
+        telemetry::PROMETHEUS_METRICS.with_borrow_mut(|metrics| {
+            metrics.record_last_get_node_providers_rewards_max_message_instructions(
+                max_message_instructions,
+            )
+        });
 
         Ok(NodeProvidersRewards {
             algorithm_version,
@@ -812,7 +874,7 @@ mod reward_reduction_tests {
     // Tests against the real, compiled-in `REWARD_REDUCTIONS` table.
     // ------------------------------------------------------------------------------------------
 
-    /// In both rounds: reduced continuously from 2026-07-15 to 2026-11-01.
+    /// In all three rounds: reduced continuously from 2026-07-15 to 2027-01-15.
     const CONTINUING_PROVIDER: &str =
         "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae"; // Zondax AG
     /// First round only: recovered, so rewarded in full again from 2026-10-15.
@@ -821,6 +883,9 @@ mod reward_reduction_tests {
     /// Second round only: newly added, reduced from 2026-08-01 to 2026-11-01.
     const NEWLY_ADDED_PROVIDER: &str =
         "kos24-5xact-6aror-uofg2-tnvt6-dq3bk-c2c5z-jtptt-jbqvc-lmegy-qae"; // Anonstake
+    /// Second and third rounds: reduced continuously from 2026-08-01 to 2027-01-15.
+    const SECOND_AND_THIRD_ROUND_PROVIDER: &str =
+        "sixix-2nyqd-t2k2v-vlsyz-dssko-ls4hl-hyij4-y7mdp-ja6cj-nsmpf-yae"; // Starbase
 
     fn real_multiplier_on(provider: &str, date: NaiveDate) -> Option<Decimal> {
         let by_provider = parse_reward_reductions(REWARD_REDUCTIONS);
@@ -839,15 +904,18 @@ mod reward_reduction_tests {
     }
 
     #[test]
-    fn continuing_provider_is_reduced_across_both_windows() {
+    fn continuing_provider_is_reduced_across_all_windows() {
         let half = Some(Decimal::new(5, 1));
         for day in [
             d(2026, 7, 15),
             d(2026, 7, 31),
             d(2026, 8, 1),
+            d(2026, 10, 3),
             d(2026, 10, 14),
             d(2026, 10, 15),
             d(2026, 10, 31),
+            d(2026, 11, 1),
+            d(2027, 1, 14),
         ] {
             assert_eq!(
                 real_multiplier_on(CONTINUING_PROVIDER, day),
@@ -860,7 +928,32 @@ mod reward_reduction_tests {
             None
         );
         assert_eq!(
-            real_multiplier_on(CONTINUING_PROVIDER, d(2026, 11, 1)),
+            real_multiplier_on(CONTINUING_PROVIDER, d(2027, 1, 15)),
+            None
+        );
+    }
+
+    #[test]
+    fn second_and_third_round_provider_is_reduced_from_august_to_january() {
+        let half = Some(Decimal::new(5, 1));
+        assert_eq!(
+            real_multiplier_on(SECOND_AND_THIRD_ROUND_PROVIDER, d(2026, 7, 31)),
+            None
+        );
+        for day in [
+            d(2026, 8, 1),
+            d(2026, 10, 31),
+            d(2026, 11, 1),
+            d(2027, 1, 14),
+        ] {
+            assert_eq!(
+                real_multiplier_on(SECOND_AND_THIRD_ROUND_PROVIDER, day),
+                half,
+                "expected a 0.5 reduction on {day}"
+            );
+        }
+        assert_eq!(
+            real_multiplier_on(SECOND_AND_THIRD_ROUND_PROVIDER, d(2027, 1, 15)),
             None
         );
     }
@@ -910,12 +1003,16 @@ mod reward_reduction_tests {
     fn reward_reduction_round_membership_is_as_intended() {
         let by_provider = parse_reward_reductions(REWARD_REDUCTIONS);
 
-        // 19 providers in the first round, 18 in the second, 13 in both.
-        assert_eq!(REWARD_REDUCTIONS.len(), 2);
+        // 19 providers in the first round, 18 in the second, 4 in the third. 13 are in the first
+        // and second, all 4 of the third are in the second, and 3 of those 4 are in all three.
+        assert_eq!(REWARD_REDUCTIONS.len(), 3);
         assert_eq!(REWARD_REDUCTIONS[0].providers.len(), 19);
         assert_eq!(REWARD_REDUCTIONS[1].providers.len(), 18);
-        let in_both = by_provider.values().filter(|w| w.len() == 2).count();
-        assert_eq!(in_both, 13);
+        assert_eq!(REWARD_REDUCTIONS[2].providers.len(), 4);
+        let in_two = by_provider.values().filter(|w| w.len() == 2).count();
+        let in_three = by_provider.values().filter(|w| w.len() == 3).count();
+        assert_eq!(in_three, 3);
+        assert_eq!(in_two, (13 - 3) + (4 - 3));
         assert_eq!(by_provider.len(), 19 + 18 - 13);
 
         // No round lists a provider twice.
@@ -925,6 +1022,121 @@ mod reward_reduction_tests {
                 unique.len(),
                 reduction.providers.len(),
                 "duplicate provider in a reward reduction round"
+            );
+        }
+    }
+
+    /// The second round is the June 13 + July 27 pair, not the July 27 drill alone. Pinned by
+    /// principal: the count-based assertions above survive a one-for-one swap, which is exactly
+    /// how these two providers were originally mis-assigned.
+    #[test]
+    fn second_round_follows_the_two_consecutive_misses_rule() {
+        let second_round = REWARD_REDUCTIONS[1].providers;
+
+        // Late in both June and July — a late reply counts as a failure, so in scope.
+        assert!(
+            second_round
+                .contains(&"2hl5k-umjdt-ykii4-goecz-kkps6-nvl53-l7ost-p4mcp-qmnmw-rzrfc-mqe"),
+            "ParaFi Technologies NS LLC replied late in both drills and belongs in the second round"
+        );
+        // Replied in time in June and missed only July, so it never missed two drills in a row.
+        assert!(
+            !second_round
+                .contains(&"izmhk-lpjum-uo4oy-lviba-yctpc-arg4b-2ywim-vgoiu-gqaj2-gskmw-2qe"),
+            "MI Servers missed only the July drill and must not be reduced"
+        );
+    }
+
+    // The exact cohort of each round, pinned by principal. The assertions in
+    // `reward_reduction_round_membership_is_as_intended` are count-based and survive a
+    // one-for-one swap, which is how MI Servers and ParaFi Technologies NS LLC were originally
+    // mis-assigned. Only a literal list makes a cohort change visible in review. This is a
+    // deliberate second copy of each cohort: changing a round means changing both, and the drill
+    // outcomes in the comments are the reason each provider is in the list.
+
+    /// First round: missed the 24h window in BOTH the May 20 and June 13, 2026 drills.
+    const FIRST_ROUND_COHORT: [&str; 19] = [
+        "sqhxa-h6ili-qkwup-ohzwn-yofnm-vvnp5-kxdhg-saabw-rvua3-xp325-zqe", // 43rd Big Idea Films (no reply / no reply)
+        "eipr5-izbom-neyqh-s3ec2-52eww-cyfpg-qfomg-3dpwj-4pffh-34xcu-7qe", // 87m Neuron (late / no reply)
+        "2dgp4-h57n4-a4kgx-n4uun-huo3a-wbdlc-m57wd-jtkuh-g5vcc-fcbby-6qe", // 100 Count Holdings (late / late)
+        "ss6oe-fm7b2-b5r57-y3x74-omrz5-d5pgy-5iwtw-4aew5-aqj3l-6ydra-wqe", // Arceau NP LLC (no reply / no reply)
+        "mjnyf-lzqq6-s7fzb-62rqm-xzvge-5oa26-humwp-dvwxp-jxxkf-hoel7-fqe", // Bitmoon (no reply / no reply)
+        "sma3p-ivkif-hz7nu-ngmvq-ibnjg-nubke-zf6gh-wbnfc-2dlng-l3die-zqe", // BLP22 (late / no reply)
+        "ks7ow-zvs7i-ratdk-azq34-zio2b-gbekj-qjicg-pfhp3-ovhgu-k5qql-dae", // BlockTech Ventures (no reply / no reply)
+        "i3cfo-s2tgu-qe5ym-wk7e6-y7ura-pptgu-kevuf-2feh7-z4enq-5hz4s-mqe", // Conic Ventures (no reply / no reply)
+        "w4buy-lgwzr-pccs7-huzhh-qqnws-rns75-iaoox-jolrm-xs2ra-vdu3o-2qe", // Decentralized Entities Foundation (no reply / no reply)
+        "7ryes-jnj73-bsyu4-lo6h7-lbxk5-x4ien-lylws-5qwzl-hxd5f-xjh3w-mqe", // Extragone SA (no reply / no reply)
+        "i7dto-bgkj2-xo5dx-cyrb7-zkk5y-q46eh-gz6iq-qkgyc-w4qte-scgtb-6ae", // Iancu Aurel (no reply / no reply)
+        "7ws2n-wqorv-vmo4m-5e222-n42c3-hk43s-ei3kp-4hpbn-xlkzo-jgv7i-tqe", // InfoObjects (no reply / no reply)
+        "4dibr-2alzr-h6kva-bvwn2-yqgsl-o577t-od46o-v275p-a2zov-tcw4f-eae", // Neptune Partners (no reply / no reply)
+        "r3yjn-kthmg-pfgmb-2fngg-5c7d7-t6kqg-wi37r-j7gy6-iee64-kjdja-jae", // Pindar Technology Limited (no reply / no reply)
+        "4fedi-eu6ue-nd7ts-vnof5-hzg66-hgzl7-liy5n-3otyp-h7ipw-owycg-uae", // Power Meta Corporation (no reply / no reply)
+        "g2ax6-jrkmb-3zuh3-jibtb-q5xoq-njrgo-5utbc-j2o7g-zfq2w-yyhky-dqe", // Wancloud limited (late / late)
+        "glrjs-2dbzh-owbdd-fpp5e-eweoz-nsuto-e3jmk-tl42c-wem4f-qfpfa-qqe", // Zarety (no reply / no reply)
+        "pa5mu-yxsey-b4yrk-bodka-dhjnm-a3nx4-w2grw-3b766-ddr6e-nupu4-pqe", // Zenith Code LLC (no reply / no reply)
+        "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG (no reply / no reply)
+    ];
+
+    /// Second round: missed the 24h window in BOTH the June 13 and July 27, 2026 drills.
+    const SECOND_ROUND_COHORT: [&str; 18] = [
+        "2dgp4-h57n4-a4kgx-n4uun-huo3a-wbdlc-m57wd-jtkuh-g5vcc-fcbby-6qe", // 100 Count Holdings (late / no reply)
+        "sqhxa-h6ili-qkwup-ohzwn-yofnm-vvnp5-kxdhg-saabw-rvua3-xp325-zqe", // 43rd Big Idea Films (no reply / no reply)
+        "cp5ib-twnmx-h4dvd-isef2-tu44u-kb2ka-fise5-m4hta-hnxoq-k45mm-hqe", // ACCUSET SOLUTIONS (no reply / no reply)
+        "kos24-5xact-6aror-uofg2-tnvt6-dq3bk-c2c5z-jtptt-jbqvc-lmegy-qae", // Anonstake (no reply / no reply)
+        "ss6oe-fm7b2-b5r57-y3x74-omrz5-d5pgy-5iwtw-4aew5-aqj3l-6ydra-wqe", // Arceau NP LLC (no reply / no reply)
+        "mjnyf-lzqq6-s7fzb-62rqm-xzvge-5oa26-humwp-dvwxp-jxxkf-hoel7-fqe", // Bitmoon (no reply / no reply)
+        "ks7ow-zvs7i-ratdk-azq34-zio2b-gbekj-qjicg-pfhp3-ovhgu-k5qql-dae", // BlockTech Ventures (no reply / no reply)
+        "sma3p-ivkif-hz7nu-ngmvq-ibnjg-nubke-zf6gh-wbnfc-2dlng-l3die-zqe", // BLP22 (no reply / no reply)
+        "w4buy-lgwzr-pccs7-huzhh-qqnws-rns75-iaoox-jolrm-xs2ra-vdu3o-2qe", // Decentralized Entities Foundation (no reply / no reply)
+        "7ryes-jnj73-bsyu4-lo6h7-lbxk5-x4ien-lylws-5qwzl-hxd5f-xjh3w-mqe", // Extragone SA (no reply / no reply)
+        "i7dto-bgkj2-xo5dx-cyrb7-zkk5y-q46eh-gz6iq-qkgyc-w4qte-scgtb-6ae", // Iancu Aurel (no reply / no reply)
+        "7ws2n-wqorv-vmo4m-5e222-n42c3-hk43s-ei3kp-4hpbn-xlkzo-jgv7i-tqe", // InfoObjects (no reply / no reply)
+        "4dibr-2alzr-h6kva-bvwn2-yqgsl-o577t-od46o-v275p-a2zov-tcw4f-eae", // Neptune Partners (no reply / no reply)
+        "2hl5k-umjdt-ykii4-goecz-kkps6-nvl53-l7ost-p4mcp-qmnmw-rzrfc-mqe", // ParaFi Technologies NS LLC (late / late)
+        "ma7dp-gz4tg-3c2wv-pgnsv-wna7u-czvhu-fpu47-t4dr6-gzxql-wr2m2-qae", // Reist Telecom AG (no reply / no reply)
+        "sixix-2nyqd-t2k2v-vlsyz-dssko-ls4hl-hyij4-y7mdp-ja6cj-nsmpf-yae", // Starbase (no reply / no reply)
+        "glrjs-2dbzh-owbdd-fpp5e-eweoz-nsuto-e3jmk-tl42c-wem4f-qfpfa-qqe", // Zarety (no reply / no reply)
+        "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG (no reply / no reply)
+    ];
+
+    /// Third round: missed the 24h window in BOTH the July 27 and October 2, 2026 drills.
+    const THIRD_ROUND_COHORT: [&str; 4] = [
+        "i7dto-bgkj2-xo5dx-cyrb7-zkk5y-q46eh-gz6iq-qkgyc-w4qte-scgtb-6ae", // Iancu Aurel
+        "7ws2n-wqorv-vmo4m-5e222-n42c3-hk43s-ei3kp-4hpbn-xlkzo-jgv7i-tqe", // InfoObjects
+        "sixix-2nyqd-t2k2v-vlsyz-dssko-ls4hl-hyij4-y7mdp-ja6cj-nsmpf-yae", // Starbase
+        "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG
+    ];
+
+    #[test]
+    fn reward_reduction_cohorts_are_pinned() {
+        assert_eq!(
+            REWARD_REDUCTIONS.len(),
+            3,
+            "a new round needs a pinned cohort here"
+        );
+        for (round, expected, label) in [
+            (
+                &REWARD_REDUCTIONS[0],
+                FIRST_ROUND_COHORT.as_slice(),
+                "first",
+            ),
+            (
+                &REWARD_REDUCTIONS[1],
+                SECOND_ROUND_COHORT.as_slice(),
+                "second",
+            ),
+            (
+                &REWARD_REDUCTIONS[2],
+                THIRD_ROUND_COHORT.as_slice(),
+                "third",
+            ),
+        ] {
+            let actual: BTreeSet<&str> = round.providers.iter().copied().collect();
+            let expected: BTreeSet<&str> = expected.iter().copied().collect();
+            assert_eq!(
+                actual, expected,
+                "{label} round cohort changed; update it only together with the drill results it \
+                 encodes"
             );
         }
     }

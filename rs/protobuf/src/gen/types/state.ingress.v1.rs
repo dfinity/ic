@@ -156,6 +156,7 @@ pub enum ErrorCode {
     CertifiedStateUnavailable = 208,
     CanisterInstallCodeRateLimited = 209,
     CanisterHeapDeltaRateLimited = 210,
+    SubnetCoolingDown = 211,
     /// 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
     CanisterSnapshotNotFound = 305,
@@ -229,6 +230,7 @@ impl ErrorCode {
             Self::CertifiedStateUnavailable => "ERROR_CODE_CERTIFIED_STATE_UNAVAILABLE",
             Self::CanisterInstallCodeRateLimited => "ERROR_CODE_CANISTER_INSTALL_CODE_RATE_LIMITED",
             Self::CanisterHeapDeltaRateLimited => "ERROR_CODE_CANISTER_HEAP_DELTA_RATE_LIMITED",
+            Self::SubnetCoolingDown => "ERROR_CODE_SUBNET_COOLING_DOWN",
             Self::CanisterNotFound => "ERROR_CODE_CANISTER_NOT_FOUND",
             Self::CanisterSnapshotNotFound => "ERROR_CODE_CANISTER_SNAPSHOT_NOT_FOUND",
             Self::InsufficientMemoryAllocation => "ERROR_CODE_INSUFFICIENT_MEMORY_ALLOCATION",
@@ -324,6 +326,7 @@ impl ErrorCode {
             "ERROR_CODE_CANISTER_HEAP_DELTA_RATE_LIMITED" => {
                 Some(Self::CanisterHeapDeltaRateLimited)
             }
+            "ERROR_CODE_SUBNET_COOLING_DOWN" => Some(Self::SubnetCoolingDown),
             "ERROR_CODE_CANISTER_NOT_FOUND" => Some(Self::CanisterNotFound),
             "ERROR_CODE_CANISTER_SNAPSHOT_NOT_FOUND" => Some(Self::CanisterSnapshotNotFound),
             "ERROR_CODE_INSUFFICIENT_MEMORY_ALLOCATION" => Some(Self::InsufficientMemoryAllocation),

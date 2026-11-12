@@ -1,8 +1,3 @@
-use self::routing::demux::Demux;
-use self::routing::stream_handler::StreamHandler;
-use self::scheduling::valid_set_rule::ValidSetRule;
-use crate::routing::demux::DemuxImpl;
-
 use super::*;
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_ni_dkg::{
@@ -23,23 +18,20 @@ use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDa
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable, routing_table_insert_subnet};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
-use ic_replicated_state::Stream;
-use ic_replicated_state::testing::StreamTesting;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec};
+use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
 use ic_test_utilities_registry::{SubnetRecordBuilder, get_mainnet_delta_00_6d_c1};
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::batch::BatchBuilder;
-use ic_test_utilities_types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::{
+    canister_test_id, node_test_id, subnet_test_id, test_replica_version, user_test_id,
+};
 use ic_types::batch::{Batch, BatchMessages, BlockmakerMetrics};
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
 use ic_types::time::Time;
-use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
-use ic_types::{
-    CanisterId, ExecutionRound, NodeId, NumBytes, PrincipalId, Randomness, ReplicaVersion,
-};
+use ic_types::{CanisterId, NodeId, NumBytes, NumInstructions, PrincipalId, Randomness};
 use maplit::{btreemap, btreeset};
 use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
 
@@ -676,6 +668,8 @@ fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
         ),
         metrics: metrics.clone(),
         log,
+        ingress_history_memory_capacity: HypervisorConfig::default()
+            .ingress_history_memory_capacity,
         malicious_flags: MaliciousFlags::default(),
     };
     (batch_processor, metrics, state_manager, registry_settings)
@@ -714,6 +708,8 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         let own_subnet_id = subnet_test_id(13);
         let own_maximum_state_size = NumBytes::new(1 << 30);
         let own_maximum_state_delta = NumBytes::new(1 << 20);
+        let own_maximum_query_instructions = NumInstructions::new(7_000_000_000);
+        let own_maximum_query_walltime_seconds = 15;
         let own_subnet_record = SubnetRecord {
             membership: &[node_test_id(1), node_test_id(2)],
             subnet_type: SubnetType::Application,
@@ -749,6 +745,8 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             resource_limits: ResourceLimits {
                 maximum_state_size: Some(own_maximum_state_size),
                 maximum_state_delta: Some(own_maximum_state_delta),
+                maximum_query_instructions: Some(own_maximum_query_instructions),
+                maximum_query_walltime_seconds: Some(own_maximum_query_walltime_seconds),
             },
 
             ..Default::default()
@@ -1040,8 +1038,8 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             randomness: Randomness::new([123; 32]),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
-            replica_version: ReplicaVersion::default(),
+            blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
+            replica_version: test_replica_version(),
         });
         let latest_state = state_manager.get_latest_state().take();
         assert_eq!(
@@ -1057,6 +1055,16 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         assert_eq!(
             latest_state.resource_limits().maximum_state_delta,
             Some(own_maximum_state_delta)
+        );
+        assert_eq!(
+            latest_state.resource_limits().maximum_query_instructions,
+            Some(own_maximum_query_instructions)
+        );
+        assert_eq!(
+            latest_state
+                .resource_limits()
+                .maximum_query_walltime_seconds,
+            Some(own_maximum_query_walltime_seconds)
         );
         assert_eq!(
             *registry_settings.lock().unwrap(),
@@ -1739,7 +1747,7 @@ fn try_read_registry_succeeds_and_populates_subnet_admins() {
             rental_subnet_record_from_topo.subnet_admins,
             btreeset! {rental_subnet_admin.get()}
         );
-        // CloudEngine subnets are visible in the full topology on all subnets.
+        // CloudEngine subnets are visible in the network topology on all subnets.
         assert!(network_topology.subnets().get(&engine_subnet_id).is_some());
     });
 }
@@ -1813,7 +1821,7 @@ fn try_read_registry_succeeds_and_resets_subnet_admins() {
         // Check that subnet admins are reset and a critical error is raised.
         let own_subnet_record_from_topo = network_topology.subnets().get(&own_subnet_id).unwrap();
         assert_eq!(own_subnet_record_from_topo.subnet_admins, BTreeSet::new());
-        // CloudEngine subnets are visible in the full topology on all subnets.
+        // CloudEngine subnets are visible in the network topology on all subnets.
         assert!(network_topology.subnets().get(&engine_subnet_id).is_some());
         let nns_subnet_record_from_topo = network_topology.subnets().get(&nns_subnet_id).unwrap();
         assert_eq!(nns_subnet_record_from_topo.subnet_admins, BTreeSet::new());
@@ -1885,127 +1893,42 @@ fn setup_three_subnet_registry() -> (Arc<FakeRegistryClient>, SubnetId, SubnetId
     )
 }
 
-/// Tests that a CloudEngine subnet sees the full topology (all three subnets):
-/// `subnets`, `routing_table`, `subnets_for_certification`, and
-/// `routing_table_for_certification` all contain every subnet.
+/// Tests that all subnet types see all subnets in `subnets()`, including
+/// engines.
 #[test]
-fn try_read_registry_engine_subnet_sees_full_topology() {
+fn try_to_read_registry_returns_full_topology() {
     with_test_replica_logger(|log| {
         let (registry, app_subnet_id, engine_subnet_id, nns_subnet_id) =
             setup_three_subnet_registry();
 
-        let network_topology = try_to_read_registry(registry, log, engine_subnet_id)
-            .unwrap()
-            .0;
+        for own_subnet in [app_subnet_id, engine_subnet_id, nns_subnet_id] {
+            let network_topology = try_to_read_registry(registry.clone(), log.clone(), own_subnet)
+                .unwrap()
+                .0;
 
-        let subnet_keys: Vec<_> = network_topology.subnets().keys().copied().collect();
-        assert!(subnet_keys.contains(&app_subnet_id));
-        assert!(subnet_keys.contains(&engine_subnet_id));
-        assert!(subnet_keys.contains(&nns_subnet_id));
+            // subnets() includes all three subnets.
+            let subnet_keys: Vec<_> = network_topology.subnets().keys().copied().collect();
+            assert!(subnet_keys.contains(&app_subnet_id));
+            assert!(subnet_keys.contains(&nns_subnet_id));
+            assert!(subnet_keys.contains(&engine_subnet_id));
 
-        let rt_subnets: BTreeSet<_> = network_topology
-            .routing_table()
-            .iter()
-            .map(|(_, sid)| *sid)
-            .collect();
-        assert!(rt_subnets.contains(&app_subnet_id));
-        assert!(rt_subnets.contains(&engine_subnet_id));
-        assert!(rt_subnets.contains(&nns_subnet_id));
-
-        // No full_topology on engine subnets; certification accessors fall back to subnets().
-        assert_eq!(
-            network_topology.subnets_for_certification(),
-            network_topology.subnets(),
-        );
-        assert_eq!(
-            network_topology.routing_table_for_certification(),
-            network_topology.routing_table(),
-        );
+            // routing_table includes ranges for all three subnets.
+            let rt: BTreeSet<_> = network_topology
+                .routing_table()
+                .iter()
+                .map(|(_, sid)| *sid)
+                .collect();
+            assert!(rt.contains(&app_subnet_id));
+            assert!(rt.contains(&engine_subnet_id));
+            assert!(rt.contains(&nns_subnet_id));
+        }
     });
 }
 
-/// Tests that an Application subnet sees the full topology (all three subnets),
-/// including CloudEngine subnets.
-#[test]
-fn try_read_registry_application_subnet_sees_full_topology() {
-    with_test_replica_logger(|log| {
-        let (registry, app_subnet_id, engine_subnet_id, nns_subnet_id) =
-            setup_three_subnet_registry();
-
-        let network_topology = try_to_read_registry(registry, log, app_subnet_id)
-            .unwrap()
-            .0;
-
-        // Full view: all three subnets are visible, including the engine.
-        let subnet_keys: Vec<_> = network_topology.subnets().keys().copied().collect();
-        assert!(subnet_keys.contains(&app_subnet_id));
-        assert!(subnet_keys.contains(&nns_subnet_id));
-        assert!(subnet_keys.contains(&engine_subnet_id));
-
-        let rt_subnets: BTreeSet<_> = network_topology
-            .routing_table()
-            .iter()
-            .map(|(_, sid)| *sid)
-            .collect();
-        assert!(rt_subnets.contains(&app_subnet_id));
-        assert!(rt_subnets.contains(&nns_subnet_id));
-        assert!(rt_subnets.contains(&engine_subnet_id));
-
-        // No full_topology on non-NNS subnets; certification accessors fall back to subnets().
-        assert_eq!(
-            network_topology.subnets_for_certification(),
-            network_topology.subnets(),
-        );
-        assert_eq!(
-            network_topology.routing_table_for_certification(),
-            network_topology.routing_table(),
-        );
-    });
-}
-
-/// Tests that the NNS subnet sees all subnets in both `subnets()` and
-/// `subnets_for_certification()` (via `full_topology`), including engines.
-#[test]
-fn try_read_registry_nns_subnet_has_full_topology_with_engines() {
-    with_test_replica_logger(|log| {
-        let (registry, app_subnet_id, engine_subnet_id, nns_subnet_id) =
-            setup_three_subnet_registry();
-
-        let network_topology = try_to_read_registry(registry, log, nns_subnet_id)
-            .unwrap()
-            .0;
-
-        // subnets() includes all three subnets.
-        let subnet_keys: Vec<_> = network_topology.subnets().keys().copied().collect();
-        assert!(subnet_keys.contains(&app_subnet_id));
-        assert!(subnet_keys.contains(&nns_subnet_id));
-        assert!(subnet_keys.contains(&engine_subnet_id));
-
-        // subnets_for_certification also includes all three (via full_topology).
-        let cert_keys: Vec<_> = network_topology
-            .subnets_for_certification()
-            .keys()
-            .copied()
-            .collect();
-        assert!(cert_keys.contains(&app_subnet_id));
-        assert!(cert_keys.contains(&engine_subnet_id));
-        assert!(cert_keys.contains(&nns_subnet_id));
-
-        // routing_table_for_certification includes ranges for all three subnets.
-        let rt_cert: BTreeSet<_> = network_topology
-            .routing_table_for_certification()
-            .iter()
-            .map(|(_, sid)| *sid)
-            .collect();
-        assert!(rt_cert.contains(&app_subnet_id));
-        assert!(rt_cert.contains(&engine_subnet_id));
-        assert!(rt_cert.contains(&nns_subnet_id));
-    });
-}
-
-/// Like `setup_three_subnet_registry`, but also enables chain keys: `shared_key`
+/// Sets up a registry with three subnets (Application, CloudEngine, System/NNS)
+/// and a routing table covering all three. Enables chain keys: `shared_key`
 /// on both the Application and CloudEngine subnets, and `engine_only_key` on the
-/// CloudEngine subnet alone.
+/// CloudEngine subnet alone. Returns the registry and the subnet IDs.
 fn setup_three_subnet_registry_with_chain_keys()
 -> (Arc<FakeRegistryClient>, SubnetId, SubnetId, SubnetId) {
     use Integrity::*;
@@ -2407,8 +2330,8 @@ fn process_batch_updates_subnet_metrics() {
             randomness: Randomness::new([123; 32]),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
-            replica_version: ReplicaVersion::default(),
+            blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
+            replica_version: test_replica_version(),
         });
 
         let latest_state = state_manager.get_latest_state().take();
@@ -2459,14 +2382,13 @@ fn process_batch_resets_split_marker() {
         // Reading from the registry must succeed for fully specified records.
         let (batch_processor, _metrics, state_manager, _registry_settings) =
             make_batch_processor(fixture.registry.clone(), log);
-        let (mut height, mut state) = state_manager.take_tip();
+        let (_, mut state) = state_manager.take_tip();
         state.metadata.own_subnet_id = own_subnet_id;
         state.metadata.subnet_split_from = Some(other_subnet_id);
-        height.inc_assign();
         state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
         batch_processor.process_batch(Batch {
-            batch_number: height.increment(),
+            batch_number: state_manager.tip_height().increment(),
             batch_summary: None,
             content: BatchContent::Data {
                 batch_messages: BatchMessages::default(),
@@ -2478,8 +2400,8 @@ fn process_batch_resets_split_marker() {
             randomness: Randomness::new([123; 32]),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(1),
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
-            replica_version: ReplicaVersion::default(),
+            blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
+            replica_version: test_replica_version(),
         });
 
         // The subnet split marker was reset.
@@ -2489,124 +2411,65 @@ fn process_batch_resets_split_marker() {
 }
 
 #[test]
-fn test_demux_delivers_certified_stream_slices() {
-    struct FakeValidSetRule;
-    impl ValidSetRule for FakeValidSetRule {
-        fn induct_messages(
-            &self,
-            _: &mut ReplicatedState,
-            _: Vec<ic_types::messages::SignedIngress>,
-            _: ic_types::ExecutionRound,
-        ) {
-            // do nothing
-        }
-    }
-
-    struct FakeStreamHandler {
-        expected_slices: BTreeMap<SubnetId, StreamSlice>,
-    }
-
-    impl FakeStreamHandler {
-        fn new(expected_slices: BTreeMap<SubnetId, StreamSlice>) -> FakeStreamHandler {
-            FakeStreamHandler { expected_slices }
-        }
-    }
-
-    impl StreamHandler for FakeStreamHandler {
-        fn process_stream_slices(
-            &self,
-            state: ReplicatedState,
-            stream_slices: BTreeMap<SubnetId, StreamSlice>,
-        ) -> ReplicatedState {
-            assert_eq!(self.expected_slices, stream_slices);
-            state
-        }
-    }
-
+fn process_batch_resets_merge_marker() {
     with_test_replica_logger(|log| {
-        let src_subnet_id = subnet_test_id(42);
-        let dst_subnet_id = subnet_test_id(43);
-        let other_subnet_id = subnet_test_id(44);
+        use Integrity::*;
 
-        // Obtain a certified stream slice.
-        let certified_stream_slice = {
-            // Set up state manager.
-            let src_state_manager = FakeStateManager::new();
+        let own_subnet_id = subnet_test_id(13);
+        let nns_subnet_id = subnet_test_id(42);
 
-            // Obtain tip...
-            let (mut height, mut state) = src_state_manager.take_tip();
-            // ... and use testing function to put stream to encode as certified slice
-            use ic_replicated_state::testing::ReplicatedStateTesting;
-            state.modify_streams(|streams| {
-                streams.insert(
-                    dst_subnet_id,
-                    Stream::new(
-                        StreamIndexedQueue::with_begin(StreamIndex::new(0)),
-                        StreamIndex::new(42),
-                    ),
-                );
-            });
+        let own_transcript = dummy_transcript_for_tests_with_params(
+            vec![node_test_id(123)], // committee
+            NiDkgTag::HighThreshold, // dkg_tag
+            2,                       // threshold
+            3,                       // registry_version
+        );
 
-            // Commit state with modified streams.
-            height.inc_assign();
-            src_state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
-
-            // Encode slice.
-            src_state_manager
-                .encode_certified_stream_slice(dst_subnet_id, None, None, None, None)
-                .unwrap()
-        };
-
-        // Set up destination state manager.
-        let dst_metrics = MetricsRegistry::new();
-        let dst_state_manager = Arc::new(FakeStateManager::new());
-
-        // Make up a second slice with a different height.
-        let other_height = Height::new(99);
-        let mut certified_stream_slice_other_height = certified_stream_slice.clone();
-        certified_stream_slice_other_height.certification.height = other_height;
-
-        // Create messages to be provided as part of `BatchMessages`.
-        let certified_stream_slices = btreemap![src_subnet_id => certified_stream_slice, other_subnet_id => certified_stream_slice_other_height];
-
-        let expected_slices = certified_stream_slices
-            .clone()
-            .into_iter()
-            .map(|(subnet, slice)| {
-                (
-                    subnet,
-                    dst_state_manager
-                        .decode_valid_certified_stream_slice(&slice)
-                        .unwrap(),
-                )
+        let fixture = RegistryFixture::new();
+        fixture
+            .write_test_records(&TestRecords {
+                subnet_ids: Valid([own_subnet_id]),
+                subnet_records: [Valid(&SubnetRecord::default())],
+                ni_dkg_transcripts: [Valid(Some(&own_transcript))],
+                nns_subnet_id: Valid(nns_subnet_id),
+                chain_key_enabled_subnets: &BTreeMap::default(),
+                provisional_whitelist: Valid(&ProvisionalWhitelist::All),
+                routing_table: Valid(&RoutingTable::new()),
+                canister_migrations: Valid(&CanisterMigrations::new()),
+                node_public_keys: &BTreeMap::default(),
+                api_boundary_node_records: &BTreeMap::default(),
+                node_records: &BTreeMap::default(),
             })
-            .collect::<BTreeMap<_, _>>();
+            .unwrap();
 
-        let demux: Box<dyn Demux> = Box::new(DemuxImpl::new(
-            Box::new(FakeValidSetRule),
-            Box::new(FakeStreamHandler::new(expected_slices)),
-            dst_state_manager.clone(),
-            MessageRoutingMetrics::new(&dst_metrics),
-            log,
-        ));
+        // Reading from the registry must succeed for fully specified records.
+        let (batch_processor, _metrics, state_manager, _registry_settings) =
+            make_batch_processor(fixture.registry.clone(), log);
+        let (_, mut state) = state_manager.take_tip();
+        state.metadata.own_subnet_id = own_subnet_id;
+        state.metadata.subnet_merged = true;
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
-        let (_, dst_state) = dst_state_manager.take_tip();
-
-        demux.process_payload(
-            dst_state,
-            ExecutionRound::from(0),
-            BatchMessages {
-                certified_stream_slices,
-                ..Default::default()
+        batch_processor.process_batch(Batch {
+            batch_number: state_manager.tip_height().increment(),
+            batch_summary: None,
+            content: BatchContent::Data {
+                batch_messages: BatchMessages::default(),
+                consensus_responses: Vec::new(),
+                canister_http_spent: Default::default(),
+                chain_key_data: Default::default(),
+                requires_full_state_hash: false,
             },
-        );
+            randomness: Randomness::new([123; 32]),
+            registry_version: fixture.registry.get_latest_version(),
+            time: Time::from_nanos_since_unix_epoch(1),
+            blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
+            replica_version: test_replica_version(),
+        });
 
-        assert_eq!(
-            metric_vec(&[
-                (&[(LABEL_REMOTE, &src_subnet_id.to_string())], 1),
-                (&[(LABEL_REMOTE, &other_subnet_id.to_string())], 99)
-            ]),
-            fetch_int_gauge_vec(&dst_metrics, METRIC_REMOTE_CERTIFIED_HEIGHTS)
-        );
+        // The subnet merge marker was reset. (Which only happens in `after_merge()`,
+        // whose behavior is covered by the `ic-replicated-state` unit tests.)
+        let latest_state = state_manager.get_latest_state().take();
+        assert!(!latest_state.metadata.subnet_merged);
     });
 }

@@ -37,20 +37,32 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.28.1/
 
 # Use lld as the default linker instead of GNU bfd ld (which is ~6x slower).
 # For our large Rust debug binaries lld links roughly as fast as eg mold and
-# with comparable memory use. Bazel uses its own hermetic (zig/lld) toolchain and
-# is unaffected; this only changes the system linker used by cargo builds.
+# with comparable memory use. Bazel uses its own hermetic (clang/lld) toolchain
+# and is unaffected; this changes the system linker used by cargo builds and by
+# Bazel builds that opt out of the hermetic toolchain (--hermetic_cc=false,
+# e.g. --config=afl).
 RUN ln -sf "$(command -v ld.lld)" "$(realpath /usr/bin/ld)"
 
 # Add motoko compiler
 # This is only used by Cargo; Bazel pulls its own via rules_motoko
-# NOTE: keep version in line with rules_motoko
+# NOTE: keep version in line with rules_motoko (`motoko.toolchain` in MODULE.bazel)
+#       and update motoko_sha whenever motoko_version changes
 ARG motoko_version=1.11.0
-RUN curl -fsSL https://github.com/caffeinelabs/motoko/releases/download/${motoko_version}/motoko-Linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
+ARG motoko_sha=f84e566d9d7c255677c753ebe8e7319f60cce04f9ea761e6a55472886d0e5d56
+RUN motoko_tar="$(mktemp)" && \
+    curl -fsSL "https://github.com/caffeinelabs/motoko/releases/download/${motoko_version}/motoko-Linux-x86_64-${motoko_version}.tar.gz" -o "$motoko_tar" && \
+    echo "$motoko_sha $motoko_tar" | sha256sum --check && \
+    tar -xzf "$motoko_tar" -C /usr/local/bin && \
+    rm -f "$motoko_tar" && \
+    chmod +x /usr/local/bin/moc
 
-# Install AFLplusplus (`make install` puts the executables in /usr/local/bin/)
-ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
-RUN git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git /afl && \
+# Install AFLplusplus v4.35c (`make install` puts the executables in /usr/local/bin/)
+# NOTE: when bumping, pin the commit the upstream tag points to (its ^{} line if annotated):
+#       git ls-remote https://github.com/AFLplusplus/AFLplusplus.git 'refs/tags/<tag>*'
+ARG aflplusplus_commit=b449e4c544eaac1a0a9b7d1f2f15d5921907585e
+RUN git clone --depth=1 --revision="$aflplusplus_commit" https://github.com/AFLplusplus/AFLplusplus.git /afl && \
     cd /afl && \
+    test "$(git rev-parse HEAD)" = "$aflplusplus_commit" && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config CC=/usr/bin/clang CXX=/usr/bin/clang++ make all && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config CC=/usr/bin/clang CXX=/usr/bin/clang++ make install && \
     rm -rf /afl
@@ -61,11 +73,17 @@ RUN git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.c
 #   and gets fetched on the first `cargo` invocation.
 # - CARGO_HOME/RUSTUP_HOME are only set for the install step; runtime users
 #   fall back to their default $HOME/.{cargo,rustup} for per-user state.
+# - The installer must be named rustup-init: rustup picks its mode from argv[0].
 ENV PATH=/ic/bin:/opt/cargo/bin:$PATH
-RUN curl --fail https://sh.rustup.rs -sSf \
-    | env CARGO_HOME=/opt/cargo RUSTUP_HOME=/opt/rustup \
-      sh -s -- -y --default-toolchain none --no-modify-path \
-    && rm -rf /opt/rustup
+# NOTE: update rustup_sha whenever rustup_version changes
+ARG rustup_version=1.29.2
+ARG rustup_sha=5be191e8c70a5007074254cb74d78dbfdd25cd5a61c27de7b8e5410122ec24f4
+RUN rustup_dir="$(mktemp -d)" && \
+    curl -fsSL "https://static.rust-lang.org/rustup/archive/${rustup_version}/x86_64-unknown-linux-gnu/rustup-init" -o "$rustup_dir/rustup-init" && \
+    echo "$rustup_sha $rustup_dir/rustup-init" | sha256sum --check && \
+    chmod +x "$rustup_dir/rustup-init" && \
+    CARGO_HOME=/opt/cargo RUSTUP_HOME=/opt/rustup "$rustup_dir/rustup-init" -y --default-toolchain none --no-modify-path && \
+    rm -rf "$rustup_dir" /opt/rustup
 
 WORKDIR /
 # Bake the entrypoint into the image so it works without the repo bind-mounted.
@@ -80,8 +98,11 @@ USER buildifier
 FROM base as dev
 
 # Add GitHub CLI repository to get the latest version
+# NOTE: GitHub lists the keyring's SHA256 in https://github.com/cli/cli/blob/trunk/docs/install_linux.md
+ARG githubcli_keyring_sha=6084d5d7bd8e288441e0e94fc6275570895da18e6751f70f057485dc2d1a811b
 RUN mkdir -p -m 755 /etc/apt/keyrings \
 	&& out=$(mktemp) && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o "$out" \
+	&& echo "$githubcli_keyring_sha $out" | sha256sum --check \
 	&& cat $out | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
 	&& chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
 	&& mkdir -p -m 755 /etc/apt/sources.list.d \

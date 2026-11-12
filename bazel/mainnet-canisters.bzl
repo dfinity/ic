@@ -3,6 +3,53 @@
 This creates a Bazel repository which exports mainnet canisters.
 """
 
+load(
+    "//bazel:mainnet-artifact-refs.bzl",
+    "artifact_name_error",
+    "check",
+    "checked_artifact_name",
+    "checked_commit_id",
+    "checked_github_repository",
+    "checked_tag",
+    "checked_url",
+    "sha256_error",
+)
+
+_CDN_PREFIX = "https://download.dfinity.systems/ic/"
+
+_GITHUB_PREFIX = "https://github.com/"
+
+def canister_download_url(rev, repository, tag, filename, context):
+    """URL of the canister WASM `filename`, either on the CDN or on a GitHub release.
+
+    Every interpolated component is validated: `rev` and `tag` come from the
+    auto-merged mainnet-canister-revisions.json, so an unvalidated value could escape
+    the pinned CDN prefix or GitHub repository (see //bazel:mainnet-artifact-refs.bzl).
+
+    Args:
+      rev: the CDN revision to fetch from, or None to fetch from a GitHub release.
+      repository: the `owner/repo` GitHub repository; only used when `rev` is None.
+      tag: the GitHub release tag; only used when `rev` is None.
+      filename: the name of the artifact, as published.
+      context: what is being fetched, for error messages.
+
+    Returns:
+      The download URL.
+    """
+    filename = checked_artifact_name(filename, context + ": filename")
+
+    if rev == None:
+        return checked_url("https://github.com/{repository}/releases/download/{tag}/{filename}".format(
+            repository = checked_github_repository(repository, context + ": repository"),
+            tag = checked_tag(tag, context + ": tag"),
+            filename = filename,
+        ), _GITHUB_PREFIX)
+
+    return checked_url("https://download.dfinity.systems/ic/{rev}/canisters/{filename}".format(
+        rev = checked_commit_id(rev, context + ": rev"),
+        filename = filename,
+    ), _CDN_PREFIX)
+
 def _canisters_impl(repository_ctx):
     repositories = dict(repository_ctx.attr.repositories)
     filenames = dict(repository_ctx.attr.filenames)
@@ -20,6 +67,12 @@ def _canisters_impl(repository_ctx):
     for canister_key in canister_keys:
         canisterinfo = cans.pop(canister_key, None)
 
+        context = "%s: canister %r" % (json_path, canister_key)
+
+        # The canister key is used as the name of the downloaded file below, so it
+        # must not be able to walk out of the repository directory.
+        check(artifact_name_error(canister_key), "%s: canister key" % json_path)
+
         rev = canisterinfo.get("rev", None)
         if rev == None:
             repository = repositories.pop(canister_key, None)
@@ -36,17 +89,16 @@ def _canisters_impl(repository_ctx):
         if sha256 == None:
             fail("no sha256 for canister: " + canister_key)
 
+        # Not merely a sanity check: repository_ctx.download treats the empty string
+        # as "do not verify this download".
+        check(sha256_error(sha256), context + ": sha256")
+
         filename = filenames.pop(canister_key, None)
         if filename == None:
             fail("no filename for canister: " + canister_key)
 
-        if rev == None:
-            url = "https://github.com/{repository}/releases/download/{tag}/{filename}".format(repository = repository, tag = tag, filename = filename)
-        else:
-            url = "https://download.dfinity.systems/ic/{rev}/canisters/{filename}".format(rev = rev, filename = filename)
-
         repository_ctx.download(
-            url = url,
+            url = canister_download_url(rev, repository, tag, filename, context),
             sha256 = sha256,
             output = "{canister_key}.wasm.gz".format(canister_key = canister_key),
         )

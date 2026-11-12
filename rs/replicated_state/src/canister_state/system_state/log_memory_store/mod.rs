@@ -15,12 +15,25 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_types::{CanisterLog, NumBytes};
+use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::Duration;
+
+/// Returns the ring buffer data capacity to use for a non-zero log memory limit.
+///
+/// Non-zero limits below `DATA_CAPACITY_MIN` are rejected when canister settings
+/// are validated, so the clamping here is only a safety net for the release
+/// build; in debug builds such a limit trips the assertion instead.
+fn data_capacity_for_limit(limit: usize) -> usize {
+    debug_assert!(
+        limit >= DATA_CAPACITY_MIN,
+        "non-zero log memory limit {limit} is below the minimum {DATA_CAPACITY_MIN}"
+    );
+    limit.max(DATA_CAPACITY_MIN)
+}
 
 /// Canister log storage backed by a PageMap-based ring buffer.
 ///
@@ -249,17 +262,6 @@ impl LogMemoryStore {
             .unwrap_or(0)
     }
 
-    /// Returns the projected memory usage after `resize(limit)` would complete,
-    /// without mutating any state.
-    pub fn memory_usage_for_limit(&self, limit: NumBytes) -> NumBytes {
-        if limit == NumBytes::new(0) {
-            return NumBytes::new(0);
-        }
-        // Mirror resize_impl's capacity clamping exactly.
-        let target_capacity = (limit.get() as usize).max(DATA_CAPACITY_MIN);
-        NumBytes::new(self.virtual_memory_for_data_capacity(target_capacity) as u64)
-    }
-
     /// Single source of truth for the ring-buffer memory layout formula.
     ///
     /// Returns the total virtual bytes consumed by a ring buffer whose data
@@ -290,7 +292,7 @@ impl LogMemoryStore {
             // Limit zero deallocates — work only if allocated.
             return self.maybe_page_map.is_some();
         }
-        let target_limit = limit.max(DATA_CAPACITY_MIN);
+        let target_limit = data_capacity_for_limit(limit);
         let current_capacity = self.get_header().map(|h| h.data_capacity.get() as usize);
         current_capacity != Some(target_limit)
     }
@@ -318,7 +320,7 @@ impl LogMemoryStore {
             self.deallocate();
             return;
         }
-        let target_limit = limit.max(DATA_CAPACITY_MIN);
+        let target_limit = data_capacity_for_limit(limit);
         let current_capacity = self.get_header().map(|h| h.data_capacity.get() as usize);
 
         // Determine the PageMap strategy and create a new ring buffer.
@@ -361,13 +363,32 @@ impl LogMemoryStore {
     }
 
     /// Returns the canister log records, optionally filtered.
+    ///
+    /// The result is trimmed to fit within the maximum message response size
+    /// (`RESULT_MAX_SIZE`), so this must NOT be used (e.g. with a `None` filter)
+    /// to obtain the complete set of stored records: doing so silently drops
+    /// records once they exceed the response-size limit. Callers that need all
+    /// records must use [`Self::all_records_for_testing`] instead.
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
         self.load_ring_buffer()
             .map(|rb| rb.records(filter))
             .unwrap_or_default()
     }
 
+    /// Returns all canister log records currently stored in the ring buffer.
+    ///
+    /// Unlike `records`, this does not trim the result to the maximum message
+    /// response size, so it is only intended for testing.
+    pub fn all_records_for_testing(&self) -> Vec<CanisterLogRecord> {
+        self.load_ring_buffer()
+            .map(|rb| rb.iter().collect())
+            .unwrap_or_default()
+    }
+
     /// Appends a delta log to the ring buffer if it exists.
+    ///
+    /// The records are removed from the delta log even if there is no ring
+    /// buffer, so that appending the same delta log again has no effect.
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
         if delta_log.is_empty() {
             // No records to append, but still carry the monotone index forward.
@@ -384,6 +405,7 @@ impl LogMemoryStore {
             // No ring buffer exists (e.g., log_memory_limit is zero), but still
             // carry the monotone index forward so consumers can track progress.
             self.persistent_next_idx = self.persistent_next_idx.max(delta_log.next_idx());
+            delta_log.take_records();
             return;
         };
         // If the delta overflowed and evicted records, there is a gap between the
@@ -395,7 +417,7 @@ impl LogMemoryStore {
             ring_buffer.clear();
         }
         // Append the delta records and persist the ring buffer.
-        ring_buffer.append_log(delta_log.records_mut().drain(..));
+        ring_buffer.append_log(delta_log.take_records());
         self.save_ring_buffer(ring_buffer);
     }
 

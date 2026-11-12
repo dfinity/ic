@@ -46,6 +46,24 @@ use crate::{
 // Disabled by default to avoid producing too much data.
 const EMIT_STATE_HASHES_FOR_DEBUGGING: FlagStatus = FlagStatus::Disabled;
 
+/// A freshly created execution state together with the data about its Wasm
+/// module that the caller needs but the execution state does not carry.
+pub struct CreatedExecutionState {
+    /// The execution state with the initial memories of the Wasm module.
+    pub execution_state: ExecutionState,
+    /// Compiling the Wasm module is equivalent to executing this many instructions.
+    pub compilation_cost: NumInstructions,
+    /// The result of compiling the Wasm module; `None` if the module did not
+    /// have to be compiled because it was found in the compilation cache.
+    pub compilation_result: Option<CompilationResult>,
+    /// Whether the Wasm module declares a Wasm memory. If it does, then the
+    /// minimum memory size declared by the module is the size of the Wasm
+    /// memory of `execution_state`, which is the module's initial memory:
+    /// a Wasm memory is instantiated with its declared minimum size and
+    /// nothing grows it while the initial memory is created.
+    pub declares_wasm_memory: bool,
+}
+
 /// The interface of a WebAssembly execution engine.
 /// Currently it has two implementations:
 /// - `SandboxedExecutionController` for out-of-process sandboxed execution.
@@ -62,7 +80,7 @@ pub trait WasmExecutor: Send + Sync {
         canister_module: CanisterModule,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
-    ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)>;
+    ) -> HypervisorResult<CreatedExecutionState>;
 }
 
 struct WasmExecutorMetrics {
@@ -281,7 +299,7 @@ impl WasmExecutor for WasmExecutorImpl {
         canister_module: CanisterModule,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
-    ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
+    ) -> HypervisorResult<CreatedExecutionState> {
         // Compile Wasm binary and cache it.
         let wasm_binary = WasmBinary::new(canister_module);
         let CacheLookup {
@@ -326,11 +344,12 @@ impl WasmExecutor for WasmExecutorImpl {
             wasm_execution_mode: WasmExecutionMode::from_is_wasm64(serialized_module.is_wasm64),
         };
 
-        Ok((
+        Ok(CreatedExecutionState {
             execution_state,
-            serialized_module.compilation_cost,
+            compilation_cost: serialized_module.compilation_cost,
             compilation_result,
-        ))
+            declares_wasm_memory: serialized_module.declares_wasm_memory,
+        })
     }
 }
 
