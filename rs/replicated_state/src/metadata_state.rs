@@ -597,8 +597,7 @@ impl SubnetMetrics {
     /// exist, as of the end of the last committed round.
     ///
     /// This is what the certified state tree at `/subnet/<subnet_id>/metrics`
-    /// reports at certification version `V29` and what the `subnet_metrics`
-    /// management canister endpoint reports.
+    /// reports at certification version `V29`.
     pub fn consumed_cycles_total_including_canisters(&self) -> NominalCycles {
         self.consumed_cycles_total_including_canisters
     }
@@ -612,7 +611,8 @@ impl SubnetMetrics {
     /// last committed round.
     ///
     /// This is what the certified state tree at `/subnet/<subnet_id>/metrics`
-    /// reports from certification version `V30` on and what the
+    /// reports from certification version `V30` on, what the `subnet_metrics`
+    /// management canister endpoint reports, and what the
     /// `replicated_state_consumed_cycles_since_replica_started` gauge reports, so
     /// they cannot drift apart.
     pub fn consumed_cycles_total_including_canisters_monotonic(&self) -> NominalCycles {

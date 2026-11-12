@@ -14,7 +14,9 @@ use ic_replicated_state::{
     CanisterStatus, ExportedFunctions, NumWasmPages,
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
-        system_state::{CanisterHistory, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata},
+        system_state::{
+            CanisterHistory, ConnectionMetrics, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata,
+        },
     },
     page_map::{Shard, StorageLayout, StorageResult},
 };
@@ -200,6 +202,7 @@ pub struct CanisterStateBits {
     pub canister_creation_timestamp_nanos: Option<u64>,
     pub consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     pub consumed_cycles_by_use_cases_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
+    pub connection_metrics: BTreeMap<CanisterId, ConnectionMetrics>,
     pub instructions_executed: NumInstructions,
     pub ingress_messages_executed: u64,
     pub remote_subnet_messages_executed: u64,
@@ -2880,6 +2883,11 @@ impl<T> WasmFile<T>
 where
     T: WritePolicy,
 {
+    /// Writes `wasm` to the file, replacing any existing one, and marks it readonly.
+    ///
+    /// Does not sync the file to disk: as with protobufs, the checkpoint's sync in
+    /// `finalize_and_remove_unverified_marker` makes it durable before the checkpoint is
+    /// marked verified.
     pub fn serialize(&self, wasm: &CanisterModule) -> Result<(), LayoutError> {
         // If there already exists a wasm file, delete it first to avoid writing hardlinked/readonly files.
         self.try_delete_file()?;
@@ -2895,12 +2903,6 @@ where
         file.flush().map_err(|err| LayoutError::IoError {
             path: self.path.clone(),
             message: "failed to flush wasm binary to disk".to_string(),
-            io_err: err,
-        })?;
-
-        file.sync_all().map_err(|err| LayoutError::IoError {
-            path: self.path.clone(),
-            message: "failed to sync wasm binary to disk".to_string(),
             io_err: err,
         })?;
 

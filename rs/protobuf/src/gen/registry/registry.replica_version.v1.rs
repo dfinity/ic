@@ -17,8 +17,8 @@ pub struct ReplicaVersionRecord {
     /// matches the suffix of the key for this record in the registry, and is
     /// included here to make it easier to work with the generated Rust types. A
     /// ReplicaVersionRecord almost always travels with its ID String.
-    #[prost(string, optional, tag = "10")]
-    pub replica_version_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, tag = "10")]
+    pub replica_version_id: ::prost::alloc::string::String,
 }
 #[derive(
     serde::Serialize,

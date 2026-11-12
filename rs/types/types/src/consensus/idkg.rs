@@ -220,7 +220,7 @@ impl IDkgPayload {
     /// results yet.
     pub fn iter_transcript_configs_in_creation(
         &self,
-    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> + '_ {
+    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> {
         let xnet_reshares_transcripts = self.ongoing_xnet_reshares.values().map(AsRef::as_ref);
         let key_transcripts = self
             .key_transcripts
@@ -238,7 +238,7 @@ impl IDkgPayload {
     /// results yet.
     pub fn iter_pre_sig_transcript_configs_in_creation(
         &self,
-    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> + '_ {
+    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> {
         self.pre_signatures_in_creation
             .values()
             .flat_map(|pre_sig| pre_sig.iter_transcript_configs_in_creation())
@@ -247,14 +247,14 @@ impl IDkgPayload {
     /// Return an iterator of the ongoing xnet reshare transcripts on the source side.
     pub fn iter_xnet_transcripts_source_subnet(
         &self,
-    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> + '_ {
+    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> {
         self.ongoing_xnet_reshares.values().map(AsRef::as_ref)
     }
 
     /// Return an iterator of the ongoing xnet reshare transcripts on the target side.
     pub fn iter_xnet_transcripts_target_subnet(
         &self,
-    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> + '_ {
+    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> {
         self.key_transcripts.values().filter_map(|key_transcript| {
             if let KeyTranscriptCreation::XnetReshareOfUnmaskedParams((_, params)) =
                 &key_transcript.next_in_creation
@@ -267,10 +267,10 @@ impl IDkgPayload {
     }
 
     /// Return an iterator of all ids of pre-signatures for the given key in the payload.
-    pub fn iter_pre_signature_ids<'a>(
-        &'a self,
-        key_id: &'a IDkgMasterPublicKeyId,
-    ) -> impl Iterator<Item = PreSigId> + 'a {
+    pub fn iter_pre_signature_ids(
+        &self,
+        key_id: &IDkgMasterPublicKeyId,
+    ) -> impl Iterator<Item = PreSigId> {
         let available_pre_signature_ids = self
             .available_pre_signatures
             .iter()
@@ -380,7 +380,7 @@ impl IDkgPayload {
 
     /// Returns the initial DKG dealings being used to bootstrap the target subnet,
     /// if we are in the process of initial key creation.
-    pub fn initial_dkg_dealings(&self) -> impl Iterator<Item = &InitialIDkgDealings> + '_ {
+    pub fn initial_dkg_dealings(&self) -> impl Iterator<Item = &InitialIDkgDealings> {
         self.key_transcripts.values().filter_map(|key_transcript| {
             if let KeyTranscriptCreation::XnetReshareOfUnmaskedParams((initial_dealings, _)) =
                 &key_transcript.next_in_creation
@@ -1956,7 +1956,13 @@ impl TryFrom<pb::IDkgPayload> for IDkgPayload {
                 ))
             })?;
             let transcript_id = transcript.transcript_id;
-            idkg_transcripts.insert(transcript_id, transcript);
+            if idkg_transcripts.insert(transcript_id, transcript).is_some() {
+                return Err(ProxyDecodeError::DuplicateEntry {
+                    key: format!("{transcript_id:?}"),
+                    v1: String::new(),
+                    v2: String::new(),
+                });
+            }
         }
 
         // ongoing_xnet_reshares
@@ -2269,5 +2275,40 @@ mod tests {
         assert_eq!(pre_sig_id_0.id(), 0);
         assert_eq!(pre_sig_id_1.id(), 1);
         assert_eq!(pre_sig_id_2.id(), 2);
+    }
+
+    #[test]
+    fn idkg_payload_with_a_repeated_transcript_id_fails_to_decode_test() {
+        use crate::crypto::canister_threshold_sig::idkg::{
+            IDkgReceivers, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
+        };
+        use assert_matches::assert_matches;
+        use ic_types_test_utils::ids::{NODE_1, SUBNET_0};
+        use std::sync::Arc;
+
+        let transcript_id = IDkgTranscriptId::new(SUBNET_0, 1, Height::new(42));
+        let mut payload = IDkgPayload::empty(Height::new(100), SUBNET_0, vec![]);
+        payload.idkg_transcripts.insert(
+            transcript_id,
+            IDkgTranscript {
+                transcript_id,
+                receivers: IDkgReceivers::new(BTreeSet::from([NODE_1])).unwrap(),
+                registry_version: RegistryVersion::from(1),
+                verified_dealings: Arc::new(BTreeMap::new()),
+                transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
+                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                internal_transcript_raw: vec![],
+            },
+        );
+        let mut proto = pb::IDkgPayload::from(&payload);
+        assert_eq!(IDkgPayload::try_from(proto.clone()).unwrap(), payload);
+        let mut other_transcript = proto.idkg_transcripts[0].clone();
+        other_transcript.registry_version += 1;
+        proto.idkg_transcripts.push(other_transcript);
+
+        assert_matches!(
+            IDkgPayload::try_from(proto),
+            Err(ProxyDecodeError::DuplicateEntry { key, .. }) if key == format!("{transcript_id:?}")
+        );
     }
 }

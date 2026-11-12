@@ -71,12 +71,7 @@ impl<'a> PoolReader<'a> {
 
     /// Get the range of ancestor blocks of `block` specified (inclusively) by
     /// `min` and `max`. This assumes the correctness of the state of the pool.
-    pub fn get_range(
-        &self,
-        block: Block,
-        min: Height,
-        max: Height,
-    ) -> impl Iterator<Item = Block> + '_ {
+    pub fn get_range(&self, block: Block, min: Height, max: Height) -> impl Iterator<Item = Block> {
         self.chain_iterator(block)
             .skip_while(move |block| block.height > max)
             .take_while(move |block| block.height >= min)
@@ -167,10 +162,10 @@ impl<'a> PoolReader<'a> {
         })
     }
 
-    /// Return the the first instant at which a block with the given hash was inserted
-    /// into the consensus pool. Returns None if no timestamp was found.
-    pub fn get_block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
-        self.pool.block_instant(hash)
+    /// Return the the first instant at which the given block was inserted into
+    /// the consensus pool. Returns None if no timestamp was found.
+    pub fn get_block_instant(&self, block: &HashedBlock) -> Option<Instant> {
+        self.pool.block_instant(block)
     }
 
     /// Return the finalized block of a given height which is either the genesis

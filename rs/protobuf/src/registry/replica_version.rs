@@ -28,7 +28,7 @@ pub mod v1;
 /// - In particular, "SEV Secure Nested Paging Firmware ABI Specification" might
 ///   be of interest:
 ///   https://www.amd.com/content/dam/amd/en/documents/developer/56860.pdf
-const SEV_SNP_MEASUREMENT_LENGTH: usize = 48;
+pub const SEV_SNP_MEASUREMENT_LENGTH: usize = 48;
 
 impl v1::GuestLaunchMeasurements {
     /// Returns a list of defects (or Ok).

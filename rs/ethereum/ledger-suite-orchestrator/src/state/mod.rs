@@ -555,7 +555,7 @@ impl State {
             .flat_map(|(_, canisters)| canisters.principals_iter())
     }
 
-    pub fn all_managed_tokens_ids_iter(&self) -> impl Iterator<Item = TokenId> + '_ {
+    pub fn all_managed_tokens_ids_iter(&self) -> impl Iterator<Item = TokenId> {
         self.all_managed_canisters_iter().map(|(id, _)| id)
     }
 

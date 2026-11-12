@@ -65,6 +65,7 @@ pub(crate) enum InstallCodeStep {
         origin: CanisterChangeOrigin,
         mode: CanisterInstallModeV2,
         module_hash: WasmHash,
+        args_hash: [u8; 32],
     },
     HandleWasmExecution {
         canister_state_changes: CanisterStateChanges,
@@ -172,14 +173,20 @@ impl InstallCodeHelper {
         origin: CanisterChangeOrigin,
         mode: CanisterInstallModeV2,
         module_hash: WasmHash,
+        args_hash: [u8; 32],
     ) {
         self.steps.push(InstallCodeStep::AddCanisterChange {
             timestamp_nanos,
             origin: origin.clone(),
             mode,
             module_hash: module_hash.clone(),
+            args_hash,
         });
-        let details = CanisterChangeDetails::code_deployment(mode.into(), module_hash.to_slice());
+        let details = CanisterChangeDetails::code_deployment(
+            mode.into(),
+            module_hash.to_slice(),
+            Some(args_hash),
+        );
         // Recording the canister history entry changes the canister's allocated
         // memory; accumulate that change so it is accounted for across the steps.
         let old_allocated_bytes = self.canister.memory_allocated_bytes();
@@ -384,12 +391,21 @@ impl InstallCodeHelper {
                 num_bytes_try_from(es.wasm_memory.size).unwrap()
             });
 
+        // Use the execution mode of the newly installed module rather than
+        // `original.wasm_execution_mode`, which is only a charging default.
+        let wasm_execution_mode = self
+            .canister
+            .execution_state
+            .as_ref()
+            .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
+
         if let Some(wasm_memory_limit) = self.canister.system_state.wasm_memory_limit {
             // A Wasm memory limit of 0 means unlimited.
             if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
                 let err = HypervisorError::WasmMemoryLimitExceeded {
                     bytes: wasm_memory_usage,
                     limit: wasm_memory_limit,
+                    max_wasm_memory_size: wasm_execution_mode.max_wasm_memory_size(),
                 };
                 return finish_err(
                     clean_canister,
@@ -688,8 +704,12 @@ impl InstallCodeHelper {
 
         let CanisterStateChanges {
             execution_state_changes,
-            system_state_modifications,
+            mut system_state_modifications,
         } = canister_state_changes;
+
+        // Canister logs are persisted even if the other changes are not.
+        system_state_modifications
+            .apply_canister_log(&mut self.canister.system_state, round.hypervisor.metrics());
 
         // Charge the ingress induction debit before applying the state changes of
         // the Wasm execution below: the latter may burn cycles via
@@ -764,9 +784,7 @@ impl InstallCodeHelper {
             }
         }
 
-        // Apply system state changes always.
-        // The result will be checked later after we've checked the wasm execution result so that we
-        // don't miss logging in case there was an error from Wasm execution.
+        // Apply the remaining system state changes.
         let result_of_applying_system_state_modifications = system_state_modifications
             .apply_changes(
                 original.time,
@@ -774,10 +792,11 @@ impl InstallCodeHelper {
                 &round.network_topology,
                 round.hypervisor.subnet_id(),
                 false, // Install cannot happen in composite_query.
-                round.hypervisor.metrics(),
                 round.log,
             );
 
+        // Check the Wasm execution result before the result of applying the
+        // system state changes so that a Wasm failure takes precedence.
         match output.wasm_result {
             Ok(None) => {}
             Ok(Some(_response)) => {
@@ -893,8 +912,9 @@ impl InstallCodeHelper {
                 origin,
                 mode,
                 module_hash,
+                args_hash,
             } => {
-                self.add_canister_change(timestamp_nanos, origin, mode, module_hash);
+                self.add_canister_change(timestamp_nanos, origin, mode, module_hash, args_hash);
                 Ok(())
             }
             InstallCodeStep::HandleWasmExecution {

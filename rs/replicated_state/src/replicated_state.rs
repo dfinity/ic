@@ -1210,7 +1210,7 @@ impl ReplicatedState {
     /// message. Calling `next` will consume the message and remove it from the
     /// state. All messages that have not been explicitly consumed will remain
     /// in the state.
-    pub fn output_into_iter(&mut self) -> impl PeekableOutputIterator + '_ {
+    pub fn output_into_iter(&mut self) -> impl PeekableOutputIterator {
         let time = self.metadata.time();
 
         OutputIterator::new(

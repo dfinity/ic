@@ -27,6 +27,9 @@ const ERROR_LOCALLY_CLOSED_CONN: &str = "locally_closed_conn";
 
 pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";
 
+/// Label value used for inbound requests whose path did not match any registered route.
+pub(crate) const LABEL_UNMATCHED_PATH: &str = "unmatched_path";
+
 #[derive(Clone, Debug)]
 pub struct QuicTransportMetrics {
     // Connection manager

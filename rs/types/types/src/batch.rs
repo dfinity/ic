@@ -323,9 +323,7 @@ where
 ///
 /// Ends after the first message that cannot be decoded, as the messages after it
 /// can no longer be told apart.
-pub fn slice_to_messages_iter<M>(
-    mut data: &[u8],
-) -> impl Iterator<Item = Result<M, DecodeError>> + '_
+pub fn slice_to_messages_iter<M>(mut data: &[u8]) -> impl Iterator<Item = Result<M, DecodeError>>
 where
     M: Message + Default,
 {

@@ -3,13 +3,14 @@ use crate::{
     consensus::certification::{Certification, CertificationContent},
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet},
     },
     signature::ThresholdSignature,
     xnet::CertifiedStreamSlice,
 };
 use assert_matches::assert_matches;
 use ic_crypto_tree_hash::{Digest, Witness};
+use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
 use ic_protobuf::messaging::xnet::v1;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::types::v1 as pb_types;
@@ -73,6 +74,30 @@ fn certified_stream_slice_roundtrip() {
     );
 }
 
+/// Decoding rejects signers other than high-threshold NI-DKG IDs.
+#[test]
+fn certified_stream_slice_rejects_other_signers() {
+    let master_public_key_tag =
+        NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name: "key".to_string(),
+        }));
+    for dkg_tag in [NiDkgTag::LowThreshold, master_public_key_tag] {
+        let mut other_signer = certified_stream_slice_for_test();
+        other_signer.certification.signature.signer.dkg_tag = dkg_tag;
+        let decoded: Result<CertifiedStreamSlice, _> = v1::CertifiedStreamSlice::proxy_decode(
+            &v1::CertifiedStreamSlice::proxy_encode(other_signer),
+        );
+        assert_matches!(
+            decoded,
+            Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "SignedCertificationContent",
+                ..
+            })
+        );
+    }
+}
+
 #[test]
 fn error_decode_error() {
     match <pb_types::NiDkgId as ProtoProxy<NiDkgId>>::proxy_decode(&b"garbage"[..]) {
@@ -111,7 +136,7 @@ fn error_missing_field() {
 
 fn certified_stream_slice_for_test() -> CertifiedStreamSlice {
     CertifiedStreamSlice {
-        certification: certification_for_test(),
+        certification: certification_for_test().signed,
         merkle_proof: vec![7, 8, 9],
         payload: vec![4, 6, 8],
     }
@@ -120,7 +145,7 @@ fn certified_stream_slice_for_test() -> CertifiedStreamSlice {
 fn certification_for_test() -> Certification {
     Certification {
         height: Height::new(14),
-        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: Signed {
             content: certification_content_for_test(),
             signature: threshold_signature_for_test(),

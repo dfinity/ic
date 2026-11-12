@@ -1,6 +1,6 @@
 use candid::{CandidType, DecoderConfig, decode_one_with_config};
 use ic_base_types::{InternalAddress, PrincipalIdBlobParseError};
-use ic_config::embedders::{Config as EmbeddersConfig, StableMemoryPageLimit};
+use ic_config::embedders::{Config as EmbeddersConfig, MemoryPageLimit};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
@@ -95,7 +95,7 @@ macro_rules! trace_syscall {
 
 // This helper is used in system calls for displaying a summary hash of a heap region.
 #[inline]
-fn summarize(heap: &Heap<'_>, start: usize, size: usize) -> u64 {
+fn summarize(heap: &mut Heap<'_>, start: usize, size: usize) -> u64 {
     if TRACE_SYSCALLS {
         let start = start.min(heap.len());
         let end = (start + size).min(heap.len());
@@ -1894,7 +1894,7 @@ impl SystemApiImpl {
     }
 
     /// Appends the specified bytes on the heap as a string to the canister's logs.
-    pub fn save_log_message(&mut self, src: usize, size: usize, heap: &Heap<'_>) {
+    pub fn save_log_message(&mut self, src: usize, size: usize, heap: &mut Heap<'_>) {
         // The log record is truncated to the log's byte capacity anyway
         // (see `CanisterLog::add_record`), so only copy the bytes that are kept.
         let max_size = self
@@ -1934,7 +1934,7 @@ impl SystemApiImpl {
 
     /// Based on the page limit object, returns the page limit for the current
     /// system API type. Can be called with the limit for dirty pages or accessed pages.
-    pub fn get_page_limit(&self, page_limit: &StableMemoryPageLimit) -> NumOsPages {
+    pub fn get_page_limit(&self, page_limit: &MemoryPageLimit) -> NumOsPages {
         match &self.api_type {
             // Longer-running messages make use of a different, possibly higher limit.
             ApiType::Init { .. } | ApiType::PreUpgrade { .. } => page_limit.upgrade,
@@ -2271,7 +2271,7 @@ impl SystemApi for SystemApiImpl {
         &self,
         name_src: usize,
         name_size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<i32> {
         let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_env_var_name_exists")),
@@ -2325,7 +2325,7 @@ impl SystemApi for SystemApiImpl {
         &self,
         name_src: usize,
         name_size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<usize> {
         let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_env_var_value_size")),
@@ -2814,7 +2814,7 @@ impl SystemApi for SystemApiImpl {
         &mut self,
         src: usize,
         size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()> {
         let result = match self.get_response_info() {
             None => Err(self.error_for("ic0_msg_reply_data_append")),
@@ -2856,7 +2856,12 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_msg_reject(&mut self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<()> {
+    fn ic0_msg_reject(
+        &mut self,
+        src: usize,
+        size: usize,
+        heap: &mut Heap<'_>,
+    ) -> HypervisorResult<()> {
         let result = match self.get_response_info() {
             None => Err(self.error_for("ic0_msg_reject")),
             Some((_, max_reply_size, response_status)) => match response_status {
@@ -3037,7 +3042,7 @@ impl SystemApi for SystemApiImpl {
         reply_env: u64,
         reject_fun: u32,
         reject_env: u64,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()> {
         let result = match &mut self.api_type {
             ApiType::Start { .. }
@@ -3112,7 +3117,7 @@ impl SystemApi for SystemApiImpl {
         &mut self,
         src: usize,
         size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()> {
         let result = match &mut self.api_type {
             ApiType::Start { .. }
@@ -3468,9 +3473,13 @@ impl SystemApi for SystemApiImpl {
 
                 // A Wasm memory limit of 0 means unlimited.
                 if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
+                    let wasm_execution_mode = WasmExecutionMode::from_is_wasm64(
+                        self.sandbox_safe_system_state.is_wasm64_execution,
+                    );
                     return Err(HypervisorError::WasmMemoryLimitExceeded {
                         bytes: wasm_memory_usage,
                         limit: wasm_memory_limit,
+                        max_wasm_memory_size: wasm_execution_mode.max_wasm_memory_size(),
                     });
                 }
             }
@@ -3954,7 +3963,7 @@ impl SystemApi for SystemApiImpl {
         &mut self,
         src: usize,
         size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()> {
         let result = match &mut self.api_type {
             ApiType::Start { .. }
@@ -4074,7 +4083,12 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_debug_print(&self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<()> {
+    fn ic0_debug_print(
+        &self,
+        src: usize,
+        size: usize,
+        heap: &mut Heap<'_>,
+    ) -> HypervisorResult<()> {
         const MAX_DEBUG_MESSAGE_SIZE: usize = 32 * 1024;
         let size = size.min(MAX_DEBUG_MESSAGE_SIZE);
         let msg = match heap.get("ic0.debug_print", src, size) {
@@ -4107,7 +4121,7 @@ impl SystemApi for SystemApiImpl {
         Ok(())
     }
 
-    fn ic0_trap(&self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<()> {
+    fn ic0_trap(&self, src: usize, size: usize, heap: &mut Heap<'_>) -> HypervisorResult<()> {
         const MAX_ERROR_MESSAGE_SIZE: usize = 32 * 1024;
         let size = size.min(MAX_ERROR_MESSAGE_SIZE);
         let result = {
@@ -4124,7 +4138,12 @@ impl SystemApi for SystemApiImpl {
         Err(result)
     }
 
-    fn ic0_is_controller(&self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<u32> {
+    fn ic0_is_controller(
+        &self,
+        src: usize,
+        size: usize,
+        heap: &mut Heap<'_>,
+    ) -> HypervisorResult<u32> {
         let msg_bytes = heap.get("ic0.is_controller", src, size)?;
         let result = PrincipalId::try_from(msg_bytes)
             .map(|principal_id| {

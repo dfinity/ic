@@ -862,6 +862,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
                 .on_reject(wasm().reject_message().reject())
                 .on_reply(
                     wasm()
+                        .debug_print(b"callback")
                         .stable_grow(1280)
                         .stable64_fill(0, 0, 1000)
                         .instruction_counter_is_at_least(1_000_000)
@@ -938,6 +939,8 @@ fn dts_out_of_subnet_memory_in_response_callback() {
         available_memory_before_finishing_callback,
         test.subnet_available_memory().get_execution_memory()
     );
+    // The canister log of the failed response callback is persisted.
+    assert_eq!(test.canister_log_contents(a_id), vec![b"callback".to_vec()]);
 }
 
 #[test]
@@ -1748,6 +1751,157 @@ fn dts_response_concurrent_cycles_change_fails() {
             + (max_execution_cost
                 - (test.canister_execution_cost(a_id) - initial_execution_cost).real())
     );
+}
+
+#[test]
+fn dts_response_concurrent_cycles_change_persists_canister_log() {
+    // Test steps:
+    // 1. Canister A calls canister B.
+    // 2. Canister B replies to canister A.
+    // 3. The response callback of canister A logs a message and runs in
+    //    multiple slices.
+    // 4. While canister A is paused, we emulate a postponed charge
+    //    of the entire cycles balance of canister A.
+    // 5. The response callback resumes and burns more cycles than refunded
+    //    to canister A for the response transmission.
+    // 6. The response callback fails because there are not enough cycles
+    //    in the canister balance to cover both burning and cycles debit.
+    // 7. The canister log of the failed response callback is persisted.
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm().message_payload().append_and_reply().build();
+
+    let a = wasm()
+        .inter_update(
+            b_id,
+            call_args().other_side(b).on_reply(
+                wasm()
+                    .debug_print(b"callback")
+                    .instruction_counter_is_at_least(1_000_000)
+                    .cycles_burn128(Cycles::new(100_000_000_000)),
+            ),
+        )
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Execute one slice of the response callback.
+    test.execute_slice(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    // Emulate a postponed charge.
+    let cycles_debit = test.canister_state(a_id).system_state.balance();
+    test.canister_state_mut(a_id)
+        .system_state
+        .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
+
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert!(
+        err.description()
+            .contains(&format!("Canister {a_id} is out of cycles"))
+    );
+
+    // No cycles are burned by the failed response callback...
+    assert!(
+        test.canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::BurnedCycles)
+            .is_none()
+    );
+
+    // ...but its canister log is persisted.
+    assert_eq!(test.canister_log_contents(a_id), vec![b"callback".to_vec()]);
+}
+
+#[test]
+fn dts_cleanup_callback_persists_canister_log_of_response_callback() {
+    // Test steps:
+    // 1. Canister A logs a message and calls canister B.
+    // 2. Canister B replies to canister A.
+    // 3. The response callback of canister A logs a message and traps.
+    // 4. The cleanup callback of canister A logs a message and runs in
+    //    multiple slices.
+    // 5. The canister logs of all executions are persisted.
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm().message_payload().append_and_reply().build();
+
+    let a = wasm()
+        .debug_print(b"update")
+        .inter_update(
+            b_id,
+            call_args()
+                .other_side(b)
+                .on_reply(wasm().debug_print(b"callback").trap())
+                .on_cleanup(
+                    wasm()
+                        .debug_print(b"cleanup")
+                        .instruction_counter_is_at_least(1_000_000),
+                ),
+        )
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Execute the response callback and the first slice of the cleanup callback.
+    test.execute_slice(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+
+    let logs: Vec<_> = test
+        .canister_log_contents(a_id)
+        .into_iter()
+        .map(|content| String::from_utf8(content).unwrap())
+        .collect();
+    assert_eq!(logs.len(), 4, "{logs:?}");
+    assert_eq!(logs[0], "update");
+    assert_eq!(logs[1], "callback");
+    assert!(logs[2].starts_with("[TRAP]"), "{logs:?}");
+    assert_eq!(logs[3], "cleanup");
 }
 
 #[test]

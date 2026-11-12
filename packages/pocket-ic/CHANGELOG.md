@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+- Downloading the PocketIC server now fails (and the partially written binary is removed) if the download returns an HTTP error status or the downloaded archive cannot be decompressed. Previously, such errors were silently ignored, leaving a corrupted binary behind.
+
+### Changed
+- Bumped `ic-management-canister-types` to v0.11.0, so the reexported `CanisterSettings` has the new fields `minimum_incoming_canister_call_cycles` and `status_visibility`.
+
 ## 16.1.0 - 2026-10-08
 
 ### Changed

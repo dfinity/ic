@@ -33,6 +33,23 @@ fn records_to_fill(buffer_size: u64, message_len: usize) -> u32 {
     (buffer_size / LogMemoryStore::estimate_record_size(message_len) as u64 + 1) as u32
 }
 
+/// Returns the largest log content that still fits a log memory store of the given size.
+fn max_content_len(log_memory_limit: u64) -> usize {
+    log_memory_limit as usize - LogMemoryStore::estimate_record_size(0)
+}
+
+/// Asserts that lowering the log memory limit to `log_memory_limit` truncated the stored
+/// records to fit the smaller buffer instead of dropping them.
+fn assert_logs_truncated_to_limit(logs: &[CanisterLogRecord], log_memory_limit: u64) {
+    assert!(
+        !logs.is_empty(),
+        "records were dropped instead of truncated"
+    );
+    for record in logs {
+        assert_le!(record.content.len(), max_content_len(log_memory_limit));
+    }
+}
+
 // Change limits in order not to duplicate prod values.
 // Setting the instruction limit per round equal to the instruction limit per slice
 // means that the actual instruction limit used by the scheduler is 1
@@ -2316,8 +2333,6 @@ fn test_canister_resize_down_preserves_logs() {
 #[test]
 fn test_canister_resize_down_below_record_size_truncates_logs() {
     let log_memory_limit = TEST_DEFAULT_LOG_MEMORY_LIMIT as u64;
-    // The largest log content that still fits a log memory store of that size.
-    let max_content_len = log_memory_limit as usize - LogMemoryStore::estimate_record_size(0);
 
     let env = setup_env();
     let controller = PrincipalId::new_anonymous();
@@ -2342,7 +2357,10 @@ fn test_canister_resize_down_below_record_size_truncates_logs() {
     }
     let logs_before = fetch_log_records(&env, controller, canister_id);
     assert_eq!(logs_before.len(), 2);
-    assert_gt!(logs_before[0].content.len(), max_content_len);
+    assert_gt!(
+        logs_before[0].content.len(),
+        max_content_len(log_memory_limit)
+    );
 
     // Shrinking the limit below a single stored record makes `LogMemoryStore::resize_impl`
     // migrate the records into a buffer they no longer fit. They must be truncated.
@@ -2353,15 +2371,58 @@ fn test_canister_resize_down_below_record_size_truncates_logs() {
             .build(),
     );
 
-    // The records must be truncated to fit the smaller buffer, not dropped.
     let logs_after = fetch_log_records(&env, controller, canister_id);
-    assert!(
-        !logs_after.is_empty(),
-        "records were dropped instead of truncated"
+    assert_logs_truncated_to_limit(&logs_after, log_memory_limit);
+}
+
+#[test]
+fn test_canister_resize_down_truncates_logs_of_long_execution() {
+    let log_memory_limit = TEST_DEFAULT_LOG_MEMORY_LIMIT as u64;
+
+    let env = setup_env();
+    let controller = PrincipalId::new_anonymous();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .with_log_memory_limit(2 * MIB)
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
     );
-    for record in &logs_after {
-        assert_le!(record.content.len(), max_content_len);
-    }
+
+    // A long execution that logs a record not fitting the smallest accepted log memory
+    // limit and only then runs long enough to be paused. The record is created against
+    // the delta log capacity snapshotted when the message started executing, i.e. 2 MiB.
+    // Slice #0 is processed inside `send_ingress`, leaving the execution paused.
+    let message = [b'a'; MAX_LOG_MESSAGE_LEN];
+    let _msg_id = env.send_ingress(
+        controller,
+        canister_id,
+        "update",
+        wasm()
+            .debug_print(&message)
+            .instruction_counter_is_at_least(MAX_INSTRUCTIONS_PER_SLICE.get())
+            .reply()
+            .build(),
+    );
+
+    // Request a smaller limit while the execution is in flight. `update_settings` cannot
+    // run on a canister with a paused execution (only with an aborted one, see
+    // `Ic00MethodPermissions`), so it is applied after the execution has completed and
+    // `apply_changes` has appended its delta log to the still 2 MiB store. Shrinking then
+    // makes `LogMemoryStore::resize_impl` migrate that record into a buffer it no longer
+    // fits. It must be truncated.
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(log_memory_limit)
+            .build(),
+    );
+
+    let logs_after = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(logs_after.len(), 1);
+    assert_logs_truncated_to_limit(&logs_after, log_memory_limit);
 }
 
 #[test]
@@ -2642,11 +2703,16 @@ fn test_canister_log_with_zero_log_memory_limit() {
 
     // Produce a second log with no ring buffer. persistent_next_idx advances
     // to next_idx == 2.
+    const METRIC: &str = "canister_log_delta_memory_usage_bytes";
+    let before = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
     let _ = env.execute_ingress(
         canister_id,
         "update",
         wasm().debug_print(b"log").reply().build(),
     );
+    let after = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+    // The delta must be consumed and observed only once, even without a ring buffer.
+    assert_eq!(after.count, before.count + 1);
 
     // lms.next_idx() must be 2 before and after a checkpoint/reload cycle.
     let check_next_idx = |env: &StateMachine| {

@@ -3,6 +3,7 @@ use super::*;
 use crate::pb::v1::SelfDescribingValue as SelfDescribingValuePb;
 use ic_nervous_system_common_test_utils::assert_contains_all_key_words;
 use ic_nns_governance_api::SelfDescribingValue;
+use ic_protobuf::registry::replica_version::SEV_SNP_MEASUREMENT_LENGTH;
 use maplit::hashmap;
 
 #[test]
@@ -74,7 +75,7 @@ fn test_validate_base_guest_launch_measurements_empty() {
 fn test_validate_base_guest_launch_measurements_valid() {
     let guest_launch_measurements = GuestLaunchMeasurements {
         guest_launch_measurements: vec![GuestLaunchMeasurement {
-            measurement: vec![0_u8; 48],
+            measurement: vec![0_u8; SEV_SNP_MEASUREMENT_LENGTH],
             metadata: Some(GuestLaunchMeasurementMetadata {
                 kernel_cmdline: Some("console=ttyS0".to_string()),
                 vcpu_type: None,
@@ -91,7 +92,7 @@ fn test_validate_base_guest_launch_measurements_multiple_defects() {
         guest_launch_measurements: vec![
             // Valid measurement
             GuestLaunchMeasurement {
-                measurement: vec![0_u8; 48],
+                measurement: vec![0_u8; SEV_SNP_MEASUREMENT_LENGTH],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("console=ttyS0".to_string()),
                     vcpu_type: None,
@@ -107,12 +108,12 @@ fn test_validate_base_guest_launch_measurements_multiple_defects() {
             },
             // Missing metadata. This is ok.
             GuestLaunchMeasurement {
-                measurement: vec![0_u8; 48],
+                measurement: vec![0_u8; SEV_SNP_MEASUREMENT_LENGTH],
                 metadata: None,
             },
             // Empty kernel_cmdline. This IS ok.
             GuestLaunchMeasurement {
-                measurement: vec![0_u8; 48],
+                measurement: vec![0_u8; SEV_SNP_MEASUREMENT_LENGTH],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("".to_string()),
                     vcpu_type: None,
@@ -135,7 +136,7 @@ fn test_bless_alternative_guest_os_version_validate_valid() {
         rootfs_hash: "abc123".to_string(),
         base_guest_launch_measurements: Some(GuestLaunchMeasurements {
             guest_launch_measurements: vec![GuestLaunchMeasurement {
-                measurement: vec![0_u8; 48],
+                measurement: vec![0_u8; SEV_SNP_MEASUREMENT_LENGTH],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("console=ttyS0".to_string()),
                     vcpu_type: None,
@@ -182,14 +183,14 @@ fn test_bless_alternative_guest_os_version_to_self_describing() {
         base_guest_launch_measurements: Some(GuestLaunchMeasurements {
             guest_launch_measurements: vec![
                 GuestLaunchMeasurement {
-                    measurement: vec![0x01; 48],
+                    measurement: vec![0x01; SEV_SNP_MEASUREMENT_LENGTH],
                     metadata: Some(GuestLaunchMeasurementMetadata {
                         kernel_cmdline: Some("console=ttyS0".to_string()),
                         vcpu_type: Some("EPYC-Turin".to_string()),
                     }),
                 },
                 GuestLaunchMeasurement {
-                    measurement: vec![0x02; 48],
+                    measurement: vec![0x02; SEV_SNP_MEASUREMENT_LENGTH],
                     metadata: None,
                 },
             ],
@@ -211,14 +212,14 @@ fn test_bless_alternative_guest_os_version_to_self_describing() {
             "base_guest_launch_measurements".to_string() => SelfDescribingValue::Map(hashmap! {
                 "guest_launch_measurements".to_string() => SelfDescribingValue::Array(vec![
                     SelfDescribingValue::Map(hashmap! {
-                        "measurement".to_string() => SelfDescribingValue::from(vec![0x01; 48]),
+                        "measurement".to_string() => SelfDescribingValue::from(vec![0x01; SEV_SNP_MEASUREMENT_LENGTH]),
                         "metadata".to_string() => SelfDescribingValue::Map(hashmap! {
                             "kernel_cmdline".to_string() => SelfDescribingValue::from("console=ttyS0"),
                             "vcpu_type".to_string() => SelfDescribingValue::from("EPYC-Turin"),
                         }),
                     }),
                     SelfDescribingValue::Map(hashmap! {
-                        "measurement".to_string() => SelfDescribingValue::from(vec![0x02; 48]),
+                        "measurement".to_string() => SelfDescribingValue::from(vec![0x02; SEV_SNP_MEASUREMENT_LENGTH]),
                         "metadata".to_string() => SelfDescribingValue::Null,
                     }),
                 ]),

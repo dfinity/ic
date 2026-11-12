@@ -391,7 +391,7 @@ pub(crate) fn find_async_receipts<'a>(
 /// [`CanisterHttpPaymentReceipt`], paired with that signer's basic signature.
 pub(crate) fn reconstruct_individual_shares(
     proof: &CanisterHttpResponseProof,
-) -> impl Iterator<Item = CanisterHttpResponseShare> + '_ {
+) -> impl Iterator<Item = CanisterHttpResponseShare> {
     proof.signatures.iter().map(|(signer, sig)| Signed {
         content: CanisterHttpResponseReceipt {
             metadata: proof.metadata.clone(),

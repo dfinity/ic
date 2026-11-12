@@ -7,6 +7,7 @@ use std::{
 use ic_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::ReplicatedState;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_state_layout::CompleteCheckpointLayout;
 use ic_state_manager::{CheckpointMetrics, checkpoint::load_checkpoint};
@@ -14,9 +15,21 @@ use ic_types::Height;
 
 const HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED: Height = Height::new(0);
 
-/// Loads the replicated state at the checkpoint and creates a csv file with all [`CanisterMetrics`]
+/// Loads the replicated state at the checkpoint and creates csv files with some [`CanisterMetrics`]
 /// for each canister in the state.
-pub fn get(checkpoint_dir: PathBuf, output_path: &Path) -> Result<(), String> {
+pub fn get(
+    checkpoint_dir: PathBuf,
+    load_metrics_output_path: &Path,
+    connection_metrics_output_path: &Path,
+) -> Result<(), String> {
+    // Otherwise the second file would silently overwrite the first one.
+    if load_metrics_output_path == connection_metrics_output_path {
+        return Err(format!(
+            "The load metrics and connection metrics output paths must differ, got {} for both",
+            load_metrics_output_path.display()
+        ));
+    }
+
     let replicated_state = load_checkpoint(
         &CompleteCheckpointLayout::new_untracked(
             checkpoint_dir,
@@ -31,6 +44,19 @@ pub fn get(checkpoint_dir: PathBuf, output_path: &Path) -> Result<(), String> {
     )
     .map_err(|err| format!("Failed to load the checkpoint: {err:?}"))?;
 
+    write_load_metrics_file(&replicated_state, load_metrics_output_path)
+        .map_err(|err| format!("Failed to write load metrics: {err}"))?;
+
+    write_connection_metrics_file(&replicated_state, connection_metrics_output_path)
+        .map_err(|err| format!("Failed to write connection metrics: {err}"))?;
+
+    Ok(())
+}
+
+fn write_load_metrics_file(
+    replicated_state: &ReplicatedState,
+    output_path: &Path,
+) -> Result<(), String> {
     let mut output_file = std::fs::File::create(output_path)
         .map_err(|err| format!("Failed to create the output file: {err}"))?;
     // Write the header.
@@ -64,4 +90,57 @@ pub fn get(checkpoint_dir: PathBuf, output_path: &Path) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn write_connection_metrics_file(
+    replicated_state: &ReplicatedState,
+    output_path: &Path,
+) -> Result<(), String> {
+    let mut output_file = std::fs::File::create(output_path)
+        .map_err(|err| format!("Failed to create the output file: {err}"))?;
+    // Write the header.
+    writeln!(output_file, "sender_canister_id,receiver_canister_id,count")
+        .map_err(|err| format!("Failed to write header: {err}"))?;
+
+    // Write rows.
+    for (receiver_canister_id, canister_state) in replicated_state.canister_states().all_iter() {
+        for (sender_canister_id, metrics) in canister_state
+            .system_state
+            .canister_metrics()
+            .connection_metrics()
+            .get()
+            .iter()
+        {
+            let count = metrics.count;
+            writeln!(
+                output_file,
+                "{sender_canister_id},{receiver_canister_id},{count}"
+            )
+            .map_err(|err| format!("Failed to write row: {err}"))?;
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_rejects_identical_output_paths() {
+        let output_path = Path::new("metrics.csv");
+
+        // The checkpoint doesn't exist, so this only succeeds in returning the expected error if the
+        // output paths are checked before the checkpoint is loaded.
+        let err = get(
+            PathBuf::from("/non/existent/checkpoint"),
+            output_path,
+            output_path,
+        )
+        .unwrap_err();
+
+        assert!(err.contains("output paths must differ"), "{err}");
+        assert!(!output_path.exists());
+    }
 }

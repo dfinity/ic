@@ -386,6 +386,9 @@ impl LogMemoryStore {
     }
 
     /// Appends a delta log to the ring buffer if it exists.
+    ///
+    /// The records are removed from the delta log even if there is no ring
+    /// buffer, so that appending the same delta log again has no effect.
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
         if delta_log.is_empty() {
             // No records to append, but still carry the monotone index forward.
@@ -402,6 +405,7 @@ impl LogMemoryStore {
             // No ring buffer exists (e.g., log_memory_limit is zero), but still
             // carry the monotone index forward so consumers can track progress.
             self.persistent_next_idx = self.persistent_next_idx.max(delta_log.next_idx());
+            delta_log.take_records();
             return;
         };
         // If the delta overflowed and evicted records, there is a gap between the
@@ -413,7 +417,7 @@ impl LogMemoryStore {
             ring_buffer.clear();
         }
         // Append the delta records and persist the ring buffer.
-        ring_buffer.append_log(delta_log.records_mut().drain(..));
+        ring_buffer.append_log(delta_log.take_records());
         self.save_ring_buffer(ring_buffer);
     }
 

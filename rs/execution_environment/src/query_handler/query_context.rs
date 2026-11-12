@@ -90,8 +90,8 @@ fn wasm_query_method(
 }
 
 /// Executes a single user query along with its outgoing query calls.
-pub(super) struct QueryContext {
-    log: ReplicaLogger,
+pub(super) struct QueryContext<'a> {
+    log: &'a ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
     canister_manager: Arc<CanisterManager>,
     own_subnet_type: SubnetType,
@@ -127,10 +127,10 @@ pub(super) struct QueryContext {
     instruction_observation: Option<Arc<AtomicU64>>,
 }
 
-impl QueryContext {
+impl<'a> QueryContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
-        log: ReplicaLogger,
+        log: &'a ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
         canister_manager: Arc<CanisterManager>,
         own_subnet_type: SubnetType,
@@ -589,14 +589,14 @@ impl QueryContext {
         let callback = common::unregister_callback(
             &mut canister,
             &response,
-            &self.log,
+            self.log,
             &self.metrics.query_critical_error,
         )
         .ok_or_else(err)?;
         let (call_context, call_context_id) = common::get_call_context(
             &canister,
             &callback,
-            &self.log,
+            self.log,
             &self.metrics.query_critical_error,
         )
         .ok_or_else(err)?;
@@ -826,6 +826,21 @@ impl QueryContext {
 
         let canister_id = request.receiver;
 
+        info!(
+            every_n_seconds => 5,
+            self.log,
+            "Composite query: canister {} calls method {} of canister {}{}",
+            request.sender,
+            request.method_name,
+            canister_id,
+            // Also log effective canister ID if calling the management canister.
+            (canister_id == CanisterId::ic_00())
+                .then(|| request.extract_effective_canister_id())
+                .flatten()
+                .map(|id| format!(" (effective canister ID {id})"))
+                .unwrap_or_default()
+        );
+
         // Requests to the management canister made by a composite query are not
         // routed to a destination subnet, i.e. they reach the query handler with
         // `IC_00` as the receiver. A request providing a subnet ID directly in the
@@ -874,7 +889,8 @@ impl QueryContext {
             measurement_scope,
         );
 
-        self.round_limits.instructions -= self.instruction_overhead_per_query_call;
+        self.round_limits
+            .deduct_instructions(self.instruction_overhead_per_query_call);
 
         match result {
             // Execution of the message failed. We do not need to bother with
@@ -940,7 +956,8 @@ impl QueryContext {
         // Charge the base overhead of a query call. This happens after rejecting
         // calls to methods that are not management canister query methods, in the
         // same way as calls to non-existing methods of a canister are not charged.
-        self.round_limits.instructions -= self.instruction_overhead_per_query_call;
+        self.round_limits
+            .deduct_instructions(self.instruction_overhead_per_query_call);
 
         let since = Instant::now(); // Start logging execution time.
         let (result, instructions) = match execute_subnet_query(
@@ -958,7 +975,8 @@ impl QueryContext {
 
         // Account for the instructions consumed while producing the reply
         // in the same way as for the instructions executed by a canister.
-        self.round_limits.instructions -= as_round_instructions(instructions);
+        self.round_limits
+            .deduct_instructions(as_round_instructions(instructions));
 
         match result {
             Ok(reply) => ExecutionResult::Response(to_query_result(Payload::Data(reply))),

@@ -712,7 +712,7 @@ async fn validate_slice_above_signal_limit() {
         // with messages starting end ending at the given indices.
         let validate_slice = |slice_begin: u64, slice_end: u64, state| {
             let slice = stream.slice(slice_begin.into(), Some((slice_end - slice_begin) as usize));
-            let certified_stream_slice = encode_certified_stream_slice(slice, 1.into());
+            let certified_stream_slice = encode_certified_stream_slice(slice);
             xnet_payload_builder.validate_slice(
                 REMOTE_SUBNET,
                 &certified_stream_slice,

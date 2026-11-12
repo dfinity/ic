@@ -33,7 +33,7 @@ pub fn validate_payload(
     crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,
     dkg_pool: &dyn DkgPool,
-    parent: Block,
+    parent: &Block,
     last_summary_block: &Block,
     payload: &BlockPayload,
     state_reader: &dyn StateReader<State = ReplicatedState>,
@@ -60,7 +60,7 @@ pub fn validate_payload(
                 pool_reader,
                 last_summary_block,
                 last_dkg_summary,
-                &parent,
+                parent,
                 state_reader,
                 validation_context,
                 log.clone(),
@@ -125,7 +125,7 @@ pub fn validate_payload(
                 last_dkg_summary,
                 &data_payload.dkg,
                 max_dealings_per_block,
-                &parent,
+                parent,
                 state_reader,
                 validation_context,
                 log,
@@ -337,7 +337,7 @@ mod tests {
                     crypto.as_ref(),
                     &PoolReader::new(&pool),
                     dkg_pool.read().unwrap().deref(),
-                    parent_block,
+                    &parent_block,
                     &last_summary_block,
                     block_payload,
                     state_manager.as_ref(),
@@ -365,7 +365,7 @@ mod tests {
                     crypto.as_ref(),
                     &PoolReader::new(&pool),
                     dkg_pool.read().unwrap().deref(),
-                    parent_block,
+                    &parent_block,
                     &last_summary_block,
                     summary,
                     state_manager.as_ref(),
@@ -572,11 +572,7 @@ mod tests {
             let mut parent = Block::from(pool.make_next_block());
             parent.payload = Payload::new(
                 ic_types::crypto::crypto_hash,
-                BlockPayload::Data(DataPayload {
-                    batch: BatchPayload::default(),
-                    dkg: DkgDataPayload::new(Height::from(0), vec![]),
-                    idkg: idkg::Payload::default(),
-                }),
+                BlockPayload::Data(DataPayload::new_empty(Height::from(0))),
             );
 
             let context = ValidationContext {
@@ -626,7 +622,7 @@ mod tests {
                     crypto.as_ref(),
                     &PoolReader::new(&pool),
                     dkg_pool.read().unwrap().deref(),
-                    parent,
+                    &parent,
                     &last_summary_block,
                     &block_payload,
                     state_manager.as_ref(),
@@ -707,7 +703,7 @@ mod tests {
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Data(DataPayload {
                     batch: BatchPayload::default(),
-                    dkg: DkgDataPayload::new(Height::from(0), parent_dealings),
+                    dkg: DkgDataPayload::new(Height::from(0), parent_dealings, vec![]),
                     idkg: idkg::Payload::default(),
                 }),
             );
@@ -720,7 +716,7 @@ mod tests {
 
             let block_payload = BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dkg: DkgDataPayload::new(Height::from(0), dealings_to_validate),
+                dkg: DkgDataPayload::new(Height::from(0), dealings_to_validate, vec![]),
                 idkg: idkg::Payload::default(),
             });
 
@@ -731,7 +727,7 @@ mod tests {
                 crypto.as_ref(),
                 &PoolReader::new(&pool),
                 dkg_pool.read().unwrap().deref(),
-                parent,
+                &parent,
                 &last_summary_block,
                 &block_payload,
                 state_manager.as_ref(),
@@ -916,7 +912,7 @@ mod tests {
             };
             let block_payload = BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dkg: DkgDataPayload::new(start_height, vec![dealing.clone()]),
+                dkg: DkgDataPayload::new(start_height, vec![dealing.clone()], vec![]),
                 idkg: idkg::Payload::default(),
             });
 
@@ -927,7 +923,7 @@ mod tests {
                 crypto.as_ref(),
                 &PoolReader::new(&pool),
                 &dkg_pool,
-                parent.clone(),
+                &parent,
                 &last_summary_block,
                 &block_payload,
                 state_manager.as_ref(),
@@ -948,7 +944,7 @@ mod tests {
                 crypto.as_ref(),
                 &PoolReader::new(&pool),
                 &dkg_pool,
-                parent,
+                &parent,
                 &last_summary_block,
                 &block_payload,
                 state_manager.as_ref(),

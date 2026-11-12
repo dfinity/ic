@@ -95,6 +95,7 @@ pub enum OpenIdEmailVerification {
     Unknown,
     Google,
     Microsoft,
+    Apple,
 }
 
 #[derive(CandidType)]
