@@ -137,6 +137,23 @@ mod processable_utxos_for_account {
         );
         assert_eq!(state.suspended_utxos.num_utxos(), 4);
 
+        let unchecked_utxo = Utxo {
+            outpoint: OutPoint {
+                txid: "3b5fe5a0cd4eb12a8a1d0a5b4b1b1bb1d1d63d4f7c1a0d52e3a90c4bd8a6f5e2"
+                    .parse()
+                    .unwrap(),
+                vout: 2,
+            },
+            ..utxo()
+        };
+        state.suspend_utxo(
+            unchecked_utxo.clone(),
+            account,
+            SuspendedReason::Unchecked,
+            NOW.checked_sub(DAY).unwrap(),
+        );
+        assert_eq!(state.suspended_utxos.num_utxos(), 5);
+
         state.add_utxos::<CheckInvariantsImpl>(account, vec![utxo()]);
         state.add_utxos::<CheckInvariantsImpl>(
             other_account,
@@ -162,7 +179,7 @@ mod processable_utxos_for_account {
             ..utxo()
         };
         let result = state.processable_utxos_for_account(
-            btreeset! {utxo(), new_utxo.clone(), ignored_utxo(), quarantined_utxo()},
+            btreeset! {utxo(), new_utxo.clone(), ignored_utxo(), quarantined_utxo(), unchecked_utxo.clone()},
             &account,
             &NOW,
         );
@@ -174,6 +191,7 @@ mod processable_utxos_for_account {
                     new_utxos: btreeset! {new_utxo},
                     previously_ignored_utxos: btreeset! {ignored_utxo()},
                     previously_quarantined_utxos: btreeset! {quarantined_utxo()},
+                    previously_unchecked_utxos: btreeset! {unchecked_utxo},
                 },
                 vec![]
             )
@@ -250,7 +268,8 @@ mod suspended_utxos {
 
             let other_reason = match reason {
                 SuspendedReason::ValueTooSmall => SuspendedReason::Quarantined,
-                SuspendedReason::Quarantined => SuspendedReason::ValueTooSmall,
+                SuspendedReason::Quarantined => SuspendedReason::Unchecked,
+                SuspendedReason::Unchecked => SuspendedReason::ValueTooSmall,
             };
             assert!(suspended_utxos.insert(
                 ledger_account(),
@@ -300,7 +319,11 @@ mod suspended_utxos {
     }
 
     fn all_suspended_reasons() -> Vec<SuspendedReason> {
-        vec![SuspendedReason::Quarantined, SuspendedReason::ValueTooSmall]
+        vec![
+            SuspendedReason::Quarantined,
+            SuspendedReason::ValueTooSmall,
+            SuspendedReason::Unchecked,
+        ]
     }
 }
 

@@ -131,6 +131,9 @@ type UtxoStatus = variant {
     // because the Ledger was unavailable. Retrying the [update_balance] call
     // should eventually advance the UTXO to the [Minted] state.
     Checked : Utxo;
+    // The Bitcoin check of this UTXO could not be completed. The UTXO will be
+    // checked again in a later [update_balance] call.
+    Unchecked : Utxo;
     // The UTXO passed the Bitcoin check, and ckBTC has been minted.
     Minted : record {
         block_index : nat64;
@@ -419,6 +422,8 @@ type SuspendedReason = variant {
     ValueTooSmall;
     // The Bitcoin checker considered this UTXO to be tainted.
     Quarantined;
+    // The Bitcoin checker returned an error for this UTXO.
+    Unchecked;
 };
 
 type WithdrawalFee = record {

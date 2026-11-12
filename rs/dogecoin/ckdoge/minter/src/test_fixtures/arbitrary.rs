@@ -402,6 +402,7 @@ pub mod ckbtc {
         prop_oneof![
             Just(SuspendedReason::ValueTooSmall),
             Just(SuspendedReason::Quarantined),
+            Just(SuspendedReason::Unchecked),
         ]
     }
     fn replaced_reason() -> impl Strategy<Value = ic_ckbtc_minter::state::eventlog::ReplacedReason>

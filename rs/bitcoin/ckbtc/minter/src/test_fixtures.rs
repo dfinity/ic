@@ -485,6 +485,7 @@ pub mod arbitrary {
         prop_oneof![
             Just(SuspendedReason::ValueTooSmall),
             Just(SuspendedReason::Quarantined),
+            Just(SuspendedReason::Unchecked),
         ]
     }
 
