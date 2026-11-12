@@ -112,7 +112,7 @@ impl Stack {
 type OpsBytes<'a> = &'a [u8];
 
 fn read_bytes<'a>(ops_bytes: &mut OpsBytes<'a>, len: usize) -> &'a [u8] {
-    if len < ops_bytes.len() {
+    if len <= ops_bytes.len() {
         let (bytes, rest) = ops_bytes.split_at(len);
         *ops_bytes = rest;
         bytes
@@ -389,6 +389,15 @@ fn eval(ops_bytes: OpsBytes) {
                 let a = stack.pop_blob();
                 if a != b {
                     api::trap_with_blob(&c)
+                }
+            }
+            // Conditionally evaluate a nested payload on a fresh stack.
+            Ops::IfEq | Ops::IfNeq => {
+                let ops = stack.pop_blob();
+                let b = stack.pop_blob();
+                let a = stack.pop_blob();
+                if (a == b) == (op == Ops::IfEq) {
+                    eval(&ops);
                 }
             }
             Ops::MintCycles128 => {
