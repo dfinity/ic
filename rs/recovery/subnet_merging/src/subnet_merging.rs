@@ -14,7 +14,7 @@ use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
     NeuronArgs, Recovery, RecoveryArgs,
-    cli::{read, read_data_location},
+    cli::read_data_location,
     error::{RecoveryError, RecoveryResult},
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
@@ -31,7 +31,13 @@ use slog::{Logger, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 
-use std::{collections::BTreeSet, fmt::Debug, iter::Peekable, net::IpAddr, time::Duration};
+use std::{
+    collections::BTreeSet,
+    fmt::Debug,
+    iter::Peekable,
+    net::{IpAddr, Ipv6Addr},
+    time::Duration,
+};
 
 const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
@@ -127,21 +133,14 @@ pub struct SubnetMergingArgs {
     #[clap(long, value_parser=ic_recovery::util::data_location_from_str)]
     pub download_node_source: Option<DataLocation>,
 
-    /// The node of the destination subnet to download the state from: its IP
-    /// address, or "local" if the tool runs on that node. Required by
-    /// `WaitForHaltingCupOnDestinationSubnet`; asked for if missing, unless
-    /// prompts are skipped. Unless the tool runs on that node, the steps that
-    /// stop its replica and download its state access it over SSH with the
+    /// The node of the destination subnet to download the state from and upload
+    /// the merged state to: its IPv6 address, or "local" if the tool runs on
+    /// that node. The same node is stopped, recovered and restarted. Asked for
+    /// if missing, unless prompts are skipped. Remote access uses SSH with the
     /// admin key.
     #[clap(long, value_parser=ic_recovery::util::data_location_from_str)]
-    pub download_node_destination: Option<DataLocation>,
-
-    /// IP address of the node of the destination subnet to upload the merged
-    /// state to, over SSH with the admin key. Required by
-    /// `UploadStateToDestinationSubnet` and `WaitForCUPOnDestinationSubnet`;
-    /// asked for if missing, unless prompts are skipped.
-    #[clap(long)]
-    pub upload_node_destination: Option<IpAddr>,
+    #[serde(alias = "download_node_destination")]
+    pub destination_node: Option<DataLocation>,
 
     /// How long to wait for the subnet that is cooling down to become ready to
     /// be merged, in seconds.
@@ -243,10 +242,8 @@ impl SubnetMerging {
             Layout::new(&recovery, &logger).expect("Failed to create the working directories");
 
         if recovery_args.skip_prompts {
-            Self::check_download_nodes(&subnet_merging_args)
-                .expect("The download nodes should be given when prompts are skipped");
-            Self::check_upload_node(&subnet_merging_args)
-                .expect("The upload node should be given when prompts are skipped");
+            Self::check_nodes(&subnet_merging_args)
+                .expect("The nodes should be given when prompts are skipped");
         }
 
         Self {
@@ -260,39 +257,42 @@ impl SubnetMerging {
         }
     }
 
-    /// Checks that the download node of each subnet is given, unless all the
+    /// Checks that the node of each subnet is given, unless all the
     /// steps that need it are skipped explicitly.
     ///
     /// Only needed when prompts are skipped: otherwise each of these steps asks
     /// for the node. Without the node the steps cannot be created, and the tool
-    /// would carry on without confirming that the subnet has halted.
-    fn check_download_nodes(args: &SubnetMergingArgs) -> RecoveryResult<()> {
+    /// would carry on without confirming that the subnet has halted or
+    /// uploading the merged state and waiting for its recovery CUP.
+    fn check_nodes(args: &SubnetMergingArgs) -> RecoveryResult<()> {
         let skipped_steps = args.skip.clone().unwrap_or_default();
         for (step_types, node, option) in [
             (
-                [
+                &[
                     StepType::WaitForHaltingCupOnSourceSubnet,
                     StepType::StopSourceReplica,
                     StepType::DownloadStateFromSourceSubnet,
-                ],
+                ][..],
                 args.download_node_source,
                 "--download-node-source",
             ),
             (
-                [
+                &[
                     StepType::WaitForHaltingCupOnDestinationSubnet,
                     StepType::StopDestinationReplica,
                     StepType::DownloadStateFromDestinationSubnet,
-                ],
-                args.download_node_destination,
-                "--download-node-destination",
+                    StepType::UploadStateToDestinationSubnet,
+                    StepType::WaitForCUPOnDestinationSubnet,
+                ][..],
+                args.destination_node,
+                "--destination-node",
             ),
         ] {
             if node.is_some() {
                 continue;
             }
             if let Some(step_type) = step_types
-                .into_iter()
+                .iter()
                 .find(|step_type| !skipped_steps.contains(step_type))
             {
                 return Err(RecoveryError::UnexpectedError(format!(
@@ -301,29 +301,6 @@ impl SubnetMerging {
             }
         }
         Ok(())
-    }
-
-    /// Checks that the node of the destination subnet to upload the merged
-    /// state to is given, unless all the steps that need it are skipped
-    /// explicitly. Only needed when prompts are skipped, like
-    /// [Self::check_download_nodes].
-    fn check_upload_node(args: &SubnetMergingArgs) -> RecoveryResult<()> {
-        if args.upload_node_destination.is_some() {
-            return Ok(());
-        }
-        let skipped_steps = args.skip.clone().unwrap_or_default();
-        match [
-            StepType::UploadStateToDestinationSubnet,
-            StepType::WaitForCUPOnDestinationSubnet,
-        ]
-        .into_iter()
-        .find(|step_type| !skipped_steps.contains(step_type))
-        {
-            Some(step_type) => Err(RecoveryError::UnexpectedError(format!(
-                "--upload-node-destination is required by step {step_type:?}"
-            ))),
-            None => Ok(()),
-        }
     }
 
     /// Checks whether the subnets satisfy the following preconditions:
@@ -537,7 +514,7 @@ impl SubnetMerging {
     ) -> RecoveryResult<impl Step + use<>> {
         Ok(WaitForHaltingCupStep {
             subnet_id: self.subnet_id(target_subnet),
-            node: self.download_node(target_subnet)?,
+            node: self.node_location(target_subnet)?,
             registry_helper: self.recovery.registry_helper.clone(),
             layout: self.layout.clone(),
             timeout: Duration::from_secs(self.params.halt_timeout_secs),
@@ -592,7 +569,7 @@ impl SubnetMerging {
         Ok(UploadStateAndRestartStep {
             logger: self.recovery.logger.clone(),
             ssh_user: SshUser::Admin,
-            upload_method: DataLocation::Remote(self.upload_node()?),
+            upload_method: self.node_location(TargetSubnet::Destination)?,
             work_dir: self.layout.work_dir(TargetSubnet::Merged),
             data_src: self.layout.ic_state_dir(TargetSubnet::Merged),
             require_confirmation: !self.recovery_args.skip_prompts,
@@ -603,22 +580,12 @@ impl SubnetMerging {
 
     fn wait_for_recovery_cup_step(&self) -> RecoveryResult<impl Step + use<>> {
         Ok(WaitForRecoveryCupStep {
-            node_ip: self.upload_node()?,
+            node_ip: match self.node_location(TargetSubnet::Destination)? {
+                DataLocation::Remote(ip) => ip,
+                DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
+            },
             layout: self.layout.clone(),
             logger: self.recovery.logger.clone(),
-        })
-    }
-
-    /// The node of the destination subnet the merged state is uploaded to.
-    ///
-    /// Every step that needs the node prompts for it, and it is checked upfront
-    /// when prompts are skipped, so it is only missing if something went wrong.
-    fn upload_node(&self) -> RecoveryResult<IpAddr> {
-        self.params.upload_node_destination.ok_or_else(|| {
-            RecoveryError::UnexpectedError(format!(
-                "The node of subnet {} to upload the merged state to is missing",
-                self.params.destination_subnet_id,
-            ))
         })
     }
 
@@ -627,27 +594,27 @@ impl SubnetMerging {
     /// admin key otherwise.
     fn download_node_access(&self, target_subnet: TargetSubnet) -> RecoveryResult<DownloadNode> {
         Ok(DownloadNode::new(
-            self.download_node(target_subnet)?,
+            self.node_location(target_subnet)?,
             self.recovery.admin_key_file.clone(),
             self.recovery.ssh_confirmation,
             self.recovery.logger.clone(),
         ))
     }
 
-    /// The node of a subnet whose state is merged, i.e. the one the halting CUP
-    /// is waited for on.
+    /// The node used for every step that accesses a subnet: waiting for CUPs,
+    /// stopping its replica, downloading its state and recovering it.
     ///
     /// Every step that needs the node prompts for it, and it is checked upfront
     /// when prompts are skipped, so it is only missing if something went wrong.
-    fn download_node(&self, target_subnet: TargetSubnet) -> RecoveryResult<DataLocation> {
+    fn node_location(&self, target_subnet: TargetSubnet) -> RecoveryResult<DataLocation> {
         let node = match target_subnet {
             TargetSubnet::Source => self.params.download_node_source,
-            TargetSubnet::Destination => self.params.download_node_destination,
+            TargetSubnet::Destination => self.params.destination_node,
             TargetSubnet::Merged => None,
         };
         node.ok_or_else(|| {
             RecoveryError::UnexpectedError(format!(
-                "The node of subnet {} to download the state from is missing",
+                "The node of subnet {} is missing",
                 self.subnet_id(target_subnet),
             ))
         })
@@ -731,12 +698,15 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             }
             StepType::WaitForHaltingCupOnDestinationSubnet
             | StepType::StopDestinationReplica
-            | StepType::DownloadStateFromDestinationSubnet => {
-                if self.params.download_node_destination.is_none() {
-                    self.params.download_node_destination = Some(read_data_location(
+            | StepType::DownloadStateFromDestinationSubnet
+            | StepType::UploadStateToDestinationSubnet
+            | StepType::WaitForCUPOnDestinationSubnet => {
+                if self.params.destination_node.is_none() {
+                    self.params.destination_node = Some(read_data_location(
                         &self.logger,
                         "Enter the IP of the node of the Destination Subnet to download the state \
-                         from (or \"local\" if the tool runs on that node):",
+                         from and upload the merged state to (or \"local\" if the tool runs on \
+                         that node):",
                     ));
                 }
             }
@@ -745,18 +715,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             | StepType::MergeSubnets
             | StepType::CheckRegistryForRoutingTableEntry
             | StepType::ProposeCupForDestinationSubnet => {}
-            StepType::UploadStateToDestinationSubnet | StepType::WaitForCUPOnDestinationSubnet => {
-                // Asked for until given: without it, both steps fail to be
-                // created and are skipped, and the tool would go on to unhalt
-                // the destination subnet without uploading the merged state.
-                if self.params.upload_node_destination.is_none() {
-                    self.params.upload_node_destination = Some(read(
-                        &self.logger,
-                        "Enter the IP of the node of the Destination Subnet to upload the merged \
-                         state to (with admin access):",
-                    ));
-                }
-            }
             StepType::UnhaltDestinationSubnet => {}
         }
     }
@@ -910,8 +868,7 @@ mod tests {
             source_subnet_id: SubnetId::from(PrincipalId::new_subnet_test_id(1)),
             destination_subnet_id: SubnetId::from(PrincipalId::new_subnet_test_id(2)),
             download_node_source: Some(DataLocation::Remote("::1".parse().unwrap())),
-            download_node_destination: Some(DataLocation::Local),
-            upload_node_destination: Some("::2".parse().unwrap()),
+            destination_node: Some(DataLocation::Local),
             merge_ready_timeout_secs: 2400,
             halt_timeout_secs: 123,
             registry_timeout_secs: 3600,
@@ -922,59 +879,83 @@ mod tests {
     }
 
     #[test]
-    fn download_nodes_are_required_unless_their_steps_are_skipped() {
-        assert!(SubnetMerging::check_download_nodes(&args()).is_ok());
-
+    fn source_node_is_required_unless_all_its_steps_are_skipped() {
         let mut args = args();
-        args.download_node_destination = None;
-        let err = SubnetMerging::check_download_nodes(&args)
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("--download-node-destination"), "{err}");
-
-        // Still needed by the remaining steps.
-        args.skip = Some(vec![StepType::WaitForHaltingCupOnDestinationSubnet]);
-        let err = SubnetMerging::check_download_nodes(&args)
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("StopDestinationReplica"), "{err}");
-
-        args.skip = Some(vec![
-            StepType::WaitForHaltingCupOnDestinationSubnet,
-            StepType::StopDestinationReplica,
-            StepType::DownloadStateFromDestinationSubnet,
-        ]);
-        assert!(SubnetMerging::check_download_nodes(&args).is_ok());
-
+        assert!(SubnetMerging::check_nodes(&args).is_ok());
         args.download_node_source = None;
-        let err = SubnetMerging::check_download_nodes(&args)
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("--download-node-source"), "{err}");
+        for step in [
+            StepType::WaitForHaltingCupOnSourceSubnet,
+            StepType::StopSourceReplica,
+            StepType::DownloadStateFromSourceSubnet,
+        ] {
+            let err = SubnetMerging::check_nodes(&args).unwrap_err().to_string();
+            assert!(err.contains("--download-node-source"), "{err}");
+            assert!(err.contains(&format!("{step:?}")), "{err}");
+            args.skip.get_or_insert_default().push(step);
+        }
+        assert!(SubnetMerging::check_nodes(&args).is_ok());
     }
 
     #[test]
-    fn upload_node_is_required_unless_its_steps_are_skipped() {
-        assert!(SubnetMerging::check_upload_node(&args()).is_ok());
-
+    fn destination_node_is_required_unless_all_its_steps_are_skipped() {
         let mut args = args();
-        args.upload_node_destination = None;
-        let err = SubnetMerging::check_upload_node(&args)
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("UploadStateToDestinationSubnet"), "{err}");
-
-        args.skip = Some(vec![StepType::UploadStateToDestinationSubnet]);
-        let err = SubnetMerging::check_upload_node(&args)
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("WaitForCUPOnDestinationSubnet"), "{err}");
-
-        args.skip = Some(vec![
+        assert!(SubnetMerging::check_nodes(&args).is_ok());
+        args.destination_node = None;
+        for step in [
+            StepType::WaitForHaltingCupOnDestinationSubnet,
+            StepType::StopDestinationReplica,
+            StepType::DownloadStateFromDestinationSubnet,
             StepType::UploadStateToDestinationSubnet,
             StepType::WaitForCUPOnDestinationSubnet,
-        ]);
-        assert!(SubnetMerging::check_upload_node(&args).is_ok());
+        ] {
+            let err = SubnetMerging::check_nodes(&args).unwrap_err().to_string();
+            assert!(err.contains("--destination-node"), "{err}");
+            assert!(err.contains(&format!("{step:?}")), "{err}");
+            args.skip.get_or_insert_default().push(step);
+        }
+        assert!(SubnetMerging::check_nodes(&args).is_ok());
+    }
+
+    #[test]
+    fn destination_node_accepts_remote_and_local_access() {
+        let args = args();
+        for (value, expected) in [
+            ("::2", DataLocation::Remote("::2".parse().unwrap())),
+            ("local", DataLocation::Local),
+        ] {
+            let parsed = SubnetMergingArgs::try_parse_from([
+                "subnet-merging-tool",
+                "--source-subnet-id",
+                &args.source_subnet_id.to_string(),
+                "--destination-subnet-id",
+                &args.destination_subnet_id.to_string(),
+                "--destination-node",
+                value,
+            ])
+            .unwrap();
+            assert_eq!(parsed.destination_node, Some(expected));
+        }
+    }
+
+    #[test]
+    fn saved_state_keeps_original_destination_download_node() {
+        for location in [
+            DataLocation::Local,
+            DataLocation::Remote("::2".parse().unwrap()),
+        ] {
+            let mut args = args();
+            args.destination_node = Some(location);
+            let mut json = serde_json::to_value(&args).unwrap();
+            let fields = json.as_object_mut().unwrap();
+            let node = fields.remove("destination_node").unwrap();
+            fields.insert("download_node_destination".to_string(), node);
+            fields.insert("upload_node_destination".to_string(), "::3".into());
+
+            assert_eq!(
+                serde_json::from_value::<SubnetMergingArgs>(json).unwrap(),
+                args
+            );
+        }
     }
 
     #[test]
