@@ -3,11 +3,12 @@ use crate::endpoints::WithdrawalArg;
 use crate::endpoints::ckerc20::WithdrawErc20Arg;
 use crate::erc20::CkErc20Token;
 use crate::icrc21::{
-    ConsentMessageConfig, TokenSymbols, build_consent_info, format_amount, token_amount,
+    ConsentMessageConfig, TokenSymbols, build_consent_info, decoder_config, format_amount,
+    token_amount,
 };
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::Wei;
-use candid::{Encode, Nat, Principal};
+use candid::{Encode, Nat, Principal, decode_one_with_config};
 use icrc_ledger_types::icrc21::errors::{ErrorInfo, Icrc21Error};
 use icrc_ledger_types::icrc21::lib::MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES;
 use icrc_ledger_types::icrc21::requests::{
@@ -184,14 +185,14 @@ fn test_token_symbols_for_network() {
     assert_eq!(
         TokenSymbols::for_network(EthereumNetwork::Mainnet),
         TokenSymbols {
-            cketh: "ckETH",
+            cketh: "ckETH".parse().unwrap(),
             eth: "ETH"
         }
     );
     assert_eq!(
         TokenSymbols::for_network(EthereumNetwork::Sepolia),
         TokenSymbols {
-            cketh: "ckSepoliaETH",
+            cketh: "ckSepoliaETH".parse().unwrap(),
             eth: "SepoliaETH"
         }
     );
@@ -243,6 +244,60 @@ async fn test_invalid_args() {
         // Valid Candid, but missing the `ckerc20_ledger_id` field.
         ("withdraw_erc20", Encode!(&withdraw_eth_arg(1)).unwrap()),
     ] {
+        let req = make_request(method, arg, None);
+        let description = expect_unsupported_canister_call(
+            consent_info_without_ledger_call(req, &mainnet_config()).await,
+        );
+        assert!(
+            description.contains("Failed to decode"),
+            "unexpected error description for method {method}: {description}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_args_exceeding_skipping_quota_are_rejected() {
+    // A few bytes can declare a vector of u32::MAX `null` values, which would take the
+    // decoder billions of steps to skip without a skipping quota.
+    const HUGE_VEC_LEN: [u8; 5] = [0xff, 0xff, 0xff, 0xff, 0x0f]; // LEB128 of u32::MAX
+    let with_huge_trailing_arg = |mut arg: Vec<u8>| {
+        assert_eq!(arg.pop(), Some(0));
+        arg.extend_from_slice(&HUGE_VEC_LEN);
+        assert!(arg.len() <= MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize);
+        arg
+    };
+    for (method, arg) in [
+        (
+            "withdraw_eth",
+            with_huge_trailing_arg(
+                Encode!(
+                    &withdraw_eth_arg(MINIMUM_WITHDRAWAL_AMOUNT),
+                    &Vec::<()>::new()
+                )
+                .unwrap(),
+            ),
+        ),
+        (
+            "withdraw_erc20",
+            with_huge_trailing_arg(
+                Encode!(&withdraw_erc20_arg(1_000_000), &Vec::<()>::new()).unwrap(),
+            ),
+        ),
+    ] {
+        // The error description only shows the outermost context of the decoding error,
+        // so check its root cause directly.
+        let decoding_error = match method {
+            "withdraw_eth" => {
+                decode_one_with_config::<WithdrawalArg>(&arg, &decoder_config()).err()
+            }
+            _ => decode_one_with_config::<WithdrawErc20Arg>(&arg, &decoder_config()).err(),
+        };
+        let decoding_error = format!("{:?}", decoding_error.expect("decoding should fail"));
+        assert!(
+            decoding_error.contains("Skipping cost exceeds the limit"),
+            "unexpected decoding error for method {method}: {decoding_error}"
+        );
+
         let req = make_request(method, arg, None);
         let description = expect_unsupported_canister_call(
             consent_info_without_ledger_call(req, &mainnet_config()).await,
@@ -478,8 +533,10 @@ async fn test_withdraw_erc20_generic_display() {
          in USDC to the Ethereum address below.\n\n\
          The minter also burns ckETH from your account to pay for the Ethereum transaction \
          fee. The fee is estimated by the minter when it processes the withdrawal and is \
-         limited by the ckETH allowance you granted to the minter. Any unused part of the fee \
-         is not refunded.\n\n\
+         limited by the ckETH allowance you granted to the minter. The ckETH is burned first: \
+         if burning the ckUSDC then fails, no withdrawal takes place and the fee is \
+         reimbursed, possibly minus a small penalty. Once the transaction is sent to Ethereum, \
+         any unused part of the fee is not refunded.\n\n\
          **Amount to convert:** `1.5 ckUSDC`\n\n\
          **Ethereum destination address:**\n`0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0`"
     );
@@ -542,8 +599,9 @@ async fn test_withdraw_erc20_fields_display() {
                 (
                     "Transaction fee".to_string(),
                     Value::Text {
-                        content: "Paid in ckETH as estimated by the minter; any unused part is \
-                                  not refunded"
+                        content: "Paid in ckETH as estimated by the minter; reimbursed, \
+                                  possibly minus a penalty, if the ckUSDC burn fails; otherwise \
+                                  any unused part is not refunded"
                             .to_string()
                     }
                 ),
@@ -603,8 +661,9 @@ async fn test_withdraw_erc20_uses_sepolia_symbols() {
     assert_eq!(
         fields_display.fields[2].1,
         Value::Text {
-            content: "Paid in ckSepoliaETH as estimated by the minter; any unused part is not \
-                      refunded"
+            content: "Paid in ckSepoliaETH as estimated by the minter; reimbursed, possibly minus \
+                      a penalty, if the ckSepoliaUSDC burn fails; otherwise any unused part is \
+                      not refunded"
                 .to_string()
         }
     );

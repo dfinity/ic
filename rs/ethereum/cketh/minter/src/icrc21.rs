@@ -7,11 +7,11 @@ mod tests;
 use crate::address::validate_address_as_destination;
 use crate::endpoints::WithdrawalArg;
 use crate::endpoints::ckerc20::WithdrawErc20Arg;
-use crate::erc20::CkErc20Token;
+use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{Erc20Value, Wei};
 use crate::state::{State, read_state};
-use candid::{CandidType, Decode, Deserialize, Nat, Principal};
+use candid::{CandidType, DecoderConfig, Deserialize, Nat, Principal, decode_one_with_config};
 use ic_ethereum_types::Address;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::Subaccount;
@@ -29,24 +29,21 @@ const CKETH_DECIMALS: u8 = 18;
 
 /// Token symbols used in consent messages. They depend on the configured
 /// Ethereum network so that test deployments use the test-token names.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct TokenSymbols {
     /// The ledger token, e.g. "ckETH" on Mainnet, "ckSepoliaETH" on Sepolia.
-    cketh: &'static str,
+    cketh: CkTokenSymbol,
     /// The native Ethereum token, e.g. "ETH" on Mainnet, "SepoliaETH" on Sepolia.
     eth: &'static str,
 }
 
 impl TokenSymbols {
     fn for_network(network: EthereumNetwork) -> Self {
-        match network {
-            EthereumNetwork::Mainnet => Self {
-                cketh: "ckETH",
-                eth: "ETH",
-            },
-            EthereumNetwork::Sepolia => Self {
-                cketh: "ckSepoliaETH",
-                eth: "SepoliaETH",
+        Self {
+            cketh: CkTokenSymbol::cketh_symbol(network),
+            eth: match network {
+                EthereumNetwork::Mainnet => "ETH",
+                EthereumNetwork::Sepolia => "SepoliaETH",
             },
         }
     }
@@ -150,7 +147,11 @@ async fn build_consent_info(
 
     let consent_message = match consent_msg_request.method.as_str() {
         "withdraw_eth" => {
-            let args = Decode!(consent_msg_request.arg.as_slice(), WithdrawalArg).map_err(|e| {
+            let args = decode_one_with_config::<WithdrawalArg>(
+                consent_msg_request.arg.as_slice(),
+                &decoder_config(),
+            )
+            .map_err(|e| {
                 Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
                     description: format!("Failed to decode WithdrawalArg: {e}"),
                 })
@@ -169,15 +170,18 @@ async fn build_consent_info(
                     ),
                 }));
             }
-            build_withdraw_eth_message(&args, destination, &display_type, symbols)
+            build_withdraw_eth_message(&args, destination, &display_type, &symbols)
         }
         "withdraw_erc20" => {
-            let args =
-                Decode!(consent_msg_request.arg.as_slice(), WithdrawErc20Arg).map_err(|e| {
-                    Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                        description: format!("Failed to decode WithdrawErc20Arg: {e}"),
-                    })
-                })?;
+            let args = decode_one_with_config::<WithdrawErc20Arg>(
+                consent_msg_request.arg.as_slice(),
+                &decoder_config(),
+            )
+            .map_err(|e| {
+                Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                    description: format!("Failed to decode WithdrawErc20Arg: {e}"),
+                })
+            })?;
             let ckerc20_token = config
                 .ckerc20_tokens
                 .iter()
@@ -199,7 +203,7 @@ async fn build_consent_info(
                 ckerc20_token,
                 decimals,
                 &display_type,
-                symbols,
+                &symbols,
             )
         }
         method => {
@@ -230,7 +234,7 @@ fn build_withdraw_eth_message(
     args: &WithdrawalArg,
     destination: Address,
     display_type: &DisplayMessageType,
-    symbols: TokenSymbols,
+    symbols: &TokenSymbols,
 ) -> ConsentMessage {
     let TokenSymbols { cketh, eth } = symbols;
     match display_type {
@@ -260,7 +264,7 @@ fn build_withdraw_eth_message(
             let mut fields = vec![
                 (
                     "Amount".to_string(),
-                    token_amount(&args.amount, CKETH_DECIMALS, cketh),
+                    token_amount(&args.amount, CKETH_DECIMALS, &cketh.to_string()),
                 ),
                 (
                     "Ethereum address".to_string(),
@@ -292,7 +296,7 @@ fn build_withdraw_erc20_message(
     ckerc20_token: &CkErc20Token,
     decimals: u8,
     display_type: &DisplayMessageType,
-    symbols: TokenSymbols,
+    symbols: &TokenSymbols,
 ) -> ConsentMessage {
     let TokenSymbols { cketh, .. } = symbols;
     let ckerc20 = ckerc20_token.ckerc20_token_symbol.to_string();
@@ -307,7 +311,10 @@ fn build_withdraw_erc20_message(
                  The minter also burns {cketh} from your account to pay for the Ethereum \
                  transaction fee. The fee is estimated by the minter when it processes the \
                  withdrawal and is limited by the {cketh} allowance you granted to the minter. \
-                 Any unused part of the fee is not refunded.\n\n\
+                 The {cketh} is burned first: if burning the {ckerc20} then fails, no withdrawal \
+                 takes place and the fee is reimbursed, possibly minus a small penalty. Once \
+                 the transaction is sent to Ethereum, any unused part of the fee is not \
+                 refunded.\n\n\
                  **Amount to convert:** `{amount} {ckerc20}`\n\n\
                  **Ethereum destination address:**\n`{destination}`",
                 amount = format_amount(&args.amount, decimals),
@@ -342,8 +349,9 @@ fn build_withdraw_erc20_message(
                     "Transaction fee".to_string(),
                     Value::Text {
                         content: format!(
-                            "Paid in {cketh} as estimated by the minter; any unused part \
-                             is not refunded"
+                            "Paid in {cketh} as estimated by the minter; reimbursed, possibly \
+                             minus a penalty, if the {ckerc20} burn fails; otherwise any unused \
+                             part is not refunded"
                         ),
                     },
                 ),
@@ -356,6 +364,17 @@ fn build_withdraw_erc20_message(
             })
         }
     }
+}
+
+/// The Candid decoder configuration for the arguments of the call to describe.
+///
+/// The argument size limit alone does not bound the decoding work, since a few bytes can
+/// declare a vector of billions of `null` values. Use the same skipping quota as the `ic_cdk`
+/// endpoint macros apply to the arguments of `withdraw_eth` and `withdraw_erc20` themselves.
+fn decoder_config() -> DecoderConfig {
+    let mut config = DecoderConfig::new();
+    config.set_skipping_quota(10_000);
+    config
 }
 
 fn push_subaccount_field(

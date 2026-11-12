@@ -2092,8 +2092,10 @@ fn should_provide_icrc21_consent_message_for_withdraw_erc20() {
              amount in USDC to the Ethereum address below.\n\n\
              The minter also burns ckETH from your account to pay for the Ethereum transaction \
              fee. The fee is estimated by the minter when it processes the withdrawal and is \
-             limited by the ckETH allowance you granted to the minter. Any unused part of the \
-             fee is not refunded.\n\n\
+             limited by the ckETH allowance you granted to the minter. The ckETH is burned \
+             first: if burning the ckUSDC then fails, no withdrawal takes place and the fee is \
+             reimbursed, possibly minus a small penalty. Once the transaction is sent to \
+             Ethereum, any unused part of the fee is not refunded.\n\n\
              **Amount to convert:** `1.5 ckUSDC`\n\n\
              **Ethereum destination address:**\n`{DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS}`\n\n\
              **ckETH source subaccount (transaction fee):**\n`{}`",
@@ -2134,8 +2136,9 @@ fn should_provide_icrc21_consent_message_for_withdraw_erc20() {
             (
                 "Transaction fee".to_string(),
                 Value::Text {
-                    content: "Paid in ckETH as estimated by the minter; any unused part is not \
-                              refunded"
+                    content: "Paid in ckETH as estimated by the minter; reimbursed, possibly \
+                              minus a penalty, if the ckUSDC burn fails; otherwise any unused \
+                              part is not refunded"
                         .to_string(),
                 }
             ),
