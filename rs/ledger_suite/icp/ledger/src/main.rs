@@ -1,6 +1,8 @@
 #[cfg(feature = "canbench-rs")]
 mod canbench;
 
+// Only used by `canister_init`, which is not compiled with the `canbench-rs` feature.
+#[cfg(not(feature = "canbench-rs"))]
 use candid::Decode;
 use candid::{Encode, Nat, Principal, candid_method};
 use ic_base_types::{CanisterId, PrincipalId};

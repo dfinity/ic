@@ -47,9 +47,17 @@ fn append_large_vec_of_nulls<T: CandidType>(valid_arg: &T) -> Vec<u8> {
     arg
 }
 
-/// Each case is (method name, valid encoded arg, encoded arg with a large trailing vec of nulls,
-/// result of decoding the latter as the method's argument type).
-fn new_cases() -> Vec<(&'static str, Vec<u8>, Vec<u8>, Result<(), candid::Error>)> {
+/// A consent message request case for one ICRC-1/ICRC-2 method.
+struct Case {
+    method: &'static str,
+    valid_arg: Vec<u8>,
+    /// `valid_arg` followed by a large trailing vector of `null` values.
+    large_arg: Vec<u8>,
+    /// The result of decoding `large_arg` as the method's argument type.
+    large_arg_decode_result: Result<(), candid::Error>,
+}
+
+fn new_cases() -> Vec<Case> {
     let transfer_arg = TransferArg {
         from_subaccount: None,
         to: new_account(2),
@@ -83,30 +91,42 @@ fn new_cases() -> Vec<(&'static str, Vec<u8>, Vec<u8>, Result<(), candid::Error>
     let approve_large = append_large_vec_of_nulls(&approve_args);
 
     vec![
-        (
-            "icrc1_transfer",
-            Encode!(&transfer_arg).unwrap(),
-            transfer_large.clone(),
-            decode_consent_message_arg::<TransferArg>(&transfer_large).map(|_| ()),
-        ),
-        (
-            "icrc2_transfer_from",
-            Encode!(&transfer_from_args).unwrap(),
-            transfer_from_large.clone(),
-            decode_consent_message_arg::<TransferFromArgs>(&transfer_from_large).map(|_| ()),
-        ),
-        (
-            "icrc2_approve",
-            Encode!(&approve_args).unwrap(),
-            approve_large.clone(),
-            decode_consent_message_arg::<ApproveArgs>(&approve_large).map(|_| ()),
-        ),
+        Case {
+            method: "icrc1_transfer",
+            valid_arg: Encode!(&transfer_arg).unwrap(),
+            large_arg: transfer_large.clone(),
+            large_arg_decode_result: decode_consent_message_arg::<TransferArg>(&transfer_large)
+                .map(|_| ()),
+        },
+        Case {
+            method: "icrc2_transfer_from",
+            valid_arg: Encode!(&transfer_from_args).unwrap(),
+            large_arg: transfer_from_large.clone(),
+            large_arg_decode_result: decode_consent_message_arg::<TransferFromArgs>(
+                &transfer_from_large,
+            )
+            .map(|_| ()),
+        },
+        Case {
+            method: "icrc2_approve",
+            valid_arg: Encode!(&approve_args).unwrap(),
+            large_arg: approve_large.clone(),
+            large_arg_decode_result: decode_consent_message_arg::<ApproveArgs>(&approve_large)
+                .map(|_| ()),
+        },
     ]
 }
 
 #[test]
 fn test_build_icrc21_consent_info_rejects_arg_exceeding_skipping_quota() {
-    for (method, valid_arg, large_arg, decode_result) in new_cases() {
+    for case in new_cases() {
+        let Case {
+            method,
+            valid_arg,
+            large_arg,
+            large_arg_decode_result,
+        } = case;
+
         // Step 1: Prepare the world. The large arg must fit within the size limit, so that only
         // the skipping quota can stop it.
         assert!(
@@ -123,7 +143,7 @@ fn test_build_icrc21_consent_info_rejects_arg_exceeding_skipping_quota() {
 
         // Step 3.1: The root cause is the skipping quota, not some other limit. (The error
         // description only shows the outermost context of the decoding error.)
-        let decode_error = decode_result.expect_err(method);
+        let decode_error = large_arg_decode_result.expect_err(method);
         assert!(
             format!("{decode_error:?}").contains("Skipping cost exceeds the limit"),
             "{method}: {decode_error:?}"
