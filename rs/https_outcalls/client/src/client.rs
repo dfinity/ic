@@ -163,8 +163,8 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
             let request_sender = request_context.request.sender;
             let reply_callback_id = request_context.request.sender_reply_callback;
-            let time_until_timeout = request_context
-                .timeout_time()
+            let time_left = request_context
+                .effective_deadline()
                 .saturating_duration_since(dispatch_time);
             let CanisterHttpRequestContext {
                 url: request_url,
@@ -192,7 +192,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     request_body.as_deref().map(Vec::as_slice),
                     socks_proxy_addrs,
                     &mut *budget,
-                    time_until_timeout,
+                    time_left,
                     charged_response_time,
                 )
                 .await?;
@@ -366,18 +366,18 @@ async fn execute_http_request(
     body: Option<&[u8]>,
     socks_proxy_addrs: Vec<String>,
     budget: &mut dyn BudgetTracker,
-    time_until_timeout: Duration,
+    time_left: Duration,
     charged_response_time: Option<Duration>,
 ) -> Result<(HttpsOutcallResponse, NumBytes, Duration), CanisterHttpReject> {
     // The request has already timed out, so don't start it.
-    if time_until_timeout.is_zero() {
+    if time_left.is_zero() {
         return Err(deadline_exceeded());
     }
     let AdapterLimits {
         max_response_size,
         max_response_time,
     } = budget.get_adapter_limits();
-    let response_time_limit = time_until_timeout.min(max_response_time);
+    let response_time_limit = time_left.min(max_response_time);
 
     let proto_req = HttpsOutcallRequest {
         url,
@@ -778,7 +778,7 @@ mod tests {
     async fn execute_mock_http_request(
         grpc_channel: Channel,
         budget: &mut dyn BudgetTracker,
-        time_until_timeout: Duration,
+        time_left: Duration,
     ) -> Result<(HttpsOutcallResponse, NumBytes, Duration), CanisterHttpReject> {
         execute_http_request(
             &mut HttpsOutcallsServiceClient::new(grpc_channel),
@@ -788,7 +788,7 @@ mod tests {
             None,
             Vec::new(),
             budget,
-            time_until_timeout,
+            time_left,
             None,
         )
         .await

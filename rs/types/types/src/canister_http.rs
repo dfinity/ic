@@ -688,7 +688,7 @@ impl CanisterHttpRequestContext {
 
     /// The time after which consensus times the request out: the protocol timeout
     /// or, for a bounded-wait call, the caller's deadline if that comes first.
-    pub fn timeout_time(&self) -> Time {
+    pub fn effective_deadline(&self) -> Time {
         let protocol_timeout = self.time + CANISTER_HTTP_TIMEOUT_INTERVAL;
         if self.request.deadline == NO_DEADLINE {
             protocol_timeout
@@ -1667,7 +1667,7 @@ mod tests {
     }
 
     #[test]
-    fn timeout_time_is_the_earlier_of_protocol_timeout_and_deadline() {
+    fn effective_deadline_is_the_earlier_of_protocol_timeout_and_deadline() {
         let time = UNIX_EPOCH + Duration::from_secs(100);
         let with_deadline = |deadline| CanisterHttpRequestContext {
             url: "https://example.com".to_string(),
@@ -1696,11 +1696,14 @@ mod tests {
         };
         let protocol_timeout = time + CANISTER_HTTP_TIMEOUT_INTERVAL;
 
-        assert_eq!(with_deadline(NO_DEADLINE).timeout_time(), protocol_timeout);
+        assert_eq!(
+            with_deadline(NO_DEADLINE).effective_deadline(),
+            protocol_timeout
+        );
         let early = CoarseTime::from_secs_since_unix_epoch(105);
-        assert_eq!(with_deadline(early).timeout_time(), Time::from(early));
+        assert_eq!(with_deadline(early).effective_deadline(), Time::from(early));
         let late = CoarseTime::from_secs_since_unix_epoch(1_000);
-        assert_eq!(with_deadline(late).timeout_time(), protocol_timeout);
+        assert_eq!(with_deadline(late).effective_deadline(), protocol_timeout);
     }
 
     #[test]
