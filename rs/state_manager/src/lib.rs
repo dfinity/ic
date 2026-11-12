@@ -21,8 +21,10 @@
 //!   full state hash ([`CertificationScope::Full`]): the state is then written to disk as a
 //!   checkpoint (see [`StateLayout`]). A checkpoint's manifest hashes all its files, chunk by chunk;
 //!   the manifest's root hash is the state hash in the CUP ([`StateManager::get_state_hash_at`]). A
-//!   checkpoint stays *unverified* until it has been checked against the state it was written from;
-//!   the replica restarts from the latest verified checkpoint and archives unverified ones.
+//!   checkpoint stays *unverified* until it has been checked against the state it was written from.
+//!   On restart, the replica archives unverified checkpoints, and verified ones newer than the
+//!   height Consensus resumes from (keeping at least one), so that it can recompute the states
+//!   Consensus still needs; it then loads the latest remaining one.
 //! * **State sync** ([`state_sync`]) serves checkpoints to peers, chunk by chunk, and fetches one when
 //!   Consensus needs a state this replica doesn't have ([`StateManager::fetch_state`]), from peers
 //!   except for the chunks it can copy from local checkpoints.
@@ -44,7 +46,7 @@
 //! | Manifest thread | After H | The checkpoint's files, in chunks, except files hard-linked from the previous checkpoint, whose hashes it reuses | — |
 //! | Tip thread: validate | After H, while the manifest is computed | The checkpoint's protobufs, loaded and compared with the state | Marks the files read-only, `syncfs`es and removes the unverified marker |
 //! | Tip thread: publish | Once validated and the manifest is ready | — | The manifest, into the states' metadata: only now can Consensus make the CUP |
-//! | Manifest thread: rehash | After handing over a manifest that reused hashes | One in 10 (`REHASH_EVERY_NTH_CHUNK`) of the reused chunks, checked against the reused hashes; on a mismatch, the next manifest is computed from scratch | — |
+//! | Manifest thread: rehash | After handing over a manifest computed from the previous one | One in 10 (`REHASH_EVERY_NTH_CHUNK`) of all the checkpoint's chunks, compared with the manifest just computed; on a mismatch, the next manifest is computed from scratch | — |
 //! | Tip thread: reset tip, merge | After publishing | The files being merged | In `tip/`: hard links to the checkpoint's files (except protobufs), then the merged files |
 //! | Checkpoint removal thread | Once Consensus no longer needs the previous checkpoint ([`StateManager::remove_states_below`]) | — | Deletes it, after renaming it into `fs_tmp/` |
 //! | `syncfs` thread | After the tip thread's larger writes | — | Starts writeback early, so the `syncfs` before verification has less left to do |
@@ -74,9 +76,9 @@
 //!   (typically a long merge) blocks execution. After the checkpoint, `commit_and_certify` also
 //!   waits for the hash thread to hash the canonical state for certification and, at checkpoints,
 //!   to record the checkpoint in the states' metadata.
-//! * **Merges.** On disk, each PageMap is split into 40 GiB shards (`LsmtConfig::shard_num_pages`),
-//!   each a base file and a stack of overlays (see `MergeCandidate`). The tip thread merges the shards
-//!   that need it in parallel; `merge` in [`tip`] decides which.
+//! * **Merges.** On disk, a PageMap is an optional, unsharded base file plus, for each 40 GiB shard
+//!   of its pages (`LsmtConfig::shard_num_pages`), a stack of overlay files (see `MergeCandidate`).
+//!   The tip thread merges the shards that need it in parallel; `merge` in [`tip`] decides which.
 //! * **Publication order.** The manifest is computed while the checkpoint is validated, but only
 //!   published once the validation is complete, so that a CUP never refers to an unverified
 //!   checkpoint.
