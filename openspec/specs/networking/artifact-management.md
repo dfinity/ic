@@ -488,6 +488,17 @@ For consensus block proposals, a stripped download protocol reduces bandwidth by
 - **THEN** the stripped consensus artifact assembler drops it and fetches the stripped message again from a peer advertising it, using the same retry loop and backoff as other downloads
 - **AND** this happens within P2P, before the message reaches the consensus pools and their validation
 
+#### Scenario: Stripped proposal ID names the stripped messages
+- **WHEN** the P2P ID of a stripped block proposal (`MaybeStrippedConsensusMessageId::StrippedBlockProposal`, encoded as `pb::StrippedConsensusMessageId`) is computed
+- **THEN** besides the unstripped proposal's ID it contains `stripped_message_ids_hash`, a hash, under the `ic-stripped-message-ids-domain` separator, of the canonical `StrippedMessageIds` of the stripped content: a sorted map from `IngressMessageId` to the ingress bytes hash, a sorted set of `(NodeIndex, IDkgArtifactId)` for IDKG dealings, and a sorted set of canister HTTP content hashes, so the order and repeats of the listed IDs do not change it
+- **AND** an assembly task fetches only the messages its ID names; a downloaded version that lists other messages has another ID, fails the existing ID check, and the proposal is fetched again, so different stripped versions of one proposal no longer share an ID
+- **AND** because the consensus manager runs one assembly task per ID but removes a finished artifact from the unvalidated pool by its unstripped ID, only the form peers produce is accepted, so every proposal can be assembled under exactly one ID:
+  - stripped summary block proposals are rejected when decoding, since peers send summaries unstripped
+  - every listed IDKG dealing must fill exactly one slot; a second dealing for a slot, leftover dealings, or dealings for a block without an IDKG payload fail assembly (`UnusedIDkgDealing`)
+  - `IDkgPayload` decoding rejects repeated transcript IDs (`ProxyDecodeError::DuplicateEntry`) instead of keeping the last entry
+  - the listed canister HTTP responses must be exactly those worth stripping from the reassembled payload (`MismatchedStrippedResponses`)
+- **AND** pushed artifacts are delivered to the consensus manager with their ID (`Update::Artifact(id, artifact)`), computed in the update handler that decodes them
+
 #### Scenario: Disassemble message for stripped transmission
 - **WHEN** `disassemble_message` is called on a ConsensusMessage
 - **THEN** large payloads (ingress, iDKG dealings) are stripped from the message
