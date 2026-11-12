@@ -4,10 +4,9 @@ use crate::{
     layout::Layout,
     steps::{
         CheckCoolingDownStep, CheckMergeReadinessStep, CheckRoutingTableStep, DownloadStateStep,
-        MergeStatesStep, StopReplicaAtHaltingCheckpointStep, ValidateCupStep,
-        WaitForHaltingCupStep, WaitForRecoveryCupStep,
+        MergeStatesStep, ProposeRecoveryCupStep, StopReplicaAtHaltingCheckpointStep,
+        ValidateCupStep, WaitForHaltingCupStep, WaitForRecoveryCupStep,
     },
-    utils::MergedStateParams,
 };
 
 use clap::Parser;
@@ -15,7 +14,7 @@ use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
     NeuronArgs, Recovery, RecoveryArgs,
-    cli::{read_data_location, read_optional},
+    cli::{read, read_data_location},
     error::{RecoveryError, RecoveryResult},
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
@@ -27,7 +26,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_subnet_tools::{
     admin_helper::get_halt_subnet_at_cup_height_command, utils::print_url_and_ask_for_confirmation,
 };
-use ic_types::Height;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, warn};
 use strum::{EnumMessage, IntoEnumIterator};
@@ -587,25 +585,6 @@ impl SubnetMerging {
         }
     }
 
-    /// The recovery CUP of the destination subnet, at the merged state.
-    fn propose_cup_step(&self) -> RecoveryResult<impl Step + use<>> {
-        let params = MergedStateParams::read(&self.layout.merged_state_params_file())?;
-
-        self.recovery.update_recovery_cup(
-            self.params.destination_subnet_id,
-            Height::from(params.height),
-            params.state_hash,
-            /*replacement_nodes=*/ &[],
-            /*registry_params=*/ None,
-            // The merged subnets are both unavailable while the recovery CUP is
-            // created, so its DKG is handled by whichever subnet the NNS picks
-            // by default, which is neither of them.
-            /*initial_dkg_subnet_id=*/
-            None,
-            /*chain_key_subnet_id=*/ None,
-        )
-    }
-
     fn upload_state_and_restart_step(&self) -> RecoveryResult<impl Step + use<>> {
         // The replica of the destination subnet has been stopped before its
         // state was downloaded, so this step replaces its state directory and
@@ -767,12 +746,15 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             | StepType::CheckRegistryForRoutingTableEntry
             | StepType::ProposeCupForDestinationSubnet => {}
             StepType::UploadStateToDestinationSubnet | StepType::WaitForCUPOnDestinationSubnet => {
+                // Asked for until given: without it, both steps fail to be
+                // created and are skipped, and the tool would go on to unhalt
+                // the destination subnet without uploading the merged state.
                 if self.params.upload_node_destination.is_none() {
-                    self.params.upload_node_destination = read_optional(
+                    self.params.upload_node_destination = Some(read(
                         &self.logger,
                         "Enter the IP of the node of the Destination Subnet to upload the merged \
                          state to (with admin access):",
-                    );
+                    ));
                 }
             }
             StepType::UnhaltDestinationSubnet => {}
@@ -873,7 +855,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             }
             .into(),
 
-            StepType::ProposeCupForDestinationSubnet => self.propose_cup_step()?.into(),
+            StepType::ProposeCupForDestinationSubnet => ProposeRecoveryCupStep {
+                destination_subnet_id: self.params.destination_subnet_id,
+                admin_helper: self.recovery.admin_helper.clone(),
+                layout: self.layout.clone(),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
             StepType::UploadStateToDestinationSubnet => {
                 self.upload_state_and_restart_step()?.into()
             }

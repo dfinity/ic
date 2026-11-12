@@ -11,10 +11,11 @@ use ic_cup_explorer::get_cup;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery, STATES_METADATA,
+    admin_helper::AdminHelper,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::remove_dir,
     registry_helper::RegistryHelper,
-    steps::{CopyLocalIcStateStep, DownloadIcDataStep, Step},
+    steps::{AdminStep, CopyLocalIcStateStep, DownloadIcDataStep, Step},
     util::{CheckpointHeight, DataLocation, ExecutionMode, block_on},
 };
 use ic_state_layout::{CheckpointStatus, StateLayout};
@@ -35,7 +36,7 @@ use std::{
     net::{IpAddr, Ipv6Addr},
     path::PathBuf,
     thread::sleep,
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 /// Waits until the record of the subnet that is being merged away is labeled
@@ -535,10 +536,12 @@ impl Step for MergeStatesStep {
              height {destination_height}; the merged state is the checkpoint {merged_height}",
         );
 
-        // The merge claims its output directory by creating it, so a merged
-        // checkpoint left over from an earlier run of this step is removed
-        // first.
-        remove_dir(&merged_checkpoint)?;
+        // The merge claims its output directory by creating it, and the upload
+        // step refuses a state directory holding more than one checkpoint, so
+        // every merged checkpoint left over from an earlier run of this step
+        // is removed first, whatever its height. The downloaded checkpoints of
+        // the two subnets are in other directories and stay untouched.
+        remove_dir(&self.layout.checkpoints_dir(TargetSubnet::Merged))?;
 
         info!(self.logger, "Merging the states");
         state_tool_helper::merge_checkpoints(
@@ -668,6 +671,52 @@ impl Step for CheckRoutingTableStep {
 
         self.layout
             .write_merge_registry_version(source_subnet_id, merge_registry_version.get())
+    }
+}
+
+/// Proposes the recovery CUP of the destination subnet at the merged state,
+/// with the height and state hash recorded by [MergeStatesStep].
+///
+/// They are read when the step is executed rather than when it is created: a
+/// step that fails to be created is skipped, and the tool would then upload the
+/// merged state and unhalt the destination subnet without a recovery CUP.
+pub(crate) struct ProposeRecoveryCupStep {
+    pub(crate) destination_subnet_id: SubnetId,
+    pub(crate) admin_helper: AdminHelper,
+    pub(crate) layout: Layout,
+    pub(crate) logger: Logger,
+}
+
+impl Step for ProposeRecoveryCupStep {
+    fn descr(&self) -> String {
+        format!(
+            "Propose a recovery CUP for subnet {} at the height and state hash of the merged \
+             state recorded in {}, with its DKG run by the default initial DKG subnet (or the \
+             NNS subnet if none is set).",
+            self.destination_subnet_id,
+            self.layout.merged_state_params_file().display(),
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let params = MergedStateParams::read(&self.layout.merged_state_params_file())?;
+
+        AdminStep {
+            logger: self.logger.clone(),
+            ic_admin_cmd: self
+                .admin_helper
+                .get_propose_to_update_recovery_cup_command(
+                    self.destination_subnet_id,
+                    Height::from(params.height),
+                    params.state_hash,
+                    /*initial_dkg_subnet_id=*/ None,
+                    /*chain_key_config=*/ None,
+                    /*replacement_nodes=*/ &[],
+                    /*registry_params=*/ None,
+                    SystemTime::now(),
+                ),
+        }
+        .exec()
     }
 }
 
