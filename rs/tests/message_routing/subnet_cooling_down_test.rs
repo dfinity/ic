@@ -11,9 +11,9 @@ is one that the subnet does not satisfy to begin with; and that once the tool
 subnet rejects ingress messages and query calls, the tool eventually finds the
 condition to hold, and it then halts the subnet and the subnet it is told to
 merge it into at their next CUP, and downloads and validates the state each
-halted at. The subnet also holds calls waiting
-for responses that never arrive: they are not drained, but make it possible to
-assert that a subnet merge populates the ingress history properly.
+halted at. The cooling down subnet also holds calls waiting for responses that
+never arrive: they are not drained, but make it possible to assert that a
+subnet merge populates the ingress history properly.
 
 The subnet that is cooled down, i.e. the one that would be merged away, is
 called `M`, and the Application subnet the tool is told to merge `M` into is
@@ -41,8 +41,8 @@ Runbook::
 3. Wait until both loops have completed a few iterations, i.e. messages are
    actually flowing between `M` and `T` in both directions.
 4. Install the universal canisters of the steps below (`U1`, `U3`, `U5` and `U6`
-   on `M`, `U4` and `U7` on `T`, `UR` on `R`) and create two empty canisters `U2a` and `U2b`
-   on `M`, controlled by `U1`.
+   on `M`, `U4` and `U7` on `T`, `UR` on `R`) and create two empty canisters
+   `U2a` and `U2b` on `M`, controlled by `U1`.
 5. Execute an update call on `U1` that makes two calls to the management
    canister's `install_code` method, one per `U2x`, in mode `install`, with the
    universal canister module and an `arg` that makes `canister_init` burn
@@ -545,7 +545,7 @@ async fn prepare<'a>(
     }
 }
 
-/// Steps 8 to 11: hand the scenario over to the subnet merging tool, and make
+/// Steps 8 to 14: hand the scenario over to the subnet merging tool, and make
 /// the checks of the steps in between its steps.
 ///
 /// Plain synchronous code, like `rs/tests/consensus/subnet_splitting_test.rs`:
@@ -1012,9 +1012,9 @@ async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
         .expect("starting the call loop should succeed");
 }
 
-/// The payload of the endless loops of `U3`, `U5`, `U7` and `UR`: bump the global
-/// counter, so that the test can observe (via a query) that the payload started
-/// executing, and then loop until the global data is set to
+/// The payload of the endless loops of `U3`, `U5`, `U7` and `UR`: bump the
+/// global counter, so that the test can observe (via a query) that the payload
+/// started executing, and then loop until the global data is set to
 /// `LOOP_BREAK_TRIGGER`, which this test never does.
 ///
 /// The canister never responds to the call it is executing, so that call
