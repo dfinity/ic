@@ -28,6 +28,11 @@ Controllers can create snapshots of a canister's state.
 - **WHEN** `take_canister_snapshot` is called with invalid arguments
 - **THEN** the request is rejected with a decode error
 
+#### Scenario: Sender canister version is validated for take_canister_snapshot
+- **WHEN** a canister calls `take_canister_snapshot` on the management canister with a `sender_canister_version`
+- **THEN** that version must equal the caller's actual canister version (`ic0.canister_version`), or the call is rejected before execution, as for `install_code`, `update_settings`, `uninstall_code`, and `load_canister_snapshot`
+- **AND** when the call also sets `uninstall_code = true`, the validated version is what the target's history records as the origin (`from_canister(caller, Some(version))`) of the resulting `CanisterCodeUninstall` change; a rejected call leaves the target's code, snapshots, and history unchanged
+
 ### Requirement: Loading Canister Snapshots
 
 Controllers can restore a canister from a snapshot.
