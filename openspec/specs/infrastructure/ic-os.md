@@ -69,6 +69,11 @@ HostOS manages the physical host machine and the GuestOS virtual machine.
 - **WHEN** HostOS manages a GuestOS VM
 - **THEN** the `GuestVMType` indicates whether the VM is `Default` (normal operation), `Upgrade` (temporary during upgrade), or `Unknown` (forward compatibility fallback)
 
+#### Scenario: HostOS base image includes nginx
+- **WHEN** the HostOS base image is built
+- **THEN** it installs the `nginx-light` package from `packages.common`, in both prod and dev images, in preparation for HostOS functionality that uses it
+- **AND** HostOS ships no nginx configuration of its own yet, and its IPv4 and IPv6 firewalls do not open ports 80 or 443 inbound, so nginx is not reachable from the network
+
 ### Requirement: GuestOS Configuration
 GuestOS is the environment where the replica process runs.
 
