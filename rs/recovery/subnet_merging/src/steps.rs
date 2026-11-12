@@ -1,5 +1,4 @@
 use crate::{
-    download_node::DownloadNode,
     layout::Layout,
     readiness,
     subnet_merging::TargetSubnet,
@@ -260,7 +259,8 @@ impl WaitForHaltingCupStep {
 /// its files are still being written (or state-synced).
 pub(crate) struct StopReplicaAtHaltingCheckpointStep {
     pub(crate) subnet_id: SubnetId,
-    pub(crate) node: DownloadNode,
+    pub(crate) node: ExecutionMode,
+    pub(crate) require_confirmation: bool,
     pub(crate) layout: Layout,
     pub(crate) timeout: Duration,
     pub(crate) poll_interval: Duration,
@@ -297,8 +297,12 @@ impl Step for StopReplicaAtHaltingCheckpointStep {
         );
 
         info!(self.logger, "Stopping the replica on {}", self.node);
-        self.node
-            .execute("sudo systemctl stop ic-replica".to_string())?;
+        // Unlike the checks on the node, stopping its replica asks for
+        // confirmation on a local node too.
+        self.node.execute(
+            "sudo systemctl stop ic-replica".to_string(),
+            self.require_confirmation.then_some(&self.logger),
+        )?;
         Ok(())
     }
 }
@@ -311,7 +315,7 @@ impl StopReplicaAtHaltingCheckpointStep {
             .join(IC_CHECKPOINTS_PATH)
             .join(StateLayout::checkpoint_name(height));
 
-        match self.node.mode().checkpoint_status(&checkpoint)? {
+        match self.node.checkpoint_status(&checkpoint)? {
             Some(CheckpointStatus::Verified) => Ok(()),
             None => Err(RecoveryError::UnexpectedError(format!(
                 "{} does not hold the checkpoint {} yet",
@@ -337,7 +341,8 @@ impl StopReplicaAtHaltingCheckpointStep {
 pub(crate) struct DownloadStateStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) target_subnet: TargetSubnet,
-    pub(crate) node: DownloadNode,
+    pub(crate) node: ExecutionMode,
+    pub(crate) require_confirmation: bool,
     pub(crate) layout: Layout,
     pub(crate) logger: Logger,
 }
@@ -358,13 +363,19 @@ impl Step for DownloadStateStep {
         let height = read_cup_file(&self.layout.halting_cup_file(self.subnet_id))?.height();
         let working_dir = self.layout.work_dir(self.target_subnet);
 
-        match self.node.ssh_helper() {
-            None => {
+        // A working directory is reused when the download is retried, e.g.
+        // after an interrupted transfer, or when the tool is run again with the
+        // same directory. Only the checkpoint at the halting height is kept, so
+        // that checkpoints at other heights cannot be mistaken for the
+        // downloaded one by later steps.
+        self.layout
+            .remove_checkpoints_except(self.target_subnet, height)?;
+
+        match &self.node {
+            ExecutionMode::Local => {
                 // Unlike the `rsync --delete` of a download, `cp` keeps files
-                // that are only in the copy, e.g. of a different checkpoint at
-                // the same height left over in a reused working directory,
-                // which would then enter the recomputed manifest. Checkpoints
-                // at other heights are left alone.
+                // that are only in a stale copy, which would then enter the
+                // recomputed manifest, so the checkpoint is copied afresh.
                 remove_dir(&self.layout.checkpoint_dir(self.target_subnet, height))?;
                 let data_includes = Recovery::get_ic_state_includes(
                     &self.logger,
@@ -374,13 +385,16 @@ impl Step for DownloadStateStep {
                 CopyLocalIcStateStep {
                     logger: self.logger.clone(),
                     working_dir,
-                    require_confirmation: self.node.require_confirmation(),
+                    require_confirmation: self.require_confirmation,
                     data_includes,
                     include_config: false,
                 }
                 .exec()
             }
-            Some(ssh_helper) => {
+            // The checkpoint at the halting height is kept: `rsync --delete`
+            // removes stale files from it, and `--partial` lets a retry resume
+            // the transfer instead of starting over.
+            ExecutionMode::Remote(ssh_helper) => {
                 ssh_helper.wait_for_access().map_err(|err| {
                     RecoveryError::UnexpectedError(format!(
                         "SSH access to {} with the admin key denied: {err}",
@@ -389,7 +403,7 @@ impl Step for DownloadStateStep {
                 })?;
                 let data_includes = Recovery::get_ic_state_includes(
                     &self.logger,
-                    ExecutionMode::Remote(ssh_helper),
+                    ExecutionMode::Remote(ssh_helper.clone()),
                     CheckpointHeight::Specified(height.get()),
                 )?;
                 DownloadIcDataStep {

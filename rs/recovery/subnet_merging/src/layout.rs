@@ -5,7 +5,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     CHECKPOINTS, IC_STATE, Recovery,
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{create_dir, read_file, write_bytes, write_file},
+    file_sync_helper::{create_dir, read_file, remove_dir, write_bytes, write_file},
 };
 use ic_state_layout::StateLayout;
 use ic_types::Height;
@@ -117,12 +117,40 @@ impl Layout {
             .join(CHECKPOINTS)
     }
 
-    /// The downloaded checkpoint at `height`. Neither download removes the
-    /// other checkpoints in a reused working directory, so the checkpoint is
-    /// selected by its height rather than as the latest one.
+    /// The downloaded checkpoint at `height`.
     pub(crate) fn checkpoint_dir(&self, target_subnet: TargetSubnet, height: Height) -> PathBuf {
         self.checkpoints_dir(target_subnet)
             .join(StateLayout::checkpoint_name(height))
+    }
+
+    /// Removes everything in the checkpoints directory of `target_subnet`
+    /// except the checkpoint at `height`.
+    pub(crate) fn remove_checkpoints_except(
+        &self,
+        target_subnet: TargetSubnet,
+        height: Height,
+    ) -> RecoveryResult<()> {
+        let checkpoints_dir = self.checkpoints_dir(target_subnet);
+        let entries = match std::fs::read_dir(&checkpoints_dir) {
+            Ok(entries) => entries,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => return Err(RecoveryError::file_error(&checkpoints_dir, err)),
+        };
+        let kept = StateLayout::checkpoint_name(height);
+        for entry in entries {
+            let path = entry
+                .map_err(|err| RecoveryError::file_error(&checkpoints_dir, err))?
+                .path();
+            if path.file_name().is_some_and(|name| *name == *kept) {
+                continue;
+            }
+            if path.is_dir() {
+                remove_dir(&path)?;
+            } else {
+                std::fs::remove_file(&path).map_err(|err| RecoveryError::file_error(&path, err))?;
+            }
+        }
+        Ok(())
     }
 
     fn cooling_down_registry_version_file(&self) -> PathBuf {
@@ -248,6 +276,37 @@ mod tests {
             cup
         );
         assert!(pb::CatchUpPackage::read_from_file(layout.halting_cup_file(subnet_id(2))).is_err());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn only_the_checkpoint_at_the_given_height_is_kept() {
+        let root = std::env::temp_dir().join(format!(
+            "subnet_merging_layout_checkpoints_test_{}",
+            std::process::id()
+        ));
+        let layout = Layout { root: root.clone() };
+        let target_subnet = TargetSubnet::Source;
+
+        // Nothing to remove before the first download.
+        layout
+            .remove_checkpoints_except(target_subnet, Height::new(100))
+            .unwrap();
+
+        let kept = layout.checkpoint_dir(target_subnet, Height::new(100));
+        let other = layout.checkpoint_dir(target_subnet, Height::new(200));
+        let stray_file = layout.checkpoints_dir(target_subnet).join("stray");
+        std::fs::create_dir_all(&kept).unwrap();
+        std::fs::write(kept.join("partial"), b"").unwrap();
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::write(&stray_file, b"").unwrap();
+
+        layout
+            .remove_checkpoints_except(target_subnet, Height::new(100))
+            .unwrap();
+        assert!(kept.join("partial").exists());
+        assert!(!other.exists());
+        assert!(!stray_file.exists());
         std::fs::remove_dir_all(root).unwrap();
     }
 
