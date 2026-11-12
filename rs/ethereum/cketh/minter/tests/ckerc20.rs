@@ -1,6 +1,6 @@
 use alloy_consensus::TxEip1559;
 use assert_matches::assert_matches;
-use candid::{Nat, Principal};
+use candid::{Encode, Nat, Principal};
 use ic_cketh_minter::blocklist::SAMPLE_BLOCKED_ADDRESS;
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
@@ -2023,6 +2023,173 @@ mod withdraw_erc20 {
         ckerc20
             .cketh
             .eip_1559_transaction_price_expecting_err(not_ledger_id);
+    }
+}
+
+/// Smoke-tests `icrc21_canister_call_consent_message` for `withdraw_erc20`: the ckERC20 token
+/// symbol is resolved from the minter state and its decimals are retrieved from the ckERC20
+/// ledger (6 for ckUSDC, 8 for ckWBTC), and the message mentions the ckETH burned for the
+/// transaction fee.
+#[test]
+fn should_provide_icrc21_consent_message_for_withdraw_erc20() {
+    use ic_cketh_minter::endpoints::ckerc20::WithdrawErc20Arg;
+    use ic_cketh_test_utils::ckerc20::{DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS, ckwbtc};
+    use icrc_ledger_types::icrc21::errors::Icrc21Error;
+    use icrc_ledger_types::icrc21::requests::{
+        ConsentMessageMetadata, ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
+    };
+    use icrc_ledger_types::icrc21::responses::{ConsentMessage, Value};
+
+    let ckerc20 = CkErc20Setup::default()
+        .add_supported_erc20_tokens()
+        .add_supported_erc20_token(ckwbtc());
+    let caller = ckerc20.caller();
+    let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+    let ckwbtc = ckerc20.find_ckerc20_token("ckWBTC");
+    let make_request = |arg: &WithdrawErc20Arg,
+                        device_spec: Option<DisplayMessageType>|
+     -> ConsentMessageRequest {
+        ConsentMessageRequest {
+            method: "withdraw_erc20".to_string(),
+            arg: Encode!(arg).unwrap(),
+            user_preferences: ConsentMessageSpec {
+                metadata: ConsentMessageMetadata {
+                    language: "en".to_string(),
+                    utc_offset_minutes: None,
+                },
+                device_spec,
+            },
+        }
+    };
+    let cketh_subaccount = [2_u8; 32];
+    let withdraw_erc20_arg = |ckerc20_ledger_id: Principal| WithdrawErc20Arg {
+        amount: Nat::from(1_500_000_u64),
+        ckerc20_ledger_id,
+        recipient: DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        from_cketh_subaccount: Some(cketh_subaccount),
+        from_ckerc20_subaccount: None,
+    };
+    let args = withdraw_erc20_arg(ckusdc.ledger_canister_id);
+
+    // 1. GenericDisplay: full-string equality so any wording change has to be updated here
+    // consciously.
+    let info = ckerc20
+        .cketh
+        .icrc21_canister_call_consent_message(
+            caller,
+            &make_request(&args, Some(DisplayMessageType::GenericDisplay)),
+        )
+        .expect("consent message should be produced for withdraw_erc20");
+    let message = match info.consent_message {
+        ConsentMessage::GenericDisplayMessage(m) => m,
+        other => panic!("expected GenericDisplayMessage, got {other:?}"),
+    };
+    assert_eq!(
+        message,
+        format!(
+            "# Convert ckUSDC to USDC\n\n\
+             Authorize the ckETH minter to burn ckUSDC from your account and send the same \
+             amount in USDC to the Ethereum address below.\n\n\
+             The minter also burns ckETH from your account to pay for the Ethereum transaction \
+             fee. The fee is estimated by the minter when it processes the withdrawal and is \
+             limited by the ckETH allowance you granted to the minter. Any unused part of the \
+             fee is not refunded.\n\n\
+             **Amount to convert:** `1.5 ckUSDC`\n\n\
+             **Ethereum destination address:**\n`{DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS}`\n\n\
+             **ckETH source subaccount (transaction fee):**\n`{}`",
+            hex::encode(cketh_subaccount)
+        )
+    );
+
+    // 2. FieldsDisplay.
+    let info = ckerc20
+        .cketh
+        .icrc21_canister_call_consent_message(
+            caller,
+            &make_request(&args, Some(DisplayMessageType::FieldsDisplay)),
+        )
+        .expect("consent message should be produced for withdraw_erc20");
+    let fields_display = match info.consent_message {
+        ConsentMessage::FieldsDisplayMessage(f) => f,
+        other => panic!("expected FieldsDisplayMessage, got {other:?}"),
+    };
+    assert_eq!(fields_display.intent, "ckUSDC to USDC");
+    assert_eq!(
+        fields_display.fields,
+        vec![
+            (
+                "Amount".to_string(),
+                Value::TokenAmount {
+                    decimals: 6,
+                    amount: 1_500_000,
+                    symbol: "ckUSDC".to_string(),
+                }
+            ),
+            (
+                "Ethereum address".to_string(),
+                Value::Text {
+                    content: DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+                }
+            ),
+            (
+                "Transaction fee".to_string(),
+                Value::Text {
+                    content: "Paid in ckETH as estimated by the minter; any unused part is not \
+                              refunded"
+                        .to_string(),
+                }
+            ),
+            (
+                "Fee subaccount".to_string(),
+                Value::Text {
+                    content: hex::encode(cketh_subaccount),
+                }
+            ),
+        ]
+    );
+
+    // 3. The decimals are those of the requested ckERC20 ledger.
+    let info = ckerc20
+        .cketh
+        .icrc21_canister_call_consent_message(
+            caller,
+            &make_request(
+                &withdraw_erc20_arg(ckwbtc.ledger_canister_id),
+                Some(DisplayMessageType::FieldsDisplay),
+            ),
+        )
+        .expect("consent message should be produced for withdraw_erc20");
+    let fields_display = match info.consent_message {
+        ConsentMessage::FieldsDisplayMessage(f) => f,
+        other => panic!("expected FieldsDisplayMessage, got {other:?}"),
+    };
+    assert_eq!(fields_display.intent, "ckWBTC to WBTC");
+    assert_eq!(
+        fields_display.fields[0],
+        (
+            "Amount".to_string(),
+            Value::TokenAmount {
+                decimals: 8,
+                amount: 1_500_000,
+                symbol: "ckWBTC".to_string(),
+            }
+        )
+    );
+
+    // 4. Ledgers that are not ckERC20 ledgers known to the minter are rejected.
+    for ckerc20_ledger_id in [ckerc20.cketh_ledger_id(), Principal::management_canister()] {
+        let err = ckerc20
+            .cketh
+            .icrc21_canister_call_consent_message(
+                caller,
+                &make_request(&withdraw_erc20_arg(ckerc20_ledger_id), None),
+            )
+            .expect_err("expected UnsupportedCanisterCall");
+        assert_matches!(
+            err,
+            Icrc21Error::UnsupportedCanisterCall(info)
+            if info.description.contains("is not supported by the minter")
+        );
     }
 }
 
