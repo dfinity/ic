@@ -13,16 +13,22 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, warn};
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// The file in which the tool records a registry version at which the subnet
 /// that is merged away is labeled "cooling down", i.e. the `V` of the merge
 /// readiness condition, together with the id of that subnet.
 const COOLING_DOWN_REGISTRY_VERSION_FILE: &str = "cooling_down_registry_version.json";
 
-/// The contents of `COOLING_DOWN_REGISTRY_VERSION_FILE`.
+/// The file in which the tool records a registry version at which no canister
+/// ID range is routed to the subnet that is merged away anymore, together with
+/// the id of that subnet.
+const MERGE_REGISTRY_VERSION_FILE: &str = "merge_registry_version.json";
+
+/// The contents of `COOLING_DOWN_REGISTRY_VERSION_FILE` and
+/// `MERGE_REGISTRY_VERSION_FILE`.
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
-struct CoolingDownRegistryVersion {
+struct RecordedRegistryVersion {
     source_subnet_id: SubnetId,
     registry_version: u64,
 }
@@ -36,6 +42,7 @@ struct CoolingDownRegistryVersion {
 /// |  |-- ${source_subnet_id}.pem
 /// |  |-- ${destination_subnet_id}.pem
 /// |  |-- cooling_down_registry_version.json
+/// |  |-- merge_registry_version.json
 /// |  |-- merged.manifest
 /// |  |-- merged_state_params.json
 /// |  |-- nns.pem
@@ -146,10 +153,6 @@ impl Layout {
             .join(StateLayout::checkpoint_name(height))
     }
 
-    fn cooling_down_registry_version_file(&self) -> PathBuf {
-        self.root.join(COOLING_DOWN_REGISTRY_VERSION_FILE)
-    }
-
     /// A registry version at which the subnet that is merged away is labeled
     /// "cooling down", i.e. the `V` of the merge readiness condition.
     ///
@@ -162,8 +165,8 @@ impl Layout {
         version: u64,
     ) -> RecoveryResult<()> {
         write_file(
-            &self.cooling_down_registry_version_file(),
-            encode_cooling_down_registry_version(source_subnet_id, version),
+            &self.root.join(COOLING_DOWN_REGISTRY_VERSION_FILE),
+            encode_registry_version(source_subnet_id, version),
         )
     }
 
@@ -173,13 +176,26 @@ impl Layout {
         &self,
         source_subnet_id: SubnetId,
     ) -> RecoveryResult<u64> {
-        let path = self.cooling_down_registry_version_file();
-        decode_cooling_down_registry_version(&read_file(&path)?, source_subnet_id).map_err(|err| {
-            RecoveryError::UnexpectedError(format!(
-                "Failed to read the registry version at {}: {err}",
-                path.display()
-            ))
-        })
+        read_registry_version(
+            &self.root.join(COOLING_DOWN_REGISTRY_VERSION_FILE),
+            source_subnet_id,
+        )
+    }
+
+    /// A registry version at which no canister ID range is routed to the subnet
+    /// that is merged away anymore, i.e. the one every other subnet has to have
+    /// reached before that subnet may be deleted. Recorded together with the id
+    /// of the subnet, like the one of
+    /// [Self::write_cooling_down_registry_version].
+    pub(crate) fn write_merge_registry_version(
+        &self,
+        source_subnet_id: SubnetId,
+        version: u64,
+    ) -> RecoveryResult<()> {
+        write_file(
+            &self.root.join(MERGE_REGISTRY_VERSION_FILE),
+            encode_registry_version(source_subnet_id, version),
+        )
     }
 
     /// The file holding the CUP `subnet_id` halts at, as a
@@ -201,19 +217,25 @@ impl Layout {
     }
 }
 
-fn encode_cooling_down_registry_version(source_subnet_id: SubnetId, version: u64) -> String {
-    serde_json::to_string_pretty(&CoolingDownRegistryVersion {
+fn read_registry_version(path: &Path, source_subnet_id: SubnetId) -> RecoveryResult<u64> {
+    decode_registry_version(&read_file(path)?, source_subnet_id).map_err(|err| {
+        RecoveryError::UnexpectedError(format!(
+            "Failed to read the registry version at {}: {err}",
+            path.display()
+        ))
+    })
+}
+
+fn encode_registry_version(source_subnet_id: SubnetId, version: u64) -> String {
+    serde_json::to_string_pretty(&RecordedRegistryVersion {
         source_subnet_id,
         registry_version: version,
     })
-    .expect("Failed to serialize the cooling down registry version")
+    .expect("Failed to serialize the registry version")
 }
 
-fn decode_cooling_down_registry_version(
-    contents: &str,
-    source_subnet_id: SubnetId,
-) -> Result<u64, String> {
-    let recorded: CoolingDownRegistryVersion =
+fn decode_registry_version(contents: &str, source_subnet_id: SubnetId) -> Result<u64, String> {
+    let recorded: RecordedRegistryVersion =
         serde_json::from_str(contents).map_err(|err| err.to_string())?;
     if recorded.source_subnet_id != source_subnet_id {
         return Err(format!(
@@ -235,18 +257,15 @@ mod tests {
     }
 
     #[test]
-    fn cooling_down_registry_version_round_trips() {
-        let contents = encode_cooling_down_registry_version(subnet_id(1), 42);
-        assert_eq!(
-            decode_cooling_down_registry_version(&contents, subnet_id(1)),
-            Ok(42)
-        );
+    fn registry_version_round_trips() {
+        let contents = encode_registry_version(subnet_id(1), 42);
+        assert_eq!(decode_registry_version(&contents, subnet_id(1)), Ok(42));
     }
 
     #[test]
-    fn cooling_down_registry_version_of_another_subnet_is_rejected() {
-        let contents = encode_cooling_down_registry_version(subnet_id(1), 42);
-        let err = decode_cooling_down_registry_version(&contents, subnet_id(2)).unwrap_err();
+    fn registry_version_of_another_subnet_is_rejected() {
+        let contents = encode_registry_version(subnet_id(1), 42);
+        let err = decode_registry_version(&contents, subnet_id(2)).unwrap_err();
         assert!(err.contains("not for subnet"), "{err}");
     }
 
@@ -273,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    fn malformed_cooling_down_registry_version_is_rejected() {
-        assert!(decode_cooling_down_registry_version("42", subnet_id(1)).is_err());
+    fn malformed_registry_version_is_rejected() {
+        assert!(decode_registry_version("42", subnet_id(1)).is_err());
     }
 }
