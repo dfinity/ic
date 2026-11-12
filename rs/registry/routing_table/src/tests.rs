@@ -751,3 +751,47 @@ fn test_routing_table_insert_subnet_never_overlaps_last_range() {
         ])
     );
 }
+
+#[test]
+fn test_routing_table_insert_subnet_aligns_new_range() {
+    // Step 1: Prepare the world: neither the last range nor the passed-in index is
+    // aligned to `CANISTER_IDS_PER_SUBNET`.
+    const N: u64 = CANISTER_IDS_PER_SUBNET;
+    let mut routing_table = new_routing_table(vec![((0, N + 41), 1)]);
+
+    // Step 2: Run the code under test.
+    let result = routing_table_insert_subnet(
+        &mut routing_table,
+        subnet_test_id(2),
+        /* next_unallocated_canister_index = */ N + 7,
+    );
+
+    // Step 3: Verify results: subnet 2 starts at the next multiple of N.
+    assert_eq!(result, Ok(3 * N));
+    assert_eq!(
+        routing_table,
+        new_routing_table(vec![((0, N + 41), 1), ((2 * N, 3 * N - 1), 2)])
+    );
+}
+
+#[test]
+fn test_routing_table_insert_subnet_aligns_unaligned_index() {
+    // Step 1: Prepare the world: the passed-in index is above the routing table,
+    // but not aligned to `CANISTER_IDS_PER_SUBNET`.
+    const N: u64 = CANISTER_IDS_PER_SUBNET;
+    let mut routing_table = new_routing_table(vec![((0, N - 1), 1)]);
+
+    // Step 2: Run the code under test.
+    let result = routing_table_insert_subnet(
+        &mut routing_table,
+        subnet_test_id(2),
+        /* next_unallocated_canister_index = */ 2 * N + 1,
+    );
+
+    // Step 3: Verify results: subnet 2 starts at the next multiple of N.
+    assert_eq!(result, Ok(4 * N));
+    assert_eq!(
+        routing_table,
+        new_routing_table(vec![((0, N - 1), 1), ((3 * N, 4 * N - 1), 2)])
+    );
+}

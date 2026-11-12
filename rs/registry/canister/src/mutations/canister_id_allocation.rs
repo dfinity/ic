@@ -1,10 +1,11 @@
-//! Tracks which canister IDs have ever been allocated to a subnet, so that subnet creation never
-//! hands out the canister IDs of a deleted subnet again.
+//! Whatever is needed to allocate canister IDs to new subnets, so that a new canister never gets
+//! the ID of an old canister.
 //!
-//! The registry stores a `CanisterIdAllocation` under `make_canister_id_allocation_key()`, holding
-//! one past the largest canister index ever allocated, including to subnets that have since been
-//! deleted (and whose ranges are therefore no longer in the routing table). It only ever increases,
-//! and new ranges always start at or above it.
+//! The registry stores a `CanisterIdAllocation` under `make_canister_id_allocation_key()`. No
+//! canister index at or above its `next_unallocated_canister_index` has ever been allocated to a
+//! subnet, including to subnets that have since been deleted (and whose ranges are therefore no
+//! longer in the routing table). It only ever increases, and new ranges always start at or above
+//! it.
 
 use crate::{common::LOG_PREFIX, registry::Registry, storage::with_chunks};
 use ic_protobuf::registry::routing_table::v1::CanisterIdAllocation;
@@ -22,8 +23,8 @@ use prost::Message;
 use dfn_core::println;
 
 impl Registry {
-    /// Returns the smallest canister index that has never been allocated to any subnet, as of
-    /// `version`.
+    /// Returns a canister index such that no canister index at or above it has ever been allocated
+    /// to any subnet, as of `version`.
     ///
     /// This is read from the `CanisterIdAllocation`. If that does not exist yet (e.g., the
     /// registry has not been upgraded past the release introducing it), it is computed from the

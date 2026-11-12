@@ -24,9 +24,10 @@ on the process that this file is part of, see
 * Creating or splitting off a subnet no longer reuses the canister IDs of a deleted subnet. A
   deleted subnet's ranges are removed from the routing table, so a new subnet used to receive
   exactly the same canister IDs whenever the deleted subnet had held the last range. The registry
-  now stores a `CanisterIdAllocation` record (key `canister_id_allocation`) holding one past the
-  largest canister index ever allocated to a subnet, and new ranges start at or above it. The
-  upgrade backfills the record from the full history of the routing table.
+  now stores a `CanisterIdAllocation` record (key `canister_id_allocation`) such that no canister
+  index at or above its `next_unallocated_canister_index` has ever been allocated to a subnet, and
+  new ranges start at or above it. The upgrade backfills the record from the full history of the
+  routing table.
 
 ## Security
 

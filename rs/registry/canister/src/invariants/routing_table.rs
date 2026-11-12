@@ -97,8 +97,8 @@ pub(crate) fn decode_next_unallocated_canister_index(
     Ok(canister_id_allocation.next_unallocated_canister_index)
 }
 
-/// Checks the invariants of the `CanisterIdAllocation`, which records one past the largest
-/// canister index ever allocated to a subnet:
+/// Checks the invariants of the `CanisterIdAllocation` (no canister index at or above its
+/// `next_unallocated_canister_index` has ever been allocated to a subnet):
 ///
 /// * Once present, it is never deleted.
 /// * It never decreases. `previous_next_unallocated_canister_index` is its value before the

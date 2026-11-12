@@ -54,16 +54,14 @@ pub mod canister_migrations {
         pub subnet_ids: ::prost::alloc::vec::Vec<super::super::super::super::types::v1::SubnetId>,
     }
 }
-/// Tracks which canister IDs have ever been allocated to a subnet, so that
-/// subnet creation never hands out canister IDs again after the subnet that
-/// owned them has been deleted.
-///
-/// Every canister ID whose index (the u64 encoded in its first 8 bytes) is
-/// below `next_unallocated_canister_index` has been assigned to some subnet at
-/// some point, even if that subnet has since been deleted and its range is no
-/// longer in the routing table.
+/// Whatever is needed to allocate canister IDs to new subnets. In particular,
+/// we are trying to prevent a new canister from getting an ID used by an old
+/// canister.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CanisterIdAllocation {
+    /// No canister ID whose index (the u64 encoded in its first 8 bytes) is at or
+    /// above this value has ever been allocated to a subnet (including subnets
+    /// that have since been deleted).
     #[prost(uint64, tag = "1")]
     pub next_unallocated_canister_index: u64,
 }

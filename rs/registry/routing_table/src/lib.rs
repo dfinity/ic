@@ -225,10 +225,12 @@ impl CanisterIdRanges {
 /// Since subnets can be deleted, `routing_table` alone does not tell which
 /// canister IDs are fresh: the ranges of deleted subnets are no longer in it,
 /// but their canister IDs must never be allocated again. Hence, the caller must
-/// pass `next_unallocated_canister_index`, the smallest canister index that has
-/// never been allocated to any subnet (including deleted ones). The new range
+/// pass `next_unallocated_canister_index`: no canister index at or above it has
+/// ever been allocated to any subnet (including deleted ones). The new range
 /// starts at that index, or directly after the last range in `routing_table`
-/// if that is higher.
+/// if that is higher, rounded up to the next multiple of
+/// `CANISTER_IDS_PER_SUBNET`. Hence, the new range is aligned to (and of size)
+/// `CANISTER_IDS_PER_SUBNET`, even if the existing ranges are not.
 ///
 /// When building a routing table from scratch (e.g., in tests or at genesis),
 /// no subnet has been deleted, so passing `0` (or the value returned by the
@@ -245,7 +247,9 @@ pub fn routing_table_insert_subnet(
         Some((last_canister_id_range, _)) => canister_id_into_u64(last_canister_id_range.end) + 1,
         None => 0,
     };
-    let start = after_last_range.max(next_unallocated_canister_index);
+    let start = after_last_range
+        .max(next_unallocated_canister_index)
+        .next_multiple_of(CANISTER_IDS_PER_SUBNET);
     // The -1 because the ranges are stored as closed intervals.
     let end = start + CANISTER_IDS_PER_SUBNET - 1;
     let canister_id_range = CanisterIdRange {
