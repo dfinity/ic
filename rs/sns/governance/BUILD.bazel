@@ -186,6 +186,7 @@ rust_canister(
     name = "sns-governance-canister",
     srcs = ["canister/canister.rs"],
     compile_data = [":canister/governance.did"],
+    max_compression = True,
     proc_macro_deps = [
         # Keep sorted.
         "//rs/nervous_system/common/build_metadata",
@@ -206,6 +207,7 @@ rust_canister(
     srcs = ["canister/canister.rs"],
     compile_data = [":test_did"],
     crate_features = ["test"],
+    max_compression = True,
     proc_macro_deps = [
         # Keep sorted.
         "//rs/nervous_system/common/build_metadata",
