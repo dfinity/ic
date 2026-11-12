@@ -9,7 +9,7 @@ source /opt/ic/bin/logging.sh
 
 COUNT=$(get_guest_vm_count)
 
-# Slots are 1-based. There is no guestos0.
+# Slots are 1-based. See serial_log_path().
 for i in $(seq 1 "${COUNT}"); do
     s=$(get_guest_vm_suffix "$i" "$COUNT")
 
