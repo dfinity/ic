@@ -5215,7 +5215,7 @@ impl Operation for CallRequest {
                             )
                             .unwrap()
                         });
-                        let (_, delegation_rx) = watch::channel(builder);
+                        let (_, delegation_rx) = watch::channel(builder.map(Arc::new));
                         let metrics_registry = MetricsRegistry::new();
                         let metrics = HttpHandlerMetrics::new(&metrics_registry);
 
@@ -5341,7 +5341,7 @@ impl Operation for QueryRequest {
                     )
                     .unwrap()
                 });
-                let (_, delegation_rx) = watch::channel(builder);
+                let (_, delegation_rx) = watch::channel(builder.map(Arc::new));
                 let node = &subnet.nodes[0];
                 subnet.certify_latest_state();
                 let query_handler = subnet.query_handler.lock().unwrap().clone();
@@ -5437,7 +5437,7 @@ impl Operation for CanisterReadStateRequest {
                     )
                     .unwrap()
                 });
-                let (_, delegation_rx) = watch::channel(builder);
+                let (_, delegation_rx) = watch::channel(builder.map(Arc::new));
                 subnet.certify_latest_state();
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
                 let mainnet_root_of_trust =
@@ -5523,7 +5523,7 @@ impl Operation for SubnetReadStateRequest {
                     )
                     .unwrap()
                 });
-                let (_, delegation_rx) = watch::channel(builder);
+                let (_, delegation_rx) = watch::channel(builder.map(Arc::new));
                 subnet.certify_latest_state();
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
                 let mainnet_root_of_trust =
