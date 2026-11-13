@@ -65,12 +65,6 @@ impl NNSDelegationReader {
 
     /// Returns a snapshot of the most recent NNS delegation known to the replica.
     /// Consecutive calls might return different delegations.
-    /// Note: on the NNS subnet the snapshot never holds a delegation.
-    ///
-    /// The snapshot is immutable, so it can be used to verify the delegation against a
-    /// certified state and to build exactly the verified delegation (see
-    /// [`NNSDelegationSnapshot::build_verified`]), without holding on to the underlying
-    /// channel and without having to worry about the delegation being concurrently replaced.
     pub fn snapshot(&self) -> NNSDelegationSnapshot {
         NNSDelegationSnapshot(self.receiver.borrow().clone())
     }
@@ -85,7 +79,7 @@ impl NNSDelegationReader {
 pub struct NNSDelegationSnapshot(Option<Arc<NNSDelegationBuilder>>);
 
 impl NNSDelegationSnapshot {
-    /// A snapshot holding no delegation.
+    /// A snapshot holding no delegation, e.g. on the NNS subnet.
     pub fn none() -> Self {
         Self(None)
     }
@@ -93,7 +87,7 @@ impl NNSDelegationSnapshot {
     /// Verifies the delegation, if any, against the given replicated state and, only if it is
     /// consistent, builds and returns it (see [`NNSDelegationBuilder::build_verified`]).
     /// Returns `Ok(None)` when the snapshot holds no delegation.
-    pub fn build_verified(
+    pub fn get_delegation(
         &self,
         ranges_check: CanisterRangesCheck,
         state: &dyn StateForDelegationVerification,
@@ -104,9 +98,8 @@ impl NNSDelegationSnapshot {
             .transpose()
     }
 
-    /// Returns the delegation, if any, built with the given canister ranges filter, together with
-    /// some metadata.
-    /// Note: when the snapshot holds no delegation (e.g. on the NNS subnet), this returns `None`.
+    /// Returns the delegation together with some metadata.
+    /// Returns `None` when the snapshot holds no delegation.
     /// TODO: Make this method also verify the delegation against a given replicated state
     pub fn get_delegation_with_metadata(
         &self,

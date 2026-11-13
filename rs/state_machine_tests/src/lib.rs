@@ -4683,7 +4683,7 @@ impl StateMachine {
     }
 
     /// Queries the canister with the specified ID, with the NNS delegation held by
-    /// `delegation_snapshot` (if any) and sender info.
+    /// `delegation_snapshot` and sender info.
     pub fn query_as_with_delegation_and_sender_info(
         &self,
         sender: PrincipalId,

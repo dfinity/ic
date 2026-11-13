@@ -1268,7 +1268,7 @@ mod tests {
         assert!(
             reader
                 .snapshot()
-                .build_verified(
+                .get_delegation(
                     CanisterRangesCheck::AllSubnetRanges,
                     &*mutable_state.read().unwrap()
                 )
@@ -1311,7 +1311,7 @@ mod tests {
 
             let delegation = reader
                 .snapshot()
-                .build_verified(
+                .get_delegation(
                     CanisterRangesCheck::AllSubnetRanges,
                     &*mutable_state.read().unwrap(),
                 )
@@ -1945,7 +1945,7 @@ mod tests {
         .unwrap();
 
         assert_matches!(
-            reader.snapshot().build_verified(
+            reader.snapshot().get_delegation(
                 CanisterRangesCheck::AllSubnetRanges,
                 &*mutable_state.read().unwrap()
             ),
