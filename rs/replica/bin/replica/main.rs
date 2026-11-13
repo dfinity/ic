@@ -48,9 +48,9 @@ use std::io::Write;
 
 /// How long shutting down may take after `SIGTERM` or `SIGINT`, before the
 /// replica exits with an error. Shorter than both the orchestrator's grace
-/// period before escalating to `SIGKILL` (60 s) and systemd's default stop
+/// period before escalating to `SIGKILL` (75 s) and systemd's default stop
 /// timeout at reboot (90 s), so that the replica exits on its own.
-const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(55);
+const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(70);
 
 /// How often to check whether the latest checkpoint is verified, while shutting
 /// down.
