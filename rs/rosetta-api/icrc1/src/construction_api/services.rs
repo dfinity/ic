@@ -147,7 +147,7 @@ fn validate_ingress_window(now: u64, ingress_start: u64, ingress_end: u64) -> Re
 /// The memo is part of the canister method arguments, which are replicated once
 /// per ingress expiry, so an unbounded memo would be amplified by up to the
 /// number of expiries in the (at most 24h) ingress window.
-fn validate_memo(memo: Option<&Vec<u8>>) -> Result<(), Error> {
+fn validate_memo(memo: Option<&[u8]>) -> Result<(), Error> {
     if let Some(memo) = memo
         && memo.len() > MAX_MEMO_LENGTH_BYTES
     {
@@ -184,19 +184,16 @@ pub fn construction_payloads(
     let ingress_end = metadata
         .as_ref()
         .and_then(|meta| meta.ingress_end)
-        .unwrap_or(ingress_start + ingress_interval);
+        .unwrap_or(ingress_start.saturating_add(ingress_interval));
 
     let created_at_time = metadata
         .as_ref()
         .and_then(|meta| meta.created_at_time)
         .unwrap_or(now);
 
-    validate_memo(metadata.as_ref().and_then(|meta| meta.memo.as_ref()))?;
-
-    let memo = metadata
-        .as_ref()
-        .and_then(|meta| meta.memo.clone())
-        .map(|memo| memo.into());
+    let memo = metadata.and_then(|meta| meta.memo);
+    validate_memo(memo.as_deref())?;
+    let memo = memo.map(|memo| memo.into());
 
     if ingress_end < now + ingress_interval {
         return Err(Error::processing_construction_failed(&format!(
@@ -364,8 +361,8 @@ mod tests {
     #[test]
     fn memo_length_boundary_is_inclusive() {
         assert!(validate_memo(None).is_ok());
-        assert!(validate_memo(Some(&vec![0_u8; MAX_MEMO_LENGTH_BYTES])).is_ok());
-        assert!(validate_memo(Some(&vec![0_u8; MAX_MEMO_LENGTH_BYTES + 1])).is_err());
+        assert!(validate_memo(Some(&[0_u8; MAX_MEMO_LENGTH_BYTES])).is_ok());
+        assert!(validate_memo(Some(&[0_u8; MAX_MEMO_LENGTH_BYTES + 1])).is_err());
     }
 
     // An oversized memo is rejected by `construction_payloads` before any
@@ -383,6 +380,27 @@ mod tests {
             construction_payloads(vec![], Some(metadata), &Principal::anonymous(), vec![], now);
         let err = result.expect_err("oversized memo should be rejected");
         assert!(format!("{err:?}").contains("memo must not be longer"));
+    }
+
+    // An `ingress_start` close to `u64::MAX` without an `ingress_end` must be
+    // rejected instead of overflowing when computing the default `ingress_end`.
+    #[test]
+    fn construction_payloads_rejects_ingress_start_near_u64_max() {
+        let now = SystemTime::UNIX_EPOCH + std::time::Duration::from_nanos(NOW_NANOS);
+        for ingress_start in [u64::MAX - 1, u64::MAX] {
+            let metadata = ConstructionPayloadsRequestMetadata {
+                memo: None,
+                ingress_start: Some(ingress_start),
+                ingress_end: None,
+                created_at_time: None,
+            };
+            let result =
+                construction_payloads(vec![], Some(metadata), &Principal::anonymous(), vec![], now);
+            assert!(
+                result.is_err(),
+                "ingress_start {ingress_start} should be rejected"
+            );
+        }
     }
 
     fn call_construction_derive<T: RosettaSupportedKeyPair>(key_pair: &T) {
