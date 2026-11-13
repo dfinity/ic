@@ -2888,6 +2888,11 @@ impl<T> WasmFile<T>
 where
     T: WritePolicy,
 {
+    /// Writes `wasm` to the file, replacing any existing one, and marks it readonly.
+    ///
+    /// Does not sync the file to disk: as with protobufs, the checkpoint's sync in
+    /// `finalize_and_remove_unverified_marker` makes it durable before the checkpoint is
+    /// marked verified.
     pub fn serialize(&self, wasm: &CanisterModule) -> Result<(), LayoutError> {
         // If there already exists a wasm file, delete it first to avoid writing hardlinked/readonly files.
         self.try_delete_file()?;
@@ -2903,12 +2908,6 @@ where
         file.flush().map_err(|err| LayoutError::IoError {
             path: self.path.clone(),
             message: "failed to flush wasm binary to disk".to_string(),
-            io_err: err,
-        })?;
-
-        file.sync_all().map_err(|err| LayoutError::IoError {
-            path: self.path.clone(),
-            message: "failed to sync wasm binary to disk".to_string(),
             io_err: err,
         })?;
 

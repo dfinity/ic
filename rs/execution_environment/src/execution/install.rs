@@ -141,7 +141,14 @@ pub(crate) fn execute_install(
     helper.clear_log();
     helper.deactivate_global_timer();
     helper.bump_canister_version();
-    helper.add_canister_change(round.time, context.origin, context.mode, module_hash.into());
+    let args_hash = ic_crypto_sha2::Sha256::hash(&context.arg);
+    helper.add_canister_change(
+        round.time,
+        context.origin,
+        context.mode,
+        module_hash.into(),
+        args_hash,
+    );
 
     // Stage 2: invoke the `start()` method of the Wasm module (if present).
     let method = WasmMethod::System(SystemMethod::CanisterStart);
