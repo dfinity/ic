@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Limit the memo length in `/construction/payloads` to 1024 bytes ([#11886](https://github.com/dfinity/ic/pull/11886))
+- Limit the length of amounts to 78 digits and the size of the ledger method arguments in `/construction/payloads` to 4 KiB
 
 ## [1.2.10] - 2026-07-02
 ### Added

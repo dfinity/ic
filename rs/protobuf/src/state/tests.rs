@@ -26,6 +26,7 @@ fn huge_proto_encoding_roundtrip() {
             cycles_payment: Some(cycles),
             metadata: None,
             deadline_seconds: 0,
+            effective_canister_id: None,
         })),
     };
     let entry = message_pool::Entry {

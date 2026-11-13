@@ -1,6 +1,7 @@
 /* tag::catalog[]
-Title:: Draining and halting a subnet that is "cooling down" with the subnet
-merging tool.
+Title:: Draining and halting a subnet that is "cooling down", and downloading
+and validating the states of the subnets to merge, with the subnet merging
+tool.
 
 Goal:: Verify that a subnet holding what a subnet merge has to drain violates
 the individual terms of the "merge readiness" condition, i.e. that the
@@ -9,7 +10,7 @@ is one that the subnet does not satisfy to begin with; and that once the tool
 (`rs/recovery/subnet_merging`) has labeled the subnet "cooling down", the
 subnet rejects ingress messages and query calls, the tool eventually finds the
 condition to hold, and it then halts both subnets at their next
-CUP. The subnet also holds calls waiting
+CUP, and downloads and validates the state each halted at. The subnet also holds calls waiting
 for responses that never arrive: they are not drained, but make it possible to
 assert that a subnet merge populates the ingress history properly.
 
@@ -84,12 +85,23 @@ Runbook::
 13. After `WaitForHaltingCupOnDestinationSubnet`: check that both subnets are
    halted, i.e. that every one of their nodes certifies the height its subnet
    halts at and none goes past it, even after `HALT_OBSERVATION_PERIOD`.
+14. The following steps of the tool are executed, over SSH with the admin key
+   (or locally, if the tool runs on the node):
+   `Stop{Source,Destination}Replica`, which wait until the node of each subnet
+   holds a finished checkpoint at the height of the CUP its subnet halts at
+   and then stop its replica;
+   `DownloadStateFrom{Source,Destination}Subnet`, which download the
+   checkpoint at the height of the CUP each subnet halted at; and
+   `Validate{Source,Destination}SubnetCup`, which validate each downloaded state
+   against the CUP its subnet halted at and the subnet's public key in the NNS
+   signed state tree.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
 violated before `M` starts cooling down; `M` then rejects ingress messages and
 query calls and becomes "merge ready", and `UT`'s loop of step 2 is stalled;
-the tool then halts `M` and `T` at their next CUP.
+the tool then halts `M` and `T` at their next CUP, and the states it downloads
+from them pass validation.
 
 end::catalog[] */
 
@@ -107,6 +119,8 @@ use ic_subnet_merging::readiness::{
     Term, evaluate_merge_readiness,
 };
 use ic_subnet_merging::subnet_merging::{StepType, SubnetMerging, SubnetMergingArgs};
+use ic_system_test_driver::driver::constants::SSH_USERNAME;
+use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -527,8 +541,10 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
             .unwrap()
             .get_public_url(),
         replica_version: Some(get_guestos_img_version()),
-        // No step of this phase of the tool accesses a node via ssh.
-        admin_key_file: None,
+        admin_key_file: Some(
+            env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
+                .join(SSH_USERNAME),
+        ),
         test_mode: true,
         skip_prompts: true,
     };
@@ -587,13 +603,29 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     );
     runtime.block_on(check_subnets_halted(context));
 
+    info!(
+        logger,
+        "Step 14: Downloading and validating the states of subnets M and T"
+    );
+    exec_next_step(StepType::StopSourceReplica);
+    exec_next_step(StepType::StopDestinationReplica);
+    exec_next_step(StepType::DownloadStateFromSourceSubnet);
+    exec_next_step(StepType::DownloadStateFromDestinationSubnet);
+    exec_next_step(StepType::ValidateSourceSubnetCup);
+    exec_next_step(StepType::ValidateDestinationSubnetCup);
+    info!(
+        logger,
+        "Step 14 done: the states M and T halted at are downloaded and valid"
+    );
+
     if let Some((step_type, _)) = merging.next() {
         panic!("unexpected step {step_type:?}");
     }
 
     info!(
         logger,
-        "Subnet M has been drained and halted by the subnet merging tool"
+        "Subnet M has been drained and halted, and the states of M and T downloaded and \
+         validated, by the subnet merging tool"
     );
 }
 

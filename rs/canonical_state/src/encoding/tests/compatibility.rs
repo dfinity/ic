@@ -35,6 +35,24 @@ use std::collections::{BTreeMap, VecDeque};
 // Tests for exact binary encoding
 //
 
+#[test]
+fn canonical_encoding_ignores_cached_effective_canister_id() {
+    for certification_version in all_supported_versions() {
+        let uncached = request(certification_version);
+        let cached = Request {
+            effective_canister_id: Some(Box::new(canister_test_id(13))),
+            ..uncached.clone()
+        };
+        let uncached: StreamMessage = uncached.into();
+        let cached: StreamMessage = cached.into();
+        let encoded = encode_message(&cached, certification_version);
+
+        assert_eq!(encoded, encode_message(&uncached, certification_version));
+        // Decoding the wire representation must not restore the local cache.
+        assert_eq!(decode_message(&encoded).unwrap(), uncached);
+    }
+}
+
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
@@ -443,6 +461,7 @@ fn canonical_encoding_minimal_request() {
             method_payload: vec![6],
             metadata: RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(101)),
             deadline: NO_DEADLINE,
+            effective_canister_id: None,
         }
         .into();
 
@@ -521,6 +540,7 @@ fn canonical_encoding_minimal_request_v22() {
             method_payload: vec![6],
             metadata: RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(101)),
             deadline: NO_DEADLINE,
+            effective_canister_id: None,
         }
         .into();
 
@@ -605,6 +625,7 @@ fn canonical_encoding_request() {
             method_payload: vec![6],
             metadata: RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(101)),
             deadline: CoarseTime::from_secs_since_unix_epoch(8),
+            effective_canister_id: None,
         }
         .into();
 
@@ -685,6 +706,7 @@ fn canonical_encoding_request_v22() {
             method_payload: vec![6],
             metadata: RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(101)),
             deadline: CoarseTime::from_secs_since_unix_epoch(8),
+            effective_canister_id: None,
         }
         .into();
 
@@ -760,6 +782,7 @@ fn canonical_encoding_request_with_u128_cycles() {
             method_payload: vec![6],
             metadata: Default::default(),
             deadline: NO_DEADLINE,
+            effective_canister_id: None,
         }
         .into();
 
@@ -837,6 +860,7 @@ fn canonical_encoding_request_with_u128_cycles_v22() {
             method_payload: vec![6],
             metadata: Default::default(),
             deadline: NO_DEADLINE,
+            effective_canister_id: None,
         }
         .into();
 
@@ -2078,6 +2102,7 @@ fn request(_certification_version: CertificationVersion) -> Request {
         method_payload: vec![6],
         metadata: request_metadata(),
         deadline: CoarseTime::from_secs_since_unix_epoch(8),
+        effective_canister_id: None,
     }
 }
 

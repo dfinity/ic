@@ -117,6 +117,14 @@ pub struct Request {
     pub metadata: RequestMetadata,
     /// If non-zero, this is a best-effort call.
     pub deadline: CoarseTime,
+    /// Cached effective canister ID of a request addressed to the management
+    /// canister, as returned by `extract_effective_canister_id()`.
+    ///
+    /// Populated by `cache_effective_canister_id()`. `None` if not (yet)
+    /// populated or if the request has no effective canister ID. Persisted in
+    /// checkpoints, but not part of the canonical (XNet stream) encoding. Boxed,
+    /// so that it only takes up the size of a pointer in all other requests.
+    pub effective_canister_id: Option<Box<CanisterId>>,
 }
 
 impl Request {
@@ -146,6 +154,29 @@ impl Request {
     /// (i.e. if it has a non-zero deadline).
     pub fn is_best_effort(&self) -> bool {
         self.deadline != NO_DEADLINE
+    }
+
+    /// Returns the effective canister ID of this request: the cached value, if
+    /// populated; else decodes it from the payload.
+    pub fn effective_canister_id(&self) -> Option<CanisterId> {
+        self.effective_canister_id
+            .as_deref()
+            .copied()
+            .or_else(|| self.extract_effective_canister_id())
+    }
+
+    /// Caches the effective canister ID of `request` (a request addressed to the
+    /// management canister), unless it is already cached or `request` has no
+    /// effective canister ID.
+    ///
+    /// Copies the request if its `Arc` is shared, so call it while `request` is
+    /// (most likely) the only reference.
+    pub fn cache_effective_canister_id(request: &mut Arc<Request>) {
+        if request.effective_canister_id.is_none()
+            && let Some(effective_canister_id) = request.extract_effective_canister_id()
+        {
+            Arc::make_mut(request).effective_canister_id = Some(Box::new(effective_canister_id));
+        }
     }
 
     /// Helper function to extract the effective canister id from the payload.
@@ -314,6 +345,7 @@ impl std::fmt::Debug for Request {
             method_payload,
             metadata,
             deadline,
+            effective_canister_id,
         } = self;
         f.debug_struct("Request")
             .field("receiver", receiver)
@@ -324,6 +356,7 @@ impl std::fmt::Debug for Request {
             .field("method_payload", &truncate_and_format(method_payload, 1024))
             .field("metadata", metadata)
             .field("deadline", deadline)
+            .field("effective_canister_id", effective_canister_id)
             .finish()
     }
 }
@@ -732,10 +765,19 @@ impl StreamMessage {
 /// `RequestOrResponse::Request(self).count_bytes()` and
 /// `StreamMessage::Request(self).count_bytes()` so we don't need to wrap
 /// `self` only to calculate its estimated byte size.
+///
+/// Includes the heap-allocated cached effective canister ID, if any. The cache is
+/// only populated (by `cache_effective_canister_id()`) before the request is
+/// pushed into a stream or queue, so its byte size does not change while it is
+/// accounted for in one.
 impl CountBytes for Request {
     fn count_bytes(&self) -> usize {
         size_of::<RequestOrResponse>()
             + size_of::<Request>()
+            + self
+                .effective_canister_id
+                .as_ref()
+                .map_or(0, |_| size_of::<CanisterId>())
             + self.payload_size_bytes().get() as usize
     }
 }
@@ -836,6 +878,10 @@ impl From<&Request> for pb_queues::Request {
             cycles_payment: Some((req.payment).into()),
             metadata: Some((&req.metadata).into()),
             deadline_seconds: req.deadline.as_secs_since_unix_epoch(),
+            effective_canister_id: req
+                .effective_canister_id
+                .as_deref()
+                .map(|id| pb_types::CanisterId::from(*id)),
         }
     }
 }
@@ -864,6 +910,11 @@ impl TryFrom<pb_queues::Request> for Request {
             method_payload: req.method_payload,
             metadata: req.metadata.map_or_else(Default::default, From::from),
             deadline: CoarseTime::from_secs_since_unix_epoch(req.deadline_seconds),
+            effective_canister_id: req
+                .effective_canister_id
+                .map(CanisterId::try_from)
+                .transpose()?
+                .map(Box::new),
         })
     }
 }

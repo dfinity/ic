@@ -28,8 +28,8 @@ build --strategy=Genrule=remote,sandboxed,local
 # Bazel adds these default exec properties, in order, to its action execution salt: if they differ
 # between two commands on the same server, all actions are invalidated. Defining them once, here,
 # gives build, test, run and coverage the same ones.
-# The image must equal the container.image of the bazel-test-all-rbe job in
-# .github/workflows/ci-rbe-evaluation.yml, so actions run in the same environment locally (like the
+# The image must equal the container.image of the bazel-test-all job in
+# .github/workflows/ci-main.yml, so actions run in the same environment locally (like the
 # ic-os image builds) and remotely. The update-image-references job of
 # .github/workflows/container-autobuild.yml rewrites both.
 build --remote_default_exec_properties=namespace_action_isolation=sandboxed
@@ -49,7 +49,7 @@ build --jobs=480
 # command finishes and then whenever the earliest lease expires (--experimental_remote_cache_ttl,
 # 3 hours by default), and stops at the end of the command: nothing extends leases between commands.
 build --experimental_remote_cache_lease_extension
-# Action rewinding, on trial in this non-blocking job: when an action lost inputs, Bazel reruns the
+# Action rewinding (since #12044): when an action lost inputs, Bazel reruns the
 # actions that produced them and then the action itself, within the same command. Without it the
 # action fails, the command runs on to its end (--keep_going) and only then reruns as a whole (the
 # retries below), after dropping what it knew about all remote outputs: on 2026-11-06 that turned a
