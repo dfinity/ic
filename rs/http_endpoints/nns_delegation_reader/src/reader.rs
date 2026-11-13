@@ -104,25 +104,26 @@ impl NNSDelegationSnapshot {
             .transpose()
     }
 
-    /// Returns the delegation, if any, built with the given canister ranges filter, together with
-    /// some metadata.
-    /// Note: when the snapshot holds no delegation (e.g. on the NNS subnet), this returns `None`.
-    /// TODO: Make this method also verify the delegation against a given replicated state
-    pub fn get_delegation_with_metadata(
+    /// Same as [`Self::build_verified`], but also returns the metadata describing the
+    /// format of the returned delegation.
+    pub fn build_verified_with_metadata(
         &self,
-        canister_ranges_filter: CanisterRangesFilter,
-    ) -> Option<(CertificateDelegation, CertificateDelegationMetadata)> {
+        ranges_check: CanisterRangesCheck,
+        state: &dyn StateForDelegationVerification,
+    ) -> Result<
+        Option<(CertificateDelegation, CertificateDelegationMetadata)>,
+        DelegationVerificationError,
+    > {
         let metadata = CertificateDelegationMetadata {
-            format: match canister_ranges_filter {
+            format: match CanisterRangesFilter::from(ranges_check) {
                 CanisterRangesFilter::Flat => CertificateDelegationFormat::Flat,
                 CanisterRangesFilter::Tree(_canister_id) => CertificateDelegationFormat::Tree,
                 CanisterRangesFilter::None => CertificateDelegationFormat::Pruned,
             },
         };
 
-        self.0
-            .as_deref()
-            .map(|builder| (builder.build_unverified(canister_ranges_filter), metadata))
+        self.build_verified(ranges_check, state)
+            .map(|delegation| delegation.map(|delegation| (delegation, metadata)))
     }
 }
 

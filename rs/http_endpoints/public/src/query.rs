@@ -3,10 +3,11 @@
 use crate::{
     ReplicaHealthStatus,
     common::{
-        Cbor, WithTimeout, build_validator, certified_state_unavailable_error,
+        Cbor, LOG_EVERY_N_SECONDS, WithTimeout, build_validator, certified_state_unavailable_error,
         validation_error_to_http_error,
     },
     metrics::HttpHandlerMetrics,
+    verified_delegation_source::delegation_verification_failure_error,
 };
 
 use axum::{
@@ -26,8 +27,8 @@ use ic_interfaces::{
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{ReplicaLogger, error};
-use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
+use ic_logger::{ReplicaLogger, error, warn};
+use ic_nns_delegation_manager::{CanisterRangesCheck, CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_types::{
     CanisterId, NodeId, PrincipalId, SubnetId,
@@ -305,19 +306,22 @@ pub(crate) async fn query(
 
     let query_execution_service = query_execution_service.lock().unwrap().clone();
 
-    let nns_delegation = nns_delegation_reader.snapshot();
-    let delegation_from_nns = match version {
-        Version::V2 => nns_delegation.get_delegation_with_metadata(CanisterRangesFilter::Flat),
-        Version::V3 => nns_delegation.get_delegation_with_metadata(CanisterRangesFilter::Tree(
-            CanisterId::unchecked_from_principal(id),
-        )),
-        Version::SubnetV3 => {
-            nns_delegation.get_delegation_with_metadata(CanisterRangesFilter::None)
+    // The query handler builds the NNS delegation itself, right before embedding it into
+    // the data certificate, so that it can verify it against the certified state the
+    // certificate is built from.
+    let canister_ranges_check = match version {
+        Version::V2 => {
+            CanisterRangesCheck::CanisterInFlat(CanisterId::unchecked_from_principal(id))
         }
+        Version::V3 => {
+            CanisterRangesCheck::CanisterInTree(CanisterId::unchecked_from_principal(id))
+        }
+        Version::SubnetV3 => CanisterRangesCheck::NoCheck(CanisterRangesFilter::None),
     };
     let query_execution_input = QueryExecutionInput {
         query: user_query.clone(),
-        certificate_delegation_with_metadata: delegation_from_nns,
+        nns_delegation: nns_delegation_reader.snapshot(),
+        canister_ranges_check,
     };
     let query_execution_response = query_execution_service
         .oneshot(query_execution_input)
@@ -327,6 +331,15 @@ pub(crate) async fn query(
     let (response, timestamp) = match query_execution_response {
         Err(QueryExecutionError::CertifiedStateUnavailable) => {
             return certified_state_unavailable_error().into_response();
+        }
+        Err(QueryExecutionError::DelegationInconsistentWithState(err)) => {
+            warn!(
+                every_n_seconds => LOG_EVERY_N_SECONDS,
+                log,
+                "Failed to verify the NNS delegation (endpoint: query): {err}"
+            );
+            metrics.observe_delegation_verification_failure("query", &err);
+            return delegation_verification_failure_error(&err).into_response();
         }
         Ok((response, time)) => (response, time),
     };
