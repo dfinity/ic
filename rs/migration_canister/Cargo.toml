@@ -35,6 +35,7 @@ ic-management-canister-types-private = { path = "../types/management_canister_ty
 ic-nervous-system-common-test-utils = { path = "../nervous_system/common/test_utils" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-nns-test-utils = { path = "../nns/test_utils" }
+ic-replicated-state = { path = "../replicated_state" }
 ic-transport-types = { workspace = true }
 ic-universal-canister = { path = "../universal_canister/lib" }
 pocket-ic = { path = "../../packages/pocket-ic" }
