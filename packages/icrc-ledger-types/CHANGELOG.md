@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `icrc21::lib::validate_consent_message_arg_size` and `icrc21::lib::decode_consent_message_arg`, for checking and decoding the `arg` of an ICRC-21 consent message request.
+
+### Changed
+- `build_icrc21_consent_info` decodes the `arg` of the consent message request with a Candid skipping quota of 10,000, the same quota the `ic_cdk` endpoint macros apply to the endpoints being described.
+
 ## 0.2.0
 
 ### Changed
