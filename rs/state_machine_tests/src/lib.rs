@@ -77,7 +77,7 @@ use ic_management_canister_types_private::{
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
-use ic_nns_delegation_reader::{CanisterRangesFilter, NNSDelegationSnapshot};
+use ic_nns_delegation_reader::{CanisterRangesCheck, CanisterRangesFilter, NNSDelegationSnapshot};
 use ic_protobuf::{
     registry::{
         crypto::v1::{ChainKeyEnabledSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
@@ -4708,8 +4708,11 @@ impl StateMachine {
         let query_svc = self.query_handler.lock().unwrap().clone();
         let input = QueryExecutionInput {
             query: user_query,
-            certificate_delegation_with_metadata: delegation_snapshot
-                .get_delegation_with_metadata(CanisterRangesFilter::Flat),
+            nns_delegation: delegation_snapshot,
+            // Test fixture delegations are not guaranteed to be consistent with the canister
+            // ranges in the test state, so only verify the subnet public key, and keep serving
+            // the delegation with the flat canister ranges.
+            canister_ranges_check: CanisterRangesCheck::NoCheck(CanisterRangesFilter::Flat),
         };
         if let Ok((result, _)) = self.runtime.block_on(query_svc.oneshot(input)).unwrap() {
             result

@@ -7,6 +7,9 @@ pub use heap::{Heap, HeapAccessCheck, valid_subslice};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
 use ic_management_canister_types_private::MasterPublicKeyId;
+pub use ic_nns_delegation_reader::{
+    CanisterRangesCheck, CanisterRangesFilter, DelegationVerificationError, NNSDelegationSnapshot,
+};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
@@ -14,9 +17,7 @@ use ic_types::{
     Time,
     batch::ChainKeyData,
     ingress::{IngressStatus, WasmResult},
-    messages::{
-        CertificateDelegation, CertificateDelegationMetadata, MessageId, Query, SignedIngress,
-    },
+    messages::{MessageId, Query, SignedIngress},
 };
 use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
@@ -562,6 +563,8 @@ pub type IngressFilterService =
 pub enum QueryExecutionError {
     #[error("Certified state is not available yet")]
     CertifiedStateUnavailable,
+    #[error("The NNS delegation could not be verified to be consistent with the certified state")]
+    DelegationInconsistentWithState(DelegationVerificationError),
 }
 
 /// The response type to a `call()` request in [`QueryExecutionService`].
@@ -573,8 +576,13 @@ pub type QueryExecutionResponse =
 #[derive(Debug)]
 pub struct QueryExecutionInput {
     pub query: Query,
-    pub certificate_delegation_with_metadata:
-        Option<(CertificateDelegation, CertificateDelegationMetadata)>,
+    /// Snapshot of the NNS delegation to embed into the data certificate, after verifying it
+    /// against the certified state the certificate is built from. When it holds no
+    /// delegation (e.g. on the NNS subnet), none is embedded.
+    pub nns_delegation: NNSDelegationSnapshot,
+    /// What to verify the NNS delegation's canister ranges against. This also determines
+    /// which canister ranges the embedded delegation carries.
+    pub canister_ranges_check: CanisterRangesCheck,
 }
 
 /// Interface for the component to execute queries.
