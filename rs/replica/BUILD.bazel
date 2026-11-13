@@ -36,6 +36,7 @@ DEPENDENCIES = [
     "//rs/registry/local_store",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
+    "//rs/state_layout",
     "//rs/state_manager",
     "//rs/sys",
     "//rs/types/types",

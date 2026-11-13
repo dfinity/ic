@@ -8,6 +8,7 @@ use crate::{
     child_process_initialization,
     controller_launcher_client_stub::{self, ControllerLauncherClientStub},
     controller_launcher_service::ControllerLauncherService,
+    ignore_sigterm,
     launcher_service::LauncherService,
     process::spawn_socketed_process,
     protocol::{
@@ -32,6 +33,7 @@ use nix::{
 /// binaries such as `ic-replay` to run as a sandbox launcher.
 ///
 pub fn sandbox_launcher_main() {
+    ignore_sigterm();
     let socket = child_process_initialization();
     let mut embedder_config_arg: Option<String> = None;
 

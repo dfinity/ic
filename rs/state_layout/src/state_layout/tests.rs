@@ -733,6 +733,93 @@ fn test_state_sync_checkpoint_stays_unverified_between_marker_removals() {
     });
 }
 
+/// Creates the directory of a checkpoint at `height` under `state_root`,
+/// containing the given marker files.
+fn create_checkpoint_dir(state_root: &Path, height: u64, markers: &[&str]) {
+    let path = state_root
+        .join(CHECKPOINTS_DIR)
+        .join(StateLayout::checkpoint_name(Height::new(height)));
+    std::fs::create_dir_all(&path).unwrap();
+    for marker in markers {
+        File::create(path.join(marker)).unwrap();
+    }
+}
+
+#[test]
+fn latest_checkpoint_status_without_checkpoints() {
+    let tmp = tmpdir("state_layout");
+    assert_eq!(latest_checkpoint_status(tmp.path()).unwrap(), None);
+
+    std::fs::create_dir(tmp.path().join(CHECKPOINTS_DIR)).unwrap();
+    assert_eq!(latest_checkpoint_status(tmp.path()).unwrap(), None);
+}
+
+#[test]
+fn latest_checkpoint_status_of_verified_checkpoint() {
+    let tmp = tmpdir("state_layout");
+    create_checkpoint_dir(tmp.path(), 1, &[]);
+    create_checkpoint_dir(tmp.path(), 2, &[]);
+    assert_eq!(
+        latest_checkpoint_status(tmp.path()).unwrap(),
+        Some((Height::new(2), CheckpointStatus::Verified))
+    );
+}
+
+#[test]
+fn latest_checkpoint_status_of_unverified_checkpoint() {
+    let tmp = tmpdir("state_layout");
+    create_checkpoint_dir(tmp.path(), 1, &[]);
+    create_checkpoint_dir(tmp.path(), 2, &[UNVERIFIED_CHECKPOINT_MARKER]);
+    assert_eq!(
+        latest_checkpoint_status(tmp.path()).unwrap(),
+        Some((Height::new(2), CheckpointStatus::UnverifiedRegular))
+    );
+
+    create_checkpoint_dir(
+        tmp.path(),
+        3,
+        &[UNVERIFIED_CHECKPOINT_MARKER, STATE_SYNC_CHECKPOINT_MARKER],
+    );
+    assert_eq!(
+        latest_checkpoint_status(tmp.path()).unwrap(),
+        Some((Height::new(3), CheckpointStatus::UnverifiedStateSync))
+    );
+}
+
+#[test]
+fn latest_checkpoint_status_ignores_older_unverified_checkpoint() {
+    let tmp = tmpdir("state_layout");
+    create_checkpoint_dir(tmp.path(), 1, &[UNVERIFIED_CHECKPOINT_MARKER]);
+    create_checkpoint_dir(tmp.path(), 2, &[]);
+    assert_eq!(
+        latest_checkpoint_status(tmp.path()).unwrap(),
+        Some((Height::new(2), CheckpointStatus::Verified))
+    );
+}
+
+#[test]
+fn latest_checkpoint_status_skips_non_checkpoint_entries() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let tmp = tmpdir("state_layout");
+    // Not hex, not UTF-8, not 16 digits, uppercase.
+    for name in [
+        OsStr::new("tmp"),
+        OsStr::from_bytes(b"\xff"),
+        OsStr::new("ff"),
+        OsStr::new("00000000000000FF"),
+    ] {
+        std::fs::create_dir_all(tmp.path().join(CHECKPOINTS_DIR).join(name)).unwrap();
+    }
+    assert_eq!(latest_checkpoint_status(tmp.path()).unwrap(), None);
+
+    create_checkpoint_dir(tmp.path(), 1, &[UNVERIFIED_CHECKPOINT_MARKER]);
+    assert_eq!(
+        latest_checkpoint_status(tmp.path()).unwrap(),
+        Some((Height::new(1), CheckpointStatus::UnverifiedRegular))
+    );
+}
+
 #[test]
 fn test_canister_id_from_path() {
     assert_eq!(

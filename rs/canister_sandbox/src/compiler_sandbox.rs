@@ -157,6 +157,7 @@ impl Drop for WasmCompilerProxy {
 }
 
 pub fn compiler_sandbox_main() {
+    crate::ignore_sigterm();
     let logger_config = ic_config::logger::Config {
         log_destination: ic_config::logger::LogDestination::Stderr,
         level: ic_config::logger::Level::Warning,

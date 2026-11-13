@@ -18,9 +18,11 @@ use std::{
 use crate::error::OrchestratorResult;
 
 /// How long [`SingleProcessRunner::stop`] waits for the process to exit after
-/// sending `SIGTERM`, before escalating to `SIGKILL`.
+/// sending `SIGTERM`, before escalating to `SIGKILL`. Longer than the replica's
+/// shutdown timeout (30 s), so that the replica can finish shutting down (e.g.
+/// verifying its latest checkpoint) and exit on its own.
 #[cfg(not(test))]
-const STOP_GRACE_PERIOD: Duration = Duration::from_secs(30);
+const STOP_GRACE_PERIOD: Duration = Duration::from_secs(45);
 // In tests, we want to fail fast.
 #[cfg(test)]
 const STOP_GRACE_PERIOD: Duration = Duration::from_secs(1);
