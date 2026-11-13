@@ -82,6 +82,20 @@ pub const WASM_CHUNK_STORE: &str = "wasm_chunk_store";
 pub const LOG_MEMORY_STORE: &str = "log_memory_store";
 pub const BIN_FILE: &str = "bin";
 
+/// Returns `true` iff the checkpoint at `height` under `state_root` exists and is
+/// verified (see `CheckpointLayout::checkpoint_status`).
+///
+/// Only reads the file system, without constructing a `StateLayout` (which spawns
+/// threads).
+pub fn is_checkpoint_verified(state_root: &Path, height: Height) -> bool {
+    let path = state_root
+        .join(CHECKPOINTS_DIR)
+        .join(StateLayout::checkpoint_name(height));
+    path.exists()
+        && CheckpointLayout::<ReadOnly>::new_untracked(path, height)
+            .is_ok_and(|checkpoint| checkpoint.is_checkpoint_verified())
+}
+
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
 pub enum ReadOnly {}

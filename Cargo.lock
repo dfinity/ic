@@ -19025,6 +19025,7 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-registry-replicator",
  "ic-registry-subnet-type",
+ "ic-state-layout",
  "ic-sys",
  "ic-test-utilities-consensus",
  "ic-test-utilities-in-memory-logger",

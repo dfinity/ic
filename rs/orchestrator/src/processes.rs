@@ -461,8 +461,7 @@ impl MultipleProcessesManager {
         }
     }
 
-    // Used in tests to assert the state of the managed processes.
-    #[cfg(test)]
+    /// Returns `true` iff the replica process is running.
     pub(crate) fn is_replica_running(&self) -> bool {
         self.replica_manager.process_runner.is_running()
     }

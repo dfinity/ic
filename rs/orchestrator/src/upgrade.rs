@@ -20,8 +20,9 @@ use ic_protobuf::{proxy::try_from_option_field, types::v1 as pb};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
+use ic_state_layout::is_checkpoint_verified;
 use ic_types::{
-    NodeId, PlatformVersion, RegistryVersion, ReplicaVersion, SubnetId,
+    Height, NodeId, PlatformVersion, RegistryVersion, ReplicaVersion, SubnetId,
     consensus::{CatchUpPackage, HasHeight},
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
 };
@@ -29,7 +30,7 @@ use std::{
     collections::BTreeMap,
     ffi::{CString, OsString},
     os::unix::ffi::OsStrExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
@@ -41,6 +42,10 @@ const TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR: Duration = Duration::from_secs(1800)
 // For ease of testing, we reduce this timeout in tests.
 #[cfg(test)]
 const TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR: Duration = Duration::from_secs(5);
+
+/// Maximum delay of an upgrade at a CUP, waiting for the local checkpoint at the CUP height to be
+/// verified.
+const CHECKPOINT_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[must_use = "This may be a `Stop` variant, which should be handled"]
 #[derive(Debug, PartialEq, Eq)]
@@ -101,6 +106,9 @@ pub(crate) struct Upgrade {
     /// The replica version that is prepared by 'prepare_upgrade' to upgrade to.
     pub prepared_upgrade_version: Option<ReplicaVersion>,
     pub orchestrator_data_directory: PathBuf,
+    /// CUP height of the pending upgrade and the deadline for the local checkpoint at that height
+    /// to be verified.
+    checkpoint_verification_deadline: Option<(Height, Instant)>,
 }
 
 impl Upgrade {
@@ -140,6 +148,7 @@ impl Upgrade {
             prepared_upgrade_version: None,
             orchestrator_data_directory,
             disk_encryption_key_exchange_agent,
+            checkpoint_verification_deadline: None,
         };
         if let Err(e) = value.report_reboot_time() {
             warn!(logger, "Cannot report the reboot time: {}", e);
@@ -383,6 +392,8 @@ impl Upgrade {
                 latest_registry_version,
                 &new_replica_version,
             )?;
+            // Not part of `ensure_upgrade_should_be_executed`, as it also applies to the NNS.
+            self.ensure_checkpoint_verified(&latest_cup, &new_replica_version)?;
 
             info!(
                 self.logger,
@@ -617,6 +628,59 @@ impl Upgrade {
         }
 
         Ok(())
+    }
+
+    /// Delays the upgrade to `new_replica_version` until the local checkpoint at the height of
+    /// `cup` is verified, for at most `CHECKPOINT_VERIFICATION_TIMEOUT` from the first delay at that
+    /// height.
+    ///
+    /// Returns `Err(UpgradeError)` while delaying; after the timeout, logs a warning and returns
+    /// `Ok`. A state root that can't be read from the replica config counts as unverified. Doesn't
+    /// delay if `cup` is unsigned (genesis or recovery) or the replica isn't running (e.g. on a
+    /// node joining the subnet), as no local checkpoint at that height is coming then.
+    ///
+    /// On restart, the replica archives unverified checkpoints and state syncs instead, which is
+    /// costly. Waiting is cheap, as the replica is halted at the CUP height anyway.
+    fn ensure_checkpoint_verified(
+        &mut self,
+        cup: &CatchUpPackage,
+        new_replica_version: &ReplicaVersion,
+    ) -> OrchestratorResult<()> {
+        if !cup.is_signed() || !self.processes_manager.is_replica_running() {
+            return Ok(());
+        }
+        let cup_height = cup.height();
+        let verified = read_state_root(&self.replica_config_file)
+            .inspect_err(|err| warn!(self.logger, "Failed to read the state root: {}", err))
+            .is_ok_and(|state_root| is_checkpoint_verified(&state_root, cup_height));
+        if verified {
+            return Ok(());
+        }
+
+        let deadline = match self.checkpoint_verification_deadline {
+            Some((height, deadline)) if height == cup_height => deadline,
+            _ => Instant::now() + CHECKPOINT_VERIFICATION_TIMEOUT,
+        };
+        self.checkpoint_verification_deadline = Some((cup_height, deadline));
+        if Instant::now() >= deadline {
+            warn!(
+                self.logger,
+                "Checkpoint at height {} still not verified after {:?}, upgrading to {} anyway",
+                cup_height,
+                CHECKPOINT_VERIFICATION_TIMEOUT,
+                new_replica_version
+            );
+            return Ok(());
+        }
+
+        self.metrics
+            .replica_version_upgrade_prevented
+            .with_label_values(&[new_replica_version.as_ref(), "checkpoint_not_verified"])
+            .inc();
+        Err(OrchestratorError::UpgradeError(format!(
+            "Delaying upgrade to {} until the local checkpoint at CUP height {} is verified",
+            new_replica_version, cup_height
+        )))
     }
 
     /// Stop all child processes, including the replica, and wait until they have exited.
@@ -863,6 +927,20 @@ async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
             "Failed to run command '{fstrim_script:?}', error: {err}"
         )),
     }
+}
+
+/// Reads the replica's state root from `replica_config_file`.
+///
+/// Returns `Err` if the file can't be loaded or doesn't specify a state root.
+fn read_state_root(replica_config_file: &Path) -> Result<PathBuf, String> {
+    use ic_config::{ConfigOptional, ConfigSource};
+    let config: ConfigOptional = ConfigSource::File(replica_config_file.to_path_buf())
+        .load()
+        .map_err(|err| err.to_string())?;
+    config
+        .state_manager
+        .map(|state_manager| state_manager.state_root)
+        .ok_or_else(|| format!("No state root in {}", replica_config_file.display()))
 }
 
 /// Deletes the subnet state consisting of the consensus pool, execution state,
@@ -1127,6 +1205,7 @@ mod tests {
     use ic_interfaces_registry::{
         RegistryClientVersionedResult, RegistryDataProvider, RegistryVersionedRecord,
     };
+    use ic_logger::no_op_logger;
     use ic_management_canister_types_private::{
         EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
         VetKdKeyId,
@@ -1150,6 +1229,7 @@ mod tests {
         make_replica_version_key, make_subnet_record_key, make_unassigned_nodes_config_record_key,
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_state_layout::{CHECKPOINTS_DIR, StateLayout, UNVERIFIED_CHECKPOINT_MARKER};
     use ic_test_utilities_consensus::fake::{Fake, FakeContent};
     use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
     use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
@@ -1159,6 +1239,7 @@ mod tests {
         NODE_1, NODE_2, SUBNET_1, SUBNET_42, node_test_id, subnet_test_id,
     };
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetId;
+    use ic_types::crypto::{CombinedThresholdSig, CombinedThresholdSigOf};
     use ic_types::{
         Height, PrincipalId, Time,
         batch::ValidationContext,
@@ -1483,6 +1564,16 @@ mod tests {
             .unwrap();
     }
 
+    /// Returns the path of the checkpoint at `height` in the state root of the replica config
+    /// written by `create_upgrade_for_test` under `dir`.
+    fn checkpoint_path(dir: &Path, height: Height) -> PathBuf {
+        dir.join("state")
+            .join(CHECKPOINTS_DIR)
+            .join(StateLayout::checkpoint_name(height))
+    }
+
+    /// Creates an `Upgrade` for `test_scenario` under `dir`, with the replica config's state root
+    /// at `dir/state`.
     async fn create_upgrade_for_test(
         dir: &Path,
         logger: ReplicaLogger,
@@ -1531,6 +1622,9 @@ mod tests {
         );
 
         let replica_config_file = dir.join("ic.json5");
+        let replica_config =
+            serde_json::json!({ "state_manager": { "state_root": dir.join("state") } });
+        std::fs::write(&replica_config_file, replica_config.to_string()).unwrap();
         let ic_binary_dir = dir.join("ic_binary");
         std::fs::create_dir_all(&ic_binary_dir).unwrap();
         let ic_gateway_env_file = dir.join("ic-gateway.env");
@@ -3231,6 +3325,8 @@ mod tests {
         .with_registry_replicator(Arc::new(registry_replicator))
         .with_subnet_aware_cup_verifier();
         assert!(upgrade_loop.is_replica_running());
+        // The post-split CUP is signed, so the upgrade waits for the checkpoint at its height.
+        std::fs::create_dir_all(checkpoint_path(tmp_path, post_split_cup_height)).unwrap();
 
         // Seeing the post-split CUP makes us reboot into the new replica version.
         assert_eq!(
@@ -3732,6 +3828,159 @@ mod tests {
         // Assert that despite the replicator not having replicated all versions before init,
         // and the version being recalled, we proceed with upgrading as it is the NNS subnet.
         assert_matches!(flow_result, Ok(OrchestratorControlFlow::Stop));
+    }
+
+    /// CUP height of the scenario of `checkpoint_gate_scenario`.
+    const CHECKPOINT_GATE_CUP_HEIGHT: Height = Height::new(100);
+
+    /// Returns a scenario of `subnet_id` with a running replica and a local CUP at
+    /// `CHECKPOINT_GATE_CUP_HEIGHT` that upgrades to `new_replica_version`.
+    fn checkpoint_gate_scenario(
+        subnet_id: SubnetId,
+        new_replica_version: &ReplicaVersion,
+    ) -> UpgradeTestScenario {
+        UpgradeTestScenario {
+            node_id: NODE_1,
+            subnet_type: SubnetType::Application,
+            current_replica_version: ReplicaVersion::from_str("replica_version_0.1").unwrap(),
+            guestos_version: None,
+            has_local_cup: Some(CUPScenario {
+                height: CHECKPOINT_GATE_CUP_HEIGHT,
+                subnet_id,
+                registry_version: RegistryVersion::from(10),
+            }),
+            has_registry_cup: None,
+            initial_subnet_assignment: SubnetAssignment::Assigned(subnet_id),
+            is_leaving: None,
+            upgrade_to: Some(ReplicaUpgradeScenario {
+                replica_version: new_replica_version.clone(),
+                registry_version: RegistryVersion::from(10),
+                is_recalled: false,
+                has_replicated_versions_before_init: true,
+            }),
+        }
+    }
+
+    /// Gives the CUP persisted under `tmp_path` a non-empty (fake) signature, as a running
+    /// subnet's CUPs have.
+    fn sign_local_cup(tmp_path: &Path) {
+        let mut cup = read_local_cup(tmp_path);
+        cup.signature.signature = CombinedThresholdSigOf::new(CombinedThresholdSig(vec![1]));
+        let cup_path = tmp_path.join("cups").join("cup.types.v1.CatchUpPackage.pb");
+        std::fs::write(cup_path, pb::CatchUpPackage::from(cup).encode_to_vec()).unwrap();
+    }
+
+    /// An upgrade is delayed while the local checkpoint at the CUP height is missing or
+    /// unverified, for at most `CHECKPOINT_VERIFICATION_TIMEOUT` after the first delay. Unlike
+    /// the other upgrade gates, this one also applies to the NNS subnet.
+    #[rstest]
+    #[tokio::test]
+    async fn test_upgrade_waits_for_verified_checkpoint(
+        #[values(SUBNET_1, SUBNET_42)] subnet_id: SubnetId,
+        #[values(false, true)] times_out: bool,
+    ) {
+        let new_replica_version = ReplicaVersion::from_str("replica_version_0.2").unwrap();
+        let test_scenario = checkpoint_gate_scenario(subnet_id, &new_replica_version);
+
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let logger = InMemoryReplicaLogger::new();
+        let mut upgrade_loop = create_upgrade_for_test(
+            tmp_path,
+            ReplicaLogger::from(&logger),
+            test_scenario.clone(),
+            test_scenario.setup_registry(),
+        )
+        .await;
+        sign_local_cup(tmp_path);
+
+        let checkpoint = checkpoint_path(tmp_path, CHECKPOINT_GATE_CUP_HEIGHT);
+        let marker = checkpoint.join(UNVERIFIED_CHECKPOINT_MARKER);
+        let assert_delayed = |result: OrchestratorResult<OrchestratorControlFlow>| {
+            assert_matches!(
+                result,
+                Err(OrchestratorError::UpgradeError(err)) if err.contains("checkpoint")
+            );
+        };
+
+        // Missing checkpoint.
+        assert_delayed(upgrade_loop.check().await);
+
+        // The registry replicator of `create_upgrade_for_test` only allows a single `check()`.
+        let mut registry_replicator = MockRegistryReplicatorForUpgrade::new();
+        registry_replicator
+            .expect_has_replicated_all_versions_certified_before_init()
+            .return_const(true);
+        upgrade_loop = upgrade_loop.with_registry_replicator(Arc::new(registry_replicator));
+
+        // Unverified checkpoint.
+        std::fs::create_dir_all(&checkpoint).unwrap();
+        std::fs::write(&marker, b"").unwrap();
+        assert_delayed(upgrade_loop.check().await);
+
+        if times_out {
+            // Let the deadline set by the first delay pass.
+            let (height, _) = upgrade_loop.checkpoint_verification_deadline.unwrap();
+            upgrade_loop.checkpoint_verification_deadline = Some((height, Instant::now()));
+        } else {
+            std::fs::remove_file(&marker).unwrap();
+        }
+        assert_eq!(
+            upgrade_loop.check().await.unwrap(),
+            OrchestratorControlFlow::Stop
+        );
+
+        assert_eq!(
+            upgrade_loop
+                .metrics
+                .replica_version_upgrade_prevented
+                .with_label_values(&[new_replica_version.as_ref(), "checkpoint_not_verified"])
+                .get(),
+            2
+        );
+        LogEntriesAssert::assert_that(logger.drain_logs())
+            .has_exactly_n_messages_containing(
+                usize::from(times_out),
+                &Level::Warning,
+                "still not verified",
+            )
+            .has_only_one_message_containing(&Level::Info, "Starting version upgrade");
+    }
+
+    /// An upgrade isn't delayed for a missing checkpoint if the CUP is unsigned (genesis or
+    /// recovery) or the replica isn't running.
+    #[rstest]
+    #[tokio::test]
+    async fn test_upgrade_skips_checkpoint_gate(#[values(false, true)] cup_is_signed: bool) {
+        let new_replica_version = ReplicaVersion::from_str("replica_version_0.2").unwrap();
+        let test_scenario = checkpoint_gate_scenario(SUBNET_42, &new_replica_version);
+
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let mut upgrade_loop = create_upgrade_for_test(
+            tmp_path,
+            no_op_logger(),
+            test_scenario.clone(),
+            test_scenario.setup_registry(),
+        )
+        .await;
+        if cup_is_signed {
+            sign_local_cup(tmp_path);
+            upgrade_loop.processes_manager.stop_all().unwrap();
+        }
+
+        assert_eq!(
+            upgrade_loop.check().await.unwrap(),
+            OrchestratorControlFlow::Stop
+        );
+        assert_eq!(
+            upgrade_loop
+                .metrics
+                .replica_version_upgrade_prevented
+                .with_label_values(&[new_replica_version.as_ref(), "checkpoint_not_verified"])
+                .get(),
+            0
+        );
     }
 
     #[tokio::test]

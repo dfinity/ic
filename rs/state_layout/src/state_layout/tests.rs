@@ -734,6 +734,49 @@ fn test_state_sync_checkpoint_stays_unverified_between_marker_removals() {
 }
 
 #[test]
+fn test_is_checkpoint_verified() {
+    with_test_replica_logger(|log| {
+        let tempdir = tmpdir("state_layout");
+        let root = tempdir.path();
+        let metrics_registry = ic_metrics::MetricsRegistry::new();
+        let state_layout =
+            StateLayout::try_new(log, root.to_path_buf(), &metrics_registry).unwrap();
+        // Promotes an empty scratchpad, from state sync or not, to an unverified checkpoint.
+        let promote = |height, state_sync| {
+            let scratchpad = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+                state_layout.state_sync_scratchpad(height),
+                height,
+            )
+            .unwrap();
+            if state_sync {
+                scratchpad.create_state_sync_checkpoint_marker().unwrap();
+            }
+            state_layout
+                .promote_scratchpad_to_unverified_checkpoint(scratchpad, height)
+                .unwrap()
+                .as_readonly()
+        };
+        let (h1, h2) = (Height::new(1), Height::new(2));
+
+        assert!(!is_checkpoint_verified(root, h1));
+
+        let checkpoint = promote(h1, false);
+        assert!(!is_checkpoint_verified(root, h1));
+        checkpoint
+            .finalize_and_remove_unverified_marker(None)
+            .unwrap();
+        assert!(is_checkpoint_verified(root, h1));
+        assert!(!is_checkpoint_verified(root, h2));
+
+        let checkpoint = promote(h2, true);
+        checkpoint.remove_unverified_checkpoint_marker().unwrap();
+        assert!(!is_checkpoint_verified(root, h2));
+        checkpoint.remove_state_sync_checkpoint_marker().unwrap();
+        assert!(is_checkpoint_verified(root, h2));
+    });
+}
+
+#[test]
 fn test_canister_id_from_path() {
     assert_eq!(
         Some(CanisterId::from_u64(1)),
