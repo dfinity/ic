@@ -2151,7 +2151,7 @@ fn fresh_threshold_public_key() -> ThresholdSigPublicKey {
 fn drift_delegation_from_certified_state(
     drift: DelegationDrift,
     side: DriftingSide,
-    nns_delegation_watcher: &watch::Sender<Option<NNSDelegationBuilder>>,
+    nns_delegation_watcher: &watch::Sender<Option<Arc<NNSDelegationBuilder>>>,
     latest_state: &Mutex<Labeled<Arc<ReplicatedState>>>,
 ) {
     let drifted_subnet = match drift {
@@ -2166,9 +2166,9 @@ fn drift_delegation_from_certified_state(
     match side {
         DriftingSide::NnsDelegation => {
             nns_delegation_watcher
-                .send(Some(nns_delegation_builder(
+                .send(Some(Arc::new(nns_delegation_builder(
                     drifted_subnet.nns_delegation(),
-                )))
+                ))))
                 .expect("The NNS delegation receiver should be alive.");
         }
         DriftingSide::CertifiedState => {

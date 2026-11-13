@@ -127,14 +127,13 @@ pub fn start_nns_delegation_manager(
 }
 
 /// What the [`DelegationManager`] last published to the [`NNSDelegationReader`]s.
-#[allow(clippy::large_enum_variant)]
 enum PublishedDelegation {
     /// Nothing has been published yet, i.e. the readers are still waiting to be initialized.
     Uninitialized,
     /// We are on the NNS subnet, where there is no delegation. Published as `None`.
     AbsentBecauseNNS,
     /// A delegation which has been published.
-    Present(NNSDelegationBuilder),
+    Present(Arc<NNSDelegationBuilder>),
 }
 
 struct DelegationManager {
@@ -242,7 +241,7 @@ impl DelegationManager {
         None
     }
 
-    async fn run(mut self, sender: watch::Sender<Option<NNSDelegationBuilder>>) {
+    async fn run(mut self, sender: watch::Sender<Option<Arc<NNSDelegationBuilder>>>) {
         let mut proactive_interval = tokio::time::interval(DELEGATION_PROACTIVE_UPDATE_INTERVAL);
         let mut reactive_interval = tokio::time::interval(DELEGATION_REACTIVE_UPDATE_INTERVAL);
         // If we miss a tick because fetching the delegation took too long (f.ex. because the NNS
@@ -260,6 +259,7 @@ impl DelegationManager {
                 // No new delegation was fetched. Retry on the next tick.
                 continue;
             };
+            let new_delegation = new_delegation.map(Arc::new);
 
             sender.send_replace(new_delegation.clone());
             self.metrics.updates.inc();
@@ -1727,7 +1727,7 @@ mod tests {
             subnet_id: APP_SUBNET_ID,
             subnet_type: SubnetType::Application,
             nns_subnet_id: NNS_SUBNET_ID,
-            last_delegation: PublishedDelegation::Present(old_delegation.clone()),
+            last_delegation: PublishedDelegation::Present(Arc::new(old_delegation.clone())),
             state_reader,
             registry_client,
             tls_config,
@@ -1764,7 +1764,7 @@ mod tests {
             subnet_id: APP_SUBNET_ID,
             subnet_type: SubnetType::Application,
             nns_subnet_id: NNS_SUBNET_ID,
-            last_delegation: PublishedDelegation::Present(old_delegation.clone()),
+            last_delegation: PublishedDelegation::Present(Arc::new(old_delegation.clone())),
             state_reader,
             registry_client,
             tls_config,

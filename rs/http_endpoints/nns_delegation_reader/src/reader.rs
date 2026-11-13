@@ -11,7 +11,7 @@ use ic_types::{
     },
 };
 use serde::ser::Serialize;
-use std::fmt;
+use std::{fmt, sync::Arc};
 use tokio::sync::watch;
 
 use crate::validation::{
@@ -55,12 +55,24 @@ impl From<CanisterRangesCheck> for CanisterRangesFilter {
 /// Wrapper around [`tokio::sync::watch::Receiver`] with some utility methods.
 // TODO(CON-1487): Consider caching the delegations per canister range.
 pub struct NNSDelegationReader {
-    receiver: watch::Receiver<Option<NNSDelegationBuilder>>,
+    receiver: watch::Receiver<Option<Arc<NNSDelegationBuilder>>>,
 }
 
 impl NNSDelegationReader {
-    pub fn new(receiver: watch::Receiver<Option<NNSDelegationBuilder>>) -> Self {
+    pub fn new(receiver: watch::Receiver<Option<Arc<NNSDelegationBuilder>>>) -> Self {
         Self { receiver }
+    }
+
+    /// Returns a snapshot of the most recent NNS delegation known to the replica.
+    /// Consecutive calls might return different delegations.
+    /// Note: on the NNS subnet this always returns `None`.
+    ///
+    /// The snapshot is immutable, so it can be used to verify the delegation against a
+    /// certified state and to build exactly the verified delegation (see
+    /// [`NNSDelegationBuilder::build_verified`]), without holding on to the underlying
+    /// channel and without having to worry about the delegation being concurrently replaced.
+    pub fn builder(&self) -> Option<Arc<NNSDelegationBuilder>> {
+        self.receiver.borrow().clone()
     }
 
     /// Verifies the most recent NNS delegation known to the replica against the given
@@ -73,9 +85,7 @@ impl NNSDelegationReader {
         ranges_check: CanisterRangesCheck,
         state: &dyn StateForDelegationVerification,
     ) -> Result<Option<CertificateDelegation>, DelegationVerificationError> {
-        self.receiver
-            .borrow()
-            .as_ref()
+        self.builder()
             .map(|builder| builder.build_verified(ranges_check, state))
             .transpose()
     }
@@ -96,9 +106,7 @@ impl NNSDelegationReader {
             },
         };
 
-        self.receiver
-            .borrow()
-            .as_ref()
+        self.builder()
             .map(|builder| (builder.build_unverified(canister_ranges_filter), metadata))
     }
 
