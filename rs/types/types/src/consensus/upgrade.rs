@@ -34,7 +34,9 @@ pub enum UpgradePermitAction {
     RequestPermit(UpgradePermitRequest),
     /// Authorize a node to reboot — the signed request and the basic
     /// signatures over it collected from other nodes.
-    AuthorizePermit(Signed<UpgradePermitRequest, BasicSignatureBatch<UpgradePermitRequest>>),
+    AuthorizePermit(
+        Signed<UpgradeAuthorizationContent, BasicSignatureBatch<UpgradeAuthorizationContent>>,
+    ),
     /// Release a previously authorized permit (reboot complete).
     ReturnPermit { node: NodeId },
     /// Expire a permit, if the request is no longer valid. e.g. The node has
@@ -49,18 +51,18 @@ pub struct UpgradePermitRequest {
     pub requestor: NodeId,
 }
 
-impl SignedBytesWithoutDomainSeparator for UpgradePermitRequest {
-    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
-        serde_cbor::to_writer(bytes, &self).unwrap();
-    }
-}
-
 /// UpgradeAuthorizationContent holds the values that are signed in an upgrade
 /// permit authorization share.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Serialize)]
 pub struct UpgradeAuthorizationContent {
     pub requestor: NodeId,
     pub request_height: Height,
+}
+
+impl SignedBytesWithoutDomainSeparator for UpgradeAuthorizationContent {
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
+    }
 }
 
 impl HasHeight for UpgradeAuthorizationContent {

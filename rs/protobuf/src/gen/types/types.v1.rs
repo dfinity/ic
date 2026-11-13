@@ -1910,7 +1910,7 @@ pub struct RequestUpgradePermit {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizeUpgradePermit {
     #[prost(message, optional, tag = "1")]
-    pub request: ::core::option::Option<UpgradePermitRequest>,
+    pub request: ::core::option::Option<UpgradeAuthorizationContent>,
     #[prost(message, repeated, tag = "2")]
     pub signatures: ::prost::alloc::vec::Vec<BasicSignature>,
 }

@@ -4,7 +4,7 @@ use ic_types::{
     canister_http::CanisterHttpResponseReceipt,
     consensus::{
         BlockMetadata, CatchUpContent, FinalizationContent, NotarizationContent,
-        RandomBeaconContent, RandomTapeContent, UpgradePermitRequest, dkg,
+        RandomBeaconContent, RandomTapeContent, UpgradeAuthorizationContent, dkg,
         hashed::Hashed,
         idkg::{IDkgComplaintContent, IDkgOpeningContent},
     },
@@ -425,8 +425,11 @@ pub trait ConsensusCrypto:
     + SignVerify<IDkgDealing, BasicSignature<IDkgDealing>, RegistryVersion>
     + SignVerify<IDkgComplaintContent, BasicSignature<IDkgComplaintContent>, RegistryVersion>
     + SignVerify<IDkgOpeningContent, BasicSignature<IDkgOpeningContent>, RegistryVersion>
-    + SignVerify<UpgradePermitRequest, BasicSignature<UpgradePermitRequest>, RegistryVersion>
-    + SignVerify<RandomBeaconContent, ThresholdSignatureShare<RandomBeaconContent>, NiDkgId>
+    + SignVerify<
+        UpgradeAuthorizationContent,
+        BasicSignature<UpgradeAuthorizationContent>,
+        RegistryVersion,
+    > + SignVerify<RandomBeaconContent, ThresholdSignatureShare<RandomBeaconContent>, NiDkgId>
     + SignVerify<RandomTapeContent, ThresholdSignatureShare<RandomTapeContent>, NiDkgId>
     + SignVerify<CatchUpContent, ThresholdSignatureShare<CatchUpContent>, NiDkgId>
     + SignVerify<dkg::DealingContent, BasicSignature<dkg::DealingContent>, RegistryVersion>

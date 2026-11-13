@@ -42,9 +42,9 @@ use ic_types::canister_http::{
     CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, RefundStatus, Replication,
     Transform,
 };
-use ic_types::consensus::UpgradePermitRequest;
 use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature};
 use ic_types::consensus::upgrade::UpgradePermitAction;
+use ic_types::consensus::{UpgradeAuthorizationContent, UpgradePermitRequest};
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::Signed;
 use ic_types::crypto::canister_threshold_sig::SchnorrPreSignatureTranscript;
@@ -3596,9 +3596,12 @@ fn upgrade_request_action(requestor: NodeId) -> UpgradePermitAction {
     UpgradePermitAction::RequestPermit(UpgradePermitRequest { requestor })
 }
 
-fn upgrade_authorize_action(requestor: NodeId) -> UpgradePermitAction {
+fn upgrade_authorize_action(requestor: NodeId, request_height: Height) -> UpgradePermitAction {
     UpgradePermitAction::AuthorizePermit(Signed {
-        content: UpgradePermitRequest { requestor },
+        content: UpgradeAuthorizationContent {
+            requestor,
+            request_height,
+        },
         signature: BasicSignatureBatch {
             signatures_map: BTreeMap::new(),
         },
@@ -3640,7 +3643,7 @@ fn upgrade_state_authorize_moves_request_to_authorized() {
         &FakeUpgradePermitMetrics::default(),
     );
     state.apply(
-        &[upgrade_authorize_action(node_test_id(1))],
+        &[upgrade_authorize_action(node_test_id(1), Height::new(1))],
         Height::new(5),
         &no_op_logger(),
         &FakeUpgradePermitMetrics::default(),
@@ -3660,7 +3663,7 @@ fn upgrade_state_return_removes_authorization() {
         &FakeUpgradePermitMetrics::default(),
     );
     state.apply(
-        &[upgrade_authorize_action(node_test_id(1))],
+        &[upgrade_authorize_action(node_test_id(1), Height::new(1))],
         Height::new(2),
         &no_op_logger(),
         &FakeUpgradePermitMetrics::default(),
@@ -3693,7 +3696,7 @@ fn upgrade_state_prunes_departed_members() {
         &metrics,
     );
     state.apply(
-        &[upgrade_authorize_action(node_test_id(7))],
+        &[upgrade_authorize_action(node_test_id(7), Height::new(2))],
         Height::new(3),
         &no_op_logger(),
         &metrics,
@@ -3736,8 +3739,8 @@ fn upgrade_state_applies_multiple_actions_per_block() {
     // ... and both are authorized in the same block.
     state.apply(
         &[
-            upgrade_authorize_action(node_test_id(1)),
-            upgrade_authorize_action(node_test_id(2)),
+            upgrade_authorize_action(node_test_id(1), Height::new(1)),
+            upgrade_authorize_action(node_test_id(2), Height::new(2)),
         ],
         Height::new(5),
         &no_op_logger(),

@@ -79,7 +79,7 @@ mod crypto_hash_stability {
         EquivocationProof, Finalization, FinalizationContent, FinalizationShare, HashedBlock,
         HashedRandomBeacon, Notarization, NotarizationContent, NotarizationShare, Payload,
         RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank, SummaryPayload,
-        UpgradeAuthorizationContent, UpgradeAuthorizationShare, UpgradePermitRequest,
+        UpgradeAuthorizationContent, UpgradeAuthorizationShare,
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
@@ -457,18 +457,19 @@ mod crypto_hash_stability {
         );
     }
 
-    /// Test stability of the signed bytes of UpgradePermitRequest
+    /// Test stability of the signed bytes of UpgradeAuthorizationContent
     #[test]
     fn upgrade_permit_request_signed_bytes_stability() {
-        let data = UpgradePermitRequest {
+        let data = UpgradeAuthorizationContent {
             requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
+            request_height: Height::from(42),
         };
         let mut bytes = vec![];
         data.write_signed_bytes_without_domain_separator(&mut bytes);
         assert_eq!(
             hex::encode(bytes),
-            "a169726571756573746f724a2a00000000000000fd01",
-            "Signed bytes of UpgradePermitRequest changed"
+            "a269726571756573746f724a2a00000000000000fd016e726571756573745f686569676874182a",
+            "Signed bytes of UpgradeAuthorizationContent changed"
         );
     }
 

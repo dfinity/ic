@@ -25,7 +25,7 @@ message RequestUpgradePermit {
 }
 
 message AuthorizeUpgradePermit {
-  UpgradePermitRequest request = 1;
+  UpgradeAuthorizationContent request = 1;
   repeated types.v1.BasicSignature signatures = 2;
 }
 
