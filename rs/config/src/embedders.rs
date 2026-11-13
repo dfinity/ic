@@ -41,6 +41,15 @@ pub(crate) const MAX_CUSTOM_SECTIONS_SIZE: NumBytes = NumBytes::new(1048576);
 // Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
 // if you change its value.
 pub(crate) const MAX_NUMBER_EXPORTED_FUNCTIONS: usize = 1000;
+// The maximum number of exports of ANY kind (functions, globals, memories,
+// tables) allowed in a Wasm module.
+//
+// Beyond the 1000 exported functions, modules currently only need 9 more exports, but
+// we allow 100 more for future expansions.
+// NOTE. The following constant is contained in the public Interface Specification.
+// Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
+// if you change its value.
+pub(crate) const MAX_NUMBER_EXPORTS: usize = 1100;
 // The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
 // `canister_query <name>`, or `canister_composite_query <name>`.
 // NOTE. The following constant is contained in the public Interface Specification.
@@ -190,6 +199,10 @@ pub struct Config {
     /// `canister_query <name>`, or `canister_composite_query <name>`.
     pub max_number_exported_functions: usize,
 
+    /// The maximum number of exports of any kind (functions, globals, memories,
+    /// tables) allowed in a Wasm module.
+    pub max_number_exports: usize,
+
     /// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
     /// `canister_query <name>`, or `canister_composite_query <name>`.
     pub max_sum_exported_function_name_lengths: usize,
@@ -281,6 +294,7 @@ impl Config {
             max_custom_sections: MAX_CUSTOM_SECTIONS,
             max_custom_sections_size: MAX_CUSTOM_SECTIONS_SIZE,
             max_number_exported_functions: MAX_NUMBER_EXPORTED_FUNCTIONS,
+            max_number_exports: MAX_NUMBER_EXPORTS,
             max_sum_exported_function_name_lengths: MAX_SUM_EXPORTED_FUNCTION_NAME_LENGTHS,
             cost_to_compile_wasm_instruction: DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
             create_execution_state_base_cost: DEFAULT_CREATE_EXECUTION_STATE_BASE_COST,
