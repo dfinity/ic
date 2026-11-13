@@ -100,6 +100,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
     caller: &Principal,
     candid_bytes: Vec<u8>,
 ) -> anyhow::Result<crate::common::storage::types::IcrcTransaction> {
+    validate_canister_method_args_size(&candid_bytes)?;
     Ok(match canister_method_name {
         CanisterMethodName::Icrc2Approve => {
             let ApproveArgs {
@@ -532,9 +533,10 @@ pub fn handle_construction_parse(
                     created_at_time: icrc1_transaction.created_at_time,
                     // The ingress start is the first ingress expiry set minus the ingress interval
                     ingress_start: ingress_expiry_start.map(|start| {
-                        start
-                            - (ic_limits::MAX_INGRESS_TTL - ic_limits::PERMITTED_DRIFT).as_nanos()
-                                as u64
+                        start.saturating_sub(
+                            (ic_limits::MAX_INGRESS_TTL - ic_limits::PERMITTED_DRIFT).as_nanos()
+                                as u64,
+                        )
                     }),
                     ingress_end: ingress_expiry_end,
                 }
@@ -781,6 +783,123 @@ mod test {
                 "unexpected error: {err}"
             );
         }
+    }
+
+    fn transfer_rosetta_core_operations() -> Vec<Operation> {
+        icrc1_operation_to_rosetta_core_operations(
+            crate::common::storage::types::IcrcOperation::Transfer {
+                from: account_with_subaccount(),
+                to: account_with_subaccount(),
+                spender: None,
+                amount: candid::Nat::from(1_u64),
+                fee: None,
+            },
+            test_currency(),
+            None,
+        )
+        .unwrap()
+    }
+
+    fn test_currency() -> Currency {
+        Currency {
+            symbol: "XTST".to_string(),
+            decimals: 8,
+            metadata: None,
+        }
+    }
+
+    fn call_envelope_content(arg: Vec<u8>, ingress_expiry: u64) -> EnvelopeContent {
+        EnvelopeContent::Call {
+            canister_id: Principal::anonymous(),
+            method_name: CanisterMethodName::Icrc1Transfer.to_string(),
+            arg,
+            nonce: None,
+            sender: account_with_subaccount().owner,
+            ingress_expiry,
+            sender_info: None,
+        }
+    }
+
+    fn oversized_transfer_args() -> Vec<u8> {
+        Encode!(&TransferArg {
+            from_subaccount: None,
+            to: account_with_subaccount(),
+            fee: None,
+            created_at_time: None,
+            memo: Some(Memo::from(vec![0xff_u8; MAX_CANISTER_METHOD_ARGS_BYTES])),
+            amount: candid::Nat::from(1_u64),
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn test_construction_payloads_rejects_oversized_canister_method_args() {
+        let err = handle_construction_payloads(
+            transfer_rosetta_core_operations(),
+            0,
+            Some(Memo::from(vec![0xff_u8; MAX_CANISTER_METHOD_ARGS_BYTES])),
+            Principal::anonymous(),
+            PublicKey::new(
+                hex::encode([0_u8; 32]),
+                rosetta_core::objects::CurveType::Edwards25519,
+            ),
+            vec![1],
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("canister method arguments must not be longer"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_construction_parse_and_hash_reject_oversized_canister_method_args() {
+        let envelope_content = call_envelope_content(oversized_transfer_args(), 1);
+
+        let err = build_transaction_hash_from_envelope_content(&envelope_content).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("canister method arguments must not be longer"),
+            "unexpected error: {err}"
+        );
+
+        let err = handle_construction_parse(
+            vec![envelope_content],
+            test_currency(),
+            Some(1),
+            Some(1),
+            false,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("canister method arguments must not be longer"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_construction_parse_does_not_underflow_ingress_start() {
+        let args = Encode!(&TransferArg {
+            from_subaccount: None,
+            to: account_with_subaccount(),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: candid::Nat::from(1_u64),
+        })
+        .unwrap();
+        let response = handle_construction_parse(
+            vec![call_envelope_content(args, 0)],
+            test_currency(),
+            Some(0),
+            Some(0),
+            false,
+        )
+        .unwrap();
+        let metadata = ConstructionPayloadsRequestMetadata::try_from(response.metadata).unwrap();
+        assert_eq!(metadata.ingress_start, Some(0));
     }
 
     #[test]
