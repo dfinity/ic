@@ -21,8 +21,7 @@ use prost::Message;
 ///
 /// Together, these imply that all shards concatenated form a valid routing table, since the
 /// entries of each shard are confined to the canister IDs between the shard's key (inclusive) and
-/// the next shard's key (exclusive). Hence, the concatenation is not validated separately, which
-/// would mean converting every entry a second time.
+/// the next shard's key (exclusive).
 pub(crate) fn check_routing_table_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
