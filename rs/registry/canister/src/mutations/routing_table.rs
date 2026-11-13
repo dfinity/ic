@@ -790,6 +790,63 @@ mod tests {
         );
     }
 
+    #[test]
+    fn dropped_shard_key_overflows_previous_shard_and_forces_resplit() {
+        let mut registry = invariant_compliant_registry(0);
+
+        // Shard 0 is full: it holds the 20 ranges [0, 9], [10, 19], ..., [190, 199], where the
+        // i-th range is assigned to the subnet with index i. Shard 200 holds 4 more ranges.
+        let full_shard = make_rt_entry_definitions(0..20, 10);
+        assert_eq!(full_shard.len(), MAX_RANGES_PER_CANISTER_RANGES as usize);
+        let shards = shards(vec![
+            (0, full_shard),
+            (
+                200,
+                vec![
+                    ((200, 200), test_subnet(30)),
+                    ((201, 209), test_subnet(19)),
+                    ((210, 219), test_subnet(31)),
+                    ((220, 229), test_subnet(32)),
+                ],
+            ),
+        ]);
+        apply_shards_to_registry(&mut registry, &shards);
+
+        // Moving canister 200 to the subnet with index 19 makes optimize() merge [190, 199],
+        // [200, 200], and [201, 209] into [190, 209], which spans the shard key 200. That shard
+        // key is dropped, so the remaining ranges of its shard overflow the already full shard 0.
+        let mutations = registry.migrate_canisters_to_subnet(
+            registry.latest_version(),
+            vec![CanisterId::from(200)],
+            test_subnet(19),
+        );
+        registry.maybe_apply_mutation_internal(mutations);
+
+        // Shard 0 is split in the middle, i.e., at the start of its 11th range: [100, 109].
+        let shard_keys_and_entry_counts =
+            get_key_family::<pb::RoutingTable>(&registry, CANISTER_RANGES_PREFIX)
+                .into_iter()
+                .map(|(key, shard)| (key, shard.entries.len()))
+                .collect::<Vec<(String, usize)>>();
+        assert_eq!(
+            shard_keys_and_entry_counts,
+            vec![
+                (hex::encode(CanisterId::from(0).get_ref().as_slice()), 10),
+                (hex::encode(CanisterId::from(100).get_ref().as_slice()), 12),
+            ]
+        );
+
+        assert_subnet_for_canister(&registry, 0, 0);
+        assert_subnet_for_canister(&registry, 99, 9);
+        assert_subnet_for_canister(&registry, 100, 10);
+        assert_subnet_for_canister(&registry, 190, 19);
+        assert_subnet_for_canister(&registry, 200, 19);
+        assert_subnet_for_canister(&registry, 209, 19);
+        assert_subnet_for_canister(&registry, 210, 31);
+        assert_subnet_for_canister(&registry, 229, 32);
+        assert_no_subnet_for_canister(&registry, 230);
+    }
+
     // Simple helper to create SubnetId from index
     fn test_subnet(idx: u64) -> SubnetId {
         SubnetId::new(PrincipalId::new_subnet_test_id(idx))

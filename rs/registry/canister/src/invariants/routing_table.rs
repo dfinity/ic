@@ -12,24 +12,43 @@ use ic_registry_keys::{
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use prost::Message;
 
-/// Routing table invariants hold if reading and conversion succeed.
+/// Checks that the routing table shards (the `canister_ranges_*` keys) are consistent:
+///
+/// * the canister IDs in the shard keys are strictly increasing;
+/// * each shard is a valid routing table;
+/// * no entry of a shard starts before the canister ID in the shard's key;
+/// * no entry of a shard reaches the canister ID in the next shard's key.
+///
+/// Together, these imply that all shards concatenated form a valid routing table, since the
+/// entries of each shard are confined to the canister IDs between the shard's key (inclusive) and
+/// the next shard's key (exclusive). Hence, the concatenation is not validated separately, which
+/// would mean converting every entry a second time.
 pub(crate) fn check_routing_table_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    let shards = get_routing_table_shards(snapshot);
+    let mut shards = get_routing_table_shards(snapshot).into_iter().peekable();
 
-    for ((shard_key, shard), next_shard) in shards
-        .iter()
-        .zip(shards.iter().skip(1).map(Some).chain(std::iter::once(None)))
-    {
-        let routing_table =
-            RoutingTable::try_from(shard.clone()).map_err(|err| InvariantCheckError {
-                msg: format!("Invalid routing table shard at key {shard_key}: {err}"),
+    while let Some((shard_key, shard)) = shards.next() {
+        let next_shard_key = shards.peek().map(|(next_shard_key, _)| *next_shard_key);
+
+        if let Some(next_shard_key) = next_shard_key
+            && next_shard_key <= shard_key
+        {
+            return Err(InvariantCheckError {
+                msg: format!(
+                    "Routing table shard key {shard_key} is not smaller than the next shard key {next_shard_key}"
+                ),
                 source: None,
-            })?;
+            });
+        }
+
+        let routing_table = RoutingTable::try_from(shard).map_err(|err| InvariantCheckError {
+            msg: format!("Invalid routing table shard at key {shard_key}: {err}"),
+            source: None,
+        })?;
 
         if let Some((first_range, _)) = routing_table.iter().next()
-            && first_range.start < *shard_key
+            && first_range.start < shard_key
         {
             return Err(InvariantCheckError {
                 msg: format!(
@@ -40,9 +59,9 @@ pub(crate) fn check_routing_table_invariants(
             });
         }
 
-        if let (Some((last_range, _)), Some((next_shard_key, _))) =
-            (routing_table.iter().last(), next_shard)
-            && last_range.end >= *next_shard_key
+        if let (Some((last_range, _)), Some(next_shard_key)) =
+            (routing_table.iter().last(), next_shard_key)
+            && last_range.end >= next_shard_key
         {
             return Err(InvariantCheckError {
                 msg: format!(
@@ -54,16 +73,6 @@ pub(crate) fn check_routing_table_invariants(
         }
     }
 
-    RoutingTable::try_from(
-        shards
-            .into_iter()
-            .map(|(_, routing_table)| routing_table)
-            .collect::<Vec<_>>(),
-    )
-    .map_err(|err| InvariantCheckError {
-        msg: format!("Invalid routing table: {err}"),
-        source: None,
-    })?;
     Ok(())
 }
 
