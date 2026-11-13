@@ -29,20 +29,25 @@
 //!   Consensus needs a state this replica doesn't have ([`StateManager::fetch_state`]), from peers
 //!   except for the chunks it can copy from local checkpoints.
 //! * **Removal.** [`StateManager::remove_states_below`] removes the states and checkpoints below a
-//!   height, except the latest checkpoint at or below it.
+//!   height, except:
+//!   * the latest state, the latest certified state and the latest checkpoint;
+//!   * the latest checkpoint at or below that height, which a restart loads;
+//!   * the latest checkpoint with a manifest, which the next manifest and state sync build on, and
+//!     the latest verified one, which survives a restart.
 //!
 //! # A checkpoint interval
 //!
-//! Between consecutive checkpoints H and H′, execution modifies canister memory (the
-//! [`PageMap`](ic_replicated_state::PageMap)s) in memory, and the state manager writes, reads and
-//! merges files in the background, mostly on the tip thread, which owns the `tip/` directory (the
-//! next checkpoint, being written):
+//! Between consecutive checkpoints H and H′, Execution and Message Routing modify the replicated
+//! state in memory, including canister memory (the [`PageMap`](ic_replicated_state::PageMap)s),
+//! whose changes are written as overlay files. Meanwhile, the state manager writes, reads and merges
+//! files in the background, mostly on the tip thread, which owns the `tip/` directory (the next
+//! checkpoint, being written):
 //!
 //! | Thread | When | Reads | Writes |
 //! |---|---|---|---|
 //! | Canister sandboxes | Every round | Canister memory: page faults on the checkpoint files that back it | Nothing to disk: modified pages stay in memory, in the PageMaps' page delta |
 //! | Tip thread: flush | At H′-50 ([`NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY`]) | — | The page delta accumulated since H, as new overlay files in `tip/` |
-//! | Tip thread: checkpoint (**blocks execution**) | At H′ | — | The rest of the page delta and new Wasm binaries; then renames `tip/` into the checkpoint and switches the state's PageMaps to its files. Execution resumes, and the protobufs are written after |
+//! | Tip thread: checkpoint (**blocks Execution**) | At H′ | — | The rest of the page delta and new Wasm binaries; then renames `tip/` into the checkpoint and switches the state's PageMaps to its files. Execution resumes, and the protobufs are written after |
 //! | Manifest thread | After H | The checkpoint's files, in chunks, except files hard-linked from the previous checkpoint, whose hashes it reuses | — |
 //! | Tip thread: validate | After H, while the manifest is computed | The checkpoint's protobufs, loaded and compared with the state | Marks the files read-only, `syncfs`es and removes the unverified marker |
 //! | Tip thread: publish | Once validated and the manifest is ready | — | The manifest, into the states' metadata: only now can Consensus make the CUP |
@@ -73,12 +78,15 @@
 //! * **One request at a time.** The tip thread handles its requests in order, so each one waits for
 //!   all earlier ones. The checkpoint at H′ first waits for all of them, for the manifest thread
 //!   (e.g. a rehash) and for pending checkpoint removals: whatever of this is still running at H′
-//!   (typically a long merge) blocks execution. After the checkpoint, `commit_and_certify` also
+//!   (typically a long merge) blocks Execution. After the checkpoint, `commit_and_certify` also
 //!   waits for the hash thread to hash the canonical state for certification and, at checkpoints,
 //!   to record the checkpoint in the states' metadata.
-//! * **Merges.** On disk, a PageMap is an optional, unsharded base file plus, for each 40 GiB shard
-//!   of its pages (`LsmtConfig::shard_num_pages`), a stack of overlay files (see `MergeCandidate`).
-//!   The tip thread merges the shards that need it in parallel; `merge` in [`tip`] decides which.
+//! * **Merges.** On disk, a PageMap is, for each 40 GiB shard of its pages
+//!   (`LsmtConfig::shard_num_pages`), a stack of overlay files (see `MergeCandidate`). Older replicas
+//!   also wrote an unsharded base file, which is still read but no longer written. After each
+//!   checkpoint, once its manifest is published, the tip thread merges, in parallel, the stacks of
+//!   shards with too many files, and of enough others to keep the files' total size under 2.5 times
+//!   the PageMaps' size (see `merge` in [`tip`]).
 //! * **Publication order.** The manifest is computed while the checkpoint is validated, but only
 //!   published once the validation is complete, so that a CUP never refers to an unverified
 //!   checkpoint.
@@ -87,11 +95,11 @@
 //!   takes longer than about 130 rounds stops block making.
 //! * **Certification gap.** Consensus also stops notarizing 70 heights past the latest certified
 //!   state (`ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP`), and slows down well before that. While a
-//!   checkpoint blocks execution, no new states are certified, so block making stops 70 heights
+//!   checkpoint blocks Execution, no new states are certified, so block making stops 70 heights
 //!   after the last certified one.
-//! * **Page cache.** Manifest, rehash and merge reads go through the page cache, as do the
-//!   sandboxes' page faults on checkpoint files: the state manager's reads compete with execution
-//!   for memory.
+//! * **Page cache.** Manifest, rehash and merge reads go through the operating system's page cache
+//!   (the kernel's cache of file contents in RAM), as do the sandboxes' page faults on checkpoint
+//!   files: the state manager's reads compete with Execution for memory.
 
 // `pub` so that the benchmarks in `state_benches` can access it.
 mod allowed_panics;
