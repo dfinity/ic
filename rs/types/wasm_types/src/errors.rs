@@ -88,6 +88,11 @@ pub enum WasmValidationError {
         defined: usize,
         allowed: usize,
     },
+    /// There are too many exports of any kind defined in the module.
+    TooManyTotalExports {
+        defined: usize,
+        allowed: usize,
+    },
     /// The total length of exported function names is too large.
     ExportedNamesTooLong {
         total_length: usize,
@@ -194,6 +199,12 @@ impl std::fmt::Display for WasmValidationError {
                     "The number of exported functions called \
                     `canister_update <name>`, `canister_query <name>`, or \
                     `canister_composite_query <name>` is {defined} which exceeds {allowed}."
+                )
+            }
+            Self::TooManyTotalExports { defined, allowed } => {
+                write!(
+                    f,
+                    "The total number of exported items is {defined} which exceeds {allowed}."
                 )
             }
             Self::ExportedNamesTooLong {
@@ -323,6 +334,10 @@ impl AsErrorHelp for WasmValidationError {
             },
             WasmValidationError::TooManyExports { .. } => ErrorHelp::UserError {
                 suggestion: "Try combining multiple endpoints into a single endpoint.".to_string(),
+                doc_link: doc_ref("wasm-module-exports-too-many-methods"),
+            },
+            WasmValidationError::TooManyTotalExports { .. } => ErrorHelp::UserError {
+                suggestion: "Try reducing the number of exported items.".to_string(),
                 doc_link: doc_ref("wasm-module-exports-too-many-methods"),
             },
             WasmValidationError::ExportedNamesTooLong { .. } => ErrorHelp::UserError {
