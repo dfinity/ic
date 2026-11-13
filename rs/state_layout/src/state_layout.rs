@@ -142,6 +142,7 @@ impl<T> WritePolicy for RwPolicy<'_, T> {}
 
 pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CheckpointStatus {
     /// Locally created checkpoint that has been fully verified.
     Verified,
@@ -1941,6 +1942,10 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     ///
     /// This is the canonical method for determining checkpoint status.
     /// Other methods should use this function rather than checking markers directly.
+    ///
+    /// `ExecutionMode::checkpoint_status` in `ic-recovery` duplicates this logic
+    /// with shell commands, as it also checks checkpoints on remote nodes; keep
+    /// the two in sync.
     pub fn checkpoint_status(&self) -> CheckpointStatus {
         if self.state_sync_checkpoint_marker().exists() {
             // The state sync marker alone makes the checkpoint unverified. The unverified marker is

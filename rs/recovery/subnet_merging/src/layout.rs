@@ -1,12 +1,17 @@
+use crate::subnet_merging::TargetSubnet;
+
 use ic_base_types::SubnetId;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    Recovery,
+    CHECKPOINTS, IC_STATE, Recovery,
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{read_file, write_bytes, write_file},
+    file_sync_helper::{create_dir, read_file, remove_dir, write_bytes, write_file},
 };
+use ic_state_layout::StateLayout;
+use ic_types::Height;
 use prost::Message;
 use serde::{Deserialize, Serialize};
+use slog::{Logger, warn};
 
 use std::path::PathBuf;
 
@@ -26,17 +31,126 @@ struct CoolingDownRegistryVersion {
 /// Describes the layout of the working directory of subnet merging:
 ///
 /// |-- root/
+/// |  |-- ${source_subnet_id}.manifest
+/// |  |-- ${destination_subnet_id}.manifest
+/// |  |-- ${source_subnet_id}.pem
+/// |  |-- ${destination_subnet_id}.pem
 /// |  |-- cooling_down_registry_version.json
-/// |  |-- halting_cup_<subnet_id>.pb
+/// |  |-- nns.pem
+/// |  |-- ${source_subnet_id}.pruned_state_tree.cbor
+/// |  |-- ${destination_subnet_id}.pruned_state_tree.cbor
+/// |  |-- halting_cup_${source_subnet_id}.pb
+/// |  |-- halting_cup_${destination_subnet_id}.pb
+/// |  |-- source_working_dir/           (the source subnet's)
+/// |  |   |-- data/
+/// |  |   |   |-- ic_state/states_metadata.pbuf
+/// |  |   |   |-- ic_state/checkpoints/
+/// |  |   |   |   |-- ${halting_height}/
+/// |  |-- destination_working_dir/      (the destination subnet's)
+/// |  |   |-- data/
+/// |  |   |   |-- ic_state/states_metadata.pbuf
+/// |  |   |   |-- ic_state/checkpoints/
+/// |  |   |   |   |-- ${halting_height}/
 pub(crate) struct Layout {
     root: PathBuf,
 }
 
 impl Layout {
-    pub(crate) fn new(recovery: &Recovery) -> Self {
-        Self {
+    /// Creates the working directories of the two subnets being merged, and
+    /// warns if one of them already holds checkpoints, e.g. from an earlier
+    /// merge.
+    pub(crate) fn new(recovery: &Recovery, logger: &Logger) -> RecoveryResult<Self> {
+        let layout = Self {
             root: recovery.recovery_dir.clone(),
+        };
+
+        for target_subnet in [TargetSubnet::Source, TargetSubnet::Destination] {
+            let checkpoints_dir = layout.checkpoints_dir(target_subnet);
+            let has_checkpoints = std::fs::read_dir(&checkpoints_dir)
+                .is_ok_and(|mut entries| entries.next().is_some());
+            if has_checkpoints {
+                warn!(
+                    logger,
+                    "{} already holds checkpoints. This is expected when resuming a merge, but \
+                     otherwise they are likely left over from an earlier merge on this machine.",
+                    checkpoints_dir.display(),
+                );
+            }
+
+            create_dir(&layout.data_dir(target_subnet))?;
         }
+
+        Ok(layout)
+    }
+
+    pub(crate) fn nns_public_key_file(&self) -> PathBuf {
+        self.root.join("nns.pem")
+    }
+
+    pub(crate) fn actual_manifest_file(&self, subnet_id: SubnetId) -> PathBuf {
+        self.root.join(format!("{subnet_id}.manifest"))
+    }
+
+    pub(crate) fn subnet_public_key_file(&self, subnet_id: SubnetId) -> PathBuf {
+        self.root.join(format!("{subnet_id}.pem"))
+    }
+
+    pub(crate) fn pruned_state_tree_file(&self, subnet_id: SubnetId) -> PathBuf {
+        self.root
+            .join(format!("{subnet_id}.pruned_state_tree.cbor"))
+    }
+
+    pub(crate) fn work_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
+        match target_subnet {
+            TargetSubnet::Source => self.root.join("source_working_dir"),
+            TargetSubnet::Destination => self.root.join("destination_working_dir"),
+        }
+    }
+
+    pub(crate) fn data_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
+        self.work_dir(target_subnet).join("data")
+    }
+
+    pub(crate) fn checkpoints_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
+        self.data_dir(target_subnet)
+            .join(IC_STATE)
+            .join(CHECKPOINTS)
+    }
+
+    /// The downloaded checkpoint at `height`.
+    pub(crate) fn checkpoint_dir(&self, target_subnet: TargetSubnet, height: Height) -> PathBuf {
+        self.checkpoints_dir(target_subnet)
+            .join(StateLayout::checkpoint_name(height))
+    }
+
+    /// Removes everything in the checkpoints directory of `target_subnet`
+    /// except the checkpoint at `height`.
+    pub(crate) fn remove_checkpoints_except(
+        &self,
+        target_subnet: TargetSubnet,
+        height: Height,
+    ) -> RecoveryResult<()> {
+        let checkpoints_dir = self.checkpoints_dir(target_subnet);
+        let entries = match std::fs::read_dir(&checkpoints_dir) {
+            Ok(entries) => entries,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => return Err(RecoveryError::file_error(&checkpoints_dir, err)),
+        };
+        let kept = StateLayout::checkpoint_name(height);
+        for entry in entries {
+            let path = entry
+                .map_err(|err| RecoveryError::file_error(&checkpoints_dir, err))?
+                .path();
+            if path.file_name().is_some_and(|name| *name == *kept) {
+                continue;
+            }
+            if path.is_dir() {
+                remove_dir(&path)?;
+            } else {
+                std::fs::remove_file(&path).map_err(|err| RecoveryError::file_error(&path, err))?;
+            }
+        }
+        Ok(())
     }
 
     fn cooling_down_registry_version_file(&self) -> PathBuf {
@@ -78,8 +192,6 @@ impl Layout {
     /// The file holding the CUP `subnet_id` halts at, as a
     /// `types.v1.CatchUpPackage` protobuf, i.e. in the format of the CUP file
     /// of a replica.
-    // Read by the step validating the downloaded state, added in a follow-up.
-    #[allow(dead_code)]
     pub(crate) fn halting_cup_file(&self, subnet_id: SubnetId) -> PathBuf {
         self.root.join(format!("halting_cup_{subnet_id}.pb"))
     }
@@ -164,6 +276,37 @@ mod tests {
             cup
         );
         assert!(pb::CatchUpPackage::read_from_file(layout.halting_cup_file(subnet_id(2))).is_err());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn only_the_checkpoint_at_the_given_height_is_kept() {
+        let root = std::env::temp_dir().join(format!(
+            "subnet_merging_layout_checkpoints_test_{}",
+            std::process::id()
+        ));
+        let layout = Layout { root: root.clone() };
+        let target_subnet = TargetSubnet::Source;
+
+        // Nothing to remove before the first download.
+        layout
+            .remove_checkpoints_except(target_subnet, Height::new(100))
+            .unwrap();
+
+        let kept = layout.checkpoint_dir(target_subnet, Height::new(100));
+        let other = layout.checkpoint_dir(target_subnet, Height::new(200));
+        let stray_file = layout.checkpoints_dir(target_subnet).join("stray");
+        std::fs::create_dir_all(&kept).unwrap();
+        std::fs::write(kept.join("partial"), b"").unwrap();
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::write(&stray_file, b"").unwrap();
+
+        layout
+            .remove_checkpoints_except(target_subnet, Height::new(100))
+            .unwrap();
+        assert!(kept.join("partial").exists());
+        assert!(!other.exists());
+        assert!(!stray_file.exists());
         std::fs::remove_dir_all(root).unwrap();
     }
 
