@@ -5211,7 +5211,7 @@ impl Operation for CallRequest {
                             NNSDelegationBuilder::try_new(
                                 delegation.certificate,
                                 subnet_id,
-                                &subnet.replica_logger,
+                                subnet.replica_logger.clone(),
                             )
                             .unwrap()
                         });
@@ -5225,7 +5225,7 @@ impl Operation for CallRequest {
                             metrics,
                             http_handler::Config::default()
                                 .ingress_message_certificate_timeout_seconds,
-                            NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
+                            NNSDelegationReader::new(delegation_rx),
                             subnet.state_manager.clone(),
                             match self.version {
                                 CallRequestVersion::V2 => unreachable!(),
@@ -5337,7 +5337,7 @@ impl Operation for QueryRequest {
                     NNSDelegationBuilder::try_new(
                         delegation.certificate,
                         subnet_id,
-                        &subnet.replica_logger,
+                        subnet.replica_logger.clone(),
                     )
                     .unwrap()
                 });
@@ -5354,7 +5354,7 @@ impl Operation for QueryRequest {
                     Arc::new(PocketNodeSigner(node.node_signing_key.clone())),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
+                    NNSDelegationReader::new(delegation_rx),
                     query_handler,
                     subnet_id,
                     self.version,
@@ -5433,7 +5433,7 @@ impl Operation for CanisterReadStateRequest {
                     NNSDelegationBuilder::try_new(
                         delegation.certificate,
                         subnet_id,
-                        &subnet.replica_logger,
+                        subnet.replica_logger.clone(),
                     )
                     .unwrap()
                 });
@@ -5448,7 +5448,7 @@ impl Operation for CanisterReadStateRequest {
                     subnet.state_manager.clone(),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
+                    NNSDelegationReader::new(delegation_rx),
                     nns_subnet_id,
                     self.version,
                     read_state::Target::Canister,
@@ -5519,7 +5519,7 @@ impl Operation for SubnetReadStateRequest {
                     NNSDelegationBuilder::try_new(
                         delegation.certificate,
                         subnet_id,
-                        &subnet.replica_logger,
+                        subnet.replica_logger.clone(),
                     )
                     .unwrap()
                 });
@@ -5534,7 +5534,7 @@ impl Operation for SubnetReadStateRequest {
                     subnet.state_manager.clone(),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
+                    NNSDelegationReader::new(delegation_rx),
                     nns_subnet_id,
                     self.version,
                     read_state::Target::Subnet,
