@@ -37,6 +37,22 @@ use tracing::log::debug;
 /// `ConstructionPayloadsRequestMetadata`.
 const MAX_INGRESS_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 
+/// Maximum permitted number of (request, ingress expiry) pairs in
+/// `/construction/payloads`. Each pair is turned into an update and a read
+/// state signing payload, so this bounds the work and the size of the
+/// response. It allows 100 requests over the maximum ingress window (720
+/// ingress expiries), which is well above what realistic transfer and neuron
+/// management workflows need.
+const MAX_REQUEST_INGRESS_EXPIRY_PAIRS: usize = 100 * 720;
+
+/// Maximum permitted size of a CBOR-encoded canister update in
+/// `/construction/payloads` and `/construction/combine`. Each update is cloned
+/// and hashed for every ingress expiry, so this bounds the work per (request,
+/// ingress expiry) pair. The largest updates that Rosetta builds are
+/// governance `manage_neuron` calls of about 2.3 KB, most of which is the
+/// Candid type table of the argument.
+const MAX_UPDATE_BYTES: usize = 4 * 1024;
+
 /// Validate the caller-provided ingress window before it is expanded into a
 /// list of ingress expiries.
 ///
@@ -72,6 +88,37 @@ fn validate_ingress_window(
         return Err(ApiError::invalid_request(format!(
             "ingress_end must not be more than {} hours in the future.",
             MAX_INGRESS_WINDOW.as_secs() / 3600
+        )));
+    }
+    Ok(())
+}
+
+/// Validate the number of (request, ingress expiry) pairs before any signing
+/// payloads are built for them.
+pub(crate) fn validate_request_ingress_expiry_pairs(
+    num_requests: usize,
+    num_ingress_expiries: usize,
+) -> Result<(), ApiError> {
+    let num_pairs = num_requests.saturating_mul(num_ingress_expiries);
+    if num_pairs > MAX_REQUEST_INGRESS_EXPIRY_PAIRS {
+        return Err(ApiError::invalid_request(format!(
+            "The number of requests multiplied by the number of ingress expiries must not exceed {MAX_REQUEST_INGRESS_EXPIRY_PAIRS}: got {num_requests} requests and {num_ingress_expiries} ingress expiries."
+        )));
+    }
+    Ok(())
+}
+
+/// Validate the size of a canister update, including all of its
+/// variable-length fields, before it is cloned for every ingress expiry.
+pub(crate) fn validate_update_size(update: &HttpCanisterUpdate) -> Result<(), ApiError> {
+    let update_len = serde_cbor::to_vec(update)
+        .map_err(|err| {
+            ApiError::internal_error(format!("Serialization of the update failed: {err:?}"))
+        })?
+        .len();
+    if update_len > MAX_UPDATE_BYTES {
+        return Err(ApiError::invalid_request(format!(
+            "A canister update must not be larger than {MAX_UPDATE_BYTES} bytes: got {update_len} bytes."
         )));
     }
     Ok(())
@@ -154,6 +201,8 @@ impl RosettaRequestHandler {
             ingress_expiries.push(ingress_expiry);
             now += interval;
         }
+
+        validate_request_ingress_expiry_pairs(transactions.len(), ingress_expiries.len())?;
 
         let mut updates = vec![];
         let mut payloads = vec![];
@@ -422,7 +471,7 @@ fn handle_transfer_operation(
         &convert::to_model_account_identifier(&from),
         &update,
         SignatureType::from(pk.curve_type),
-    );
+    )?;
     updates.push((RequestType::Send, update));
     Ok(())
 }
@@ -473,7 +522,7 @@ fn handle_neuron_info(
         &convert::to_model_account_identifier(&account),
         &update,
         SignatureType::from(pk.curve_type),
-    );
+    )?;
     updates.push((
         RequestType::NeuronInfo {
             neuron_index,
@@ -535,7 +584,7 @@ fn handle_list_neurons(
         &convert::to_model_account_identifier(&account),
         &update,
         SignatureType::from(pk.curve_type),
-    );
+    )?;
     updates.push((
         RequestType::ListNeurons {
             page_number: req.page_number.unwrap_or_default(),
@@ -667,7 +716,7 @@ fn handle_stake(
         &to_model_account_identifier(&account),
         &update,
         SignatureType::from(pk.curve_type),
-    );
+    )?;
     updates.push((RequestType::Stake { neuron_index }, update));
     Ok(())
 }
@@ -1086,7 +1135,7 @@ fn add_neuron_management_payload(
         &convert::to_model_account_identifier(&account),
         &update,
         SignatureType::from(pk.curve_type),
-    );
+    )?;
 
     updates.push((request_type, update));
     Ok(())
@@ -1100,7 +1149,8 @@ fn add_payloads(
     account_identifier: &AccountIdentifier,
     update: &HttpCanisterUpdate,
     signature_type: SignatureType,
-) {
+) -> Result<(), ApiError> {
+    validate_update_size(update)?;
     for ingress_expiry in ingress_expiries {
         let mut update = update.clone();
         update.ingress_expiry = *ingress_expiry;
@@ -1122,6 +1172,7 @@ fn add_payloads(
         };
         payloads.push(read_state_payload);
     }
+    Ok(())
 }
 
 // Process the neuron subaccount from controller or hotkey.
@@ -1224,5 +1275,29 @@ mod tests {
         assert!(
             validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), t(NOW_NANOS + max + 1)).is_err()
         );
+    }
+
+    // Boundary: exactly the maximum number of (request, ingress expiry) pairs is
+    // accepted, one more request or one more expiry is rejected.
+    #[test]
+    fn request_ingress_expiry_pairs_boundary_is_inclusive() {
+        const EXPIRIES: usize = 720;
+        const MAX_REQUESTS: usize = MAX_REQUEST_INGRESS_EXPIRY_PAIRS / EXPIRIES;
+        assert_eq!(MAX_REQUESTS * EXPIRIES, MAX_REQUEST_INGRESS_EXPIRY_PAIRS);
+
+        assert!(validate_request_ingress_expiry_pairs(MAX_REQUESTS - 1, EXPIRIES).is_ok());
+        assert!(validate_request_ingress_expiry_pairs(MAX_REQUESTS, EXPIRIES).is_ok());
+        assert!(validate_request_ingress_expiry_pairs(MAX_REQUESTS + 1, EXPIRIES).is_err());
+        assert!(validate_request_ingress_expiry_pairs(MAX_REQUEST_INGRESS_EXPIRY_PAIRS, 1).is_ok());
+        assert!(
+            validate_request_ingress_expiry_pairs(MAX_REQUEST_INGRESS_EXPIRY_PAIRS + 1, 1).is_err()
+        );
+    }
+
+    // The product of the counts must not wrap around and slip under the bound.
+    #[test]
+    fn request_ingress_expiry_pairs_overflow_is_rejected() {
+        assert!(validate_request_ingress_expiry_pairs(usize::MAX, 2).is_err());
+        assert!(validate_request_ingress_expiry_pairs(2, usize::MAX).is_err());
     }
 }

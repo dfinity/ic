@@ -4,6 +4,9 @@ use crate::models::{
     ConstructionCombineResponse, EnvelopePair, SignatureType, SignedTransaction,
     UnsignedTransaction,
 };
+use crate::request_handler::construction_payloads::{
+    validate_request_ingress_expiry_pairs, validate_update_size,
+};
 use crate::request_handler::{RosettaRequestHandler, make_sig_data, verify_network_id};
 use crate::{convert, models};
 use ic_types::messages::{
@@ -12,6 +15,30 @@ use ic_types::messages::{
 use rosetta_core::models::{Ed25519KeyPair, RosettaSupportedKeyPair, Secp256k1KeyPair};
 use std::collections::HashMap;
 use std::str::FromStr;
+
+/// Maximum permitted size of a signature: Ed25519 and secp256k1 signatures
+/// are both 64 bytes.
+const MAX_SIGNATURE_BYTES: usize = 64;
+
+/// Maximum permitted size of a public key: Ed25519 public keys are 32 bytes,
+/// secp256k1 public keys 33 (compressed) or 65 (uncompressed) bytes.
+const MAX_PUBLIC_KEY_BYTES: usize = 65;
+
+/// Validate the size of a signature and its public key before they are decoded
+/// for every envelope they are used in.
+fn validate_signature_size(signature: &models::Signature) -> Result<(), ApiError> {
+    if signature.hex_bytes.len() > 2 * MAX_SIGNATURE_BYTES {
+        return Err(ApiError::invalid_request(format!(
+            "A signature must not be larger than {MAX_SIGNATURE_BYTES} bytes."
+        )));
+    }
+    if signature.public_key.hex_bytes.len() > 2 * MAX_PUBLIC_KEY_BYTES {
+        return Err(ApiError::invalid_request(format!(
+            "A public key must not be larger than {MAX_PUBLIC_KEY_BYTES} bytes."
+        )));
+    }
+    Ok(())
+}
 
 impl RosettaRequestHandler {
     /// Create Network Transaction from Signatures.
@@ -26,6 +53,7 @@ impl RosettaRequestHandler {
         let mut signatures_by_sig_data: HashMap<Vec<u8>, _> = HashMap::new();
 
         for sig in &msg.signatures {
+            validate_signature_size(sig)?;
             let sig_data = convert::from_hex(&sig.signing_payload.hex_bytes)?;
             signatures_by_sig_data.insert(sig_data, sig);
         }
@@ -36,6 +64,26 @@ impl RosettaRequestHandler {
                     "Cannot deserialize signed transaction in /construction/combine response: {e}"
                 ))
             })?;
+        validate_request_ingress_expiry_pairs(
+            unsigned_transaction.updates.len(),
+            unsigned_transaction.ingress_expiries.len(),
+        )?;
+        for (_, update) in &unsigned_transaction.updates {
+            validate_update_size(update)?;
+        }
+        // `/construction/payloads` builds strictly increasing ingress expiries.
+        // Repeated expiries would let a single signature be reused for many
+        // envelopes.
+        if !unsigned_transaction
+            .ingress_expiries
+            .windows(2)
+            .all(|pair| pair[0] < pair[1])
+        {
+            return Err(ApiError::invalid_request(
+                "The ingress expiries must be strictly increasing.".to_string(),
+            ));
+        }
+
         let mut requests = vec![];
 
         for (request_type, update) in unsigned_transaction.updates {

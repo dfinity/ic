@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
+### Fixed
+- Limit the number of requests times ingress expiries in `construction/payloads` and `construction/combine` to 72,000, i.e. 100 requests over a 24h ingress window, and the size of each canister update to 4 KiB. `construction/combine` also limits the size of signatures and public keys and requires strictly increasing ingress expiries ([#12082](https://github.com/dfinity/ic/pull/12082)).
 
 ## [2.1.10] - 2026-07-01
 ### Changed
