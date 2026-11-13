@@ -53,7 +53,7 @@ pub trait BatchPayloadBuilder: Send + Sync {
     /// Builds a payload and returns it in serialized form.
     ///
     /// # Arguments
-    /// - `max_size`: The maximum size the payload is supposed to have
+    /// - `max_size`: The maximum [wire size](Self::wire_size) the payload is supposed to have
     /// - `past_payloads`: A collection of past payloads. Allows the payload builder
     ///   to deduplicate messages.
     /// - `context`: [`ValidationContext`] under which the payload is supposed to be validated
@@ -88,6 +88,14 @@ pub trait BatchPayloadBuilder: Send + Sync {
         payload: &[u8],
         past_payloads: &[PastPayload],
     ) -> ValidationResult<PayloadValidationError>;
+
+    /// Returns the size of a valid payload in a block proposal sent to peers, which
+    /// is what counts against the block's payload size limit.
+    ///
+    /// Defaults to the size of the payload itself, for a payload that is sent as it is.
+    fn wire_size(&self, payload: &[u8]) -> NumBytes {
+        NumBytes::new(payload.len() as u64)
+    }
 }
 
 /// Indicates that a payload can be transformed into a set of messages, which
