@@ -66,7 +66,8 @@ class TestCsvLoading(unittest.TestCase):
             FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
             FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
         )
-        # this corresponds to the "ingress_messages_executed" column in "fake_load_sample.csv"
+        # this corresponds to the "ingress_messages_executed" column of "fake_load_sample.csv" minus that of
+        # "fake_load_baseline_sample.csv"
         self.assertEqual(
             result["loads"]["ingress_messages_executed"],
             [1, 0, 1, 0, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1],
@@ -153,12 +154,13 @@ class TestCsvLoading(unittest.TestCase):
         self.assertEqual(result["edges"], {(1, 0): 5})
 
     def test_solver_sanity_check(self):
+        epsilon = 0.0001
         result = find_split(
             FAKE_LOAD_SAMPLE_CSV_PATH,
             FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
             FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
             FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
-            {"instructions_executed": 0.0001},
+            {"instructions_executed": epsilon},
             100,
         )
 
@@ -170,6 +172,11 @@ class TestCsvLoading(unittest.TestCase):
                 ("qsgjb-riaaa-aaaaa-aaaga-cai", "qvhpv-4qaaa-aaaaa-aaagq-cai"),
             ],
             msg=f"`find_split` returned unexpected split: {result}",
+        )
+        self.assertLessEqual(
+            max_load_ratio(result, "instructions_executed"),
+            1 + epsilon,
+            msg=f"`find_split` returned a split which doesn't balance instructions_executed: {result}",
         )
 
     def test_solver_balances_every_load_type(self):
@@ -186,6 +193,11 @@ class TestCsvLoading(unittest.TestCase):
 
         # Removing the heartbeats constraint makes split_finder ignore it
         instructions_only_split = find_split(*FAKE_SAMPLE_PATHS, {"instructions_executed": epsilon}, 100)
+        self.assertLessEqual(
+            max_load_ratio(instructions_only_split, "instructions_executed"),
+            1 + epsilon,
+            msg=f"`find_split` returned a split which doesn't balance instructions_executed: {instructions_only_split}",
+        )
         self.assertGreater(
             max_load_ratio(instructions_only_split, "heartbeats_and_global_timers_executed"),
             1 + epsilon,
