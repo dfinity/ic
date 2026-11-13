@@ -686,14 +686,15 @@ impl CanisterHttpRequestContext {
         NumBytes::from(request_size as u64)
     }
 
-    /// The time after which consensus times the request out: the protocol timeout
-    /// or, for a bounded-wait call, the caller's deadline if that comes first.
+    /// The time after which consensus times the request out: the protocol timeout or,
+    /// for a bounded-wait call, a second past its deadline if that comes first. The
+    /// extra second lets the caller's callback expire first, with `SYS_UNKNOWN`.
     pub fn effective_deadline(&self) -> Time {
         let protocol_timeout = self.time + CANISTER_HTTP_TIMEOUT_INTERVAL;
         if self.request.deadline == NO_DEADLINE {
             protocol_timeout
         } else {
-            protocol_timeout.min(self.request.deadline.into())
+            protocol_timeout.min(Time::from(self.request.deadline) + Duration::from_secs(1))
         }
     }
 
@@ -1718,7 +1719,7 @@ mod tests {
     }
 
     #[test]
-    fn effective_deadline_is_the_earlier_of_protocol_timeout_and_deadline() {
+    fn effective_deadline_is_the_earlier_of_protocol_timeout_and_a_second_past_deadline() {
         let time = UNIX_EPOCH + Duration::from_secs(100);
         let with_deadline = |deadline| CanisterHttpRequestContext {
             url: "https://example.com".to_string(),
@@ -1752,7 +1753,10 @@ mod tests {
             protocol_timeout
         );
         let early = CoarseTime::from_secs_since_unix_epoch(105);
-        assert_eq!(with_deadline(early).effective_deadline(), Time::from(early));
+        assert_eq!(
+            with_deadline(early).effective_deadline(),
+            Time::from(early) + Duration::from_secs(1)
+        );
         let late = CoarseTime::from_secs_since_unix_epoch(1_000);
         assert_eq!(with_deadline(late).effective_deadline(), protocol_timeout);
     }

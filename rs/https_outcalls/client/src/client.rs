@@ -1091,8 +1091,8 @@ mod tests {
     }
 
     /// The client stops waiting for an adapter that never responds at the request's
-    /// bounded-wait deadline, counting from when the request was dispatched rather
-    /// than created.
+    /// effective deadline, counting from when the request was dispatched rather than
+    /// created.
     #[tokio::test]
     async fn test_client_stops_at_request_deadline() {
         let mock_grpc_channel = setup_hanging_adapter_mock().await;
@@ -1106,7 +1106,8 @@ mod tests {
             no_op_logger(),
         );
 
-        // Created 10s before its deadline, but dispatched only 100ms before it.
+        // Created 10s before its deadline, but dispatched only 100ms before it, so it
+        // gets 1.1s.
         let mut request = build_mock_canister_http_request(420, None);
         Arc::make_mut(&mut request.context.request).deadline =
             CoarseTime::from_secs_since_unix_epoch(10);

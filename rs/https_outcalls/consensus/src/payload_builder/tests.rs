@@ -4352,10 +4352,10 @@ fn with_deadline(
     context
 }
 
-/// A bounded-wait request times out once its deadline has passed, long before the
-/// protocol timeout that still applies to a guaranteed-response request.
+/// A bounded-wait request times out once a second past its deadline has passed, long
+/// before the protocol timeout that still applies to a guaranteed-response request.
 #[test]
-fn bounded_wait_request_times_out_at_its_deadline() {
+fn bounded_wait_request_times_out_a_second_after_its_deadline() {
     let deadline = CoarseTime::from_secs_since_unix_epoch(10);
     let contexts = vec![
         (
@@ -4372,7 +4372,7 @@ fn bounded_wait_request_times_out_at_its_deadline() {
         let validation_context = ValidationContext {
             registry_version: RegistryVersion::new(1),
             certified_height: Height::new(0),
-            time: UNIX_EPOCH + Duration::from_secs(11),
+            time: UNIX_EPOCH + Duration::from_secs(12),
         };
         assert!(validation_context.time < UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL);
 
@@ -4396,9 +4396,9 @@ fn bounded_wait_request_times_out_at_its_deadline() {
     });
 }
 
-/// A bounded-wait request has not timed out at its deadline itself.
+/// A bounded-wait request has not timed out yet a second after its deadline.
 #[test]
-fn bounded_wait_request_timeout_invalid_at_deadline() {
+fn bounded_wait_request_timeout_invalid_a_second_after_deadline() {
     let callback_id = CallbackId::new(1);
     let contexts = vec![(
         callback_id,
@@ -4412,7 +4412,7 @@ fn bounded_wait_request_timeout_invalid_at_deadline() {
         let validation_context = ValidationContext {
             registry_version: RegistryVersion::new(1),
             certified_height: Height::new(0),
-            time: UNIX_EPOCH + Duration::from_secs(10),
+            time: UNIX_EPOCH + Duration::from_secs(11),
         };
         let payload = CanisterHttpPayload {
             timeouts: vec![callback_id],
@@ -4435,9 +4435,10 @@ fn bounded_wait_request_timeout_invalid_at_deadline() {
     });
 }
 
-/// A flexible bounded-wait request may be timed out once its deadline has passed.
+/// A flexible bounded-wait request may be timed out once a second past its deadline has
+/// passed.
 #[test]
-fn flexible_bounded_wait_request_times_out_at_its_deadline() {
+fn flexible_bounded_wait_request_times_out_a_second_after_its_deadline() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -4465,14 +4466,14 @@ fn flexible_bounded_wait_request_times_out_at_its_deadline() {
             )
         };
         assert_matches!(
-            validate_at(10),
+            validate_at(11),
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
                     InvalidCanisterHttpPayloadReason::NotTimedOut(id)
                 )
             )) if id == callback_id
         );
-        assert_matches!(validate_at(11), Ok(()));
+        assert_matches!(validate_at(12), Ok(()));
     });
 }
 

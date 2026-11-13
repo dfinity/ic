@@ -2362,10 +2362,15 @@ fn bounded_wait_http_requests_are_cancelled_at_deadline() {
         .unwrap_err()
         .assert_contains(ErrorCode::CanisterCalledTrap, "call_perform failed");
 
-    // At the deadline all callbacks are rejected and the outcalls are timed out.
-    env.advance_time(Duration::from_secs(TIMEOUT_SECONDS as u64 + 1));
-    // Unlike `tick()`, this builds the payload that times the outcalls out.
-    env.execute_round();
+    // Run rounds 300ms apart from the deadline on, as on mainnet. The callbacks still
+    // expire (`SYS_UNKNOWN`) before the outcalls' timeout rejects can reach them.
+    let deadline = Time::from(in_flight.values().next().unwrap().request.deadline);
+    env.advance_time(deadline.saturating_duration_since(env.get_time()));
+    while env.get_time() <= deadline + Duration::from_secs(1) {
+        env.advance_time(Duration::from_millis(300));
+        // Unlike `tick()`, this builds the payload that times the outcalls out.
+        env.execute_round();
+    }
     assert_eq!(
         reject_codes(),
         vec![RejectCode::SysUnknown as u32; DEFAULT_QUEUE_CAPACITY]

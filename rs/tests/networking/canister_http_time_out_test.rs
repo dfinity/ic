@@ -2,7 +2,7 @@
 Title:: HTTP requests timeout behaviour
 
 Goal:: Ensure HTTP requests to invalid endpoint occur a timeout, and bounded-wait HTTP requests
-are cancelled at their deadline.
+are cancelled right after their deadline.
 
 Runbook::
 1. Instantiate an IC with one applications subnet with the HTTP feature enabled.
@@ -16,8 +16,8 @@ Runbook::
 Success::
 1. Http request to valid http endpoint returns status 200.
 2. Http request to invalid http endpoint returns a transient timeout error.
-3. Bounded-wait http request times out, and consensus times it out at its deadline instead of
-   waiting for the adapter to give up.
+3. Bounded-wait http request times out, and consensus times it out a second after its deadline
+   instead of waiting for the adapter to give up.
 
 end::catalog[] */
 
@@ -140,8 +140,8 @@ pub fn test(env: TestEnv) {
         .await
         .expect("Timeout on doing a canister http call to the webserver");
 
-        // Test that consensus times out a bounded-wait request at its deadline. Otherwise
-        // the adapter's 30s request timeout would end it with a response first.
+        // Test that consensus times out a bounded-wait request a second after its deadline.
+        // Otherwise the adapter's 30s request timeout would end it with a response first.
         const TIMEOUT_SECONDS: u32 = 5;
         let timeouts_before = timeouts_delivered_once_idle(&env).await;
         request.request.url = format!("https://[{webserver_ipv6}]/delay/40");
