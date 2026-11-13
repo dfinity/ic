@@ -2290,7 +2290,7 @@ fn application_subnet_with_payload_builder() -> Arc<StateMachine> {
         .build_with_subnets(Arc::new(SingleSubnet::default()));
     let subnet_id = env.get_subnet_id();
     let mut routing_table = RoutingTable::new();
-    routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
+    routing_table_insert_subnet(&mut routing_table, subnet_id, 0).unwrap();
     add_initial_registry_records(registry_data_provider.clone());
     add_global_registry_records(
         subnet_id,

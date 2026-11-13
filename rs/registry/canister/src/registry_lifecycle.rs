@@ -1,4 +1,5 @@
 use crate::certification::recertify_registry;
+use crate::mutations::canister_id_allocation::backfill_canister_id_allocation;
 use crate::mutations::node_management::common::find_subnet_for_node;
 use crate::{pb::v1::RegistryCanisterStableStorage, registry::Registry};
 use ic_base_types::PrincipalId;
@@ -31,6 +32,14 @@ pub fn canister_post_upgrade(
     // Registry data migrations should be implemented as follows:
     let mutation_batches_due_to_data_migrations = {
         let mut total_batches = 0;
+
+        // Comes first, so that the invariant checks of the later batches already compare the
+        // routing table against the CanisterIdAllocation.
+        let mutations = backfill_canister_id_allocation(registry);
+        if !mutations.is_empty() {
+            registry.maybe_apply_mutation_internal(mutations);
+            total_batches += 1;
+        }
 
         let mutations = fix_node_operators_corrupted(registry);
         if !mutations.is_empty() {
