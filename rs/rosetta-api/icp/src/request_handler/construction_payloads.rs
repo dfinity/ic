@@ -45,13 +45,13 @@ const MAX_INGRESS_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 /// management workflows need.
 const MAX_REQUEST_INGRESS_EXPIRY_PAIRS: usize = 100 * 720;
 
-/// Maximum permitted size of the argument of a canister update in
+/// Maximum permitted size of a CBOR-encoded canister update in
 /// `/construction/payloads` and `/construction/combine`. Each update is cloned
 /// and hashed for every ingress expiry, so this bounds the work per (request,
-/// ingress expiry) pair. The largest arguments that Rosetta builds are
-/// governance `manage_neuron` calls of about 2.2 KB, most of which is the
-/// Candid type table.
-const MAX_UPDATE_ARG_BYTES: usize = 4 * 1024;
+/// ingress expiry) pair. The largest updates that Rosetta builds are
+/// governance `manage_neuron` calls of about 2.3 KB, most of which is the
+/// Candid type table of the argument.
+const MAX_UPDATE_BYTES: usize = 4 * 1024;
 
 /// Validate the caller-provided ingress window before it is expanded into a
 /// list of ingress expiries.
@@ -108,14 +108,17 @@ pub(crate) fn validate_request_ingress_expiry_pairs(
     Ok(())
 }
 
-/// Validate the size of the argument of a canister update before it is cloned
-/// for every ingress expiry.
-pub(crate) fn validate_update_arg_size(update: &HttpCanisterUpdate) -> Result<(), ApiError> {
-    let arg_len = update.arg.0.len();
-    if arg_len > MAX_UPDATE_ARG_BYTES {
+/// Validate the size of a canister update, including all of its
+/// variable-length fields, before it is cloned for every ingress expiry.
+pub(crate) fn validate_update_size(update: &HttpCanisterUpdate) -> Result<(), ApiError> {
+    let update_len = serde_cbor::to_vec(update)
+        .map_err(|err| {
+            ApiError::internal_error(format!("Serialization of the update failed: {err:?}"))
+        })?
+        .len();
+    if update_len > MAX_UPDATE_BYTES {
         return Err(ApiError::invalid_request(format!(
-            "The argument of the {} call must not be longer than {MAX_UPDATE_ARG_BYTES} bytes: got {arg_len} bytes.",
-            update.method_name
+            "A canister update must not be larger than {MAX_UPDATE_BYTES} bytes: got {update_len} bytes."
         )));
     }
     Ok(())
@@ -1147,7 +1150,7 @@ fn add_payloads(
     update: &HttpCanisterUpdate,
     signature_type: SignatureType,
 ) -> Result<(), ApiError> {
-    validate_update_arg_size(update)?;
+    validate_update_size(update)?;
     for ingress_expiry in ingress_expiries {
         let mut update = update.clone();
         update.ingress_expiry = *ingress_expiry;

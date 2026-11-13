@@ -890,22 +890,24 @@ fn should_reject_request_with_oversized_arg() {
         public_key,
     );
 
-    assert_invalid_request_containing(result, "must not be longer than");
+    assert_invalid_request_containing(result, "must not be larger than");
 }
 
 fn construction_combine_with(
     req_handler: &RosettaRequestHandler,
     unsigned_transaction: crate::models::UnsignedTransaction,
+    signatures: Vec<crate::models::Signature>,
 ) -> Result<crate::models::ConstructionCombineResponse, ApiError> {
     req_handler.construction_combine(crate::models::ConstructionCombineRequest {
         network_identifier: req_handler.network_id(),
         unsigned_transaction: unsigned_transaction.to_string(),
-        signatures: vec![],
+        signatures,
     })
 }
 
-/// `/construction/combine` applies the same limits to a client-supplied
-/// unsigned transaction before building any envelopes.
+/// `/construction/combine` applies the same limits as `/construction/payloads`
+/// to a client-supplied unsigned transaction and its signatures before
+/// building any envelopes.
 #[test]
 fn should_reject_combine_exceeding_limits() {
     use std::str::FromStr;
@@ -918,20 +920,75 @@ fn should_reject_combine_exceeding_limits() {
     let response = construction_payloads_with_max_ingress_window(
         &req_handler,
         &stake_requests(account, 1),
-        public_key,
+        public_key.clone(),
     )
     .unwrap();
     let unsigned_transaction =
         crate::models::UnsignedTransaction::from_str(&response.unsigned_transaction).unwrap();
+    let ingress_expiry = unsigned_transaction.ingress_expiries[0];
 
     let mut too_many_pairs = unsigned_transaction.clone();
     too_many_pairs.ingress_expiries = (0..72_001).collect();
-    assert_exceeds_max_signing_payloads(construction_combine_with(&req_handler, too_many_pairs));
+    assert_exceeds_max_signing_payloads(construction_combine_with(
+        &req_handler,
+        too_many_pairs,
+        vec![],
+    ));
 
-    let mut oversized_arg = unsigned_transaction;
+    let mut oversized_arg = unsigned_transaction.clone();
     oversized_arg.updates[0].1.arg = ic_types::messages::Blob(vec![0; 4 * 1024 + 1]);
     assert_invalid_request_containing(
-        construction_combine_with(&req_handler, oversized_arg),
-        "must not be longer than",
+        construction_combine_with(&req_handler, oversized_arg, vec![]),
+        "must not be larger than",
+    );
+
+    let mut oversized_nonce = unsigned_transaction.clone();
+    oversized_nonce.updates[0].1.nonce = Some(ic_types::messages::Blob(vec![0; 4 * 1024 + 1]));
+    assert_invalid_request_containing(
+        construction_combine_with(&req_handler, oversized_nonce, vec![]),
+        "must not be larger than",
+    );
+
+    let mut repeated_expiries = unsigned_transaction.clone();
+    repeated_expiries.ingress_expiries = vec![ingress_expiry; 2];
+    assert_invalid_request_containing(
+        construction_combine_with(&req_handler, repeated_expiries, vec![]),
+        "strictly increasing",
+    );
+
+    let mut decreasing_expiries = unsigned_transaction.clone();
+    decreasing_expiries.ingress_expiries = vec![ingress_expiry, ingress_expiry - 1];
+    assert_invalid_request_containing(
+        construction_combine_with(&req_handler, decreasing_expiries, vec![]),
+        "strictly increasing",
+    );
+
+    let signature = crate::models::Signature {
+        signing_payload: response.payloads[0].clone(),
+        public_key: public_key.clone(),
+        signature_type: crate::models::SignatureType::Ed25519,
+        hex_bytes: hex::encode([0_u8; 64]),
+    };
+
+    let mut oversized_signature = signature.clone();
+    oversized_signature.hex_bytes = hex::encode([0_u8; 65]);
+    assert_invalid_request_containing(
+        construction_combine_with(
+            &req_handler,
+            unsigned_transaction.clone(),
+            vec![oversized_signature],
+        ),
+        "signature must not be larger than",
+    );
+
+    let mut oversized_public_key = signature;
+    oversized_public_key.public_key.hex_bytes = hex::encode([0_u8; 66]);
+    assert_invalid_request_containing(
+        construction_combine_with(
+            &req_handler,
+            unsigned_transaction,
+            vec![oversized_public_key],
+        ),
+        "public key must not be larger than",
     );
 }
