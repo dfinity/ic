@@ -13,8 +13,8 @@ use crate::{
     request::Request,
     request_handler::RosettaRequestHandler,
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, PublicKeyOrPrincipal, SetDissolveTimestamp, Stake,
-        StartDissolve,
+        AddHotKey, ChangeAutoStakeMaturity, Follow, PublicKeyOrPrincipal, SetDissolveTimestamp,
+        Stake, StartDissolve,
     },
 };
 use async_trait::async_trait;
@@ -730,7 +730,7 @@ fn assert_exceeds_max_signing_payloads(result: Result<impl std::fmt::Debug, ApiE
     }
 }
 
-/// A request with as many STAKE operations as fit in a request body and the
+/// A request with far more STAKE operations than the limit allows and the
 /// maximum ingress window is rejected without building its signing payloads.
 #[test]
 fn should_reject_request_exceeding_max_signing_payloads() {
@@ -820,4 +820,118 @@ fn should_accept_neuron_workflow_with_max_ingress_window() {
 
     // One update and one read state payload per request and ingress expiry.
     assert_eq!(response.payloads.len(), requests.len() * 720 * 2);
+}
+
+fn follow_request(
+    account: AccountIdentifier,
+    controller: PrincipalId,
+    followees: usize,
+) -> Request {
+    Request::Follow(Follow {
+        account,
+        topic: 0,
+        followees: vec![u64::MAX; followees],
+        controller: Some(controller),
+        neuron_index: u64::MAX,
+    })
+}
+
+fn assert_invalid_request_containing(
+    result: Result<impl std::fmt::Debug, ApiError>,
+    expected: &str,
+) {
+    match result {
+        Err(ApiError::InvalidRequest(false, details)) => assert!(
+            format!("{details:?}").contains(expected),
+            "unexpected error details: {details:?}"
+        ),
+        other => panic!("expected an invalid request error, got {other:?}"),
+    }
+}
+
+/// The largest requests Rosetta builds, governance `manage_neuron` calls such
+/// as a FOLLOW with the maximum number of followees accepted by governance,
+/// are accepted with the maximum ingress window.
+#[test]
+fn should_accept_largest_requests_with_max_ingress_window() {
+    let (account, _, public_key, _) = ic_rosetta_test_utils::make_user_ed25519(1);
+    let (_, _, _, hot_key) = ic_rosetta_test_utils::make_user_ed25519(2);
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        Arc::new(MockLedger::new()),
+        Arc::new(AtomicBool::new(true)),
+    );
+    let requests = vec![
+        follow_request(account, hot_key, 15),
+        Request::AddHotKey(AddHotKey {
+            account,
+            neuron_index: u64::MAX,
+            key: PublicKeyOrPrincipal::Principal(hot_key),
+        }),
+    ];
+
+    construction_payloads_with_max_ingress_window(&req_handler, &requests, public_key)
+        .expect("the largest legitimate requests should be accepted");
+}
+
+/// A request whose canister call argument exceeds the size limit is rejected
+/// before its signing payloads are built.
+#[test]
+fn should_reject_request_with_oversized_arg() {
+    let (account, _, public_key, _) = ic_rosetta_test_utils::make_user_ed25519(1);
+    let (_, _, _, hot_key) = ic_rosetta_test_utils::make_user_ed25519(2);
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        Arc::new(MockLedger::new()),
+        Arc::new(AtomicBool::new(true)),
+    );
+
+    let result = construction_payloads_with_max_ingress_window(
+        &req_handler,
+        &[follow_request(account, hot_key, 1_000)],
+        public_key,
+    );
+
+    assert_invalid_request_containing(result, "must not be longer than");
+}
+
+fn construction_combine_with(
+    req_handler: &RosettaRequestHandler,
+    unsigned_transaction: crate::models::UnsignedTransaction,
+) -> Result<crate::models::ConstructionCombineResponse, ApiError> {
+    req_handler.construction_combine(crate::models::ConstructionCombineRequest {
+        network_identifier: req_handler.network_id(),
+        unsigned_transaction: unsigned_transaction.to_string(),
+        signatures: vec![],
+    })
+}
+
+/// `/construction/combine` applies the same limits to a client-supplied
+/// unsigned transaction before building any envelopes.
+#[test]
+fn should_reject_combine_exceeding_limits() {
+    use std::str::FromStr;
+
+    let (account, _, public_key, _) = ic_rosetta_test_utils::make_user_ed25519(1);
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        Arc::new(MockLedger::new()),
+        Arc::new(AtomicBool::new(true)),
+    );
+    let response = construction_payloads_with_max_ingress_window(
+        &req_handler,
+        &stake_requests(account, 1),
+        public_key,
+    )
+    .unwrap();
+    let unsigned_transaction =
+        crate::models::UnsignedTransaction::from_str(&response.unsigned_transaction).unwrap();
+
+    let mut too_many_pairs = unsigned_transaction.clone();
+    too_many_pairs.ingress_expiries = (0..72_001).collect();
+    assert_exceeds_max_signing_payloads(construction_combine_with(&req_handler, too_many_pairs));
+
+    let mut oversized_arg = unsigned_transaction;
+    oversized_arg.updates[0].1.arg = ic_types::messages::Blob(vec![0; 4 * 1024 + 1]);
+    assert_invalid_request_containing(
+        construction_combine_with(&req_handler, oversized_arg),
+        "must not be longer than",
+    );
 }

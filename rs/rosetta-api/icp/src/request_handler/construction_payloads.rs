@@ -45,6 +45,14 @@ const MAX_INGRESS_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 /// management workflows need.
 const MAX_REQUEST_INGRESS_EXPIRY_PAIRS: usize = 100 * 720;
 
+/// Maximum permitted size of the argument of a canister update in
+/// `/construction/payloads` and `/construction/combine`. Each update is cloned
+/// and hashed for every ingress expiry, so this bounds the work per (request,
+/// ingress expiry) pair. The largest arguments that Rosetta builds are
+/// governance `manage_neuron` calls of about 2.2 KB, most of which is the
+/// Candid type table.
+const MAX_UPDATE_ARG_BYTES: usize = 4 * 1024;
+
 /// Validate the caller-provided ingress window before it is expanded into a
 /// list of ingress expiries.
 ///
@@ -87,7 +95,7 @@ fn validate_ingress_window(
 
 /// Validate the number of (request, ingress expiry) pairs before any signing
 /// payloads are built for them.
-fn validate_request_ingress_expiry_pairs(
+pub(crate) fn validate_request_ingress_expiry_pairs(
     num_requests: usize,
     num_ingress_expiries: usize,
 ) -> Result<(), ApiError> {
@@ -95,6 +103,19 @@ fn validate_request_ingress_expiry_pairs(
     if num_pairs > MAX_REQUEST_INGRESS_EXPIRY_PAIRS {
         return Err(ApiError::invalid_request(format!(
             "The number of requests multiplied by the number of ingress expiries must not exceed {MAX_REQUEST_INGRESS_EXPIRY_PAIRS}: got {num_requests} requests and {num_ingress_expiries} ingress expiries."
+        )));
+    }
+    Ok(())
+}
+
+/// Validate the size of the argument of a canister update before it is cloned
+/// for every ingress expiry.
+pub(crate) fn validate_update_arg_size(update: &HttpCanisterUpdate) -> Result<(), ApiError> {
+    let arg_len = update.arg.0.len();
+    if arg_len > MAX_UPDATE_ARG_BYTES {
+        return Err(ApiError::invalid_request(format!(
+            "The argument of the {} call must not be longer than {MAX_UPDATE_ARG_BYTES} bytes: got {arg_len} bytes.",
+            update.method_name
         )));
     }
     Ok(())
@@ -447,7 +468,7 @@ fn handle_transfer_operation(
         &convert::to_model_account_identifier(&from),
         &update,
         SignatureType::from(pk.curve_type),
-    );
+    )?;
     updates.push((RequestType::Send, update));
     Ok(())
 }
@@ -498,7 +519,7 @@ fn handle_neuron_info(
         &convert::to_model_account_identifier(&account),
         &update,
         SignatureType::from(pk.curve_type),
-    );
+    )?;
     updates.push((
         RequestType::NeuronInfo {
             neuron_index,
@@ -560,7 +581,7 @@ fn handle_list_neurons(
         &convert::to_model_account_identifier(&account),
         &update,
         SignatureType::from(pk.curve_type),
-    );
+    )?;
     updates.push((
         RequestType::ListNeurons {
             page_number: req.page_number.unwrap_or_default(),
@@ -692,7 +713,7 @@ fn handle_stake(
         &to_model_account_identifier(&account),
         &update,
         SignatureType::from(pk.curve_type),
-    );
+    )?;
     updates.push((RequestType::Stake { neuron_index }, update));
     Ok(())
 }
@@ -1111,7 +1132,7 @@ fn add_neuron_management_payload(
         &convert::to_model_account_identifier(&account),
         &update,
         SignatureType::from(pk.curve_type),
-    );
+    )?;
 
     updates.push((request_type, update));
     Ok(())
@@ -1125,7 +1146,8 @@ fn add_payloads(
     account_identifier: &AccountIdentifier,
     update: &HttpCanisterUpdate,
     signature_type: SignatureType,
-) {
+) -> Result<(), ApiError> {
+    validate_update_arg_size(update)?;
     for ingress_expiry in ingress_expiries {
         let mut update = update.clone();
         update.ingress_expiry = *ingress_expiry;
@@ -1147,6 +1169,7 @@ fn add_payloads(
         };
         payloads.push(read_state_payload);
     }
+    Ok(())
 }
 
 // Process the neuron subaccount from controller or hotkey.

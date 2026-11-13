@@ -4,6 +4,9 @@ use crate::models::{
     ConstructionCombineResponse, EnvelopePair, SignatureType, SignedTransaction,
     UnsignedTransaction,
 };
+use crate::request_handler::construction_payloads::{
+    validate_request_ingress_expiry_pairs, validate_update_arg_size,
+};
 use crate::request_handler::{RosettaRequestHandler, make_sig_data, verify_network_id};
 use crate::{convert, models};
 use ic_types::messages::{
@@ -36,6 +39,14 @@ impl RosettaRequestHandler {
                     "Cannot deserialize signed transaction in /construction/combine response: {e}"
                 ))
             })?;
+        validate_request_ingress_expiry_pairs(
+            unsigned_transaction.updates.len(),
+            unsigned_transaction.ingress_expiries.len(),
+        )?;
+        for (_, update) in &unsigned_transaction.updates {
+            validate_update_arg_size(update)?;
+        }
+
         let mut requests = vec![];
 
         for (request_type, update) in unsigned_transaction.updates {
