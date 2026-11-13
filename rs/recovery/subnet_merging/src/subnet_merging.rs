@@ -1,32 +1,45 @@
 use crate::{
-    admin_helper::get_propose_to_cool_down_subnet_command,
+    admin_helper::{
+        get_propose_to_cool_down_subnet_command, get_propose_to_delete_subnet_command,
+        get_propose_to_merge_subnets_command,
+    },
     layout::Layout,
-    steps::{CheckCoolingDownStep, CheckMergeReadinessStep, WaitForHaltingCupStep},
+    steps::{
+        CheckCoolingDownStep, CheckMergeReadinessStep, CheckRegistryVersionOnAllSubnetsStep,
+        CheckRoutingTableStep, MergeStatesStep, ValidateCupStep, WaitForHaltingCheckpointStep,
+        WaitForHaltingCupStep, WaitForRecoveryCupStep,
+    },
+    target_subnet::TargetSubnet,
+    utils::MergedStateParams,
 };
 
 use clap::Parser;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
-    NeuronArgs, Recovery, RecoveryArgs,
-    cli::read_data_location,
+    CUPS_DIR, NeuronArgs, Recovery, RecoveryArgs,
+    cli::{consent_given, read_data_location, read_optional},
     error::{RecoveryError, RecoveryResult},
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
-    steps::{AdminStep, Step},
-    util::DataLocation,
+    ssh_helper::SshHelper,
+    steps::{AdminStep, DownloadIcDataStep, Step, UploadStateAndRestartStep},
+    util::{CheckpointHeight, DataLocation, ExecutionMode, SshUser},
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_tools::{
     admin_helper::get_halt_subnet_at_cup_height_command, utils::print_url_and_ask_for_confirmation,
 };
+use ic_types::Height;
 use serde::{Deserialize, Serialize};
-use slog::{Logger, warn};
+use slog::{Logger, info, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 
-use std::{collections::BTreeSet, fmt::Debug, iter::Peekable, time::Duration};
+use std::{
+    collections::BTreeSet, fmt::Debug, iter::Peekable, net::IpAddr, path::PathBuf, time::Duration,
+};
 
 const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
@@ -61,6 +74,56 @@ pub enum StepType {
     /// Wait until the node of the destination subnet the state is downloaded
     /// from serves the CUP the subnet halts at.
     WaitForHaltingCupOnDestinationSubnet,
+    /// Wait until the node of the source subnet the state is downloaded from
+    /// has certified the state the subnet halts at and holds the CUP it halts
+    /// at on disk.
+    WaitForHaltingCheckpointOnSourceSubnet,
+    /// Wait until the node of the destination subnet the state is downloaded
+    /// from has certified the state the subnet halts at and holds the CUP it
+    /// halts at on disk.
+    WaitForHaltingCheckpointOnDestinationSubnet,
+    /// Stop the replica of the node of the source subnet the state is
+    /// downloaded from.
+    StopSourceReplica,
+    /// Stop the replica of the node of the destination subnet the state is
+    /// downloaded from.
+    StopDestinationReplica,
+    /// Download the state the source subnet halted at.
+    DownloadStateFromSourceSubnet,
+    /// Download the state the destination subnet halted at.
+    DownloadStateFromDestinationSubnet,
+    /// Validate the state downloaded from the source subnet against the CUP it
+    /// halted at.
+    ValidateSourceSubnetCup,
+    /// Validate the state downloaded from the destination subnet against the
+    /// CUP it halted at.
+    ValidateDestinationSubnetCup,
+    /// Assemble the merged state from the two downloaded states.
+    MergeStates,
+    /// Submit a proposal to route the canister ID ranges of the source subnet
+    /// to the destination subnet.
+    MergeSubnets,
+    /// Wait until the registry routes the canister ID ranges of the source
+    /// subnet to the destination subnet, and record the registry version at
+    /// which this was read.
+    CheckRegistryForRoutingTableEntry,
+    /// Submit a proposal for a recovery CUP of the destination subnet at the
+    /// merged state.
+    ProposeCupForDestinationSubnet,
+    /// Upload the merged state to a node of the destination subnet and restart
+    /// its replica.
+    UploadStateToDestinationSubnet,
+    /// Wait until that node reports the recovery CUP.
+    WaitForCUPOnDestinationSubnet,
+    /// Submit a proposal to unhalt the destination subnet.
+    UnhaltDestinationSubnet,
+    /// Wait until every subnet other than the source subnet has reached the
+    /// registry version recorded by `CheckRegistryForRoutingTableEntry`.
+    CheckRegistryVersionOnAllSubnets,
+    /// Submit a proposal to delete the source subnet.
+    DeleteSourceSubnet,
+    /// Delete the working directory of the tool.
+    Cleanup,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -76,22 +139,42 @@ pub struct SubnetMergingArgs {
     #[clap(long, value_parser=ic_recovery::util::subnet_id_from_str)]
     pub destination_subnet_id: SubnetId,
 
+    /// Public ssh key to be deployed to both subnets for read only access.
+    #[clap(long)]
+    pub readonly_pub_key: Option<String>,
+
+    /// The path to a file containing the private key associated with `readonly_pub_key`.
+    #[clap(long)]
+    pub readonly_key_file: Option<PathBuf>,
+
+    /// If the downloaded states should be backed up locally.
+    #[clap(long)]
+    pub keep_downloaded_state: Option<bool>,
+
     /// The node of the source subnet to download the state from: its IP
     /// address, or "local" if the tool runs on that node. Required by
     /// `WaitForHaltingCupOnSourceSubnet`; asked for if missing, unless prompts
-    /// are skipped.
+    /// are skipped. The steps that access the node over SSH (waiting for the
+    /// halting checkpoint, stopping the replica and downloading the state)
+    /// require an IP address.
     #[clap(long, value_parser=ic_recovery::util::data_location_from_str)]
     pub download_node_source: Option<DataLocation>,
 
     /// The node of the destination subnet to download the state from: its IP
     /// address, or "local" if the tool runs on that node. Required by
     /// `WaitForHaltingCupOnDestinationSubnet`; asked for if missing, unless
-    /// prompts are skipped.
+    /// prompts are skipped. The steps that access the node over SSH (waiting
+    /// for the halting checkpoint, stopping the replica and downloading the
+    /// state) require an IP address.
     #[clap(long, value_parser=ic_recovery::util::data_location_from_str)]
     pub download_node_destination: Option<DataLocation>,
 
+    /// IP address of the node of the destination subnet to upload the merged state to.
+    #[clap(long)]
+    pub upload_node_destination: Option<IpAddr>,
+
     /// How long to wait for the subnet that is cooling down to become ready to
-    /// be merged, in seconds.
+    /// be merged, and for every other subnet to observe the merge, in seconds.
     #[clap(long, default_value = "2400")]
     pub merge_ready_timeout_secs: u64,
 
@@ -104,14 +187,16 @@ pub struct SubnetMergingArgs {
     #[clap(long, default_value = "1800")]
     pub halt_timeout_secs: u64,
 
-    /// How long to wait, in seconds, for the proposal labeling the source
-    /// subnet as "cooling down" to be adopted, executed and visible in the
-    /// registry.
+    /// How long to wait, in seconds, for the proposals labeling the source
+    /// subnet as "cooling down" and merging it into the destination subnet to
+    /// be adopted, executed and visible in the registry.
     #[clap(long, default_value = "3600")]
     pub registry_timeout_secs: u64,
 
-    /// How long to wait, in seconds, between two attempts of a step that waits.
-    /// Must be positive.
+    /// How long to wait, in seconds, between two attempts of a step that waits:
+    /// e.g. between two registry reads while waiting for a proposal to take
+    /// effect, and between two readiness rounds (each reading the registry and
+    /// scraping every replica). Must be positive.
     #[clap(long, default_value = "10", value_parser = clap::value_parser!(u64).range(1..))]
     pub poll_interval_secs: u64,
 
@@ -123,17 +208,6 @@ pub struct SubnetMergingArgs {
     /// Which steps to skip
     #[clap(long)]
     pub skip: Option<Vec<StepType>>,
-}
-
-/// The two subnets a subnet merge works with.
-#[derive(Copy, Clone, PartialEq, Debug)]
-enum TargetSubnet {
-    /// The subnet that is cooling down, whose canisters are merged away and
-    /// which is deleted afterwards.
-    Source,
-    /// The subnet that hosts the canisters of the source subnet after the merge
-    /// and that is recovered at the merged state.
-    Destination,
 }
 
 pub struct SubnetMerging {
@@ -166,8 +240,14 @@ impl SubnetMerging {
             &recovery,
             subnet_merging_args.source_subnet_id,
             subnet_merging_args.destination_subnet_id,
+            subnet_merging_args.next_step,
         )
         .expect("Subnets should satisfy all the preconditions");
+
+        let layout = Layout::new(&recovery);
+        layout
+            .create_dirs()
+            .expect("Failed to create the working directories");
 
         if recovery_args.skip_prompts {
             Self::check_download_nodes(&subnet_merging_args)
@@ -179,7 +259,7 @@ impl SubnetMerging {
             params: subnet_merging_args,
             recovery_args,
             neuron_args,
-            layout: Layout::new(&recovery),
+            layout,
             recovery,
             logger,
         }
@@ -220,7 +300,9 @@ impl SubnetMerging {
     /// 3) Neither holds any chain keys;
     /// 4) Neither is halted (`is_halted`), as a halted subnet never reaches the
     ///    CUP it is halted at by the tool (which sets `halt_at_cup_height`, but
-    ///    never `is_halted`);
+    ///    never `is_halted`), unless the tool is resumed past
+    ///    `HaltSourceSubnetAtCupHeight`: the recovery of the destination subnet
+    ///    at the merged state halts it;
     /// 5) The destination subnet is not cooling down;
     /// 6) Both have the same subnet type, cycles cost schedule, subnet admins
     ///    and SEV setting.
@@ -228,6 +310,7 @@ impl SubnetMerging {
         recovery: &Recovery,
         source_subnet_id: SubnetId,
         destination_subnet_id: SubnetId,
+        next_step: Option<StepType>,
     ) -> RecoveryResult<()> {
         if source_subnet_id == destination_subnet_id {
             return Err(RecoveryError::ValidationFailed(format!(
@@ -235,9 +318,16 @@ impl SubnetMerging {
             )));
         }
 
-        let source = Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id)?;
-        let destination =
-            Self::get_and_pre_validate_subnet_record(recovery, destination_subnet_id)?;
+        let check_not_halted = next_step.is_none_or(|next_step| {
+            next_step as usize <= StepType::HaltSourceSubnetAtCupHeight as usize
+        });
+        let source =
+            Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id, check_not_halted)?;
+        let destination = Self::get_and_pre_validate_subnet_record(
+            recovery,
+            destination_subnet_id,
+            check_not_halted,
+        )?;
 
         Self::ensure_compatible_subnet_records(
             source_subnet_id,
@@ -357,6 +447,7 @@ impl SubnetMerging {
     fn get_and_pre_validate_subnet_record(
         recovery: &Recovery,
         subnet_id: SubnetId,
+        check_not_halted: bool,
     ) -> RecoveryResult<SubnetRecord> {
         let validation_error = |error_message| {
             Err(RecoveryError::ValidationFailed(format!(
@@ -377,10 +468,6 @@ impl SubnetMerging {
             return validation_error("Subnet should not hold any chain keys".to_string());
         }
 
-        if subnet_record.is_halted {
-            return validation_error("Subnet should not be halted".to_string());
-        }
-
         let subnet_type = subnet_record
             .subnet_type()
             .try_into()
@@ -392,6 +479,10 @@ impl SubnetMerging {
             ));
         }
 
+        if check_not_halted && subnet_record.is_halted {
+            return validation_error("Subnet should not be halted".to_string());
+        }
+
         Ok(subnet_record)
     }
 
@@ -401,9 +492,11 @@ impl SubnetMerging {
             ic_admin_cmd: get_halt_subnet_at_cup_height_command(
                 &self.recovery.admin_helper,
                 self.subnet_id(target_subnet),
-                // No readonly SSH key (`key`) is needed: the halting CUP is
-                // read from the replica's public endpoint rather than over SSH.
-                &None,
+                // The halting CUP is read from the replica's public endpoint,
+                // but the state is downloaded over SSH, for which the readonly
+                // key is deployed to both subnets. Passing it replaces the
+                // subnet's entire list of readonly keys.
+                &self.params.readonly_pub_key,
             ),
         }
     }
@@ -432,39 +525,199 @@ impl SubnetMerging {
         })
     }
 
+    fn stop_replica_step(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step + use<>> {
+        // The state manager of a running replica owns its state directory, even
+        // while consensus is halted, so the replica has to be stopped before the
+        // state is downloaded. The destination subnet's replica stays stopped
+        // until the merged state is uploaded to it; the source subnet's stays
+        // stopped for good, as that subnet is deleted at the end of the merge.
+        let node_ip = self.download_node_ip(target_subnet, "StopReplica")?;
+        Ok(self.recovery.get_stop_replica_step(node_ip))
+    }
+
+    /// Downloads the state a subnet halted at into that subnet's working
+    /// directory.
+    ///
+    /// `DownloadIcDataStep` rather than `Recovery::get_download_data_step`: a
+    /// merge downloads two states, and the latter always downloads into the
+    /// single working directory a `Recovery` has.
+    fn download_state_step(
+        &self,
+        target_subnet: TargetSubnet,
+    ) -> RecoveryResult<impl Step + use<>> {
+        let node_ip = self.download_node_ip(target_subnet, "DownloadState")?;
+
+        let mut ssh_helper = self.ssh_helper(node_ip);
+        if ssh_helper.wait_for_access().is_err() {
+            ssh_helper.ssh_user = SshUser::Admin;
+            ssh_helper.key_file = self.recovery.admin_key_file.clone();
+            if !ssh_helper.can_connect() {
+                return Err(RecoveryError::UnexpectedError(format!(
+                    "SSH access to node {node_ip} denied"
+                )));
+            }
+        }
+        info!(
+            self.recovery.logger,
+            "Continuing with account: {}", ssh_helper.ssh_user
+        );
+
+        let mut includes = Recovery::get_ic_state_includes(
+            &self.recovery.logger,
+            ExecutionMode::Remote(&ssh_helper),
+            CheckpointHeight::Latest,
+        )?;
+        // The CUP the subnet halted at, which the validation step checks the
+        // downloaded state against.
+        includes.push(PathBuf::from(CUPS_DIR));
+
+        Ok(DownloadIcDataStep {
+            logger: self.recovery.logger.clone(),
+            ssh_helper,
+            backup_dir: self.layout.original_data_dir(target_subnet),
+            working_dir: self.layout.work_dir(target_subnet),
+            keep_downloaded_data: self.params.keep_downloaded_state == Some(true),
+            data_includes: includes,
+            include_config: true,
+        })
+    }
+
+    fn validate_cup_step(&self, target_subnet: TargetSubnet) -> impl Step + use<> {
+        ValidateCupStep {
+            subnet_id: self.subnet_id(target_subnet),
+            target_subnet,
+            nns_url: self.recovery_args.nns_url.clone(),
+            layout: self.layout.clone(),
+            logger: self.recovery.logger.clone(),
+        }
+    }
+
+    /// The recovery CUP of the destination subnet, at the merged state.
+    fn propose_cup(&self) -> RecoveryResult<impl Step + use<>> {
+        let params = MergedStateParams::read(self.layout.merged_state_params_file())?;
+
+        self.recovery.update_recovery_cup(
+            self.params.destination_subnet_id,
+            Height::from(params.height),
+            params.state_hash,
+            /*replacement_nodes=*/ &[],
+            /*registry_params=*/ None,
+            // The merged subnets are both unavailable while the recovery CUP is
+            // created, so its DKG is handled by whichever subnet the NNS picks
+            // by default, which is neither of them.
+            /*initial_dkg_subnet_id=*/
+            None,
+            /*chain_key_subnet_id=*/ None,
+        )
+    }
+
+    fn upload_state_and_restart_step(&self) -> RecoveryResult<impl Step + use<>> {
+        match self.params.upload_node_destination {
+            // The replica of the destination subnet has been stopped before its
+            // state was downloaded, so this step replaces its state directory
+            // and starts it back up on the merged state.
+            Some(node_ip) => Ok(UploadStateAndRestartStep {
+                logger: self.recovery.logger.clone(),
+                ssh_user: SshUser::Admin,
+                upload_method: DataLocation::Remote(node_ip),
+                work_dir: self.layout.work_dir(TargetSubnet::Merged),
+                data_src: self.layout.ic_state_dir(TargetSubnet::Merged),
+                require_confirmation: !self.recovery_args.skip_prompts,
+                key_file: self.recovery.admin_key_file.clone(),
+                check_ic_replay_height: false,
+            }),
+            None => Err(RecoveryError::StepSkipped),
+        }
+    }
+
+    fn wait_for_recovery_cup_step(&self) -> RecoveryResult<impl Step + use<>> {
+        match self.params.upload_node_destination {
+            Some(node_ip) => Ok(WaitForRecoveryCupStep {
+                node_ip,
+                layout: self.layout.clone(),
+                logger: self.recovery.logger.clone(),
+            }),
+            None => Err(RecoveryError::StepSkipped),
+        }
+    }
+
+    fn wait_for_halting_checkpoint_step(
+        &self,
+        target_subnet: TargetSubnet,
+    ) -> RecoveryResult<impl Step + use<>> {
+        let node_ip = self.download_node_ip(target_subnet, "WaitForHaltingCheckpoint")?;
+
+        Ok(WaitForHaltingCheckpointStep {
+            subnet_id: self.subnet_id(target_subnet),
+            node_ip,
+            layout: self.layout.clone(),
+            ssh_helper: self.ssh_helper(node_ip),
+            timeout: Duration::from_secs(self.params.halt_timeout_secs),
+            poll_interval: Duration::from_secs(self.params.poll_interval_secs),
+            logger: self.recovery.logger.clone(),
+        })
+    }
+
+    fn ssh_helper(&self, node_ip: IpAddr) -> SshHelper {
+        let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {
+            (SshUser::Readonly, self.params.readonly_key_file.clone())
+        } else {
+            (SshUser::Admin, self.recovery.admin_key_file.clone())
+        };
+
+        SshHelper::new(
+            self.recovery.logger.clone(),
+            ssh_user,
+            node_ip,
+            self.recovery.ssh_confirmation,
+            key_file,
+        )
+    }
+
+    /// The IP address of the node of a subnet whose state is merged, for the
+    /// steps accessing it over SSH. Skips the step if the node is not given,
+    /// and fails it if the tool runs on that node.
+    fn download_node_ip(&self, target_subnet: TargetSubnet, step: &str) -> RecoveryResult<IpAddr> {
+        match self.download_node(target_subnet) {
+            Some(DataLocation::Remote(node_ip)) => Ok(node_ip),
+            Some(DataLocation::Local) => Err(RecoveryError::UnexpectedError(format!(
+                "Step {step} needs the IP address of the node of subnet {} to download the \
+                 state from, and does not support running on that node",
+                self.subnet_id(target_subnet),
+            ))),
+            None => Err(RecoveryError::StepSkipped),
+        }
+    }
+
     /// The node of a subnet whose state is merged, i.e. the one the halting CUP
     /// is waited for on.
     fn download_node(&self, target_subnet: TargetSubnet) -> Option<DataLocation> {
         match target_subnet {
             TargetSubnet::Source => self.params.download_node_source,
             TargetSubnet::Destination => self.params.download_node_destination,
+            TargetSubnet::Merged => None,
         }
     }
 
     fn subnet_id(&self, target_subnet: TargetSubnet) -> SubnetId {
         match target_subnet {
             TargetSubnet::Source => self.params.source_subnet_id,
-            TargetSubnet::Destination => self.params.destination_subnet_id,
+            TargetSubnet::Destination | TargetSubnet::Merged => self.params.destination_subnet_id,
         }
     }
 
     /// The URL of the dashboard evaluating the merge readiness condition, for
-    /// the registry version `V` recorded by `CheckRegistryForCoolingDownFlag`.
-    fn dashboard_url(&self) -> String {
+    /// the given registry version, recorded by an earlier step.
+    fn dashboard_url(&self, registry_version: RecoveryResult<u64>) -> String {
         let source_subnet_id = self.params.source_subnet_id;
-        match self
-            .layout
-            .read_cooling_down_registry_version(source_subnet_id)
-        {
+        match registry_version {
             Ok(registry_version) => format!(
                 "https://grafana.mainnet.dfinity.network/d/subnet-merging?var-ic=mercury&var-ic_subnet={source_subnet_id}&var-registry_version={registry_version}",
             ),
             Err(err) => {
                 warn!(
                     self.logger,
-                    "Failed to read the registry version the subnet is labeled \"cooling down\" \
-                     at: {}",
-                    err
+                    "Failed to read the registry version recorded by an earlier step: {}", err
                 );
                 format!(
                     "https://grafana.mainnet.dfinity.network/d/subnet-merging?var-ic=mercury&var-ic_subnet={source_subnet_id}",
@@ -497,10 +750,24 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
 
     fn read_step_params(&mut self, step_type: StepType) {
         match step_type {
-            StepType::CoolDownSourceSubnet | StepType::CheckRegistryForCoolingDownFlag => {}
+            StepType::CoolDownSourceSubnet => {
+                if self.params.readonly_pub_key.is_none() {
+                    self.params.readonly_pub_key = read_optional(
+                        &self.logger,
+                        "Enter public key to add readonly SSH access to both subnets. Ensure the right format.\n\
+                        Format:   ssh-ed25519 <pubkey> <identity>\n\
+                        Example:  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwS/0S6xH0g/xLDV0Tz7VeMZE9AKPeSbLmCsq9bY3F1 foo@dfinity.org\n\
+                        Enter your key: ",
+                    )
+                }
+            }
+
             StepType::CheckMergeReadiness => print_url_and_ask_for_confirmation(
                 &self.logger,
-                self.dashboard_url(),
+                self.dashboard_url(
+                    self.layout
+                        .read_cooling_down_registry_version(self.params.source_subnet_id),
+                ),
                 "The tool evaluates the merge readiness condition itself, and waits until it \
                  holds. Please check the dashboard as well, to see whether it is safe to merge \
                  the subnet",
@@ -524,6 +791,34 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                     ));
                 }
             }
+
+            StepType::DownloadStateFromSourceSubnet => {
+                self.params.keep_downloaded_state = Some(consent_given(
+                    &self.logger,
+                    "Preserve original downloaded state locally?",
+                ));
+            }
+
+            StepType::UploadStateToDestinationSubnet => {
+                if self.params.upload_node_destination.is_none() {
+                    self.params.upload_node_destination = read_optional(
+                        &self.logger,
+                        "Enter IP of node in the Destination Subnet with admin access: ",
+                    );
+                }
+            }
+
+            StepType::DeleteSourceSubnet => print_url_and_ask_for_confirmation(
+                &self.logger,
+                self.dashboard_url(
+                    self.layout
+                        .read_merge_registry_version(self.params.source_subnet_id),
+                ),
+                "Please check the dashboard to see if it is safe to delete the subnet that was \
+                 merged away",
+            ),
+
+            _ => {}
         }
     }
 
@@ -534,6 +829,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 ic_admin_cmd: get_propose_to_cool_down_subnet_command(
                     &self.recovery.admin_helper,
                     self.params.source_subnet_id,
+                    &self.params.readonly_pub_key,
                 ),
             }
             .into(),
@@ -572,6 +868,91 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             StepType::WaitForHaltingCupOnDestinationSubnet => self
                 .wait_for_halting_cup_step(TargetSubnet::Destination)?
                 .into(),
+
+            StepType::WaitForHaltingCheckpointOnSourceSubnet => self
+                .wait_for_halting_checkpoint_step(TargetSubnet::Source)?
+                .into(),
+            StepType::WaitForHaltingCheckpointOnDestinationSubnet => self
+                .wait_for_halting_checkpoint_step(TargetSubnet::Destination)?
+                .into(),
+
+            StepType::StopSourceReplica => self.stop_replica_step(TargetSubnet::Source)?.into(),
+            StepType::StopDestinationReplica => {
+                self.stop_replica_step(TargetSubnet::Destination)?.into()
+            }
+
+            StepType::DownloadStateFromSourceSubnet => {
+                self.download_state_step(TargetSubnet::Source)?.into()
+            }
+            StepType::DownloadStateFromDestinationSubnet => {
+                self.download_state_step(TargetSubnet::Destination)?.into()
+            }
+
+            StepType::ValidateSourceSubnetCup => {
+                self.validate_cup_step(TargetSubnet::Source).into()
+            }
+            StepType::ValidateDestinationSubnetCup => {
+                self.validate_cup_step(TargetSubnet::Destination).into()
+            }
+
+            StepType::MergeStates => MergeStatesStep {
+                layout: self.layout.clone(),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
+
+            StepType::MergeSubnets => AdminStep {
+                logger: self.recovery.logger.clone(),
+                ic_admin_cmd: get_propose_to_merge_subnets_command(
+                    &self.recovery.admin_helper,
+                    self.params.source_subnet_id,
+                    self.params.destination_subnet_id,
+                ),
+            }
+            .into(),
+
+            StepType::CheckRegistryForRoutingTableEntry => CheckRoutingTableStep {
+                source_subnet_id: self.params.source_subnet_id,
+                destination_subnet_id: self.params.destination_subnet_id,
+                registry_helper: self.recovery.registry_helper.clone(),
+                layout: self.layout.clone(),
+                timeout: Duration::from_secs(self.params.registry_timeout_secs),
+                poll_interval: Duration::from_secs(self.params.poll_interval_secs),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
+
+            StepType::ProposeCupForDestinationSubnet => self.propose_cup()?.into(),
+            StepType::UploadStateToDestinationSubnet => {
+                self.upload_state_and_restart_step()?.into()
+            }
+            StepType::WaitForCUPOnDestinationSubnet => self.wait_for_recovery_cup_step()?.into(),
+
+            StepType::UnhaltDestinationSubnet => self
+                .recovery
+                .bring_subnet_back_online_after_repairs(self.params.destination_subnet_id)
+                .into(),
+
+            StepType::CheckRegistryVersionOnAllSubnets => CheckRegistryVersionOnAllSubnetsStep {
+                source_subnet_id: self.params.source_subnet_id,
+                registry_helper: self.recovery.registry_helper.clone(),
+                layout: self.layout.clone(),
+                timeout: Duration::from_secs(self.params.merge_ready_timeout_secs),
+                poll_interval: Duration::from_secs(self.params.poll_interval_secs),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
+
+            StepType::DeleteSourceSubnet => AdminStep {
+                logger: self.recovery.logger.clone(),
+                ic_admin_cmd: get_propose_to_delete_subnet_command(
+                    &self.recovery.admin_helper,
+                    self.params.source_subnet_id,
+                ),
+            }
+            .into(),
+
+            StepType::Cleanup => self.recovery.get_cleanup_step().into(),
         };
 
         Ok(step)
@@ -610,8 +991,12 @@ mod tests {
         SubnetMergingArgs {
             source_subnet_id: SubnetId::from(PrincipalId::new_subnet_test_id(1)),
             destination_subnet_id: SubnetId::from(PrincipalId::new_subnet_test_id(2)),
+            readonly_pub_key: Some("ssh-ed25519 AAAA".to_string()),
+            readonly_key_file: Some(PathBuf::from("/tmp/key")),
+            keep_downloaded_state: Some(false),
             download_node_source: Some(DataLocation::Remote("::1".parse().unwrap())),
             download_node_destination: Some(DataLocation::Local),
+            upload_node_destination: Some("::2".parse().unwrap()),
             merge_ready_timeout_secs: 2400,
             halt_timeout_secs: 123,
             registry_timeout_secs: 3600,
