@@ -171,6 +171,8 @@ jobs:
       # The reviewed head merged into master. CI PR Only and the statuses use the head itself.
       commit-sha: ${{ needs.verify-inputs-and-get-pr-refs.outputs.merge-sha }}
       release-build: 'false'
+      # The PR's code: bazel-test-all then runs on a Namespace profile without a cache volume.
+      untrusted-code: 'true'
     # Read-only: the PR's code runs in these jobs.
     permissions:
       contents: read

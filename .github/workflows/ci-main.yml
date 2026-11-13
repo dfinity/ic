@@ -12,6 +12,13 @@ on:
         required: false
         default: ''
         type: string
+      untrusted-code:
+        description: >-
+          'true' when commit-sha contains code that isn't trusted, like a reviewed pull request from a fork
+          (ci-kickoff-manual.yml): jobs then don't run on runners whose caches later runs reuse, see bazel-test-all.
+        required: false
+        default: ''
+        type: string
     secrets:
       BEP_GPG_PASSPHRASE:
         description: Encrypts the build event files that the bazel action uploads
@@ -215,15 +222,139 @@ jobs:
       # This environment is also only active on protected branches. That's why we require the `upload-artifacts` environment
       # when `release-build == 'true'` but not otherwise.
       name: ${{ case(needs.config.outputs.release-build == 'true', 'upload-artifacts', '') }}
-    runs-on: *dind-large-setup
-    container: *container-setup
-    timeout-minutes: 180
+    # Builds and tests on the Remote Build Execution (RBE) cluster @ Namespace: bazel runs in this job's
+    # container and the actions and tests run on the RBE workers, except for the ic-os image builds,
+    # which bazel/conf/.bazelrc.build forces to run locally, i.e. here. Of the system-tests only the
+    # `_local` variants run (on the workers). Of the Farm-backed variants only those of system_test_large
+    # tests (release-testing.yml) and of the tests the nightly workflows select still run.
+    # container.mount-scratch gives the runner a real ephemeral filesystem at /namespace/scratch.
+    # The ic-os image builds put their scratch there, see the "Prepare the scratch directory" step below.
+    # The rbe-driver profile has a Namespace cache volume, which runs on master commit and all later
+    # runs, release builds included, start from (see "Mount the Bazel repository cache"). A reviewed PR
+    # from a fork runs as a workflow_dispatch run on master (ci-kickoff-manual.yml), i.e. its code could
+    # commit that volume, so it runs on a copy of the profile without a cache volume.
+    runs-on: ${{ case(inputs.untrusted-code == 'true', 'namespace-profile-rbe-driver-amd64-linux-16x32-no-cache;container.mount-scratch=true', 'namespace-profile-rbe-driver-amd64-linux-16x32;container.mount-scratch=true') }}
+    container:
+      # The RBE worker image of .github/actions/bazel-namespace/rbe.bazelrc: the
+      # update-image-references job of container-autobuild.yml rewrites both.
+      image: nscr.io/c9ptjuknd7oc6/ic-build@sha256:b897752c4c05ee6f26bf17e4dfb42f2f64ad409cbfb0b95203eeaa00ed1bd95c
+      # ic-os image builds run 'podman build' (rootless) and are forced to run locally in
+      # this container by --strategy_regexp=ic-os[:/].*=local in bazel/conf/.bazelrc.build.
+      # Rootless podman needs to create user namespaces, which fails in an unprivileged
+      # container with "cannot clone: Operation not permitted".
+      options: >-
+        --privileged --mount type=tmpfs,target="/tmp/containers"
+      volumes:
+        # nscloud-setup finds the runner's Namespace token in here and exports NSC_TOKEN_FILE,
+        # which nsc reads.
+        - /var/run/nsc/:/var/run/nsc/
+        # The runner profile's Namespace cache volume (always /cache on the host). The
+        # "Mount the Bazel repository cache" step bind-mounts a directory of it into this
+        # container; mount(2) needs CAP_SYS_ADMIN, which --privileged above grants.
+        - /cache:/cache
+        # The runner's scratch filesystem, see runs-on above.
+        - /namespace/scratch:/namespace/scratch
+      env:
+        # Set (to /cache) by the Namespace runner when the profile has a cache volume, and forwarded
+        # into the container here; the "Prepare the Bazel repository cache" step checks it and the
+        # other repository-cache steps are skipped when it is unset.
+        NSC_CACHE_PATH: ${{ env.NSC_CACHE_PATH }}
+    # A job timeout cancels the job, skipping the uploads of the bazel-namespace action, so this
+    # exceeds the steps' timeout-minutes (35 + 20 + 100 + 60 + 190 = 405) plus all other steps (setup,
+    # AWS credentials, Attest, uploads and reports take a few minutes together). Instances of DFINITY's
+    # Namespace (enterprise) plan run for up to 24 hours.
+    timeout-minutes: 415
     steps:
-      - *checkout
-      - uses: ./.github/actions/netrc
-      - name: "Node Name"
+      - uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0
+      - name: Set up Bazel Remote Execution
         run: |
-          echo "::notice::Node Name: ${NODE_NAME}"
+          # --command=common scopes the generated options to every bazel command instead of
+          # just `build` so that the `bazel query` of the Infer Bazel Targets step below also
+          # fetches repositories through Namespace's remote asset API.
+          nsc bazel setup --command=common --enable_remote_asset_api --bazelrc=/tmp/bazel-rbe.bazelrc
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # The Infer Bazel Targets step below diffs PRs against their base which needs history.
+          fetch-depth: ${{ case(github.event_name == 'pull_request', 256, 1) }}
+          ref: ${{ inputs.commit-sha }}
+      - uses: ./.github/actions/netrc
+
+      - name: Prepare the Bazel repository cache on the Namespace cache volume
+        # NSC_CACHE_PATH (/cache) is set by the Namespace runner only when the profile has a
+        # cache volume. It reaches this container through the env block above but is not in
+        # the workflow's `env` context, so `if:` cannot test it; check it in the shell and
+        # publish the result for the steps below. spacectl (run by the cache action) creates
+        # the directory on the volume as the current user (buildifier) while /cache belongs
+        # to the host side; pre-create it with sudo so the mount cannot fail on permissions.
+        id: prepare-cache
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${NSC_CACHE_PATH:-}" ]; then
+            echo "No cache volume is attached (NSC_CACHE_PATH is unset); using an ephemeral repository cache."
+            echo "has_volume=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          sudo install -d -o "$(id -u)" -g "$(id -g)" "$NSC_CACHE_PATH/var/cache/bazel-repository-cache"
+          echo "has_volume=true" >>"$GITHUB_OUTPUT"
+
+      - name: Mount the Bazel repository cache
+        # Only runs on master commit the volume (runner-profile setting); every other run
+        # reads master's last successful commit. Runs of untrusted code have no volume (see
+        # runs-on). A cache outage must not fail the job:
+        # without the mount the next step is skipped and Bazel keeps its ephemeral default
+        # repository cache.
+        id: repo-cache
+        if: steps.prepare-cache.outputs.has_volume == 'true'
+        continue-on-error: true
+        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        with:
+          path: /var/cache/bazel-repository-cache
+          spacectl-version: 0.12.3
+
+      - name: Configure the Bazel repository cache
+        # /tmp/bazel-rbe.bazelrc is read by every bazel invocation of this job (all of them
+        # run through ./.github/actions/bazel-namespace, whose bazel wrapper passes it), so one
+        # `common` line reaches all of them and they keep sharing one server. Bazel puts its
+        # repo contents cache (the extracted repositories) under the same directory, so a warm
+        # run neither downloads nor extracts.
+        if: steps.repo-cache.outcome == 'success'
+        run: echo "common --repository_cache=/var/cache/bazel-repository-cache" >>/tmp/bazel-rbe.bazelrc
+
+      - name: Prepare the scratch directory for the ic-os image builds
+        # The ic-os image actions run locally (see the container options above) and each
+        # writes several GB of scratch under $TMPDIR, by default /tmp: this container's
+        # overlay root, a containerd snapshot on the Namespace cache volume which risks
+        # filling up if the ic-os build writes its temporary scratch there.
+        # $HOME is no alternative: it is on the runner's root disk, an overlayfs with layers
+        # on different filesystems, where directory inode numbers are not stable, so tar
+        # ("Directory renamed before its status could be extracted") and fakeroot, which
+        # track files by inode, break. /namespace/scratch is a real filesystem (runs-on
+        # above); a bind mount of a missing host path would only create a directory on the
+        # root disk, so check that it is a non-overlay mount and fail otherwise.
+        shell: bash
+        run: |
+          set -euo pipefail
+          scratch=/namespace/scratch
+          if ! mountpoint -q "$scratch" || [ "$(stat -f -c %T "$scratch")" = overlayfs ]; then
+            echo >&2 "No scratch filesystem is mounted at $scratch."
+            exit 1
+          fi
+          sudo install -d -o "$(id -u)" -g "$(id -g)" "$scratch/tmp"
+          df -h "$scratch"
+
+      - name: Report the cache volume usage before the build
+        # Whether this run is warm or cold: the cache action reports "found and restored" as
+        # soon as the directory exists, which the prepare step guarantees, so only du tells.
+        # The volume also holds Namespace's container image cache (/cache/containerscache).
+        if: steps.repo-cache.outcome == 'success'
+        continue-on-error: true
+        run: |
+          sudo du -xh --max-depth=2 /cache | sort -h
+          du -h --max-depth=1 /var/cache/bazel-repository-cache
+          df -h /cache
 
       - name: Infer Bazel Args
         id: infer-bazel-args
@@ -249,42 +380,64 @@ jobs:
           echo "bazel-args=${bazel_args[@]}" >> $GITHUB_OUTPUT
 
       - name: Infer Bazel Targets
-        timeout-minutes: 30
-        shell: bash
+        id: infer-bazel-targets
+        # Backstop for the action's timeout-minutes, which stops bazel gracefully in time for
+        # the action's uploads (see .github/actions/bazel-namespace/action.yaml).
+        timeout-minutes: 35
+        uses: ./.github/actions/bazel-namespace
         env:
           SKIP_LONG_TESTS: ${{ needs.config.outputs.skip_long_tests }}
           SKIP_BUF_CHECKS: ${{ needs.config.outputs.skip_buf_checks }}
           SKIP_SYSTEM_TESTS: ${{ needs.config.outputs.skip_system_tests }}
           DIFF_ONLY: ${{ needs.config.outputs.diff-only }}
-        run: |
-          set -euo pipefail
+        with:
+          timeout-minutes: 30
+          run: |
+            # Only the `_local` variants of system-tests run in CI Main, on the RBE workers. targets.py
+            # applies this exclusion after adding the targets of PULL_REQUEST_BAZEL_TARGETS, so the Farm
+            # variants listed there would be dropped, which `targets.py check` (below) rejects.
+            targets_args=(--exclude_tags=farm_system_test)
+            if [[ "$SKIP_LONG_TESTS" == 'true' ]]; then
+              targets_args+=("--skip_long_tests")
+            fi
+            if [[ "$SKIP_BUF_CHECKS" == 'true' ]]; then
+              targets_args+=("--exclude_tags=buf")
+            fi
+            if [[ "$SKIP_SYSTEM_TESTS" == 'true' ]]; then
+              targets_args+=("--exclude_tags=system_test")
+            fi
+            if [[ "$DIFF_ONLY" == 'true' ]]; then
+              targets_args+=(
+                '--base=${{ github.event.pull_request.base.sha }}'
+                '--head=${{ github.event.pull_request.head.sha }}'
+                )
+            fi
 
-          # Local system-tests will run on the Remote Execution Cluster @ Namespace
-          # via the .github/workflows/ci-rbe-evaluation.yml job so skip them in this job:
-          targets_args=(--exclude_tags=local_system_test)
-          if [[ "$SKIP_LONG_TESTS" == 'true' ]]; then
-            targets_args+=("--skip_long_tests")
-          fi
-          if [[ "$SKIP_BUF_CHECKS" == 'true' ]]; then
-            targets_args+=("--exclude_tags=buf")
-          fi
-          if [[ "$SKIP_SYSTEM_TESTS" == 'true' ]]; then
-            targets_args+=("--exclude_tags=system_test")
-          fi
-          if [[ "$DIFF_ONLY" == 'true' ]]; then
-            targets_args+=(
-              '--base=${{ github.event.pull_request.base.sha }}'
-              '--head=${{ github.event.pull_request.head.sha }}'
-              )
-          fi
+            # Create the lists of targets to build and test which are consumed via
+            # --target_pattern_file by the steps below. targets.py's `bazel query` runs the
+            # action's bazel wrapper, so it uses the same bazel server as those steps (which
+            # reuse the packages and repositories it loads) and fetches repositories through
+            # Namespace's remote asset API, not DFINITY's cache, which isn't reachable from here.
+            # (${{ runner.temp }} is not used since it expands to the host path.)
+            mkdir -p "$HOME/bazel-targets"
+            /usr/bin/time ci/scripts/targets.py build "${targets_args[@]}" >"$HOME/bazel-targets/build-targets"
+            /usr/bin/time ci/scripts/targets.py test "${targets_args[@]}" >"$HOME/bazel-targets/test-targets"
 
-          # Create the lists of targets to build and test which are consumed via
-          # --target_pattern_file by the steps below. The bazel server this starts and
-          # the packages and repositories it loads are reused by those steps.
-          # (${{ runner.temp }} is not used since it expands to the host path.)
-          mkdir -p "$HOME/bazel-targets"
-          /usr/bin/time ci/scripts/targets.py build "${targets_args[@]}" >"$HOME/bazel-targets/build-targets"
-          /usr/bin/time ci/scripts/targets.py test "${targets_args[@]}" >"$HOME/bazel-targets/test-targets"
+      - name: Warm the Bazel repository cache for the PR queries
+        id: warm-repository-cache
+        # Only master runs commit the Namespace cache volume, and a master run queries
+        # plain //... and builds one configuration, so on its own it never fetches the
+        # repositories that only the rdeps(//..., ...) query of PR runs loads (other
+        # platforms' toolchains, unselected select() branches). Load the same closure here
+        # so PR runs find every repository in the cache. Same server as the steps around it.
+        if: github.event_name == 'push' && env.BRANCH_NAME == 'master' && steps.repo-cache.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 20 # Backstop, see "Infer Bazel Targets".
+        uses: ./.github/actions/bazel-namespace
+        with:
+          timeout-minutes: 15
+          run: |
+            /usr/bin/time bazel query --keep_going 'deps(//...)' >/dev/null
 
       - name: Upload target files
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
@@ -295,20 +448,28 @@ jobs:
             ~/bazel-targets/build-targets
             ~/bazel-targets/test-targets
 
-      - name: Run Bazel Commands
-        uses: ./.github/actions/bazel
+      # The job is broken up into a build and a test step so that the artifacts of release builds are
+      # uploaded (and attested) even when tests fail.
+
+      - name: Bazel Build with RBE
+        id: bazel-build
+        timeout-minutes: 100 # Backstop, see "Infer Bazel Targets".
+        env:
+          # Bazel's local strategy hands actions the client's TMPDIR (--action_env has no
+          # effect on it), so this is what moves the ic-os image builds' scratch to the
+          # scratch filesystem; see the "Prepare the scratch directory" step.
+          TMPDIR: /namespace/scratch/tmp
+        uses: ./.github/actions/bazel-namespace
         with:
+          timeout-minutes: 90
           GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
+          # Compared with the one of build-ic by the build-determinism job below.
           execlogs-artifact-name: execlogs-bazel-build
-          invocation-names: build
           run: |
-            echo "Building as user: $(whoami)"
-            echo "Bazel version: $(bazel version)"
-
-            bazel_args='${{ steps.infer-bazel-args.outputs.bazel-args }}'
-
-            build_targets="$HOME/bazel-targets/build-targets"
-            eval "bazel build $bazel_args --target_pattern_file=$build_targets"
+            read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
+            # Runs it once more after a remote execution error at Namespace (exit code 34), see the script.
+            "$GITHUB_WORKSPACE/.github/actions/bazel-namespace/rerun-on-remote-error.sh" \
+              bazel build "${inferred_args[@]}" --target_pattern_file="$HOME/bazel-targets/build-targets"
 
       - name: Configure AWS credentials
         id: aws-credentials
@@ -318,7 +479,9 @@ jobs:
           role-session-name: "GitHub-Actions_ic_upload-artifacts"
           role-to-assume: ${{ vars.AWS_ASSUME_ROLE }}
           aws-region: eu-central-1
-          # Only for the Upload artifacts step: the BEP files of Run Tests record the job's environment.
+          # Only for the uploader, see the Upload artifacts step: the BEP files of the bazel commands
+          # record their client's environment, and `nsc bazel setup` streams every bazel command's BEP
+          # to Namespace's Build Event Service.
           output-env-credentials: false
           output-credentials: true
 
@@ -326,14 +489,19 @@ jobs:
         id: upload-artifacts
         uses: ./.github/actions/upload-artifacts
         if: needs.config.outputs.release-build == 'true'
+        # Backstop for the action's bazel part (timeout-minutes below), plus the upload itself
+        # (about 27 minutes for the 172 files of a master build).
+        timeout-minutes: 60
         with:
           name: Bazel Test All
           target: //:upload-artifacts
-          # The options of the Run Bazel Commands step above; with --check_up_to_date Bazel will error
+          # The options of the Bazel Build with RBE step above; with --check_up_to_date Bazel will error
           # out if the artifacts to be uploaded were not built in that step (this ensures that the exact
           # artifacts built above are uploaded).
           bazel-args: ${{ steps.infer-bazel-args.outputs.bazel-args }}
           check-up-to-date: 'true'
+          bazel-action: bazel-namespace
+          timeout-minutes: 20
           # Only the step of the action that runs the uploader gets these.
           aws-access-key-id: ${{ steps.aws-credentials.outputs.aws-access-key-id }}
           aws-secret-access-key: ${{ steps.aws-credentials.outputs.aws-secret-access-key }}
@@ -353,23 +521,41 @@ jobs:
         with:
           subject-checksums: ${{ steps.upload-artifacts.outputs.manifest-path }}
 
-      # GitHub runners override the container's entrypoint which is ci/container/init.sh
-      # so we run it explicitly here to ensure the system is set up correctly for running local system-tests.
-      - run: ci/container/init.sh
-
-      - name: Run Tests
-        uses: ./.github/actions/bazel
+      - name: Bazel Test with RBE
+        # The id names this step's artifacts (bazel-test-all-bazel-test-<attempt>-bep and -logs),
+        # which ci/githubstats/query.py recognizes as the tests of this job.
+        id: bazel-test
+        # Backstop, see "Infer Bazel Targets". The test step of a master run usually takes 25-40 minutes,
+        # but on a saturated cluster a single attempt took up to 120 (2026-11-03). The action's
+        # timeout-minutes below leaves room for a rerun of what such an attempt didn't complete
+        # (rerun-on-remote-error.sh, or the eviction retries of rbe.bazelrc).
+        timeout-minutes: 190
+        env:
+          # Same as in the build step, for locally executed tests and actions.
+          TMPDIR: /namespace/scratch/tmp
+        uses: ./.github/actions/bazel-namespace
         with:
+          timeout-minutes: 180
           GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
-          execlogs-artifact-name: execlogs-bazel-test
-          invocation-names: test
           run: |
-            bazel_args='${{ steps.infer-bazel-args.outputs.bazel-args }}'
-
+            read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
             test_targets="$HOME/bazel-targets/test-targets"
             if [ -s "$test_targets" ]; then # bazel errors out if no test targets are listed
-              eval "bazel test $bazel_args --target_pattern_file=$test_targets"
+              # Runs it once more after a remote execution error at Namespace (exit code 34), see the script.
+              "$GITHUB_WORKSPACE/.github/actions/bazel-namespace/rerun-on-remote-error.sh" \
+                bazel test "${inferred_args[@]}" --target_pattern_file="$test_targets"
             fi
+
+      - name: Report the cache volume usage at the end
+        # On master this is what gets committed; compared with the report before the build
+        # it tells what this run added to the volume and whether the cache needs pruning
+        # before Namespace's reset-when-full kicks in.
+        if: ${{ !cancelled() && steps.repo-cache.outcome == 'success' }}
+        continue-on-error: true
+        run: |
+          sudo du -xh --max-depth=2 /cache | sort -h
+          du -h --max-depth=1 /var/cache/bazel-repository-cache
+          df -h /cache
 
   # Build & upload arm64-{linux,darwin} binaries,
   # build the entire codebase on arm64-darwin,
@@ -387,7 +573,10 @@ jobs:
     runs-on: ${{ matrix.profile }}
     timeout-minutes: 120
     needs: [config]
-    if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
+    # Only on the public repo. dfinity/ic-private has had Namespace runners since 2026-11-05 (bazel-test-all
+    # runs there), but these arm64 runner profiles haven't been tried there yet: drop this condition once
+    # they have been.
+    if: github.repository == 'dfinity/ic'
     outputs:
       arm64-linux-sums: ${{ steps.sums.outputs.arm64-linux-sums }}
       arm64-darwin-sums: ${{ steps.sums.outputs.arm64-darwin-sums }}
@@ -847,7 +1036,9 @@ jobs:
       - name: Check PULL_REQUEST_BAZEL_TARGETS
         uses: ./.github/actions/bazel
         with:
-          run: ./ci/scripts/targets.py check
+          # The exclusion of the Infer Bazel Targets step of bazel-test-all, so that a Farm variant of a
+          # system-test listed in PULL_REQUEST_BAZEL_TARGETS fails the check instead of silently not running.
+          run: ./ci/scripts/targets.py check --exclude_tags=farm_system_test
 
 # only run on pull-request event - they are also triggered from schedule-daily.yml
   pocket-ic-tests-windows:
