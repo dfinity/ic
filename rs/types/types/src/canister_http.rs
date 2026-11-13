@@ -1738,6 +1738,7 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline,
+                effective_canister_id: None,
             }),
             time,
             replication: Replication::FullyReplicated,
