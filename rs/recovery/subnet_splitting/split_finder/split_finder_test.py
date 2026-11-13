@@ -69,7 +69,7 @@ class TestCsvLoading(unittest.TestCase):
         # this corresponds to the "ingress_messages_executed" column in "fake_load_sample.csv"
         self.assertEqual(
             result["loads"]["ingress_messages_executed"],
-            [1.0, 0.0, 1.0, 0.0, 3.0, 1.0, 3.0, 1.0, 3.0, 1.0, 3.0, 1.0, 3.0, 1.0, 3.0, 1.0, 3.0, 1.0, 3.0, 1.0],
+            [1, 0, 1, 0, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1],
             msg=f"`load_subnet_data` returned {result}",
         )
         self.assertEqual(result["edges"], FAKE_COMMUNICATION_EDGES)
@@ -184,8 +184,7 @@ class TestCsvLoading(unittest.TestCase):
                 msg=f"`find_split` returned a split which doesn't balance {load_type}: {split}",
             )
 
-        # Balancing the instructions alone leaves the heartbeats unbalanced, so the split above is
-        # balanced because of the heartbeats constraint rather than by coincidence.
+        # Removing the heartbeats constraint makes split_finder ignore it
         instructions_only_split = find_split(*FAKE_SAMPLE_PATHS, {"instructions_executed": epsilon}, 100)
         self.assertGreater(
             max_load_ratio(instructions_only_split, "heartbeats_and_global_timers_executed"),
@@ -204,8 +203,7 @@ class TestCsvLoading(unittest.TestCase):
                 msg=f"`find_split` returned a split which doesn't balance {load_type}: {split}",
             )
 
-        # No split balances the heartbeats as tightly as the instructions, so the split above is
-        # only found thanks to the heartbeats' own, larger, epsilon.
+        # Tightening the constraint becomes impossible
         with self.assertRaises(RuntimeError):
             find_split(*FAKE_SAMPLE_PATHS, {load_type: 0.001 for load_type in load_epsilons}, 100)
 
