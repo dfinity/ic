@@ -3860,6 +3860,7 @@ impl Operation for ProcessCanisterHttpInternal {
                 .into_iter()
                 .filter(|(id, _)| !canister_http.pending.contains(id))
                 .collect();
+            let dispatch_time = sm.get_latest_state().time();
             let client = canister_http.client.clone();
             let mut client = client.lock().unwrap();
             for (id, context) in new_requests {
@@ -3867,6 +3868,7 @@ impl Operation for ProcessCanisterHttpInternal {
                     id,
                     context,
                     socks_proxy_addrs: vec![],
+                    dispatch_time,
                 }) {
                     canister_http.pending.insert(id);
                 }
@@ -4053,6 +4055,7 @@ fn mock_canister_http_response_content(
                     id: canister_http_request_id,
                     context: context.clone(),
                     socks_proxy_addrs: vec![],
+                    dispatch_time: subnet.get_latest_state().time(),
                 })
                 .unwrap();
             loop {
