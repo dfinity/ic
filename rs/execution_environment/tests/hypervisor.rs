@@ -11125,6 +11125,123 @@ fn ic0_is_controller() {
     );
 }
 
+// Replies with `ic0.is_subnet_admin` of the principal passed as the argument,
+// as a little-endian u32, from an update and from a query.
+const IS_SUBNET_ADMIN_WAT: &str = r#"
+        (module
+            (import "ic0" "is_subnet_admin"
+                (func $is_subnet_admin (param i32 i32) (result i32)))
+            (import "ic0" "msg_arg_data_size"
+                (func $msg_arg_data_size (result i32)))
+            (import "ic0" "msg_arg_data_copy"
+                (func $msg_arg_data_copy (param i32 i32 i32)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+                (func $msg_reply_data_append (param i32 i32)))
+            (func $answer
+                ;; heap[100..] = the principal
+                (call $msg_arg_data_copy (i32.const 100) (i32.const 0) (call $msg_arg_data_size))
+                ;; heap[0..4] = is_subnet_admin(heap[100..])
+                (i32.store (i32.const 0)
+                    (call $is_subnet_admin (i32.const 100) (call $msg_arg_data_size)))
+                (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+                (call $msg_reply)
+            )
+            (func (export "canister_update update") (call $answer))
+            (func (export "canister_query query") (call $answer))
+            (memory 1 1)
+        )"#;
+
+fn is_subnet_admin(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    principal: PrincipalId,
+) -> u32 {
+    let update = get_reply(test.ingress(canister_id, "update", principal.as_slice().to_vec()));
+    let query =
+        get_reply(test.non_replicated_query(canister_id, "query", principal.as_slice().to_vec()));
+    assert_eq!(update, query);
+    u32::from_le_bytes(update.try_into().unwrap())
+}
+
+#[test]
+fn ic0_is_subnet_admin_on_a_cloud_engine() {
+    let admin = user_test_id(100).get();
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::CloudEngine)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin])
+        .build();
+    let canister_id = test.canister_from_wat(IS_SUBNET_ADMIN_WAT).unwrap();
+    let controller = test.user_id().get();
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .system_state
+            .controllers
+            .contains(&admin)
+    );
+
+    assert_eq!(is_subnet_admin(&mut test, canister_id, admin), 1);
+    // A controller is not a subnet admin by being a controller.
+    assert_eq!(is_subnet_admin(&mut test, canister_id, controller), 0);
+    assert_eq!(
+        is_subnet_admin(&mut test, canister_id, user_test_id(101).get()),
+        0
+    );
+}
+
+#[test]
+fn ic0_is_subnet_admin_on_a_rented_subnet() {
+    let admin = user_test_id(100).get();
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin])
+        .build();
+    let canister_id = test.canister_from_wat(IS_SUBNET_ADMIN_WAT).unwrap();
+
+    assert_eq!(is_subnet_admin(&mut test, canister_id, admin), 1);
+    assert_eq!(
+        is_subnet_admin(&mut test, canister_id, user_test_id(101).get()),
+        0
+    );
+}
+
+// Admins in the topology of a subnet that cannot have subnet admins are
+// ignored, as they are by the management canister.
+#[test]
+fn ic0_is_subnet_admin_returns_0_where_subnet_admins_do_not_apply() {
+    let admin = user_test_id(100).get();
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Normal)
+        .with_subnet_admins(vec![admin])
+        .build();
+    let canister_id = test.canister_from_wat(IS_SUBNET_ADMIN_WAT).unwrap();
+
+    assert_eq!(is_subnet_admin(&mut test, canister_id, admin), 0);
+}
+
+#[test]
+fn ic0_is_subnet_admin_traps_on_an_invalid_principal() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::CloudEngine)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![user_test_id(100).get()])
+        .build();
+    let canister_id = test.canister_from_wat(IS_SUBNET_ADMIN_WAT).unwrap();
+
+    let err = test
+        .ingress(canister_id, "update", vec![42; 30])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
+    assert!(
+        err.description()
+            .contains("Canister provided invalid principal id.")
+    );
+}
+
 #[test]
 fn ic0_time_constant_within_single_message() {
     let mut test = ExecutionTestBuilder::new().build();

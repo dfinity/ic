@@ -751,6 +751,16 @@ fn get_valid_system_apis_common(
             )],
         ),
         (
+            "is_subnet_admin",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I],
+                    return_type: vec![DataType::I32],
+                },
+            )],
+        ),
+        (
             "in_replicated_execution",
             vec![(
                 API_VERSION_IC0,

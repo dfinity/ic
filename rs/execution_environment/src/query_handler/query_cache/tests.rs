@@ -1801,6 +1801,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::GlobalTimerSet
         | SystemApiCallId::InReplicatedExecution
         | SystemApiCallId::IsController
+        | SystemApiCallId::IsSubnetAdmin
         | SystemApiCallId::MintCycles128
         | SystemApiCallId::MsgArgDataCopy
         | SystemApiCallId::MsgArgDataSize
