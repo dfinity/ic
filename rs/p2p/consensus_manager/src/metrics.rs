@@ -23,6 +23,7 @@ pub(crate) struct ConsensusManagerMetrics {
     pub slot_table_updates_total: IntCounter,
     pub slot_table_updates_with_artifact_total: IntCounter,
     pub slot_table_limit_exceeded_total: IntCounter,
+    pub slot_table_wrong_sender_total: IntCounter,
     pub slot_table_overwrite_total: IntCounter,
     pub slot_table_stale_total: IntCounter,
     pub slot_table_new_entry_total: IntCounterVec,
@@ -110,6 +111,14 @@ impl ConsensusManagerMetrics {
                 IntCounter::with_opts(opts!(
                     "ic_consensus_manager_slot_table_limit_exceeded_total",
                     "Slot updates that would exceed slot table limit.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
+            ),
+            slot_table_wrong_sender_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_slot_table_wrong_sender_total",
+                    "Slot updates dropped because only another peer may send the artifact.",
                     const_labels.clone(),
                 ))
                 .unwrap(),
