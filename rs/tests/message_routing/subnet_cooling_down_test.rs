@@ -17,13 +17,12 @@ subnet merge populates the ingress history properly.
 
 The subnet that is cooled down, i.e. the one that would be merged away, is
 called `M`, and the Application subnet the tool is told to merge `M` into is
-called `R`. A third Application subnet `T` holds the canisters at the other end
-of `M`'s cross-subnet calls. It is kept apart from `R` so that, once the merge
-goes ahead, the messages and calls between `T` and the canisters of `M` have to
-be rerouted to `R` by a subnet that is not itself part of the merge, rather than
-becoming calls within the destination subnet. `R` holds a canister `UR` looping
-in a call of its own, so that the state the tool downloads from the destination
-subnet and validates is not that of an idle subnet without canisters.
+called `R`. `M` exchanges the same calls with `R` as with a third Application
+subnet `T`, which is not part of the merge: once the merge goes ahead, the
+messages and calls between `R` and the canisters of `M` become messages and
+calls within the destination subnet, whereas those between `T` and the
+canisters of `M` have to be rerouted to `R` by a subnet that is not itself
+part of the merge.
 
 The tool submits its proposals through `ic-admin`, with the test neuron.
 
@@ -34,22 +33,24 @@ never meant to complete.
 Runbook::
 0. Set up an IC with an NNS subnet (with the NNS canisters installed) and three
    Application subnets `M`, `T` and `R`, of `SUBNET_SIZE` nodes each.
-1. Install a universal canister on each of `M` and `T`: `UM` on `M`, `UT` on
-   `T`.
-2. Make an ingress call to each of `UM` and `UT` with a payload that calls the
-   universal canister on the other subnet in a loop.
-3. Wait until both loops have completed a few iterations, i.e. messages are
-   actually flowing between `M` and `T` in both directions.
-4. Install the universal canisters of the steps below (`U1`, `U3`, `U5` and `U6`
-   on `M`, `U4` and `U7` on `T`, `UR` on `R`) and create two empty canisters
-   `U2a` and `U2b` on `M`, controlled by `U1`.
+1. Install two universal canisters on `M` and one on each of `T` and `R`:
+   `UMT` and `UMR` on `M`, `UT` on `T` and `UR` on `R`.
+2. Make an ingress call to each of them with a payload that calls its peer on
+   another subnet in a loop: `UMT` and `UT` call each other, and so do `UMR`
+   and `UR`.
+3. Wait until all four loops have completed a few iterations, i.e. messages
+   are actually flowing between `M` and each of `T` and `R` in both
+   directions.
+4. Install the universal canisters of the steps below (`U1`, `U3`, `U5`, `U6`,
+   `U9` and `U10` on `M`, `U4` and `U7` on `T`, `U8` and `U11` on `R`) and
+   create two empty canisters `U2a` and `U2b` on `M`, controlled by `U1`.
 5. Execute an update call on `U1` that makes two calls to the management
    canister's `install_code` method, one per `U2x`, in mode `install`, with the
    universal canister module and an `arg` that makes `canister_init` burn
    `INIT_INSTRUCTIONS` instructions. Wait until both requests have left
    `U1`'s output queue, i.e. until they are enqueued in `M`'s subnet input
    queues or already executing.
-6. Start four endless loops, each of which calls the management canister's
+6. Start five endless loops, each of which calls the management canister's
    `canister_status` method for the looping canister over and over until the
    global data of that canister is set to `LOOP_BREAK_TRIGGER`, which this test
    never does:
@@ -60,13 +61,14 @@ Runbook::
    c. execute an update call on `U6` (on `M`) that calls `U7` (on `T`) with the
       loop as its payload, so that `M` holds a canister waiting for a response
       from another subnet that never arrives;
-   d. execute an update call on `UR` (on `R`) with the loop as its payload, so
-      that `R` holds a canister looping in a call that never completes, just
-      like `M` does.
-   Wait until all four loops are running.
+   d. execute an update call on `U8` (on `R`) that calls `U9` (on `M`), like b;
+   e. execute an update call on `U10` (on `M`) that calls `U11` (on `R`), like
+      c.
+   Wait until all five loops are running.
 7. Evaluate the terms of the "merge readiness" condition for `M` and check that
-   none of the `VIOLATED_CONDITIONS` holds: `T` holds messages in its stream to
-   `M` and `M` holds messages in its own streams (the loops of step 2), the
+   none of the `VIOLATED_CONDITIONS` holds: `T` and `R` hold messages in their
+   streams to `M` and `M` holds messages in its own streams (the loops of step
+   2), the
    ingress history holds terminal entries (the calls of the steps above that
    did complete), `M`'s subnet input queues hold messages (`U1`'s `install_code`
    requests) and its subnet call context manager holds call contexts (the
@@ -83,9 +85,10 @@ Runbook::
 10. The following step of the tool is executed: `CheckMergeReadiness`, which
    waits until `M` is "merge ready" for `V`, i.e. until every term of the
    condition of step 7 holds.
-11. After `CheckMergeReadiness`: check that `UT`'s loop of step 2 is stalled,
-   i.e. that its iteration counter does not advance, as read via a query to
-   `T`. `UM`'s counter cannot be read, as `M` rejects query calls.
+11. After `CheckMergeReadiness`: check that the loops of `UT` and `UR` of step
+   2 are stalled, i.e. that their iteration counters do not advance, as read
+   via queries to `T` and `R`. The counters of `UMT` and `UMR` cannot be read,
+   as `M` rejects query calls.
 12. The following steps of the tool are executed: `HaltSourceSubnetAtCupHeight`
    and `HaltDestinationSubnetAtCupHeight`, which set the `halt_at_cup_height`
    flag of `M` and `R`, and `WaitForHaltingCupOnSourceSubnet` and
@@ -108,7 +111,8 @@ Runbook::
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
 violated before `M` starts cooling down; `M` then rejects ingress messages and
-query calls and becomes "merge ready", and `UT`'s loop of step 2 is stalled;
+query calls and becomes "merge ready", and the loops of `UT` and `UR` of step
+2 are stalled;
 the tool then halts `M` and `R` at their next CUP, and the states it downloads
 from them pass validation.
 
@@ -182,8 +186,8 @@ const INSTALL_CODE_TARGETS: [&str; 2] = ["U2a", "U2b"];
 /// for it.
 const INIT_INSTRUCTIONS: u64 = 295 * B;
 
-/// The global data value that would end the endless loops of `U3`, `U5`, `U7`
-/// and `UR`. The test never sets it, so those loops never end.
+/// The global data value that would end the endless loops of `U3`, `U5`, `U7`,
+/// `U9` and `U11`. The test never sets it, so those loops never end.
 const LOOP_BREAK_TRIGGER: &[u8] = b"break";
 
 /// The number of nodes of every subnet. More than one so that the terms of the
@@ -237,7 +241,7 @@ const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// of its Bazel target.
 const HALT_TIMEOUT: Duration = Duration::from_secs(1200);
 
-/// How long `UT`'s loop is observed to be stalled (step 11).
+/// How long the loops of `UT` and `UR` are observed to be stalled (step 11).
 const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 
 /// How long the certified heights of the nodes of `M` and `R` are observed to
@@ -337,9 +341,9 @@ pub fn test(env: TestEnv) {
     let runtime = Runtime::new().expect("failed to create a tokio runtime");
 
     // The three Application subnets: `M` is the one that is set up to be
-    // cooled down and merged away, `R` is the one it is merged into, and `T` is
-    // the one `M` exchanges messages with in a loop and that holds the
-    // canisters at the other end of the cross-subnet endless loops of step 6.
+    // cooled down and merged away, and `R` is the one it is merged into. `M`
+    // exchanges the same calls with `R` as with `T`, which is not part of the
+    // merge.
     let app_subnets: Vec<_> = env
         .topology_snapshot()
         .subnets()
@@ -374,10 +378,11 @@ struct Context<'a> {
     m_subnet: SubnetSnapshot,
     /// The subnet `M` is merged into.
     r_subnet: SubnetSnapshot,
-    /// The two canisters calling each other in a loop across subnets, `UM` on
-    /// `M` and `UT` on `T`.
-    um: UniversalCanister<'a>,
+    /// A canister on `M` calling another subnet in a loop, `UMT`.
+    umt: UniversalCanister<'a>,
+    /// The canisters on `T` and `R` calling `M` in a loop, `UT` and `UR`.
     ut: UniversalCanister<'a>,
+    ur: UniversalCanister<'a>,
 }
 
 /// Steps 1 to 7: set the scenario up and check that `M` violates the
@@ -389,7 +394,7 @@ async fn prepare<'a>(
     r_subnet: SubnetSnapshot,
     m_agent: &'a Agent,
     t_agent: &'a Agent,
-    r_agent: &Agent,
+    r_agent: &'a Agent,
 ) -> Context<'a> {
     let logger = env.logger();
     let topology = env.topology_snapshot();
@@ -405,32 +410,47 @@ async fn prepare<'a>(
         topology.root_subnet_id(),
     );
 
-    // Step 1: Install a universal canister on each of `M` and `T`.
-    info!(logger, "Step 1: Installing universal canisters UM and UT");
-    let um =
-        UniversalCanister::new_with_retries(m_agent, m_node.effective_canister_id(), &logger).await;
-    let ut =
-        UniversalCanister::new_with_retries(t_agent, t_node.effective_canister_id(), &logger).await;
+    let m_id = m_node.effective_canister_id();
+    let t_id = t_node.effective_canister_id();
+    let r_id = r_node.effective_canister_id();
+
+    // Step 1: Install two universal canisters on `M` and one on each of `T`
+    // and `R`.
     info!(
         logger,
-        "Step 1 done: UM={}, UT={}",
-        um.canister_id(),
+        "Step 1: Installing universal canisters UMT, UMR, UT and UR"
+    );
+    let umt = UniversalCanister::new_with_retries(m_agent, m_id, &logger).await;
+    let umr = UniversalCanister::new_with_retries(m_agent, m_id, &logger).await;
+    let ut = UniversalCanister::new_with_retries(t_agent, t_id, &logger).await;
+    let ur = UniversalCanister::new_with_retries(r_agent, r_id, &logger).await;
+    info!(
+        logger,
+        "Step 1 done: UMT={}, UMR={} on M; UT={} on T; UR={} on R",
+        umt.canister_id(),
+        umr.canister_id(),
         ut.canister_id(),
+        ur.canister_id(),
     );
 
-    // Step 2: Start a loop of calls to the canister on the other subnet on both
-    // universal canisters.
-    info!(logger, "Step 2: Starting the UM <-> UT call loops");
-    start_call_loop(&um, ut.canister_id()).await;
-    start_call_loop(&ut, um.canister_id()).await;
-    info!(logger, "Step 2 done: both call loops started");
-
-    // Step 3: Wait until both loops have completed a few iterations.
+    // Step 2: Start a loop of calls to the peer on the other subnet on every
+    // universal canister of step 1.
     info!(
         logger,
-        "Step 3: Waiting for {MIN_LOOP_ITERATIONS} iterations of both call loops"
+        "Step 2: Starting the UMT <-> UT and UMR <-> UR call loops"
     );
-    for (canister, name) in [(&um, "UM"), (&ut, "UT")] {
+    start_call_loop(&umt, ut.canister_id()).await;
+    start_call_loop(&ut, umt.canister_id()).await;
+    start_call_loop(&umr, ur.canister_id()).await;
+    start_call_loop(&ur, umr.canister_id()).await;
+    info!(logger, "Step 2 done: all four call loops started");
+
+    // Step 3: Wait until all four loops have completed a few iterations.
+    info!(
+        logger,
+        "Step 3: Waiting for {MIN_LOOP_ITERATIONS} iterations of all four call loops"
+    );
+    for (canister, name) in [(&umt, "UMT"), (&ut, "UT"), (&umr, "UMR"), (&ur, "UR")] {
         retry_with_msg_async!(
             format!("waiting for {MIN_LOOP_ITERATIONS} iterations of {name}'s call loop"),
             &logger,
@@ -447,7 +467,10 @@ async fn prepare<'a>(
         .await
         .unwrap_or_else(|e| panic!("{name}'s call loop did not make progress: {e}"));
     }
-    info!(logger, "Step 3 done: both call loops are making progress");
+    info!(
+        logger,
+        "Step 3 done: all four call loops are making progress"
+    );
 
     // Step 4: Install all the canisters of the steps below. Every installation
     // has to happen before step 5 starts `U1`'s `install_code` calls: at most
@@ -457,30 +480,34 @@ async fn prepare<'a>(
     // `U1`'s calls for as long as they run.
     info!(
         logger,
-        "Step 4: Installing U1, U3, U5, U6 on M, U4, U7 on T and UR on R, and creating {} \
-         canisters for U1 to install code on",
+        "Step 4: Installing U1, U3, U5, U6, U9, U10 on M, U4, U7 on T and U8, U11 on R, and \
+         creating {} canisters for U1 to install code on",
         INSTALL_CODE_TARGETS.len(),
     );
-    let m_id = m_node.effective_canister_id();
-    let t_id = t_node.effective_canister_id();
     let u1 = UniversalCanister::new_with_retries(m_agent, m_id, &logger).await;
     let u3 = UniversalCanister::new_with_retries(m_agent, m_id, &logger).await;
     let u4 = UniversalCanister::new_with_retries(t_agent, t_id, &logger).await;
     let u5 = UniversalCanister::new_with_retries(m_agent, m_id, &logger).await;
     let u6 = UniversalCanister::new_with_retries(m_agent, m_id, &logger).await;
     let u7 = UniversalCanister::new_with_retries(t_agent, t_id, &logger).await;
-    let ur =
-        UniversalCanister::new_with_retries(r_agent, r_node.effective_canister_id(), &logger).await;
+    let u8 = UniversalCanister::new_with_retries(r_agent, r_id, &logger).await;
+    let u9 = UniversalCanister::new_with_retries(m_agent, m_id, &logger).await;
+    let u10 = UniversalCanister::new_with_retries(m_agent, m_id, &logger).await;
+    let u11 = UniversalCanister::new_with_retries(r_agent, r_id, &logger).await;
     info!(
         logger,
-        "Step 4: U1={}, U3={}, U5={}, U6={} on M; U4={}, U7={} on T; UR={} on R",
+        "Step 4: U1={}, U3={}, U5={}, U6={}, U9={}, U10={} on M; U4={}, U7={} on T; U8={}, \
+         U11={} on R",
         u1.canister_id(),
         u3.canister_id(),
         u5.canister_id(),
         u6.canister_id(),
+        u9.canister_id(),
+        u10.canister_id(),
         u4.canister_id(),
         u7.canister_id(),
-        ur.canister_id(),
+        u8.canister_id(),
+        u11.canister_id(),
     );
     let mut targets = Vec::new();
     for name in INSTALL_CODE_TARGETS {
@@ -506,13 +533,14 @@ async fn prepare<'a>(
         "Step 5 done: all of U1's `install_code` requests left its output queue"
     );
 
-    // Step 6: Start the four endless loops.
-    info!(logger, "Step 6: Starting the four endless loops");
+    // Step 6: Start the five endless loops.
+    info!(logger, "Step 6: Starting the five endless loops");
     for (canister, name, callee) in [
         (&u3, "U3", None),
         (&u4, "U4", Some(&u5)),
         (&u6, "U6", Some(&u7)),
-        (&ur, "UR", None),
+        (&u8, "U8", Some(&u9)),
+        (&u10, "U10", Some(&u11)),
     ] {
         let payload = match callee {
             None => endless_loop(),
@@ -524,13 +552,19 @@ async fn prepare<'a>(
             .unwrap_or_else(|e| panic!("submitting {name}'s update call should succeed: {e}"))
             .unwrap_or_else(|| panic!("{name}'s update call should not have completed already"));
     }
-    for (canister, name) in [(&u3, "U3"), (&u5, "U5"), (&u7, "U7"), (&ur, "UR")] {
+    for (canister, name) in [
+        (&u3, "U3"),
+        (&u5, "U5"),
+        (&u7, "U7"),
+        (&u9, "U9"),
+        (&u11, "U11"),
+    ] {
         await_loop_started(canister, name, &logger).await;
     }
     info!(
         logger,
-        "Step 6 done: U3 and UR are looping, U5 is looping in a call from U4, and U7 is looping \
-         in a call from U6"
+        "Step 6 done: U3 is looping, and U5, U7, U9 and U11 are looping in calls from U4, U6, \
+         U8 and U10, respectively"
     );
 
     // Step 7: Check that the scenario violates the individual conditions.
@@ -538,8 +572,9 @@ async fn prepare<'a>(
 
     Context {
         logger,
-        um,
+        umt,
         ut,
+        ur,
         m_subnet,
         r_subnet,
     }
@@ -612,7 +647,7 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
 
     exec_next_step(StepType::CheckMergeReadiness);
     info!(logger, "Step 10 done: subnet M is \"merge ready\"");
-    runtime.block_on(check_ut_loop_stalled(context));
+    runtime.block_on(check_loops_stalled(context));
 
     info!(logger, "Step 12: Halting subnets M and R at their next CUP");
     exec_next_step(StepType::HaltSourceSubnetAtCupHeight);
@@ -758,7 +793,7 @@ async fn check_subnets_halted(context: &Context<'_>) {
 /// effect.
 async fn check_ingress_and_queries_rejected(context: &Context<'_>) {
     let logger = &context.logger;
-    let um = &context.um;
+    let umt = &context.umt;
 
     info!(
         logger,
@@ -773,12 +808,12 @@ async fn check_ingress_and_queries_rejected(context: &Context<'_>) {
             // Submitted rather than called: an ingress message that is still
             // accepted is never executed by a cooling down subnet, so waiting for
             // its completion would only wait for it to expire.
-            match um.submit_update(wasm().reply_data(&[])).await {
-                Ok(_) => bail!("ingress message to UM was still accepted"),
+            match umt.submit_update(wasm().reply_data(&[])).await {
+                Ok(_) => bail!("ingress message to UMT was still accepted"),
                 Err(err) => {
                     let err = err.to_string();
                     if !err.contains("cooling down") {
-                        bail!("ingress message to UM failed unexpectedly: {err}");
+                        bail!("ingress message to UMT failed unexpectedly: {err}");
                     }
                     Ok(())
                 }
@@ -798,12 +833,12 @@ async fn check_ingress_and_queries_rejected(context: &Context<'_>) {
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || async {
-            match um.query(wasm().reply_data(&[])).await {
-                Ok(_) => bail!("query call to UM was still answered"),
+            match umt.query(wasm().reply_data(&[])).await {
+                Ok(_) => bail!("query call to UMT was still answered"),
                 Err(err) => {
                     let err = err.to_string();
                     if !err.contains("cooling down") {
-                        bail!("query call to UM failed unexpectedly: {err}");
+                        bail!("query call to UMT failed unexpectedly: {err}");
                     }
                     Ok(())
                 }
@@ -818,30 +853,41 @@ async fn check_ingress_and_queries_rejected(context: &Context<'_>) {
     );
 }
 
-/// Step 11: check that `UT`'s call loop of step 2 is stalled, i.e. that its
-/// iteration counter, read via a query to `T`, does not advance. `UM`'s counter
-/// cannot be read, as `M` rejects query calls.
+/// Step 11: check that the call loops of `UT` and `UR` of step 2 are stalled,
+/// i.e. that their iteration counters, read via queries to `T` and `R`, do not
+/// advance. The counters of `UMT` and `UMR` cannot be read, as `M` rejects
+/// query calls.
 ///
-/// Iterations whose call to `UM` was rejected with `SYS_TRANSIENT` do not
-/// count (see `start_call_loop`).
-async fn check_ut_loop_stalled(context: &Context<'_>) {
+/// Iterations whose call to `M` was rejected with `SYS_TRANSIENT` do not count
+/// (see `start_call_loop`).
+async fn check_loops_stalled(context: &Context<'_>) {
     let logger = &context.logger;
     info!(
         logger,
-        "Step 11: Checking that UT's call loop is stalled over {STALL_OBSERVATION_PERIOD:?}"
+        "Step 11: Checking that the call loops of UT and UR are stalled over \
+         {STALL_OBSERVATION_PERIOD:?}"
     );
-    let ut = &context.ut;
-    let ut_before = global_counter(ut).await.unwrap();
+    let canisters = [(&context.ut, "UT"), (&context.ur, "UR")];
+    let mut before = Vec::new();
+    for (canister, _) in canisters {
+        before.push(global_counter(canister).await.unwrap());
+    }
     tokio::time::sleep(STALL_OBSERVATION_PERIOD).await;
-    let ut_after = global_counter(ut).await.unwrap();
-    assert_eq!(
-        ut_before, ut_after,
-        "UT's call loop advanced from iteration {ut_before} to {ut_after} while subnet M was \
-         cooling down",
-    );
+    for ((canister, name), before) in canisters.into_iter().zip(before) {
+        let after = global_counter(canister).await.unwrap();
+        assert_eq!(
+            before, after,
+            "{name}'s call loop advanced from iteration {before} to {after} while subnet M was \
+             cooling down",
+        );
+        info!(
+            logger,
+            "Step 11: {name}'s call loop is stalled at iteration {after}"
+        );
+    }
     info!(
         logger,
-        "Step 11 done: UT's call loop is stalled at iteration {ut_after}"
+        "Step 11 done: the call loops of UT and UR are stalled"
     );
 }
 
@@ -1012,7 +1058,7 @@ async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
         .expect("starting the call loop should succeed");
 }
 
-/// The payload of the endless loops of `U3`, `U5`, `U7` and `UR`: bump the
+/// The payload of the endless loops of `U3`, `U5`, `U7`, `U9` and `U11`: bump the
 /// global counter, so that the test can observe (via a query) that the payload
 /// started executing, and then loop until the global data is set to
 /// `LOOP_BREAK_TRIGGER`, which this test never does.
