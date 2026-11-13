@@ -30,9 +30,8 @@ use ic_consensus_system_test_utils::{
     rw_message::cert_state_makes_progress_with_retries,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    DKG_INTERVAL, await_pre_signature_stash_size, enable_chain_key_signing,
-    get_public_key_and_test_signature, get_public_key_with_logger, make_key_ids_for_all_schemes,
-    set_pre_signature_stash_size,
+    await_pre_signature_stash_size, enable_chain_key_signing, get_public_key_and_test_signature,
+    get_public_key_with_logger, make_key_ids_for_all_schemes, set_pre_signature_stash_size,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -60,6 +59,20 @@ use std::collections::BTreeMap;
 const NODES_COUNT: usize = 4;
 const UNASSIGNED_NODES_COUNT: usize = 3;
 const PRE_SIGNATURES_TO_CREATE_IN_ADVANCE: u32 = 5;
+
+// Adding the unassigned nodes makes the subnet reshare its IDKG keys to all nodes. The reshare has
+// to complete within the DKG interval in which it starts, otherwise the maker of the next summary
+// block raises the `master_key_transcript_missing` critical error, which fails the test:
+// - The reshare starts at the first summary block whose validation context uses a registry version
+//   that includes the new nodes, which can be as early as ~10 s after the proposal is executed.
+// - Each reshare dealing needs support shares from 2f+1 = 5 of the 7 receivers, so at least one
+//   new node must take part. Before it can, its orchestrator has to notice the assignment (it
+//   checks every 10 s), start the replica, connect to the other nodes (failed dials are retried
+//   every 10 s) and follow the chain. This can take more than 10 s after the reshare started.
+// 20 blocks, as with the `DKG_INTERVAL` of 19 shared by the other tecdsa tests, last only ~8 s on
+// this subnet, while 50 blocks last ~19-25 s. Don't make the interval much longer either, as the
+// test waits for several DKG intervals.
+const DKG_INTERVAL: u64 = 49;
 
 const MASTER_KEY_TRANSCRIPTS_CREATED: &str = "consensus_master_key_transcripts_created";
 
