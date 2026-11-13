@@ -124,13 +124,17 @@ impl transport::MuxInto<LauncherToController> for launchersvc::Reply {
     }
 }
 
-/// Ignores `SIGTERM`, so that a `SIGTERM` sent to the replica's whole process
-/// group or cgroup only stops the replica. The launcher and sandbox processes
-/// instead exit when their socket to the replica reaches EOF, i.e. once the
-/// replica has exited.
-pub(crate) fn ignore_sigterm() {
-    // SAFETY: Ignoring a signal installs no signal handler.
-    unsafe { signal(Signal::SIGTERM, SigHandler::SigIgn) }.expect("Failed to ignore SIGTERM");
+/// Ignores `SIGTERM` and `SIGINT`, so that either signal, sent to the replica's
+/// whole process group or cgroup (e.g. by systemd or Ctrl-C), only stops the
+/// replica, which handles both. The launcher and sandbox processes instead exit
+/// when their socket to the replica reaches EOF, i.e. once the replica has
+/// exited.
+pub(crate) fn ignore_shutdown_signals() {
+    for sig in [Signal::SIGTERM, Signal::SIGINT] {
+        // SAFETY: Ignoring a signal installs no signal handler.
+        unsafe { signal(sig, SigHandler::SigIgn) }
+            .unwrap_or_else(|e| panic!("Failed to ignore {sig}: {e}"));
+    }
 }
 
 /// Common setup to start the sandbox and launcher executables.
@@ -169,7 +173,7 @@ fn abort_on_panic() {
 /// process, and it calls for system call and execution state change
 /// operations into the controller.
 pub fn canister_sandbox_main() {
-    ignore_sigterm();
+    ignore_shutdown_signals();
     let socket = child_process_initialization();
     let mut embedder_config_arg = None;
 
