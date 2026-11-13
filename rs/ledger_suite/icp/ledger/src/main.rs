@@ -1,9 +1,6 @@
 #[cfg(feature = "canbench-rs")]
 mod canbench;
 
-// Only used by `canister_init`, which is not compiled with the `canbench-rs` feature.
-#[cfg(not(feature = "canbench-rs"))]
-use candid::Decode;
 use candid::{Encode, Nat, Principal, candid_method};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
@@ -590,6 +587,7 @@ fn canister_init(arg: LedgerCanisterPayload) {
 #[cfg(not(feature = "canbench-rs"))]
 #[unsafe(export_name = "canister_init")]
 fn main() {
+    use candid::Decode;
     in_executor_context(|| {
         let bytes = arg_data_raw();
         // We support the old init argument for backward
