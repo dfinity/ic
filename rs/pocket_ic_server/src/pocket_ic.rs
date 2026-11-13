@@ -118,9 +118,7 @@ use ic_state_machine_tests::{
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::messages::{
-    CertificateDelegationFormat, CertificateDelegationMetadata, SignedSenderInfo,
-};
+use ic_types::messages::SignedSenderInfo;
 use ic_types::{
     CanisterId, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SnapshotId,
     SubnetId,
@@ -135,8 +133,8 @@ use ic_types::{
     crypto::{BasicSig, BasicSigOf, CryptoResult, Signable, threshold_sig::IcRootOfTrust},
     malicious_flags::MaliciousFlags,
     messages::{
-        CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId as OtherMessageId,
-        QueryResponseHash, ReplicaHealthStatus,
+        HttpCallContent, HttpRequestEnvelope, MessageId as OtherMessageId, QueryResponseHash,
+        ReplicaHealthStatus,
     },
     time::GENESIS,
 };
@@ -3460,18 +3458,27 @@ impl PocketIc {
         self.subnets.get_nns()
     }
 
-    fn get_nns_delegation_for_subnet(&self, subnet_id: SubnetId) -> Option<CertificateDelegation> {
-        let nns_subnet = match self.nns_subnet() {
-            Some(nns_subnet) => nns_subnet,
-            None => {
-                return None;
-            }
-        };
-        if nns_subnet.get_subnet_id() == subnet_id {
-            None
-        } else {
-            nns_subnet.get_delegation_for_subnet(subnet_id).ok()
-        }
+    fn get_nns_delegation_for_subnet(&self, subnet: &StateMachine) -> NNSDelegationReader {
+        let subnet_id = subnet.get_subnet_id();
+
+        let maybe_delegation = self
+            .nns_subnet()
+            .filter(|nns_subnet| nns_subnet.get_subnet_id() != subnet_id)
+            .and_then(|nns_subnet| nns_subnet.get_delegation_for_subnet(subnet_id).ok());
+
+        let builder = maybe_delegation.map(|delegation| {
+            Arc::new(
+                NNSDelegationBuilder::try_new(
+                    delegation.certificate,
+                    subnet_id,
+                    subnet.replica_logger.clone(),
+                )
+                .unwrap(),
+            )
+        });
+
+        let (_, delegation_rx) = watch::channel(builder);
+        NNSDelegationReader::new(delegation_rx)
     }
 }
 
@@ -4965,22 +4972,13 @@ impl Operation for Query {
         let subnet = route_call(pic, canister_call);
         match subnet {
             Ok(subnet) => {
-                let delegation = pic
-                    .get_nns_delegation_for_subnet(subnet.get_subnet_id())
-                    .map(|delegation| {
-                        (
-                            delegation,
-                            CertificateDelegationMetadata {
-                                format: CertificateDelegationFormat::Flat,
-                            },
-                        )
-                    });
+                let delegation_reader = pic.get_nns_delegation_for_subnet(&subnet);
                 match subnet.query_as_with_delegation_and_sender_info(
                     self.0.sender,
                     self.0.canister_id,
                     self.0.method.clone(),
                     self.0.payload.clone(),
-                    delegation,
+                    delegation_reader.snapshot(),
                     self.0.sender_info.clone(),
                 ) {
                     Ok(result) => {
@@ -5205,17 +5203,7 @@ impl Operation for CallRequest {
                     CallRequestVersion::V3
                     | CallRequestVersion::V4
                     | CallRequestVersion::SubnetV4 => {
-                        let subnet_id = subnet.get_subnet_id();
-                        let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
-                        let builder = delegation.map(|delegation| {
-                            NNSDelegationBuilder::try_new(
-                                delegation.certificate,
-                                subnet_id,
-                                subnet.replica_logger.clone(),
-                            )
-                            .unwrap()
-                        });
-                        let (_, delegation_rx) = watch::channel(builder);
+                        let delegation_reader = pic.get_nns_delegation_for_subnet(&subnet);
                         let metrics_registry = MetricsRegistry::new();
                         let metrics = HttpHandlerMetrics::new(&metrics_registry);
 
@@ -5225,7 +5213,7 @@ impl Operation for CallRequest {
                             metrics,
                             http_handler::Config::default()
                                 .ingress_message_certificate_timeout_seconds,
-                            NNSDelegationReader::new(delegation_rx),
+                            delegation_reader,
                             subnet.state_manager.clone(),
                             match self.version {
                                 CallRequestVersion::V2 => unreachable!(),
@@ -5331,17 +5319,7 @@ impl Operation for QueryRequest {
         match subnet {
             Err(e) => OpOut::Error(e),
             Ok(subnet) => {
-                let subnet_id = subnet.get_subnet_id();
-                let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
-                let builder = delegation.map(|delegation| {
-                    NNSDelegationBuilder::try_new(
-                        delegation.certificate,
-                        subnet_id,
-                        subnet.replica_logger.clone(),
-                    )
-                    .unwrap()
-                });
-                let (_, delegation_rx) = watch::channel(builder);
+                let delegation_reader = pic.get_nns_delegation_for_subnet(&subnet);
                 let node = &subnet.nodes[0];
                 subnet.certify_latest_state();
                 let query_handler = subnet.query_handler.lock().unwrap().clone();
@@ -5354,9 +5332,9 @@ impl Operation for QueryRequest {
                     Arc::new(PocketNodeSigner(node.node_signing_key.clone())),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    NNSDelegationReader::new(delegation_rx),
+                    delegation_reader,
                     query_handler,
-                    subnet_id,
+                    subnet.get_subnet_id(),
                     self.version,
                 )
                 .with_malicious_flags(pic.malicious_flags.clone())
@@ -5421,23 +5399,13 @@ impl Operation for CanisterReadStateRequest {
         ) {
             Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
             Ok(subnet) => {
-                let subnet_id = subnet.get_subnet_id();
-                let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
+                let delegation_reader = pic.get_nns_delegation_for_subnet(&subnet);
                 let nns_subnet_id = pic
                     .nns_subnet()
                     .map(|subnet| subnet.get_subnet_id())
                     .expect(
                         "The NNS subnet should already exist if we are already executing requests",
                     );
-                let builder = delegation.map(|delegation| {
-                    NNSDelegationBuilder::try_new(
-                        delegation.certificate,
-                        subnet_id,
-                        subnet.replica_logger.clone(),
-                    )
-                    .unwrap()
-                });
-                let (_, delegation_rx) = watch::channel(builder);
                 subnet.certify_latest_state();
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
                 let mainnet_root_of_trust =
@@ -5448,7 +5416,7 @@ impl Operation for CanisterReadStateRequest {
                     subnet.state_manager.clone(),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    NNSDelegationReader::new(delegation_rx),
+                    delegation_reader,
                     nns_subnet_id,
                     self.version,
                     read_state::Target::Canister,
@@ -5507,23 +5475,13 @@ impl Operation for SubnetReadStateRequest {
         match route(pic, EffectivePrincipal::SubnetId(self.subnet_id), false) {
             Err(e) => OpOut::Error(PocketIcError::SubnetRequestRoutingError(e)),
             Ok(subnet) => {
-                let subnet_id = subnet.get_subnet_id();
                 let nns_subnet_id = pic
                     .nns_subnet()
                     .map(|subnet| subnet.get_subnet_id())
                     .expect(
                         "The NNS subnet should already exist if we are already executing requests",
                     );
-                let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
-                let builder = delegation.map(|delegation| {
-                    NNSDelegationBuilder::try_new(
-                        delegation.certificate,
-                        subnet_id,
-                        subnet.replica_logger.clone(),
-                    )
-                    .unwrap()
-                });
-                let (_, delegation_rx) = watch::channel(builder);
+                let delegation_reader = pic.get_nns_delegation_for_subnet(&subnet);
                 subnet.certify_latest_state();
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
                 let mainnet_root_of_trust =
@@ -5534,7 +5492,7 @@ impl Operation for SubnetReadStateRequest {
                     subnet.state_manager.clone(),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    NNSDelegationReader::new(delegation_rx),
+                    delegation_reader,
                     nns_subnet_id,
                     self.version,
                     read_state::Target::Subnet,

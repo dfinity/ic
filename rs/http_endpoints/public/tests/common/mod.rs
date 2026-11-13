@@ -586,12 +586,14 @@ pub struct HttpEndpointHandles {
     pub terminal_state_ingress_messages: Sender<(MessageId, Height)>,
     pub certified_height_watcher: watch::Sender<Height>,
     pub metrics: MetricsRegistry,
-    pub nns_delegation_watcher: watch::Sender<Option<NNSDelegationBuilder>>,
+    pub nns_delegation_watcher: watch::Sender<Option<Arc<NNSDelegationBuilder>>>,
 }
 
-pub fn nns_delegation_builder(delegation: CertificateDelegation) -> NNSDelegationBuilder {
-    NNSDelegationBuilder::try_new(delegation.certificate, subnet_test_id(1), no_op_logger())
-        .expect("The NNS delegation should be well-formed.")
+pub fn nns_delegation_builder(delegation: CertificateDelegation) -> Arc<NNSDelegationBuilder> {
+    Arc::new(
+        NNSDelegationBuilder::try_new(delegation.certificate, subnet_test_id(1), no_op_logger())
+            .expect("The NNS delegation should be well-formed."),
+    )
 }
 
 pub struct HttpEndpointBuilder {

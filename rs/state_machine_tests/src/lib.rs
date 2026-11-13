@@ -77,6 +77,7 @@ use ic_management_canister_types_private::{
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
+use ic_nns_delegation_reader::{CanisterRangesFilter, NNSDelegationSnapshot};
 use ic_protobuf::{
     registry::{
         crypto::v1::{ChainKeyEnabledSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
@@ -171,11 +172,11 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, CallbackId, Certificate, CertificateDelegation, CertificateDelegationMetadata,
-        EXPECTED_MESSAGE_ID_LENGTH, HttpCallContent, HttpCanisterUpdate, HttpRequestContent,
-        HttpRequestEnvelope, MessageId, Payload as MsgPayload, Query, QuerySource,
-        RawSignedSenderInfo, RejectContext, RequestOrResponse, Response, SignedIngress,
-        SignedSenderInfo, extract_effective_canister_id,
+        Blob, CallbackId, Certificate, CertificateDelegation, EXPECTED_MESSAGE_ID_LENGTH,
+        HttpCallContent, HttpCanisterUpdate, HttpRequestContent, HttpRequestEnvelope, MessageId,
+        Payload as MsgPayload, Query, QuerySource, RawSignedSenderInfo, RejectContext,
+        RequestOrResponse, Response, SignedIngress, SignedSenderInfo,
+        extract_effective_canister_id,
     },
     signature::ThresholdSignature,
     state_manager::StateManagerResult,
@@ -4676,20 +4677,20 @@ impl StateMachine {
             receiver,
             method,
             method_payload,
-            None,
+            NNSDelegationSnapshot::none(),
             None,
         )
     }
 
-    /// Queries the canister with the specified ID and with an optional subnet delegation from the NNS
-    /// and sender info.
+    /// Queries the canister with the specified ID, with the NNS delegation held by
+    /// `delegation_snapshot` and sender info.
     pub fn query_as_with_delegation_and_sender_info(
         &self,
         sender: PrincipalId,
         receiver: CanisterId,
         method: impl ToString,
         method_payload: Vec<u8>,
-        delegation: Option<(CertificateDelegation, CertificateDelegationMetadata)>,
+        delegation_snapshot: NNSDelegationSnapshot,
         sender_info: Option<SignedSenderInfo>,
     ) -> Result<WasmResult, UserError> {
         self.certify_latest_state();
@@ -4707,7 +4708,8 @@ impl StateMachine {
         let query_svc = self.query_handler.lock().unwrap().clone();
         let input = QueryExecutionInput {
             query: user_query,
-            certificate_delegation_with_metadata: delegation,
+            certificate_delegation_with_metadata: delegation_snapshot
+                .get_delegation_with_metadata(CanisterRangesFilter::Flat),
         };
         if let Ok((result, _)) = self.runtime.block_on(query_svc.oneshot(input)).unwrap() {
             result

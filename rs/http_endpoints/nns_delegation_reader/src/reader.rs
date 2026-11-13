@@ -11,7 +11,7 @@ use ic_types::{
     },
 };
 use serde::ser::Serialize;
-use std::fmt;
+use std::{fmt, sync::Arc};
 use tokio::sync::watch;
 
 use crate::validation::{
@@ -55,34 +55,51 @@ impl From<CanisterRangesCheck> for CanisterRangesFilter {
 /// Wrapper around [`tokio::sync::watch::Receiver`] with some utility methods.
 // TODO(CON-1487): Consider caching the delegations per canister range.
 pub struct NNSDelegationReader {
-    receiver: watch::Receiver<Option<NNSDelegationBuilder>>,
+    receiver: watch::Receiver<Option<Arc<NNSDelegationBuilder>>>,
 }
 
 impl NNSDelegationReader {
-    pub fn new(receiver: watch::Receiver<Option<NNSDelegationBuilder>>) -> Self {
+    pub fn new(receiver: watch::Receiver<Option<Arc<NNSDelegationBuilder>>>) -> Self {
         Self { receiver }
     }
 
-    /// Verifies the most recent NNS delegation known to the replica against the given
-    /// replicated state and, only if it is consistent, builds and returns it (see
-    /// [`NNSDelegationBuilder::build_verified`]).
-    /// Consecutive calls might verify and return different delegations.
-    /// Note: on the NNS subnet this always returns `Ok(None)`.
+    /// Returns a snapshot of the most recent NNS delegation known to the replica.
+    /// Consecutive calls might return different delegations.
+    pub fn snapshot(&self) -> NNSDelegationSnapshot {
+        NNSDelegationSnapshot(self.receiver.borrow().clone())
+    }
+
+    pub async fn wait_until_updated(&mut self) -> Result<(), watch::error::RecvError> {
+        self.receiver.changed().await
+    }
+}
+
+/// An immutable snapshot of the NNS delegation to serve. It holds none on the NNS subnet.
+#[derive(Clone, Debug)]
+pub struct NNSDelegationSnapshot(Option<Arc<NNSDelegationBuilder>>);
+
+impl NNSDelegationSnapshot {
+    /// A snapshot holding no delegation, e.g. on the NNS subnet.
+    pub fn none() -> Self {
+        Self(None)
+    }
+
+    /// Verifies the delegation, if any, against the given replicated state and, only if it is
+    /// consistent, builds and returns it (see [`NNSDelegationBuilder::build_verified`]).
+    /// Returns `Ok(None)` when the snapshot holds no delegation.
     pub fn get_delegation(
         &self,
         ranges_check: CanisterRangesCheck,
         state: &dyn StateForDelegationVerification,
     ) -> Result<Option<CertificateDelegation>, DelegationVerificationError> {
-        self.receiver
-            .borrow()
-            .as_ref()
+        self.0
+            .as_deref()
             .map(|builder| builder.build_verified(ranges_check, state))
             .transpose()
     }
 
-    /// Returns the most recent NNS delegation known to the replica together with some metadata.
-    /// Consecutive calls might return different delegations.
-    /// Note: on the NNS subnet this always returns `None`.
+    /// Returns the delegation together with some metadata.
+    /// Returns `None` when the snapshot holds no delegation.
     /// TODO: Make this method also verify the delegation against a given replicated state
     pub fn get_delegation_with_metadata(
         &self,
@@ -96,14 +113,9 @@ impl NNSDelegationReader {
             },
         };
 
-        self.receiver
-            .borrow()
-            .as_ref()
+        self.0
+            .as_deref()
             .map(|builder| (builder.build_unverified(canister_ranges_filter), metadata))
-    }
-
-    pub async fn wait_until_updated(&mut self) -> Result<(), watch::error::RecvError> {
-        self.receiver.changed().await
     }
 }
 

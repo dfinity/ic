@@ -35,7 +35,7 @@ impl VerifiedDelegationSource {
         }
     }
 
-    /// Wrapper around `NNSDelegationReader::get_delegation` to log and record metrics on
+    /// Wrapper around `NNSDelegationSnapshot::get_delegation` to log and record metrics on
     /// verification failures.
     pub(crate) fn get_delegation(
         &self,
@@ -43,6 +43,7 @@ impl VerifiedDelegationSource {
         certified_state: &ReplicatedState,
     ) -> Result<Option<CertificateDelegation>, DelegationVerificationError> {
         self.nns_delegation_reader
+            .snapshot()
             .get_delegation(canister_ranges_check, certified_state)
             .inspect_err(|err| {
                 warn!(
