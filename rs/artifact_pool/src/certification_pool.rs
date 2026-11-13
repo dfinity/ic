@@ -15,11 +15,10 @@ use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_types::NodeId;
 use ic_types::consensus::IsShare;
-use ic_types::crypto::crypto_hash;
+use ic_types::crypto::{CryptoHash, CryptoHashOf, crypto_hash};
 use ic_types::{
     Height,
     artifact::CertificationMessageId,
-    consensus::HasHeight,
     consensus::certification::{
         Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
     },
@@ -106,9 +105,9 @@ impl PoolMetrics {
 pub struct CertificationPoolImpl {
     node_id: NodeId,
 
-    unvalidated_share_index: HeightIndex<CertificationMessageHash>,
-    unvalidated_cert_index: HeightIndex<CertificationMessageHash>,
-    unvalidated: BTreeMap<CertificationMessageHash, CertificationMessage>,
+    unvalidated_share_index: HeightIndex<CryptoHashOf<CertificationShare>>,
+    unvalidated_cert_index: HeightIndex<CryptoHashOf<Certification>>,
+    unvalidated: BTreeMap<CryptoHash, CertificationMessage>,
 
     pub validated: Box<dyn MutablePoolSection + Send + Sync>,
 
@@ -191,37 +190,26 @@ impl CertificationPoolImpl {
 
     /// Removes all unvalidated artifacts below the given height
     fn remove_all_unvalidated_below(&mut self, height: Height) {
-        // remove from unvalidated pool
-        let range = (
-            std::ops::Bound::Included(Height::from(0)),
-            std::ops::Bound::Excluded(height),
-        );
-        self.unvalidated_share_index
-            .range(range)
-            .chain(self.unvalidated_cert_index.range(range))
-            .for_each(|(_, ids)| {
-                for id in ids {
-                    self.unvalidated.remove(id);
-                }
-            });
-
-        // purge indices
-        self.unvalidated_share_index.remove_all_below(height);
-        self.unvalidated_cert_index.remove_all_below(height);
+        for (_height, share_hash) in self.unvalidated_share_index.remove_all_below(height) {
+            self.unvalidated.remove(share_hash.get_ref());
+        }
+        for (_height, cert_hash) in self.unvalidated_cert_index.remove_all_below(height) {
+            self.unvalidated.remove(cert_hash.get_ref());
+        }
     }
 
     fn update_metrics(&self) {
         // Unvalidated section
         if let (Some(min_cert), Some(max_cert)) = (
-            self.unvalidated_cert_index.range(..).next().map(|x| *x.0),
-            self.unvalidated_cert_index.range(..).last().map(|x| *x.0),
+            self.unvalidated_cert_index.min_height(),
+            self.unvalidated_cert_index.max_height(),
         ) {
             self.unvalidated_pool_metrics
                 .set_certification_range(HeightRange::new(min_cert, max_cert));
         }
         if let (Some(min_share), Some(max_share)) = (
-            self.unvalidated_share_index.range(..).next().map(|x| *x.0),
-            self.unvalidated_share_index.range(..).last().map(|x| *x.0),
+            self.unvalidated_share_index.min_height(),
+            self.unvalidated_share_index.max_height(),
         ) {
             self.unvalidated_pool_metrics
                 .set_certification_share_range(HeightRange::new(min_share, max_share));
@@ -252,23 +240,41 @@ impl CertificationPoolImpl {
             .count
             .set(self.validated.certification_shares().size() as i64);
     }
+
+    #[cfg(test)]
+    fn all_heights_with_artifacts(&self) -> Vec<Height> {
+        use ic_types::consensus::HasHeight;
+
+        let mut heights: Vec<Height> = self
+            .unvalidated
+            .values()
+            .map(|msg| msg.height())
+            .chain(self.validated_shares().map(|share| share.height))
+            .chain(
+                self.validated_certifications()
+                    .map(|certification| certification.height),
+            )
+            .collect();
+        heights.sort_unstable();
+        heights.dedup();
+        heights
+    }
 }
 
 impl MutablePool<CertificationMessage> for CertificationPoolImpl {
     type Mutations = Mutations;
 
     fn insert(&mut self, msg: UnvalidatedArtifact<CertificationMessage>) {
-        let height = msg.message.height();
-        let hash = CertificationMessageHash::from(&msg.message);
+        let CertificationMessageId { hash, height } = CertificationMessageId::from(&msg.message);
 
         // Don't overwrite existing artifacts.
-        if let Entry::Vacant(entry) = self.unvalidated.entry(hash.clone()) {
+        if let Entry::Vacant(entry) = self.unvalidated.entry(hash.digest().clone()) {
             match hash {
-                CertificationMessageHash::Certification(_) => {
-                    self.unvalidated_cert_index.insert(height, hash);
+                CertificationMessageHash::Certification(cert_hash) => {
+                    self.unvalidated_cert_index.insert(height, cert_hash);
                 }
-                CertificationMessageHash::CertificationShare(_) => {
-                    self.unvalidated_share_index.insert(height, hash);
+                CertificationMessageHash::CertificationShare(share_hash) => {
+                    self.unvalidated_share_index.insert(height, share_hash);
                 }
             }
             entry.insert(msg.message);
@@ -276,15 +282,18 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
     }
 
     fn remove(&mut self, id: &CertificationMessageId) {
-        if match id.hash {
-            CertificationMessageHash::Certification(_) => self
-                .unvalidated_cert_index
-                .retain(&id.height, |c| c != &id.hash),
-            CertificationMessageHash::CertificationShare(_) => self
-                .unvalidated_share_index
-                .retain(&id.height, |c| c != &id.hash),
-        } {
-            self.unvalidated.remove(&id.hash);
+        let CertificationMessageId { hash, height } = id;
+
+        let artifact = self.unvalidated.remove(hash.digest());
+        if artifact.is_some() {
+            match hash {
+                CertificationMessageHash::Certification(cert_hash) => {
+                    self.unvalidated_cert_index.remove(height, cert_hash);
+                }
+                CertificationMessageHash::CertificationShare(share_hash) => {
+                    self.unvalidated_share_index.remove(height, share_hash);
+                }
+            }
         }
     }
 
@@ -395,7 +404,7 @@ impl CertificationPool for CertificationPoolImpl {
         Box::new(self.unvalidated_share_index.lookup(height).map(|id| {
             let CertificationMessage::CertificationShare(share) = self
                 .unvalidated
-                .get(id)
+                .get(id.get_ref())
                 .expect("value must exist if hash exists")
             else {
                 panic!("hash is share, but value is not");
@@ -411,30 +420,13 @@ impl CertificationPool for CertificationPoolImpl {
         Box::new(self.unvalidated_cert_index.lookup(height).map(|id| {
             let CertificationMessage::Certification(cert) = self
                 .unvalidated
-                .get(id)
+                .get(id.get_ref())
                 .expect("value must exist if hash exists")
             else {
                 panic!("hash is certification, but value is not");
             };
             cert
         }))
-    }
-
-    fn all_heights_with_artifacts(&self) -> Vec<Height> {
-        let mut heights: Vec<Height> = self
-            .unvalidated_share_index
-            .heights()
-            .cloned()
-            .chain(self.unvalidated_cert_index.heights().cloned())
-            .chain(self.validated_shares().map(|share| share.height))
-            .chain(
-                self.validated_certifications()
-                    .map(|certification| certification.height),
-            )
-            .collect();
-        heights.sort_unstable();
-        heights.dedup();
-        heights
     }
 
     fn certified_heights(&self) -> HashSet<Height> {
@@ -515,6 +507,7 @@ mod tests {
     use ic_test_utilities_consensus::fake::{Fake, FakeSigner};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::artifact::IdentifiableArtifact;
+    use ic_types::consensus::HasHeight;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{
         CryptoHashOfPartialState, Height,
@@ -580,6 +573,15 @@ mod tests {
         }
     }
 
+    /// Checks the invariant that the size of the unvalidated pool matches the
+    /// size of its height index.
+    fn assert_pool_and_index_sizes_match(pool: &CertificationPoolImpl) {
+        assert_eq!(
+            pool.unvalidated_share_index.size() + pool.unvalidated_cert_index.size(),
+            pool.unvalidated.len()
+        );
+    }
+
     #[test]
     fn test_certifications_should_be_added_only_once() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -633,17 +635,40 @@ mod tests {
             let height = Height::from(1);
             let share = fake_share(height.get(), 0);
             pool.insert(to_unvalidated(share.clone()));
-            pool.insert(to_unvalidated(share));
+            pool.insert(to_unvalidated(share.clone()));
 
             let cert = fake_cert(height.get());
             pool.insert(to_unvalidated(cert.clone()));
-            pool.insert(to_unvalidated(cert));
+            pool.insert(to_unvalidated(cert.clone()));
 
             assert_eq!(pool.unvalidated.len(), 2);
             assert_eq!(pool.unvalidated_share_index.size(), 1);
             assert_eq!(pool.unvalidated_cert_index.size(), 1);
             assert_eq!(pool.unvalidated_shares_at_height(height).count(), 1);
             assert_eq!(pool.unvalidated_certifications_at_height(height).count(), 1);
+
+            // Removing ids that are not in the pool is a no-op.
+            let absent_share = fake_share(height.get(), 1);
+            assert_ne!(
+                msg_to_id(&absent_share),
+                msg_to_id(&share),
+                "hash should have changed"
+            );
+            let mut absent_cert = msg_to_cert(fake_cert(height.get()));
+            absent_cert.height_witness = Witness::new_for_testing(Digest([1; 32]));
+            let absent_cert = CertificationMessage::Certification(absent_cert);
+            assert_ne!(
+                msg_to_id(&absent_cert),
+                msg_to_id(&cert),
+                "hash should have changed"
+            );
+
+            pool.remove(&msg_to_id(&absent_share));
+            pool.remove(&msg_to_id(&absent_cert));
+
+            assert_eq!(pool.unvalidated.len(), 2);
+            assert_eq!(pool.unvalidated_share_index.size(), 1);
+            assert_eq!(pool.unvalidated_cert_index.size(), 1);
         });
     }
 
@@ -697,9 +722,9 @@ mod tests {
             );
 
             for id in [id1, id2, id3, id4] {
-                assert!(pool.unvalidated.contains_key(&id.hash));
+                assert!(pool.unvalidated.contains_key(id.hash.digest()));
                 pool.remove(&id);
-                assert!(!pool.unvalidated.contains_key(&id.hash));
+                assert!(!pool.unvalidated.contains_key(id.hash.digest()));
             }
         })
     }
@@ -779,11 +804,7 @@ mod tests {
                     .count(),
                 0
             );
-            // INVARIANT: The sizes the unvalidated pool and the height index must be equal
-            assert_eq!(
-                pool.unvalidated_share_index.size() + pool.unvalidated_cert_index.size(),
-                pool.unvalidated.values().len()
-            )
+            assert_pool_and_index_sizes_match(&pool);
         });
     }
 
@@ -856,11 +877,46 @@ mod tests {
                     .count(),
                 0
             );
-            // INVARIANT: The sizes the unvalidated pool and the height index must be equal
+            assert_pool_and_index_sizes_match(&pool);
+        });
+    }
+
+    #[test]
+    fn test_certification_pool_remove_all_below_is_exclusive() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let mut pool = CertificationPoolImpl::new(
+                node_test_id(0),
+                pool_config,
+                no_op_logger(),
+                MetricsRegistry::new(),
+            );
+            for height in [9, 10] {
+                pool.insert(to_unvalidated(fake_share(height, 0)));
+                pool.insert(to_unvalidated(fake_cert(height)));
+            }
+
+            pool.apply(vec![ChangeAction::RemoveAllBelow(Height::from(10))]);
+
+            // Unvalidated artifacts at exactly the given height stay.
             assert_eq!(
-                pool.unvalidated_share_index.size() + pool.unvalidated_cert_index.size(),
-                pool.unvalidated.values().len()
-            )
+                pool.unvalidated_shares_at_height(Height::from(9)).count(),
+                0
+            );
+            assert_eq!(
+                pool.unvalidated_certifications_at_height(Height::from(9))
+                    .count(),
+                0
+            );
+            assert_eq!(
+                pool.unvalidated_shares_at_height(Height::from(10)).count(),
+                1
+            );
+            assert_eq!(
+                pool.unvalidated_certifications_at_height(Height::from(10))
+                    .count(),
+                1
+            );
+            assert_pool_and_index_sizes_match(&pool);
         });
     }
 
@@ -893,11 +949,7 @@ mod tests {
 
             let result = pool.apply(vec![]);
             assert!(!result.poll_immediately);
-            // INVARIANT: The sizes the unvalidated pool and the height index must be equal
-            assert_eq!(
-                pool.unvalidated_share_index.size() + pool.unvalidated_cert_index.size(),
-                pool.unvalidated.values().len()
-            )
+            assert_pool_and_index_sizes_match(&pool);
         });
     }
 
@@ -916,24 +968,24 @@ mod tests {
             assert!(
                 !pool
                     .unvalidated
-                    .contains_key(&CertificationMessageId::from(&share_msg).hash)
+                    .contains_key(CertificationMessageHash::from(&share_msg).digest())
             );
             assert!(
                 !pool
                     .unvalidated
-                    .contains_key(&CertificationMessageId::from(&cert_msg).hash)
+                    .contains_key(CertificationMessageHash::from(&cert_msg).digest())
             );
 
             pool.insert(to_unvalidated(share_msg.clone()));
 
             assert!(
                 pool.unvalidated
-                    .contains_key(&CertificationMessageId::from(&share_msg).hash)
+                    .contains_key(CertificationMessageHash::from(&share_msg).digest())
             );
             assert!(
                 !pool
                     .unvalidated
-                    .contains_key(&CertificationMessageId::from(&cert_msg).hash)
+                    .contains_key(CertificationMessageHash::from(&cert_msg).digest())
             );
         });
     }
