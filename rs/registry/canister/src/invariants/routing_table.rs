@@ -6,7 +6,9 @@ use ic_base_types::CanisterId;
 use ic_protobuf::registry::routing_table::v1::{
     CanisterMigrations as pbCanisterMigrations, RoutingTable as pbRoutingTable,
 };
-use ic_registry_keys::{make_canister_migrations_record_key, make_canister_ranges_key};
+use ic_registry_keys::{
+    CANISTER_RANGES_PREFIX, make_canister_migrations_record_key, make_canister_ranges_key,
+};
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use prost::Message;
 
@@ -14,24 +16,79 @@ use prost::Message;
 pub(crate) fn check_routing_table_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    get_routing_table(snapshot);
+    let shards = get_routing_table_shards(snapshot);
+
+    for ((shard_key, shard), next_shard) in shards
+        .iter()
+        .zip(shards.iter().skip(1).map(Some).chain(std::iter::once(None)))
+    {
+        let routing_table =
+            RoutingTable::try_from(shard.clone()).map_err(|err| InvariantCheckError {
+                msg: format!("Invalid routing table shard at key {shard_key}: {err}"),
+                source: None,
+            })?;
+
+        if let Some((first_range, _)) = routing_table.iter().next()
+            && first_range.start < *shard_key
+        {
+            return Err(InvariantCheckError {
+                msg: format!(
+                    "Routing table shard at key {shard_key} contains an entry starting at {}",
+                    first_range.start
+                ),
+                source: None,
+            });
+        }
+
+        if let (Some((last_range, _)), Some((next_shard_key, _))) =
+            (routing_table.iter().last(), next_shard)
+            && last_range.end >= *next_shard_key
+        {
+            return Err(InvariantCheckError {
+                msg: format!(
+                    "Routing table shard at key {shard_key} contains an entry ending at {}, which overlaps the next shard key {next_shard_key}",
+                    last_range.end
+                ),
+                source: None,
+            });
+        }
+    }
+
+    RoutingTable::try_from(
+        shards
+            .into_iter()
+            .map(|(_, routing_table)| routing_table)
+            .collect::<Vec<_>>(),
+    )
+    .map_err(|err| InvariantCheckError {
+        msg: format!("Invalid routing table: {err}"),
+        source: None,
+    })?;
     Ok(())
 }
 
 // Return routing table from snapshot
 fn get_routing_table(snapshot: &RegistrySnapshot) -> RoutingTable {
     // If there are shards, they should match the routing table record.
-    let shards = get_routing_table_shards(snapshot);
+    let shards: Vec<pbRoutingTable> = get_routing_table_shards(snapshot)
+        .into_iter()
+        .map(|(_, routing_table)| routing_table)
+        .collect();
     RoutingTable::try_from(shards).unwrap()
 }
 
-fn get_routing_table_shards(snapshot: &RegistrySnapshot) -> Vec<pbRoutingTable> {
+fn get_routing_table_shards(snapshot: &RegistrySnapshot) -> Vec<(CanisterId, pbRoutingTable)> {
     let start = make_canister_ranges_key(CanisterId::from_u64(0)).into_bytes();
     let end = make_canister_ranges_key(CanisterId::from_u64(u64::MAX)).into_bytes();
     let mut shards = vec![];
-    for (_, value) in snapshot.range(start..=end) {
+    for (key, value) in snapshot.range(start..=end) {
+        let shard_key = key
+            .strip_prefix(CANISTER_RANGES_PREFIX.as_bytes())
+            .and_then(|key| hex::decode(key).ok())
+            .and_then(|key| CanisterId::try_from(key).ok())
+            .expect("invalid canister ranges key");
         let routing_table_proto = pbRoutingTable::decode(value.as_slice()).unwrap();
-        shards.push(routing_table_proto);
+        shards.push((shard_key, routing_table_proto));
     }
 
     shards
@@ -125,6 +182,51 @@ mod tests {
 
         assert!(check_routing_table_invariants(&snapshot).is_ok());
         assert!(check_canister_migrations_invariants(&snapshot).is_ok());
+    }
+
+    #[test]
+    fn routing_table_range_must_not_span_shard_key() {
+        let mut snapshot = RegistrySnapshot::new();
+        let subnet_1 = subnet_test_id(1);
+        let subnet_2 = subnet_test_id(2);
+
+        let first_shard = RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(0), end: CanisterId::from(199) } => subnet_1,
+        })
+        .unwrap();
+        let second_shard = RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(200), end: CanisterId::from(299) } => subnet_2,
+        })
+        .unwrap();
+
+        snapshot.insert(
+            make_canister_ranges_key(CanisterId::from(0)).into_bytes(),
+            PbRoutingTable::from(first_shard).encode_to_vec(),
+        );
+        snapshot.insert(
+            make_canister_ranges_key(CanisterId::from(100)).into_bytes(),
+            PbRoutingTable::from(second_shard).encode_to_vec(),
+        );
+
+        let err = check_routing_table_invariants(&snapshot).unwrap_err();
+        assert!(err.msg.contains("overlaps the next shard key"), "{err}");
+    }
+
+    #[test]
+    fn routing_table_entry_must_not_start_before_its_shard_key() {
+        let mut snapshot = RegistrySnapshot::new();
+        let routing_table = RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(99), end: CanisterId::from(199) } => subnet_test_id(1),
+        })
+        .unwrap();
+
+        snapshot.insert(
+            make_canister_ranges_key(CanisterId::from(100)).into_bytes(),
+            PbRoutingTable::from(routing_table).encode_to_vec(),
+        );
+
+        let err = check_routing_table_invariants(&snapshot).unwrap_err();
+        assert!(err.msg.contains("contains an entry starting"), "{err}");
     }
 
     #[test]

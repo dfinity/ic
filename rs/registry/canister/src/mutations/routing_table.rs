@@ -72,7 +72,7 @@ const MAX_RANGES_PER_CANISTER_RANGES: u16 = 20;
 /// mutations, while it helps with setting up tests, since a single shard with all the entries can
 /// be inserted with a smallest possible shard key, i.e., `CanisterId::from_u64(0)`.
 ///
-/// Complexity O(n)
+/// Complexity O(n log n)
 fn mutations_for_canister_ranges(
     registry: &Registry,
     new_rt: &RoutingTable,
@@ -112,6 +112,11 @@ fn mutations_for_canister_ranges(
             )
         })
         .unzip();
+
+    new_shards.retain(|shard_key, _| match new_rt.lookup_entry(*shard_key) {
+        Some((range, _)) => range.start == *shard_key,
+        None => true,
+    });
 
     let zero_id = CanisterId::from_u64(0);
     // If we don't have any routing table fragments in the new_shards, we need to create a default one to
@@ -736,6 +741,52 @@ mod tests {
                 }],
             })
             .unwrap()
+        );
+    }
+
+    #[test]
+    fn migrating_canister_back_rekeys_range_merged_across_shard_boundary() {
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_a = test_subnet(1);
+        let subnet_b = test_subnet(2);
+        let subnet_c = test_subnet(3);
+
+        // This is the layout produced after isolated canisters have caused a shard split. Moving
+        // canister 100 back to subnet A makes optimize() merge [0, 99], [100, 100], and [101, 199]
+        // into one range that would span the preserved shard key 100.
+        let shards = shards(vec![
+            (0, vec![((0, 99), subnet_a)]),
+            (
+                100,
+                vec![
+                    ((100, 100), subnet_b),
+                    ((101, 199), subnet_a),
+                    ((200, 299), subnet_c),
+                ],
+            ),
+        ]);
+        apply_shards_to_registry(&mut registry, &shards);
+
+        let mutations = registry.migrate_canisters_to_subnet(
+            registry.latest_version(),
+            vec![CanisterId::from(100)],
+            subnet_a,
+        );
+        registry.maybe_apply_mutation_internal(mutations);
+
+        assert_subnet_for_canister(&registry, 0, 1);
+        assert_subnet_for_canister(&registry, 99, 1);
+        assert_subnet_for_canister(&registry, 100, 1);
+        assert_subnet_for_canister(&registry, 199, 1);
+        assert_subnet_for_canister(&registry, 200, 3);
+
+        let shard_keys = get_key_family::<pb::RoutingTable>(&registry, CANISTER_RANGES_PREFIX)
+            .into_iter()
+            .map(|(key, _)| key)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            shard_keys,
+            vec![hex::encode(CanisterId::from(0).get_ref().as_slice())]
         );
     }
 
