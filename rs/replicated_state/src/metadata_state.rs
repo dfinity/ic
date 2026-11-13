@@ -1327,6 +1327,7 @@ impl SystemMetadata {
             // Transient field; reset so that `generate_reject_responses_for_deleted_subnets()`
             // runs unconditionally on the first post-split round.
             subnet_ids_at_last_reject_generation: None,
+            // TODO: Still need to decide what will happen with upgrade_state during subnet splitting.
             upgrade_state: Default::default(),
         })
     }
