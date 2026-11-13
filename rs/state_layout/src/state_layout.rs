@@ -142,6 +142,7 @@ impl<T> WritePolicy for RwPolicy<'_, T> {}
 
 pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CheckpointStatus {
     /// Locally created checkpoint that has been fully verified.
     Verified,
@@ -1691,6 +1692,41 @@ pub fn canister_id_from_path(path: &Path) -> Option<CanisterId> {
         return parse_canister_id(hex.to_str()?).ok();
     }
     None
+}
+
+/// Returns the height and status of the latest checkpoint under `state_root`;
+/// or `None` if there is no checkpoint.
+///
+/// Reads the file system directly, as constructing a `StateLayout` spawns
+/// threads. Skips entries that are not checkpoint names (as produced by
+/// `StateLayout::checkpoint_name()`).
+///
+/// Returns an error if the checkpoints directory cannot be read.
+pub fn latest_checkpoint_status(
+    state_root: &Path,
+) -> std::io::Result<Option<(Height, CheckpointStatus)>> {
+    let checkpoints = state_root.join(CHECKPOINTS_DIR);
+    let entries = match std::fs::read_dir(&checkpoints) {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        entries => entries?,
+    };
+    let mut latest = None;
+    for entry in entries {
+        let height = entry?.file_name().to_str().and_then(|name| {
+            let height = Height::new(u64::from_str_radix(name, 16).ok()?);
+            (name == StateLayout::checkpoint_name(height)).then_some(height)
+        });
+        latest = latest.max(height);
+    }
+    let Some(height) = latest else {
+        return Ok(None);
+    };
+    let checkpoint = CheckpointLayout::<ReadOnly>::new_untracked(
+        checkpoints.join(StateLayout::checkpoint_name(height)),
+        height,
+    )
+    .map_err(std::io::Error::other)?;
+    Ok(Some((height, checkpoint.checkpoint_status())))
 }
 
 fn parse_and_sort_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, LayoutError> {

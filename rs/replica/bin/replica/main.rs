@@ -4,9 +4,10 @@ use ic_config::Config;
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_async_utils::{abort_on_panic, shutdown_signal};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_logger::{info, new_replica_logger_from_config};
+use ic_logger::{ReplicaLogger, error, info, new_replica_logger_from_config, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replica::setup;
+use ic_state_layout::{CheckpointStatus, latest_checkpoint_status};
 use ic_sys::PAGE_SIZE;
 use ic_tracing::ReloadHandles;
 use ic_tracing_jaeger_exporter::jaeger_exporter;
@@ -16,7 +17,13 @@ use ic_types::{
     replica_version::REPLICA_BINARY_HASH,
 };
 use nix::unistd::{Pid, setpgid};
-use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    env, fs, io,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::signal::unix::{SignalKind, signal};
 use tracing_subscriber::{Layer, filter::filter_fn, layer::SubscriberExt};
 
@@ -38,6 +45,16 @@ use regex::Regex;
 use std::fs::File;
 #[cfg(feature = "profiler")]
 use std::io::Write;
+
+/// How long shutting down may take after `SIGTERM` or `SIGINT`, before the
+/// replica exits with an error. Shorter than both the orchestrator's grace
+/// period before escalating to `SIGKILL` (45 s) and systemd's default stop
+/// timeout at reboot (90 s), so that the replica exits on its own.
+const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// How often to check whether the latest checkpoint is verified, while shutting
+/// down.
+const CHECKPOINT_VERIFICATION_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Determine sha256 hash of the current replica binary
 ///
@@ -62,6 +79,50 @@ fn available_parallelism() -> usize {
     std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1)
+}
+
+/// Spawns a thread that exits the process with an error after
+/// `SHUTDOWN_TIMEOUT`.
+fn spawn_shutdown_watchdog(log: ReplicaLogger) {
+    std::thread::spawn(move || {
+        std::thread::sleep(SHUTDOWN_TIMEOUT);
+        error!(
+            log,
+            "Shutdown did not complete within {:?}, exiting", SHUTDOWN_TIMEOUT
+        );
+        std::process::exit(1);
+    });
+}
+
+/// Waits until the latest checkpoint under `state_root` is verified, so that it
+/// is not archived on restart.
+///
+/// Does not wait if there is no checkpoint; if the latest one is a state sync
+/// checkpoint (these may remain unverified until superseded); or if its status
+/// cannot be read.
+async fn wait_for_checkpoint_verification(log: &ReplicaLogger, state_root: &Path) {
+    let start = Instant::now();
+    loop {
+        match latest_checkpoint_status(state_root) {
+            Ok(Some((height, CheckpointStatus::UnverifiedRegular))) => {
+                info!(every_n_seconds => 5, log, "Waiting for checkpoint @{} to be verified", height);
+                tokio::time::sleep(CHECKPOINT_VERIFICATION_POLL_INTERVAL).await;
+            }
+            Ok(latest) => {
+                info!(
+                    log,
+                    "Latest checkpoint after {:?}: {:?}",
+                    start.elapsed(),
+                    latest
+                );
+                return;
+            }
+            Err(err) => {
+                warn!(log, "Failed to read the latest checkpoint status: {}", err);
+                return;
+            }
+        }
+    }
 }
 
 fn main() -> io::Result<()> {
@@ -337,12 +398,15 @@ fn main() -> io::Result<()> {
     }
 
     let save_logger = logger.clone();
+    let state_root = config.state_manager.state_root();
     rt_main.block_on(async move {
         let _drop_async_log_guard = async_log_guard;
         let _drop_sigpipe_handler = sigpipe_handler;
         info!(logger, "IC Replica Running");
         // Blocking on `SIGINT` or `SIGTERM`.
-        shutdown_signal(logger.clone()).await
+        shutdown_signal(logger.clone()).await;
+        spawn_shutdown_watchdog(logger.clone());
+        wait_for_checkpoint_verification(&logger, &state_root).await;
     });
     info!(save_logger, "IC Replica Terminating");
 
