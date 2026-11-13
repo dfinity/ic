@@ -1,5 +1,5 @@
 use crate::{
-    command_helper::exec_cmd,
+    command_helper::confirm_exec_cmd,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::write_bytes,
     ssh_helper::SshHelper,
@@ -7,6 +7,9 @@ use crate::{
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_utils_threshold_sig_der::public_key_der_to_pem;
+use ic_state_layout::{
+    CheckpointStatus, STATE_SYNC_CHECKPOINT_MARKER, UNVERIFIED_CHECKPOINT_MARKER,
+};
 use ic_types::Height;
 use serde::{Deserialize, Serialize};
 use slog::{Drain, Logger, o};
@@ -59,32 +62,65 @@ pub fn data_location_from_str(s: &str) -> RecoveryResult<DataLocation> {
 /// Helper enum to abstract over local and remote implementations of functions that need to access
 /// the filesystem of the node. Local implementations execute commands directly on the machine,
 /// while remote implementations use ssh to execute them on the remote node.
-pub enum ExecutionMode<'a> {
+pub enum ExecutionMode {
     Local,
-    Remote(&'a SshHelper),
+    Remote(SshHelper),
 }
 
-impl<'a> ExecutionMode<'a> {
-    fn execute(&self, command: String) -> RecoveryResult<Option<String>> {
+impl ExecutionMode {
+    /// Runs a shell command on the node and returns its output.
+    ///
+    /// A local command asks for confirmation if `confirmation_logger` is given.
+    /// Whether a remote command asks for confirmation is configured on its
+    /// [SshHelper] instead.
+    pub fn execute(
+        &self,
+        command: String,
+        confirmation_logger: Option<&Logger>,
+    ) -> RecoveryResult<Option<String>> {
         match self {
-            Self::Local => exec_cmd(Command::new("sh").arg("-c").arg(command)),
+            Self::Local => confirm_exec_cmd(
+                Command::new("sh").arg("-c").arg(command),
+                confirmation_logger,
+            ),
             Self::Remote(ssh_helper) => ssh_helper.ssh(command),
         }
     }
 
     pub fn path_exists(&self, path: &Path) -> RecoveryResult<bool> {
-        self.execute(format!("test -e {} && echo y || echo n", path.display()))
-            .map(|output| output.is_some_and(|s| s.trim() == "y"))
+        self.execute(
+            format!("test -e {} && echo y || echo n", path.display()),
+            None,
+        )
+        .map(|output| output.is_some_and(|s| s.trim() == "y"))
+    }
+
+    /// The status of the checkpoint in the directory `checkpoint`, or `None`
+    /// if it does not exist.
+    ///
+    /// The markers the state manager uses are checked in the same order as
+    /// `CheckpointLayout::checkpoint_status` checks them.
+    pub fn checkpoint_status(&self, checkpoint: &Path) -> RecoveryResult<Option<CheckpointStatus>> {
+        if !self.path_exists(checkpoint)? {
+            return Ok(None);
+        }
+        if self.path_exists(&checkpoint.join(STATE_SYNC_CHECKPOINT_MARKER))? {
+            return Ok(Some(CheckpointStatus::UnverifiedStateSync));
+        }
+        if self.path_exists(&checkpoint.join(UNVERIFIED_CHECKPOINT_MARKER))? {
+            return Ok(Some(CheckpointStatus::UnverifiedRegular));
+        }
+        Ok(Some(CheckpointStatus::Verified))
     }
 
     pub fn get_maybe_latest_checkpoint_name_and_height(
         &self,
         checkpoints_path: &Path,
     ) -> RecoveryResult<Option<(String, Height)>> {
-        let maybe_output = self.execute(format!(
-            "ls -1 {} | sort | tail -n 1",
-            checkpoints_path.display()
-        ))?;
+        let maybe_output = self.execute(
+            format!("ls -1 {} | sort | tail -n 1", checkpoints_path.display()),
+            None,
+        )?;
 
         let Some(output) = maybe_output else {
             return Ok(None);
@@ -94,6 +130,15 @@ impl<'a> ExecutionMode<'a> {
         let height = parse_hex_str(name)?;
 
         Ok(Some((name.to_string(), Height::from(height))))
+    }
+}
+
+impl fmt::Display for ExecutionMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Local => write!(f, "this node"),
+            Self::Remote(ssh_helper) => write!(f, "node {}", ssh_helper.ip),
+        }
     }
 }
 
@@ -211,5 +256,69 @@ mod tests {
 
         let invalid_input = valid_pub_key_str.to_string();
         assert!(node_id_and_pub_key_from_str(&invalid_input).is_err());
+    }
+
+    #[test]
+    fn execution_mode_runs_local_commands_and_names_the_node() {
+        assert_eq!(
+            ExecutionMode::Local
+                .execute("echo finished".to_string(), None)
+                .unwrap()
+                .as_deref()
+                .map(str::trim),
+            Some("finished")
+        );
+        assert_eq!(ExecutionMode::Local.to_string(), "this node");
+
+        let ssh_helper = SshHelper::new(
+            make_logger(),
+            SshUser::Admin,
+            "::1".parse().unwrap(),
+            false,
+            None,
+        );
+        assert_eq!(ExecutionMode::Remote(ssh_helper).to_string(), "node ::1");
+    }
+
+    /// The status determined from the markers agrees with the one the state
+    /// layout code determines.
+    #[test]
+    fn checkpoint_status_matches_state_layout() {
+        use ic_state_layout::{CheckpointLayout, ReadOnly};
+
+        let root = tempfile::tempdir().expect("Could not create a temp dir");
+        let height = Height::new(100);
+        let checkpoint = root.path().join("0000000000000064");
+
+        let check = |expected: Option<CheckpointStatus>| {
+            let status = ExecutionMode::Local.checkpoint_status(&checkpoint).unwrap();
+            assert_eq!(status, expected);
+            if checkpoint.exists() {
+                let layout =
+                    CheckpointLayout::<ReadOnly>::new_untracked(checkpoint.clone(), height)
+                        .unwrap();
+                assert_eq!(Some(layout.checkpoint_status()), expected);
+            }
+        };
+
+        check(None);
+
+        std::fs::create_dir_all(&checkpoint).unwrap();
+        check(Some(CheckpointStatus::Verified));
+
+        let unverified = checkpoint.join(UNVERIFIED_CHECKPOINT_MARKER);
+        let state_sync = checkpoint.join(STATE_SYNC_CHECKPOINT_MARKER);
+        std::fs::write(&unverified, b"").unwrap();
+        check(Some(CheckpointStatus::UnverifiedRegular));
+
+        std::fs::write(&state_sync, b"").unwrap();
+        check(Some(CheckpointStatus::UnverifiedStateSync));
+
+        // The state sync marker is removed last, so it may be the only one.
+        std::fs::remove_file(&unverified).unwrap();
+        check(Some(CheckpointStatus::UnverifiedStateSync));
+
+        std::fs::remove_file(&state_sync).unwrap();
+        check(Some(CheckpointStatus::Verified));
     }
 }
