@@ -20,6 +20,10 @@ use std::path::PathBuf;
 /// readiness condition, together with the id of that subnet.
 const COOLING_DOWN_REGISTRY_VERSION_FILE: &str = "cooling_down_registry_version.json";
 
+/// The directory, within a working directory, that mirrors the data directory
+/// of a node.
+const DATA: &str = "data";
+
 /// The contents of `COOLING_DOWN_REGISTRY_VERSION_FILE`.
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 struct CoolingDownRegistryVersion {
@@ -36,6 +40,8 @@ struct CoolingDownRegistryVersion {
 /// |  |-- ${source_subnet_id}.pem
 /// |  |-- ${destination_subnet_id}.pem
 /// |  |-- cooling_down_registry_version.json
+/// |  |-- merged.manifest
+/// |  |-- merged_state_params.json
 /// |  |-- nns.pem
 /// |  |-- ${source_subnet_id}.pruned_state_tree.cbor
 /// |  |-- ${destination_subnet_id}.pruned_state_tree.cbor
@@ -51,14 +57,19 @@ struct CoolingDownRegistryVersion {
 /// |  |   |   |-- ic_state/states_metadata.pbuf
 /// |  |   |   |-- ic_state/checkpoints/
 /// |  |   |   |   |-- ${halting_height}/
+/// |  |-- merged_working_dir/           (the merged state)
+/// |  |   |-- data/
+/// |  |   |   |-- ic_state/states_metadata.pbuf
+/// |  |   |   |-- ic_state/checkpoints/
+/// |  |   |   |   |-- ${recovery_height}/
 pub(crate) struct Layout {
     root: PathBuf,
 }
 
 impl Layout {
-    /// Creates the working directories of the two subnets being merged, and
-    /// warns if one of them already holds checkpoints, e.g. from an earlier
-    /// merge.
+    /// Creates the working directories of the two subnets being merged and of
+    /// the merged state, and warns if one of the two subnets' already holds
+    /// checkpoints, e.g. from an earlier merge.
     pub(crate) fn new(recovery: &Recovery, logger: &Logger) -> RecoveryResult<Self> {
         let layout = Self {
             root: recovery.recovery_dir.clone(),
@@ -79,12 +90,23 @@ impl Layout {
 
             create_dir(&layout.data_dir(target_subnet))?;
         }
+        create_dir(&layout.merged_work_dir().join(DATA))?;
 
         Ok(layout)
     }
 
     pub(crate) fn nns_public_key_file(&self) -> PathBuf {
         self.root.join("nns.pem")
+    }
+
+    /// The manifest of the merged state.
+    pub(crate) fn merged_state_manifest_file(&self) -> PathBuf {
+        self.root.join("merged.manifest")
+    }
+
+    /// The [crate::utils::MergedStateParams] of the merged state.
+    pub(crate) fn merged_state_params_file(&self) -> PathBuf {
+        self.root.join("merged_state_params.json")
     }
 
     pub(crate) fn actual_manifest_file(&self, subnet_id: SubnetId) -> PathBuf {
@@ -108,18 +130,42 @@ impl Layout {
     }
 
     pub(crate) fn data_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
-        self.work_dir(target_subnet).join("data")
+        self.work_dir(target_subnet).join(DATA)
+    }
+
+    pub(crate) fn ic_state_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
+        self.data_dir(target_subnet).join(IC_STATE)
     }
 
     pub(crate) fn checkpoints_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
-        self.data_dir(target_subnet)
-            .join(IC_STATE)
-            .join(CHECKPOINTS)
+        self.ic_state_dir(target_subnet).join(CHECKPOINTS)
     }
 
     /// The downloaded checkpoint at `height`.
     pub(crate) fn checkpoint_dir(&self, target_subnet: TargetSubnet, height: Height) -> PathBuf {
         self.checkpoints_dir(target_subnet)
+            .join(StateLayout::checkpoint_name(height))
+    }
+
+    /// The working directory of the merged state, which is assembled locally
+    /// rather than downloaded from a subnet.
+    pub(crate) fn merged_work_dir(&self) -> PathBuf {
+        self.root.join("merged_working_dir")
+    }
+
+    /// The state directory of the merged state, i.e. what is uploaded to the
+    /// destination subnet.
+    pub(crate) fn merged_ic_state_dir(&self) -> PathBuf {
+        self.merged_work_dir().join(DATA).join(IC_STATE)
+    }
+
+    pub(crate) fn merged_checkpoints_dir(&self) -> PathBuf {
+        self.merged_ic_state_dir().join(CHECKPOINTS)
+    }
+
+    /// The merged checkpoint at `height`.
+    pub(crate) fn merged_checkpoint_dir(&self, height: Height) -> PathBuf {
+        self.merged_checkpoints_dir()
             .join(StateLayout::checkpoint_name(height))
     }
 

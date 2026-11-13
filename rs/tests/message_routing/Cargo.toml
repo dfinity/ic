@@ -25,6 +25,7 @@ itertools = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rejoin-test-lib = { path = "./rejoin_test_lib" }
+serde_json = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

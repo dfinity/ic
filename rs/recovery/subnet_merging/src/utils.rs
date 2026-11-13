@@ -2,12 +2,15 @@ use ic_base_types::{RegistryVersion, SubnetId};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
     error::{RecoveryError, RecoveryResult},
+    file_sync_helper::write_file,
     registry_helper::RegistryHelper,
 };
 use ic_registry_client_helpers::subnet::SubnetRegistry;
+use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 
 use std::{
+    path::Path,
     thread::sleep,
     time::{Duration, Instant},
 };
@@ -35,6 +38,32 @@ pub(crate) fn wait_for<T>(
             )));
         }
         sleep(poll_interval);
+    }
+}
+
+/// Everything the recovery of the destination subnet needs to know about the
+/// merged state, as computed by the step that assembles it.
+///
+/// Persisted next to the merged state so that the steps recovering the
+/// destination subnet at it agree on the same values, also in a run that is
+/// resumed after the merged state was assembled.
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+pub(crate) struct MergedStateParams {
+    /// The height of the merged checkpoint, i.e. the height the destination
+    /// subnet is recovered at.
+    pub(crate) height: u64,
+    /// The root hash of the manifest of the merged state.
+    pub(crate) state_hash: String,
+}
+
+impl MergedStateParams {
+    pub(crate) fn write(&self, path: &Path) -> RecoveryResult<()> {
+        let contents = serde_json::to_string_pretty(self).map_err(|err| {
+            RecoveryError::UnexpectedError(format!(
+                "Failed to serialize the merged state params: {err}"
+            ))
+        })?;
+        write_file(path, contents)
     }
 }
 

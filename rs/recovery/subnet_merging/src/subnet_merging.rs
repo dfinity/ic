@@ -2,7 +2,7 @@ use crate::{
     admin_helper::get_propose_to_cool_down_subnet_command,
     layout::Layout,
     steps::{
-        CheckCoolingDownStep, CheckMergeReadinessStep, DownloadStateStep,
+        CheckCoolingDownStep, CheckMergeReadinessStep, DownloadStateStep, MergeStatesStep,
         StopReplicaAtHaltingCheckpointStep, ValidateCupStep, WaitForHaltingCupStep,
     },
 };
@@ -85,6 +85,8 @@ pub enum StepType {
     /// Validate the state downloaded from the destination subnet against the
     /// CUP it halted at.
     ValidateDestinationSubnetCup,
+    /// Assemble the merged state from the two downloaded states.
+    MergeStates,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -649,7 +651,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                     ));
                 }
             }
-            StepType::ValidateSourceSubnetCup | StepType::ValidateDestinationSubnetCup => {}
+            StepType::ValidateSourceSubnetCup
+            | StepType::ValidateDestinationSubnetCup
+            | StepType::MergeStates => {}
         }
     }
 
@@ -717,6 +721,14 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             StepType::ValidateDestinationSubnetCup => {
                 self.validate_cup_step(TargetSubnet::Destination).into()
             }
+
+            StepType::MergeStates => MergeStatesStep {
+                source_subnet_id: self.params.source_subnet_id,
+                destination_subnet_id: self.params.destination_subnet_id,
+                layout: self.layout.clone(),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
         };
 
         Ok(step)
