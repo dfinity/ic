@@ -2166,9 +2166,9 @@ fn drift_delegation_from_certified_state(
     match side {
         DriftingSide::NnsDelegation => {
             nns_delegation_watcher
-                .send(Some(Arc::new(nns_delegation_builder(
+                .send(Some(nns_delegation_builder(
                     drifted_subnet.nns_delegation(),
-                ))))
+                )))
                 .expect("The NNS delegation receiver should be alive.");
         }
         DriftingSide::CertifiedState => {

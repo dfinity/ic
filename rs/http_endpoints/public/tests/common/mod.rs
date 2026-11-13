@@ -589,9 +589,11 @@ pub struct HttpEndpointHandles {
     pub nns_delegation_watcher: watch::Sender<Option<Arc<NNSDelegationBuilder>>>,
 }
 
-pub fn nns_delegation_builder(delegation: CertificateDelegation) -> NNSDelegationBuilder {
-    NNSDelegationBuilder::try_new(delegation.certificate, subnet_test_id(1), no_op_logger())
-        .expect("The NNS delegation should be well-formed.")
+pub fn nns_delegation_builder(delegation: CertificateDelegation) -> Arc<NNSDelegationBuilder> {
+    Arc::new(
+        NNSDelegationBuilder::try_new(delegation.certificate, subnet_test_id(1), no_op_logger())
+            .expect("The NNS delegation should be well-formed."),
+    )
 }
 
 pub struct HttpEndpointBuilder {
@@ -705,10 +707,7 @@ impl HttpEndpointBuilder {
         let (query_exe, query_exe_handler) = setup_query_execution_mock();
         let (certified_height_watcher_tx, certified_height_watcher_rx) =
             watch::channel(self.certified_height.unwrap_or_default());
-        let builder = self
-            .delegation_from_nns
-            .map(nns_delegation_builder)
-            .map(Arc::new);
+        let builder = self.delegation_from_nns.map(nns_delegation_builder);
         let (nns_delegation_watcher_tx, nns_delegation_watcher_rx) = watch::channel(None);
         let nns_delegation_reader = NNSDelegationReader::new(nns_delegation_watcher_rx);
         nns_delegation_watcher_tx

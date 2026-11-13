@@ -3,6 +3,6 @@ mod nns_delegation_manager;
 
 pub use ic_nns_delegation_reader::{
     CanisterRangesCheck, CanisterRangesFilter, DelegationVerificationError, NNSDelegationBuilder,
-    NNSDelegationReader,
+    NNSDelegationReader, NNSDelegationSnapshot,
 };
 pub use nns_delegation_manager::start_nns_delegation_manager;

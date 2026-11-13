@@ -35,15 +35,19 @@ impl VerifiedDelegationSource {
         }
     }
 
-    /// Wrapper around `NNSDelegationReader::get_delegation` to log and record metrics on
+    /// Verifies the most recent NNS delegation known to the replica against the given
+    /// certified state and, only if it is consistent, builds and returns it (see
+    /// `NNSDelegationSnapshot::build_verified`), logging and recording metrics on
     /// verification failures.
+    /// Note: on the NNS subnet this always returns `Ok(None)`.
     pub(crate) fn get_delegation(
         &self,
         canister_ranges_check: CanisterRangesCheck,
         certified_state: &ReplicatedState,
     ) -> Result<Option<CertificateDelegation>, DelegationVerificationError> {
         self.nns_delegation_reader
-            .get_delegation(canister_ranges_check, certified_state)
+            .snapshot()
+            .build_verified(canister_ranges_check, certified_state)
             .inspect_err(|err| {
                 warn!(
                     every_n_seconds => LOG_EVERY_N_SECONDS,

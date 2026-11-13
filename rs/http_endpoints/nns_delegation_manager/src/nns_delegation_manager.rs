@@ -1267,7 +1267,8 @@ mod tests {
 
         assert!(
             reader
-                .get_delegation(
+                .snapshot()
+                .build_verified(
                     CanisterRangesCheck::AllSubnetRanges,
                     &*mutable_state.read().unwrap()
                 )
@@ -1309,7 +1310,8 @@ mod tests {
             reader.wait_until_updated().await.unwrap();
 
             let delegation = reader
-                .get_delegation(
+                .snapshot()
+                .build_verified(
                     CanisterRangesCheck::AllSubnetRanges,
                     &*mutable_state.read().unwrap(),
                 )
@@ -1677,20 +1679,22 @@ mod tests {
         rt_handle: &tokio::runtime::Handle,
         registry_client: &dyn RegistryClient,
         tls_config: &dyn TlsConfig,
-    ) -> NNSDelegationBuilder {
-        load_root_delegation(
-            &Config::default(),
-            &no_op_logger(),
-            rt_handle,
-            APP_SUBNET_ID,
-            SubnetType::Application,
-            NNS_SUBNET_ID,
-            registry_client,
-            tls_config,
-            &DelegationManagerMetrics::new(&MetricsRegistry::new()),
+    ) -> Arc<NNSDelegationBuilder> {
+        Arc::new(
+            load_root_delegation(
+                &Config::default(),
+                &no_op_logger(),
+                rt_handle,
+                APP_SUBNET_ID,
+                SubnetType::Application,
+                NNS_SUBNET_ID,
+                registry_client,
+                tls_config,
+                &DelegationManagerMetrics::new(&MetricsRegistry::new()),
+            )
+            .await
+            .expect("Should fetch an initial delegation on an app subnet"),
         )
-        .await
-        .expect("Should fetch an initial delegation on an app subnet")
     }
 
     #[tokio::test]
@@ -1727,7 +1731,7 @@ mod tests {
             subnet_id: APP_SUBNET_ID,
             subnet_type: SubnetType::Application,
             nns_subnet_id: NNS_SUBNET_ID,
-            last_delegation: PublishedDelegation::Present(Arc::new(old_delegation.clone())),
+            last_delegation: PublishedDelegation::Present(old_delegation.clone()),
             state_reader,
             registry_client,
             tls_config,
@@ -1764,7 +1768,7 @@ mod tests {
             subnet_id: APP_SUBNET_ID,
             subnet_type: SubnetType::Application,
             nns_subnet_id: NNS_SUBNET_ID,
-            last_delegation: PublishedDelegation::Present(Arc::new(old_delegation.clone())),
+            last_delegation: PublishedDelegation::Present(old_delegation.clone()),
             state_reader,
             registry_client,
             tls_config,
@@ -1941,7 +1945,7 @@ mod tests {
         .unwrap();
 
         assert_matches!(
-            reader.get_delegation(
+            reader.snapshot().build_verified(
                 CanisterRangesCheck::AllSubnetRanges,
                 &*mutable_state.read().unwrap()
             ),

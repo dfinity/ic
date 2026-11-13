@@ -305,15 +305,14 @@ pub(crate) async fn query(
 
     let query_execution_service = query_execution_service.lock().unwrap().clone();
 
+    let nns_delegation = nns_delegation_reader.snapshot();
     let delegation_from_nns = match version {
-        Version::V2 => {
-            nns_delegation_reader.get_delegation_with_metadata(CanisterRangesFilter::Flat)
-        }
-        Version::V3 => nns_delegation_reader.get_delegation_with_metadata(
-            CanisterRangesFilter::Tree(CanisterId::unchecked_from_principal(id)),
-        ),
+        Version::V2 => nns_delegation.get_delegation_with_metadata(CanisterRangesFilter::Flat),
+        Version::V3 => nns_delegation.get_delegation_with_metadata(CanisterRangesFilter::Tree(
+            CanisterId::unchecked_from_principal(id),
+        )),
         Version::SubnetV3 => {
-            nns_delegation_reader.get_delegation_with_metadata(CanisterRangesFilter::None)
+            nns_delegation.get_delegation_with_metadata(CanisterRangesFilter::None)
         }
     };
     let query_execution_input = QueryExecutionInput {

@@ -14443,6 +14443,7 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-messaging",
  "ic-metrics",
+ "ic-nns-delegation-reader",
  "ic-protobuf",
  "ic-query-stats",
  "ic-registry-client-fake",
