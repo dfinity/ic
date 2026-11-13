@@ -17,7 +17,8 @@ use wasmtime::{
 pub use host_memory::WasmtimeMemoryCreator;
 use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{
-    CanisterBacktrace, HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
+    CanisterBacktrace, HeapPageLimitRefusals, HypervisorError, HypervisorResult, InstanceStats,
+    SystemApi, TrapCode,
 };
 use ic_logger::{ReplicaLogger, debug, error, fatal};
 use ic_replicated_state::{
@@ -38,7 +39,7 @@ use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
     ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-    INSTRUCTIONS_COUNTER_GLOBAL_NAME, WasmMemoryType,
+    HEAP_PAGE_BUDGET_GLOBAL_NAME, INSTRUCTIONS_COUNTER_GLOBAL_NAME, WasmMemoryType,
 };
 use crate::{
     serialized_module::SerializedModuleBytes, wasm_utils::validation::wasmtime_validation_config,
@@ -167,6 +168,7 @@ fn get_exported_globals<T>(instance: &Instance, store: &mut Store<T>) -> Vec<was
     const TO_IGNORE: &[&str] = &[
         DIRTY_PAGES_COUNTER_GLOBAL_NAME,
         ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
+        HEAP_PAGE_BUDGET_GLOBAL_NAME,
     ];
 
     instance
@@ -638,6 +640,18 @@ impl WasmtimeEmbedder {
             )
             .set(&mut store, Val::I64(current_accessed_limit.get() as i64))
             .expect("Couldn't set dirty page counter global");
+        // The budget starts at the limit and is decremented by the heap memory
+        // tracker for every newly accessed Wasm page, so that the instrumented
+        // code can cheaply check `budget == limit - accessed`.
+        let heap_page_budget_global = instance
+            .get_global(&mut store, HEAP_PAGE_BUDGET_GLOBAL_NAME)
+            .expect("Heap page budget global should have been added by the instrumentation.");
+        heap_page_budget_global
+            .set(
+                &mut store,
+                Val::I64(heap_accessed_wasm_page_limit.get() as i64),
+            )
+            .expect("Couldn't set heap page budget global");
 
         let mut memories = HashMap::new();
         for mem_info in self.list_memory_infos(modification_tracking, heap_memory, stable_memory) {
@@ -692,6 +706,24 @@ impl WasmtimeEmbedder {
             }
         };
 
+        // Create a closure to decrement the heap page budget once per newly
+        // accessed Wasm heap page.
+        // SAFETY: Same lifetime relationship as for `subtract_instruction_counter`.
+        let decrement_heap_page_budget: Arc<SignalMutex<dyn FnMut() + Send>> = {
+            let mut store_ptr = StorePtr::new(store.as_mut());
+            Arc::new(SignalMutex::new(move || {
+                // SAFETY: Accessing the Store and Global from the signal handler.
+                // Both pointers are guaranteed valid by the lifetime relationship described above.
+                unsafe {
+                    let store_ref = store_ptr.get();
+                    if let Val::I64(current) = heap_page_budget_global.get(&mut *store_ref) {
+                        let _ = heap_page_budget_global
+                            .set(store_ref, Val::I64(current.saturating_sub(1)));
+                    }
+                }
+            }))
+        };
+
         let signal_stack = WasmtimeSignalStack::new();
         let mut main_memory_type = WasmMemoryType::Wasm32;
         if let Some(mem) = instance.get_memory(&mut *store, WASM_HEAP_MEMORY_NAME)
@@ -706,6 +738,7 @@ impl WasmtimeEmbedder {
             self.log.clone(),
             self.config.page_overhead,
             subtract_instruction_counter,
+            decrement_heap_page_budget,
         );
 
         // Host functions check their heap accesses against the heap tracker.
@@ -868,7 +901,10 @@ fn sigsegv_memory_tracker<S>(
     log: ReplicaLogger,
     page_overhead: NumInstructions,
     subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
+    decrement_heap_page_budget: Arc<SignalMutex<dyn FnMut() + Send>>,
 ) -> HashMap<CanisterMemoryType, Arc<SignalMutex<DeterministicMemoryTracker>>> {
+    // Only the heap tracker maintains the heap page budget.
+    let no_op: Arc<SignalMutex<dyn FnMut() + Send>> = Arc::new(SignalMutex::new(|| {}));
     let mut tracked_memories = vec![];
     let mut result = HashMap::new();
     for (
@@ -909,6 +945,10 @@ fn sigsegv_memory_tracker<S>(
                     memory_limits,
                     page_overhead.get(),
                     subtract_instruction_counter.clone(),
+                    match mem_type {
+                        CanisterMemoryType::Heap => Arc::clone(&decrement_heap_page_budget),
+                        CanisterMemoryType::Stable => Arc::clone(&no_op),
+                    },
                 )
                 .expect("failed to instantiate SIGSEGV memory tracker"),
             ))
@@ -990,6 +1030,8 @@ pub struct PageAccessResults {
     pub wasm_mprotect_count: usize,
     pub wasm_copy_page_count: usize,
     pub wasm_sigsegv_handler_duration: Duration,
+    pub wasm_page_limit_refusals: HeapPageLimitRefusals,
+    pub wasm_bulk_check_slow_path_calls: usize,
     pub stable_dirty_pages: Vec<PageIndex>,
     pub stable_accessed_pages: usize,
     pub stable_sigsegv_count: usize,
@@ -1093,6 +1135,13 @@ impl WasmtimeInstance {
 
             let wasm_sigsegv_handler_duration = wasm_tracker.metrics().sigsegv_handler_duration();
 
+            let heap_access = &self.store.data().heap_access;
+            let wasm_page_limit_refusals = HeapPageLimitRefusals {
+                handler: wasm_tracker.metrics().page_limit_exceeded(),
+                ..heap_access.refusals()
+            };
+            let wasm_bulk_check_slow_path_calls = heap_access.bulk_check_slow_path_calls();
+
             // We don't have a tracker for stable memory.
             if !self
                 .memory_trackers
@@ -1110,6 +1159,8 @@ impl WasmtimeInstance {
                     wasm_mprotect_count: wasm_tracker.metrics().mprotect_count(),
                     wasm_copy_page_count: wasm_tracker.metrics().copy_page_count(),
                     wasm_sigsegv_handler_duration,
+                    wasm_page_limit_refusals,
+                    wasm_bulk_check_slow_path_calls,
                     stable_dirty_pages,
                     stable_accessed_pages,
                     ..Default::default()
@@ -1137,6 +1188,8 @@ impl WasmtimeInstance {
                 wasm_mprotect_count: wasm_tracker.metrics().mprotect_count(),
                 wasm_copy_page_count: wasm_tracker.metrics().copy_page_count(),
                 wasm_sigsegv_handler_duration,
+                wasm_page_limit_refusals,
+                wasm_bulk_check_slow_path_calls,
                 stable_dirty_pages,
                 stable_accessed_pages,
                 stable_sigsegv_count: stable_tracker.metrics().sigsegv_count(),
@@ -1176,6 +1229,8 @@ impl WasmtimeInstance {
             wasm_mprotect_count: res.wasm_mprotect_count,
             wasm_copy_page_count: res.wasm_copy_page_count,
             wasm_sigsegv_handler_duration: res.wasm_sigsegv_handler_duration,
+            wasm_page_limit_refusals: res.wasm_page_limit_refusals,
+            wasm_bulk_check_slow_path_calls: res.wasm_bulk_check_slow_path_calls,
             stable_accessed_pages: res.stable_accessed_pages,
             stable_dirty_pages: res.stable_dirty_pages.len(),
             stable_sigsegv_count: res.stable_sigsegv_count,
@@ -1415,6 +1470,22 @@ impl WasmtimeInstance {
             panic!("invalid instruction counter type");
         };
         instruction_counter
+    }
+
+    /// Returns the number of Wasm heap pages that may still be accessed
+    /// before the heap accessed page limit is reached.
+    #[doc(hidden)]
+    pub fn heap_page_budget(&mut self) -> i64 {
+        let Some(budget) = self
+            .instance
+            .get_global(&mut *self.store, HEAP_PAGE_BUDGET_GLOBAL_NAME)
+        else {
+            panic!("couldn't find the heap page budget in the canister globals");
+        };
+        let Val::I64(budget) = budget.get(&mut *self.store) else {
+            panic!("invalid heap page budget type");
+        };
+        budget
     }
 
     /// Returns the heap size.

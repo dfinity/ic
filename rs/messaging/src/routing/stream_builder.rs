@@ -14,7 +14,7 @@ use ic_types::messages::{
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload,
     RejectContext, Request, RequestOrResponse, Response, StreamMessage,
 };
-use ic_types::{CanisterId, CountBytes, SubnetId};
+use ic_types::{CountBytes, SubnetId};
 use ic_types_cycles::{CompoundCycles, Cycles};
 #[cfg(test)]
 use mockall::automock;
@@ -414,10 +414,10 @@ impl StreamBuilderImpl {
         ///    peeked one.
         fn validated_next(
             iterator: &mut dyn PeekableOutputIterator,
-            expected_message: &RequestOrResponse,
+            expected_message: RequestOrResponse,
         ) -> RequestOrResponse {
             let message = iterator.next().unwrap();
-            debug_assert_eq!(&message, expected_message);
+            debug_assert_eq!(message, expected_message);
             message
         }
 
@@ -472,7 +472,6 @@ impl StreamBuilderImpl {
         let mut engine_requests_to_reject: Vec<Arc<Request>> = Vec::new();
         let mut engine_response_dropped_cycles = Cycles::zero();
         let mut dropped_response_cycles = Cycles::zero();
-        let mut local_connections: Vec<(CanisterId, CanisterId)> = Vec::new();
         let own_cost_schedule = state.get_own_cost_schedule();
 
         let mut output_iter = state.output_into_iter();
@@ -528,8 +527,10 @@ impl StreamBuilderImpl {
                         continue;
                     }
 
-                    // We will route (or reject) the message, pop it.
-                    let mut msg = validated_next(&mut output_iter, &msg);
+                    // We will route (or reject) the message, pop it. This consumes the peeked
+                    // clone, so that the popped message's `Arc` is (usually) not shared and
+                    // `Arc::make_mut()` below does not copy it.
+                    let mut msg = validated_next(&mut output_iter, msg);
 
                     let is_engine_dst =
                         !is_loopback_stream && dst_subnet_type == Some(SubnetType::CloudEngine);
@@ -664,8 +665,13 @@ impl StreamBuilderImpl {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
-                            if is_loopback_stream && let RequestOrResponse::Request(req) = &msg {
-                                local_connections.push((req.sender, req.receiver));
+                            if is_loopback_stream
+                                && let RequestOrResponse::Request(req) = &mut msg
+                                && req.receiver.get() == self.subnet_id.get()
+                            {
+                                // Optimization: cache the effective canister ID of a request to the
+                                // local management canister now, while its `Arc` is not shared.
+                                Request::cache_effective_canister_id(req);
                             }
                             dst_stream_entry.or_default().push(msg.into());
                         }
@@ -680,7 +686,7 @@ impl StreamBuilderImpl {
                 None => {
                     warn!(self.log, "No route to canister {}", msg.receiver());
                     self.observe_message_status(&msg, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND);
-                    match validated_next(&mut output_iter, &msg) {
+                    match validated_next(&mut output_iter, msg) {
                         // A Request: generate a reject Response.
                         RequestOrResponse::Request(req) => {
                             requests_to_reject.push(req);
@@ -713,20 +719,6 @@ impl StreamBuilderImpl {
             };
         }
         drop(output_iter);
-
-        // Record a connection metrics entry on the sender of every subnet-local
-        // request, for identifying tightly coupled canisters (e.g. when splitting
-        // the subnet).
-        let batch_time = state.metadata.batch_time;
-        for (sender, receiver) in local_connections {
-            if let Some(canister) = state.canister_state_make_mut(&sender) {
-                canister
-                    .system_state
-                    .canister_metrics_mut()
-                    .connection_metrics_mut()
-                    .increment(receiver, batch_time);
-            }
-        }
 
         if !dropped_response_cycles.is_zero() {
             state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(

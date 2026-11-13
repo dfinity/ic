@@ -20,5 +20,9 @@ pub const INGRESS_INTERVAL_OVERLAP: Duration = Duration::from_secs(120);
 /// Maximum permitted ingress window, mirroring the 24-hour bound documented on
 /// `ConstructionPayloadsRequestMetadata`.
 pub const MAX_INGRESS_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
+/// Maximum permitted size of the Candid-encoded ledger method arguments built in
+/// `/construction/payloads`. The arguments are copied into every envelope of the unsigned
+/// transaction, so their size must be bounded.
+pub const MAX_CANISTER_METHOD_ARGS_BYTES: usize = 4 * 1024;
 pub const STATUS_COMPLETED: &str = "COMPLETED";
 pub const MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST: u64 = 10000;

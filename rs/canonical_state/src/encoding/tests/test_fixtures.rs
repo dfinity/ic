@@ -54,6 +54,7 @@ pub fn request(_certification_version: CertificationVersion) -> StreamMessage {
         method_payload: vec![6],
         metadata,
         deadline,
+        effective_canister_id: None,
     }
     .into()
 }

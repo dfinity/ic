@@ -315,14 +315,22 @@ impl Amount {
     }
 }
 
+/// The maximum number of characters of an `Amount` value converted to a `Nat`, not counting a
+/// leading `-`. Enough for any 256-bit unsigned integer (at most 78 decimal digits).
+pub const MAX_AMOUNT_VALUE_LENGTH: usize = 78;
+
 impl TryFrom<Amount> for Nat {
     type Error = anyhow::Error;
     fn try_from(value: Amount) -> std::prelude::v1::Result<Self, Self::Error> {
-        Nat::from_str(match value.value.strip_prefix('-') {
-            Some(value) => value,
-            None => &value.value,
-        })
-        .with_context(|| format!("Failed to convert Amount to Nat: {value:?}"))
+        let digits = value.value.strip_prefix('-').unwrap_or(&value.value);
+        if digits.len() > MAX_AMOUNT_VALUE_LENGTH {
+            bail!(
+                "Failed to convert Amount to Nat: the value must not be longer than \
+                 {MAX_AMOUNT_VALUE_LENGTH} characters, got {}",
+                digits.len()
+            );
+        }
+        Nat::from_str(digits).with_context(|| format!("Failed to convert Amount to Nat: {value:?}"))
     }
 }
 
@@ -717,6 +725,48 @@ impl ::std::fmt::Display for Operator {
         match *self {
             Operator::Or => write!(f, "or"),
             Operator::And => write!(f, "and"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const U256_MAX: &str =
+        "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+
+    fn amount(value: &str) -> Amount {
+        Amount {
+            value: value.to_string(),
+            currency: Currency::default(),
+            metadata: None,
+        }
+    }
+
+    #[test]
+    fn should_convert_amount_of_max_length_to_nat() {
+        assert_eq!(U256_MAX.len(), MAX_AMOUNT_VALUE_LENGTH);
+        let expected = Nat::from_str(U256_MAX).unwrap();
+        assert_eq!(Nat::try_from(amount(U256_MAX)).unwrap(), expected);
+        assert_eq!(
+            Nat::try_from(amount(&format!("-{U256_MAX}"))).unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn should_reject_amount_longer_than_max_length() {
+        for value in [
+            "1".repeat(MAX_AMOUNT_VALUE_LENGTH + 1),
+            format!("-{}", "1".repeat(MAX_AMOUNT_VALUE_LENGTH + 1)),
+            "1".repeat(1_000_000),
+        ] {
+            let err = Nat::try_from(amount(&value)).unwrap_err();
+            assert!(
+                err.to_string().contains("must not be longer than"),
+                "unexpected error: {err}"
+            );
         }
     }
 }

@@ -142,7 +142,7 @@ pub(crate) fn check_canister_id_allocation_invariants(
     }
 
     // It suffices to check the last range, since the ranges of a `RoutingTable` are sorted.
-    let Some((last_range, last_subnet_id)) = routing_table.iter().last() else {
+    let Some((last_range, last_subnet_id)) = routing_table.iter().next_back() else {
         return Ok(());
     };
     if canister_id_into_u64(last_range.end) >= next_unallocated_canister_index {

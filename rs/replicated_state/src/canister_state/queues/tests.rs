@@ -3567,6 +3567,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
                     method_payload: vec![],
                     metadata: Default::default(),
                     deadline,
+                    effective_canister_id: None,
                 }),
                 time,
             )

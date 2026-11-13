@@ -1,11 +1,14 @@
 //! Defines types used internally by consensus components.
 
 use crate::{
-    artifact::ConsensusMessageId,
+    NodeIndex,
+    artifact::{ConsensusMessageId, IngressMessageId},
     batch::{BatchPayload, ValidationContext},
+    canister_http::CanisterHttpResponse,
     consensus::dkg::DkgPayload,
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag},
     crypto::*,
+    messages::SignedRequestBytes,
     replica_version::ReplicaVersion,
     signature::*,
     *,
@@ -22,6 +25,7 @@ use ic_protobuf::{
 };
 use serde::{Deserialize, Serialize};
 use std::cmp::PartialOrd;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryInto;
 use std::hash::Hash;
 
@@ -421,6 +425,17 @@ impl From<BlockProposal> for Block {
     fn from(proposal: BlockProposal) -> Block {
         proposal.content.value
     }
+}
+
+/// The IDs of the messages that P2P strips from a block proposal before sending it.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
+pub struct StrippedMessageIds {
+    /// The hash of the bytes of each ingress message.
+    pub ingress_messages: BTreeMap<IngressMessageId, CryptoHashOf<SignedRequestBytes>>,
+    /// The ID of each IDKG dealing, together with the index of its dealer.
+    pub idkg_dealings: BTreeSet<(NodeIndex, idkg::IDkgArtifactId)>,
+    /// The content hash of each canister http response.
+    pub canister_http_responses: BTreeSet<CryptoHashOf<CanisterHttpResponse>>,
 }
 
 impl AsRef<Block> for BlockProposal {
@@ -965,6 +980,10 @@ impl PbArtifact for ConsensusMessage {
     type PbIdError = ProxyDecodeError;
     type PbMessage = ic_protobuf::types::v1::ConsensusMessage;
     type PbMessageError = ProxyDecodeError;
+
+    fn check_integrity(&self) -> bool {
+        ConsensusMessageHashable::check_integrity(self)
+    }
 }
 
 impl From<ConsensusMessage> for pb::ConsensusMessage {
@@ -1487,11 +1506,11 @@ pub trait ConsensusMessageHashable: Clone {
     fn assert(msg: &ConsensusMessage) -> Option<&Self>;
     fn into_message(self) -> ConsensusMessage;
 
-    /// Check integrity of a message. Default is false.
+    /// Check integrity of a message. Default is true.
     /// This should be implemented for those that have `Hashed<H, V>`.
     /// Note that if lazy loading is also used, it will force evaluation.
     fn check_integrity(&self) -> bool {
-        false
+        true
     }
 }
 

@@ -304,4 +304,7 @@ message StrippedConsensusMessage {
 
 message StrippedConsensusMessageId {
   ConsensusMessageId unstripped_id = 1;
+  // The hash of the IDs of the messages stripped from the block proposal, or empty if the
+  // message was not stripped.
+  bytes stripped_message_ids_hash = 2;
 }

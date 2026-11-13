@@ -523,6 +523,7 @@ impl TryFrom<Request> for ic_types::messages::Request {
             method_payload: request.method_payload,
             metadata: request.metadata.into(),
             deadline: CoarseTime::from_secs_since_unix_epoch(request.deadline),
+            effective_canister_id: None,
         })
     }
 }

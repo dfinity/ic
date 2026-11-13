@@ -213,28 +213,28 @@ fn load_metrics_e2e_test() {
             states_sizes_bytes
                 .source
                 .min(states_sizes_bytes.destination),
-            3705962,
+            3712636,
             0.1
         );
         assert_near!(
             states_sizes_bytes
                 .source
                 .max(states_sizes_bytes.destination),
-            5558934,
+            5568917,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .min(instructions_executed.destination),
-            144343027,
+            144307301,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .max(instructions_executed.destination),
-            145772259,
+            145741551,
             0.1
         );
         assert_eq_oriented!(canisters_installed, 12, 8);

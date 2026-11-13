@@ -14,7 +14,7 @@ use std::{
     ops::Range,
     os::unix::io::BorrowedFd,
     ptr::NonNull,
-    sync::atomic::{AtomicU64, AtomicUsize, Ordering},
+    sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     time::Duration,
 };
 
@@ -149,7 +149,7 @@ pub enum AccessKind {
 #[derive(Default)]
 pub struct MemoryTrackerMetrics {
     sigsegv_count: AtomicUsize,
-    page_limit_exceeded_count: AtomicUsize,
+    page_limit_exceeded: AtomicBool,
     mmap_count: AtomicUsize,
     mprotect_count: AtomicUsize,
     copy_page_count: AtomicUsize,
@@ -161,10 +161,11 @@ impl MemoryTrackerMetrics {
         self.sigsegv_count.load(Ordering::Relaxed)
     }
 
-    /// The number of signals for pages beyond the accessed page limit. Such
-    /// pages are refused if the limit is enforced, and mapped otherwise.
-    pub fn page_limit_exceeded_count(&self) -> usize {
-        self.page_limit_exceeded_count.load(Ordering::Relaxed)
+    /// Whether a signal for a page beyond the accessed page limit was
+    /// handled. Such a page is refused if the limit is enforced, and mapped
+    /// otherwise.
+    pub fn page_limit_exceeded(&self) -> bool {
+        self.page_limit_exceeded.load(Ordering::Relaxed)
     }
 
     pub fn mmap_count(&self) -> usize {

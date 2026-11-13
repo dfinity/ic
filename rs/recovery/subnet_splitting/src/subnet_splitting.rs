@@ -93,6 +93,9 @@ pub struct SubnetSplittingArgs {
     pub destination_subnet_id: SubnetId,
 
     /// Public ssh key to be deployed to the subnet for read only access.
+    ///
+    /// The proposal halting the subnet sets this key as the subnet's only
+    /// readonly key: it replaces the subnet's entire list of readonly keys.
     #[clap(long)]
     pub readonly_pub_key: Option<String>,
 
@@ -428,6 +431,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                     self.params.readonly_pub_key = read_optional(
                         &self.logger,
                         "Enter public key to add readonly SSH access to subnet. Ensure the right format.\n\
+                        Note: it replaces all existing readonly keys of the subnet.\n\
                         Format:   ssh-ed25519 <pubkey> <identity>\n\
                         Example:  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwS/0S6xH0g/xLDV0Tz7VeMZE9AKPeSbLmCsq9bY3F1 foo@dfinity.org\n\
                         Enter your key: ",
@@ -591,7 +595,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 );
                 let mut includes = Recovery::get_ic_state_includes(
                     &self.recovery.logger,
-                    ExecutionMode::Remote(&ssh_helper),
+                    ExecutionMode::Remote(ssh_helper.clone()),
                     CheckpointHeight::Latest,
                 )?;
                 includes.push(PathBuf::from(CUPS_DIR));

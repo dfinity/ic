@@ -56,7 +56,7 @@
 //!
 //! Optionally, the tracker limits the number of distinct Wasm pages that may
 //! be accessed (`AccessedWasmPagesLimit`). Once the limit is reached, a signal
-//! for an unaccessed page is counted in `page_limit_exceeded_count` and, if
+//! for an unaccessed page is recorded in the `page_limit_exceeded` metric and, if
 //! the limit is enforced, refused (`SigsegvOutcome::Refused`): the page is not
 //! mapped and the `page_limit_exceeded` flag is set. If the limit is only
 //! observed, the page is mapped like any other page. Writes to already
@@ -298,26 +298,41 @@ impl DeterministicState {
         (in_bitmap.end - in_bitmap.start - accessed) + beyond_bitmap
     }
 
-    /// Returns true if accessing all pages in the specified byte range fits
-    /// within the accessed page limit.
-    fn range_fits_limit(&self, byte_range: Range<u64>) -> bool {
-        let Some(limit) = self.accessed_wasm_pages_limit.limit() else {
-            return true;
-        };
+    /// Returns the range of Wasm pages that overlap with the specified byte range.
+    fn wasm_page_range(byte_range: &Range<u64>) -> Range<usize> {
         if byte_range.is_empty() {
-            return true;
+            return 0..0;
         }
         let wasm_page_size = WASM_PAGE_SIZE_IN_BYTES as u64;
         let first_page = (byte_range.start / wasm_page_size) as usize;
         let last_page = ((byte_range.end - 1) / wasm_page_size) as usize;
-        let wasm_pages = first_page..last_page + 1;
+        first_page..last_page + 1
+    }
 
+    /// Returns true if accessing all pages in both byte ranges fits within the
+    /// accessed page limit. Pages shared by the two ranges are counted once.
+    fn ranges_fit_limit(&self, first: Range<u64>, second: Range<u64>) -> bool {
+        let Some(limit) = self.accessed_wasm_pages_limit.limit() else {
+            return true;
+        };
+        let first = Self::wasm_page_range(&first);
+        let second = Self::wasm_page_range(&second);
+        // Inclusion-exclusion: pages in both ranges are counted twice by the
+        // sum, so the overlap is subtracted. If the ranges are disjoint, the
+        // overlap is an inverted or empty range of length zero.
+        let overlap = first.start.max(second.start)..first.end.min(second.end);
         let accessed = self.accessed_wasm_pages_count.get();
-        // Fast path: even if every page in the range is new, we stay within the limit.
-        if accessed + wasm_pages.len() <= limit.get() {
+        // Fast path: even if every page in the ranges is new, we stay within the limit.
+        let distinct = first.len() + second.len() - overlap.len();
+        if accessed + distinct <= limit.get() {
             return true;
         }
-        accessed + self.count_unaccessed_wasm_pages(wasm_pages) <= limit.get()
+        let new_pages = self.count_unaccessed_wasm_pages(first)
+            + self.count_unaccessed_wasm_pages(second)
+            - self.count_unaccessed_wasm_pages(overlap);
+        // Accessing no new page always fits, like in the signal handler, also
+        // if the limit is only observed and the count is already beyond it.
+        new_pages == 0 || accessed + new_pages <= limit.get()
     }
 
     /// Marks specified Wasm page as dirty.
@@ -413,6 +428,10 @@ pub struct DeterministicMemoryTracker {
     state: RefCell<DeterministicState>,
     page_overhead: u64,
     subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
+    /// Invoked once for every Wasm page that becomes accessed (mapped). Not
+    /// invoked when only the write protection of an accessed page is lifted
+    /// or when a page is refused because of the accessed page limit.
+    on_wasm_page_accessed: Arc<SignalMutex<dyn FnMut() + Send>>,
     /// Set once a page was refused because of the enforced accessed page limit.
     page_limit_exceeded: Arc<AtomicBool>,
 }
@@ -437,6 +456,7 @@ impl DeterministicMemoryTracker {
 
         // Charge instructions.
         (self.subtract_instruction_counter.lock())(num_os_pages * self.page_overhead);
+        (self.on_wasm_page_accessed.lock())();
     }
 
     /// Marks a Wasm page as dirty.
@@ -494,8 +514,8 @@ impl DeterministicMemoryTracker {
         // From here on the faulting page is unaccessed and about to be mapped.
         if state.exceeds_limit_if_accessed(faulting_wasm_page_idx) {
             self.metrics
-                .page_limit_exceeded_count
-                .fetch_add(1, Ordering::Relaxed);
+                .page_limit_exceeded
+                .store(true, Ordering::Relaxed);
             if state.accessed_wasm_pages_limit.is_enforced() {
                 self.page_limit_exceeded.store(true, Ordering::Relaxed);
                 return SigsegvOutcome::Refused;
@@ -547,9 +567,16 @@ impl DeterministicMemoryTracker {
     /// start of the tracked memory) fits within the accessed page limit, given
     /// the pages accessed so far.
     pub fn check_range_fits(&self, byte_range: Range<u64>) -> bool {
+        self.check_ranges_fit(byte_range, 0..0)
+    }
+
+    /// Like `check_range_fits`, but for two byte ranges that are accessed by
+    /// the same operation (e.g. the source and the destination of a copy).
+    /// Pages shared by the two ranges are counted once.
+    pub fn check_ranges_fit(&self, first: Range<u64>, second: Range<u64>) -> bool {
         // SAFETY: The caller must ensure that the tracker has a deterministic state.
         let state = &*self.state.borrow();
-        state.range_fits_limit(byte_range)
+        state.ranges_fit_limit(first, second)
     }
 
     /// Returns the flag that is set once a page was refused because of the
@@ -582,6 +609,7 @@ impl DeterministicMemoryTracker {
         memory_limits: MemoryLimits,
         page_overhead: u64,
         subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
+        on_wasm_page_accessed: Arc<SignalMutex<dyn FnMut() + Send>>,
     ) -> nix::Result<Self>
     where
         Self: Sized,
@@ -610,6 +638,7 @@ impl DeterministicMemoryTracker {
             state: RefCell::new(state),
             page_overhead,
             subtract_instruction_counter,
+            on_wasm_page_accessed,
             page_limit_exceeded: Arc::new(AtomicBool::new(false)),
         };
 

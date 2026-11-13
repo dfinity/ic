@@ -280,9 +280,11 @@ impl Step for MergeCertificationPoolsStep {
 pub struct DownloadIcDataStep {
     pub logger: Logger,
     pub ssh_helper: SshHelper,
-    pub backup_dir: PathBuf,
+    /// If given, the data is downloaded into this directory, and then copied
+    /// into `working_dir`, so that a pristine copy of the downloaded data is
+    /// kept. Otherwise, the data is downloaded straight into `working_dir`.
+    pub backup_dir: Option<PathBuf>,
     pub working_dir: PathBuf,
-    pub keep_downloaded_data: bool,
     pub data_includes: Vec<PathBuf>,
     pub include_config: bool,
 }
@@ -304,25 +306,20 @@ impl Step for DownloadIcDataStep {
             let config_src = self.ssh_helper.remote_path(IC_JSON5_PATH);
             descr.push_str(&format!(" and config from {}", config_src));
         }
-        if self.keep_downloaded_data {
-            descr.push_str(&format!(
+        match &self.backup_dir {
+            Some(backup_dir) => descr.push_str(&format!(
                 " to {}. Then copy to {}.",
-                self.backup_dir.display(),
+                backup_dir.display(),
                 self.working_dir.display()
-            ));
-        } else {
-            descr.push_str(&format!(" to {}.", self.working_dir.display()));
+            )),
+            None => descr.push_str(&format!(" to {}.", self.working_dir.display())),
         }
 
         descr
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let target = if self.keep_downloaded_data {
-            &self.backup_dir
-        } else {
-            &self.working_dir
-        };
+        let target = self.backup_dir.as_ref().unwrap_or(&self.working_dir);
 
         if !self.data_includes.is_empty() {
             self.ssh_helper.rsync_includes(
@@ -331,7 +328,7 @@ impl Step for DownloadIcDataStep {
                 target.join("data").join(""),
             )?;
 
-            if self.keep_downloaded_data {
+            if self.backup_dir.is_some() {
                 rsync_includes(
                     &self.logger,
                     &self.data_includes,
@@ -352,7 +349,7 @@ impl Step for DownloadIcDataStep {
             self.ssh_helper
                 .rsync(self.ssh_helper.remote_path(IC_JSON5_PATH), target.join(""))?;
 
-            if self.keep_downloaded_data {
+            if self.backup_dir.is_some() {
                 rsync(
                     &self.logger,
                     target.join(PathBuf::from(IC_JSON5_PATH).file_name().unwrap()),
@@ -367,21 +364,22 @@ impl Step for DownloadIcDataStep {
     }
 }
 
-pub(crate) struct CopyLocalIcStateStep {
+pub struct CopyLocalIcStateStep {
     pub logger: Logger,
     pub working_dir: PathBuf,
     pub require_confirmation: bool,
     pub data_includes: Vec<PathBuf>,
+    pub include_config: bool,
 }
 
 impl Step for CopyLocalIcStateStep {
     fn descr(&self) -> String {
-        format!(
-            "Copy node state from {} and config from {} to {}.",
-            IC_DATA_PATH,
-            IC_JSON5_PATH,
-            self.working_dir.display()
-        )
+        let mut descr = format!("Copy node state from {IC_DATA_PATH}");
+        if self.include_config {
+            descr.push_str(&format!(" and config from {IC_JSON5_PATH}"));
+        }
+        descr.push_str(&format!(" to {}.", self.working_dir.display()));
+        descr
     }
 
     fn exec(&self) -> RecoveryResult<()> {
@@ -410,9 +408,11 @@ impl Step for CopyLocalIcStateStep {
         }
 
         // Config
-        let mut cp = Command::new("cp");
-        cp.arg(IC_JSON5_PATH).arg(&self.working_dir);
-        confirm_exec_cmd(&mut cp, log)?;
+        if self.include_config {
+            let mut cp = Command::new("cp");
+            cp.arg(IC_JSON5_PATH).arg(&self.working_dir);
+            confirm_exec_cmd(&mut cp, log)?;
+        }
 
         Ok(())
     }
@@ -684,7 +684,7 @@ impl Step for UploadStateAndRestartStep {
             let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
             // path of latest checkpoint on upload node
             let copy_from = ic_checkpoints_path.join(
-                ExecutionMode::Remote(&ssh_helper)
+                ExecutionMode::Remote(ssh_helper.clone())
                     .get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
                     .unwrap_or_default()
                     .0,

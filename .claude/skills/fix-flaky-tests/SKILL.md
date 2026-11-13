@@ -52,7 +52,7 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
 
 2. Get the last flaky runs of the test named `label` in the last week by running one of the following commands, replacing `<label>` with the label of the test:
 
-   - For most system-tests, which run via Farm, also download their journald logs from ElasticSearch and their console logs from Farm:
+   - For `_farm` system-tests, which run via Farm, also download their journald logs from ElasticSearch and their console logs from Farm. CI Main only runs the `_local` variants, so only the Farm variants of `system_test_large` tests (release-testing) and of the tests the nightly workflows select still run regularly:
      ```
      bazel --quiet run //ci/githubstats:query -- last --flaky --week --download-ic-logs --download-console-logs <label>
      ```
@@ -62,7 +62,7 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
      bazel --quiet run //ci/githubstats:query -- last --flaky --week <label>
      ```
      These tests use the `Local` backend which doesn't run via Farm and doesn't upload its journald logs to ElasticSearch. Instead the journald and console logs are streamed to the test log itself (the `FAILED.log`/`PASSED.log` files), so there's nothing to download from ElasticSearch or Farm.
-     They only run on RBE @ Namespace, so their logs come from GitHub artifacts instead of BuildBuddy. GitHub deletes those after 14 days, and downloading them needs `gh` to be logged in (see the prerequisites).
+     In CI Main they run on RBE @ Namespace, so their logs come from GitHub artifacts instead of BuildBuddy. GitHub deletes those after 14 days, and downloading them needs `gh` to be logged in (see the prerequisites).
 
    Note the command will print `Downloading logs to: <LOG_DIR>`.
 

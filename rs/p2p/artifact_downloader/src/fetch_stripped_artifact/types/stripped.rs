@@ -3,31 +3,12 @@ use ic_protobuf::{
     types::v1 as pb,
 };
 use ic_types::{
-    NodeIndex,
     artifact::{ConsensusMessageId, IdentifiableArtifact, PbArtifact},
-    consensus::{ConsensusMessage, ConsensusMessageHash, idkg::IDkgArtifactId},
-    crypto::{CryptoHash, CryptoHashOf},
+    consensus::{ConsensusMessage, ConsensusMessageHash, StrippedMessageIds, idkg::IDkgArtifactId},
+    crypto::{CryptoHash, CryptoHashOf, crypto_hash},
 };
 
-use super::{CanisterHttpResponseContentHash, SignedIngressId};
-
-/// Stripped version of the [`IngressPayload`].
-#[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct StrippedIngressPayload {
-    pub(crate) ingress_messages: Vec<SignedIngressId>,
-}
-
-/// Stripped version of the [`SignedIDkgDealing`]s.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct StrippedIDkgDealings {
-    pub(crate) stripped_dealings: Vec<(NodeIndex, IDkgArtifactId)>,
-}
-
-/// Stripped version of the canister HTTP payload.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct StrippedCanisterHttpResponses {
-    pub(crate) stripped_responses: Vec<CanisterHttpResponseContentHash>,
-}
+use super::SignedIngressId;
 
 /// Stripped version of the [`BlockProposal`].
 #[derive(Clone, Debug, PartialEq)]
@@ -36,13 +17,8 @@ pub struct StrippedBlockProposal {
     pub(crate) pruned_block_proposal_proto: pb::BlockProposal,
     /// The consensus message ID of the original (unstripped) block proposal, including the [`Strippable`] data.
     pub(crate) unstripped_consensus_message_id: ConsensusMessageId,
-    /// The stripped ingress messages, i.e. the IDs of ingress messages that were pruned from the block proposal.
-    pub(crate) stripped_ingress_payload: StrippedIngressPayload,
-    /// The stripped IDKG dealings, i.e. the IDs of IDKG dealings that were pruned from the block proposal.
-    pub(crate) stripped_idkg_dealings: StrippedIDkgDealings,
-    /// The stripped canister HTTP responses, i.e. the content hashes of the responses that were
-    /// pruned from the canister HTTP payload of the block proposal.
-    pub(crate) stripped_canister_http_responses: StrippedCanisterHttpResponses,
+    /// The IDs of the messages that were pruned from the block proposal.
+    pub(crate) stripped_message_ids: StrippedMessageIds,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -92,6 +68,25 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
             )));
         }
 
+        // Peers strip only data block proposals.
+        if pruned_block_proposal_proto
+            .value
+            .as_ref()
+            .is_some_and(|block| {
+                !matches!(
+                    block
+                        .dkg_payload
+                        .as_ref()
+                        .and_then(|payload| payload.val.as_ref()),
+                    Some(pb::dkg_payload::Val::DataPayload(_))
+                )
+            })
+        {
+            return Err(ProxyDecodeError::Other(String::from(
+                "The block proposal is NOT a data block proposal",
+            )));
+        }
+
         let unstripped_consensus_message_id: ConsensusMessageId = try_from_option_field(
             value.unstripped_consensus_message_id,
             "unstripped_consensus_message_id",
@@ -107,72 +102,75 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
             )));
         }
 
+        // Every order and repetition of the same IDs decodes to the same IDs.
+        let stripped_message_ids = StrippedMessageIds {
+            ingress_messages: value
+                .ingress_messages
+                .into_iter()
+                .map(|message| {
+                    SignedIngressId::try_from(message)
+                        .map(|id| (id.ingress_message_id, id.ingress_bytes_hash))
+                })
+                .collect::<Result<_, _>>()?,
+            idkg_dealings: value
+                .stripped_idkg_dealings
+                .into_iter()
+                .map(|dealing| {
+                    let idkg_artifact_id: IDkgArtifactId = try_from_option_field(
+                        dealing.dealing_id,
+                        "StrippedIDkgDealing::dealing_id",
+                    )?;
+                    if !matches!(idkg_artifact_id, IDkgArtifactId::Dealing(_, _)) {
+                        return Err(ProxyDecodeError::Other(format!(
+                            "The stripped IDKG artifact id {:?} is NOT for a dealing",
+                            idkg_artifact_id,
+                        )));
+                    }
+                    Ok((dealing.dealer_index, idkg_artifact_id))
+                })
+                .collect::<Result<_, ProxyDecodeError>>()?,
+            canister_http_responses: value
+                .stripped_canister_http_responses
+                .into_iter()
+                .map(|response| CryptoHashOf::new(CryptoHash(response.content_hash)))
+                .collect(),
+        };
+
         Ok(Self {
             pruned_block_proposal_proto,
-            stripped_ingress_payload: StrippedIngressPayload {
-                ingress_messages: value
-                    .ingress_messages
-                    .into_iter()
-                    .map(SignedIngressId::try_from)
-                    .collect::<Result<Vec<_>, _>>()?,
-            },
             unstripped_consensus_message_id,
-            stripped_idkg_dealings: StrippedIDkgDealings {
-                stripped_dealings: value
-                    .stripped_idkg_dealings
-                    .into_iter()
-                    .map(|dealing| {
-                        let idkg_artifact_id: IDkgArtifactId = try_from_option_field(
-                            dealing.dealing_id,
-                            "StrippedIDkgDealings::dealing_id",
-                        )?;
-                        if !matches!(idkg_artifact_id, IDkgArtifactId::Dealing(_, _)) {
-                            return Err(ProxyDecodeError::Other(format!(
-                                "The stripped IDKG artifact id {:?} is NOT for a dealing",
-                                idkg_artifact_id,
-                            )));
-                        }
-                        Ok((dealing.dealer_index, idkg_artifact_id))
-                    })
-                    .collect::<Result<Vec<_>, ProxyDecodeError>>()?,
-            },
-            stripped_canister_http_responses: StrippedCanisterHttpResponses {
-                stripped_responses: value
-                    .stripped_canister_http_responses
-                    .into_iter()
-                    .map(|response| CryptoHashOf::new(CryptoHash(response.content_hash)))
-                    .collect(),
-            },
+            stripped_message_ids,
         })
     }
 }
 
 impl From<StrippedBlockProposal> for pb::StrippedBlockProposal {
     fn from(value: StrippedBlockProposal) -> Self {
+        let StrippedMessageIds {
+            ingress_messages,
+            idkg_dealings,
+            canister_http_responses,
+        } = value.stripped_message_ids;
         Self {
             pruned_block_proposal: Some(value.pruned_block_proposal_proto),
-            ingress_messages: value
-                .stripped_ingress_payload
-                .ingress_messages
+            ingress_messages: ingress_messages
                 .into_iter()
-                .map(|signed_ingress_id| pb::StrippedIngressMessage {
-                    stripped: Some(signed_ingress_id.ingress_message_id.into()),
-                    ingress_bytes_hash: signed_ingress_id.ingress_bytes_hash.get().0,
-                })
+                .map(
+                    |(ingress_message_id, ingress_bytes_hash)| pb::StrippedIngressMessage {
+                        stripped: Some(ingress_message_id.into()),
+                        ingress_bytes_hash: ingress_bytes_hash.get().0,
+                    },
+                )
                 .collect(),
             unstripped_consensus_message_id: Some(value.unstripped_consensus_message_id.into()),
-            stripped_idkg_dealings: value
-                .stripped_idkg_dealings
-                .stripped_dealings
+            stripped_idkg_dealings: idkg_dealings
                 .into_iter()
                 .map(|(dealer_index, dealing_id)| pb::StrippedIDkgDealing {
                     dealer_index,
                     dealing_id: Some(dealing_id.into()),
                 })
                 .collect(),
-            stripped_canister_http_responses: value
-                .stripped_canister_http_responses
-                .stripped_responses
+            stripped_canister_http_responses: canister_http_responses
                 .into_iter()
                 .map(|content_hash| pb::StrippedCanisterHttpResponse {
                     content_hash: content_hash.get().0,
@@ -197,50 +195,82 @@ impl From<MaybeStrippedConsensusMessage> for pb::StrippedConsensusMessage {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash)]
-pub struct StrippedConsensusMessageId(ConsensusMessageId);
-
-impl AsRef<ConsensusMessageId> for StrippedConsensusMessageId {
-    fn as_ref(&self) -> &ConsensusMessageId {
-        &self.0
-    }
+/// The id of a [`MaybeStrippedConsensusMessage`].
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub enum MaybeStrippedConsensusMessageId {
+    /// Also covers the IDs of the stripped messages, so that a proposal listing other messages
+    /// has another id.
+    StrippedBlockProposal {
+        unstripped_id: ConsensusMessageId,
+        stripped_message_ids_hash: CryptoHashOf<StrippedMessageIds>,
+    },
+    Unstripped(ConsensusMessageId),
 }
 
-impl From<StrippedConsensusMessageId> for pb::StrippedConsensusMessageId {
-    fn from(value: StrippedConsensusMessageId) -> Self {
-        pb::StrippedConsensusMessageId {
-            unstripped_id: Some(value.0.into()),
+impl AsRef<ConsensusMessageId> for MaybeStrippedConsensusMessageId {
+    fn as_ref(&self) -> &ConsensusMessageId {
+        match self {
+            Self::StrippedBlockProposal { unstripped_id, .. } => unstripped_id,
+            Self::Unstripped(id) => id,
         }
     }
 }
 
-impl TryFrom<pb::StrippedConsensusMessageId> for StrippedConsensusMessageId {
+impl From<MaybeStrippedConsensusMessageId> for pb::StrippedConsensusMessageId {
+    fn from(value: MaybeStrippedConsensusMessageId) -> Self {
+        let (unstripped_id, stripped_message_ids_hash) = match value {
+            MaybeStrippedConsensusMessageId::StrippedBlockProposal {
+                unstripped_id,
+                stripped_message_ids_hash,
+            } => (unstripped_id, stripped_message_ids_hash.get().0),
+            MaybeStrippedConsensusMessageId::Unstripped(id) => (id, vec![]),
+        };
+
+        pb::StrippedConsensusMessageId {
+            unstripped_id: Some(unstripped_id.into()),
+            stripped_message_ids_hash,
+        }
+    }
+}
+
+impl TryFrom<pb::StrippedConsensusMessageId> for MaybeStrippedConsensusMessageId {
     type Error = ProxyDecodeError;
 
     fn try_from(value: pb::StrippedConsensusMessageId) -> Result<Self, Self::Error> {
-        let unstripped = try_from_option_field(
+        let unstripped_id = try_from_option_field(
             value.unstripped_id,
             "StrippedConsensusMessageId::unstripped_id",
         )?;
+        let hash = value.stripped_message_ids_hash;
 
-        Ok(Self(unstripped))
+        Ok(if hash.is_empty() {
+            Self::Unstripped(unstripped_id)
+        } else {
+            Self::StrippedBlockProposal {
+                unstripped_id,
+                stripped_message_ids_hash: CryptoHashOf::new(CryptoHash(hash)),
+            }
+        })
     }
 }
 
 impl IdentifiableArtifact for MaybeStrippedConsensusMessage {
     const NAME: &'static str = "strippedconsensus";
 
-    type Id = StrippedConsensusMessageId;
+    type Id = MaybeStrippedConsensusMessageId;
 
     fn id(&self) -> Self::Id {
-        let unstripped_id = match self {
-            MaybeStrippedConsensusMessage::Unstripped(unstripped) => unstripped.id(),
+        match self {
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) => {
-                stripped.unstripped_consensus_message_id.clone()
+                MaybeStrippedConsensusMessageId::StrippedBlockProposal {
+                    unstripped_id: stripped.unstripped_consensus_message_id.clone(),
+                    stripped_message_ids_hash: crypto_hash(&stripped.stripped_message_ids),
+                }
             }
-        };
-
-        StrippedConsensusMessageId(unstripped_id)
+            MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
+                MaybeStrippedConsensusMessageId::Unstripped(unstripped.id())
+            }
+        }
     }
 }
 
@@ -252,6 +282,14 @@ impl PbArtifact for MaybeStrippedConsensusMessage {
     type PbMessage = pb::StrippedConsensusMessage;
 
     type PbMessageError = ProxyDecodeError;
+
+    fn check_integrity(&self) -> bool {
+        match self {
+            MaybeStrippedConsensusMessage::Unstripped(unstripped) => unstripped.check_integrity(),
+            // A stripped proposal can only be checked once it is reassembled.
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(_) => true,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -260,10 +298,13 @@ mod tests {
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
 
     use crate::fetch_stripped_artifact::{
+        stripper::Strippable,
         test_utils::{
-            fake_canister_http_stripped_message, fake_finalization_consensus_message_id,
-            fake_idkg_dealing, fake_idkg_dealing_support_artifact_id, fake_ingress_message,
-            fake_stripped_block_proposal_with_messages,
+            fake_block_proposal_with_ingresses, fake_canister_http_stripped_message,
+            fake_finalization_consensus_message_id, fake_idkg_dealing,
+            fake_idkg_dealing_support_artifact_id, fake_ingress_message,
+            fake_ingress_message_with_arg_size, fake_ingress_message_with_sig,
+            fake_stripped_block_proposal_with_messages, fake_summary_block_proposal,
         },
         types::StrippedMessageId,
     };
@@ -329,6 +370,27 @@ mod tests {
     }
 
     #[test]
+    fn deserialize_summary_block_proposal_should_fail() {
+        let message = fake_summary_block_proposal();
+        let ConsensusMessage::BlockProposal(block_proposal) = message.clone() else {
+            unreachable!();
+        };
+        let mut stripped_block_proposal = fake_stripped_block_proposal_with_messages(vec![]);
+        stripped_block_proposal.pruned_block_proposal_proto =
+            pb::BlockProposal::from(block_proposal);
+        stripped_block_proposal.unstripped_consensus_message_id = message.id();
+
+        let original_consensus_message =
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped_block_proposal);
+        let proto = pb::StrippedConsensusMessage::from(original_consensus_message.clone());
+        let result = MaybeStrippedConsensusMessage::try_from(proto);
+        assert_matches!(
+            result,
+            Err(ProxyDecodeError::Other(msg)) if msg.contains("is NOT a data block proposal")
+        );
+    }
+
+    #[test]
     fn deserialize_non_dealing_artifact_id_should_fail() {
         let idkg_dealing_support_id = fake_idkg_dealing_support_artifact_id();
         let stripped_block_proposal =
@@ -344,6 +406,123 @@ mod tests {
         assert_matches!(
             result,
             Err(ProxyDecodeError::Other(msg)) if msg.contains("is NOT for a dealing")
+        );
+    }
+
+    #[test]
+    fn stripped_consensus_message_id_roundtrip_test() {
+        let stripped = ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![
+            fake_ingress_message_with_arg_size("fake_1", 8).0,
+        ]))
+        .strip();
+        let unstripped = fake_summary_block_proposal().strip();
+
+        for message in [stripped, unstripped] {
+            let id = message.id();
+            let proto = pb::StrippedConsensusMessageId::from(id.clone());
+
+            assert_eq!(
+                MaybeStrippedConsensusMessageId::try_from(proto).unwrap(),
+                id
+            );
+        }
+    }
+
+    /// The id covers which messages were stripped, but not the rest of the proposal, which is
+    /// checked once it is reassembled.
+    #[test]
+    fn id_covers_the_stripped_message_ids_test() {
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) =
+            ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![
+                fake_ingress_message_with_arg_size("fake_1", 8).0,
+            ]))
+            .strip()
+        else {
+            panic!("Didn't strip the block proposal");
+        };
+        let mut modified_block = stripped.clone();
+        modified_block
+            .pruned_block_proposal_proto
+            .value
+            .as_mut()
+            .unwrap()
+            .time += 1;
+        let mut other_messages = stripped.clone();
+        let (_, other_ingress_id) = fake_ingress_message_with_arg_size("fake_2", 8);
+        other_messages.stripped_message_ids.ingress_messages.insert(
+            other_ingress_id.ingress_message_id,
+            other_ingress_id.ingress_bytes_hash,
+        );
+        let id = MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped).id();
+
+        let modified_block_id =
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(modified_block).id();
+        assert_eq!(modified_block_id, id);
+        let other_messages_id =
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(other_messages).id();
+        assert_eq!(other_messages_id.as_ref(), id.as_ref());
+        assert_ne!(other_messages_id, id);
+    }
+
+    /// However a peer orders or repeats the stripped message IDs on the wire, they decode to the
+    /// same IDs.
+    #[test]
+    fn reordered_and_repeated_ids_decode_to_the_same_ids_test() {
+        let stripped_block_proposal = fake_stripped_block_proposal_with_messages(vec![
+            fake_ingress_message("fake_1").id(),
+            fake_ingress_message("fake_2").id(),
+            fake_idkg_dealing(NODE_1, 1).id(),
+            fake_idkg_dealing(NODE_2, 2).id(),
+            fake_canister_http_stripped_message(1).id(),
+            fake_canister_http_stripped_message(2).id(),
+        ]);
+        let mut proto = pb::StrippedBlockProposal::from(stripped_block_proposal.clone());
+        proto.ingress_messages.reverse();
+        proto
+            .ingress_messages
+            .push(proto.ingress_messages[0].clone());
+        proto.stripped_idkg_dealings.reverse();
+        proto
+            .stripped_idkg_dealings
+            .push(proto.stripped_idkg_dealings[0].clone());
+        proto.stripped_canister_http_responses.reverse();
+        proto
+            .stripped_canister_http_responses
+            .push(proto.stripped_canister_http_responses[0].clone());
+
+        assert_eq!(
+            StrippedBlockProposal::try_from(proto).unwrap(),
+            stripped_block_proposal
+        );
+    }
+
+    /// A block holds one signed version of each request, so the stripped IDs do as well.
+    #[test]
+    fn signed_versions_of_one_request_decode_to_one_id_test() {
+        let (_, signed_ingress_id) = fake_ingress_message_with_sig("fake_1", vec![1, 2, 3]);
+        let (_, other_signed_ingress_id) = fake_ingress_message_with_sig("fake_1", vec![2, 3, 4]);
+        assert_eq!(
+            signed_ingress_id.ingress_message_id,
+            other_signed_ingress_id.ingress_message_id
+        );
+        let mut proto =
+            pb::StrippedBlockProposal::from(fake_stripped_block_proposal_with_messages(vec![
+                StrippedMessageId::Ingress(signed_ingress_id),
+            ]));
+        proto.ingress_messages.push(pb::StrippedIngressMessage {
+            stripped: Some(other_signed_ingress_id.ingress_message_id.into()),
+            ingress_bytes_hash: other_signed_ingress_id.ingress_bytes_hash.get().0,
+        });
+        assert_eq!(proto.ingress_messages.len(), 2);
+
+        let stripped_block_proposal = StrippedBlockProposal::try_from(proto).unwrap();
+
+        assert_eq!(
+            stripped_block_proposal
+                .stripped_message_ids
+                .ingress_messages
+                .len(),
+            1
         );
     }
 }

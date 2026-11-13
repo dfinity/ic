@@ -10,7 +10,7 @@ py_binary(
     # So that query_test can `import query`: rules_python runs Python with PYTHONSAFEPATH=1.
     imports = ["."],
     deps = [
-        "@buildbuddy_proto//:buildbuddy_py_proto",
+        "@buildbuddy_proto//:buildbuddy_py",
         requirement("pandas"),
         requirement("psycopg"),
         requirement("requests"),
