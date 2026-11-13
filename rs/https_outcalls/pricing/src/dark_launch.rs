@@ -162,6 +162,7 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
+                effective_canister_id: None,
             }),
             url: String::new(),
             max_response_bytes: None,

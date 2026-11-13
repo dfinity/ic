@@ -191,6 +191,7 @@ impl OutputRequest {
             method_payload: self.method_payload,
             metadata: self.metadata,
             deadline: self.deadline,
+            effective_canister_id: None,
         }
     }
 }
