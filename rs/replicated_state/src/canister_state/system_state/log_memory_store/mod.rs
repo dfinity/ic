@@ -161,6 +161,29 @@ impl LogMemoryStore {
         }
     }
 
+    /// Clears the canister log records and resets the monotonic record index
+    /// so that the next appended record is assigned `next_idx`.
+    ///
+    /// Unlike [`Self::clear`], which preserves the ever-growing record index,
+    /// this forces the index to a new starting point. It is used when a
+    /// canister is renamed: the renamed canister takes over the record index
+    /// of the canister whose id it adopts, so that the records served for that
+    /// id keep increasing.
+    pub fn clear_and_set_next_idx(&mut self, next_idx: u64) {
+        if let Some(mut ring_buffer) = self.load_ring_buffer() {
+            ring_buffer.clear_and_set_next_idx(next_idx);
+            self.save_ring_buffer(ring_buffer);
+        } else {
+            self.header_cache = OnceLock::new();
+            self.first_timestamp_cache = None;
+        }
+        // Must come after `save_ring_buffer`, which recomputes
+        // `persistent_next_idx` as the maximum of its old value and the
+        // header's index; here the new index wins outright.
+        self.persistent_next_idx = next_idx;
+        debug_assert!(self.stats_ok());
+    }
+
     /// Update page_map, header_cache, first_timestamp_cache and persistent_next_idx.
     fn save_ring_buffer(&mut self, ring_buffer: RingBuffer) {
         let header = ring_buffer.get_header();

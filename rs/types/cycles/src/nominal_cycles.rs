@@ -31,6 +31,16 @@ impl NominalCycles {
         Self(0)
     }
 
+    /// Constructs an amount from a raw value.
+    ///
+    /// Amounts are normally derived from cycles actually consumed while
+    /// executing on this subnet, which is why there is no general conversion
+    /// from `u128`. This constructor is for the amounts that a canister
+    /// carries over from the canister whose id it adopts when it is renamed.
+    pub const fn from_raw_amount(amount: u128) -> Self {
+        Self(amount)
+    }
+
     fn from_parts(high: u64, low: u64) -> Self {
         Self(((high as u128) << 64) | low as u128)
     }

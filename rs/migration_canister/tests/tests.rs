@@ -3,7 +3,8 @@ use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::{CanisterLogRecord, CanisterSettings};
 use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, Payload as _,
+    CanisterChangeDetails, CanisterIdRecord, CanisterInfoRequest, CanisterInfoResponse,
+    CanisterMetricsArgs, CanisterMetricsResult, CanisterStatusResultV2, Payload as _,
 };
 use ic_nervous_system_common_test_utils::get_gauge;
 use ic_transport_types::Envelope;
@@ -492,6 +493,271 @@ async fn canister_info(
         .await
         .unwrap();
     CanisterInfoResponse::decode(&res).unwrap()
+}
+
+async fn canister_status(
+    pic: &PocketIc,
+    proxy_canister: Principal,
+    canister_id: Principal,
+) -> CanisterStatusResultV2 {
+    let canister_id = CanisterId::unchecked_from_principal(PrincipalId(canister_id));
+    let call_args = CallArgs::default().other_side(CanisterIdRecord::from(canister_id).encode());
+    let payload = wasm()
+        .call_simple(CanisterId::ic_00(), "canister_status", call_args)
+        .build();
+    let res = pic
+        .update_call(proxy_canister, Principal::anonymous(), "update", payload)
+        .await
+        .unwrap();
+    CanisterStatusResultV2::decode(&res).unwrap()
+}
+
+async fn canister_metrics(
+    pic: &PocketIc,
+    proxy_canister: Principal,
+    canister_id: Principal,
+) -> CanisterMetricsResult {
+    let canister_id = CanisterId::unchecked_from_principal(PrincipalId(canister_id));
+    let call_args = CallArgs::default().other_side(CanisterMetricsArgs::new(canister_id).encode());
+    let payload = wasm()
+        .call_simple(CanisterId::ic_00(), "canister_metrics", call_args)
+        .build();
+    let res = pic
+        .update_call(proxy_canister, Principal::anonymous(), "update", payload)
+        .await
+        .unwrap();
+    CanisterMetricsResult::decode(&res).unwrap()
+}
+
+/// Installs the universal canister on `canister` and makes it emit
+/// `num_log_records` log records, so that it ends up with a distinctive log
+/// record index and instruction consumption. Also makes `proxy_canister` a
+/// controller, so that the test can read the canister properties that only
+/// controllers may read. The canister is left running, so that it can still
+/// serve the query calls that produce its query stats.
+async fn seed_canister(
+    pic: &PocketIc,
+    canister: Principal,
+    controller: Principal,
+    controllers: &[Principal],
+    proxy_canister: Principal,
+    num_log_records: usize,
+) {
+    pic.install_canister(
+        canister,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        Some(controller),
+    )
+    .await;
+    pic.start_canister(canister, Some(controller))
+        .await
+        .unwrap();
+    for i in 0..num_log_records {
+        pic.update_call(
+            canister,
+            controller,
+            "update",
+            wasm()
+                .debug_print(format!("log record {i}").as_bytes())
+                .reply()
+                .build(),
+        )
+        .await
+        .unwrap();
+    }
+
+    let mut controllers = controllers.to_vec();
+    controllers.push(MIGRATION_CANISTER_ID.into());
+    controllers.push(proxy_canister);
+    pic.set_controllers(canister, Some(controller), controllers)
+        .await
+        .unwrap();
+}
+
+/// The renamed canister takes over the creation timestamp, the log record index,
+/// the canister metrics and the query stats of the migrated canister, and drops
+/// the log records that the replaced canister accumulated under its own id.
+#[tokio::test]
+async fn migration_proxies_canister_properties() {
+    let Setup {
+        pic,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
+        replaced_canister_controllers,
+        replaced_canister_subnet,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
+
+    // We deploy a universal canister acting as a proxy canister for the
+    // management canister endpoints that only controllers may call.
+    let proxy_canister = pic.create_canister().await;
+    pic.add_cycles(proxy_canister, 1_000_000_000_000).await;
+    pic.install_canister(
+        proxy_canister,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+    )
+    .await;
+
+    // Both canisters emit a different number of log records (and thus consume a
+    // different number of instructions), so that the assertions below tell the
+    // properties of the two canisters apart.
+    const MIGRATED_CANISTER_LOG_RECORDS: usize = 3;
+    const REPLACED_CANISTER_LOG_RECORDS: usize = 7;
+    seed_canister(
+        &pic,
+        migrated_canister,
+        sender,
+        &migrated_canister_controllers,
+        proxy_canister,
+        MIGRATED_CANISTER_LOG_RECORDS,
+    )
+    .await;
+    seed_canister(
+        &pic,
+        replaced_canister,
+        sender,
+        &replaced_canister_controllers,
+        proxy_canister,
+        REPLACED_CANISTER_LOG_RECORDS,
+    )
+    .await;
+
+    // Query calls produce the query stats. They are aggregated at the end of a
+    // query stats epoch and only observable two epochs later, so the calls are
+    // issued during the first two epochs and two more epochs are then let pass.
+    // Each app subnet has `NODES_PER_SUBNET` nodes and PocketIc sends each query
+    // call to a different one, so issuing a multiple of that many calls makes
+    // every node observe the same number of them. The two canisters get a
+    // different number of calls so that the assertions below tell their query
+    // stats apart.
+    const QUERY_STATS_EPOCH_ROUNDS: usize = 60;
+    const NODES_PER_SUBNET: u64 = 13;
+    const MIGRATED_CANISTER_QUERY_CALLS: u64 = NODES_PER_SUBNET;
+    const REPLACED_CANISTER_QUERY_CALLS: u64 = 2 * NODES_PER_SUBNET;
+    for epoch in 0..4 {
+        if epoch < 2 {
+            for (canister, num_calls) in [
+                (migrated_canister, MIGRATED_CANISTER_QUERY_CALLS),
+                (replaced_canister, REPLACED_CANISTER_QUERY_CALLS),
+            ] {
+                for i in 0..num_calls {
+                    // Every query call gets a distinct payload so that the
+                    // calls are not served from the query cache.
+                    pic.query_call(
+                        canister,
+                        Principal::anonymous(),
+                        "query",
+                        wasm().reply_data(&(epoch * 1000 + i).to_le_bytes()).build(),
+                    )
+                    .await
+                    .unwrap();
+                }
+            }
+        }
+        for _ in 0..QUERY_STATS_EPOCH_ROUNDS {
+            pic.tick().await;
+        }
+    }
+
+    // A migration requires both canisters to be stopped.
+    for canister in [migrated_canister, replaced_canister] {
+        pic.stop_canister(canister, Some(sender)).await.unwrap();
+    }
+
+    let migrated_canister_status = canister_status(&pic, proxy_canister, migrated_canister).await;
+    let replaced_canister_status = canister_status(&pic, proxy_canister, replaced_canister).await;
+    let migrated_canister_metrics = canister_metrics(&pic, proxy_canister, migrated_canister).await;
+    let replaced_canister_metrics = canister_metrics(&pic, proxy_canister, replaced_canister).await;
+
+    // The properties of the two canisters differ, so that the assertions after
+    // the migration below distinguish the migrated canister's properties from
+    // the replaced canister's.
+    assert_ne!(
+        migrated_canister_status.canister_creation_timestamp(),
+        replaced_canister_status.canister_creation_timestamp()
+    );
+    assert_eq!(
+        migrated_canister_status.log_memory_store_next_idx(),
+        MIGRATED_CANISTER_LOG_RECORDS as u64
+    );
+    assert_eq!(
+        replaced_canister_status.log_memory_store_next_idx(),
+        REPLACED_CANISTER_LOG_RECORDS as u64
+    );
+    assert_ne!(migrated_canister_metrics, replaced_canister_metrics);
+    assert_eq!(
+        migrated_canister_status.query_stats().num_calls_total(),
+        2 * MIGRATED_CANISTER_QUERY_CALLS as u128
+    );
+    assert_eq!(
+        replaced_canister_status.query_stats().num_calls_total(),
+        2 * REPLACED_CANISTER_QUERY_CALLS as u128
+    );
+
+    migrate_canister(
+        &pic,
+        sender,
+        &MigrateCanisterArgs {
+            migrated_canister_id: migrated_canister,
+            replaced_canister_id: replaced_canister,
+        },
+    )
+    .await
+    .unwrap();
+
+    for _ in 0..100 {
+        // advance time by a lot such that the task which waits 6m can succeed quickly.
+        pic.advance_time(Duration::from_secs(250)).await;
+        pic.tick().await;
+    }
+    assert_eq!(
+        pic.get_subnet(migrated_canister).await.unwrap(),
+        replaced_canister_subnet
+    );
+
+    // The renamed canister took over the creation timestamp and the log record
+    // index of the migrated canister.
+    let status = canister_status(&pic, proxy_canister, migrated_canister).await;
+    assert_eq!(
+        status.canister_creation_timestamp(),
+        migrated_canister_status.canister_creation_timestamp()
+    );
+    assert_eq!(
+        status.log_memory_store_next_idx(),
+        MIGRATED_CANISTER_LOG_RECORDS as u64
+    );
+    // The renamed canister took over the query stats of the migrated canister
+    // rather than keeping the replaced canister's.
+    assert_eq!(status.query_stats(), migrated_canister_status.query_stats());
+    // The renamed canister took over the canister metrics of the migrated
+    // canister. Only the consumed instructions are compared: they are frozen
+    // once the migrated canister is stopped, whereas e.g. the cycles consumed
+    // for memory keep accruing until the migrated canister is deleted.
+    let metrics = canister_metrics(&pic, proxy_canister, migrated_canister).await;
+    assert_eq!(
+        metrics.cycles_consumed().instructions(),
+        migrated_canister_metrics.cycles_consumed().instructions()
+    );
+    assert_ne!(
+        metrics.cycles_consumed().instructions(),
+        replaced_canister_metrics.cycles_consumed().instructions()
+    );
+
+    // The log records that the replaced canister accumulated under its own id
+    // were dropped by the rename.
+    assert_eq!(
+        pic.fetch_canister_logs(migrated_canister, sender)
+            .await
+            .unwrap(),
+        Vec::<CanisterLogRecord>::new()
+    );
 }
 
 #[tokio::test]
