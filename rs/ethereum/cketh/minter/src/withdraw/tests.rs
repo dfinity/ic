@@ -145,6 +145,43 @@ mod collect {
     }
 }
 
+mod retry {
+    use crate::PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL;
+    use crate::withdraw::should_schedule_retry;
+
+    #[test]
+    fn should_keep_a_single_retry_scheduled() {
+        let retry_interval = PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL.as_nanos() as u64;
+        let first_run = 1_000_u64;
+        let first_retry = first_run + retry_interval;
+        let second_retry = first_retry + retry_interval;
+
+        assert!(should_schedule_retry(first_run));
+
+        // Later runs neither schedule another retry nor postpone the one already scheduled.
+        assert!(!should_schedule_retry(first_run + 1));
+        assert!(!should_schedule_retry(first_retry - 1));
+
+        // The retry, once it runs, schedules the next one.
+        assert!(should_schedule_retry(first_retry));
+        assert!(!should_schedule_retry(first_retry + 1));
+        assert!(!should_schedule_retry(second_retry - 1));
+        assert!(should_schedule_retry(second_retry));
+    }
+
+    #[test]
+    fn should_schedule_a_retry_when_the_previous_one_is_overdue() {
+        let retry_interval = PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL.as_nanos() as u64;
+        let first_run = 1_000_u64;
+
+        assert!(should_schedule_retry(first_run));
+
+        // The retry did not schedule the next one, e.g. because it could not get a gas fee
+        // estimate: the next run that leaves requests pending does.
+        assert!(should_schedule_retry(first_run + 2 * retry_interval));
+    }
+}
+
 mod round {
     use super::*;
 

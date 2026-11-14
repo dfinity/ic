@@ -204,17 +204,26 @@ pub async fn process_retrieve_eth_requests<R: CanisterRuntime>(runtime: R) {
     send_transactions_batch(sender, latest_transaction_count).await;
     finalize_transactions_batch(sender, &runtime).await;
 
-    // Keep a single retry scheduled, however many runs were started since it was scheduled.
-    let now = runtime.time();
-    if read_state(|s| s.withdrawal_transactions.has_pending_requests()) && RETRY_AT.get() <= now {
-        RETRY_AT.set(now.saturating_add(
-            crate::PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL.as_nanos() as u64,
-        ));
+    if read_state(|s| s.withdrawal_transactions.has_pending_requests())
+        && should_schedule_retry(runtime.time())
+    {
         ic_cdk_timers::set_timer(
             crate::PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
             async move { process_retrieve_eth_requests(runtime).await },
         );
     }
+}
+
+/// Whether a run that leaves requests pending at time `now` schedules a retry. It does so only
+/// once the retry scheduled by an earlier run is due, so that a single retry is scheduled at a
+/// time, however many runs were started in the meantime.
+fn should_schedule_retry(now: u64) -> bool {
+    if now < RETRY_AT.get() {
+        return false;
+    }
+    let retry_interval = crate::PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL.as_nanos() as u64;
+    RETRY_AT.set(now.saturating_add(retry_interval));
+    true
 }
 
 /// The latest (unconfirmed) transaction count of `sender` on chain, used to gate resubmission and
