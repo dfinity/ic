@@ -426,6 +426,14 @@ async fn get_minter_info() -> MinterInfo {
     })
 }
 
+/// Starts processing a withdrawal request as soon as it is accepted, instead of waiting for the
+/// next periodic run of `process_retrieve_eth_requests`.
+fn process_retrieve_eth_requests_now() {
+    ic_cdk_timers::set_timer(Duration::from_secs(0), async {
+        process_retrieve_eth_requests(IC_CANISTER_RUNTIME).await;
+    });
+}
+
 #[update]
 async fn withdraw_eth(
     WithdrawalArg {
@@ -498,6 +506,7 @@ async fn withdraw_eth(
                     &IC_TIME_PROVIDER,
                 );
             });
+            process_retrieve_eth_requests_now();
             Ok(RetrieveEthRequest::from(withdrawal_request))
         }
         Err(e) => Err(WithdrawalError::from(e)),
@@ -677,6 +686,7 @@ async fn withdraw_erc20(
                             &IC_TIME_PROVIDER,
                         );
                     });
+                    process_retrieve_eth_requests_now();
                     Ok(RetrieveErc20Request::from(withdrawal_request))
                 }
                 Err(ckerc20_burn_error) => {
