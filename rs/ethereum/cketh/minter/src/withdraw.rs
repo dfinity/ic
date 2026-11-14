@@ -41,6 +41,7 @@ use icrc_ledger_types::icrc1::{
 use num_traits::ToPrimitive;
 use scopeguard::ScopeGuard;
 use std::{
+    cell::Cell,
     collections::{BTreeMap, BTreeSet},
     iter::zip,
 };
@@ -51,6 +52,12 @@ const TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
 
 pub const CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(21_000);
 pub const CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(65_000);
+
+thread_local! {
+    /// When the retry of `process_retrieve_eth_requests` scheduled by an earlier run is due, in
+    /// nanoseconds since the Unix epoch.
+    static RETRY_AT: Cell<u64> = const { Cell::new(0) };
+}
 
 pub async fn process_reimbursement<T: TimeProvider>(time_provider: &T) {
     let _guard = match TimerGuard::new(TaskType::Reimbursement) {
@@ -197,12 +204,26 @@ pub async fn process_retrieve_eth_requests<R: CanisterRuntime>(runtime: R) {
     send_transactions_batch(sender, latest_transaction_count).await;
     finalize_transactions_batch(sender, &runtime).await;
 
-    if read_state(|s| s.withdrawal_transactions.has_pending_requests()) {
+    if read_state(|s| s.withdrawal_transactions.has_pending_requests())
+        && should_schedule_retry(runtime.time())
+    {
         ic_cdk_timers::set_timer(
             crate::PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
             async move { process_retrieve_eth_requests(runtime).await },
         );
     }
+}
+
+/// Whether a run that leaves requests pending at time `now` schedules a retry. It does so only
+/// once the retry scheduled by an earlier run is due, so that a single retry is scheduled at a
+/// time, however many runs were started in the meantime.
+fn should_schedule_retry(now: u64) -> bool {
+    if now < RETRY_AT.get() {
+        return false;
+    }
+    let retry_interval = crate::PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL.as_nanos() as u64;
+    RETRY_AT.set(now.saturating_add(retry_interval));
+    true
 }
 
 /// The latest (unconfirmed) transaction count of `sender` on chain, used to gate resubmission and
