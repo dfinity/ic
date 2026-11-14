@@ -1716,6 +1716,7 @@ impl PocketIcSubnets {
                 retrieve_blocks_from_ledger_interval_seconds: None,
                 min_retrieve_blocks_from_ledger_interval_seconds: None,
                 max_retrieve_blocks_from_ledger_interval_seconds: None,
+                allowed_poke_callers: None,
             };
             let cycles_ledger_index_arg = CyclesLedgerIndexArg::Init(cycles_ledger_index_init_arg);
             ii_subnet

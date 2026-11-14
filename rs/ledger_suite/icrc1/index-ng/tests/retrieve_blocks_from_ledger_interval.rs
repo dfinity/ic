@@ -52,6 +52,7 @@ fn install_and_upgrade(
         retrieve_blocks_from_ledger_interval_seconds: install_intervals.legacy_interval,
         min_retrieve_blocks_from_ledger_interval_seconds: install_intervals.min_interval_seconds,
         max_retrieve_blocks_from_ledger_interval_seconds: install_intervals.max_interval_seconds,
+        allowed_poke_callers: None,
     });
     let index_id = env.install_canister_with_cycles(
         index_ng_wasm(),
@@ -68,6 +69,7 @@ fn install_and_upgrade(
         retrieve_blocks_from_ledger_interval_seconds: upgrade_intervals.legacy_interval,
         min_retrieve_blocks_from_ledger_interval_seconds: upgrade_intervals.min_interval_seconds,
         max_retrieve_blocks_from_ledger_interval_seconds: upgrade_intervals.max_interval_seconds,
+        allowed_poke_callers: None,
     });
     env.upgrade_canister(index_id, index_ng_wasm(), Encode!(&upgrade_arg).unwrap())?;
 
@@ -233,6 +235,7 @@ fn should_fail_to_install_with_invalid_values() {
             retrieve_blocks_from_ledger_interval_seconds: intervals.legacy_interval,
             min_retrieve_blocks_from_ledger_interval_seconds: intervals.min_interval_seconds,
             max_retrieve_blocks_from_ledger_interval_seconds: intervals.max_interval_seconds,
+            allowed_poke_callers: None,
         });
         let err = env
             .install_canister_with_cycles(
@@ -251,6 +254,7 @@ fn should_fail_to_install_with_invalid_values() {
         retrieve_blocks_from_ledger_interval_seconds: None,
         min_retrieve_blocks_from_ledger_interval_seconds: None,
         max_retrieve_blocks_from_ledger_interval_seconds: None,
+        allowed_poke_callers: None,
     });
     let index_id = env
         .install_canister_with_cycles(
@@ -270,6 +274,7 @@ fn should_fail_to_install_with_invalid_values() {
             retrieve_blocks_from_ledger_interval_seconds: intervals.legacy_interval,
             min_retrieve_blocks_from_ledger_interval_seconds: intervals.min_interval_seconds,
             max_retrieve_blocks_from_ledger_interval_seconds: intervals.max_interval_seconds,
+            allowed_poke_callers: None,
         });
         let err = env
             .upgrade_canister(index_id, index_ng_wasm(), Encode!(&upgrade_arg).unwrap())
@@ -374,6 +379,7 @@ fn should_consume_expected_amount_of_cycles() {
             retrieve_blocks_from_ledger_interval_seconds: None,
             min_retrieve_blocks_from_ledger_interval_seconds: Some(1),
             max_retrieve_blocks_from_ledger_interval_seconds: Some(1),
+            allowed_poke_callers: None,
         },
     );
 
@@ -387,6 +393,7 @@ fn should_consume_expected_amount_of_cycles() {
         retrieve_blocks_from_ledger_interval_seconds: None,
         min_retrieve_blocks_from_ledger_interval_seconds: None,
         max_retrieve_blocks_from_ledger_interval_seconds: None,
+        allowed_poke_callers: None,
     });
     env.reinstall_canister(index_id, index_ng_wasm(), Encode!(&reinstall_arg).unwrap())
         .unwrap();
