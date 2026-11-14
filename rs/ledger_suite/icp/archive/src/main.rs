@@ -1,4 +1,4 @@
-use candid::{Decode, Encode, candid_method};
+use candid::{CandidType, Decode, DecoderConfig, Encode, candid_method, decode_one_with_config};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{
     api::{debug_print, msg_arg_data, msg_caller, msg_reply},
@@ -24,7 +24,7 @@ use icp_ledger::{
     GetBlocksResult, GetEncodedBlocksResult, IterBlocksArgs, IterBlocksRes, from_proto_bytes,
     to_proto_bytes,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{borrow::Cow, cell::RefCell};
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -175,13 +175,32 @@ fn set_last_upgrade_timestamp(timestamp: u64) {
     LAST_UPGRADE_TIMESTAMP.with(|t| *t.borrow_mut() = timestamp)
 }
 
-// Append the Blocks to the internal Vec
-fn append_blocks(blocks: Vec<EncodedBlock>) {
+/// Candid skipping quota for decoding endpoint arguments. This is the quota that the `ic_cdk`
+/// endpoint macros apply, which the hand-written endpoints below do not use.
+const ARG_SKIPPING_QUOTA: usize = 10_000;
+
+/// Decodes the argument of the current message as a single value of type `T`, under
+/// `ARG_SKIPPING_QUOTA`.
+fn decode_arg<T>(method: &str) -> T
+where
+    T: CandidType + DeserializeOwned,
+{
+    let mut config = DecoderConfig::new();
+    config.set_skipping_quota(ARG_SKIPPING_QUOTA);
+    decode_one_with_config(&msg_arg_data(), &config)
+        .unwrap_or_else(|err| panic!("failed to decode {method} argument: {err:?}"))
+}
+
+fn assert_caller_is_ledger() {
     assert_eq!(
         PrincipalId::from(msg_caller()),
         ledger_canister_id().get(),
         "Only Ledger canister is allowed to append blocks to an Archive Node"
     );
+}
+
+// Append the Blocks to the internal Vec
+fn append_blocks(blocks: Vec<EncodedBlock>) {
     debug_print(format!(
         "[archive node] append_blocks(): archive size: {} blocks, appending {} blocks",
         blocks_len(),
@@ -288,8 +307,9 @@ fn remaining_capacity_() {
 #[unsafe(export_name = "canister_update append_blocks")]
 fn append_blocks_() {
     in_executor_context(|| {
-        let blocks = Decode!(&msg_arg_data(), Vec<EncodedBlock>)
-            .expect("failed to decode append_blocks argument");
+        // Check the caller before decoding the argument.
+        assert_caller_is_ledger();
+        let blocks: Vec<EncodedBlock> = decode_arg("append_blocks");
         append_blocks(blocks);
         msg_reply(Encode!().unwrap());
     })
@@ -373,8 +393,7 @@ fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult
 #[unsafe(export_name = "canister_query get_blocks")]
 fn get_blocks_candid_() {
     in_query_executor_context(|| {
-        let args =
-            Decode!(&msg_arg_data(), GetBlocksArgs).expect("failed to decode get_blocks argument");
+        let args: GetBlocksArgs = decode_arg("get_blocks");
         msg_reply(Encode!(&get_blocks(args)).unwrap());
     })
 }
@@ -507,8 +526,7 @@ fn read_encoded_blocks(start: u64, length: usize) -> Result<Vec<EncodedBlock>, G
 #[unsafe(export_name = "canister_query get_encoded_blocks")]
 fn get_encoded_blocks_blocks_() {
     in_query_executor_context(|| {
-        let args = Decode!(&msg_arg_data(), GetBlocksArgs)
-            .expect("failed to decode get_encoded_blocks argument");
+        let args: GetBlocksArgs = decode_arg("get_encoded_blocks");
         msg_reply(Encode!(&get_encoded_blocks(args)).unwrap());
     })
 }
