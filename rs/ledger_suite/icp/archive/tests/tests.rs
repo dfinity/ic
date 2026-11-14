@@ -6,7 +6,10 @@ use ic_ledger_core::Tokens;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
 use icp_ledger::Operation::Mint;
-use icp_ledger::{AccountIdentifier, Block, Memo, Transaction};
+use icp_ledger::{
+    AccountIdentifier, Block, GetBlocksArgs, GetBlocksResult, GetEncodedBlocksResult, Memo,
+    Transaction,
+};
 use pocket_ic::PocketIcBuilder;
 use serde_bytes::ByteBuf;
 
@@ -250,4 +253,133 @@ fn should_update_max_capacity_with_upgrade_arg() {
     upgrade_arg.max_memory_size_bytes = Some(u64::MAX);
     setup.upgrade(Some(upgrade_arg), None);
     setup.assert_remaining_capacity(u64::MAX - 2 * encoded_block_size);
+}
+
+/// Length of the `vec null` in the args built by the tests below. It is encoded with this length
+/// and then patched to `DECLARED_VEC_LEN`, which is far too long to skip.
+const ENCODED_VEC_LEN: u64 = 1_234_567;
+const DECLARED_VEC_LEN: u64 = 1_000_000_000;
+
+fn leb128(mut n: u64) -> Vec<u8> {
+    let mut bytes = vec![];
+    loop {
+        let byte = (n & 0x7f) as u8;
+        n >>= 7;
+        if n == 0 {
+            bytes.push(byte);
+            return bytes;
+        }
+        bytes.push(byte | 0x80);
+    }
+}
+
+/// Encodes `arg` followed by a trailing `vec null` argument of length `DECLARED_VEC_LEN`.
+fn with_long_trailing_vec<T: candid::CandidType>(arg: &T) -> Vec<u8> {
+    let args = Encode!(arg, &vec![(); ENCODED_VEC_LEN as usize]).unwrap();
+    let encoded = leb128(ENCODED_VEC_LEN);
+    let positions: Vec<usize> = args
+        .windows(encoded.len())
+        .enumerate()
+        .filter(|(_, window)| *window == encoded.as_slice())
+        .map(|(pos, _)| pos)
+        .collect();
+    assert_eq!(positions.len(), 1, "the vec length must occur exactly once");
+    let pos = positions[0];
+    [
+        &args[..pos],
+        &leb128(DECLARED_VEC_LEN),
+        &args[pos + encoded.len()..],
+    ]
+    .concat()
+}
+
+#[test]
+fn should_reject_append_blocks_from_non_ledger_caller_before_decoding() {
+    let setup = Setup::new(1_000_000);
+    let err = setup
+        .pocket_ic
+        .update_call(
+            setup.archive_canister_id.into(),
+            Principal::anonymous(),
+            "append_blocks",
+            b"not candid".to_vec(),
+        )
+        .unwrap_err();
+    assert!(
+        err.reject_message
+            .contains("Only Ledger canister is allowed to append blocks to an Archive Node"),
+        "unexpected error: {}",
+        err.reject_message
+    );
+}
+
+#[test]
+fn should_reject_args_exceeding_skipping_quota() {
+    let setup = Setup::new(1_000_000);
+    let archive: Principal = setup.archive_canister_id.into();
+
+    let err = setup
+        .pocket_ic
+        .update_call(
+            archive,
+            // The test setup uses the archive's own id as the ledger id.
+            archive,
+            "append_blocks",
+            with_long_trailing_vec(&Vec::<EncodedBlock>::new()),
+        )
+        .unwrap_err();
+    assert!(
+        err.reject_message
+            .contains("Skipping cost exceeds the limit"),
+        "append_blocks: unexpected error: {}",
+        err.reject_message
+    );
+
+    for method in ["get_blocks", "get_encoded_blocks"] {
+        let err = setup
+            .pocket_ic
+            .query_call(
+                archive,
+                Principal::anonymous(),
+                method,
+                with_long_trailing_vec(&GetBlocksArgs {
+                    start: 0,
+                    length: 1,
+                }),
+            )
+            .unwrap_err();
+        assert!(
+            err.reject_message
+                .contains("Skipping cost exceeds the limit"),
+            "{method}: unexpected error: {}",
+            err.reject_message
+        );
+    }
+}
+
+#[test]
+fn should_get_appended_blocks() {
+    let setup = Setup::new(1_000_000);
+    let archive: Principal = setup.archive_canister_id.into();
+    let encoded_block = valid_encoded_block();
+    setup.append_block(encoded_block.clone());
+
+    let args = Encode!(&GetBlocksArgs {
+        start: 0,
+        length: 1
+    })
+    .unwrap();
+    let response = setup
+        .pocket_ic
+        .query_call(archive, Principal::anonymous(), "get_blocks", args.clone())
+        .unwrap();
+    let blocks = Decode!(&response, GetBlocksResult).unwrap().unwrap().blocks;
+    assert_eq!(blocks.len(), 1);
+
+    let response = setup
+        .pocket_ic
+        .query_call(archive, Principal::anonymous(), "get_encoded_blocks", args)
+        .unwrap();
+    let blocks = Decode!(&response, GetEncodedBlocksResult).unwrap().unwrap();
+    assert_eq!(blocks, vec![encoded_block]);
 }
