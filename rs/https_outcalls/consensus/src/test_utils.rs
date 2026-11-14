@@ -41,7 +41,7 @@ impl BatchPayloadBuilder for FakeCanisterHttpPayloadBuilder {
             flexible_errors: vec![],
             async_receipts: vec![],
         };
-        payload_to_bytes(payload, max_size)
+        payload_to_bytes(payload, max_size, max_size)
     }
 
     fn validate_payload(

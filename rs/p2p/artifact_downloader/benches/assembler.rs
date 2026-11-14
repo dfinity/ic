@@ -6,7 +6,7 @@ use std::{
 };
 
 use criterion::{BatchSize, Bencher, Criterion, black_box, criterion_group, criterion_main};
-use ic_artifact_downloader::{FetchStrippedConsensusArtifact, MIN_STRIPPED_CONTENT_BYTES};
+use ic_artifact_downloader::FetchStrippedConsensusArtifact;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
 use ic_interfaces::p2p::consensus::{
     ArtifactAssembler, AssembleResult, BouncerValue, Peers, ValidatedPoolReader,
@@ -25,8 +25,8 @@ use ic_types::{
     CountBytes, Height, NodeId, NumBytes, RegistryVersion,
     artifact::{IdentifiableArtifact, IngressMessageId},
     batch::{
-        BatchPayload, IngressPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE, iterator_to_bytes,
-        slice_to_messages,
+        BatchPayload, IngressPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
+        canister_http_stripping::MIN_STRIPPED_CONTENT_BYTES, iterator_to_bytes, slice_to_messages,
     },
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpResponse, CanisterHttpResponseContent,

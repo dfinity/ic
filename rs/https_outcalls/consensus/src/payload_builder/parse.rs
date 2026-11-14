@@ -1,3 +1,4 @@
+use ic_consensus_features::HASHES_IN_BLOCKS_ENABLED;
 use ic_interfaces::batch_payload::PastPayload;
 use ic_logger::{ReplicaLogger, error};
 use ic_protobuf::{
@@ -9,7 +10,8 @@ use ic_types::{
     NodeId, NumBytes, PrincipalId,
     batch::{
         CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
-        FlexibleCanisterHttpResponses, iterator_to_bytes, slice_to_messages,
+        FlexibleCanisterHttpResponses, canister_http_stripping::stripped_size, slice_to_messages,
+        slice_to_messages_iter,
     },
     canister_http::CanisterHttpResponseShare,
     messages::CallbackId,
@@ -89,7 +91,13 @@ fn messages_to_payload(
     Ok(payload)
 }
 
-pub(crate) fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes) -> Vec<u8> {
+/// Serializes the payload, leaving out every message that does not fit within
+/// `memory_limit` bytes, or within `wire_limit` bytes of [`wire_size`].
+pub(crate) fn payload_to_bytes(
+    payload: CanisterHttpPayload,
+    memory_limit: NumBytes,
+    wire_limit: NumBytes,
+) -> Vec<u8> {
     let CanisterHttpPayload {
         timeouts,
         divergence_responses,
@@ -159,7 +167,49 @@ pub(crate) fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes)
                     }),
             );
 
-    iterator_to_bytes(message_iterator, max_size)
+    let mut bytes = vec![];
+    let mut wire_size = 0;
+    for message in message_iterator {
+        // Like `iterator_to_bytes`, try the remaining messages after one that does
+        // not fit, to give smaller ones a chance.
+        let start = bytes.len();
+        if start + length_delimited_len(&message) > memory_limit.get() as usize {
+            continue;
+        }
+        message
+            .encode_length_delimited(&mut bytes)
+            .expect("Encoding into a Vec never runs out of space");
+        let message_wire_size = message_wire_size(message);
+        if wire_size + message_wire_size > wire_limit.get() as usize {
+            bytes.truncate(start);
+            continue;
+        }
+        wire_size += message_wire_size;
+    }
+    bytes
+}
+
+/// The size of a valid payload in a block proposal sent to peers.
+pub(crate) fn wire_size(data: &[u8]) -> NumBytes {
+    let size = slice_to_messages_iter::<CanisterHttpResponseMessage>(data)
+        .map(|message| message.map(message_wire_size))
+        .sum::<Result<usize, _>>()
+        .unwrap_or(data.len());
+    NumBytes::new(size as u64)
+}
+
+/// The bytes that the message adds to a block proposal sent to peers.
+fn message_wire_size(message: CanisterHttpResponseMessage) -> usize {
+    if HASHES_IN_BLOCKS_ENABLED {
+        stripped_size(message)
+    } else {
+        length_delimited_len(&message)
+    }
+}
+
+fn length_delimited_len(message: &CanisterHttpResponseMessage) -> usize {
+    let len = message.encoded_len();
+    prost::length_delimiter_len(len) + len
 }
 
 /// Relevant data of payloads between the certified height and the block being built.
@@ -242,6 +292,7 @@ fn get_id_from_message(message: CanisterHttpResponseMessage) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_types::batch::iterator_to_bytes;
     use prost::encoding::{WireType, encode_key, encode_varint};
 
     fn bytes_field(tag: u32, value: &[u8]) -> Vec<u8> {

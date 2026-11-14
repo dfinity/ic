@@ -816,6 +816,7 @@ mod tests {
         make_genesis,
     };
     use ic_test_utilities_types::ids::test_replica_version;
+    use ic_types::batch::canister_http_stripping::STRIPPED_RESPONSE_DECLARATION_BYTES;
     use ic_types::consensus::ConsensusMessageHashable;
     use ic_types::{
         Height,
@@ -1745,7 +1746,7 @@ mod tests {
                 .map(ic_types::crypto::crypto_hash)
                 .collect()
         );
-        // ...at a cost of exactly 36 bytes each...
+        // ...at the declared cost each...
         let mut undeclared = stripped.clone();
         undeclared
             .stripped_message_ids
@@ -1754,7 +1755,7 @@ mod tests {
         assert_eq!(
             pb::StrippedBlockProposal::proxy_encode(stripped.clone()).len()
                 - pb::StrippedBlockProposal::proxy_encode(undeclared).len(),
-            36 * stripped_responses.len()
+            STRIPPED_RESPONSE_DECLARATION_BYTES * stripped_responses.len()
         );
         // ...while the payload shrank by at least their contents.
         let pruned_payload = &stripped
