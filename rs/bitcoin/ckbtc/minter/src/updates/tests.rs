@@ -21,8 +21,11 @@ mod update_balance {
     };
     use crate::{CanisterRuntime, GetUtxosResponse, Timestamp, state};
     use assert_matches::assert_matches;
-    use ic_btc_checker::{CheckTransactionResponse, CheckTransactionStatus};
-    use ic_btc_interface::Utxo;
+    use ic_btc_checker::{
+        CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
+        CheckTransactionStatus,
+    };
+    use ic_btc_interface::{OutPoint, Utxo};
     use icrc_ledger_types::icrc1::account::Account;
     use maplit::btreeset;
     use std::iter;
@@ -401,6 +404,256 @@ mod update_balance {
             SuspendedReason::Quarantined,
         )
         .await;
+    }
+
+    #[tokio::test]
+    async fn should_not_add_event_when_reevaluated_utxo_still_unchecked() {
+        mock_constant_time(&mut MockCanisterRuntime::new(), NOW, 1);
+
+        test_suspended_utxo_last_time_checked_timestamp(utxo(), SuspendedReason::Unchecked).await;
+    }
+
+    #[tokio::test]
+    async fn should_mint_remaining_utxos_when_one_check_fails() {
+        init_state_with_ecdsa_public_key();
+        let account = ledger_account();
+        let update_balance_args = UpdateBalanceArgs {
+            owner: Some(account.owner),
+            subaccount: account.subaccount,
+        };
+        let (unchecked_utxo, clean_utxo) = two_utxos();
+        let check_fee = read_state(|s| s.check_fee);
+        let minted_amount = clean_utxo.value - check_fee;
+        let events_before: Vec<_> = events().map(|event| event.payload).collect();
+
+        let mut runtime = MockCanisterRuntime::new();
+        use_ckbtc_event_logger(&mut runtime);
+        mock_constant_time(&mut runtime, NOW, 20);
+        mock_derive_user_address(&mut runtime, account);
+        mock_get_utxos_for_account(
+            &mut runtime,
+            account,
+            vec![unchecked_utxo.clone(), clean_utxo.clone()],
+        );
+        expect_check_transaction_returning(
+            &mut runtime,
+            unchecked_utxo.clone(),
+            checker_error_response(),
+        );
+        expect_check_transaction_returning(
+            &mut runtime,
+            clean_utxo.clone(),
+            CheckTransactionResponse::Passed,
+        );
+        runtime
+            .expect_mint_ckbtc()
+            .times(1)
+            .withf(move |amount, account_, _memo| amount == &minted_amount && account_ == &account)
+            .return_const(Ok(1));
+        mock_schedule_now_process_logic(&mut runtime);
+
+        let result = update_balance(update_balance_args.clone(), &runtime).await;
+
+        assert_eq!(
+            result,
+            Ok(vec![
+                UtxoStatus::Unchecked(unchecked_utxo.clone()),
+                UtxoStatus::Minted {
+                    block_index: 1,
+                    minted_amount,
+                    utxo: clean_utxo.clone(),
+                },
+            ])
+        );
+        assert_has_new_events(
+            &events_before,
+            &[
+                EventType::SuspendedUtxo {
+                    utxo: unchecked_utxo.clone(),
+                    account,
+                    reason: SuspendedReason::Unchecked,
+                },
+                checked_utxo_event(clean_utxo.clone(), account),
+                EventType::ReceivedUtxos {
+                    mint_txid: Some(1),
+                    to_account: account,
+                    utxos: vec![clean_utxo.clone()],
+                },
+            ],
+        );
+        assert_eq!(
+            suspended_utxo(&unchecked_utxo),
+            Some(SuspendedReason::Unchecked)
+        );
+
+        // The UTXO that could not be checked is not checked again before the retry delay.
+        runtime.checkpoint();
+        use_ckbtc_event_logger(&mut runtime);
+        let events_before: Vec<_> = events().map(|event| event.payload).collect();
+        mock_constant_time(&mut runtime, NOW.saturating_add(Duration::from_secs(1)), 20);
+        mock_derive_user_address(&mut runtime, account);
+        mock_get_utxos_for_account(
+            &mut runtime,
+            account,
+            vec![unchecked_utxo.clone(), clean_utxo.clone()],
+        );
+
+        let result = update_balance(update_balance_args.clone(), &runtime).await;
+
+        assert_eq!(
+            result,
+            Err(UpdateBalanceError::NoNewUtxos {
+                current_confirmations: None,
+                required_confirmations: 6,
+                pending_utxos: Some(vec![]),
+                suspended_utxos: Some(vec![SuspendedUtxo {
+                    utxo: unchecked_utxo.clone(),
+                    reason: SuspendedReason::Unchecked,
+                    earliest_retry: NOW.checked_add(DAY).unwrap().as_nanos_since_unix_epoch(),
+                }]),
+            })
+        );
+        assert_has_no_new_events(&events_before);
+
+        // After the retry delay, the UTXO is checked again and minted if the check succeeds.
+        runtime.checkpoint();
+        use_ckbtc_event_logger(&mut runtime);
+        let later = NOW.checked_add(DAY).unwrap();
+        mock_constant_time(&mut runtime, later, 20);
+        mock_derive_user_address(&mut runtime, account);
+        mock_get_utxos_for_account(
+            &mut runtime,
+            account,
+            vec![unchecked_utxo.clone(), clean_utxo.clone()],
+        );
+        expect_check_transaction_returning(
+            &mut runtime,
+            unchecked_utxo.clone(),
+            CheckTransactionResponse::Passed,
+        );
+        let minted_amount = unchecked_utxo.value - check_fee;
+        runtime
+            .expect_mint_ckbtc()
+            .times(1)
+            .withf(move |amount, account_, _memo| amount == &minted_amount && account_ == &account)
+            .return_const(Ok(2));
+        mock_schedule_now_process_logic(&mut runtime);
+
+        let result = update_balance(update_balance_args, &runtime).await;
+
+        assert_eq!(
+            result,
+            Ok(vec![UtxoStatus::Minted {
+                block_index: 2,
+                minted_amount,
+                utxo: unchecked_utxo.clone(),
+            }])
+        );
+        assert_eq!(suspended_utxo(&unchecked_utxo), None);
+    }
+
+    #[tokio::test]
+    async fn should_mint_remaining_utxos_when_one_check_is_temporarily_unavailable() {
+        init_state_with_ecdsa_public_key();
+        let account = ledger_account();
+        let (unchecked_utxo, clean_utxo) = two_utxos();
+        let minted_amount = clean_utxo.value - read_state(|s| s.check_fee);
+        let events_before: Vec<_> = events().map(|event| event.payload).collect();
+
+        let mut runtime = MockCanisterRuntime::new();
+        use_ckbtc_event_logger(&mut runtime);
+        mock_constant_time(&mut runtime, NOW, 20);
+        mock_derive_user_address(&mut runtime, account);
+        mock_get_utxos_for_account(
+            &mut runtime,
+            account,
+            vec![unchecked_utxo.clone(), clean_utxo.clone()],
+        );
+        expect_check_transaction_returning(
+            &mut runtime,
+            unchecked_utxo.clone(),
+            CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+                CheckTransactionRetriable::HighLoad,
+            )),
+        );
+        expect_check_transaction_returning(
+            &mut runtime,
+            clean_utxo.clone(),
+            CheckTransactionResponse::Passed,
+        );
+        runtime
+            .expect_mint_ckbtc()
+            .times(1)
+            .withf(move |amount, account_, _memo| amount == &minted_amount && account_ == &account)
+            .return_const(Ok(1));
+        mock_schedule_now_process_logic(&mut runtime);
+
+        let result = update_balance(
+            UpdateBalanceArgs {
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
+            },
+            &runtime,
+        )
+        .await;
+
+        assert_eq!(
+            result,
+            Ok(vec![
+                UtxoStatus::Unchecked(unchecked_utxo.clone()),
+                UtxoStatus::Minted {
+                    block_index: 1,
+                    minted_amount,
+                    utxo: clean_utxo.clone(),
+                },
+            ])
+        );
+        assert_has_new_events(
+            &events_before,
+            &[
+                checked_utxo_event(clean_utxo.clone(), account),
+                EventType::ReceivedUtxos {
+                    mint_txid: Some(1),
+                    to_account: account,
+                    utxos: vec![clean_utxo],
+                },
+            ],
+        );
+        assert_eq!(suspended_utxo(&unchecked_utxo), None);
+    }
+
+    #[tokio::test]
+    async fn should_return_error_when_all_checks_are_temporarily_unavailable() {
+        init_state_with_ecdsa_public_key();
+        let account = ledger_account();
+        let utxo = utxo();
+        let events_before: Vec<_> = events().map(|event| event.payload).collect();
+
+        let mut runtime = MockCanisterRuntime::new();
+        use_ckbtc_event_logger(&mut runtime);
+        mock_constant_time(&mut runtime, NOW, 20);
+        mock_derive_user_address(&mut runtime, account);
+        mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
+        expect_check_transaction_returning(
+            &mut runtime,
+            utxo.clone(),
+            CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+                CheckTransactionRetriable::HighLoad,
+            )),
+        );
+
+        let result = update_balance(
+            UpdateBalanceArgs {
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
+            },
+            &runtime,
+        )
+        .await;
+
+        assert_matches!(result, Err(UpdateBalanceError::TemporarilyUnavailable(_)));
+        assert_has_no_new_events(&events_before);
+        assert_eq!(suspended_utxo(&utxo), None);
     }
 
     #[tokio::test]
@@ -950,6 +1203,15 @@ mod update_balance {
                     &runtime,
                 );
             }),
+            SuspendedReason::Unchecked => mutate_state(|s| {
+                audit::suspend_unchecked_utxo(
+                    s,
+                    utxo.clone(),
+                    account,
+                    NOW.checked_sub(DAY).unwrap(),
+                    &runtime,
+                );
+            }),
         };
 
         let events_before: Vec<_> = events().map(|event| event.payload).collect();
@@ -991,6 +1253,13 @@ mod update_balance {
                     CheckTransactionResponse::Failed(vec![]),
                 );
             }
+            SuspendedReason::Unchecked => {
+                expect_check_transaction_returning(
+                    &mut runtime,
+                    utxo.clone(),
+                    checker_error_response(),
+                );
+            }
         }
         mock_schedule_now_process_logic(&mut runtime);
 
@@ -1001,6 +1270,7 @@ mod update_balance {
             Ok(vec![match &reason {
                 SuspendedReason::ValueTooSmall => UtxoStatus::ValueTooSmall(utxo.clone()),
                 SuspendedReason::Quarantined => UtxoStatus::Tainted(utxo.clone()),
+                SuspendedReason::Unchecked => UtxoStatus::Unchecked(utxo.clone()),
             }])
         );
         assert_has_no_new_events(&events_before);
@@ -1027,6 +1297,34 @@ mod update_balance {
             })
         );
         assert_has_no_new_events(&events_before);
+    }
+
+    /// Two UTXOs of the same account, where the first one sorts before the second one.
+    fn two_utxos() -> (Utxo, Utxo) {
+        let first = Utxo {
+            outpoint: OutPoint {
+                vout: 0,
+                ..utxo().outpoint
+            },
+            ..utxo()
+        };
+        let second = Utxo {
+            outpoint: OutPoint {
+                vout: 1,
+                ..utxo().outpoint
+            },
+            ..utxo()
+        };
+        assert!(first < second);
+        (first, second)
+    }
+
+    fn checker_error_response() -> CheckTransactionResponse {
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
+            CheckTransactionIrrecoverableError::InvalidTransaction(
+                "unsupported transaction".to_string(),
+            ),
+        ))
     }
 
     fn init_state_with_ecdsa_public_key() {
