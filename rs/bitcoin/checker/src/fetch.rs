@@ -120,31 +120,25 @@ pub trait FetchEnv {
         max_response_bytes: u32,
     ) -> Result<FetchResult, Infallible> {
         match self.http_get_tx(&provider, txid, max_response_bytes).await {
-            Ok(tx) => {
-                let input_addresses = tx.input.iter().map(|_| None).collect();
-                match TransactionCheckData::from_transaction(provider.btc_network(), tx.clone()) {
-                    Ok(tx) => {
-                        let fetched = FetchedTx {
-                            tx,
-                            input_addresses,
-                        };
-                        state::set_fetch_status(txid, FetchTxStatus::Fetched(fetched.clone()));
-                        Ok(FetchResult::Fetched(fetched))
-                    }
-                    Err(err) => {
-                        let err = HttpGetTxError::TxEncoding(err.to_string());
-                        state::set_fetch_status(
-                            txid,
-                            FetchTxStatus::Error(FetchTxStatusError {
-                                provider,
-                                max_response_bytes,
-                                error: err.clone(),
-                            }),
-                        );
-                        Ok(FetchResult::Error(err))
-                    }
+            Ok(tx) => match TransactionCheckData::from_transaction(provider.btc_network(), tx) {
+                Ok(tx) => {
+                    let fetched = FetchedTx::new(tx);
+                    state::set_fetch_status(txid, FetchTxStatus::Fetched(fetched.clone()));
+                    Ok(FetchResult::Fetched(fetched))
                 }
-            }
+                Err(err) => {
+                    let err = HttpGetTxError::TxEncoding(err.to_string());
+                    state::set_fetch_status(
+                        txid,
+                        FetchTxStatus::Error(FetchTxStatusError {
+                            provider,
+                            max_response_bytes,
+                            error: err.clone(),
+                        }),
+                    );
+                    Ok(FetchResult::Error(err))
+                }
+            },
             Err(HttpGetTxError::ResponseTooLarge)
                 if max_response_bytes < RETRY_MAX_RESPONSE_BYTES =>
             {
@@ -202,12 +196,12 @@ pub trait FetchEnv {
                         futures.push(do_fetch)
                     }
                     Fetched(fetched) => {
-                        if let Some(address) = &fetched.tx.outputs[input.vout as usize] {
-                            state::set_fetched_address(txid, index, address.clone());
+                        if let Some(addresses) = fetched.tx.outputs.get(input.vout as usize) {
+                            state::set_fetched_addresses(txid, index, addresses.clone());
                         } else {
                             // This error shouldn't happen unless blockdata is corrupted.
                             let msg = format!(
-                                "Tx {} vout {} has no address, but is vin {} of tx {}",
+                                "Tx {} has no vout {}, but it is vin {} of tx {}",
                                 input.txid, input.vout, index, txid
                             );
                             log!(WARN, "{msg}");
@@ -244,12 +238,12 @@ pub trait FetchEnv {
             let (index, input_txid, vout) = jobs[i];
             match result {
                 FetchResult::Fetched(fetched) => {
-                    if let Some(address) = &fetched.tx.outputs[vout as usize] {
-                        state::set_fetched_address(txid, index, address.clone());
+                    if let Some(addresses) = fetched.tx.outputs.get(vout as usize) {
+                        state::set_fetched_addresses(txid, index, addresses.clone());
                     } else {
                         // This error shouldn't happen unless blockdata is corrupted.
                         let msg = format!(
-                            "Tx {input_txid} vout {vout} has no address, but is vin {index} of tx {txid}"
+                            "Tx {input_txid} has no vout {vout}, but it is vin {index} of tx {txid}"
                         );
                         log!(WARN, "{msg}");
                         error = Some(
@@ -310,6 +304,7 @@ pub fn check_for_blocked_input_addresses(fetched: &FetchedTx) -> Result<(), Chec
     let blocked: Vec<String> = fetched
         .input_addresses
         .iter()
+        .flatten()
         .flatten()
         .filter(|address| is_blocked(address))
         .map(|address| address.to_string())

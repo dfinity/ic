@@ -120,11 +120,21 @@ pub fn dashboard(page_index: usize) -> DashboardTemplate {
                             FetchTxStatus::Error(err) => Status::Error(format!("{:?}", err.error)),
                             FetchTxStatus::Fetched(fetched) => {
                                 // Return an empty list if no input address is available yet.
+                                // Inputs without any address are shown as `None`.
                                 let input_addresses =
                                     if fetched.input_addresses.iter().all(|x| x.is_none()) {
                                         Vec::new()
                                     } else {
-                                        fetched.input_addresses.clone()
+                                        fetched
+                                            .input_addresses
+                                            .iter()
+                                            .flat_map(|addresses| match addresses {
+                                                Some(addresses) if !addresses.is_empty() => {
+                                                    addresses.iter().cloned().map(Some).collect()
+                                                }
+                                                _ => vec![None],
+                                            })
+                                            .collect()
                                     };
                                 Status::Fetched(Fetched { input_addresses })
                             }
