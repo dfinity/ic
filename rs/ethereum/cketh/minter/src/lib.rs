@@ -13,6 +13,7 @@ pub mod eth_logs;
 pub mod eth_rpc;
 pub mod eth_rpc_client;
 pub mod guard;
+pub mod icrc21;
 pub mod ledger_client;
 pub mod lifecycle;
 pub mod logs;
