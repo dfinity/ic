@@ -9,7 +9,6 @@ use ic_ckbtc_minter::tx::FeeRate;
 use ic_ckbtc_minter::{
     BuildTxError, Satoshi, address::BitcoinAddress, fees::FeeEstimator, state::utxos::UtxoSet,
 };
-use std::cmp::max;
 
 // TODO DEFI-2458: have proper domain design for handling units:
 // * fee rate (millisatoshis/vbyte or millikoinus/byte)
@@ -38,6 +37,31 @@ impl DogecoinFeeEstimator {
             Network::try_from(state.btc_network).expect("BUG: unsupported network"),
             state.retrieve_btc_min_amount,
         )
+    }
+
+    /// Evaluate the fee (in Koinu) necessary to cover the minter's cycles consumption,
+    /// see [`FeeEstimator::evaluate_minter_fee`] for details.
+    ///
+    /// This is a free-standing `const fn` (rather than the trait method itself, which
+    /// cannot be `const` since Rust does not support `const` trait methods on stable)
+    /// so that callers needing a compile-time constant, such as the typical
+    /// (2 inputs, 2 outputs) transaction fee bound below, can still declare it `const`.
+    const fn minter_fee(num_inputs: u64, num_outputs: u64) -> Satoshi {
+        //in Koinu
+        const MINTER_FEE_PER_INPUT: u64 = 146_000_000;
+        //in Koinu
+        const MINTER_FEE_PER_OUTPUT: u64 = 4_000_000;
+        //in Koinu
+        const MINTER_FEE_CONSTANT: u64 = 26_000_000;
+
+        let fee = MINTER_FEE_PER_INPUT * num_inputs
+            + MINTER_FEE_PER_OUTPUT * num_outputs
+            + MINTER_FEE_CONSTANT;
+        if fee > Self::DUST_LIMIT {
+            fee
+        } else {
+            Self::DUST_LIMIT
+        }
     }
 }
 
@@ -76,19 +100,7 @@ impl FeeEstimator for DogecoinFeeEstimator {
     /// 1.46 DOGE * num_inputs + 0.04 DOGE * num_outputs + 0.26 DOGE,
     /// ```
     fn evaluate_minter_fee(&self, num_inputs: u64, num_outputs: u64) -> Satoshi {
-        //in Koinu
-        const MINTER_FEE_PER_INPUT: u64 = 146_000_000;
-        //in Koinu
-        const MINTER_FEE_PER_OUTPUT: u64 = 4_000_000;
-        //in Koinu
-        const MINTER_FEE_CONSTANT: u64 = 26_000_000;
-
-        max(
-            MINTER_FEE_PER_INPUT * num_inputs
-                + MINTER_FEE_PER_OUTPUT * num_outputs
-                + MINTER_FEE_CONSTANT,
-            Self::DUST_LIMIT,
-        )
+        Self::minter_fee(num_inputs, num_outputs)
     }
 
     fn fee_based_minimum_withdrawal_amount(&self, median_fee_rate: FeeRate) -> u64 {
@@ -100,8 +112,9 @@ impl FeeEstimator for DogecoinFeeEstimator {
                 // Size of a typical transaction made by the minter,
                 // which is a P2PKH transaction with 2 inputs and 2 outputs
                 const PER_REQUEST_SIZE_BOUND: u64 = 374;
-                //in Koinu
-                const PER_REQUEST_MINTER_FEE_BOUND: u64 = 326_000;
+                // Minter fee (in koinu) for a typical transaction made by the minter,
+                // which is a P2PKH transaction with 2 inputs and 2 outputs.
+                const PER_REQUEST_MINTER_FEE_BOUND: u64 = DogecoinFeeEstimator::minter_fee(2, 2);
 
                 let min_withdrawal_amount_increment = self.retrieve_doge_min_amount >> 1;
                 ((PER_REQUEST_RBF_BOUND
