@@ -1,6 +1,7 @@
 #![allow(clippy::disallowed_types)]
 use crate::common::storage::storage_client::StorageClient;
 use crate::common::storage::types::RosettaBlock;
+use crate::ledger_blocks_synchronization::value_depth::ensure_blocks_within_max_depth;
 use anyhow::{Context, bail};
 use candid::{Decode, Encode, Nat};
 use icrc_ledger_agent::Icrc1Agent;
@@ -564,15 +565,20 @@ async fn fetch_blocks_interval(
                     )
                 })?;
 
+            let blocks = ensure_blocks_within_max_depth(
+                blocks_response.blocks,
+                &blocks_response.first_index,
+            )?;
+            let first_index = blocks_response
+                .first_index
+                .0
+                .to_u64()
+                .context("Could not convert Nat to u64")?;
+
             // Convert all Generic Blocks into RosettaBlocks.
-            for (index, block) in blocks_response.blocks.into_iter().enumerate() {
+            for (index, block) in blocks.into_iter().enumerate() {
                 // The index of the RosettaBlock is the starting index of the request plus the position of current block in the response object.
-                let block_index = blocks_response
-                    .first_index
-                    .0
-                    .to_u64()
-                    .context("Could not convert Nat to u64")?
-                    + index as u64;
+                let block_index = first_index + index as u64;
                 fetched_blocks_result.insert(
                     block_index,
                     Some(
@@ -633,6 +639,10 @@ async fn fetch_blocks_interval(
                     .await?;
 
                 let arch_blocks_result = Decode!(&archive_response, BlockRange)?;
+                let archived_blocks = ensure_blocks_within_max_depth(
+                    arch_blocks_result.blocks,
+                    &archive_query.start,
+                )?;
 
                 // The archive guarantees that the first index of the blocks it returns is the same as requested.
                 let first_index = archive_query
@@ -642,7 +652,7 @@ async fn fetch_blocks_interval(
                     .with_context(|| anyhow::Error::msg("Nat could not be converted to u64"))?;
 
                 // Iterate over the blocks returned from the archive and add them to the hashmap.
-                for (index, block) in arch_blocks_result.blocks.into_iter().enumerate() {
+                for (index, block) in archived_blocks.into_iter().enumerate() {
                     let block_index = first_index + index as u64;
                     // The index of the RosettaBlock is the starting index of the request plus the position of the current block in the response object.
                     fetched_blocks_result.insert(

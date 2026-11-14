@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Fixed
+- Reject ledger and archive blocks whose values exceed a maximum nesting depth during block synchronization ([#12087](https://github.com/dfinity/ic/pull/12087))
 
 ### Fixed
 - Limit the memo length in `/construction/payloads` to 1024 bytes ([#11886](https://github.com/dfinity/ic/pull/11886))
