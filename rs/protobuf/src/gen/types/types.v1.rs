@@ -1884,7 +1884,7 @@ impl ChainKeyErrorCode {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpgradePermitAction {
-    #[prost(oneof = "upgrade_permit_action::Action", tags = "1, 2, 3")]
+    #[prost(oneof = "upgrade_permit_action::Action", tags = "1, 2, 3, 4")]
     pub action: ::core::option::Option<upgrade_permit_action::Action>,
 }
 /// Nested message and enum types in `UpgradePermitAction`.
@@ -1897,14 +1897,14 @@ pub mod upgrade_permit_action {
         AuthorizePermit(super::AuthorizeUpgradePermit),
         #[prost(message, tag = "3")]
         ReturnPermit(super::ReturnUpgradePermit),
+        #[prost(message, tag = "4")]
+        ExpirePermit(super::ExpireUpgradePermit),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct UpgradePermitRequest {
     #[prost(message, optional, tag = "1")]
     pub requestor: ::core::option::Option<NodeId>,
-    #[prost(uint64, tag = "2")]
-    pub request_height: u64,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RequestUpgradePermit {
@@ -1914,7 +1914,7 @@ pub struct RequestUpgradePermit {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizeUpgradePermit {
     #[prost(message, optional, tag = "1")]
-    pub request: ::core::option::Option<UpgradePermitRequest>,
+    pub request: ::core::option::Option<UpgradeAuthorizationContent>,
     #[prost(message, repeated, tag = "2")]
     pub signatures: ::prost::alloc::vec::Vec<BasicSignature>,
 }
@@ -1924,9 +1924,21 @@ pub struct ReturnUpgradePermit {
     pub node: ::core::option::Option<NodeId>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ExpireUpgradePermit {
+    #[prost(message, optional, tag = "1")]
+    pub node: ::core::option::Option<NodeId>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradeAuthorizationContent {
+    #[prost(message, optional, tag = "1")]
+    pub requestor: ::core::option::Option<NodeId>,
+    #[prost(uint64, tag = "2")]
+    pub request_height: u64,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct UpgradeAuthorizationShare {
     #[prost(message, optional, tag = "1")]
-    pub request: ::core::option::Option<UpgradePermitRequest>,
+    pub content: ::core::option::Option<UpgradeAuthorizationContent>,
     #[prost(message, optional, tag = "2")]
     pub signature: ::core::option::Option<BasicSignature>,
 }

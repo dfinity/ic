@@ -31,37 +31,47 @@ use crate::{Height, NodeId, node_id_into_protobuf, node_id_try_from_option};
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum UpgradePermitAction {
     /// Request permission to reboot. The block maker requests for itself.
-    /// `request_height` is the height of the block containing this request,
-    /// used for timeout tracking.
     RequestPermit(UpgradePermitRequest),
     /// Authorize a node to reboot — the signed request and the basic
     /// signatures over it collected from other nodes.
-    AuthorizePermit(Signed<UpgradePermitRequest, BasicSignatureBatch<UpgradePermitRequest>>),
+    AuthorizePermit(
+        Signed<UpgradeAuthorizationContent, BasicSignatureBatch<UpgradeAuthorizationContent>>,
+    ),
     /// Release a previously authorized permit (reboot complete).
     ReturnPermit { node: NodeId },
+    /// Expire a permit, if the request is no longer valid. e.g. The node has
+    /// left, or the request is too old.
+    ExpirePermit { node: NodeId },
 }
 
-/// UpgradePermitRequest holds the values that are signed in an
-/// upgrade permit authorization share.
+/// UpgradePermitRequest holds the values that are used in creating an upgrade
+/// permit authorization share.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Serialize)]
 pub struct UpgradePermitRequest {
+    pub requestor: NodeId,
+}
+
+/// UpgradeAuthorizationContent holds the values that are signed in an upgrade
+/// permit authorization share.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Serialize)]
+pub struct UpgradeAuthorizationContent {
     pub requestor: NodeId,
     pub request_height: Height,
 }
 
-impl SignedBytesWithoutDomainSeparator for UpgradePermitRequest {
+impl SignedBytesWithoutDomainSeparator for UpgradeAuthorizationContent {
     fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
         serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
-impl HasHeight for UpgradePermitRequest {
+impl HasHeight for UpgradeAuthorizationContent {
     fn height(&self) -> Height {
         self.request_height
     }
 }
 
-pub type UpgradeAuthorizationShare = BasicSigned<UpgradePermitRequest>;
+pub type UpgradeAuthorizationShare = BasicSigned<UpgradeAuthorizationContent>;
 
 /// Upgrade permit authorization message identifier carries both a message hash
 /// and a height, used by the upgrade permit auth pool for lookup.
@@ -105,7 +115,6 @@ impl From<&UpgradePermitRequest> for pb::UpgradePermitRequest {
     fn from(content: &UpgradePermitRequest) -> Self {
         pb::UpgradePermitRequest {
             requestor: Some(node_id_into_protobuf(content.requestor)),
-            request_height: content.request_height.get(),
         }
     }
 }
@@ -116,6 +125,25 @@ impl TryFrom<pb::UpgradePermitRequest> for UpgradePermitRequest {
     fn try_from(content: pb::UpgradePermitRequest) -> Result<Self, Self::Error> {
         Ok(UpgradePermitRequest {
             requestor: node_id_try_from_option(content.requestor)?,
+        })
+    }
+}
+
+impl From<&UpgradeAuthorizationContent> for pb::UpgradeAuthorizationContent {
+    fn from(content: &UpgradeAuthorizationContent) -> Self {
+        pb::UpgradeAuthorizationContent {
+            requestor: Some(node_id_into_protobuf(content.requestor)),
+            request_height: content.request_height.get(),
+        }
+    }
+}
+
+impl TryFrom<pb::UpgradeAuthorizationContent> for UpgradeAuthorizationContent {
+    type Error = ProxyDecodeError;
+
+    fn try_from(content: pb::UpgradeAuthorizationContent) -> Result<Self, Self::Error> {
+        Ok(UpgradeAuthorizationContent {
+            requestor: node_id_try_from_option(content.requestor)?,
             request_height: Height::from(content.request_height),
         })
     }
@@ -124,7 +152,7 @@ impl TryFrom<pb::UpgradePermitRequest> for UpgradePermitRequest {
 impl From<UpgradeAuthorizationShare> for pb::UpgradeAuthorizationShare {
     fn from(share: UpgradeAuthorizationShare) -> Self {
         pb::UpgradeAuthorizationShare {
-            request: Some(pb::UpgradePermitRequest::from(&share.content)),
+            content: Some(pb::UpgradeAuthorizationContent::from(&share.content)),
             signature: Some(pb::BasicSignature::from(share.signature)),
         }
     }
@@ -134,7 +162,7 @@ impl TryFrom<pb::UpgradeAuthorizationShare> for UpgradeAuthorizationShare {
     type Error = ProxyDecodeError;
 
     fn try_from(message: pb::UpgradeAuthorizationShare) -> Result<Self, Self::Error> {
-        let content = try_from_option_field(message.request, "UpgradeAuthorizationShare::request")?;
+        let content = try_from_option_field(message.content, "UpgradeAuthorizationShare::content")?;
         let signature =
             try_from_option_field(message.signature, "UpgradeAuthorizationShare::signature")?;
         Ok(UpgradeAuthorizationShare { content, signature })

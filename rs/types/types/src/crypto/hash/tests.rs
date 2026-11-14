@@ -79,7 +79,7 @@ mod crypto_hash_stability {
         EquivocationProof, Finalization, FinalizationContent, FinalizationShare, HashedBlock,
         HashedRandomBeacon, Notarization, NotarizationContent, NotarizationShare, Payload,
         RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank, SummaryPayload,
-        UpgradeAuthorizationShare, UpgradePermitRequest,
+        UpgradeAuthorizationContent, UpgradeAuthorizationShare,
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
@@ -457,10 +457,10 @@ mod crypto_hash_stability {
         );
     }
 
-    /// Test stability of the signed bytes of UpgradePermitRequest
+    /// Test stability of the signed bytes of UpgradeAuthorizationContent
     #[test]
     fn upgrade_permit_request_signed_bytes_stability() {
-        let data = UpgradePermitRequest {
+        let data = UpgradeAuthorizationContent {
             requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
             request_height: Height::from(42),
         };
@@ -469,7 +469,7 @@ mod crypto_hash_stability {
         assert_eq!(
             hex::encode(bytes),
             "a269726571756573746f724a2a00000000000000fd016e726571756573745f686569676874182a",
-            "Signed bytes of UpgradePermitRequest changed"
+            "Signed bytes of UpgradeAuthorizationContent changed"
         );
     }
 
@@ -477,7 +477,7 @@ mod crypto_hash_stability {
     #[test]
     fn upgrade_authorization_share_stability() {
         let data: UpgradeAuthorizationShare = Signed {
-            content: UpgradePermitRequest {
+            content: UpgradeAuthorizationContent {
                 requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
                 request_height: Height::from(42),
             },
@@ -490,7 +490,7 @@ mod crypto_hash_stability {
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
             "1e780154b2467bdf06efa99128aa50b5ad8db4a494a300cbe9d35b9747e85c98",
-            "Hash of UpgradeAuthorizationShare changed"
+            "Hash of UpgradeAuthorizationContent changed"
         );
     }
 

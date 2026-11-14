@@ -4,7 +4,7 @@ use super::hash::domain_separator::DomainSeparator;
 use crate::canister_http::CanisterHttpResponseReceipt;
 use crate::consensus::{
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent, UpgradePermitRequest,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent, UpgradeAuthorizationContent,
     certification::CertificationContent,
     dkg::DealingContent,
     idkg::{IDkgComplaintContent, IDkgOpeningContent},
@@ -64,7 +64,7 @@ mod private {
     impl SignatureDomainSeal for DealingContent {}
     impl SignatureDomainSeal for NotarizationContent {}
     impl SignatureDomainSeal for FinalizationContent {}
-    impl SignatureDomainSeal for UpgradePermitRequest {}
+    impl SignatureDomainSeal for UpgradeAuthorizationContent {}
     impl SignatureDomainSeal for IDkgDealing {}
     impl SignatureDomainSeal for SignedIDkgDealing {}
     impl SignatureDomainSeal for IDkgComplaintContent {}
@@ -116,9 +116,9 @@ impl SignatureDomain for FinalizationContent {
     }
 }
 
-impl SignatureDomain for UpgradePermitRequest {
+impl SignatureDomain for UpgradeAuthorizationContent {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DomainSeparator::UpgradePermitRequest.as_str())
+        domain_with_prepended_length(DomainSeparator::UpgradeAuthorizationContent.as_str())
     }
 }
 
