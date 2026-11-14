@@ -498,6 +498,23 @@ pub fn principal_id_from_public_key_or_principal(
     }
 }
 
+/// Candid skipping quota for decoding the canister method arguments of client-supplied
+/// envelopes. The size of the arguments alone does not bound the decoding work, so this applies
+/// the same quota as the `ic_cdk` endpoint macros of the canister methods being called.
+pub const CANISTER_METHOD_ARG_SKIPPING_QUOTA: usize = 10_000;
+
+/// Decodes the Candid-encoded argument of a client-supplied envelope as a single value of type
+/// `T`, under a skipping quota so that the decoding work is bounded regardless of the lengths
+/// declared in the type table.
+pub fn decode_canister_method_arg<T>(arg: &[u8]) -> Result<T, candid::Error>
+where
+    T: candid::CandidType + serde::de::DeserializeOwned,
+{
+    let mut config = candid::DecoderConfig::new();
+    config.set_skipping_quota(CANISTER_METHOD_ARG_SKIPPING_QUOTA);
+    candid::decode_one_with_config(arg, &config)
+}
+
 // This is so I can keep track of where this conversion is done
 pub fn from_arg(encoded: Vec<u8>) -> Result<SendArgs, ApiError> {
     ProtoBuf::from_bytes(encoded)

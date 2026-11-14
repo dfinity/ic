@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
+### Fixed
+- Bound the Candid decoding of canister method arguments in `construction/parse` and `construction/submit`, and run the construction endpoints that parse or build transactions on the blocking thread pool.
 
 ## [2.1.10] - 2026-07-01
 ### Changed

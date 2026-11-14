@@ -34,6 +34,18 @@ use tokio::sync::Mutex;
 const BLOCK_SYNC_INTERVAL: Duration = Duration::from_secs(1);
 use tracing::{error, info};
 
+/// Runs CPU-bound construction work on the blocking thread pool, so that a slow request cannot
+/// occupy the actix workers that serve the other endpoints.
+async fn run_blocking<T, F>(f: F) -> Result<T, ApiError>
+where
+    F: FnOnce() -> Result<T, ApiError> + Send + 'static,
+    T: Send + 'static,
+{
+    web::block(f)
+        .await
+        .map_err(|err| ApiError::internal_error(format!("Failed to run request: {err}")))?
+}
+
 #[post("/account/balance")]
 async fn account_balance(
     msg: web::Json<AccountBalanceRequest>,
@@ -81,7 +93,8 @@ async fn construction_combine(
     msg: web::Json<ConstructionCombineRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
-    let res = req_handler.construction_combine(msg.into_inner());
+    let handler = req_handler.clone();
+    let res = run_blocking(move || handler.construction_combine(msg.into_inner())).await;
     to_rosetta_response(res, &req_handler.rosetta_metrics())
 }
 
@@ -99,7 +112,8 @@ async fn construction_hash(
     msg: web::Json<ConstructionHashRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
-    let res = req_handler.construction_hash(msg.into_inner());
+    let handler = req_handler.clone();
+    let res = run_blocking(move || handler.construction_hash(msg.into_inner())).await;
     to_rosetta_response(res, &req_handler.rosetta_metrics())
 }
 
@@ -117,7 +131,8 @@ async fn construction_parse(
     msg: web::Json<ConstructionParseRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
-    let res = req_handler.construction_parse(msg.into_inner());
+    let handler = req_handler.clone();
+    let res = run_blocking(move || handler.construction_parse(msg.into_inner())).await;
     to_rosetta_response(res, &req_handler.rosetta_metrics())
 }
 
@@ -126,7 +141,8 @@ async fn construction_payloads(
     msg: web::Json<ConstructionPayloadsRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
-    let res = req_handler.construction_payloads(msg.into_inner());
+    let handler = req_handler.clone();
+    let res = run_blocking(move || handler.construction_payloads(msg.into_inner())).await;
     to_rosetta_response(res, &req_handler.rosetta_metrics())
 }
 
