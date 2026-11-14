@@ -710,8 +710,8 @@ mod tests {
     };
     use rosetta_core::objects::ObjectMap;
 
-    /// Length of the `vec null` in the args built by the tests below. It is encoded with this
-    /// length and then patched to `DECLARED_VEC_LEN`, which is far too long to skip.
+    /// Length of the vector in the args built by the tests below. It is encoded with this
+    /// length and then patched to `DECLARED_VEC_LEN`, which is far beyond the decoding quotas.
     const ENCODED_VEC_LEN: u64 = 1_234_567;
     const DECLARED_VEC_LEN: u64 = 100_000_000;
 
@@ -728,7 +728,8 @@ mod tests {
         }
     }
 
-    /// Replaces the length of the single `vec null` in `args` with `DECLARED_VEC_LEN`.
+    /// Replaces the length of the single `ENCODED_VEC_LEN`-element vector in `args` with
+    /// `DECLARED_VEC_LEN`.
     fn with_declared_vec_len(args: Vec<u8>) -> Vec<u8> {
         let encoded = leb128(ENCODED_VEC_LEN);
         let positions: Vec<usize> = args
@@ -763,14 +764,32 @@ mod tests {
         ))
     }
 
-    /// `manage_neuron` args that exceed the skipping quota in different ways.
-    fn manage_neuron_args_exceeding_skipping_quota() -> Vec<(&'static str, Vec<u8>)> {
+    /// `manage_neuron` args that exceed the decoding quotas in different ways.
+    fn manage_neuron_args_exceeding_decoding_quotas() -> Vec<(&'static str, Vec<u8>)> {
         #[derive(candid::CandidType)]
         struct ManageNeuronWithExtraField {
             id: Option<ic_nns_common::pb::v1::NeuronId>,
             neuron_id_or_subaccount: Option<NeuronIdOrSubaccount>,
             command: Option<ManageNeuronCommandRequest>,
             extra: Vec<()>,
+        }
+        // A `SetFollowing` command whose `topic_following` holds records without fields. They
+        // decode as `FolloweesForTopic` with all fields `None`, and take no bytes on the wire.
+        #[derive(candid::CandidType)]
+        struct EmptyRecord {}
+        #[derive(candid::CandidType)]
+        struct SetFollowingWithEmptyRecords {
+            topic_following: Option<Vec<EmptyRecord>>,
+        }
+        #[derive(candid::CandidType)]
+        enum CommandWithEmptyRecords {
+            SetFollowing(SetFollowingWithEmptyRecords),
+        }
+        #[derive(candid::CandidType)]
+        struct ManageNeuronWithEmptyRecords {
+            id: Option<ic_nns_common::pb::v1::NeuronId>,
+            neuron_id_or_subaccount: Option<NeuronIdOrSubaccount>,
+            command: Option<CommandWithEmptyRecords>,
         }
         #[derive(candid::CandidType)]
         struct ManageNeuronWithMismatchedId {
@@ -804,6 +823,21 @@ mod tests {
                     id: Some(zero_sized_vec()),
                     neuron_id_or_subaccount: None,
                     command: set_dissolve_timestamp_command(),
+                })
+                .unwrap(),
+            ),
+            (
+                "known vector of empty records",
+                Encode!(&ManageNeuronWithEmptyRecords {
+                    id: None,
+                    neuron_id_or_subaccount: None,
+                    command: Some(CommandWithEmptyRecords::SetFollowing(
+                        SetFollowingWithEmptyRecords {
+                            topic_following: Some(
+                                (0..ENCODED_VEC_LEN).map(|_| EmptyRecord {}).collect(),
+                            ),
+                        },
+                    )),
                 })
                 .unwrap(),
             ),
@@ -873,14 +907,15 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_and_submit_reject_args_exceeding_skipping_quota() {
+    fn test_parse_and_submit_reject_args_exceeding_decoding_quotas() {
         let (handler, network_identifier, _, _, _) = setup_transfer_test();
-        for (name, args) in manage_neuron_args_exceeding_skipping_quota() {
+        for (name, args) in manage_neuron_args_exceeding_decoding_quotas() {
             let err =
                 parse_unsigned_set_dissolve_timestamp(&handler, &network_identifier, args.clone())
                     .unwrap_err();
+            // Skipped values count towards both quotas, so either one may be exceeded first.
             assert!(
-                format!("{err:?}").contains("Skipping cost exceeds the limit"),
+                format!("{err:?}").contains("cost exceeds the limit"),
                 "{name}: unexpected parse error: {err:?}"
             );
 
@@ -916,6 +951,36 @@ mod tests {
             submitted_set_dissolve_timestamp(args).unwrap(),
             Request::SetDissolveTimestamp(_)
         ));
+    }
+
+    #[test]
+    fn test_largest_follow_arg_is_well_within_decoding_quota() {
+        // FOLLOW is the largest argument built by `/construction/payloads`.
+        let follow_arg = |num_followees: u64| {
+            Encode!(&ManageNeuronRequest {
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::Subaccount(vec![0xff; 32])),
+                command: Some(ManageNeuronCommandRequest::Follow(manage_neuron::Follow {
+                    topic: i32::MAX,
+                    followees: (0..num_followees)
+                        .map(|id| ic_nns_common::pb::v1::NeuronId { id: u64::MAX - id })
+                        .collect(),
+                })),
+            })
+            .unwrap()
+        };
+        let cost = |arg: &[u8]| {
+            crate::convert::canister_method_arg_decoding_cost::<ManageNeuronRequest>(arg)
+        };
+
+        // Governance allows at most 15 followees per topic.
+        let max_cost = cost(&follow_arg(15));
+        assert!(
+            max_cost * 10 < crate::convert::CANISTER_METHOD_ARG_DECODING_QUOTA,
+            "decoding cost {max_cost} is too close to the quota"
+        );
+        // Far more followees than governance accepts still decode.
+        cost(&follow_arg(100));
     }
 
     #[test]

@@ -503,16 +503,47 @@ pub fn principal_id_from_public_key_or_principal(
 /// the same quota as the `ic_cdk` endpoint macros of the canister methods being called.
 pub const CANISTER_METHOD_ARG_SKIPPING_QUOTA: usize = 10_000;
 
+/// Candid decoding quota for the canister method arguments of client-supplied envelopes. The
+/// skipping quota does not cover values that are decoded rather than skipped, e.g. a long vector
+/// of records whose fields are all optional, which take no bytes on the wire. This is the quota
+/// the NNS canisters use for their `http_request` endpoints, and well above the cost of the
+/// largest arguments built by `/construction/payloads`.
+pub const CANISTER_METHOD_ARG_DECODING_QUOTA: usize = 100_000;
+
+fn canister_method_arg_decoder_config() -> candid::DecoderConfig {
+    let mut config = candid::DecoderConfig::new();
+    config
+        .set_skipping_quota(CANISTER_METHOD_ARG_SKIPPING_QUOTA)
+        .set_decoding_quota(CANISTER_METHOD_ARG_DECODING_QUOTA);
+    config
+}
+
 /// Decodes the Candid-encoded argument of a client-supplied envelope as a single value of type
-/// `T`, under a skipping quota so that the decoding work is bounded regardless of the lengths
-/// declared in the type table.
+/// `T`, under skipping and decoding quotas so that the decoding work is bounded regardless of
+/// the lengths declared in the type table.
 pub fn decode_canister_method_arg<T>(arg: &[u8]) -> Result<T, candid::Error>
 where
     T: candid::CandidType + serde::de::DeserializeOwned,
 {
-    let mut config = candid::DecoderConfig::new();
-    config.set_skipping_quota(CANISTER_METHOD_ARG_SKIPPING_QUOTA);
-    candid::decode_one_with_config(arg, &config)
+    candid::decode_one_with_config(arg, &canister_method_arg_decoder_config())
+}
+
+/// Returns the decoding cost of `arg` as a single value of type `T`, for checking that
+/// legitimate arguments stay well within `CANISTER_METHOD_ARG_DECODING_QUOTA`.
+#[cfg(test)]
+pub(crate) fn canister_method_arg_decoding_cost<T>(arg: &[u8]) -> usize
+where
+    T: candid::CandidType + serde::de::DeserializeOwned,
+{
+    let mut de =
+        candid::de::IDLDeserialize::new_with_config(arg, &canister_method_arg_decoder_config())
+            .expect("failed to read the Candid header");
+    de.get_value::<T>().expect("failed to decode the argument");
+    de.done().expect("failed to finish decoding");
+    CANISTER_METHOD_ARG_DECODING_QUOTA
+        - de.get_config()
+            .decoding_quota
+            .expect("the decoding quota is set")
 }
 
 // This is so I can keep track of where this conversion is done
