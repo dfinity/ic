@@ -5,6 +5,3 @@ authors.workspace = true
 edition.workspace = true
 description.workspace = true
 documentation.workspace = true
-
-[dependencies]
-byteorder = { workspace = true }
