@@ -1872,7 +1872,7 @@ impl PocketIc {
     /// to be retrievable here.
     /// Note that, unless a PocketIC instance is in auto progress mode,
     /// a response to the pending canister HTTP outcalls
-    /// must be produced by the test driver and passed on to the PocketIC instace
+    /// must be produced by the test driver and passed on to the PocketIC instance
     /// using `PocketIc::mock_canister_http_response`, or, for a *flexible* outcall
     /// (`CanisterHttpReplication::Flexible`), using
     /// `PocketIc::mock_flexible_canister_http_response`.

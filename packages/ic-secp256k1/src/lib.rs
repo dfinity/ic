@@ -891,7 +891,7 @@ impl PublicKey {
         use k256::pkcs8::EncodePublicKey;
         self.key
             .to_public_key_der()
-            .expect("Encoding is infalliable as long as key is valid")
+            .expect("Encoding is infallible as long as key is valid")
             .as_ref()
             .to_vec()
     }
@@ -901,7 +901,7 @@ impl PublicKey {
         use k256::pkcs8::EncodePublicKey;
         self.key
             .to_public_key_pem(k256::pkcs8::LineEnding::CRLF)
-            .expect("Encoding is infalliable as long as key is valid")
+            .expect("Encoding is infallible as long as key is valid")
     }
 
     /// Deprecated alias of verify_ecdsa_signature
