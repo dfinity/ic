@@ -1,12 +1,14 @@
 use super::types::{
     CanisterMethodName, ConstructionPayloadsRequestMetadata, SignedTransaction, UnsignedTransaction,
 };
-use crate::common::constants::MAX_CANISTER_METHOD_ARGS_BYTES;
+use crate::common::constants::{
+    CANISTER_METHOD_ARGS_SKIPPING_QUOTA, MAX_CANISTER_METHOD_ARGS_BYTES,
+};
 use crate::common::utils::utils::{
     icrc1_operation_to_rosetta_core_operations, rosetta_core_operations_to_icrc1_operation,
 };
 use anyhow::{Context, bail};
-use candid::{Decode, Encode, Principal};
+use candid::{CandidType, DecoderConfig, Encode, Principal, decode_one_with_config};
 use ic_agent::agent::{Envelope, EnvelopeContent};
 use ic_rosetta_api::models::ConstructionParseResponse;
 use icrc_ledger_agent::Icrc1Agent;
@@ -20,6 +22,7 @@ use rosetta_core::response_types::{ConstructionCombineResponse, ConstructionPayl
 use rosetta_core::{
     identifiers::TransactionIdentifier, response_types::ConstructionSubmitResponse,
 };
+use serde::de::DeserializeOwned;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -93,6 +96,17 @@ pub async fn handle_construction_submit(
     bail!("No valid envelopes found in the signed transaction");
 }
 
+/// Decodes ledger method arguments taken from a client-supplied envelope under a skipping quota,
+/// so that the decoding work is bounded regardless of the lengths declared in the type table.
+fn decode_canister_method_args<T>(candid_bytes: &[u8]) -> Result<T, candid::Error>
+where
+    T: CandidType + DeserializeOwned,
+{
+    let mut config = DecoderConfig::new();
+    config.set_skipping_quota(CANISTER_METHOD_ARGS_SKIPPING_QUOTA);
+    decode_one_with_config(candid_bytes, &config)
+}
+
 // Tries to convert a CanisterMethodArg into an icrc1::Transaction
 // Fails if the underlying method is not supported by icrc1 ledgers
 pub fn build_icrc1_transaction_from_canister_method_args(
@@ -112,7 +126,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 expires_at,
                 memo,
                 created_at_time,
-            } = Decode!(&candid_bytes, ApproveArgs).with_context(|| {
+            } = decode_canister_method_args::<ApproveArgs>(&candid_bytes).with_context(|| {
                 format!("Could not decode approve args from: {candid_bytes:?} ")
             })?;
 
@@ -142,9 +156,9 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 fee,
                 memo,
                 created_at_time,
-            } = Decode!(&candid_bytes, TransferFromArgs).with_context(|| {
-                format!("Could not decode transfer from args from: {candid_bytes:?} ")
-            })?;
+            } = decode_canister_method_args::<TransferFromArgs>(&candid_bytes).with_context(
+                || format!("Could not decode transfer from args from: {candid_bytes:?} "),
+            )?;
 
             let operation = crate::common::storage::types::IcrcOperation::Transfer {
                 to,
@@ -170,7 +184,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 fee,
                 memo,
                 created_at_time,
-            } = Decode!(&candid_bytes, TransferArg).with_context(|| {
+            } = decode_canister_method_args::<TransferArg>(&candid_bytes).with_context(|| {
                 format!("Could not decode transfer args from: {candid_bytes:?} ")
             })?;
 
@@ -877,6 +891,159 @@ mod test {
                 .contains("canister method arguments must not be longer"),
             "unexpected error: {err}"
         );
+    }
+
+    /// Length of the `vec null` in the args built by the tests below. It is encoded with this
+    /// length and then patched to `DECLARED_VEC_LEN`, which is far too long to skip.
+    const ENCODED_VEC_LEN: u64 = 1_234_567;
+    const DECLARED_VEC_LEN: u64 = 100_000_000;
+
+    fn leb128(mut n: u64) -> Vec<u8> {
+        let mut bytes = vec![];
+        loop {
+            let byte = (n & 0x7f) as u8;
+            n >>= 7;
+            if n == 0 {
+                bytes.push(byte);
+                return bytes;
+            }
+            bytes.push(byte | 0x80);
+        }
+    }
+
+    /// Replaces the length of the single `vec null` in `args` with `DECLARED_VEC_LEN`.
+    fn with_declared_vec_len(args: Vec<u8>) -> Vec<u8> {
+        let encoded = leb128(ENCODED_VEC_LEN);
+        let positions: Vec<usize> = args
+            .windows(encoded.len())
+            .enumerate()
+            .filter(|(_, window)| *window == encoded.as_slice())
+            .map(|(pos, _)| pos)
+            .collect();
+        assert_eq!(positions.len(), 1, "the vec length must occur exactly once");
+        let pos = positions[0];
+        [
+            &args[..pos],
+            &leb128(DECLARED_VEC_LEN),
+            &args[pos + encoded.len()..],
+        ]
+        .concat()
+    }
+
+    fn zero_sized_vec() -> Vec<()> {
+        vec![(); ENCODED_VEC_LEN as usize]
+    }
+
+    fn transfer_arg() -> TransferArg {
+        TransferArg {
+            from_subaccount: None,
+            to: account_with_subaccount(),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: candid::Nat::from(1_u64),
+        }
+    }
+
+    /// `TransferArg` args followed by a long `vec null` argument.
+    fn transfer_args_with_trailing_vec() -> Vec<u8> {
+        with_declared_vec_len(Encode!(&transfer_arg(), &zero_sized_vec()).unwrap())
+    }
+
+    /// `TransferArg` args with an extra long `vec null` record field.
+    fn transfer_args_with_extra_field() -> Vec<u8> {
+        #[derive(candid::CandidType)]
+        struct TransferArgWithExtraField {
+            from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+            to: Account,
+            fee: Option<candid::Nat>,
+            created_at_time: Option<u64>,
+            memo: Option<Memo>,
+            amount: candid::Nat,
+            extra: Vec<()>,
+        }
+        with_declared_vec_len(
+            Encode!(&TransferArgWithExtraField {
+                from_subaccount: None,
+                to: account_with_subaccount(),
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: candid::Nat::from(1_u64),
+                extra: zero_sized_vec(),
+            })
+            .unwrap(),
+        )
+    }
+
+    /// `TransferArg` args whose `opt` memo holds a long `vec null` instead of a blob.
+    fn transfer_args_with_mismatched_opt_field() -> Vec<u8> {
+        #[derive(candid::CandidType)]
+        struct TransferArgWithMismatchedMemo {
+            from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+            to: Account,
+            fee: Option<candid::Nat>,
+            created_at_time: Option<u64>,
+            memo: Option<Vec<()>>,
+            amount: candid::Nat,
+        }
+        with_declared_vec_len(
+            Encode!(&TransferArgWithMismatchedMemo {
+                from_subaccount: None,
+                to: account_with_subaccount(),
+                fee: None,
+                created_at_time: None,
+                memo: Some(zero_sized_vec()),
+                amount: candid::Nat::from(1_u64),
+            })
+            .unwrap(),
+        )
+    }
+
+    #[test]
+    fn test_construction_parse_and_hash_reject_args_exceeding_skipping_quota() {
+        for (name, args) in [
+            ("trailing argument", transfer_args_with_trailing_vec()),
+            ("extra record field", transfer_args_with_extra_field()),
+            (
+                "mismatched opt field",
+                transfer_args_with_mismatched_opt_field(),
+            ),
+        ] {
+            let envelope_content = call_envelope_content(args, 1);
+
+            let err = build_transaction_hash_from_envelope_content(&envelope_content).unwrap_err();
+            assert!(
+                format!("{err:#}").contains("Skipping cost exceeds the limit"),
+                "{name}: unexpected hash error: {err:#}"
+            );
+
+            let err = handle_construction_parse(
+                vec![envelope_content],
+                test_currency(),
+                Some(1),
+                Some(1),
+                false,
+            )
+            .unwrap_err();
+            assert!(
+                format!("{err:#}").contains("Skipping cost exceeds the limit"),
+                "{name}: unexpected parse error: {err:#}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_canister_method_args_with_short_unexpected_vec_are_accepted() {
+        // Values the decoder has to skip are fine as long as they stay within the quota.
+        let args = Encode!(&transfer_arg(), &vec![(); 100]).unwrap();
+        let transaction = build_icrc1_transaction_from_canister_method_args(
+            &CanisterMethodName::Icrc1Transfer,
+            &account_with_subaccount().owner,
+            args,
+        )
+        .unwrap();
+        assert_eq!(transaction.memo, None);
     }
 
     #[test]
