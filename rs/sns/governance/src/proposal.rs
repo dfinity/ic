@@ -1,4 +1,5 @@
 use crate::{
+    are_canister_snapshot_proposals_enabled,
     cached_upgrade_steps::render_two_versions_as_markdown_table,
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     extensions::{
@@ -11,14 +12,15 @@ use crate::{
         log_prefix, valid_canister_upgrade_options,
     },
     logs::{ERROR, INFO},
+    pb::sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse},
     pb::v1::{
         AdvanceSnsTargetVersion, DeregisterDappCanisters, ExecuteExtensionOperation,
-        ExecuteGenericNervousSystemFunction, Governance, GovernanceError, LogVisibility,
-        ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata, MintSnsTokens,
-        Motion, NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData,
-        ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-        RegisterExtension, SetTopicsForCustomProposals, SnapshotVisibility, SnsVersion, Tally,
-        Topic, Topic as TopicPb, TransferSnsTreasuryFunds, UpgradeExtension,
+        ExecuteGenericNervousSystemFunction, Governance, GovernanceError, LoadCanisterSnapshot,
+        LogVisibility, ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata,
+        MintSnsTokens, Motion, NervousSystemFunction, NervousSystemParameters, Proposal,
+        ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
+        RegisterDappCanisters, RegisterExtension, SetTopicsForCustomProposals, SnapshotVisibility,
+        SnsVersion, Tally, Topic, Topic as TopicPb, TransferSnsTreasuryFunds, UpgradeExtension,
         UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
         governance::{SnsMetadata, Version},
         governance_error::ErrorType,
@@ -37,8 +39,8 @@ use crate::{
     types::{Environment, Wasm},
     validate_chars_count, validate_len, validate_required_field,
 };
-use candid::Principal;
-use ic_base_types::{CanisterId, PrincipalId};
+use candid::{Decode, Encode, Principal};
+use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::CanisterInstallMode as RootCanisterInstallMode;
@@ -504,6 +506,14 @@ pub(crate) async fn validate_and_render_action(
                 set_topics_for_custom_proposals,
                 &governance_proto.custom_functions_to_topics(),
             )
+        }
+        Action::LoadCanisterSnapshot(load_canister_snapshot) => {
+            validate_and_render_load_canister_snapshot(
+                load_canister_snapshot,
+                env,
+                root_canister_id,
+            )
+            .await
         }
     }
     .map(|rendering| (rendering, ActionAuxiliary::None))
@@ -1202,6 +1212,141 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
 ## Argument info
 
 {args_info}",
+    ))
+}
+
+/// Parses `snapshot_id`, and makes sure that the snapshot belongs to `canister_id`.
+///
+/// The main requirement enforced here is that the snapshot belongs to the canister. Lower layers
+/// allow a snapshot of one canister to be loaded into another (and SNS Root controls all dapp
+/// canisters).
+///
+/// This relies on the fact that (currently) a snapshot ID embeds the ID of the canister that the
+/// snapshot belongs to. Officially though, snapshot IDs are opaque. The supported way to find out
+/// whether a snapshot belongs to a canister is to list the canister's snapshots, which would
+/// require a call to the Management canister (via SNS Root).
+fn validate_snapshot_id(
+    field_name: &str,
+    snapshot_id: &[u8],
+    // We require that the snapshot belong to this canister (e.g. the one that the snapshot will
+    // be loaded into).
+    canister_id: CanisterId,
+) -> Result<SnapshotId, String> {
+    let snapshot_id = SnapshotId::try_from(snapshot_id)
+        .map_err(|err| format!("{field_name} is not a valid snapshot ID: {err}"))?;
+
+    let snapshot_canister_id = snapshot_id.get_canister_id();
+    if snapshot_canister_id != canister_id {
+        return Err(format!(
+            "{field_name} ({snapshot_id}) is a snapshot of canister {snapshot_canister_id}, \
+             not of the target canister {canister_id}."
+        ));
+    }
+
+    Ok(snapshot_id)
+}
+
+/// Makes sure that `canister_id` is a dapp canister registered with SNS Root. That excludes the
+/// SNS framework canisters (Root, Governance, Ledger, Swap, Index, and the ledger archives), as
+/// well as SNS extensions.
+async fn validate_registered_dapp_canister(
+    env: &dyn Environment,
+    root_canister_id: CanisterId,
+    canister_id: CanisterId,
+) -> Result<(), String> {
+    let arg = Encode!(&ListSnsCanistersRequest {})
+        .map_err(|err| format!("Could not encode ListSnsCanistersRequest: {err:?}"))?;
+    let reply = env
+        .call_canister(root_canister_id, "list_sns_canisters", arg)
+        .await
+        .map_err(|err| format!("Canister method call Root.list_sns_canisters failed: {err:?}"))?;
+    let ListSnsCanistersResponse { dapps, .. } = Decode!(&reply, ListSnsCanistersResponse)
+        .map_err(|err| format!("Could not decode Root.list_sns_canisters response: {err:?}"))?;
+
+    if !dapps.contains(&canister_id.get()) {
+        return Err(format!(
+            "Canister {canister_id} is not a dapp canister registered with this SNS. \
+             Registered dapp canisters: {dapps:?}"
+        ));
+    }
+
+    Ok(())
+}
+
+impl LoadCanisterSnapshot {
+    /// Returns the (parsed) target canister ID and snapshot ID, if this is valid, i.e.
+    ///
+    ///   1. canister_id is a dapp canister registered with SNS Root (not an SNS framework
+    ///      canister), and
+    ///
+    ///   2. the snapshot belongs to that canister (lower layers would allow loading a snapshot of
+    ///      one canister into another).
+    ///
+    /// This is done when the proposal is submitted, and again when it is executed (by then, the
+    /// target might no longer be a registered dapp canister).
+    pub(crate) async fn validate(
+        &self,
+        env: &dyn Environment,
+        root_canister_id: CanisterId,
+    ) -> Result<(CanisterId, SnapshotId), GovernanceError> {
+        let Self {
+            canister_id,
+            snapshot_id,
+        } = self;
+
+        let invalid = |err: String| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("LoadCanisterSnapshot was invalid: {err}"),
+            )
+        };
+
+        // Validate canister_id (the one where the snapshot will be loaded into).
+        let canister_id = validate_required_field("canister_id", canister_id).map_err(invalid)?;
+        let canister_id = CanisterId::try_from_principal_id(*canister_id)
+            .map_err(|err| invalid(format!("canister_id is invalid: {err:?}")))?;
+        validate_registered_dapp_canister(env, root_canister_id, canister_id)
+            .await
+            .map_err(invalid)?;
+
+        // Validate snapshot_id.
+        let snapshot_id = validate_required_field("snapshot_id", snapshot_id).map_err(invalid)?;
+        let snapshot_id =
+            validate_snapshot_id("snapshot_id", snapshot_id, canister_id).map_err(invalid)?;
+
+        Ok((canister_id, snapshot_id))
+    }
+}
+
+/// Validates and renders a proposal with action LoadCanisterSnapshot.
+async fn validate_and_render_load_canister_snapshot(
+    load_canister_snapshot: &LoadCanisterSnapshot,
+    env: &dyn Environment,
+    root_canister_id: CanisterId,
+) -> Result<String, String> {
+    if !are_canister_snapshot_proposals_enabled() {
+        return Err(
+            "LoadCanisterSnapshot was invalid: Canister snapshot proposals are not yet enabled."
+                .to_string(),
+        );
+    }
+
+    let (canister_id, snapshot_id) = load_canister_snapshot
+        .validate(env, root_canister_id)
+        .await
+        .map_err(|err| err.error_message)?;
+
+    Ok(format!(
+        "# Proposal to Load a Snapshot into a Dapp Canister\n\n\
+         ## Target canister: {canister_id}\n\n\
+         ## Snapshot: `{snapshot_id_hex}` ({snapshot_id})\n\n\
+         ## Warning: All state written after the snapshot was taken will be lost\n\n\
+         If adopted, the canister's Wasm module and (heap and stable) memory will be replaced \
+         with the ones saved in the snapshot. This rolls the canister back to the state it was \
+         in when the snapshot was taken: everything the canister stored or changed since then \
+         will be lost. Effects outside of the canister (such as token transfers, or calls that it \
+         made to other canisters) are not undone.",
+        snapshot_id_hex = hex::encode(snapshot_id.as_slice()),
     ))
 }
 
@@ -2617,16 +2762,18 @@ impl ProposalData {
                     Action::UpgradeSnsControlledCanister(_)
                         | Action::UpgradeSnsToNextVersion(_)
                         | Action::ManageLedgerParameters(_)
+                        | Action::LoadCanisterSnapshot(_)
                 ),
                 ..
             })
         );
         // In production, the above condition is exactly what we want. However, in some tests, we only set the action_id
         // and not the action.
-        let upgrade_action_ids: [u64; 3] = [
+        let upgrade_action_ids: [u64; 4] = [
             (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into(),
             (&Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default())).into(),
             (&Action::ManageLedgerParameters(ManageLedgerParameters::default())).into(),
+            (&Action::LoadCanisterSnapshot(LoadCanisterSnapshot::default())).into(),
         ];
         let action_id_is_upgrade = upgrade_action_ids.contains(&self.action);
         action_is_upgrade || action_id_is_upgrade
@@ -2854,6 +3001,9 @@ mod advance_sns_target_version;
 
 #[cfg(test)]
 mod set_topics_for_custom_proposals;
+
+#[cfg(test)]
+mod load_canister_snapshot_tests;
 
 #[cfg(test)]
 mod tests {

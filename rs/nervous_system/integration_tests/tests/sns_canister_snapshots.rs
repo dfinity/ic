@@ -1,9 +1,10 @@
-//! End-to-end tests of SNS canister snapshots, with a real NNS and SNS (built from this branch)
-//! in PocketIC.
+//! End-to-end tests of SNS canister snapshots (SNS Root's snapshot methods, and the proposals
+//! that use them), with a real NNS and SNS (built from this branch; the SNS Governance canister
+//! is the feature = "test" build, where snapshot proposals are enabled) in PocketIC.
 
 use candid::{Decode, Encode, Principal};
 use canister_test::Wasm;
-use ic_base_types::{CanisterId, SnapshotId};
+use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
 use ic_management_canister_types::CanisterStatusType;
 use ic_nervous_system_agent::sns::Sns;
 use ic_nervous_system_integration_tests::{
@@ -11,6 +12,7 @@ use ic_nervous_system_integration_tests::{
     pocket_ic_helpers::{
         NnsInstaller, add_wasms_to_sns_wasm, install_canister_on_subnet, load_registry_mutations,
         nns, sns,
+        sns::governance::{find_neuron_with_majority_voting_power, propose_and_wait},
     },
 };
 use ic_nervous_system_root::{
@@ -23,6 +25,7 @@ use ic_nervous_system_root::{
     },
 };
 use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_sns_governance_api::pb::v1::{LoadCanisterSnapshot, Proposal, proposal::Action};
 use ic_sns_swap::pb::v1::Lifecycle;
 use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
 use tempfile::TempDir;
@@ -297,4 +300,115 @@ async fn test_root_snapshot_methods_only_target_registered_dapp_canisters() {
 
     // The snapshot was not loaded into the unregistered canister.
     assert_eq!(get(&pocket_ic, unregistered_canister_id).await, 5);
+}
+
+#[tokio::test]
+async fn test_load_canister_snapshot() {
+    // Step 1: Prepare the world: the counter is at 3 when a snapshot is taken, then at 5.
+    let state_dir = TempDir::new().unwrap();
+    let (pocket_ic, sns, dapp_canister_id) = set_up_sns_with_dapp(&state_dir).await;
+    for _ in 0..3 {
+        inc(&pocket_ic, dapp_canister_id).await;
+    }
+
+    // There is no proposal to take a snapshot (yet), so this takes one directly, as Root (the
+    // controller of the dapp canister).
+    let snapshot_id = pocket_ic
+        .take_canister_snapshot(dapp_canister_id.into(), Some(sns.root.canister_id.0), None)
+        .await
+        .unwrap()
+        .id;
+
+    for _ in 0..2 {
+        inc(&pocket_ic, dapp_canister_id).await;
+    }
+    assert_eq!(get(&pocket_ic, dapp_canister_id).await, 5);
+
+    // Step 2: Run the code under test: load the snapshot, by proposal.
+    let (neuron_id, proposer) =
+        find_neuron_with_majority_voting_power(&pocket_ic, sns.governance.canister_id)
+            .await
+            .unwrap();
+    let proposal = Proposal {
+        title: "Roll back the dapp.".to_string(),
+        summary: "".to_string(),
+        url: "".to_string(),
+        action: Some(Action::LoadCanisterSnapshot(LoadCanisterSnapshot {
+            canister_id: Some(dapp_canister_id.get()),
+            snapshot_id: Some(snapshot_id.clone()),
+        })),
+    };
+    let proposal_data = propose_and_wait(
+        &pocket_ic,
+        sns.governance.canister_id,
+        proposer,
+        neuron_id,
+        proposal,
+    )
+    .await
+    .unwrap();
+
+    // Step 3: Verify that the proposal was executed successfully, that the state written after
+    // the snapshot is gone, and that the dapp runs.
+    assert!(
+        proposal_data.executed_timestamp_seconds > 0,
+        "{proposal_data:#?}"
+    );
+    assert_eq!(proposal_data.failure_reason, None);
+    assert_eq!(get(&pocket_ic, dapp_canister_id).await, 3);
+    inc(&pocket_ic, dapp_canister_id).await;
+    assert_eq!(get(&pocket_ic, dapp_canister_id).await, 4);
+    let snapshots_after_proposal = pocket_ic
+        .list_canister_snapshots(dapp_canister_id.into(), Some(sns.root.canister_id.0))
+        .await
+        .unwrap();
+
+    // Only SNS Governance may call SNS Root's snapshot methods. Root rejects other callers by
+    // comparing the caller with the Governance canister ID, so both appear in the error.
+    let not_governance = PrincipalId::new_user_test_id(42).0;
+    let expected_in_reject_message = [
+        not_governance.to_text(),
+        sns.governance.canister_id.to_string(),
+    ];
+    let err = pocket_ic
+        .update_call(
+            sns.root.canister_id.0,
+            not_governance,
+            "load_canister_snapshot",
+            Encode!(&LoadCanisterSnapshotRequest {
+                canister_id: dapp_canister_id.get(),
+                snapshot_id,
+            })
+            .unwrap(),
+        )
+        .await
+        .unwrap_err();
+    for expected in &expected_in_reject_message {
+        assert!(err.reject_message.contains(expected), "{err:?}");
+    }
+    let err = pocket_ic
+        .update_call(
+            sns.root.canister_id.0,
+            not_governance,
+            "take_canister_snapshot",
+            Encode!(&TakeCanisterSnapshotRequest {
+                canister_id: dapp_canister_id.get(),
+                replace_snapshot: None,
+            })
+            .unwrap(),
+        )
+        .await
+        .unwrap_err();
+    for expected in &expected_in_reject_message {
+        assert!(err.reject_message.contains(expected), "{err:?}");
+    }
+    // Neither call had any effect.
+    assert_eq!(get(&pocket_ic, dapp_canister_id).await, 4);
+    assert_eq!(
+        pocket_ic
+            .list_canister_snapshots(dapp_canister_id.into(), Some(sns.root.canister_id.0))
+            .await
+            .unwrap(),
+        snapshots_after_proposal,
+    );
 }
