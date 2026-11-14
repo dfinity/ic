@@ -2,7 +2,6 @@ use crate::{
     convert, convert::principal_id_from_public_key_or_principal, errors::ApiError, models,
     models::seconds::Seconds, request_types::*,
 };
-use candid::Decode;
 use ic_nns_governance_api::{
     ManageNeuronCommandRequest,
     manage_neuron::{self, Configure, configure},
@@ -249,9 +248,8 @@ impl TryFrom<&models::Request> for Request {
 
         let manage_neuron = || {
             {
-                Decode!(
+                convert::decode_canister_method_arg::<ic_nns_governance_api::ManageNeuronRequest>(
                     &payload.update_content().arg.0,
-                    ic_nns_governance_api::ManageNeuronRequest
                 )
                 .map_err(|e| {
                     ApiError::invalid_request(format!("Could not parse manage_neuron: {e}"))
