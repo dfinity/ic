@@ -66,23 +66,50 @@ fn ipv6_to_guestos_ipv6(addr: Ipv6Addr) -> Ipv6Addr {
     Ipv6Addr::new(s[0], s[1], s[2], s[3], 0x6801, s[5], s[6], s[7])
 }
 
+/// Whether `addr` belongs to a GuestOS in a multi-VM (type4.x) slot, whose MAC
+/// is `[0x7a, node_index, slot, ..]` rather than `[0x6a, node_index, hash0, ..]`.
+fn is_multi_vm_guest(addr: Ipv6Addr) -> bool {
+    addr.segments()[4] >> 8 == 0x78
+}
+
+/// Resolves `name` against the local address, or `None` if it cannot be answered.
+///
+/// Multi-VM guests get `None` because `slot` displaces the `hash0` byte the
+/// HostOS address is built from, making that address underivable: two nodes with
+/// different HostOS addresses can share one slot address. Only lookups from
+/// inside a guest can be guarded this way — a HostOS address is the same whether
+/// or not it hosts many VMs, so `guestos` still resolves to the single-VM address
+/// there, and nothing listens on it.
+fn resolve(name: &str, local_ipv6: Ipv6Addr) -> Option<Ipv6Addr> {
+    if is_multi_vm_guest(local_ipv6) {
+        return None;
+    }
+    match name {
+        "guestos" => Some(ipv6_to_guestos_ipv6(local_ipv6)),
+        "hostos" => Some(ipv6_to_hostos_ipv6(local_ipv6)),
+        _ => None,
+    }
+}
+
+const KNOWN_NAMES: [&str; 2] = ["hostos", "guestos"];
+
 static PUBLIC_IPV6: LazyLock<Result<Ipv6Addr, LocalIpError>> = LazyLock::new(get_local_ipv6);
 
 impl HostHooks for ICOSHosts {
     fn get_all_entries() -> Response<Vec<Host>> {
         match PUBLIC_IPV6.clone() {
-            Ok(local_ipv6) => Response::Success(vec![
-                Host {
-                    name: "hostos".to_string(),
-                    addresses: Addresses::V6(vec![ipv6_to_hostos_ipv6(local_ipv6)]),
-                    aliases: vec![],
-                },
-                Host {
-                    name: "guestos".to_string(),
-                    addresses: Addresses::V6(vec![ipv6_to_guestos_ipv6(local_ipv6)]),
-                    aliases: vec![],
-                },
-            ]),
+            Ok(local_ipv6) => Response::Success(
+                KNOWN_NAMES
+                    .into_iter()
+                    .filter_map(|name| {
+                        resolve(name, local_ipv6).map(|addr| Host {
+                            name: name.to_string(),
+                            addresses: Addresses::V6(vec![addr]),
+                            aliases: vec![],
+                        })
+                    })
+                    .collect(),
+            ),
             Err(_) => Response::Success(vec![]),
         }
     }
@@ -90,23 +117,16 @@ impl HostHooks for ICOSHosts {
     fn get_host_by_addr(addr: IpAddr) -> Response<Host> {
         match addr {
             IpAddr::V6(addr) => match PUBLIC_IPV6.clone() {
-                Ok(local_ipv6) => {
-                    if addr == ipv6_to_guestos_ipv6(local_ipv6) {
+                Ok(local_ipv6) => KNOWN_NAMES
+                    .into_iter()
+                    .find(|name| resolve(name, local_ipv6) == Some(addr))
+                    .map_or(Response::NotFound, |name| {
                         Response::Success(Host {
-                            name: "guestos".to_string(),
+                            name: name.to_string(),
                             addresses: Addresses::V6(vec![addr]),
                             aliases: vec![],
                         })
-                    } else if addr == ipv6_to_hostos_ipv6(local_ipv6) {
-                        Response::Success(Host {
-                            name: "hostos".to_string(),
-                            addresses: Addresses::V6(vec![addr]),
-                            aliases: vec![],
-                        })
-                    } else {
-                        Response::NotFound
-                    }
-                }
+                    }),
                 _ => Response::NotFound,
             },
             _ => Response::NotFound,
@@ -115,26 +135,184 @@ impl HostHooks for ICOSHosts {
 
     fn get_host_by_name(name: &str, family: AddressFamily) -> Response<Host> {
         match family {
-            AddressFamily::IPv6 => match name {
-                "guestos" => match PUBLIC_IPV6.clone() {
-                    Ok(local_ipv6) => Response::Success(Host {
+            // Checked before PUBLIC_IPV6, which caches its first result forever.
+            AddressFamily::IPv6 if !KNOWN_NAMES.contains(&name) => Response::NotFound,
+            AddressFamily::IPv6 => match PUBLIC_IPV6.clone() {
+                Ok(local_ipv6) => match resolve(name, local_ipv6) {
+                    Some(addr) => Response::Success(Host {
                         name: name.to_string(),
-                        addresses: Addresses::V6(vec![ipv6_to_guestos_ipv6(local_ipv6)]),
+                        addresses: Addresses::V6(vec![addr]),
                         aliases: vec![],
                     }),
-                    Err(_) => Response::NotFound,
+                    None => Response::NotFound,
                 },
-                "hostos" => match PUBLIC_IPV6.clone() {
-                    Ok(local_ipv6) => Response::Success(Host {
-                        name: name.to_string(),
-                        addresses: Addresses::V6(vec![ipv6_to_hostos_ipv6(local_ipv6)]),
-                        aliases: vec![],
-                    }),
-                    Err(_) => Response::NotFound,
-                },
-                _ => Response::NotFound,
+                Err(_) => Response::NotFound,
             },
             _ => Response::NotFound,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use deterministic_ips::node_type::NodeType;
+    use deterministic_ips::{
+        DeploymentEnvironment, MacAddr6Ext, VmSlot, calculate_deterministic_mac,
+    };
+    use macaddr::MacAddr6;
+
+    const MGMT_MAC: &str = "b0:7b:25:c8:f6:c0";
+    const PREFIX: &str = "2602:FFE4:801:17";
+
+    /// The address such a node actually receives via SLAAC.
+    fn real_address(node_type: NodeType, slot: VmSlot) -> Ipv6Addr {
+        let mgmt_mac = MGMT_MAC.parse::<MacAddr6>().unwrap();
+        calculate_deterministic_mac(&mgmt_mac, DeploymentEnvironment::Mainnet, node_type, slot)
+            .calculate_slaac(PREFIX)
+            .unwrap()
+    }
+
+    /// HostOS always runs in the plain slot, even when it hosts many guests.
+    fn real_hostos_address() -> Ipv6Addr {
+        real_address(NodeType::HostOS, VmSlot::Plain)
+    }
+
+    #[test]
+    fn single_vm_node_resolves_both_names() {
+        let host = real_hostos_address();
+        let guest = real_address(NodeType::GuestOS, VmSlot::Plain);
+
+        assert_eq!(resolve("guestos", host), Some(guest));
+        assert_eq!(resolve("hostos", guest), Some(host));
+        assert_eq!(resolve("hostos", host), Some(host));
+        assert_eq!(resolve("guestos", guest), Some(guest));
+    }
+
+    #[test]
+    fn multi_vm_guest_refuses_to_resolve() {
+        for slot in 1..=4_u8 {
+            let guest = real_address(NodeType::GuestOS, VmSlot::new(slot));
+            assert!(is_multi_vm_guest(guest), "slot {slot}: {guest}");
+            assert_eq!(resolve("hostos", guest), None, "slot {slot}");
+            assert_eq!(resolve("guestos", guest), None, "slot {slot}");
+        }
+    }
+
+    /// The guard must not catch ordinary nodes, or it would break every one.
+    #[test]
+    fn single_vm_addresses_are_not_flagged_as_multi_vm() {
+        for node_type in [NodeType::HostOS, NodeType::GuestOS] {
+            let addr = real_address(node_type, VmSlot::Plain);
+            assert!(!is_multi_vm_guest(addr), "{node_type} {addr}");
+        }
+    }
+
+    #[test]
+    fn unknown_names_do_not_resolve() {
+        assert_eq!(resolve("nowhere", real_hostos_address()), None);
+    }
+
+    #[test]
+    fn every_known_name_resolves() {
+        for name in KNOWN_NAMES {
+            assert!(
+                resolve(name, real_hostos_address()).is_some(),
+                "{name} is in KNOWN_NAMES but does not resolve"
+            );
+        }
+    }
+
+    struct Vector {
+        node_type: NodeType,
+        slot: u8,
+        address: &'static str,
+        hostos: Option<&'static str>,
+        guestos: Option<&'static str>,
+    }
+
+    /// Known-answer vectors for the whole chain: mgmt MAC -> deterministic MAC ->
+    /// SLAAC address -> what a node holding it resolves. This addressing is baked
+    /// into deployed nodes, so moving any of these has to be deliberate.
+    #[test]
+    fn golden_vectors() {
+        const SINGLE_VM_HOST: Option<&str> = Some("2602:ffe4:801:17:6800:ff:feec:bd51");
+        const SINGLE_VM_GUEST: Option<&str> = Some("2602:ffe4:801:17:6801:ff:feec:bd51");
+
+        let vectors = [
+            Vector {
+                node_type: NodeType::HostOS,
+                slot: 0,
+                address: "2602:ffe4:801:17:6800:ff:feec:bd51",
+                hostos: SINGLE_VM_HOST,
+                guestos: SINGLE_VM_GUEST,
+            },
+            Vector {
+                node_type: NodeType::GuestOS,
+                slot: 0,
+                address: "2602:ffe4:801:17:6801:ff:feec:bd51",
+                hostos: SINGLE_VM_HOST,
+                guestos: SINGLE_VM_GUEST,
+            },
+            // The upgrade VM shares the plain slot, so it resolves too.
+            Vector {
+                node_type: NodeType::UpgradeGuestOS,
+                slot: 0,
+                address: "2602:ffe4:801:17:6802:ff:feec:bd51",
+                hostos: SINGLE_VM_HOST,
+                guestos: SINGLE_VM_GUEST,
+            },
+            // Multi-VM slots: type4.1 runs 60 guests on one host.
+            Vector {
+                node_type: NodeType::GuestOS,
+                slot: 1,
+                address: "2602:ffe4:801:17:7801:1ff:feec:bd51",
+                hostos: None,
+                guestos: None,
+            },
+            Vector {
+                node_type: NodeType::GuestOS,
+                slot: 60,
+                address: "2602:ffe4:801:17:7801:3cff:feec:bd51",
+                hostos: None,
+                guestos: None,
+            },
+            Vector {
+                node_type: NodeType::GuestOS,
+                slot: 255,
+                address: "2602:ffe4:801:17:7801:ffff:feec:bd51",
+                hostos: None,
+                guestos: None,
+            },
+            Vector {
+                node_type: NodeType::UpgradeGuestOS,
+                slot: 1,
+                address: "2602:ffe4:801:17:7802:1ff:feec:bd51",
+                hostos: None,
+                guestos: None,
+            },
+        ];
+
+        let parse = |a: Option<&str>| a.map(|a| a.parse::<Ipv6Addr>().unwrap());
+
+        for v in vectors {
+            let expected: Ipv6Addr = v.address.parse().unwrap();
+            let (node_type, slot) = (v.node_type, v.slot);
+            assert_eq!(
+                real_address(node_type, VmSlot::new(slot)),
+                expected,
+                "{node_type} slot {slot}: SLAAC address moved"
+            );
+            assert_eq!(
+                resolve("hostos", expected),
+                parse(v.hostos),
+                "{node_type} slot {slot}: `hostos` resolution moved"
+            );
+            assert_eq!(
+                resolve("guestos", expected),
+                parse(v.guestos),
+                "{node_type} slot {slot}: `guestos` resolution moved"
+            );
         }
     }
 }

@@ -1145,13 +1145,18 @@ mod tests {
 
     #[test]
     fn nftables_golden_assigned_cloud_engine_test() {
-        golden_test(
-            Role::AssignedCloudEngine(SUBNET_ID),
-            node_test_id(0),
-            Some(NodeRewardType::Type4),
-            NFTABLES_ASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
-            "assigned_cloud_engine",
-        );
+        for reward_type in NodeRewardType::iter()
+            .filter(|reward_type| is_cloud_engine_reward_type(*reward_type))
+            .map(Some)
+        {
+            golden_test(
+                Role::AssignedCloudEngine(SUBNET_ID),
+                node_test_id(0),
+                reward_type,
+                NFTABLES_ASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
+                "assigned_cloud_engine",
+            );
+        }
     }
 
     #[test]
@@ -1174,13 +1179,18 @@ mod tests {
 
     #[test]
     fn nftables_golden_unassigned_cloud_engine_test() {
-        golden_test(
-            Role::Unassigned,
-            node_test_id(0),
-            Some(NodeRewardType::Type4),
-            NFTABLES_UNASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
-            "unassigned_cloud_engine",
-        );
+        for reward_type in NodeRewardType::iter()
+            .filter(|reward_type| is_cloud_engine_reward_type(*reward_type))
+            .map(Some)
+        {
+            golden_test(
+                Role::Unassigned,
+                node_test_id(0),
+                reward_type,
+                NFTABLES_UNASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
+                "unassigned_cloud_engine",
+            );
+        }
     }
 
     /// The automatic node whitelisting/blacklisting rules of an assigned cloud engine must
@@ -1208,20 +1218,23 @@ mod tests {
         let cloud_engine_ports = [52001, 52002, 52003, 52004, 52005];
         let tmp_dir = tempfile::tempdir().unwrap();
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
-        let config = get_config();
-        let replica_firewall_config = ReplicaFirewallConfig {
-            config_file: nftables_config_path.clone(),
-            assigned_node_port_lists: replica_port_lists.clone(),
-            ..config.firewall.unwrap()
-        };
+        let replica_reward_type = Some(NodeRewardType::Type0);
+        let cloud_engine_reward_type = Some(NodeRewardType::Type4);
+        let replica_ic_config = get_config(replica_reward_type);
+        let cloud_engine_ic_config = get_config(cloud_engine_reward_type);
         let cloud_engine_firewall_config = CloudEngineFirewallConfig {
             config_file: nftables_config_path.clone(),
             assigned_node_port_lists: cloud_engine_port_lists.clone(),
-            ..config.cloud_engine_firewall.unwrap()
+            ..cloud_engine_ic_config.cloud_engine_firewall.unwrap()
+        };
+        let replica_firewall_config = ReplicaFirewallConfig {
+            config_file: nftables_config_path.clone(),
+            assigned_node_port_lists: replica_port_lists.clone(),
+            ..replica_ic_config.firewall.unwrap()
         };
         let boundary_node_firewall_config = BoundaryNodeFirewallConfig {
             config_file: nftables_config_path.clone(),
-            ..config.boundary_node_firewall.unwrap()
+            ..replica_ic_config.boundary_node_firewall.unwrap()
         };
 
         set_up_firewall_dependencies(
@@ -1231,7 +1244,7 @@ mod tests {
             tmp_dir.path(),
             Role::AssignedReplica(SUBNET_ID),
             node_test_id(0),
-            Some(NodeRewardType::Type0),
+            replica_reward_type,
         )
         .check_for_firewall_config(RegistryVersion::new(1))
         .expect("Should successfully produce a firewall config");
@@ -1257,7 +1270,7 @@ mod tests {
             tmp_dir.path(),
             Role::AssignedCloudEngine(SUBNET_ID),
             node_test_id(0),
-            Some(NodeRewardType::Type4),
+            cloud_engine_reward_type,
         )
         .check_for_firewall_config(RegistryVersion::new(1))
         .expect("Should successfully produce a firewall config");
@@ -1321,6 +1334,22 @@ mod tests {
         }
     }
 
+    /// The GuestOS template keys its metrics rule off the reward-type string.
+    #[test]
+    fn cloud_engine_reward_types_agree_with_config_types() {
+        for reward_type in NodeRewardType::iter() {
+            let as_str = match reward_type {
+                NodeRewardType::Unspecified => String::new(),
+                other => String::from(other),
+            };
+            assert_eq!(
+                is_cloud_engine_reward_type(reward_type),
+                config_types::is_cloud_engine_node(&as_str),
+                "{reward_type:?} renders as {as_str:?}"
+            );
+        }
+    }
+
     fn is_cloud_engine_reward_type(reward_type: NodeRewardType) -> bool {
         match reward_type {
             NodeRewardType::Unspecified
@@ -1350,7 +1379,7 @@ mod tests {
     ) {
         let tmp_dir = tempfile::tempdir().unwrap();
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
-        let config = get_config();
+        let config = get_config(reward_type);
         let mut replica_firewall_config = config.firewall.unwrap();
         replica_firewall_config
             .config_file
@@ -1391,7 +1420,15 @@ mod tests {
     }
 
     /// Returns the `ic.json5` config filled with some dummy values.
-    fn get_config() -> ConfigOptional {
+    ///
+    /// `reward_type` matters because the template keys the GuestOS metrics
+    /// firewall rule off it. Derived from the enum so it cannot drift from what a
+    /// real node carries.
+    fn get_config(reward_type: Option<NodeRewardType>) -> ConfigOptional {
+        let node_reward_type = match reward_type {
+            None | Some(NodeRewardType::Unspecified) => String::new(),
+            Some(reward_type) => String::from(reward_type),
+        };
         let template = generate_ic_config::IcConfigTemplate {
             ipv6_prefix: "::/64".to_string(),
             ipv4_address: "".to_string(),
@@ -1403,7 +1440,7 @@ mod tests {
             query_stats_epoch_length: "600".to_string(),
             jaeger_addr: "".to_string(),
             domain_name: "".to_string(),
-            node_reward_type: "".to_string(),
+            node_reward_type,
             malicious_behavior: "null".to_string(),
             extra_api_boundary_node_trust_anchors_pem: "null".to_string(),
             peer_guest_vm_address: Some("2001:db8::6802:94ff:feef:2978".parse().unwrap()),

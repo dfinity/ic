@@ -375,6 +375,32 @@ pub struct FixedIpv6Config {
     pub gateway: Ipv6Addr,
 }
 
+/// Number of GuestOS VMs a node of this reward type runs. Shell components
+/// reach this through `config_tool guest-vm-count`. Note `type4` and `type4.5`
+/// are cloud engine reward types but run a single VM.
+pub fn guest_vm_count(node_reward_type: &str) -> u32 {
+    match node_reward_type {
+        "type4.1" => 60,
+        "type4.2" => 15,
+        "type4.3" => 4,
+        "type4.4" => 2,
+        _ => 1,
+    }
+}
+
+/// Whether the node runs more than one GuestOS VM. Such guests occupy numbered
+/// slots ([`VmSlot::Multi`]) instead of [`VmSlot::Plain`], which changes their
+/// address derivation.
+pub fn is_multi_vm_node(node_reward_type: &str) -> bool {
+    guest_vm_count(node_reward_type) > 1
+}
+
+/// The `type4` family. Wider than [`is_multi_vm_node`]: `type4` and `type4.5`
+/// are cloud engine types that run a single VM.
+pub fn is_cloud_engine_node(node_reward_type: &str) -> bool {
+    node_reward_type == "type4" || node_reward_type.starts_with("type4.")
+}
+
 #[derive(Copy, Clone)]
 pub enum VmSlot {
     Plain,
@@ -400,6 +426,38 @@ impl VmSlot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn guest_vm_counts_by_reward_type() {
+        assert_eq!(guest_vm_count("type4.1"), 60);
+        assert_eq!(guest_vm_count("type4.2"), 15);
+        assert_eq!(guest_vm_count("type4.3"), 4);
+        assert_eq!(guest_vm_count("type4.4"), 2);
+        // `type4` and `type4.5` are cloud engine reward types but run one VM,
+        // as do all non-type4 nodes and anything unrecognised.
+        for single in [
+            "type4", "type4.5", "", "type0", "type3.1", "type40", "TYPE4.1",
+        ] {
+            assert_eq!(guest_vm_count(single), 1, "{single}");
+            assert!(!is_multi_vm_node(single), "{single}");
+        }
+        for multi in ["type4.1", "type4.2", "type4.3", "type4.4"] {
+            assert!(is_multi_vm_node(multi), "{multi}");
+        }
+    }
+
+    #[test]
+    fn cloud_engine_covers_every_type4() {
+        for cloud in [
+            "type4", "type4.1", "type4.2", "type4.3", "type4.4", "type4.5",
+        ] {
+            assert!(is_cloud_engine_node(cloud), "{cloud}");
+        }
+        for other in ["", "type0", "type3.1", "type40", "TYPE4.1"] {
+            assert!(!is_cloud_engine_node(other), "{other}");
+        }
+        assert!(!is_multi_vm_node("type4") && is_cloud_engine_node("type4"));
+    }
     use serde_json::Value;
     use std::collections::HashSet;
 

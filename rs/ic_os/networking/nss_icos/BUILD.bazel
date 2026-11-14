@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("@rules_rust//rust:defs.bzl", "rust_shared_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -16,5 +16,16 @@ rust_shared_library(
         "@crate_index//:libc",
         "@crate_index//:libnss",
         "@crate_index//:nix",
+    ],
+)
+
+# These deps are test-only; see Cargo.toml.
+rust_test(
+    name = "tests",
+    crate = ":nss_icos",
+    deps = [
+        # Keep sorted.
+        "//rs/ic_os/networking/deterministic_ips",
+        "@crate_index//:macaddr",
     ],
 )

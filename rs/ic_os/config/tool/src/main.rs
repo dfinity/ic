@@ -2,6 +2,7 @@ use anyhow::{Context, Error, Result, bail};
 use clap::{Parser, Subcommand};
 use config_tool::guestos::bootstrap_ic_node::{bootstrap_ic_node, populate_nns_public_key};
 use config_tool::guestos::generate_ic_config;
+use config_tool::hostos::metrics_proxy_config::generate_metrics_proxy_config;
 use config_tool::serialize_and_write_config;
 use config_tool::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
 use config_tool::setupos::deployment_json::{VmResources, get_deployment_settings};
@@ -58,6 +59,18 @@ pub enum Commands {
         /// Type of the operating system to select the right config
         #[arg(long)]
         os_type: OsType,
+    },
+    /// Prints the number of GuestOS VMs a node of this reward type runs
+    GuestVmCount {
+        #[arg(long)]
+        node_reward_type: String,
+    },
+    /// Generate the HostOS metrics-proxy configuration, one proxy pair per GuestOS VM
+    GenerateMetricsProxyConfig {
+        #[arg(long, default_value = config_tool::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
+        hostos_config_json_path: PathBuf,
+        #[arg(long, default_value = config_tool::DEFAULT_HOSTOS_METRICS_PROXY_OUTPUT_PATH, value_name = "metrics-proxy.yaml")]
+        output_path: PathBuf,
     },
 }
 
@@ -267,6 +280,21 @@ pub fn main() -> Result<()> {
             }
 
             Ok(())
+        }
+
+        Some(Commands::GuestVmCount { node_reward_type }) => {
+            println!("{}", guest_vm_count(&node_reward_type));
+            Ok(())
+        }
+
+        Some(Commands::GenerateMetricsProxyConfig {
+            hostos_config_json_path,
+            output_path,
+        }) => {
+            let hostos_config: HostOSConfig =
+                config_tool::deserialize_config(&hostos_config_json_path)?;
+
+            generate_metrics_proxy_config(&hostos_config, &output_path)
         }
 
         None => {
