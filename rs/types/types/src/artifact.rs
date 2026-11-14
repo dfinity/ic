@@ -49,6 +49,14 @@ pub trait PbArtifact: IdentifiableArtifact + Send + Sized + 'static {
     fn check_integrity(&self) -> bool {
         true
     }
+
+    /// The only peer that sends the artifact with the given ID, if there is one.
+    ///
+    /// P2P ignores adverts and pushes of the artifact from any other peer. By default, any peer
+    /// may send it.
+    fn sole_sender(_id: &Self::Id) -> Option<NodeId> {
+        None
+    }
 }
 
 #[derive(Eq, PartialEq, Debug)]

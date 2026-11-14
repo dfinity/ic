@@ -1474,6 +1474,11 @@ impl PbArtifact for CanisterHttpResponseArtifact {
             .as_ref()
             .is_none_or(|response| &crypto_hash(response) == self.share.content.content_hash())
     }
+
+    // Nodes only announce their own shares, so a share from anyone else may lack its response.
+    fn sole_sender(id: &Self::Id) -> Option<NodeId> {
+        Some(id.signature.signer)
+    }
 }
 
 #[cfg(test)]
