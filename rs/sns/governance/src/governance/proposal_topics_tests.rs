@@ -137,6 +137,13 @@ fn test_all_topics() {
                 ProposalCriticality::Normal,
             )),
         ),
+        (
+            pb::proposal::Action::LoadCanisterSnapshot(Default::default()),
+            Ok((
+                Some(pb::Topic::DappCanisterManagement),
+                ProposalCriticality::Normal,
+            )),
+        ),
         // ApplicationBusinessLogic - skipped, since this topic is for custom proposals.
 
         // Governance
