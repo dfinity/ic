@@ -1870,8 +1870,8 @@ mod tests {
         update_rx.recv().await.unwrap();
     }
 
-    /// Nodes only announce their own canister http shares, so an update for a share from any
-    /// other peer is dropped.
+    /// Nodes only announce their own canister http shares, so adverts and pushes of a share from
+    /// any other peer are dropped.
     #[tokio::test]
     async fn canister_http_share_announced_by_other_peer_is_dropped() {
         /// Never finishes, so the test only looks at which assemble tasks were started.
@@ -1898,68 +1898,90 @@ mod tests {
             }
         }
 
-        let share = Signed {
-            content: CanisterHttpResponseReceipt {
-                metadata: CanisterHttpResponseMetadata {
-                    id: CallbackId::from(1),
-                    content_hash: CryptoHashOf::new(CryptoHash(vec![])),
-                    content_size: 0,
-                    is_reject: false,
-                    replica_version: test_replica_version(),
+        let artifact = CanisterHttpResponseArtifact {
+            share: Signed {
+                content: CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(1),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_size: 0,
+                        is_reject: false,
+                        replica_version: test_replica_version(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
                 },
-                payment_receipt: CanisterHttpPaymentReceipt::default(),
+                signature: BasicSignature {
+                    signature: BasicSigOf::new(BasicSig(vec![])),
+                    signer: NODE_1,
+                },
             },
-            signature: BasicSignature {
-                signature: BasicSigOf::new(BasicSig(vec![])),
-                signer: NODE_1,
-            },
+            response: None,
         };
-        let (_, slot_updates_rx) = tokio::sync::mpsc::channel(100);
-        let (sender, _unvalidated_artifact_receiver) = tokio::sync::mpsc::channel(100);
-        let (_, topology_watcher) = watch::channel(SubnetTopology::default());
-        let mut mgr: ConsensusManagerReceiver<
-            CanisterHttpResponseArtifact,
-            CanisterHttpResponseArtifact,
-            PendingAssembler,
-        > = ConsensusManagerReceiver {
-            log: no_op_logger(),
-            metrics: ConsensusManagerMetrics::new::<CanisterHttpResponseArtifact>(
-                &MetricsRegistry::default(),
-            ),
-            rt_handle: Handle::current(),
-            slot_updates_rx,
-            sender,
-            artifact_assembler: PendingAssembler,
-            topology_watcher,
-            active_assembles: HashMap::new(),
-            slot_table: HashMap::new(),
-            artifact_processor_tasks: JoinSet::new(),
-            slot_limit: usize::MAX,
-        };
-        let slot_update = || SlotUpdate {
-            slot_number: SlotNumber::from(1),
-            commit_id: CommitId::from(1),
-            update: Update::Id(share.clone()),
-        };
-
-        mgr.handle_slot_update_receive(
-            slot_update(),
-            NODE_2,
-            ConnId::from(1),
-            CancellationToken::new(),
+        let advert = pb::slot_update::Update::Id(
+            <CanisterHttpResponseArtifact as PbArtifact>::PbId::from(artifact.id()).encode_to_vec(),
         );
-        assert!(mgr.slot_table.is_empty());
-        assert!(mgr.active_assembles.is_empty());
-        assert_eq!(mgr.metrics.slot_table_wrong_sender_total.get(), 1);
-
-        mgr.handle_slot_update_receive(
-            slot_update(),
-            NODE_1,
-            ConnId::from(2),
-            CancellationToken::new(),
+        let push = pb::slot_update::Update::Artifact(
+            <CanisterHttpResponseArtifact as PbArtifact>::PbMessage::from(artifact).encode_to_vec(),
         );
-        assert_eq!(mgr.slot_table.len(), 1);
-        assert_eq!(mgr.active_assembles.len(), 1);
-        assert_eq!(mgr.metrics.slot_table_wrong_sender_total.get(), 1);
+
+        for update in [advert, push] {
+            let (router, mut update_rx) =
+                build_axum_router::<CanisterHttpResponseArtifact>(no_op_logger());
+            let (_, slot_updates_rx) = tokio::sync::mpsc::channel(100);
+            let (sender, _unvalidated_artifact_receiver) = tokio::sync::mpsc::channel(100);
+            let (_, topology_watcher) = watch::channel(SubnetTopology::default());
+            let mut mgr: ConsensusManagerReceiver<
+                CanisterHttpResponseArtifact,
+                CanisterHttpResponseArtifact,
+                PendingAssembler,
+            > = ConsensusManagerReceiver {
+                log: no_op_logger(),
+                metrics: ConsensusManagerMetrics::new::<CanisterHttpResponseArtifact>(
+                    &MetricsRegistry::default(),
+                ),
+                rt_handle: Handle::current(),
+                slot_updates_rx,
+                sender,
+                artifact_assembler: PendingAssembler,
+                topology_watcher,
+                active_assembles: HashMap::new(),
+                slot_table: HashMap::new(),
+                artifact_processor_tasks: JoinSet::new(),
+                slot_limit: usize::MAX,
+            };
+
+            // The update goes through the handler, which derives the id of a pushed artifact.
+            for (peer, expected_tasks) in [(NODE_2, 0), (NODE_1, 1)] {
+                let request = Request::builder()
+                    .uri(format!(
+                        "/{}/update",
+                        uri_prefix::<CanisterHttpResponseArtifact>()
+                    ))
+                    .extension(peer)
+                    .extension(ConnId::from(1))
+                    .body(Body::from(
+                        pb::SlotUpdate {
+                            commit_id: 1,
+                            slot_id: 1,
+                            update: Some(update.clone()),
+                        }
+                        .encode_to_vec(),
+                    ))
+                    .unwrap();
+                let response = router.clone().oneshot(request).await.unwrap();
+                assert_eq!(response.status(), StatusCode::OK);
+                let (slot_update, peer_id, conn_id) = update_rx.recv().await.unwrap();
+                mgr.handle_slot_update_receive(
+                    slot_update,
+                    peer_id,
+                    conn_id,
+                    CancellationToken::new(),
+                );
+
+                assert_eq!(mgr.slot_table.len(), expected_tasks);
+                assert_eq!(mgr.active_assembles.len(), expected_tasks);
+                assert_eq!(mgr.metrics.slot_table_wrong_sender_total.get(), 1);
+            }
+        }
     }
 }
