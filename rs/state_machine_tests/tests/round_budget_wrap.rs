@@ -151,67 +151,79 @@ fn round_budget_wrap() {
 /// Regression test for the round instruction budget wrapping due to an
 /// unbounded number of instructions reported as executed in a slice.
 ///
-/// A system API call that charges a huge fee before failing (e.g.
-/// `stable64_read` with a huge length, charged before any bounds check)
-/// drives the instruction counter far below zero. On a fresh (first) slice
-/// this always exceeds `2 * max_instructions_per_slice` on its own
-/// (regardless of how much budget is actually left), so
+/// A system API call that charges a huge fee before failing (here
+/// `msg_arg_data_copy` with a huge length in a Wasm64 canister, charged before
+/// any bounds or context check) drives the instruction counter far below zero.
+/// On a fresh (first) slice this always exceeds `2 * max_instructions_per_slice`
+/// on its own (regardless of how much budget is actually left), so
 /// `DeterministicTimeSlicing::newly_executed` (`rs/canister_sandbox/src/dts.rs`)
 /// is not involved: the out-of-instructions handling fails the message
 /// outright via `SliceOverrun`. The bug instead lived in the embedders-level
-/// `slice_instructions_executed`, which is what reports the *final* slice's
-/// executed instructions once `instance.run()` returns overall (whether the
-/// message completed or the failure above ended it) and which feeds
-/// `update_round_limits` for that slice. Unfixed, it reported this same
-/// unbounded value, and `update_round_limits` wrapped the round instruction
-/// budget, letting a single execution round drain far more than its share
-/// of the queued messages.
+/// `slice_instructions_executed`, which reports the *final* slice's executed
+/// instructions once `instance.run()` returns (whether the message completed
+/// or the failure above ended it) and which feeds `update_round_limits` for
+/// that slice. Unfixed, it reported this same unbounded value, and deducting
+/// it from the round instruction budget twice (for the reply and the cleanup
+/// callback of the same response) overflowed: with debug assertions, the
+/// replica panicked with `attempt to subtract with overflow`; without them, the
+/// round instruction budget wrapped, letting a single execution round drain
+/// far more than its share of the queued messages.
+///
+/// Two fixes independently prevent this, and the test only fails if both are
+/// reverted: capping `slice_instructions_executed` at the instructions left for
+/// the message (in `rs/embedders`) and deducting instructions from the round
+/// limits with saturating subtraction (`RoundLimits::deduct_instructions`).
 mod astronomic_charge {
     use super::*;
 
     const N_BURNS: usize = 30;
 
     // `go` calls the canister itself. With env = 1 the reply callback and the
-    // cleanup callback both call stable64_read with a huge length (charged to
-    // the instruction counter before any bounds check); with env = 0 they
-    // just trap. `burn` executes about 1.5 billion instructions (below the 2B
-    // slice limit).
+    // cleanup callback both call `msg_arg_data_copy` with a huge length; with
+    // env = 0 they just trap. The canister is a Wasm64 module so that the length
+    // can be (almost) as large as `i64::MAX` and it is charged (1 instruction per
+    // byte) to the instruction counter before any bounds or context check
+    // (unlike for `stable64_read`, whose bounds are checked before the charge).
+    // The length must keep the charge within `i64::MAX` (otherwise the call
+    // fails without charging anything), while the two charges together must
+    // exceed it (so that deducting both from the round budget overflows).
+    // `burn` executes about 1.5 billion instructions (below the 2B slice limit).
     const WAT: &str = r#"
 (module
   (import "ic0" "msg_reply" (func $msg_reply))
-  (import "ic0" "call_new" (func $call_new (param i32 i32 i32 i32 i32 i32 i32 i32)))
-  (import "ic0" "call_on_cleanup" (func $call_on_cleanup (param i32 i32)))
+  (import "ic0" "call_new" (func $call_new (param i64 i64 i64 i64 i64 i64 i64 i64)))
+  (import "ic0" "call_on_cleanup" (func $call_on_cleanup (param i64 i64)))
   (import "ic0" "call_perform" (func $call_perform (result i32)))
-  (import "ic0" "canister_self_size" (func $self_size (result i32)))
-  (import "ic0" "canister_self_copy" (func $self_copy (param i32 i32 i32)))
-  (import "ic0" "stable64_read" (func $s64r (param i64 i64 i64)))
-  (memory 1)
+  (import "ic0" "canister_self_size" (func $self_size (result i64)))
+  (import "ic0" "canister_self_copy" (func $self_copy (param i64 i64 i64)))
+  (import "ic0" "msg_arg_data_copy" (func $arg_copy (param i64 i64 i64)))
+  (memory i64 1)
   (table 2 funcref)
   (elem (i32.const 0) $on_reply $on_cleanup)
-  (func $on_reply (param $env i32)
-    (if (local.get $env)
-      (then (call $s64r (i64.const 0) (i64.const 0) (i64.const 0x8000000000000000)))
+  (func $on_reply (param $env i64)
+    (if (i64.ne (local.get $env) (i64.const 0))
+      (then (call $arg_copy (i64.const 0) (i64.const 0) (i64.const 0x7000000000000000)))
       (else unreachable)))
-  (func $on_cleanup (param $env i32)
-    (if (local.get $env)
-      (then (call $s64r (i64.const 0) (i64.const 0) (i64.const 0x4000000000000000)))
+  (func $on_cleanup (param $env i64)
+    (if (i64.ne (local.get $env) (i64.const 0))
+      (then (call $arg_copy (i64.const 0) (i64.const 0) (i64.const 0x7000000000000000)))
       (else unreachable)))
-  (func $call_self (param $env i32)
-    (call $self_copy (i32.const 0) (i32.const 0) (call $self_size))
-    (call $call_new (i32.const 0) (call $self_size) (i32.const 100) (i32.const 4)
-      (i32.const 0) (local.get $env) (i32.const 0) (local.get $env))
-    (call $call_on_cleanup (i32.const 1) (local.get $env))
+  (func $call_self (param $env i64)
+    (call $self_copy (i64.const 0) (i64.const 0) (call $self_size))
+    (call $call_new (i64.const 0) (call $self_size) (i64.const 100) (i64.const 4)
+      (i64.const 0) (local.get $env) (i64.const 0) (local.get $env))
+    (call $call_on_cleanup (i64.const 1) (local.get $env))
     (drop (call $call_perform))
     (call $msg_reply))
-  (func $go (call $call_self (i32.const 1)))
-  (func $go_control (call $call_self (i32.const 0)))
+  (func $go (call $call_self (i64.const 1)))
+  (func $go_control (call $call_self (i64.const 0)))
   (func $noop (call $msg_reply))
   (func $burn (local $i i64)
     (loop $l
       (local.set $i (i64.add (local.get $i) (i64.const 1)))
       (br_if $l (i64.lt_u (local.get $i) (i64.const 180000000))))
     (call $msg_reply))
-  (data (i32.const 100) "noop")
+  (data (i64.const 100) "noop")
   (export "canister_update go" (func $go))
   (export "canister_update go_control" (func $go_control))
   (export "canister_update noop" (func $noop))
