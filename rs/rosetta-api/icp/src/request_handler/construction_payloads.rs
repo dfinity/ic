@@ -30,7 +30,11 @@ use ic_types::{
 };
 use icp_ledger::{Memo, Operation, SendArgs, Tokens};
 use rosetta_core::convert::principal_id_from_public_key;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::Duration,
+};
 use tracing::log::debug;
 
 /// Maximum permitted ingress window, mirroring the 24-hour bound documented on
@@ -38,12 +42,13 @@ use tracing::log::debug;
 const MAX_INGRESS_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// Maximum permitted number of (request, ingress expiry) pairs in
-/// `/construction/payloads`. Each pair is turned into an update and a read
-/// state signing payload, so this bounds the work and the size of the
-/// response. It allows 100 requests over the maximum ingress window (720
-/// ingress expiries), which is well above what realistic transfer and neuron
-/// management workflows need.
-const MAX_REQUEST_INGRESS_EXPIRY_PAIRS: usize = 100 * 720;
+/// `/construction/payloads` and `/construction/combine`. Each pair is turned
+/// into an update and a read state signing payload, and `/construction/combine`
+/// needs a signature for each of them, i.e. about 1.1 KB of JSON per pair. It
+/// allows 5 requests over the maximum ingress window (720 ingress expiries),
+/// so that the combine request for any transaction built here stays within the
+/// 4 MiB request body limit.
+const MAX_REQUEST_INGRESS_EXPIRY_PAIRS: usize = 5 * 720;
 
 /// Maximum permitted size of a CBOR-encoded canister update in
 /// `/construction/payloads` and `/construction/combine`. Each update is cloned
@@ -120,6 +125,28 @@ pub(crate) fn validate_update_size(update: &HttpCanisterUpdate) -> Result<(), Ap
         return Err(ApiError::invalid_request(format!(
             "A canister update must not be larger than {MAX_UPDATE_BYTES} bytes: got {update_len} bytes."
         )));
+    }
+    Ok(())
+}
+
+/// Validate that no two updates are identical apart from their ingress expiry.
+///
+/// Identical updates have the same message ID for each ingress expiry, so in
+/// `/construction/combine` they would share signatures and could be expanded
+/// into many envelopes with only two signatures per ingress expiry. They are
+/// never needed, since the IC executes a message with a given ID only once.
+pub(crate) fn validate_unique_updates(
+    updates: &[(RequestType, HttpCanisterUpdate)],
+) -> Result<(), ApiError> {
+    let mut message_ids = HashSet::with_capacity(updates.len());
+    for (_, update) in updates {
+        let mut update = update.clone();
+        update.ingress_expiry = 0;
+        if !message_ids.insert(update.id()) {
+            return Err(ApiError::invalid_request(
+                "A transaction must not contain repeated canister updates.".to_string(),
+            ));
+        }
     }
     Ok(())
 }
@@ -350,6 +377,8 @@ impl RosettaRequestHandler {
                 )?,
             }
         }
+
+        validate_unique_updates(&updates)?;
 
         Ok(models::ConstructionPayloadsResponse::new(
             UnsignedTransaction {

@@ -5,7 +5,7 @@ use crate::models::{
     UnsignedTransaction,
 };
 use crate::request_handler::construction_payloads::{
-    validate_request_ingress_expiry_pairs, validate_update_size,
+    validate_request_ingress_expiry_pairs, validate_unique_updates, validate_update_size,
 };
 use crate::request_handler::{RosettaRequestHandler, make_sig_data, verify_network_id};
 use crate::{convert, models};
@@ -71,6 +71,9 @@ impl RosettaRequestHandler {
         for (_, update) in &unsigned_transaction.updates {
             validate_update_size(update)?;
         }
+        // Repeated updates would share signatures, so that a single signature
+        // could be used for many envelopes.
+        validate_unique_updates(&unsigned_transaction.updates)?;
         // `/construction/payloads` builds strictly increasing ingress expiries.
         // Repeated expiries would let a single signature be reused for many
         // envelopes.
