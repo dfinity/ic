@@ -18,6 +18,7 @@ use ic_system_test_driver::driver::test_env_api::{
 };
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
+    ic_gateway_vm::{IC_GATEWAY_VM_NAME, IcGatewayVm},
     test_env::TestEnv,
 };
 use ic_system_test_driver::util::*;
@@ -56,6 +57,11 @@ fn setup(env: TestEnv) {
         })
     });
     install_nns_and_check_progress(env.topology_snapshot());
+    // The ic-gateway provides a playnet domain under which the PrometheusVm
+    // (if metrics are enabled) can scrape the migration canister's metrics.
+    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+        .start(&env)
+        .expect("failed to setup ic-gateway");
 }
 
 fn test(env: TestEnv) {
