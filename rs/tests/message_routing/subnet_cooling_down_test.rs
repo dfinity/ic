@@ -43,13 +43,7 @@ Runbook::
 4. Install the universal canisters of the steps below (`U1`, `U3`, `U5`, `U6`,
    `U9` and `U10` on `S`, `U4` and `U7` on `D`, `U8` and `U11` on `O`) and
    create two empty canisters `U2a` and `U2b` on `S`, controlled by `U1`.
-5. Execute an update call on `U1` that makes two calls to the management
-   canister's `install_code` method, one per `U2x`, in mode `install`, with the
-   universal canister module and an `arg` that makes `canister_init` burn
-   `INIT_INSTRUCTIONS` instructions. Wait until both requests have left
-   `U1`'s output queue, i.e. until they are enqueued in `S`'s subnet input
-   queues or already executing.
-6. Start the endless loops, each of which calls the management canister's
+5. Start the endless loops, each of which calls the management canister's
    `canister_status` method for the looping canister over and over until the
    global data of that canister is set to `LOOP_BREAK_TRIGGER`, which this test
    never does:
@@ -64,6 +58,14 @@ Runbook::
    e. execute an update call on `U10` (on `S`) that calls `U11` (on `O`), like
       c.
    Wait until all of these loops are running.
+6. Execute an update call on `U1` that makes two calls to the management
+   canister's `install_code` method, one per `U2x`, in mode `install`, with the
+   universal canister module and an `arg` that makes `canister_init` burn
+   `INIT_INSTRUCTIONS` instructions. Wait until both requests have left
+   `U1`'s output queue, i.e. until one of them is executing and the other is
+   enqueued in `S`'s subnet input queues. This comes right before step 7
+   because the other one stays enqueued only for as long as the first one
+   executes, i.e. for a fixed number of rounds.
 7. Evaluate the terms of the "merge readiness" condition for `S` and check that
    none of the `VIOLATED_CONDITIONS` holds: `D` and `O` hold messages in their
    streams to `S` and `S` holds messages in its own streams (the loops of step
@@ -218,7 +220,7 @@ const INDUCTION_BACKOFF: Duration = Duration::from_secs(1);
 const MERGING_DIR: &str = "subnet_merging";
 
 /// Timeout for the subnet to become "merge ready". The binding terms are the
-/// `install_code` calls of step 5, which take a couple of hundred rounds each
+/// `install_code` calls of step 6, which take a couple of hundred rounds each
 /// (and are executed one at a time, as at most one long-running `install_code`
 /// makes progress per round), and the ingress history, which only becomes free
 /// of terminal statuses once the entries of the ingress messages submitted
@@ -468,7 +470,7 @@ async fn prepare<'a>(
     info!(logger, "Step 3 done: all call loops are making progress");
 
     // Step 4: Install all the canisters of the steps below. Every installation
-    // has to happen before step 5 starts `U1`'s `install_code` calls: at most
+    // has to happen before step 6 starts `U1`'s `install_code` calls: at most
     // one long-running `install_code` makes progress per round, and while one
     // is in progress no other `install_code` on the same subnet is executed at
     // all, so any installation attempted here later would be stuck behind
@@ -513,23 +515,8 @@ async fn prepare<'a>(
     }
     info!(logger, "Step 4 done: all canisters installed");
 
-    // Step 5: Have `U1` install code on the canisters it controls.
-    info!(
-        logger,
-        "Step 5: Executing the update call on U1 making the {} `install_code` calls",
-        targets.len(),
-    );
-    u1.submit_update(install_code_payload(&targets))
-        .await
-        .expect("submitting U1's `install_code` calls should succeed");
-    await_install_code_requests_inducted(&s_subnet, &logger).await;
-    info!(
-        logger,
-        "Step 5 done: all of U1's `install_code` requests left its output queue"
-    );
-
-    // Step 6: Start the endless loops.
-    info!(logger, "Step 6: Starting the endless loops");
+    // Step 5: Start the endless loops.
+    info!(logger, "Step 5: Starting the endless loops");
     for (canister, name, callee) in [
         (&u3, "U3", None),
         (&u4, "U4", Some(&u5)),
@@ -558,8 +545,25 @@ async fn prepare<'a>(
     }
     info!(
         logger,
-        "Step 6 done: U3 is looping, and U5, U7, U9 and U11 are looping in calls from U4, U6, \
+        "Step 5 done: U3 is looping, and U5, U7, U9 and U11 are looping in calls from U4, U6, \
          U8 and U10, respectively"
+    );
+
+    // Step 6: Have `U1` install code on the canisters it controls. Step 7 has
+    // to follow right away: the second `install_code` request only stays in
+    // the subnet input queues while the first one executes.
+    info!(
+        logger,
+        "Step 6: Executing the update call on U1 making the {} `install_code` calls",
+        targets.len(),
+    );
+    u1.submit_update(install_code_payload(&targets))
+        .await
+        .expect("submitting U1's `install_code` calls should succeed");
+    await_install_code_requests_inducted(&s_subnet, &logger).await;
+    info!(
+        logger,
+        "Step 6 done: all of U1's `install_code` requests left its output queue"
     );
 
     // Step 7: Check that the scenario violates the individual conditions.
@@ -1112,8 +1116,12 @@ fn install_code_payload(targets: &[Principal]) -> Vec<u8> {
 /// for long enough to observe this state.
 ///
 /// Every subnet message this test made before `U1`'s calls (creating and
-/// installing canisters, setting their controller) was waited for, so the subnet
-/// queues hold nothing but those calls by the time they are inducted.
+/// installing canisters, setting their controller) was waited for. The endless
+/// loops of step 5 keep calling `canister_status`, but a paused `install_code`
+/// only holds up subnet messages that install code themselves, so these calls
+/// keep being executed rather than piling up behind `U1`'s calls. `U1` makes all
+/// of its calls in one execution, so they are inducted together: once one of
+/// them is executing, the others are enqueued.
 async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &Logger) {
     let expected_queued = (INSTALL_CODE_TARGETS.len() - 1) as f64;
     let node_ips: Vec<_> = subnet.nodes().map(|node| node.get_ip_addr()).collect();
