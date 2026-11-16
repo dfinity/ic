@@ -109,12 +109,11 @@ Runbook::
    signed state tree.
 15. The following step of the tool is executed: `MergeStates`, which assembles
    the merged state locally, as a checkpoint holding the state of `D` with the
-   canisters and canister snapshots of `S` added to it, and records its height
-   and state hash. Neither subnet nor the registry is touched.
+   canisters and canister snapshots of `S` added to it, and computes its
+   manifest. Neither subnet nor the registry is touched.
 16. After `MergeStates`: check that the merged state is a single checkpoint that
    holds exactly the canisters of `S` and `D` installed or created in the steps
-   above, i.e. none of `O`'s and no others, and that the recorded height is the
-   height of that checkpoint.
+   above, i.e. none of `O`'s and no others.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -394,9 +393,9 @@ struct Context<'a> {
     /// The canisters on `D` and `O` calling `S` in a loop, `UDS` and `UOS`.
     uds: UniversalCanister<'a>,
     uos: UniversalCanister<'a>,
-    /// Every canister installed or created in the steps above, by name, with
-    /// the name of the subnet hosting it.
-    canisters: Vec<(String, Principal, &'static str)>,
+    /// Every canister installed or created in the steps above on `S` or `D`,
+    /// i.e. the canisters the merged state is expected to hold.
+    merged_canisters: BTreeSet<Principal>,
 }
 
 /// Steps 1 to 7: set the scenario up and check that `S` violates the
@@ -581,35 +580,16 @@ async fn prepare<'a>(
     // Step 7: Check that the scenario violates the individual conditions.
     check_conditions_violated(&topology, &s_subnet, &logger).await;
 
-    let mut canisters: Vec<_> = [
-        ("USD", &usd, "S"),
-        ("USO", &uso, "S"),
-        ("UDS", &uds, "D"),
-        ("UOS", &uos, "O"),
-        ("U1", &u1, "S"),
-        ("U3", &u3, "S"),
-        ("U4", &u4, "D"),
-        ("U5", &u5, "S"),
-        ("U6", &u6, "S"),
-        ("U7", &u7, "D"),
-        ("U8", &u8, "O"),
-        ("U9", &u9, "S"),
-        ("U10", &u10, "S"),
-        ("U11", &u11, "O"),
-    ]
-    .into_iter()
-    .map(|(name, canister, subnet)| (name.to_string(), canister.canister_id(), subnet))
-    .collect();
-    canisters.extend(
-        INSTALL_CODE_TARGETS
-            .iter()
-            .zip(&targets)
-            .map(|(name, target)| (name.to_string(), *target, "S")),
-    );
+    // The canisters on `S` and `D`, i.e. all but `UOS`, `U8` and `U11` on `O`.
+    let merged_canisters = [&usd, &uso, &uds, &u1, &u3, &u4, &u5, &u6, &u7, &u9, &u10]
+        .into_iter()
+        .map(|canister| canister.canister_id())
+        .chain(targets.iter().copied())
+        .collect();
 
     Context {
         logger,
-        canisters,
+        merged_canisters,
         uso,
         uds,
         uos,
@@ -732,17 +712,15 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
 
 /// Step 16: check that the merged state the tool assembled is a single
 /// checkpoint, and that it holds exactly the canisters that `S` and `D` hosted,
-/// i.e. none of `O`'s and no others; and that the tool recorded the height of
-/// the checkpoint in the params that recovering the destination subnet at it
-/// needs.
+/// i.e. none of `O`'s and no others.
 fn check_merged_state(env: &TestEnv, context: &Context<'_>) {
-    let logger = &context.logger;
-    let recovery_dir = env.get_path(MERGING_DIR).join(RECOVERY_DIRECTORY_NAME);
-    let ic_state_dir = recovery_dir
+    let checkpoints_dir = env
+        .get_path(MERGING_DIR)
+        .join(RECOVERY_DIRECTORY_NAME)
         .join("merged_working_dir")
         .join("data")
-        .join(IC_STATE);
-    let checkpoints_dir = ic_state_dir.join(CHECKPOINTS);
+        .join(IC_STATE)
+        .join(CHECKPOINTS);
     let checkpoints: Vec<_> = std::fs::read_dir(&checkpoints_dir)
         .unwrap_or_else(|e| panic!("failed to read {}: {e}", checkpoints_dir.display()))
         .map(|entry| entry.expect("failed to read a directory entry").path())
@@ -754,7 +732,7 @@ fn check_merged_state(env: &TestEnv, context: &Context<'_>) {
     // A checkpoint keeps the state of a canister in a directory named after
     // the hex encoding of its ID.
     let canister_states_dir = checkpoint.join("canister_states");
-    let mut unexpected: BTreeSet<String> = std::fs::read_dir(&canister_states_dir)
+    let actual: BTreeSet<String> = std::fs::read_dir(&canister_states_dir)
         .unwrap_or_else(|e| panic!("failed to read {}: {e}", canister_states_dir.display()))
         .map(|entry| {
             entry
@@ -764,55 +742,29 @@ fn check_merged_state(env: &TestEnv, context: &Context<'_>) {
                 .expect("a canister directory name is not valid UTF-8")
         })
         .collect();
-    let mut merged = 0;
-    for (name, canister_id, subnet) in &context.canisters {
-        let dir_name: String = canister_id
-            .as_slice()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect();
-        let present = unexpected.remove(&dir_name);
-        if *subnet == "O" {
-            assert!(
-                !present,
-                "the merged state holds {name} ({canister_id}) of subnet O",
-            );
-        } else {
-            assert!(
-                present,
-                "the merged state does not hold {name} ({canister_id}) of subnet {subnet}",
-            );
-            merged += 1;
-        }
-    }
-    assert!(
-        unexpected.is_empty(),
-        "the merged state holds canisters the test did not create: {unexpected:?}",
-    );
-
-    // A checkpoint is named after the hex encoding of its height.
-    let checkpoint_name = checkpoint
-        .file_name()
-        .and_then(|name| name.to_str())
-        .expect("the merged checkpoint has no name");
-    let height = u64::from_str_radix(checkpoint_name, 16)
-        .unwrap_or_else(|e| panic!("{checkpoint_name} is not a checkpoint name: {e}"));
-    let params_file = recovery_dir.join("merged_state_params.json");
-    let params = std::fs::read_to_string(&params_file)
-        .unwrap_or_else(|e| panic!("failed to read {}: {e}", params_file.display()));
-    let params: serde_json::Value = serde_json::from_str(&params)
-        .unwrap_or_else(|e| panic!("failed to parse {}: {e}", params_file.display()));
+    let expected: BTreeSet<String> = context
+        .merged_canisters
+        .iter()
+        .map(|canister_id| {
+            canister_id
+                .as_slice()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect()
+        })
+        .collect();
     assert_eq!(
-        params["height"].as_u64(),
-        Some(height),
-        "{} does not record the height of the merged checkpoint {checkpoint_name}: {params}",
-        params_file.display(),
+        actual,
+        expected,
+        "the canisters in the merged checkpoint {} are not those of S and D",
+        checkpoint.display(),
     );
 
     info!(
-        logger,
-        "Step 16 done: the merged checkpoint {} holds exactly the {merged} canisters of S and D",
+        context.logger,
+        "Step 16 done: the merged checkpoint {} holds exactly the {} canisters of S and D",
         checkpoint.display(),
+        expected.len(),
     );
 }
 

@@ -41,7 +41,6 @@ struct CoolingDownRegistryVersion {
 /// |  |-- ${destination_subnet_id}.pem
 /// |  |-- cooling_down_registry_version.json
 /// |  |-- merged.manifest
-/// |  |-- merged_state_params.json
 /// |  |-- nns.pem
 /// |  |-- ${source_subnet_id}.pruned_state_tree.cbor
 /// |  |-- ${destination_subnet_id}.pruned_state_tree.cbor
@@ -101,11 +100,6 @@ impl Layout {
     /// The manifest of the merged state.
     pub(crate) fn merged_state_manifest_file(&self) -> PathBuf {
         self.root.join("merged.manifest")
-    }
-
-    /// The [crate::utils::MergedStateParams] of the merged state.
-    pub(crate) fn merged_state_params_file(&self) -> PathBuf {
-        self.root.join("merged_state_params.json")
     }
 
     pub(crate) fn actual_manifest_file(&self, subnet_id: SubnetId) -> PathBuf {

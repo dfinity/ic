@@ -2,7 +2,7 @@ use crate::{
     layout::Layout,
     readiness,
     subnet_merging::TargetSubnet,
-    utils::{MergedStateParams, get_subnet_record_at_version, wait_for},
+    utils::{get_subnet_record_at_version, wait_for},
 };
 
 use ic_base_types::SubnetId;
@@ -505,7 +505,7 @@ impl Step for MergeStatesStep {
         format!(
             "Assemble the merged state from the checkpoints downloaded to {} and {} at the \
              heights of the CUPs the two subnets halted at, as a new checkpoint in {}, and \
-             record the height and the state hash the recovery of the destination subnet needs.",
+             compute its manifest.",
             self.layout.work_dir(TargetSubnet::Source).display(),
             self.layout.work_dir(TargetSubnet::Destination).display(),
             self.layout.merged_work_dir().display(),
@@ -538,20 +538,9 @@ impl Step for MergeStatesStep {
              height {destination_height}; the merged state is the checkpoint {merged_height}",
         );
 
-        // The merge claims its output directory by creating it, and the upload
-        // step refuses a state directory holding more than one checkpoint, so
-        // every merged checkpoint left over from an earlier run of this step
-        // is removed first, whatever its height. The downloaded checkpoints of
-        // the two subnets are in other directories and stay untouched.
-        //
-        // The manifest and the params of an earlier run go with it, so that
-        // the params, which are written last, only ever describe a merged
-        // state that is complete, also if this run fails halfway.
+        // Clean up after a previous run of this step.
         let manifest_path = self.layout.merged_state_manifest_file();
-        let params_path = self.layout.merged_state_params_file();
-        for path in [&params_path, &manifest_path] {
-            remove_file_if_exists(path)?;
-        }
+        remove_file_if_exists(&manifest_path)?;
         remove_dir(&self.layout.merged_checkpoints_dir())?;
 
         info!(self.logger, "Merging the states");
@@ -564,20 +553,15 @@ impl Step for MergeStatesStep {
         info!(self.logger, "Computing the manifest of the merged state");
         state_tool_helper::compute_manifest(&merged_checkpoint, &manifest_path)?;
 
-        // The state hash is the root hash of the manifest, taken from the
-        // manifest as it was written rather than by hashing the (possibly
-        // large) merged checkpoint a second time.
         info!(self.logger, "Validating the manifest of the merged state");
         let state_hash = state_tool_helper::verify_manifest(&manifest_path)
             .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
+        info!(
+            self.logger,
+            "The merged state at height {merged_height} has the state hash {state_hash}"
+        );
 
-        let params = MergedStateParams {
-            height: merged_height.get(),
-            state_hash,
-        };
-        info!(self.logger, "The merged state: {params:?}");
-
-        params.write(&params_path)
+        Ok(())
     }
 }
 

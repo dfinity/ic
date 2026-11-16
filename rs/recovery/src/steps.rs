@@ -716,12 +716,10 @@ impl Step for UploadStateAndRestartStep {
             ssh_helper.ssh(cmd_create_and_copy_checkpoint_dir)?;
 
             // The states metadata is only a cache that the state manager
-            // rebuilds if it is missing, so it is uploaded only if present
-            // (e.g., a merged state assembled by the subnet merging tool has
-            // none). If it is absent, any copy left in the upload directory by
-            // an interrupted upload is removed, as the state manager would
-            // otherwise trust a stale manifest it holds for the checkpoint.
-            // This is a command of its own, so that a failure stops the upload.
+            // rebuilds if it is missing, so it is uploaded only if present.
+            // If it is absent, any copy left in the upload directory by an
+            // interrupted upload is removed. This is a command of its own, so
+            // that a failure stops the upload.
             let has_states_metadata = self.data_src.join(STATES_METADATA).exists();
             if !has_states_metadata {
                 info!(
@@ -729,7 +727,7 @@ impl Step for UploadStateAndRestartStep {
                     "Removing stale states metadata from the remote upload directory..."
                 );
                 ssh_helper.ssh(format!(
-                    "sudo rm -f {}",
+                    "rm -f {}",
                     upload_dir.join(STATES_METADATA).display()
                 ))?;
             }
