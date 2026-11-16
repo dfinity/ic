@@ -459,7 +459,7 @@ mod crypto_hash_stability {
 
     /// Test stability of the signed bytes of UpgradeAuthorizationContent
     #[test]
-    fn upgrade_permit_request_signed_bytes_stability() {
+    fn upgrade_authorization_content_signed_bytes_stability() {
         let data = UpgradeAuthorizationContent {
             requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
             request_height: Height::from(42),
