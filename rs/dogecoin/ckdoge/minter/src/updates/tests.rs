@@ -1,12 +1,12 @@
 mod icrc21 {
     use crate::candid_api::RetrieveDogeWithApprovalArgs;
     use crate::lifecycle::init::Network;
-    use crate::updates::icrc21::{
-        DECIMALS, TokenSymbols, build_consent_info, decoder_config, format_amount,
-    };
-    use candid::{Encode, decode_one_with_config};
+    use crate::updates::icrc21::{DECIMALS, TokenSymbols, build_consent_info, format_amount};
+    use candid::Encode;
     use icrc_ledger_types::icrc21::errors::Icrc21Error;
-    use icrc_ledger_types::icrc21::lib::MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES;
+    use icrc_ledger_types::icrc21::lib::{
+        MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES, decode_consent_message_arg,
+    };
     use icrc_ledger_types::icrc21::requests::{
         ConsentMessageMetadata, ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
     };
@@ -289,9 +289,8 @@ mod icrc21 {
 
         // The error description only shows the outermost context of the decoding error,
         // so check its root cause directly.
-        let decoding_error =
-            decode_one_with_config::<RetrieveDogeWithApprovalArgs>(&arg, &decoder_config())
-                .expect_err("decoding should fail");
+        let decoding_error = decode_consent_message_arg::<RetrieveDogeWithApprovalArgs>(&arg)
+            .expect_err("decoding should fail");
         assert!(
             format!("{decoding_error:?}").contains("Skipping cost exceeds the limit"),
             "unexpected decoding error: {decoding_error:?}"
