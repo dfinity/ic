@@ -1891,7 +1891,7 @@ fn check_custom_sections_and_code_size(
 }
 
 /// Validates a Wasm binary against the requirements of the interface spec
-/// defined in https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-module.
+/// defined in https://docs.internetcomputer.org/references/ic-interface-spec/canister-interface/.
 ///
 /// It constructs a module by parsing the input Wasm binary and then calls into
 /// more specific methods that validate different sections of the Wasm binary.
