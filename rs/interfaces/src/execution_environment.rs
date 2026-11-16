@@ -26,7 +26,10 @@ use std::{
     convert::{Infallible, TryFrom},
     fmt,
     ops::{AddAssign, SubAssign},
-    sync::{Arc, atomic::AtomicU64},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
     time::Duration,
 };
 use strum_macros::EnumIter;
@@ -587,6 +590,24 @@ pub struct TransformExecutionInput {
     pub query: Query,
     pub instruction_observation: Arc<AtomicU64>,
     pub max_instructions: NumInstructions,
+    pub start: TransformStart,
+}
+
+/// Decides once whether a transform runs: the query handler starts it or the
+/// caller cancels it, whichever comes first.
+#[derive(Clone, Debug, Default)]
+pub struct TransformStart(Arc<AtomicBool>);
+
+impl TransformStart {
+    /// Returns whether the transform may start, i.e. it wasn't cancelled.
+    pub fn try_start(&self) -> bool {
+        !self.0.swap(true, Ordering::Relaxed)
+    }
+
+    /// Returns whether the transform was cancelled, i.e. it hadn't started.
+    pub fn try_cancel(&self) -> bool {
+        !self.0.swap(true, Ordering::Relaxed)
+    }
 }
 
 /// Interface for the component to execute canister http transform.

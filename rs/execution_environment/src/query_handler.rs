@@ -504,6 +504,7 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
             query,
             instruction_observation,
             max_instructions,
+            start: transform_start,
         }: TransformExecutionInput,
     ) -> Self::Future {
         let internal = Arc::clone(&self.internal);
@@ -515,7 +516,7 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
         let enable_query_stats_tracking = self.enable_query_stats_tracking;
         self.query_scheduler.push(canister_id, move || {
             let start = std::time::Instant::now();
-            if !tx.is_closed() {
+            if !tx.is_closed() && transform_start.try_start() {
                 // We managed to upgrade the weak pointer, so the query was not cancelled.
                 // Canceling the query after this point will have no effect: the query will
                 // be executed anyway. That is fine because the execution will take O(ms).
