@@ -106,6 +106,10 @@ fn test_dts() {
 /// The burn proceeds in chunks of a tenth of the slice limit, reading
 /// `performance_counter(0)` after each chunk, so that it stops at most one
 /// chunk past its target.
+///
+/// Leaving 1.5 slice limits makes the charge land in the second to last slice:
+/// in the last slice, the message would fail for exceeding the message
+/// instruction limit even before #11956.
 fn charge_exceeding_message_budget_wasm() -> Vec<u8> {
     const WASM_PAGE_SIZE: u64 = 65536;
     // Empirically, an iteration of the loop in `$burn_chunk` costs 9 instructions.
@@ -188,6 +192,8 @@ fn charge_exceeding_message_budget_fails_with_message_limit() {
         .unwrap();
 
     let err = sm.execute_ingress(canister_id, "run", vec![]).unwrap_err();
+    // A `SliceOverrun` has the same error code, so only the error description
+    // checked below tells the two failures apart.
     assert_eq!(err.code(), ErrorCode::CanisterInstructionLimitExceeded);
     let expected = format!(
         "Canister exceeded the limit of {message_limit} instructions for single message execution."
