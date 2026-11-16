@@ -109,7 +109,7 @@ fn get_latest_certified_state_and_data_certificate(
     // Only embed a delegation which is consistent with the certified state which the
     // data certificate is built from.
     let (certificate_delegation, certificate_delegation_metadata) = nns_delegation
-        .build_verified_with_metadata(canister_ranges_check, state.as_ref())
+        .get_delegation_with_metadata(canister_ranges_check, state.as_ref())
         .map_err(QueryExecutionError::DelegationInconsistentWithState)?
         .unzip();
 
