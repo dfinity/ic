@@ -5970,9 +5970,10 @@ enum LogResizeFailure {
 
 fn update_settings_charges_log_resize_instructions_when_the_call_fails(failure: LogResizeFailure) {
     const LOG_LIMIT: u64 = 8 * 1024;
-    // A large freezing threshold, so the freezing cost of the small memory that
-    // the `controllers_change` history entry adds (the failure trigger) far
-    // exceeds the resize charge, making the funding window below wide.
+    // A large freezing threshold for `LogResizeFailure::FreezingThreshold`, so
+    // the freezing cost of the small memory that the `controllers_change`
+    // history entry adds (the failure trigger) far exceeds the resize charge,
+    // making the funding window below wide.
     const FREEZE_SECS: u64 = 1_000_000_000_000;
     const MIB: u64 = 1024 * 1024;
 
@@ -6136,6 +6137,18 @@ fn update_settings_validates_log_resize_against_the_pre_update_freezing_threshol
     const FREEZE_SECS_BEFORE: u64 = 2 * FREEZE_SECS_AFTER;
     const INITIAL_BALANCE: Cycles = Cycles::new(100_000_000_000_000_000);
 
+    /// An `update_settings` call lowering the freezing threshold and growing
+    /// the log.
+    struct LogGrowCall {
+        canister_id: CanisterId,
+        result: Result<WasmResult, UserError>,
+        log_memory_usage_before: NumBytes,
+        resize_instructions: NumInstructions,
+        resize_cost: NominalCycles,
+        /// The canister's consumed cycles for instructions right before the call.
+        consumed_before: (NominalCycles, NominalCycles),
+    }
+
     let mut test = ExecutionTestBuilder::new().build();
 
     // A canister with a non-empty log buffer, so the resize does real work.
@@ -6290,18 +6303,6 @@ fn update_settings_validates_log_resize_against_the_pre_update_freezing_threshol
     assert_eq!(counter_after - counter_before, call.resize_cost);
     assert_eq!(test.subnet_message_instructions(), call.resize_instructions);
     assert_eq!(failed_subnet_message_charges(&test), 0);
-}
-
-/// An `update_settings` call made by
-/// `update_settings_validates_log_resize_against_the_pre_update_freezing_threshold`.
-struct LogGrowCall {
-    canister_id: CanisterId,
-    result: Result<WasmResult, UserError>,
-    log_memory_usage_before: NumBytes,
-    resize_instructions: NumInstructions,
-    resize_cost: NominalCycles,
-    /// The canister's consumed cycles for instructions right before the call.
-    consumed_before: (NominalCycles, NominalCycles),
 }
 
 // Canister creation without log_memory_limit → first-time log store allocation
