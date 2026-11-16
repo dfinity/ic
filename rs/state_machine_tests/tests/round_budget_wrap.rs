@@ -175,10 +175,13 @@ fn round_budget_wrap_astronomic_charge() {
         ErrorCode::CanisterInstructionLimitExceeded,
         &expected_error.to_string(),
     );
+    // The lower bound shows that a round does complete several burns, i.e.,
+    // that the upper bound below can tell a drained queue from a normal round.
     assert!(
-        control.max_burns_per_round <= 3,
+        (2..=3).contains(&control.max_burns_per_round),
         "a round normally fits 2 burns (a new message is only started while \
-         less than 2B instructions were executed in the round)"
+         less than 2B instructions were executed in the round), got: {}",
+        control.max_burns_per_round
     );
     assert!(
         attack.max_burns_per_round <= 3,
