@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import pandas as pd
 
@@ -11,14 +11,14 @@ CANISTERS_INSTALLED = "canisters_installed"
 def load_subnet_data(
     load_path: Path,
     load_baseline_path: Path,
-    load_type: str,
+    load_types: List[str],
     communication_data_path: Path,
     communication_baseline_data_path: Path,
 ) -> Dict:
     """
     Load canister metadata and communication edges for a subnet.
-    Returns a mapping between canister edges and their weights: (i, j) => weight, load vector,
-    and index mappings.
+    Returns a mapping between canister edges and their weights: (i, j) => weight, a mapping from
+    each load type to its load vector, and index mappings.
 
     Arguments:
     load_path -- path to a file in the csv format which contains load metrics for each canister.
@@ -26,8 +26,8 @@ def load_subnet_data(
                  and `../test_data/fake_load_sample.csv` for an example.
     load_baseline_path -- path to a file in the in the same format as `load_path`. Represents a
                           sample collected at earlier time. Used to compute relative metrics.
-    load_type -- which kind of load (e.g. instructions executed, ingress messages ingested) we want
-                 to balance for.
+    load_types -- which kinds of load (e.g. instructions executed, ingress messages ingested) we
+                  want to balance for.
     communication_data_path -- path to a file in the csv format which contains for each pair of
                                canisters, the number of messages they exchanged. See
                                `../test_data/fake_communication_sample.csv` for an example.
@@ -79,15 +79,17 @@ def load_subnet_data(
         receiver_index = canister_id_to_index[receiver_id]
         edges[(sender_index, receiver_index)] = count
 
-    if load_type == CANISTERS_INSTALLED:
-        # This can't be a constant column of the load data: subtracting the baseline would zero it
-        # out for every canister which is present in both samples.
-        load = [1] * len(canister_data)
-    else:
-        load = canister_data[load_type].tolist()
+    loads = {}
+    for load_type in load_types:
+        if load_type == CANISTERS_INSTALLED:
+            # This can't be a constant column of the load data: subtracting the baseline would zero it
+            # out for every canister which is present in both samples.
+            loads[load_type] = [1] * len(canister_data)
+        else:
+            loads[load_type] = canister_data[load_type].tolist()
 
     return {
         "edges": edges,
-        "load": load,
+        "loads": loads,
         "index_to_canister_id": index_to_canister_id,
     }

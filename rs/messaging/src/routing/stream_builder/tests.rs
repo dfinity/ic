@@ -5,7 +5,7 @@ use ic_base_types::NumSeconds;
 use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
 use ic_error_types::RejectCode;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
-use ic_management_canister_types_private::Method;
+use ic_management_canister_types_private::{CanisterIdRecord, Method, Payload as _};
 use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -270,6 +270,73 @@ fn build_streams_success() {
     });
 }
 
+// Tests that the effective canister ID of a request to the management canister
+// is cached when it is routed into the loopback stream.
+#[test]
+fn build_streams_caches_effective_canister_id_of_loopback_subnet_request() {
+    with_test_replica_logger(|log| {
+        let (stream_builder, mut state, _) = new_fixture(&log);
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology
+                .subnets_mut()
+                .insert(LOCAL_SUBNET, Default::default());
+        });
+
+        let sender = canister_test_id(3);
+        let target = canister_test_id(13);
+        let mut canister_state = new_canister_state(
+            sender,
+            sender.get(),
+            *INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        // A request to the management canister, plus one without an effective canister ID.
+        for (method, payload) in [
+            (
+                Method::StartCanister,
+                CanisterIdRecord::from(target).encode(),
+            ),
+            (Method::StartCanister, vec![1, 2, 3]),
+        ] {
+            canister_state
+                .push_output_request(
+                    OutputRequestBuilder::default()
+                        .sender(sender)
+                        .receiver(CanisterId::unchecked_from_principal(LOCAL_SUBNET.get()))
+                        .method_name(method)
+                        .method_payload(payload)
+                        .build(),
+                    UNIX_EPOCH,
+                )
+                .unwrap();
+        }
+        state.put_canister_state(canister_state);
+
+        // Keep only the address: cloning the Arc would itself force a copy when caching.
+        let request_ptr = match state.output_into_iter().peek().unwrap() {
+            RequestOrResponse::Request(request) => Arc::as_ptr(request),
+            msg => panic!("Expected a request, got {msg:?}"),
+        };
+
+        let state = stream_builder.build_streams(state);
+
+        let messages: Vec<_> = state
+            .get_stream(&LOCAL_SUBNET)
+            .unwrap()
+            .messages()
+            .iter()
+            .map(|(_, msg)| match msg {
+                StreamMessage::Request(request) => request.clone(),
+                msg => panic!("Expected a request, got {msg:?}"),
+            })
+            .collect();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(Arc::as_ptr(&messages[0]), request_ptr);
+        assert_eq!(messages[0].effective_canister_id, Some(Box::new(target)));
+        assert_eq!(messages[1].effective_canister_id, None);
+    });
+}
+
 // Tests that messages between local canisters get routed.
 #[test]
 fn build_streams_local_canisters() {
@@ -312,7 +379,7 @@ fn build_streams_local_canisters() {
         let expected_stream = Stream::new(
             requests_into_queue_round_robin(
                 StreamIndex::from(0),
-                msgs.clone(),
+                msgs,
                 None,
                 provided_state.time(),
             ),
@@ -323,19 +390,6 @@ fn build_streams_local_canisters() {
         // The expected_canister_states contains both the source canisters with consumed
         // messages, but also the destination canisters of all messages.
         let mut expected_state = consume_output_queues(&provided_state);
-
-        // Every request routed into the loopback stream is recorded in the sending
-        // canister's connection metrics.
-        let batch_time = expected_state.time();
-        for msg in &msgs {
-            expected_state
-                .canister_state_make_mut(&msg.sender)
-                .unwrap()
-                .system_state
-                .canister_metrics_mut()
-                .connection_metrics_mut()
-                .increment(msg.receiver, batch_time);
-        }
 
         // Establish the expected ReplicatedState that holds the expected_stream_state
         // and expected_canister_states
@@ -2139,6 +2193,7 @@ fn build_streams_with_oversized_payloads() {
             method_payload: oversized_request_payload.clone(),
             metadata: Default::default(),
             deadline: NO_DEADLINE,
+            effective_canister_id: None,
         };
         assert!(local_request.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
 
@@ -2152,6 +2207,7 @@ fn build_streams_with_oversized_payloads() {
             method_payload: oversized_request_payload,
             metadata: Default::default(),
             deadline: NO_DEADLINE,
+            effective_canister_id: None,
         };
         assert!(remote_request.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
         let remote_request_reject = Response {
@@ -2251,20 +2307,10 @@ fn build_streams_with_oversized_payloads() {
         let mut expected_state = consume_output_queues(&provided_state);
 
         // Expecting a reject response for the remote request.
-        let batch_time = expected_state.time();
         let local_canister = expected_state
             .canister_state_make_mut(&local_canister)
             .unwrap();
         push_input(local_canister, remote_request_reject.into());
-
-        // Expecting the loopback-routed local request to be recorded in the sending
-        // canister's connection metrics.
-        let local_canister_id = local_canister.canister_id();
-        local_canister
-            .system_state
-            .canister_metrics_mut()
-            .connection_metrics_mut()
-            .increment(local_canister_id, batch_time);
 
         // Expecting a loopback stream consisting of:
         //  * successfully routed local request;

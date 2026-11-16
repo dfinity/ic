@@ -212,6 +212,33 @@ async fn send_request(
     result
 }
 
+/// Like `send_request`, but as a bounded-wait call that gives up after `timeout_seconds`.
+#[update]
+async fn send_bounded_wait_request(
+    request: RemoteHttpRequest,
+    timeout_seconds: u32,
+) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
+    let RemoteHttpRequest { request, cycles } = request;
+    let raw_response = Call::bounded_wait(Principal::management_canister(), "http_request")
+        .change_timeout(timeout_seconds)
+        .with_raw_args(&request.encode())
+        .with_cycles(u128::from(cycles))
+        .await
+        .map_err(map_call_error)?
+        .into_bytes();
+    let decoded: CanisterHttpResponsePayload = candid::utils::decode_one(&raw_response)
+        .expect("Failed to decode CanisterHttpResponsePayload");
+    Ok(RemoteHttpResponse::new(
+        decoded.status,
+        decoded
+            .headers
+            .into_iter()
+            .map(|header| (header.name, header.value))
+            .collect(),
+        String::from_utf8_lossy(&decoded.body).to_string(),
+    ))
+}
+
 #[query]
 async fn check_response(
     url: String,

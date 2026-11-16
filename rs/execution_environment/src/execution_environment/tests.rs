@@ -2280,6 +2280,19 @@ fn subnet_ingress_message_on_create_canister_fails() {
 }
 
 #[test]
+fn subnet_ingress_message_on_bitcoin_send_transaction_internal_fails() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let err = test
+        .subnet_message(Method::BitcoinSendTransactionInternal, EmptyBlob.encode())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
+    assert_eq!(
+        "bitcoin_send_transaction_internal cannot be called by a user.",
+        err.description()
+    );
+}
+
+#[test]
 fn subnet_canister_request_bad_candid_payload() {
     let mut test = ExecutionTestBuilder::new().build();
     let err = test

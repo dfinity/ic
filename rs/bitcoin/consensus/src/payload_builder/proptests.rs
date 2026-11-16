@@ -1,6 +1,7 @@
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, Network, SendTransactionResponse,
+    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, Network, SendTransactionRequest,
+    SendTransactionResponse,
 };
 use ic_config::bitcoin_payload_builder_config::Config;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, ProposalContext};
@@ -42,20 +43,32 @@ fn proptest_round(
     max_size: NumBytes,
     bitcoin_payload: BitcoinAdapterResponseWrapper,
 ) {
+    // A pending request that `bitcoin_payload` is a valid response to.
+    let request = match &bitcoin_payload {
+        BitcoinAdapterResponseWrapper::GetSuccessorsResponse(_)
+        | BitcoinAdapterResponseWrapper::GetSuccessorsReject(_) => {
+            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
+                processed_block_hashes: vec![vec![10; 32]],
+                anchor: vec![10; 32],
+                network: Network::BitcoinTestnet,
+            })
+        }
+        BitcoinAdapterResponseWrapper::SendTransactionResponse(_)
+        | BitcoinAdapterResponseWrapper::SendTransactionReject(_) => {
+            BitcoinAdapterRequestWrapper::SendTransactionRequest(SendTransactionRequest {
+                network: Network::BitcoinTestnet,
+                transaction: vec![],
+            })
+        }
+    };
+
     let mut adapter_client = MockAdapterClient::new();
     adapter_client
         .expect_send_blocking()
         .times(1)
         .returning(move |_, _| Ok(bitcoin_payload.clone()));
 
-    let state_manager =
-        mock_state_manager(vec![BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
-            GetSuccessorsRequestInitial {
-                processed_block_hashes: vec![vec![10; 32]],
-                anchor: vec![10; 32],
-                network: Network::BitcoinTestnet,
-            },
-        )]);
+    let state_manager = mock_state_manager(vec![request]);
 
     let bitcoin_payload_builder = BitcoinPayloadBuilder::new(
         Arc::new(state_manager),

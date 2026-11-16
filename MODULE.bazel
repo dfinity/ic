@@ -79,7 +79,7 @@ include("//bazel:rust.MODULE.bazel")
 
 # Python dependencies
 
-bazel_dep(name = "rules_python", version = "1.9.0")
+bazel_dep(name = "rules_python", version = "2.4.6")
 
 python_version = "3.12"
 
@@ -93,6 +93,14 @@ pip.parse(
     requirements_lock = "//:requirements.txt",
 )
 use_repo(pip, "python_deps")
+
+# Don't generate empty __init__.py files in the runfiles of this module's py_binary and py_test targets.
+# rules_python deprecated that and warns about every target that relies on it
+# (https://github.com/bazel-contrib/rules_python/issues/2945). Directories without an __init__.py
+# import as namespace packages instead (PEP 420). This only covers the targets of this module:
+# --incompatible_default_to_explicit_init_py in bazel/conf/.bazelrc.build covers those of other modules.
+rules_python_config = use_extension("@rules_python//python/extensions:config.bzl", "config")
+rules_python_config.explicit_init_py(default = True)
 
 # Protobuf dependencies
 # toolchains_protoc must be declared before protobuf so its toolchain registration wins
@@ -1134,6 +1142,8 @@ http_archive(
         # Remove everything except ./proto/
         "find . -mindepth 1 -maxdepth 1 ! -name proto -exec rm -rf {} +",
         "find ./proto -name BUILD -delete",
+        # Make the generated Python modules regular packages, see :buildbuddy_py in the BUILD file above
+        "touch proto/__init__.py proto/api/__init__.py proto/api/v1/__init__.py",
     ],
     sha256 = "eff54923b6afdf4507f9b07fc9906f06580fdba72d96e9d58d8e6ea8ac4f71cd",
     strip_prefix = "buildbuddy-89d510c91a18ec0469043a50750145ac51983f74",

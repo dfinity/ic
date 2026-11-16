@@ -1,8 +1,10 @@
 mod icrc21 {
     use crate::candid_api::RetrieveDogeWithApprovalArgs;
     use crate::lifecycle::init::Network;
-    use crate::updates::icrc21::{DECIMALS, TokenSymbols, build_consent_info, format_amount};
-    use candid::Encode;
+    use crate::updates::icrc21::{
+        DECIMALS, TokenSymbols, build_consent_info, decoder_config, format_amount,
+    };
+    use candid::{Encode, decode_one_with_config};
     use icrc_ledger_types::icrc21::errors::Icrc21Error;
     use icrc_ledger_types::icrc21::lib::MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES;
     use icrc_ledger_types::icrc21::requests::{
@@ -267,6 +269,56 @@ mod icrc21 {
                 assert!(info.description.contains("Failed to decode"));
             }
             _ => panic!("expected UnsupportedCanisterCall, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn test_args_exceeding_skipping_quota_are_rejected() {
+        // A few bytes can declare a vector of u32::MAX `null` values, which would take the
+        // decoder billions of steps to skip without a skipping quota.
+        let args = RetrieveDogeWithApprovalArgs {
+            amount: 250_000,
+            address: MAINNET_ADDRESS.to_string(),
+            from_subaccount: None,
+        };
+        let valid_arg = Encode!(&args).unwrap();
+        let mut arg = Encode!(&args, &Vec::<()>::new()).unwrap();
+        assert_eq!(arg.pop(), Some(0));
+        arg.extend_from_slice(&[0xff, 0xff, 0xff, 0xff, 0x0f]); // LEB128 of u32::MAX
+        assert!(arg.len() <= MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize);
+
+        // The error description only shows the outermost context of the decoding error,
+        // so check its root cause directly.
+        let decoding_error =
+            decode_one_with_config::<RetrieveDogeWithApprovalArgs>(&arg, &decoder_config())
+                .expect_err("decoding should fail");
+        assert!(
+            format!("{decoding_error:?}").contains("Skipping cost exceeds the limit"),
+            "unexpected decoding error: {decoding_error:?}"
+        );
+        let err = build_consent_info(
+            make_request("retrieve_doge_with_approval", arg, None),
+            Network::Mainnet,
+        )
+        .unwrap_err();
+        match err {
+            Icrc21Error::UnsupportedCanisterCall(info) => {
+                assert!(info.description.contains("Failed to decode"));
+            }
+            _ => panic!("expected UnsupportedCanisterCall, got {err:?}"),
+        }
+
+        // Arguments without trailing values are still accepted.
+        let info = build_consent_info(
+            make_request("retrieve_doge_with_approval", valid_arg, None),
+            Network::Mainnet,
+        )
+        .unwrap();
+        match info.consent_message {
+            ConsentMessage::GenericDisplayMessage(m) => {
+                assert!(m.starts_with("# Convert ckDOGE to DOGE"))
+            }
+            other => panic!("expected GenericDisplayMessage, got {other:?}"),
         }
     }
 

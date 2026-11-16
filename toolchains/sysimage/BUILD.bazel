@@ -10,15 +10,27 @@ sh_binary(
     srcs = ["proc_wrapper.sh"],
 )
 
-# Common libs
+# Common libs, imported as toolchains.sysimage.crc and toolchains.sysimage.utils.
+
+# The __init__.py files that make toolchains and toolchains.sysimage regular packages. rules_python doesn't
+# generate them (explicit_init_py in MODULE.bazel), and as namespace packages they would lose to any
+# regular `toolchains` package elsewhere on sys.path, like PyPI's `toolchains` in a user site-packages.
+py_library(
+    name = "init_py",
+    srcs = ["__init__.py"],
+    deps = ["//toolchains:init_py"],
+)
+
 py_library(
     name = "crc",
     srcs = ["crc.py"],
+    deps = [":init_py"],
 )
 
 py_library(
     name = "utils",
     srcs = ["utils.py"],
+    deps = [":init_py"],
 )
 
 # Build tools

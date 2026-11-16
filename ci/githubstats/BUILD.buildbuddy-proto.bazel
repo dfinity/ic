@@ -1,5 +1,6 @@
 load("@protobuf//bazel:proto_library.bzl", "proto_library")
 load("@protobuf//bazel:py_proto_library.bzl", "py_proto_library")
+load("@rules_python//python:defs.bzl", "py_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -32,4 +33,18 @@ proto_library(
 py_proto_library(
     name = "buildbuddy_py_proto",
     deps = [":buildbuddy_proto"],
+)
+
+# The generated modules (proto.target_pb2, ...) with the __init__.py files that make proto, proto.api and
+# proto.api.v1 regular packages. rules_python doesn't generate them (explicit_init_py in MODULE.bazel),
+# and as namespace packages they would lose to any regular `proto` package elsewhere on sys.path, like
+# proto-plus's in a user site-packages.
+py_library(
+    name = "buildbuddy_py",
+    srcs = [
+        "proto/__init__.py",
+        "proto/api/__init__.py",
+        "proto/api/v1/__init__.py",
+    ],
+    deps = [":buildbuddy_py_proto"],
 )
