@@ -12,7 +12,6 @@ use tonic::{
 use tower::service_fn;
 
 const ADAPTER_PREFIX: &str = "adapter";
-/// Upper bound on the scrape timeout.
 const MAX_SCRAPE_TIMEOUT: Duration = Duration::from_hours(1);
 
 /// Adapter metrics client
