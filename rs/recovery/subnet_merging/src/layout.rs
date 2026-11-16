@@ -59,7 +59,6 @@ struct CoolingDownRegistryVersion {
 /// |  |   |   |   |-- ${halting_height}/
 /// |  |-- merged_working_dir/           (the merged state)
 /// |  |   |-- data/
-/// |  |   |   |-- ic_state/states_metadata.pbuf
 /// |  |   |   |-- ic_state/checkpoints/
 /// |  |   |   |   |-- ${recovery_height}/
 pub(crate) struct Layout {

@@ -112,9 +112,9 @@ Runbook::
    canisters and canister snapshots of `S` added to it, and records its height
    and state hash. Neither subnet nor the registry is touched.
 16. After `MergeStates`: check that the merged state is a single checkpoint that
-   holds both a canister of `S` (`USO`) and a canister of `D` (`UDS`), that it
-   comes with the states metadata uploading it requires, and that the recorded
-   height is the height of that checkpoint.
+   holds exactly the canisters of `S` and `D` installed or created in the steps
+   above, i.e. none of `O`'s and no others, and that the recorded height is the
+   height of that checkpoint.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -122,7 +122,7 @@ violated before `S` starts cooling down; `S` then rejects ingress messages and
 query calls and becomes "merge ready", and the loops of `UDS` and `UOS` of step
 2 are stalled; the tool then halts `S` and `D` at their next CUP, the states it
 downloads from them pass validation, and the merged state it assembles from
-them holds the canisters of both.
+them holds exactly the canisters of both.
 
 end::catalog[] */
 
@@ -131,8 +131,8 @@ use candid::Principal;
 use ic_agent::Agent;
 use ic_agent::agent::RejectCode;
 use ic_recovery::{
-    CHECKPOINTS, IC_STATE, RECOVERY_DIRECTORY_NAME, RecoveryArgs, STATES_METADATA,
-    get_node_metrics, util::DataLocation,
+    CHECKPOINTS, IC_STATE, RECOVERY_DIRECTORY_NAME, RecoveryArgs, get_node_metrics,
+    util::DataLocation,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_merging::metrics_helper::{
@@ -164,7 +164,7 @@ use ic_universal_canister::{
     CallInterface, PayloadBuilder, call_args, get_universal_canister_wasm, management, wasm,
 };
 use slog::{Logger, info};
-use std::{net::IpAddr, time::Duration};
+use std::{collections::BTreeSet, net::IpAddr, time::Duration};
 use tokio::runtime::Runtime;
 
 /// The value of the `type` label selecting the `install_code` call contexts of
@@ -394,6 +394,9 @@ struct Context<'a> {
     /// The canisters on `D` and `O` calling `S` in a loop, `UDS` and `UOS`.
     uds: UniversalCanister<'a>,
     uos: UniversalCanister<'a>,
+    /// Every canister installed or created in the steps above, by name, with
+    /// the name of the subnet hosting it.
+    canisters: Vec<(String, Principal, &'static str)>,
 }
 
 /// Steps 1 to 7: set the scenario up and check that `S` violates the
@@ -578,8 +581,35 @@ async fn prepare<'a>(
     // Step 7: Check that the scenario violates the individual conditions.
     check_conditions_violated(&topology, &s_subnet, &logger).await;
 
+    let mut canisters: Vec<_> = [
+        ("USD", &usd, "S"),
+        ("USO", &uso, "S"),
+        ("UDS", &uds, "D"),
+        ("UOS", &uos, "O"),
+        ("U1", &u1, "S"),
+        ("U3", &u3, "S"),
+        ("U4", &u4, "D"),
+        ("U5", &u5, "S"),
+        ("U6", &u6, "S"),
+        ("U7", &u7, "D"),
+        ("U8", &u8, "O"),
+        ("U9", &u9, "S"),
+        ("U10", &u10, "S"),
+        ("U11", &u11, "O"),
+    ]
+    .into_iter()
+    .map(|(name, canister, subnet)| (name.to_string(), canister.canister_id(), subnet))
+    .collect();
+    canisters.extend(
+        INSTALL_CODE_TARGETS
+            .iter()
+            .zip(&targets)
+            .map(|(name, target)| (name.to_string(), *target, "S")),
+    );
+
     Context {
         logger,
+        canisters,
         uso,
         uds,
         uos,
@@ -701,10 +731,10 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
 }
 
 /// Step 16: check that the merged state the tool assembled is a single
-/// checkpoint, and that it holds a canister of each of the two subnets: `USO`,
-/// which `S` hosted, and `UDS`, which `D` hosted; and that the tool left what
-/// recovering the destination subnet at it needs: the states metadata next to
-/// the checkpoint, and the height of the checkpoint in the recorded params.
+/// checkpoint, and that it holds exactly the canisters that `S` and `D` hosted,
+/// i.e. none of `O`'s and no others; and that the tool recorded the height of
+/// the checkpoint in the params that recovering the destination subnet at it
+/// needs.
 fn check_merged_state(env: &TestEnv, context: &Context<'_>) {
     let logger = &context.logger;
     let recovery_dir = env.get_path(MERGING_DIR).join(RECOVERY_DIRECTORY_NAME);
@@ -721,31 +751,43 @@ fn check_merged_state(env: &TestEnv, context: &Context<'_>) {
         panic!("expected a single merged checkpoint, got {checkpoints:?}");
     };
 
-    for (canister_id, name, subnet) in [
-        (context.uso.canister_id(), "USO", "S"),
-        (context.uds.canister_id(), "UDS", "D"),
-    ] {
-        // A checkpoint keeps the state of a canister in a directory named after
-        // the hex encoding of its ID.
-        let canister_dir_name: String = canister_id
+    // A checkpoint keeps the state of a canister in a directory named after
+    // the hex encoding of its ID.
+    let canister_states_dir = checkpoint.join("canister_states");
+    let mut unexpected: BTreeSet<String> = std::fs::read_dir(&canister_states_dir)
+        .unwrap_or_else(|e| panic!("failed to read {}: {e}", canister_states_dir.display()))
+        .map(|entry| {
+            entry
+                .expect("failed to read a directory entry")
+                .file_name()
+                .into_string()
+                .expect("a canister directory name is not valid UTF-8")
+        })
+        .collect();
+    let mut merged = 0;
+    for (name, canister_id, subnet) in &context.canisters {
+        let dir_name: String = canister_id
             .as_slice()
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect();
-        let canister_dir = checkpoint.join("canister_states").join(canister_dir_name);
-        assert!(
-            canister_dir.is_dir(),
-            "the merged state does not hold {name} ({canister_id}) of subnet {subnet}: {} is \
-             missing",
-            canister_dir.display(),
-        );
+        let present = unexpected.remove(&dir_name);
+        if *subnet == "O" {
+            assert!(
+                !present,
+                "the merged state holds {name} ({canister_id}) of subnet O",
+            );
+        } else {
+            assert!(
+                present,
+                "the merged state does not hold {name} ({canister_id}) of subnet {subnet}",
+            );
+            merged += 1;
+        }
     }
-
-    let states_metadata = ic_state_dir.join(STATES_METADATA);
     assert!(
-        states_metadata.is_file(),
-        "the merged state lacks {}",
-        states_metadata.display(),
+        unexpected.is_empty(),
+        "the merged state holds canisters the test did not create: {unexpected:?}",
     );
 
     // A checkpoint is named after the hex encoding of its height.
@@ -769,7 +811,7 @@ fn check_merged_state(env: &TestEnv, context: &Context<'_>) {
 
     info!(
         logger,
-        "Step 16 done: the merged checkpoint {} holds USO and UDS",
+        "Step 16 done: the merged checkpoint {} holds exactly the {merged} canisters of S and D",
         checkpoint.display(),
     );
 }

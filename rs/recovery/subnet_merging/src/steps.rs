@@ -9,7 +9,7 @@ use ic_base_types::SubnetId;
 use ic_cup_explorer::get_cup;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery, STATES_METADATA,
+    IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::remove_dir,
     registry_helper::RegistryHelper,
@@ -570,20 +570,6 @@ impl Step for MergeStatesStep {
         info!(self.logger, "Validating the manifest of the merged state");
         let state_hash = state_tool_helper::verify_manifest(&manifest_path)
             .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
-
-        // The upload step fails if the states metadata is missing, so copy the
-        // destination subnet's. It doesn't describe the merged checkpoint, but
-        // that is harmless: it is only a manifest cache, so the node the merged
-        // state is uploaded to recomputes the merged manifest when it starts.
-        std::fs::copy(
-            self.layout
-                .ic_state_dir(TargetSubnet::Destination)
-                .join(STATES_METADATA),
-            self.layout.merged_ic_state_dir().join(STATES_METADATA),
-        )
-        .map_err(|err| {
-            RecoveryError::UnexpectedError(format!("Failed to copy the states metadata: {err}"))
-        })?;
 
         let params = MergedStateParams {
             height: merged_height.get(),
