@@ -590,7 +590,7 @@ async fn test_check_fetched() {
         remaining_cycles - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES)
     );
 
-    // case Passed: an input without any address does not fail the check.
+    // case Error: the spent output has an unsupported script.
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
     let fetched = FetchedTx {
         tx: from_tx(&tx_0),
@@ -603,21 +603,10 @@ async fn test_check_fetched() {
     env.expect_get_tx_with_reply(Ok(mock_transaction_with_output_but_no_address(2)));
     assert!(matches!(
         env.check_fetched(txid_0, &fetched).await,
-        CheckTransactionResponse::Passed
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
+            CheckTransactionIrrecoverableError::InvalidTransaction(err)
+        )) if err.contains("has an unsupported script")
     ));
-    match state::get_fetch_status(txid_0) {
-        Some(FetchTxStatus::Fetched(fetched)) => assert_eq!(
-            fetched.input_addresses,
-            vec![
-                Some(vec![
-                    Address::from_script(&tx_1.output[0].script_pubkey, bitcoin::Network::Bitcoin)
-                        .unwrap()
-                ]),
-                Some(vec![])
-            ]
-        ),
-        status => panic!("unexpected status {status:?}"),
-    }
 
     // case Error: the spent output does not exist. It should never happen
     // unless blockdata is corrupted.
@@ -677,4 +666,35 @@ async fn should_check_input_spending_p2pk_output() {
         ),
         status => panic!("unexpected status {status:?}"),
     }
+}
+
+#[tokio::test]
+async fn should_not_pass_input_spending_blocked_p2pkh_script_with_appended_op_nop() {
+    let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
+    let blocked_address = Address::from_str(blocklist::BTC_ADDRESS_BLOCKLIST[0])
+        .unwrap()
+        .assume_checked();
+    let txid_0 = mock_txid(20);
+    let txid_1 = mock_txid(21);
+    let mut tx_1 = mock_transaction();
+    tx_1.output = vec![TxOut {
+        value: Amount::ONE_SAT,
+        script_pubkey: bitcoin::script::Builder::from(blocked_address.script_pubkey().to_bytes())
+            .push_opcode(bitcoin::opcodes::all::OP_NOP)
+            .into_script(),
+    }];
+    let tx_0 = mock_transaction_with_inputs(vec![(txid_1, 0)]);
+    let fetched = FetchedTx::new(TransactionCheckData::from_transaction(
+        &env.config().btc_network(),
+        tx_0,
+    ));
+    state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    env.expect_get_tx_with_reply(Ok(tx_1));
+
+    assert!(matches!(
+        env.check_fetched(txid_0, &fetched).await,
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
+            CheckTransactionIrrecoverableError::InvalidTransaction(err)
+        )) if err.contains("has an unsupported script")
+    ));
 }

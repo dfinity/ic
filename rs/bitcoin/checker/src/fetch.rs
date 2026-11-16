@@ -1,10 +1,10 @@
 use crate::logs::WARN;
 use crate::state::{
     FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
-    TransactionCheckData,
+    SpentOutputError, TransactionCheckData,
 };
 use crate::{Config, providers, state};
-use bitcoin::Transaction;
+use bitcoin::{Address, Transaction};
 use futures::future::try_join_all;
 use ic_btc_checker::{
     CheckTransactionIrrecoverableError, CheckTransactionQueryResponse, CheckTransactionResponse,
@@ -192,7 +192,10 @@ pub trait FetchEnv {
                             futures.push(do_fetch);
                             continue;
                         }
-                        Fetched(fetched) => fetched.tx.outputs.get(input.vout as usize).cloned(),
+                        Fetched(fetched) => fetched
+                            .tx
+                            .spent_output_addresses(input.vout)
+                            .map(<[Address]>::to_vec),
                         Pending => continue,
                         HighLoad => {
                             high_load = true;
@@ -206,8 +209,10 @@ pub trait FetchEnv {
                 }
             };
             match spent_output {
-                Some(addresses) => state::set_fetched_addresses(txid, index, addresses),
-                None => return missing_vout(input.txid, input.vout, index, txid).into(),
+                Ok(addresses) => state::set_fetched_addresses(txid, index, addresses),
+                Err(err) => {
+                    return invalid_spent_output(err, input.txid, input.vout, index, txid).into();
+                }
             }
         }
 
@@ -228,9 +233,12 @@ pub trait FetchEnv {
         for (i, result) in fetch_results.into_iter().enumerate() {
             let (index, input_txid, vout) = jobs[i];
             match result {
-                FetchResult::Fetched(fetched) => match fetched.tx.outputs.get(vout as usize) {
-                    Some(addresses) => state::set_fetched_addresses(txid, index, addresses.clone()),
-                    None => error = Some(missing_vout(input_txid, vout, index, txid).into()),
+                FetchResult::Fetched(fetched) => match fetched.tx.spent_output_addresses(vout) {
+                    Ok(addresses) => state::set_fetched_addresses(txid, index, addresses.to_vec()),
+                    Err(err) => {
+                        error =
+                            Some(invalid_spent_output(err, input_txid, vout, index, txid).into())
+                    }
                 },
                 FetchResult::Error(err) => error = Some(err.into_response(input_txid)),
                 FetchResult::RetryWithBiggerBuffer => (),
@@ -248,15 +256,24 @@ pub trait FetchEnv {
     }
 }
 
-/// Error for an input `index` of `txid` that spends a non-existent output `vout` of `input_txid`.
-/// This shouldn't happen unless blockdata is corrupted.
-fn missing_vout(
+/// Error for an input `index` of `txid` that spends an output `vout` of `input_txid`
+/// whose addresses are not available.
+fn invalid_spent_output(
+    err: SpentOutputError,
     input_txid: Txid,
     vout: u32,
     index: usize,
     txid: Txid,
 ) -> CheckTransactionIrrecoverableError {
-    let msg = format!("Tx {input_txid} has no vout {vout}, but it is vin {index} of tx {txid}");
+    let msg = match err {
+        // This shouldn't happen unless blockdata is corrupted.
+        SpentOutputError::MissingOutput => {
+            format!("Tx {input_txid} has no vout {vout}, but it is vin {index} of tx {txid}")
+        }
+        SpentOutputError::UnsupportedScript => format!(
+            "Tx {input_txid} vout {vout} has an unsupported script, but it is vin {index} of tx {txid}"
+        ),
+    };
     log!(WARN, "{msg}");
     CheckTransactionIrrecoverableError::InvalidTransaction(msg)
 }

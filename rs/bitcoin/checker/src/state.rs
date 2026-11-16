@@ -85,8 +85,18 @@ impl FetchedTx {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TransactionCheckData {
     pub inputs: Vec<PreviousOutput>,
-    /// The addresses to check for each output, see [`output_addresses`].
-    pub outputs: Vec<Vec<Address>>,
+    /// The addresses to check for each output, or `None` if its script is not supported,
+    /// see [`output_addresses`].
+    pub outputs: Vec<Option<Vec<Address>>>,
+}
+
+/// Reason why the addresses of a spent output are not available.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SpentOutputError {
+    /// The transaction has no output with the given index.
+    MissingOutput,
+    /// The script of the output is not supported, see [`output_addresses`].
+    UnsupportedScript,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -113,31 +123,44 @@ impl TransactionCheckData {
             .collect();
         Self { inputs, outputs }
     }
+
+    /// Return the addresses to check when the output `vout` is spent.
+    pub fn spent_output_addresses(&self, vout: u32) -> Result<&[Address], SpentOutputError> {
+        match self.outputs.get(vout as usize) {
+            Some(Some(addresses)) => Ok(addresses),
+            Some(None) => Err(SpentOutputError::UnsupportedScript),
+            None => Err(SpentOutputError::MissingOutput),
+        }
+    }
 }
 
 /// Return the addresses to check when the output with the given `script_pubkey` is spent:
 /// - If the script has a standard address (P2PKH, P2SH, or a witness program), return it.
-/// - Otherwise, return the P2PKH address of every public key pushed by the script,
-///   in the same (compressed or uncompressed) encoding. In particular, a P2PK output yields
-///   the P2PKH address of its public key, and a bare multisig output yields the P2PKH
-///   addresses of all its public keys. Any push that is encoded like a public key is
-///   considered, without checking that it is a valid point on the curve.
-/// - If the script contains no public key (e.g. `OP_RETURN` or other non-standard
-///   scripts), return an empty list, i.e. spending such an output does not fail the check.
-pub fn output_addresses(script_pubkey: &Script, network: bitcoin::Network) -> Vec<Address> {
+/// - If the script is P2PK or bare multisig, return the P2PKH address of each of its
+///   public keys, in the same (compressed or uncompressed) encoding. Pushes that are not
+///   encoded like a public key are skipped, since they cannot be used to spend the output.
+///   Public keys are not checked to be valid points on the curve.
+/// - Otherwise, the script is not supported and `None` is returned, so that spending such
+///   an output does not pass the check.
+pub fn output_addresses(script_pubkey: &Script, network: bitcoin::Network) -> Option<Vec<Address>> {
     if let Ok(address) = Address::from_script(script_pubkey, network) {
-        return vec![address];
+        return Some(vec![address]);
     }
-    script_pubkey
-        .instructions()
-        .map_while(Result::ok)
-        .filter_map(|instruction| match instruction {
-            Instruction::PushBytes(bytes) if is_public_key_encoding(bytes.as_bytes()) => {
-                Some(Address::p2pkh(PubkeyHash::hash(bytes.as_bytes()), network))
-            }
-            _ => None,
-        })
-        .collect()
+    if !script_pubkey.is_p2pk() && !script_pubkey.is_multisig() {
+        return None;
+    }
+    Some(
+        script_pubkey
+            .instructions()
+            .map_while(Result::ok)
+            .filter_map(|instruction| match instruction {
+                Instruction::PushBytes(bytes) if is_public_key_encoding(bytes.as_bytes()) => {
+                    Some(Address::p2pkh(PubkeyHash::hash(bytes.as_bytes()), network))
+                }
+                _ => None,
+            })
+            .collect(),
+    )
 }
 
 fn is_public_key_encoding(bytes: &[u8]) -> bool {
@@ -255,14 +278,21 @@ pub fn clear_fetch_status(txid: Txid) {
     FETCH_TX_CACHE.with(|cache| cache.borrow_mut().clear_status(txid))
 }
 
-/// If the status of `txid` is `Fetched`, return the addresses of its output `vout`,
-/// or `Some(None)` if the transaction has no such output. Return `None` otherwise.
+/// If the status of `txid` is `Fetched`, return the addresses to check when its output
+/// `vout` is spent (see [`TransactionCheckData::spent_output_addresses`]).
+/// Return `None` otherwise.
 /// Only the addresses of that output are cloned, not the whole cache entry.
-pub fn get_fetched_output_addresses(txid: Txid, vout: u32) -> Option<Option<Vec<Address>>> {
+pub fn get_fetched_output_addresses(
+    txid: Txid,
+    vout: u32,
+) -> Option<Result<Vec<Address>, SpentOutputError>> {
     FETCH_TX_CACHE.with(|cache| match cache.borrow().get_status(txid) {
-        Some(FetchTxStatus::Fetched(fetched)) => {
-            Some(fetched.tx.outputs.get(vout as usize).cloned())
-        }
+        Some(FetchTxStatus::Fetched(fetched)) => Some(
+            fetched
+                .tx
+                .spent_output_addresses(vout)
+                .map(<[Address]>::to_vec),
+        ),
         _ => None,
     })
 }

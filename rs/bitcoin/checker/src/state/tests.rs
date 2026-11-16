@@ -71,9 +71,12 @@ fn test_fetch_status() {
     let address = Address::from_script(&tx.output[0].script_pubkey, Network::Bitcoin).unwrap();
     assert_eq!(
         get_fetched_output_addresses(txid_1, 0),
-        Some(Some(vec![address.clone()]))
+        Some(Ok(vec![address.clone()]))
     );
-    assert_eq!(get_fetched_output_addresses(txid_1, 2), Some(None));
+    assert_eq!(
+        get_fetched_output_addresses(txid_1, 2),
+        Some(Err(SpentOutputError::MissingOutput))
+    );
     assert_eq!(get_fetched_output_addresses(txid_0, 0), None);
     set_fetched_addresses(txid_1, 0, vec![address.clone()]);
     match get_fetch_status(txid_1) {
@@ -164,6 +167,7 @@ fn cache_should_have_same_size() {
 mod output_addresses {
     use crate::state::output_addresses;
     use bitcoin::{Address, Network, PublicKey, ScriptBuf, opcodes::all::*, script::Builder};
+    use ic_btc_checker::blocklist;
     use std::str::FromStr;
 
     const COMPRESSED_PUBLIC_KEY: &str =
@@ -187,7 +191,7 @@ mod output_addresses {
 
         assert_eq!(
             output_addresses(&expected.script_pubkey(), Network::Bitcoin),
-            vec![expected]
+            Some(vec![expected])
         );
     }
 
@@ -203,7 +207,7 @@ mod output_addresses {
 
             assert_eq!(
                 output_addresses(&script, Network::Bitcoin),
-                vec![address(expected)]
+                Some(vec![address(expected)])
             );
         }
     }
@@ -222,16 +226,15 @@ mod output_addresses {
 
         assert_eq!(
             output_addresses(&script, Network::Bitcoin),
-            vec![
+            Some(vec![
                 address(COMPRESSED_PUBLIC_KEY_P2PKH),
                 address(UNCOMPRESSED_PUBLIC_KEY_P2PKH)
-            ]
+            ])
         );
     }
 
     #[test]
-    fn should_return_no_address_for_script_without_public_key() {
-        let op_return = ScriptBuf::new_op_return([0xaa; 32]);
+    fn should_return_no_address_for_p2pk_output_with_malformed_public_key() {
         let malformed_p2pk = ScriptBuf::from_bytes(
             [
                 &[OP_PUSHBYTES_33.to_u8()][..],
@@ -240,10 +243,46 @@ mod output_addresses {
             ]
             .concat(),
         );
+        assert!(malformed_p2pk.is_p2pk());
+
+        assert_eq!(
+            output_addresses(&malformed_p2pk, Network::Bitcoin),
+            Some(vec![])
+        );
+    }
+
+    #[test]
+    fn should_not_support_other_scripts() {
+        let blocked_p2pkh = address(blocklist::BTC_ADDRESS_BLOCKLIST[0]).script_pubkey();
+        assert!(blocked_p2pkh.is_p2pkh());
+        let p2pkh_with_op_nop = Builder::from(blocked_p2pkh.to_bytes())
+            .push_opcode(OP_NOP)
+            .into_script();
+        let p2pk_with_op_nop = Builder::new()
+            .push_key(&public_key(COMPRESSED_PUBLIC_KEY))
+            .push_opcode(OP_CHECKSIG)
+            .push_opcode(OP_NOP)
+            .into_script();
+        let public_key_with_op_drop = Builder::new()
+            .push_key(&public_key(COMPRESSED_PUBLIC_KEY))
+            .push_opcode(OP_DROP)
+            .push_opcode(OP_PUSHNUM_1)
+            .into_script();
+        let op_return = ScriptBuf::new_op_return([0xaa; 32]);
         let anyone_can_spend = Builder::new().push_opcode(OP_PUSHNUM_1).into_script();
 
-        for script in [op_return, malformed_p2pk, anyone_can_spend] {
-            assert_eq!(output_addresses(&script, Network::Bitcoin), vec![]);
+        for script in [
+            p2pkh_with_op_nop,
+            p2pk_with_op_nop,
+            public_key_with_op_drop,
+            op_return,
+            anyone_can_spend,
+        ] {
+            assert_eq!(
+                output_addresses(&script, Network::Bitcoin),
+                None,
+                "{script}"
+            );
         }
     }
 }
