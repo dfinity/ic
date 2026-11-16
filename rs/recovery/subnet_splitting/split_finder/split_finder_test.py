@@ -235,7 +235,7 @@ class TestCsvLoading(unittest.TestCase):
         epsilon = 0.0
         split = find_split(*FAKE_SAMPLE_PATHS, {CANISTERS_INSTALLED: epsilon}, 100)
 
-        # With no allowed deviation, the 20 canisters must be split evenly.
+        # With no allowed deviation (epsilon == 0.0), the 20 canisters must be split evenly.
         self.assertLessEqual(
             max_load_ratio(split, CANISTERS_INSTALLED),
             1 + epsilon,
