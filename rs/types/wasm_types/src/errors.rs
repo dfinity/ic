@@ -116,6 +116,16 @@ pub enum WasmValidationError {
         defined: usize,
         allowed: usize,
     },
+    /// Module contains too many imports.
+    TooManyImports {
+        defined: usize,
+        allowed: usize,
+    },
+    /// The name custom section names too many functions.
+    TooManyNameSectionEntries {
+        defined: usize,
+        allowed: usize,
+    },
     /// Module contains too many custom sections.
     TooManyCustomSections {
         defined: usize,
@@ -241,6 +251,16 @@ impl std::fmt::Display for WasmValidationError {
                 "Wasm module defined {defined} \
                     functions which exceeds the maximum number allowed {allowed}.",
             ),
+            Self::TooManyImports { defined, allowed } => write!(
+                f,
+                "Wasm module has {defined} \
+                    imports which exceeds the maximum number allowed {allowed}.",
+            ),
+            Self::TooManyNameSectionEntries { defined, allowed } => write!(
+                f,
+                "The name section names {defined} \
+                    functions which exceeds the maximum number allowed {allowed}.",
+            ),
             Self::TooManyCustomSections { defined, allowed } => write!(
                 f,
                 "Wasm module defined {defined} \
@@ -347,6 +367,15 @@ impl AsErrorHelp for WasmValidationError {
             WasmValidationError::TooManyFunctions { .. } => ErrorHelp::UserError {
                 suggestion: "Try spliting this canister into multiple canisters.".to_string(),
                 doc_link: doc_ref("wasm-module-too-many-functions"),
+            },
+            WasmValidationError::TooManyImports { .. } => ErrorHelp::UserError {
+                suggestion: "Try reducing the number of imported functions.".to_string(),
+                doc_link: doc_ref("wasm-module-imports-too-many"),
+            },
+            WasmValidationError::TooManyNameSectionEntries { .. } => ErrorHelp::UserError {
+                suggestion: "Try stripping the name section (debug symbols) from the module."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-name-section-too-many-entries"),
             },
             WasmValidationError::TooManyGlobals { .. } => ErrorHelp::UserError {
                 suggestion: "Try collecting multiple globals into a single \
