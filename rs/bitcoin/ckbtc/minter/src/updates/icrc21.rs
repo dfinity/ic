@@ -5,9 +5,11 @@ use crate::Network;
 use crate::address::BitcoinAddress;
 use crate::state::read_state;
 use crate::updates::retrieve_btc::RetrieveBtcWithApprovalArgs;
-use candid::{CandidType, DecoderConfig, Deserialize, decode_one_with_config};
+use candid::{CandidType, Deserialize};
 use icrc_ledger_types::icrc21::errors::{ErrorInfo, Icrc21Error};
-use icrc_ledger_types::icrc21::lib::MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES;
+use icrc_ledger_types::icrc21::lib::{
+    decode_consent_message_arg, validate_consent_message_arg_size,
+};
 use icrc_ledger_types::icrc21::requests::{
     ConsentMessageMetadata, ConsentMessageRequest, DisplayMessageType,
 };
@@ -73,14 +75,7 @@ pub(super) fn build_consent_info(
     consent_msg_request: ConsentMessageRequest,
     network: Network,
 ) -> Result<ConsentInfo, Icrc21Error> {
-    if consent_msg_request.arg.len() > MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize {
-        return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-            description: format!(
-                "The argument size is too large. The maximum allowed size is \
-                 {MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES} bytes."
-            ),
-        }));
-    }
+    validate_consent_message_arg_size(&consent_msg_request.arg)?;
 
     let display_type = consent_msg_request
         .user_preferences
@@ -92,15 +87,15 @@ pub(super) fn build_consent_info(
 
     let consent_message = match consent_msg_request.method.as_str() {
         "retrieve_btc_with_approval" => {
-            let args = decode_one_with_config::<RetrieveBtcWithApprovalArgs>(
-                consent_msg_request.arg.as_slice(),
-                &decoder_config(),
-            )
-            .map_err(|e| {
-                Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                    description: format!("Failed to decode RetrieveBtcWithApprovalArgs: {e}"),
-                })
-            })?;
+            let args =
+                decode_consent_message_arg::<RetrieveBtcWithApprovalArgs>(&consent_msg_request.arg)
+                    .map_err(|e| {
+                        Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                            description: format!(
+                                "Failed to decode RetrieveBtcWithApprovalArgs: {e}"
+                            ),
+                        })
+                    })?;
             validate_address(&args.address, network)?;
             build_retrieve_btc_with_approval_message(&args, &display_type, symbols)
         }
@@ -206,17 +201,6 @@ fn validate_address(address: &str, network: Network) -> Result<(), Icrc21Error> 
         })
     })?;
     Ok(())
-}
-
-/// The Candid decoder configuration for the arguments of the call to describe.
-///
-/// The argument size limit alone does not bound the decoding work, since a few bytes can
-/// declare a vector of billions of `null` values. Use the same skipping quota as the `ic_cdk`
-/// endpoint macros apply to the arguments of `retrieve_btc_with_approval` itself.
-pub(super) fn decoder_config() -> DecoderConfig {
-    let mut config = DecoderConfig::new();
-    config.set_skipping_quota(10_000);
-    config
 }
 
 pub(super) fn format_amount(amount: u64, decimals: u8) -> String {

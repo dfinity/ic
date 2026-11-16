@@ -30,9 +30,8 @@ use ic_consensus_system_test_utils::{
     rw_message::cert_state_makes_progress_with_retries,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    DKG_INTERVAL, await_pre_signature_stash_size, enable_chain_key_signing,
-    get_public_key_and_test_signature, get_public_key_with_logger, make_key_ids_for_all_schemes,
-    set_pre_signature_stash_size,
+    await_pre_signature_stash_size, enable_chain_key_signing, get_public_key_and_test_signature,
+    get_public_key_with_logger, make_key_ids_for_all_schemes, set_pre_signature_stash_size,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -60,6 +59,9 @@ use std::collections::BTreeMap;
 const NODES_COUNT: usize = 4;
 const UNASSIGNED_NODES_COUNT: usize = 3;
 const PRE_SIGNATURES_TO_CREATE_IN_ADVANCE: u32 = 5;
+
+// Choose an interval that is long enough for the key resharing to succeed on the first try.
+const DKG_INTERVAL: u64 = 49;
 
 const MASTER_KEY_TRANSCRIPTS_CREATED: &str = "consensus_master_key_transcripts_created";
 
