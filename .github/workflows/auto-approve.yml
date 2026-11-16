@@ -9,7 +9,7 @@ name: Auto Approve PR
 # needs a PR that the bot opened from the branch of one revisions file, whose head is a
 # single commit that changes only that file and that the bot pushed itself. Approvals
 # survive later pushes to the PR, so every other event on a PR the bot opened dismisses
-# the approvals of anything but such a head.
+# the github-actions[bot] approvals of anything but such a head.
 
 on:
   # Not filtered by paths: a push that takes the revisions file out of the PR must still
@@ -51,7 +51,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Leaves the head output unset, so the next step dismisses every approval.
+          # Leaves the head output unset, so the next step dismisses every github-actions[bot] approval.
           reject() {
             echo "Not approving: $*" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
@@ -136,18 +136,21 @@ jobs:
           set -euo pipefail
 
           reviews="repos/$GITHUB_REPOSITORY/pulls/$PR/reviews"
-          # The IDs of this workflow's approvals whose commit_id passes the jq condition $1.
+          # The IDs of the github-actions[bot] approvals whose commit_id passes the jq condition $1.
           approvals() {
             gh api --paginate "$reviews" --jq ".[]
               | select(.user.login == \"github-actions[bot]\" and .state == \"APPROVED\")
               | select(.commit_id $1) | .id"
           }
 
+          failed=0
           if [[ "$APPROVE" == true ]]; then
             existing="$(approvals '== env.VERIFIED_HEAD')"
             if [[ -z "$existing" ]]; then
+              # If this fails, the step still dismisses the approvals of other heads, then fails.
               gh api --method POST "$reviews" --silent \
-                -f event=APPROVE -f commit_id="$VERIFIED_HEAD" -f body="Auto approving $FILE changes."
+                -f event=APPROVE -f commit_id="$VERIFIED_HEAD" -f body="Auto approving $FILE changes." ||
+                failed=1
             fi
             # A push since the check makes the head unverified.
             if [[ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.sha)" != "$VERIFIED_HEAD" ]]; then
@@ -156,7 +159,6 @@ jobs:
           fi
 
           stale="$(approvals '!= env.VERIFIED_HEAD')"
-          failed=0
           for id in $stale; do
             echo "Dismissing approval $id"
             gh api --method PUT "$reviews/$id/dismissals" --silent -f event=DISMISS \
