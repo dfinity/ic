@@ -2571,6 +2571,7 @@ fn stream_roundtrip_encoding() {
             method_payload: [2_u8, 17_u8, 29_u8, 113_u8].into(),
             metadata: RequestMetadata::new(17, Time::from_nanos_since_unix_epoch(123)),
             deadline: CoarseTime::from_secs_since_unix_epoch(456),
+            effective_canister_id: None,
         }
         .into(),
     );

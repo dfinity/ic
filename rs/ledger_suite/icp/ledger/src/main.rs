@@ -1,7 +1,6 @@
 #[cfg(feature = "canbench-rs")]
 mod canbench;
 
-use candid::Decode;
 use candid::{Encode, Nat, Principal, candid_method};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
@@ -53,7 +52,7 @@ use icrc_ledger_types::{
     icrc3::archive::QueryArchiveFn,
     icrc21::lib::{
         build_icrc21_consent_info, build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
-        icrc21_check_fee,
+        decode_consent_message_arg, icrc21_check_fee, validate_consent_message_arg_size,
     },
 };
 use icrc_ledger_types::{
@@ -588,6 +587,7 @@ fn canister_init(arg: LedgerCanisterPayload) {
 #[cfg(not(feature = "canbench-rs"))]
 #[unsafe(export_name = "canister_init")]
 fn main() {
+    use candid::Decode;
     in_executor_context(|| {
         let bytes = arg_data_raw();
         // We support the old init argument for backward
@@ -1486,6 +1486,7 @@ fn icrc21_canister_call_consent_message(
     let decimals = ic_ledger_core::tokens::DECIMAL_PLACES as u8;
 
     if consent_msg_request.method == "transfer" {
+        validate_consent_message_arg_size(&consent_msg_request.arg)?;
         let TransferArgs {
             memo,
             amount,
@@ -1493,7 +1494,7 @@ fn icrc21_canister_call_consent_message(
             from_subaccount,
             to,
             created_at_time: _,
-        } = Decode!(&consent_msg_request.arg, TransferArgs).map_err(|e| {
+        } = decode_consent_message_arg::<TransferArgs>(&consent_msg_request.arg).map_err(|e| {
             Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
                 description: format!("Failed to decode TransferArgs: {e}"),
             })

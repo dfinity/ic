@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/recovery/subnet_tools",
     "//rs/registry/helpers",
     "//rs/registry/subnet_type",
+    "//rs/state_layout",
     "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:clap",

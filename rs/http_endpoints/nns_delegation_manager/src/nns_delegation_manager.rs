@@ -100,7 +100,6 @@ pub fn start_nns_delegation_manager(
     tls_config: Arc<dyn TlsConfig>,
     cancellation_token: CancellationToken,
 ) -> (JoinHandle<()>, NNSDelegationReader) {
-    let logger = log.clone();
     let manager = DelegationManager {
         config,
         log,
@@ -124,7 +123,7 @@ pub fn start_nns_delegation_manager(
             .await
     });
 
-    (join_handle, NNSDelegationReader::new(rx, logger))
+    (join_handle, NNSDelegationReader::new(rx))
 }
 
 /// What the [`DelegationManager`] last published to the [`NNSDelegationReader`]s.
@@ -516,7 +515,7 @@ async fn try_fetch_delegation_from_nns(
         labeled_tree,
         response.certificate,
         subnet_id,
-        log,
+        log.clone(),
     );
 
     observe_delegation_sizes(&nns_delegation_builder, metrics);
@@ -1517,7 +1516,6 @@ mod tests {
                     .build_verified(
                         CanisterRangesCheck::AllSubnetRanges,
                         &*mutable_state.read().unwrap(),
-                        &no_op_logger(),
                     )
                     .expect("Delegation should be valid")
                     .certificate,
