@@ -12,6 +12,8 @@ use tonic::{
 use tower::service_fn;
 
 const ADAPTER_PREFIX: &str = "adapter";
+/// Upper bound on the scrape timeout.
+const MAX_SCRAPE_TIMEOUT: Duration = Duration::from_hours(1);
 
 /// Adapter metrics client
 ///
@@ -66,7 +68,7 @@ impl AdapterMetrics {
     pub async fn scrape(&self, timeout: Duration) -> Result<Vec<MetricFamily>, Status> {
         let mut client = AdapterMetricsServiceClient::new(self.channel.clone());
         let mut scrape_request = Request::new(ScrapeRequest {});
-        scrape_request.set_timeout(timeout);
+        scrape_request.set_timeout(timeout.min(MAX_SCRAPE_TIMEOUT));
         match client.scrape(scrape_request).await {
             Err(err) => Err(err),
             Ok(resp) => {
