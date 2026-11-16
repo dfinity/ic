@@ -123,12 +123,11 @@ fn charge_exceeding_message_budget_wasm() -> Vec<u8> {
     assert!(max_charge <= u32::MAX as u64);
     let stable_pages = max_charge / WASM_PAGE_SIZE + 1;
 
-    // Without the cap on the instructions executed in a slice, the test below
-    // only observes a `SliceOverrun` if the slice containing the charge uses at
-    // least two slice limits. That slice uses (up to a negligible carry-over
-    // from the previous slices) the instructions left in the message budget
-    // when the slice starts plus `margin`, so make sure that the limits still
-    // align this way if they ever change.
+    // Before #11956, the test below observed a `SliceOverrun` when the slice
+    // containing the charge used at least two slice limits. That slice uses
+    // (up to a negligible carry-over from the previous slices) the instructions
+    // left in the message budget when the slice starts plus `margin`, so make
+    // sure that the limits still align to exercise that failure if they change.
     let executed_before_charge_slice =
         (message_limit - target_remaining) / slice_limit * slice_limit;
     assert!(message_limit - executed_before_charge_slice + margin >= 2 * slice_limit);
@@ -166,18 +165,15 @@ fn charge_exceeding_message_budget_wasm() -> Vec<u8> {
     wat::parse_str(wat).unwrap()
 }
 
-/// Regression test for the cap on the instructions executed in a DTS slice
-/// (`DeterministicTimeSlicing::newly_executed` in
-/// `rs/canister_sandbox/src/dts.rs`).
+/// Regression test for message-budget exhaustion taking precedence over
+/// `SliceOverrun` in DTS (#11956).
 ///
-/// Without the cap, a system API call that charges more instructions than are
-/// left in the message budget is counted in full for the slice that contains
-/// it. That slice then appears to have used at least two slice limits, and the
-/// message fails with a `SliceOverrun` ("exceeded the slice limit") even though
-/// it is the message budget that has been exhausted. With the cap, the
-/// instructions executed in the slice are bounded by what is left in the
-/// message budget, so the message fails for exceeding the message instruction
-/// limit.
+/// Before #11956, the oversized system API charge made the slice appear to use
+/// at least two slice limits, producing a `SliceOverrun` even though the message
+/// budget was exhausted. `DeterministicTimeSlicing::try_pause` now checks for
+/// message-budget exhaustion first and returns `InstructionLimitExceeded`.
+/// This error precedence holds even if the cap in `State::newly_executed` is
+/// removed; the cap itself is covered by the DTS unit tests.
 #[test]
 fn charge_exceeding_message_budget_fails_with_message_limit() {
     let scheduler_config = SchedulerConfig::application_subnet();
