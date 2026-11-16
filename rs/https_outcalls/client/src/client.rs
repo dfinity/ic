@@ -36,7 +36,7 @@ use tokio::{
         Receiver, Sender, channel,
         error::{TryRecvError, TrySendError},
     },
-    time::timeout,
+    time::{timeout, timeout_at},
 };
 use tonic::{Code, transport::Channel};
 use tower::util::Oneshot;
@@ -166,6 +166,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             let time_left = request_context
                 .effective_deadline()
                 .saturating_duration_since(dispatch_time);
+            let deadline = tokio::time::Instant::now() + time_left;
             let CanisterHttpRequestContext {
                 url: request_url,
                 headers: request_headers,
@@ -218,6 +219,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             canister_http_payload,
                             request_sender,
                             transform,
+                            deadline,
                         )
                         .await;
                         metrics
@@ -501,7 +503,7 @@ fn validate_response(
     Ok(canister_http_payload)
 }
 
-/// Make upcall to execution to transform the response.
+/// Make upcall to execution to transform the response, giving up at `deadline`.
 /// This gives the ability to prune volatile fields before passing the response to consensus.
 async fn transform_adapter_response(
     budget: &mut dyn BudgetTracker,
@@ -509,6 +511,7 @@ async fn transform_adapter_response(
     canister_http_response: CanisterHttpResponsePayload,
     transform_canister: CanisterId,
     transform: &Transform,
+    deadline: tokio::time::Instant,
 ) -> (Result<Vec<u8>, CanisterHttpReject>, u64) {
     let transform_limit = budget.get_transform_limit();
 
@@ -543,7 +546,14 @@ async fn transform_adapter_response(
             max_instructions: transform_limit,
         };
 
-        match Oneshot::new(query_handler, query_execution_input).await {
+        // Dropping the call makes the query handler skip the transform if it hasn't started.
+        let Ok(call_result) =
+            timeout_at(deadline, Oneshot::new(query_handler, query_execution_input)).await
+        else {
+            return Err(deadline_exceeded());
+        };
+
+        match call_result {
             Ok(query_response) => match query_response {
                 Ok((res, _time)) => match res {
                     Ok(wasm_result) => match wasm_result {
@@ -1132,6 +1142,70 @@ mod tests {
                 "Deadline Exceeded".to_string()
             )
         );
+    }
+
+    /// The client stops waiting for a transform that hasn't run by the request's
+    /// deadline, which frees the request's slot and lets the transform be skipped.
+    #[tokio::test]
+    async fn test_client_stops_waiting_for_transform_at_request_deadline() {
+        let response = HttpsOutcallResponse {
+            status: 200,
+            headers: Vec::new(),
+            content: Vec::new(),
+        };
+        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
+        // Like the query handler, queue the sender of each transform's result, and
+        // never run the transform.
+        let (queue, mut queued) = tokio::sync::mpsc::channel(2);
+        let svc = BoxCloneService::new(service_fn(move |_: TransformExecutionInput| {
+            let (result_tx, result_rx) = tokio::sync::oneshot::channel();
+            queue.try_send(result_tx).unwrap();
+            async move {
+                Ok::<QueryExecutionResponse, std::convert::Infallible>(result_rx.await.unwrap())
+            }
+        }));
+        let mut client = CanisterHttpAdapterClientImpl::new(
+            tokio::runtime::Handle::current(),
+            mock_grpc_channel,
+            svc,
+            1,
+            MetricsRegistry::default(),
+            no_op_logger(),
+        );
+
+        // Gets 1.1s, as in `test_client_stops_at_request_deadline`.
+        let request = |id| {
+            let mut request = build_mock_canister_http_request(id, Some("transform".to_string()));
+            Arc::make_mut(&mut request.context.request).deadline =
+                CoarseTime::from_secs_since_unix_epoch(10);
+            request.dispatch_time = UNIX_EPOCH + Duration::from_millis(9_900);
+            request
+        };
+        assert_eq!(client.send(request(420)), Ok(()));
+        let transform = queued.recv().await.unwrap();
+        assert!(matches!(client.send(request(421)), Err(SendError::Full(_))));
+
+        let response = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                match client.try_receive() {
+                    Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
+                    Ok((response, _payment_receipt)) => break response,
+                }
+            }
+        })
+        .await
+        .expect("the request should end at its deadline");
+        assert_eq!(
+            response,
+            build_mock_canister_http_response_reject(
+                420,
+                RejectCode::SysTransient,
+                "Deadline Exceeded".to_string()
+            )
+        );
+        // No one waits for the transform's result anymore, so it is skipped.
+        assert!(transform.is_closed());
+        assert_eq!(client.send(request(422)), Ok(()));
     }
 
     /// Test case where transformed response exceeds consensus limit.
