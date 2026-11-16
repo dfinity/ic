@@ -96,10 +96,7 @@ pub struct PreviousOutput {
 }
 
 impl TransactionCheckData {
-    pub fn from_transaction(
-        btc_network: &BtcNetwork,
-        tx: Transaction,
-    ) -> Result<Self, bitcoin::address::FromScriptError> {
+    pub fn from_transaction(btc_network: &BtcNetwork, tx: Transaction) -> Self {
         let network = bitcoin::Network::from(btc_network.clone());
         let inputs = tx
             .input
@@ -114,7 +111,7 @@ impl TransactionCheckData {
             .iter()
             .map(|output| output_addresses(&output.script_pubkey, network))
             .collect();
-        Ok(Self { inputs, outputs })
+        Self { inputs, outputs }
     }
 }
 
@@ -256,6 +253,18 @@ pub fn set_fetch_status(txid: Txid, status: FetchTxStatus) {
 
 pub fn clear_fetch_status(txid: Txid) {
     FETCH_TX_CACHE.with(|cache| cache.borrow_mut().clear_status(txid))
+}
+
+/// If the status of `txid` is `Fetched`, return the addresses of its output `vout`,
+/// or `Some(None)` if the transaction has no such output. Return `None` otherwise.
+/// Only the addresses of that output are cloned, not the whole cache entry.
+pub fn get_fetched_output_addresses(txid: Txid, vout: u32) -> Option<Option<Vec<Address>>> {
+    FETCH_TX_CACHE.with(|cache| match cache.borrow().get_status(txid) {
+        Some(FetchTxStatus::Fetched(fetched)) => {
+            Some(fetched.tx.outputs.get(vout as usize).cloned())
+        }
+        _ => None,
+    })
 }
 
 /// Set the addresses of the input at the given `index` in the `Fetched` status of the given `txid`.

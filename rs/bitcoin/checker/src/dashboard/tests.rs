@@ -132,8 +132,7 @@ fn test_pagination() {
             input: Vec::new(),
             output: Vec::new(),
         },
-    )
-    .unwrap();
+    );
     let mut expected_txids = vec![];
     // Generate entries to fill one and half pages
     for i in 0..DEFAULT_TX_TABLE_PAGE_SIZE * 3 / 2 {

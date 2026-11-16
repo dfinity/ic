@@ -120,25 +120,14 @@ pub trait FetchEnv {
         max_response_bytes: u32,
     ) -> Result<FetchResult, Infallible> {
         match self.http_get_tx(&provider, txid, max_response_bytes).await {
-            Ok(tx) => match TransactionCheckData::from_transaction(provider.btc_network(), tx) {
-                Ok(tx) => {
-                    let fetched = FetchedTx::new(tx);
-                    state::set_fetch_status(txid, FetchTxStatus::Fetched(fetched.clone()));
-                    Ok(FetchResult::Fetched(fetched))
-                }
-                Err(err) => {
-                    let err = HttpGetTxError::TxEncoding(err.to_string());
-                    state::set_fetch_status(
-                        txid,
-                        FetchTxStatus::Error(FetchTxStatusError {
-                            provider,
-                            max_response_bytes,
-                            error: err.clone(),
-                        }),
-                    );
-                    Ok(FetchResult::Error(err))
-                }
-            },
+            Ok(tx) => {
+                let fetched = FetchedTx::new(TransactionCheckData::from_transaction(
+                    provider.btc_network(),
+                    tx,
+                ));
+                state::set_fetch_status(txid, FetchTxStatus::Fetched(fetched.clone()));
+                Ok(FetchResult::Fetched(fetched))
+            }
             Err(HttpGetTxError::ResponseTooLarge)
                 if max_response_bytes < RETRY_MAX_RESPONSE_BYTES =>
             {
@@ -188,35 +177,37 @@ pub trait FetchEnv {
         let mut high_load = false;
         let mut not_enough_cycles = false;
         for (index, input) in fetched.tx.inputs.iter().enumerate() {
-            if fetched.input_addresses[index].is_none() {
-                use TryFetchResult::*;
-                match self.try_fetch_tx(input.txid) {
-                    ToFetch(do_fetch) => {
-                        jobs.push((index, input.txid, input.vout));
-                        futures.push(do_fetch)
-                    }
-                    Fetched(fetched) => {
-                        if let Some(addresses) = fetched.tx.outputs.get(input.vout as usize) {
-                            state::set_fetched_addresses(txid, index, addresses.clone());
-                        } else {
-                            // This error shouldn't happen unless blockdata is corrupted.
-                            let msg = format!(
-                                "Tx {} has no vout {}, but it is vin {} of tx {}",
-                                input.txid, input.vout, index, txid
-                            );
-                            log!(WARN, "{msg}");
-                            return CheckTransactionIrrecoverableError::InvalidTransaction(msg)
-                                .into();
+            if fetched.input_addresses[index].is_some() {
+                continue;
+            }
+            // If the input transaction is already fetched, look up the addresses of the
+            // spent output under a borrow of the cache instead of cloning the whole entry.
+            let spent_output = match state::get_fetched_output_addresses(input.txid, input.vout) {
+                Some(spent_output) => spent_output,
+                None => {
+                    use TryFetchResult::*;
+                    match self.try_fetch_tx(input.txid) {
+                        ToFetch(do_fetch) => {
+                            jobs.push((index, input.txid, input.vout));
+                            futures.push(do_fetch);
+                            continue;
+                        }
+                        Fetched(fetched) => fetched.tx.outputs.get(input.vout as usize).cloned(),
+                        Pending => continue,
+                        HighLoad => {
+                            high_load = true;
+                            continue;
+                        }
+                        NotEnoughCycles => {
+                            not_enough_cycles = true;
+                            continue;
                         }
                     }
-                    Pending => {}
-                    HighLoad => {
-                        high_load = true;
-                    }
-                    NotEnoughCycles => {
-                        not_enough_cycles = true;
-                    }
                 }
+            };
+            match spent_output {
+                Some(addresses) => state::set_fetched_addresses(txid, index, addresses),
+                None => return missing_vout(input.txid, input.vout, index, txid).into(),
             }
         }
 
@@ -237,20 +228,10 @@ pub trait FetchEnv {
         for (i, result) in fetch_results.into_iter().enumerate() {
             let (index, input_txid, vout) = jobs[i];
             match result {
-                FetchResult::Fetched(fetched) => {
-                    if let Some(addresses) = fetched.tx.outputs.get(vout as usize) {
-                        state::set_fetched_addresses(txid, index, addresses.clone());
-                    } else {
-                        // This error shouldn't happen unless blockdata is corrupted.
-                        let msg = format!(
-                            "Tx {input_txid} has no vout {vout}, but it is vin {index} of tx {txid}"
-                        );
-                        log!(WARN, "{msg}");
-                        error = Some(
-                            CheckTransactionIrrecoverableError::InvalidTransaction(msg).into(),
-                        );
-                    }
-                }
+                FetchResult::Fetched(fetched) => match fetched.tx.outputs.get(vout as usize) {
+                    Some(addresses) => state::set_fetched_addresses(txid, index, addresses.clone()),
+                    None => error = Some(missing_vout(input_txid, vout, index, txid).into()),
+                },
                 FetchResult::Error(err) => error = Some(err.into_response(input_txid)),
                 FetchResult::RetryWithBiggerBuffer => (),
             }
@@ -265,6 +246,19 @@ pub trait FetchEnv {
             CheckTransactionRetriable::Pending.into()
         }
     }
+}
+
+/// Error for an input `index` of `txid` that spends a non-existent output `vout` of `input_txid`.
+/// This shouldn't happen unless blockdata is corrupted.
+fn missing_vout(
+    input_txid: Txid,
+    vout: u32,
+    index: usize,
+    txid: Txid,
+) -> CheckTransactionIrrecoverableError {
+    let msg = format!("Tx {input_txid} has no vout {vout}, but it is vin {index} of tx {txid}");
+    log!(WARN, "{msg}");
+    CheckTransactionIrrecoverableError::InvalidTransaction(msg)
 }
 
 #[derive(Debug, Clone)]

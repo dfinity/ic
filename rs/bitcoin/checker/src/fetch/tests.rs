@@ -203,7 +203,7 @@ fn test_try_fetch_tx() {
     let txid_1 = mock_txid(1);
     let txid_2 = mock_txid(2);
     let from_tx = |tx: &bitcoin::Transaction| {
-        TransactionCheckData::from_transaction(&env.config().btc_network(), tx.clone()).unwrap()
+        TransactionCheckData::from_transaction(&env.config().btc_network(), tx.clone())
     };
 
     // case Fetched
@@ -253,7 +253,7 @@ async fn test_fetch_tx() {
     let txid_1 = mock_txid(1);
     let txid_2 = mock_txid(2);
     let from_tx = |tx: &bitcoin::Transaction| {
-        TransactionCheckData::from_transaction(&env.config().btc_network(), tx.clone()).unwrap()
+        TransactionCheckData::from_transaction(&env.config().btc_network(), tx.clone())
     };
 
     // case Fetched
@@ -316,8 +316,7 @@ fn should_check_every_address_of_an_input() {
     let tx = TransactionCheckData::from_transaction(
         &BtcNetwork::Mainnet,
         mock_transaction_with_inputs(vec![(mock_txid(1), 0), (mock_txid(2), 0)]),
-    )
-    .unwrap();
+    );
     let fetched = |input_addresses| FetchedTx {
         tx: tx.clone(),
         input_addresses,
@@ -367,9 +366,8 @@ async fn test_check_fetched() {
     let tx_1 = mock_transaction_with_outputs(1);
     let tx_2 = mock_transaction_with_outputs(2);
     let network = env.config().btc_network();
-    let from_tx = |tx: &bitcoin::Transaction| {
-        TransactionCheckData::from_transaction(&network, tx.clone()).unwrap()
-    };
+    let from_tx =
+        |tx: &bitcoin::Transaction| TransactionCheckData::from_transaction(&network, tx.clone());
 
     // case Passed
     let fetched = FetchedTx {
@@ -656,9 +654,10 @@ async fn should_check_input_spending_p2pk_output() {
         script_pubkey: ScriptBuf::new_p2pk(&public_key),
     }];
     let tx_0 = mock_transaction_with_inputs(vec![(txid_1, 0)]);
-    let fetched = FetchedTx::new(
-        TransactionCheckData::from_transaction(&env.config().btc_network(), tx_0).unwrap(),
-    );
+    let fetched = FetchedTx::new(TransactionCheckData::from_transaction(
+        &env.config().btc_network(),
+        tx_0,
+    ));
     state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
     env.expect_get_tx_with_reply(Ok(tx_1));
 

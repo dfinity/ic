@@ -55,7 +55,7 @@ fn test_fetch_status() {
     let tx = Transaction::consensus_decode(&mut bytes.to_vec().as_slice()).unwrap();
     let txid_1 = Txid::from(*(tx.compute_txid().as_ref() as &[u8; 32]));
     let from_tx = |tx: &bitcoin::Transaction| {
-        TransactionCheckData::from_transaction(&BtcNetwork::Mainnet, tx.clone()).unwrap()
+        TransactionCheckData::from_transaction(&BtcNetwork::Mainnet, tx.clone())
     };
     set_fetch_status(
         txid_1,
@@ -69,6 +69,12 @@ fn test_fetch_status() {
         Some(FetchTxStatus::Fetched(_))
     ));
     let address = Address::from_script(&tx.output[0].script_pubkey, Network::Bitcoin).unwrap();
+    assert_eq!(
+        get_fetched_output_addresses(txid_1, 0),
+        Some(Some(vec![address.clone()]))
+    );
+    assert_eq!(get_fetched_output_addresses(txid_1, 2), Some(None));
+    assert_eq!(get_fetched_output_addresses(txid_0, 0), None);
     set_fetched_addresses(txid_1, 0, vec![address.clone()]);
     match get_fetch_status(txid_1) {
         Some(FetchTxStatus::Fetched(fetched)) => {
