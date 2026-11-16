@@ -44,8 +44,9 @@ pub(crate) const MAX_NUMBER_EXPORTED_FUNCTIONS: usize = 1000;
 // The maximum number of exports of ANY kind (functions, globals, memories,
 // tables) allowed in a Wasm module.
 //
-// Beyond the 1000 exported functions, modules currently only need 9 more exports, but
-// we allow 100 more for future expansions.
+// Beyond the 1000 exported functions, modules currently only need 9 more exports,
+// (canister_init, canister_heartbeat, canister_pre_upgrade, (see interface spec)),
+// but we allow 100 more for future expansions.
 // NOTE. The following constant is contained in the public Interface Specification.
 // Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
 // if you change its value.
