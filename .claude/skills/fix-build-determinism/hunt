@@ -64,6 +64,12 @@ if [[ $# -gt 1 ]]; then
 fi
 target="${1:?usage: hunt [--root ROOT] [--startup-options OPTS] [--build-options OPTS] [--runs N] TARGET}"
 
+if ! [[ $n_runs =~ ^[0-9]+$ ]] || ((10#$n_runs < 2)); then
+    echo "hunt: --runs must be an integer of at least 2, got '$n_runs'" >&2
+    usage >&2
+    exit 2
+fi
+
 repo_root="$(git rev-parse --show-toplevel)"
 
 # Where checkouts, output bases and execlogs live. Default to a fresh tempdir so
@@ -114,7 +120,9 @@ compare_runs() {
     local run_a="$1"
     local run_b="$2"
 
-    res=$(jq --slurp '(.[0] - .[1])' \
+    # Outputs present in only one of the two runs; an output whose content
+    # differs shows up twice, once with each run's digest.
+    res=$(jq --slurp '(.[0] - .[1]) + (.[1] - .[0])' \
         <(jq -Mr <"$root/exec$run_a.json" --slurp "$filter") \
         <(jq -Mr <"$root/exec$run_b.json" --slurp "$filter")
     )
