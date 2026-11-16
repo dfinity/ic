@@ -554,8 +554,8 @@ async fn transform_adapter_response(
         let mut call = std::pin::pin!(Oneshot::new(query_handler, query_execution_input));
         let call_result = match timeout_at(deadline, call.as_mut()).await {
             Ok(call_result) => call_result,
-            // The query handler skips a cancelled transform.
-            Err(_) if start.try_cancel() => return Err(deadline_exceeded()),
+            // It hasn't started, and now the query handler won't start it.
+            Err(_) if start.claim() => return Err(deadline_exceeded()),
             // It has started, so wait for it to finish and charge for it.
             Err(_) => call.await,
         };
@@ -1238,7 +1238,7 @@ mod tests {
             )
         );
         // The query handler won't start it.
-        assert!(!transform.start.try_start());
+        assert!(!transform.start.claim());
         assert_eq!(client.send(build_mock_request_with_deadline(422)), Ok(()));
     }
 
@@ -1252,7 +1252,8 @@ mod tests {
         request.context.refund_status.per_replica_allowance = 1_000_000_u128.into();
         assert_eq!(client.send(request), Ok(()));
         let (transform, result_tx) = queued.recv().await.unwrap();
-        assert!(transform.start.try_start());
+        // The query handler starts it.
+        assert!(transform.start.claim());
 
         // Finish the transform after the deadline.
         tokio::time::sleep(Duration::from_millis(1_500)).await;

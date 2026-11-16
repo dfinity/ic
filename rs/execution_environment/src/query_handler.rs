@@ -427,7 +427,7 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
         self.query_scheduler.push(canister_id, move || {
             let start = std::time::Instant::now();
             if !tx.is_closed() {
-                // We managed to upgrade the weak pointer, so the query was not cancelled.
+                // The caller hasn't dropped the call, so the query was not cancelled.
                 // Canceling the query after this point will have no effect: the query will
                 // be executed anyway. That is fine because the execution will take O(ms).
 
@@ -516,10 +516,9 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
         let enable_query_stats_tracking = self.enable_query_stats_tracking;
         self.query_scheduler.push(canister_id, move || {
             let start = std::time::Instant::now();
-            if !tx.is_closed() && transform_start.try_start() {
-                // We managed to upgrade the weak pointer, so the query was not cancelled.
-                // Canceling the query after this point will have no effect: the query will
-                // be executed anyway. That is fine because the execution will take O(ms).
+            if !tx.is_closed() && transform_start.claim() {
+                // The client neither dropped the call nor gave up on the transform, and now it
+                // waits for the transform to finish.
 
                 // Retrieving the state must be done here in the query handler, and should be immediately used.
                 // Otherwise, retrieving the state in the Query service in `http_endpoints` can lead to queries being queued up,

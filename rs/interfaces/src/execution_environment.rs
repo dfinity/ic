@@ -593,19 +593,14 @@ pub struct TransformExecutionInput {
     pub start: TransformStart,
 }
 
-/// Decides once whether a transform runs: the query handler starts it or the
-/// caller cancels it, whichever comes first.
+/// Decides once whether a transform runs: the query handler claims it to start
+/// it, the caller to cancel it, and only the first claim succeeds.
 #[derive(Clone, Debug, Default)]
 pub struct TransformStart(Arc<AtomicBool>);
 
 impl TransformStart {
-    /// Returns whether the transform may start, i.e. it wasn't cancelled.
-    pub fn try_start(&self) -> bool {
-        !self.0.swap(true, Ordering::Relaxed)
-    }
-
-    /// Returns whether the transform was cancelled, i.e. it hadn't started.
-    pub fn try_cancel(&self) -> bool {
+    /// Returns whether this is the first claim.
+    pub fn claim(&self) -> bool {
         !self.0.swap(true, Ordering::Relaxed)
     }
 }
