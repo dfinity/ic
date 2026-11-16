@@ -1,4 +1,7 @@
 use ic_base_types::PrincipalId;
+use ic_config::subnet_config::SchedulerConfig;
+use ic_error_types::{ErrorCode, UserError};
+use ic_interfaces::execution_environment::HypervisorError;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{PayloadBuilder, StateMachine, StateMachineBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
@@ -42,8 +45,8 @@ const WAT: &str = r#"
     (call $call_new (i64.const 0) (call $self_size) (i64.const 100) (i64.const 4)
       (i64.const 0) (local.get $env) (i64.const 0) (local.get $env))
     (call $call_on_cleanup (i64.const 1) (local.get $env))
-    (drop (call $call_perform))
-    (call $msg_reply))
+    ;; Leave the ingress open so it receives the callbacks' combined error.
+    (drop (call $call_perform)))
   (func $go (call $call_self (i64.const 1)))
   (func $go_control (call $call_self (i64.const 0)))
   (func $noop (call $msg_reply))
@@ -77,12 +80,12 @@ fn done(sm: &StateMachine, ids: &[MessageId]) -> usize {
 struct Outcome {
     /// The largest number of burns completed in a single round.
     max_burns_per_round: usize,
-    /// The cycles that the canister spent on the whole run.
-    cycles_spent: u128,
+    /// The combined reply and cleanup error returned to the triggering ingress.
+    trigger_error: UserError,
 }
 
 // Puts `trigger` and `N_BURNS` `burn` calls into one block and then runs
-// rounds until all burns have completed.
+// rounds until all burns have completed and the triggering ingress has failed.
 fn run(trigger: &str) -> Outcome {
     let sm = StateMachineBuilder::new()
         .with_subnet_type(SubnetType::Application)
@@ -90,7 +93,6 @@ fn run(trigger: &str) -> Outcome {
     let canister = sm.create_canister_with_cycles(None, Cycles::new(1 << 60), None);
     sm.install_existing_canister(canister, wat::parse_str(WAT).unwrap(), vec![])
         .unwrap();
-    let initial_balance = sm.cycle_balance(canister);
     let user = PrincipalId::new_anonymous();
     let mut block = PayloadBuilder::new()
         .with_max_expiry_time_from_now(sm.time())
@@ -99,12 +101,21 @@ fn run(trigger: &str) -> Outcome {
     for i in 0..N_BURNS {
         block = block.ingress(user, canister, "burn", vec![i as u8]);
     }
+    let trigger_id = block.ingress_ids()[0].clone();
     let burns = block.ingress_ids()[1..].to_vec();
     sm.execute_payload(block);
     let mut prev = done(&sm, &burns);
     let mut max_burns_per_round = prev;
     for _ in 0..2 * N_BURNS {
-        if prev == N_BURNS {
+        if prev == N_BURNS
+            && matches!(
+                sm.ingress_status(&trigger_id),
+                IngressStatus::Known {
+                    state: IngressState::Failed(_),
+                    ..
+                }
+            )
+        {
             break;
         }
         sm.tick();
@@ -113,9 +124,16 @@ fn run(trigger: &str) -> Outcome {
         prev = now;
     }
     assert_eq!(prev, N_BURNS);
+    let trigger_error = match sm.ingress_status(&trigger_id) {
+        IngressStatus::Known {
+            state: IngressState::Failed(error),
+            ..
+        } => error,
+        status => panic!("expected the triggering ingress to fail, got: {status:?}"),
+    };
     Outcome {
         max_burns_per_round,
-        cycles_spent: initial_balance - sm.cycle_balance(canister),
+        trigger_error,
     }
 }
 
@@ -142,22 +160,20 @@ fn run(trigger: &str) -> Outcome {
 fn round_budget_wrap_astronomic_charge() {
     let control = run("go_control");
     let attack = run("go");
-    // Make sure that the reply callback actually reaches the oversized charge
-    // (and does not, e.g., trap on a check made before it), as the test is
-    // vacuous otherwise: with the charge, the canister pays for the whole
-    // message instruction limit (40B instructions), which is on par with what
-    // it pays for all the burns (~49B instructions) of the control run.
-    //
-    // This does not show that the cleanup callback reaches its charge, too
-    // (which the overflow requires): only 5% of the message instruction limit
-    // are reserved for the cleanup callback, so the reply callback alone
-    // accounts for 38B of the 40B instructions.
-    assert!(
-        attack.cycles_spent > control.cycles_spent + control.cycles_spent / 2,
-        "the reply callback must be charged for the oversized charge: \
-         control spent {} cycles, attack spent {} cycles",
-        control.cycles_spent,
-        attack.cycles_spent
+    // Both callbacks must reach their oversized charge, rather than trap on an
+    // earlier check. Each executes only a few instructions before the charge,
+    // so neither can exhaust its budget otherwise. The error code alone only
+    // reflects the reply callback; check both errors in the description.
+    let instruction_limit_error = HypervisorError::InstructionLimitExceeded(
+        SchedulerConfig::application_subnet().max_instructions_per_message,
+    );
+    let expected_error = HypervisorError::Cleanup {
+        callback_err: Box::new(instruction_limit_error.clone()),
+        cleanup_err: Box::new(instruction_limit_error),
+    };
+    attack.trigger_error.assert_contains(
+        ErrorCode::CanisterInstructionLimitExceeded,
+        &expected_error.to_string(),
     );
     assert!(
         control.max_burns_per_round <= 3,
