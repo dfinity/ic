@@ -7,12 +7,13 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import pulp
-from data_io import load_subnet_data
+from data_io import CANISTERS_INSTALLED, load_subnet_data
 from solver_core import LoadConstraints, solve_partition
 
 DEFAULT_EPSILON_LOAD_DEFAULT = 0.05
 DEFAULT_MAX_CUTS = 20
 LOAD_TYPES = [
+    CANISTERS_INSTALLED,
     "instructions_executed",
     "ingress_messages_executed",
     "remote_subnet_messages_executed",

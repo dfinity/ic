@@ -4,8 +4,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from data_io import load_subnet_data
-from split_finder import compute_max_allowed_load_per_subnet, find_split, parse_args
+from data_io import CANISTERS_INSTALLED, load_subnet_data
+from split_finder import (
+    DEFAULT_EPSILON_LOAD_DEFAULT,
+    LOAD_TYPES,
+    compute_max_allowed_load_per_subnet,
+    find_split,
+    parse_args,
+)
 
 TEST_DATA_DIR = Path(__file__).resolve().parents[1] / "test_data"
 FAKE_LOAD_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_load_sample.csv")
@@ -96,6 +102,18 @@ class TestCsvLoading(unittest.TestCase):
             },
             msg=f"`load_subnet_data` returned {result}",
         )
+        self.assertEqual(result["edges"], FAKE_COMMUNICATION_EDGES)
+
+    def test_canisters_installed_load(self):
+        result = load_subnet_data(
+            FAKE_LOAD_SAMPLE_CSV_PATH,
+            FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
+            [CANISTERS_INSTALLED],
+            FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
+            FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+        )
+        # Every canister in "fake_load_sample.csv" counts once, including those in the baseline.
+        self.assertEqual(result["loads"], {CANISTERS_INSTALLED: [1] * 20}, msg=f"`load_subnet_data` returned {result}")
         self.assertEqual(result["edges"], FAKE_COMMUNICATION_EDGES)
 
     def test_communication_with_unknown_canisters_is_ignored(self):
@@ -218,6 +236,28 @@ class TestCsvLoading(unittest.TestCase):
         # Tightening the constraint becomes impossible
         with self.assertRaises(RuntimeError):
             find_split(*FAKE_SAMPLE_PATHS, {load_type: 0.001 for load_type in load_epsilons}, 100)
+
+    def test_solver_balances_canisters_installed(self):
+        epsilon = 0.0
+        split = find_split(*FAKE_SAMPLE_PATHS, {CANISTERS_INSTALLED: epsilon}, 100)
+
+        # With no allowed deviation (epsilon == 0.0), the 20 canisters must be split evenly.
+        self.assertLessEqual(
+            max_load_ratio(split, CANISTERS_INSTALLED),
+            1 + epsilon,
+            msg=f"`find_split` returned unbalanced split: {split}",
+        )
+
+    def test_solver_balances_all_load_types(self):
+        load_epsilons = {load_type: DEFAULT_EPSILON_LOAD_DEFAULT for load_type in LOAD_TYPES}
+        split = find_split(*FAKE_SAMPLE_PATHS, load_epsilons, 100)
+
+        for load_type, epsilon in load_epsilons.items():
+            self.assertLessEqual(
+                max_load_ratio(split, load_type),
+                1 + epsilon,
+                msg=f"`find_split` returned a split which doesn't balance {load_type}: {split}",
+            )
 
 
 class TestArgParsing(unittest.TestCase):
