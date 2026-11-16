@@ -3458,7 +3458,7 @@ impl PocketIc {
         self.subnets.get_nns()
     }
 
-    fn get_nns_delegation_for_subnet(&self, subnet: &StateMachine) -> NNSDelegationReader {
+    fn nns_delegation_reader_for_subnet(&self, subnet: &StateMachine) -> NNSDelegationReader {
         let subnet_id = subnet.get_subnet_id();
 
         let maybe_delegation = self
@@ -4972,7 +4972,7 @@ impl Operation for Query {
         let subnet = route_call(pic, canister_call);
         match subnet {
             Ok(subnet) => {
-                let delegation_reader = pic.get_nns_delegation_for_subnet(&subnet);
+                let delegation_reader = pic.nns_delegation_reader_for_subnet(&subnet);
                 match subnet.query_as_with_delegation_and_sender_info(
                     self.0.sender,
                     self.0.canister_id,
@@ -5203,7 +5203,7 @@ impl Operation for CallRequest {
                     CallRequestVersion::V3
                     | CallRequestVersion::V4
                     | CallRequestVersion::SubnetV4 => {
-                        let delegation_reader = pic.get_nns_delegation_for_subnet(&subnet);
+                        let delegation_reader = pic.nns_delegation_reader_for_subnet(&subnet);
                         let metrics_registry = MetricsRegistry::new();
                         let metrics = HttpHandlerMetrics::new(&metrics_registry);
 
@@ -5319,7 +5319,7 @@ impl Operation for QueryRequest {
         match subnet {
             Err(e) => OpOut::Error(e),
             Ok(subnet) => {
-                let delegation_reader = pic.get_nns_delegation_for_subnet(&subnet);
+                let delegation_reader = pic.nns_delegation_reader_for_subnet(&subnet);
                 let node = &subnet.nodes[0];
                 subnet.certify_latest_state();
                 let query_handler = subnet.query_handler.lock().unwrap().clone();
@@ -5399,7 +5399,7 @@ impl Operation for CanisterReadStateRequest {
         ) {
             Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
             Ok(subnet) => {
-                let delegation_reader = pic.get_nns_delegation_for_subnet(&subnet);
+                let delegation_reader = pic.nns_delegation_reader_for_subnet(&subnet);
                 let nns_subnet_id = pic
                     .nns_subnet()
                     .map(|subnet| subnet.get_subnet_id())
@@ -5481,7 +5481,7 @@ impl Operation for SubnetReadStateRequest {
                     .expect(
                         "The NNS subnet should already exist if we are already executing requests",
                     );
-                let delegation_reader = pic.get_nns_delegation_for_subnet(&subnet);
+                let delegation_reader = pic.nns_delegation_reader_for_subnet(&subnet);
                 subnet.certify_latest_state();
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
                 let mainnet_root_of_trust =
