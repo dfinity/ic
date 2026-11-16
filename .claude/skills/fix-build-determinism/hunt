@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+
+# Reproducibility "hunt": build a target several times, each in a fresh checkout
+# under an output base nested one level deeper than the last, so the absolute
+# build path differs between runs the way it would between machines. Then diff
+# the execution logs; any output whose content digest differs is non-reproducible.
+#
+# usage:
+#   ./hunt [--root ROOT] [--startup-options OPTS] [--build-options OPTS] [--runs N] TARGET
+
+set -euo pipefail
+
+filter='map
+    (reduce . as $target
+        ([]; . +
+            $target.actualOutputs
+        )
+    ) | flatten'
+
+usage() {
+    cat <<'EOF'
+usage:
+  ./hunt [--root ROOT] [--startup-options OPTS] [--build-options OPTS] [--runs N] TARGET
+
+  --root ROOT          directory for per-run checkouts, output bases and execlogs
+                       (default: a fresh `mktemp -d`)
+  --startup-options OPTS  extra bazel startup options, as one space-separated
+                          string (placed before the subcommand); repeatable
+  --build-options OPTS    extra bazel build options, as one space-separated
+                          string (e.g. "--config=local"); repeatable
+  --runs N             number of builds to compare against the first (default: 2)
+  TARGET               label to build, e.g. //:mkfs.ext4
+EOF
+}
+
+root=""
+n_runs=2
+extra_startup_options=()
+extra_build_options=()
+positional=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --root) root="${2:?--root requires an argument}"; shift 2 ;;
+        --root=*) root="${1#*=}"; shift ;;
+        --startup-options) read -ra _opts <<<"${2:?--startup-options requires an argument}"; extra_startup_options+=("${_opts[@]}"); shift 2 ;;
+        --startup-options=*) read -ra _opts <<<"${1#*=}"; extra_startup_options+=("${_opts[@]}"); shift ;;
+        --build-options) read -ra _opts <<<"${2:?--build-options requires an argument}"; extra_build_options+=("${_opts[@]}"); shift 2 ;;
+        --build-options=*) read -ra _opts <<<"${1#*=}"; extra_build_options+=("${_opts[@]}"); shift ;;
+        --runs) n_runs="${2:?--runs requires an argument}"; shift 2 ;;
+        --runs=*) n_runs="${1#*=}"; shift ;;
+        --help) usage; exit 0 ;;
+        --) shift; positional+=("$@"); break ;;
+        --*) echo "hunt: unknown option '$1'" >&2; usage >&2; exit 2 ;;
+        *) positional+=("$1"); shift ;;
+    esac
+done
+set -- "${positional[@]}"
+
+if [[ $# -gt 1 ]]; then
+    echo "hunt: unexpected extra arguments: ${*:2}" >&2
+    usage >&2
+    exit 2
+fi
+target="${1:?usage: hunt [--root ROOT] [--startup-options OPTS] [--build-options OPTS] [--runs N] TARGET}"
+
+repo_root="$(git rev-parse --show-toplevel)"
+
+# Where checkouts, output bases and execlogs live. Default to a fresh tempdir so
+# we don't pollute the repo; it is left in place afterwards for inspection.
+if [ -z "$root" ]; then
+    root="$(mktemp -d "${TMPDIR:-/tmp}/hunt.XXXXXX")"
+else
+    mkdir -p "$root"
+fi
+root="$(cd "$root" && pwd)" # absolutize: bazel needs an absolute --output_base
+echo "using root '$root'" >&2
+
+run_build() {
+    local run_n="$1"
+
+    echo "Running build $run_n/$n_runs" >&2
+
+    local output_base="$root/output-base-$run_n"
+    local checkout_path="$root/checkout-$run_n"
+
+    local i
+    for i in $(seq 1 "$run_n"); do
+        output_base="$output_base/nest-$i"
+        checkout_path="$checkout_path/nest-$i"
+    done
+
+    echo "using output base '$output_base'" >&2
+    echo "using checkout path '$checkout_path'" >&2
+    rm -rf "$output_base" "$checkout_path"
+    mkdir -p "$checkout_path"
+
+    pushd "$checkout_path" >/dev/null
+    git clone "$repo_root" .
+
+    bazel \
+        "${extra_startup_options[@]}" \
+        --output_base="$output_base" \
+        build \
+        "${extra_build_options[@]}" \
+        "--execution_log_json_file=$root/exec$run_n.json" \
+        "$target"
+
+    popd >/dev/null
+}
+
+compare_runs() {
+
+    local run_a="$1"
+    local run_b="$2"
+
+    res=$(jq --slurp '(.[0] - .[1])' \
+        <(jq -Mr <"$root/exec$run_a.json" --slurp "$filter") \
+        <(jq -Mr <"$root/exec$run_b.json" --slurp "$filter")
+    )
+
+
+    if [ "$res" != "[]" ]; then
+        echo "mismatch" >&2
+        echo "$res"
+        exit 1
+    fi
+
+    echo "builds $run_a - $run_b: no diff ✓" >&2
+}
+
+for run_n in $(seq 1 "$n_runs"); do
+    run_build "$run_n"
+
+    if [[ $run_n != "1" ]]; then
+        compare_runs "1" "$run_n"
+    fi
+done
