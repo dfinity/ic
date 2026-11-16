@@ -152,6 +152,7 @@ system_test_nns(
     name = "canister_migration_test",
     cpus = MIN_LOCAL_CPUS + 6 * DEFAULT_VCPUS_PER_VM,  # 4 IC Node VMs + 1 API boundary node VM + 1 ic-gateway VM, 6 vCPUs each.
     enable_mainnet_nns_variant = False,
+    enable_uvm = True,  # The ic-gateway runs in a universal VM.
     tags = [
         "long_test",
     ],
