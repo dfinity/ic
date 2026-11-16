@@ -76,6 +76,9 @@ message Request {
   RequestMetadata metadata = 8;
   // If non-zero, this is a best-effort call.
   uint32 deadline_seconds = 9;
+  // Cached effective canister ID of a request addressed to the management
+  // canister. Absent if not cached.
+  types.v1.CanisterId effective_canister_id = 10;
 }
 
 message RejectContext {

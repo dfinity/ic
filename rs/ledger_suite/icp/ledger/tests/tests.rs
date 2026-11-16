@@ -37,6 +37,7 @@ use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use icrc_ledger_types::icrc21::errors::{ErrorInfo, Icrc21Error};
+use icrc_ledger_types::icrc21::lib::MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES;
 use icrc_ledger_types::icrc21::requests::ConsentMessageMetadata;
 use icrc_ledger_types::icrc21::requests::{
     ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
@@ -1881,6 +1882,83 @@ fn test_icrc21_legacy_transfer_incorrect_fee() {
                     .to_string()
         })
     );
+}
+
+#[test]
+fn test_icrc21_legacy_transfer_rejects_arg_exceeding_limits() {
+    let env = StateMachine::new();
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister");
+
+    let transfer_args = TransferArgs {
+        memo: icp_ledger::Memo(15_u64),
+        amount: Tokens::from(1_000_000_u64),
+        fee: Tokens::from(10_000),
+        from_subaccount: None,
+        to: AccountIdentifier::from(Account::from(PrincipalId::new_user_test_id(1).0)).to_address(),
+        created_at_time: None,
+    };
+    let new_request = |arg: Vec<u8>| ConsentMessageRequest {
+        method: "transfer".to_owned(),
+        arg,
+        user_preferences: ConsentMessageSpec {
+            metadata: ConsentMessageMetadata {
+                language: "en".to_string(),
+                utc_offset_minutes: None,
+            },
+            device_spec: Some(DisplayMessageType::GenericDisplay),
+        },
+    };
+
+    let mut arg_with_large_vec = Encode!(&transfer_args, &Vec::<()>::new()).unwrap();
+    assert_eq!(arg_with_large_vec.pop(), Some(0));
+    arg_with_large_vec.extend_from_slice(&[0xff, 0xff, 0xff, 0xff, 0x0f]);
+    assert!(arg_with_large_vec.len() <= MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize);
+
+    let padding = vec![0_u8; MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize];
+    let oversized_arg = Encode!(&transfer_args, &padding).unwrap();
+
+    let large_vec_result = icrc21_consent_message(
+        &env,
+        canister_id,
+        Principal::anonymous(),
+        new_request(arg_with_large_vec),
+    );
+    let oversized_result = icrc21_consent_message(
+        &env,
+        canister_id,
+        Principal::anonymous(),
+        new_request(oversized_arg),
+    );
+    let valid_result = icrc21_consent_message(
+        &env,
+        canister_id,
+        Principal::anonymous(),
+        new_request(Encode!(&transfer_args).unwrap()),
+    );
+
+    match large_vec_result {
+        Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo { description })) => {
+            assert!(
+                description.contains("Failed to decode TransferArgs"),
+                "{description}"
+            );
+        }
+        other => panic!("expected UnsupportedCanisterCall, got {other:?}"),
+    }
+    match oversized_result {
+        Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo { description })) => {
+            assert!(description.contains("too large"), "{description}");
+        }
+        other => panic!("expected UnsupportedCanisterCall, got {other:?}"),
+    }
+    assert!(valid_result.is_ok(), "{valid_result:?}");
 }
 
 #[test]

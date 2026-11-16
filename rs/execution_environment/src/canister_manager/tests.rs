@@ -3005,6 +3005,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .canister_id(canister_id)
         .build();
     let module_hash = ctxt.wasm_source.module_hash();
+    let args_hash = ic_crypto_sha2::Sha256::hash(&ctxt.arg);
     let (instructions_left, res, canister) =
         install_code(&canister_manager, ctxt, &mut state, &mut round_limits);
     state.put_canister_state(canister.unwrap());
@@ -3031,7 +3032,11 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     original_canister.system_state.add_canister_change(
         state.time(),
         canister_change_origin_from_canister(&controller),
-        CanisterChangeDetails::code_deployment(CanisterInstallMode::Install, module_hash),
+        CanisterChangeDetails::code_deployment(
+            CanisterInstallMode::Install,
+            module_hash,
+            Some(args_hash),
+        ),
     );
     assert_eq!(new_state, original_canister.system_state);
 
@@ -3048,8 +3053,10 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .mode(CanisterInstallModeV2::Reinstall)
         .sender(controller.into())
         .canister_id(canister_id)
+        .arg(b"reinstall args".to_vec())
         .build();
     let module_hash = ctxt.wasm_source.module_hash();
+    let args_hash = ic_crypto_sha2::Sha256::hash(&ctxt.arg);
     let (instructions_left, res, canister) =
         install_code(&canister_manager, ctxt, &mut state, &mut round_limits);
     state.put_canister_state(canister.unwrap());
@@ -3076,7 +3083,11 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     original_canister.system_state.add_canister_change(
         state.time(),
         canister_change_origin_from_canister(&controller),
-        CanisterChangeDetails::code_deployment(CanisterInstallMode::Reinstall, module_hash),
+        CanisterChangeDetails::code_deployment(
+            CanisterInstallMode::Reinstall,
+            module_hash,
+            Some(args_hash),
+        ),
     );
     assert_eq!(new_state, original_canister.system_state);
 
@@ -3103,6 +3114,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
+    let args_hash = ic_crypto_sha2::Sha256::hash(&ctxt.arg);
 
     let (instructions_left, res, canister) =
         install_code(&canister_manager, ctxt, &mut state, &mut round_limits);
@@ -3129,7 +3141,11 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     original_canister.system_state.add_canister_change(
         state.time(),
         canister_change_origin_from_canister(&controller),
-        CanisterChangeDetails::code_deployment(CanisterInstallMode::Upgrade, module_hash),
+        CanisterChangeDetails::code_deployment(
+            CanisterInstallMode::Upgrade,
+            module_hash,
+            Some(args_hash),
+        ),
     );
     assert_eq!(new_state, original_canister.system_state);
 

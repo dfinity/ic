@@ -296,6 +296,9 @@ message CanisterCodeUninstall {}
 message CanisterCodeDeployment {
   types.v1.CanisterInstallMode mode = 1;
   bytes module_hash = 2;
+  // SHA-256 hash of the init/post-upgrade argument of `install_code`.
+  // `None` for entries recorded before `args_hash` started being recorded.
+  optional bytes args_hash = 3;
 }
 
 message CanisterControllersChange {

@@ -355,7 +355,7 @@ impl SubnetMessage {
     pub fn effective_canister_id(&self) -> Option<CanisterId> {
         match &self {
             SubnetMessage::Ingress(ingress) => ingress.effective_canister_id,
-            SubnetMessage::Request(request) => request.extract_effective_canister_id(),
+            SubnetMessage::Request(request) => request.effective_canister_id(),
             SubnetMessage::Response { .. } => None,
         }
     }
@@ -799,6 +799,7 @@ mod tests {
             method_payload: vec![0_u8, 1_u8, 2_u8, 3_u8, 4_u8, 5_u8],
             metadata: RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(17)),
             deadline: CoarseTime::from_secs_since_unix_epoch(169),
+            effective_canister_id: None,
         };
         let bytes = bincode::serialize(&request).unwrap();
         let request1 = bincode::deserialize::<Request>(&bytes);
