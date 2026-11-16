@@ -702,8 +702,24 @@ impl Step for UploadStateAndRestartStep {
                 copy_from = copy_from.display(),
                 copy_to = copy_to.display()
             );
+            // The states metadata is only a cache that the state manager
+            // rebuilds if it is missing, so it is uploaded only if present
+            // (e.g., a merged state assembled by the subnet merging tool has
+            // none). If it is absent, any copy left in the upload directory by
+            // an interrupted upload is removed, as the state manager would
+            // otherwise trust a stale manifest it holds for the checkpoint.
+            let has_states_metadata = self.data_src.join(STATES_METADATA).exists();
+            let rm_stale_states_metadata = if has_states_metadata {
+                String::new()
+            } else {
+                format!(
+                    " sudo rm -f {};",
+                    upload_dir.join(STATES_METADATA).display()
+                )
+            };
             let cmd_create_and_copy_checkpoint_dir = format!(
-                "sudo mkdir -p {copy_to_parent}; {cp}; sudo chown -R {ssh_user} {upload_dir};",
+                "sudo mkdir -p {copy_to_parent}; {cp};{rm_stale_states_metadata} sudo chown -R \
+                 {ssh_user} {upload_dir};",
                 copy_to_parent = copy_to.parent().unwrap().display(),
                 ssh_user = self.ssh_user,
                 upload_dir = upload_dir.display()
@@ -716,16 +732,10 @@ impl Step for UploadStateAndRestartStep {
             ssh_helper.ssh(cmd_create_and_copy_checkpoint_dir)?;
 
             info!(self.logger, "Uploading state...");
-            // The states metadata is only a cache that the state manager
-            // rebuilds if it is missing, so it is uploaded only if present
-            // (e.g., a merged state assembled by the subnet merging tool has
-            // none).
             let includes: Vec<_> =
                 Recovery::get_state_includes_with_given_checkpoint(max_checkpoint)
                     .into_iter()
-                    .filter(|path| {
-                        path != Path::new(STATES_METADATA) || self.data_src.join(path).exists()
-                    })
+                    .filter(|path| has_states_metadata || path != Path::new(STATES_METADATA))
                     .collect();
             ssh_helper.rsync_includes(
                 &includes,
