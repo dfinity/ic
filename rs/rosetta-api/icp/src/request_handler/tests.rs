@@ -8,13 +8,11 @@ use crate::{
         AccountBalanceRequest, BlockRequest, BlockTransactionRequest, CallRequest,
         ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata, NetworkRequest,
         ObjectMap, PartialBlockIdentifier, PublicKey, QueryBlockRangeRequest,
-        QueryBlockRangeResponse, SearchTransactionsRequest, seconds::Seconds,
+        QueryBlockRangeResponse, SearchTransactionsRequest,
     },
     request::Request,
     request_handler::RosettaRequestHandler,
-    request_types::{
-        AddHotKey, Follow, PublicKeyOrPrincipal, SetDissolveTimestamp, Stake, StartDissolve,
-    },
+    request_types::{AddHotKey, Follow, PublicKeyOrPrincipal, Stake, StartDissolve},
 };
 use async_trait::async_trait;
 use futures::{FutureExt, TryFutureExt, future::LocalBoxFuture};
@@ -748,7 +746,7 @@ fn should_reject_request_exceeding_max_signing_payloads() {
     assert_exceeds_max_signing_payloads(result);
 }
 
-/// Just above the limit: 6 requests over the maximum ingress window are
+/// Just above the limit: 5 requests over the maximum ingress window are
 /// rejected.
 #[test]
 fn should_reject_request_just_above_max_signing_payloads() {
@@ -760,14 +758,14 @@ fn should_reject_request_just_above_max_signing_payloads() {
 
     let result = construction_payloads_with_max_ingress_window(
         &req_handler,
-        &stake_requests(account, 6),
+        &stake_requests(account, 5),
         public_key,
     );
 
     assert_exceeds_max_signing_payloads(result);
 }
 
-/// A realistic neuron workflow of 5 requests, the most allowed over the
+/// A realistic neuron workflow of 4 requests, the most allowed over the
 /// maximum ingress window.
 fn neuron_workflow(account: AccountIdentifier, hot_key: PrincipalId) -> Vec<Request> {
     let neuron_index = 0;
@@ -785,11 +783,6 @@ fn neuron_workflow(account: AccountIdentifier, hot_key: PrincipalId) -> Vec<Requ
         Request::Stake(Stake {
             account,
             neuron_index,
-        }),
-        Request::SetDissolveTimestamp(SetDissolveTimestamp {
-            account,
-            neuron_index,
-            timestamp: Seconds(1_900_000_000),
         }),
         Request::AddHotKey(AddHotKey {
             account,
@@ -928,7 +921,7 @@ fn should_reject_combine_exceeding_limits() {
     let ingress_expiry = unsigned_transaction.ingress_expiries[0];
 
     let mut too_many_pairs = unsigned_transaction.clone();
-    too_many_pairs.ingress_expiries = (0..5 * 720 + 1).collect();
+    too_many_pairs.ingress_expiries = (0..4 * 720 + 1).collect();
     assert_exceeds_max_signing_payloads(construction_combine_with(
         &req_handler,
         too_many_pairs,
@@ -1037,13 +1030,19 @@ fn should_reject_payloads_with_repeated_requests() {
 }
 
 /// The combine request for the largest transaction that `/construction/payloads`
-/// builds, signed for every signing payload, fits in the 4 MiB request body
-/// limit of the Rosetta server, and is combined.
+/// builds, signed for every signing payload with an uncompressed secp256k1
+/// public key (the largest supported key encoding), fits in the 4 MiB request
+/// body limit of the Rosetta server, and is combined.
 #[test]
 fn should_combine_largest_transaction_within_request_body_limit() {
     const MAX_REQUEST_BODY_BYTES: usize = 4 * 1024 * 1024;
 
-    let (account, _, public_key, _) = ic_rosetta_test_utils::make_user_ed25519(1);
+    let (account, _, public_key, _) = ic_rosetta_test_utils::make_user_ecdsa_secp256k1(1);
+    assert_eq!(
+        public_key.hex_bytes.len(),
+        2 * 65,
+        "expected an uncompressed key"
+    );
     let (_, _, _, hot_key) = ic_rosetta_test_utils::make_user_ed25519(2);
     let req_handler = RosettaRequestHandler::new_with_default_blockchain(
         Arc::new(MockLedger::new()),
@@ -1061,7 +1060,7 @@ fn should_combine_largest_transaction_within_request_body_limit() {
         .map(|payload| crate::models::Signature {
             signing_payload: payload.clone(),
             public_key: public_key.clone(),
-            signature_type: crate::models::SignatureType::Ed25519,
+            signature_type: crate::models::SignatureType::Ecdsa,
             hex_bytes: hex::encode([0_u8; 64]),
         })
         .collect();

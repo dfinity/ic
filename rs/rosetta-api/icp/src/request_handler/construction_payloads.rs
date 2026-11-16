@@ -44,11 +44,12 @@ const MAX_INGRESS_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 /// Maximum permitted number of (request, ingress expiry) pairs in
 /// `/construction/payloads` and `/construction/combine`. Each pair is turned
 /// into an update and a read state signing payload, and `/construction/combine`
-/// needs a signature for each of them, i.e. about 1.1 KB of JSON per pair. It
-/// allows 5 requests over the maximum ingress window (720 ingress expiries),
-/// so that the combine request for any transaction built here stays within the
-/// 4 MiB request body limit.
-const MAX_REQUEST_INGRESS_EXPIRY_PAIRS: usize = 5 * 720;
+/// needs a signature for each of them, i.e. about 1.1 to 1.2 KB of JSON per
+/// pair depending on the key type. It allows 4 requests over the maximum
+/// ingress window (720 ingress expiries), so that the combine request for any
+/// transaction built here stays within the 4 MiB request body limit, also with
+/// uncompressed secp256k1 public keys.
+const MAX_REQUEST_INGRESS_EXPIRY_PAIRS: usize = 4 * 720;
 
 /// Maximum permitted size of a CBOR-encoded canister update in
 /// `/construction/payloads` and `/construction/combine`. Each update is cloned
