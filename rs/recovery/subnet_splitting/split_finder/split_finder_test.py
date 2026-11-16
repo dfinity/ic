@@ -5,7 +5,13 @@ import unittest
 from pathlib import Path
 
 from data_io import CANISTERS_INSTALLED, load_subnet_data
-from split_finder import compute_max_allowed_load_per_subnet, find_split, parse_args
+from split_finder import (
+    DEFAULT_EPSILON_LOAD_DEFAULT,
+    LOAD_TYPES,
+    compute_max_allowed_load_per_subnet,
+    find_split,
+    parse_args,
+)
 
 TEST_DATA_DIR = Path(__file__).resolve().parents[1] / "test_data"
 FAKE_LOAD_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_load_sample.csv")
@@ -241,6 +247,17 @@ class TestCsvLoading(unittest.TestCase):
             1 + epsilon,
             msg=f"`find_split` returned unbalanced split: {split}",
         )
+
+    def test_solver_balances_all_load_types(self):
+        load_epsilons = {load_type: DEFAULT_EPSILON_LOAD_DEFAULT for load_type in LOAD_TYPES}
+        split = find_split(*FAKE_SAMPLE_PATHS, load_epsilons, 100)
+
+        for load_type, epsilon in load_epsilons.items():
+            self.assertLessEqual(
+                max_load_ratio(split, load_type),
+                1 + epsilon,
+                msg=f"`find_split` returned a split which doesn't balance {load_type}: {split}",
+            )
 
 
 class TestArgParsing(unittest.TestCase):
