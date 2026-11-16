@@ -105,8 +105,9 @@ impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for C
         })
     }
 
+    // Like consensus, so that deferred artifacts are fetched soon after they're wanted.
     fn refresh_period(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(3)
+        std::time::Duration::from_secs(1)
     }
 }
 
