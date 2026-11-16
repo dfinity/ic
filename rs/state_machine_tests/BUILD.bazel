@@ -116,6 +116,7 @@ rust_ic_test(
         "tests/mod.rs",
         "tests/multi_subnet.rs",
         "tests/reject_remote_callbacks.rs",
+        "tests/round_budget_wrap.rs",
         "tests/subnet_delete.rs",
     ],
     crate_root = "tests/mod.rs",
