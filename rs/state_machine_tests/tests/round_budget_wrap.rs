@@ -142,21 +142,27 @@ fn run(trigger: &str) -> Outcome {
 fn round_budget_wrap_astronomic_charge() {
     let control = run("go_control");
     let attack = run("go");
-    // Make sure that the callbacks actually reach the oversized charge (and do
-    // not, e.g., trap on a check made before it), as the test is vacuous
-    // otherwise: with the charge, the canister pays for the whole message
-    // instruction limit (40B instructions), which is on par with what it pays
-    // for all the burns (~49B instructions) of the control run.
+    // Make sure that the reply callback actually reaches the oversized charge
+    // (and does not, e.g., trap on a check made before it), as the test is
+    // vacuous otherwise: with the charge, the canister pays for the whole
+    // message instruction limit (40B instructions), which is on par with what
+    // it pays for all the burns (~49B instructions) of the control run.
+    //
+    // This does not show that the cleanup callback reaches its charge, too
+    // (which the overflow requires): only 5% of the message instruction limit
+    // are reserved for the cleanup callback, so the reply callback alone
+    // accounts for 38B of the 40B instructions.
     assert!(
         attack.cycles_spent > control.cycles_spent + control.cycles_spent / 2,
-        "the callbacks must be charged for the oversized charge: \
+        "the reply callback must be charged for the oversized charge: \
          control spent {} cycles, attack spent {} cycles",
         control.cycles_spent,
         attack.cycles_spent
     );
     assert!(
         control.max_burns_per_round <= 3,
-        "a round normally fits ~2 burns (4B instructions)"
+        "a round normally fits 2 burns (a new message is only started while \
+         less than 2B instructions were executed in the round)"
     );
     assert!(
         attack.max_burns_per_round <= 3,
