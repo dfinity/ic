@@ -11,6 +11,16 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-11-16: Proposal 144847
+
+http://dashboard.internetcomputer.org/proposal/144847
+
+## Fixed
+
+* The rendered text of `UpgradeSnsControlledCanister` proposals now shows the SHA256 of the
+  upgrade argument. Before, it showed the argument bytes as hex.
+
+
 # 2026-10-23: Proposal 144563
 
 http://dashboard.internetcomputer.org/proposal/144563
