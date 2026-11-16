@@ -4682,8 +4682,8 @@ impl StateMachine {
         )
     }
 
-    /// Queries the canister with the specified ID, with the NNS delegation held by
-    /// `delegation_snapshot` and sender info.
+    /// Queries the canister with the specified ID, with sender info and the NNS delegation held by
+    /// `delegation_snapshot`, served in the flat format (as on the `/api/v2` query endpoint).
     pub fn query_as_with_delegation_and_sender_info(
         &self,
         sender: PrincipalId,
