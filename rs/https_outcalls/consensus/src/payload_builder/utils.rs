@@ -1,3 +1,4 @@
+use ic_crypto_sha2::Sha256;
 use ic_https_outcalls_pricing::fees::{
     flexible_initial_spent, min_flexible_consensus_cost, min_non_flexible_consensus_cost,
     non_flexible_initial_spent,
@@ -119,6 +120,22 @@ pub(crate) fn check_content_size_within_limit(
             callback_id,
             content_size: metadata.content_size,
             limit,
+        });
+    }
+    Ok(())
+}
+
+/// Enforces that the `content_hash` the signed metadata claims is as long as a SHA-256
+/// digest, as the hash of every response is.
+pub(crate) fn check_content_hash_length(
+    metadata: &CanisterHttpResponseMetadata,
+    callback_id: CallbackId,
+) -> Result<(), InvalidCanisterHttpPayloadReason> {
+    let length = metadata.content_hash.get_ref().0.len();
+    if length != Sha256::DIGEST_LEN {
+        return Err(InvalidCanisterHttpPayloadReason::InvalidContentHashLength {
+            callback_id,
+            length,
         });
     }
     Ok(())
@@ -464,7 +481,7 @@ pub(crate) fn validate_flexible_response_with_proof(
 /// `committee` the request was assigned to.
 ///
 /// Checks callback-id consistency, duplicate signers, committee membership, the
-/// per-replica spend limit, and the response size limit.
+/// per-replica spend limit, the response size limit, and the content hash length.
 ///
 /// **NOTE**: The signature is not verified. Callers are expected to
 /// batch-verify the signatures of all shares in the surrounding group via
@@ -485,6 +502,7 @@ pub(crate) fn validate_response_share(
 
     check_spent_within_limit(&share.content.payment_receipt, context)?;
     check_content_size_within_limit(&share.content.metadata, callback_id, context)?;
+    check_content_hash_length(&share.content.metadata, callback_id)?;
 
     let signer = share.signature.signer;
     if !seen_signers.insert(signer) {

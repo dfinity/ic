@@ -3,7 +3,9 @@
 //! networking component, and ensuring that the resulting responses are signed
 //! and eventually make it into consensus.
 use crate::metrics::CanisterHttpPoolManagerMetrics;
-use crate::payload_builder::utils::{check_content_size_within_limit, check_spent_within_limit};
+use crate::payload_builder::utils::{
+    check_content_hash_length, check_content_size_within_limit, check_spent_within_limit,
+};
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
@@ -493,6 +495,15 @@ impl CanisterHttpPoolManagerImpl {
                     share.content.id(),
                     context,
                 ) {
+                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                        share.clone(),
+                        format!("{err:?}"),
+                    ));
+                }
+
+                if let Err(err) =
+                    check_content_hash_length(&share.content.metadata, share.content.id())
+                {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
                         format!("{err:?}"),
@@ -1325,7 +1336,7 @@ pub mod test {
 
                     let mut bad_share = share.clone();
                     bad_share.content.metadata.content_hash =
-                        CryptoHashOf::new(CryptoHash(vec![1, 2, 3]));
+                        CryptoHashOf::new(CryptoHash(vec![0xAB; 32]));
 
                     let artifact_with_mismatched_hash = CanisterHttpResponseArtifact {
                         share: bad_share,
@@ -2090,6 +2101,99 @@ pub mod test {
                         callback_id,
                         content_size: (limit + 1) as u32,
                         limit,
+                    }
+                );
+                assert_matches!(
+                    &change_set[..],
+                    [CanisterHttpChangeAction::HandleInvalid(_, reason)] => {
+                        assert_eq!(reason, &expected_error);
+                    }
+                );
+            })
+        });
+    }
+
+    #[test]
+    fn test_share_with_content_hash_of_wrong_length_is_invalidated() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
+
+                let peer_id = node_test_id(1);
+                let callback_id = CallbackId::from(0);
+
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            callback_id,
+                            test_request_context(
+                                Replication::FullyReplicated,
+                                PricingVersion::Legacy,
+                                None,
+                            ),
+                        )]))),
+                    ));
+
+                // One byte longer than a SHA-256 digest. A fully replicated share comes
+                // without a response to compare the hash with.
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: callback_id,
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 33])),
+                        content_size: 0,
+                        is_reject: false,
+                        replica_version: replica_config.replica_version().clone(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
+                };
+                let share = Signed {
+                    content: response_metadata.clone(),
+                    signature: crypto
+                        .sign(&response_metadata, peer_id, RegistryVersion::from(1))
+                        .unwrap(),
+                };
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        response: None,
+                    },
+                    peer_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager,
+                    Arc::new(Mutex::new(Box::new(MockNonBlockingChannel::new()))),
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let change_set =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
+
+                let expected_error = format!(
+                    "{:?}",
+                    InvalidCanisterHttpPayloadReason::InvalidContentHashLength {
+                        callback_id,
+                        length: 33,
                     }
                 );
                 assert_matches!(
@@ -3159,7 +3263,7 @@ pub mod test {
 
                     let mut bad_share = share.clone();
                     bad_share.content.metadata.content_hash =
-                        CryptoHashOf::new(CryptoHash(vec![1, 2, 3]));
+                        CryptoHashOf::new(CryptoHash(vec![0xAB; 32]));
 
                     canister_http_pool.insert(UnvalidatedArtifact {
                         message: CanisterHttpResponseArtifact {
@@ -3703,7 +3807,7 @@ pub mod test {
                 let receipt_share = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
                         content_size: 0,
                         is_reject: false,
                         replica_version: replica_config.replica_version().clone(),
@@ -4076,7 +4180,7 @@ pub mod test {
                     let receipt_share = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: callback_id,
-                            content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                            content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
                             content_size: 0,
                             is_reject: false,
                             replica_version: test_replica_version(),
