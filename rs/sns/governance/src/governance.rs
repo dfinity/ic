@@ -1883,11 +1883,7 @@ impl Governance {
             }
             // Filter out proposals by topic.
             let topic = data.topic.and_then(|topic| Topic::try_from(topic).ok());
-            if !(include_topics.is_empty() || include_topics.contains(&topic)) {
-                return false;
-            }
-
-            true
+            include_topics.is_empty() || include_topics.contains(&topic)
         };
         let limit = if request.limit == 0 || request.limit > MAX_LIST_PROPOSAL_RESULTS {
             MAX_LIST_PROPOSAL_RESULTS

@@ -127,7 +127,6 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     ///     }
     /// ]'
     /// ```
-    #[clap(long)]
     pub chain_key_configs_to_generate: Option<String>,
 
     #[clap(long)]

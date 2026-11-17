@@ -236,9 +236,7 @@ fn verify_pop_fails_on_public_key_bytes_not_on_curve() {
     let mut public_key_bytes = public_key;
     // Zero out the bytes, set the compression flag.
     // This represents x = 0, which happens to have no solution on the G2 curve.
-    for i in 0..G2Bytes::SIZE {
-        public_key_bytes.0[i] = 0;
-    }
+    public_key_bytes.0.fill(0);
     public_key_bytes.0[G2Bytes::FLAG_BYTE_OFFSET] |= G2Bytes::COMPRESSED_FLAG;
     match multi_sig::verify_pop(&pop, &public_key_bytes) {
         Err(e) => assert!(e.to_string().contains("Point decoding failed")),
@@ -254,9 +252,7 @@ fn verify_pop_fails_on_public_key_bytes_not_in_subgroup() {
     let mut public_key_bytes = public_key;
     // By manual rejection sampling, we found an x-coordinate with a
     // solution, which is unlikely to have order r.
-    for i in 0..G2Bytes::SIZE {
-        public_key_bytes.0[i] = 0;
-    }
+    public_key_bytes.0.fill(0);
     public_key_bytes.0[G2Bytes::FLAG_BYTE_OFFSET] |= G2Bytes::COMPRESSED_FLAG;
     public_key_bytes.0[5] = 3;
     match multi_sig::verify_pop(&pop, &public_key_bytes) {

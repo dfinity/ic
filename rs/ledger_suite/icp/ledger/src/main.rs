@@ -1137,8 +1137,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     let archive_guard = ledger.blockchain.archive.read().unwrap();
     let num_archives = archive_guard
         .as_ref()
-        .iter()
-        .fold(0, |sum, archive| sum + archive.nodes().iter().len());
+        .map_or(0, |archive| archive.nodes().len());
     w.encode_gauge(
         "ledger_max_message_size_bytes",
         *MAX_MESSAGE_SIZE_BYTES.read().unwrap() as f64,
