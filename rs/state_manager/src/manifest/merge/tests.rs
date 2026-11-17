@@ -123,8 +123,8 @@ fn merge_manifests_replaces_the_marker_of_the_destination() {
     );
 
     assert_eq!(
-        merge_manifests(&destination, &source),
-        merge_manifests(&without_marker, &source)
+        merge_manifests(&destination, &source).unwrap(),
+        merge_manifests(&without_marker, &source).unwrap()
     );
 }
 
