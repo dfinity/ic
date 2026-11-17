@@ -2815,6 +2815,10 @@ impl StateManagerImpl {
     /// that a restart neither archives the checkpoint nor recomputes the manifest,
     /// checking every 100 ms. Returns right away if there is no checkpoint.
     ///
+    /// Only looks at the latest checkpoint: if it came from state sync (which stays
+    /// unverified until superseded, and is archived on restart), returns right away,
+    /// even if an older checkpoint is still being validated.
+    ///
     /// For shutting down: doesn't wait for the rest of the checkpoint work (resetting
     /// the tip, merging), which a replica about to exit doesn't need.
     pub fn wait_for_latest_checkpoint(&self) {

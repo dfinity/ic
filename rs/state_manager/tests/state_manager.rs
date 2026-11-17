@@ -1525,7 +1525,13 @@ fn wait_for_latest_checkpoint_waits_for_verification_and_manifest() {
                 .checkpoint_verified(height)
                 .is_ok()
         );
-        assert!(state_manager.get_state_hash_at(height).is_ok());
+        // Persisted, not just published.
+        let persisted = std::fs::read(state_manager.state_layout().states_metadata()).unwrap();
+        let persisted = <ic_protobuf::state::v1::StatesMetadata as prost::Message>::decode(
+            persisted.as_slice(),
+        )
+        .unwrap();
+        assert!(persisted.by_height[&height.get()].manifest.is_some());
     });
 }
 
