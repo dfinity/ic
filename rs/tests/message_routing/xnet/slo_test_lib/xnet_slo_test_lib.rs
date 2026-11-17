@@ -510,6 +510,11 @@ pub async fn test_async_impl(
 
     // Tear down via the most up-to-date node of each subnet: a node that has fallen
     // behind its subnet answers late or with an error, and drops update calls.
+    info!(
+        logger,
+        "Tearing down the canisters via the most up-to-date healthy node of their subnet where \
+         one is found, and via the node they were installed through otherwise..."
+    );
     let teardown_runtimes = most_up_to_date_runtimes(&env, &canisters, logger).await;
     let canisters = canisters
         .iter()
@@ -562,10 +567,7 @@ async fn most_up_to_date_runtimes(
             else {
                 warn!(
                     logger,
-                    "Found no subnet hosting canister {}, tearing down the canisters on \
-                     subnet_idx={} via the node they were installed through",
-                    canister_id,
-                    subnet_idx
+                    "Found no subnet hosting canister {} (subnet_idx={})", canister_id, subnet_idx
                 );
                 return None;
             };
@@ -577,11 +579,11 @@ async fn most_up_to_date_runtimes(
 /// Returns a runtime for the healthy node of `subnet` with the highest certified
 /// height.
 ///
-/// Returns `None` if `subnet` has a single node or no healthy node, in which case
-/// there is no better node than the one its canisters already use.
+/// Returns `None` if `subnet` has a single node, which leaves nothing to choose
+/// from, or no healthy node.
 ///
-/// `subnet_idx` identifies the subnet in the log messages, like in those of
-/// `tear_down()`.
+/// `subnet_idx`, the index of `subnet` in the test, identifies it in the log
+/// messages.
 async fn most_up_to_date_runtime(
     subnet_idx: usize,
     subnet: &SubnetSnapshot,
@@ -621,9 +623,8 @@ async fn most_up_to_date_runtime(
     let Some((node, _)) = most_up_to_date else {
         warn!(
             logger,
-            "Subnet {} has no healthy node, tearing down the canisters on subnet_idx={} via the \
-             node they were installed through; health status and certified height of its nodes: \
-             {:?}",
+            "Subnet {} (subnet_idx={}) has no healthy node; health status and certified height \
+             of its nodes: {:?}",
             subnet.subnet_id,
             subnet_idx,
             statuses
@@ -632,11 +633,11 @@ async fn most_up_to_date_runtime(
     };
     info!(
         logger,
-        "Tearing down the canisters on subnet_idx={} via node {} of subnet {}; health status \
-         and certified height of its nodes: {:?}",
-        subnet_idx,
+        "Node {} is the most up-to-date healthy node of subnet {} (subnet_idx={}); health \
+         status and certified height of its nodes: {:?}",
         node.node_id,
         subnet.subnet_id,
+        subnet_idx,
         statuses
     );
     Some(runtime_from_url(
