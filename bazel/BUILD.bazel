@@ -165,10 +165,20 @@ BUILDIFIER_EXCLUDES = [
     "./.git/*",
 ]
 
+# Changes to buildifier's default set of lint warnings.
+BUILDIFIER_WARNINGS = [
+    # make-location flags every "$(location ...)" and "$(locations ...)". We
+    # still use them in many places, and they can't be replaced mechanically:
+    # depending on the rule and attribute that expands it, $(location ...)
+    # means $(execpath ...) or $(rootpath ...), so each use has to be checked.
+    "-make-location",
+]
+
 buildifier(
     name = "buildifier",
     exclude_patterns = BUILDIFIER_EXCLUDES,
     lint_mode = "fix",
+    lint_warnings = BUILDIFIER_WARNINGS,
     mode = "fix",
     visibility = ["//visibility:public"],
 )
@@ -177,6 +187,7 @@ buildifier(
     name = "buildifier.check",
     exclude_patterns = BUILDIFIER_EXCLUDES,
     lint_mode = "warn",
+    lint_warnings = BUILDIFIER_WARNINGS,
     mode = "diff",
     visibility = ["//visibility:public"],
 )
