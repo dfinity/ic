@@ -36,6 +36,11 @@ single_version_override(
 # configure/make dependencies
 bazel_dep(name = "rules_foreign_cc", version = "0.17.0")
 
+# Use the container's make and pkg-config instead of the ones rules_foreign_cc
+# builds by default from the make and pkgconf modules. The make and pkg-config
+# that older rules_foreign_cc releases bootstrapped weren't reproducible, see
+# https://github.com/bazel-contrib/rules_foreign_cc/issues/1313.
+# TODO: check whether the module-built ones are, and if so drop these.
 register_toolchains(
     "@rules_foreign_cc//toolchains:preinstalled_pkgconfig_toolchain",
     "@rules_foreign_cc//toolchains:preinstalled_make_toolchain",
