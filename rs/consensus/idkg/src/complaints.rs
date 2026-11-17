@@ -133,7 +133,6 @@ impl IDkgComplaintHandlerImpl {
                 block_reader,
                 active_transcripts,
                 &requested_transcripts,
-                complaint.idkg_complaint.transcript_id.source_height(),
                 &complaint.idkg_complaint.transcript_id,
             ) {
                 Action::Process(transcript) => {
@@ -224,7 +223,6 @@ impl IDkgComplaintHandlerImpl {
                 block_reader,
                 active_transcripts,
                 &requested_transcripts,
-                opening.idkg_opening.transcript_id.source_height(),
                 &opening.idkg_opening.transcript_id,
             ) {
                 Action::Process(transcript) => {
@@ -984,14 +982,13 @@ enum Action<'a> {
 }
 
 impl<'a> Action<'a> {
-    /// Decides the action to take on a received message with the given
-    /// height/transcriptId
+    /// Decides the action to take on a received message for the given
+    /// transcript
     #[allow(clippy::self_named_constructors)]
     fn action(
         block_reader: &'a dyn IDkgBlockReader,
         active_transcripts: &'a BTreeMap<IDkgTranscriptId, &IDkgTranscript>,
         requested_transcripts: &'a BTreeSet<IDkgTranscriptId>,
-        msg_height: Height,
         msg_transcript_id: &IDkgTranscriptId,
     ) -> Action<'a> {
         // Messages for active transcripts are processed regardless of their height:
@@ -1002,7 +999,7 @@ impl<'a> Action<'a> {
             return Action::Process(transcript);
         }
 
-        if msg_height > block_reader.tip_height() {
+        if msg_transcript_id.source_height() > block_reader.tip_height() {
             // Message is from a node ahead of us, keep it to be
             // processed later
             return Action::Defer;
@@ -1045,12 +1042,13 @@ mod tests {
     fn test_ecdsa_complaint_action() {
         let key_id = fake_ecdsa_idkg_master_public_key_id();
         let (id_1, id_2, id_3, id_4, id_5) = (
-            create_transcript_id(1),
-            create_transcript_id(2),
-            create_transcript_id(3),
-            create_transcript_id(4),
-            create_transcript_id(5),
+            create_transcript_id_with_height(1, Height::from(10)),
+            create_transcript_id_with_height(2, Height::from(20)),
+            create_transcript_id_with_height(3, Height::from(10)),
+            create_transcript_id_with_height(4, Height::from(20)),
+            create_transcript_id_with_height(5, Height::from(10)),
         );
+        let id_ahead = create_transcript_id_with_height(3, Height::from(200));
 
         let ref_1 = TranscriptRef::new(Height::new(10), id_1);
         let ref_2 = TranscriptRef::new(Height::new(20), id_2);
@@ -1071,45 +1069,39 @@ mod tests {
 
         // Message from a node ahead of us
         assert_eq!(
-            Action::action(&block_reader, &active, &requested, Height::from(200), &id_3),
+            Action::action(&block_reader, &active, &requested, &id_ahead),
             Action::Defer
         );
 
         // Messages for transcripts not currently active
         assert_eq!(
-            Action::action(&block_reader, &active, &requested, Height::from(10), &id_3),
+            Action::action(&block_reader, &active, &requested, &id_3),
             Action::Drop
         );
         assert_eq!(
-            Action::action(&block_reader, &active, &requested, Height::from(20), &id_4),
+            Action::action(&block_reader, &active, &requested, &id_4),
             Action::Drop
         );
 
         // Messages for transcripts not currently active but requested
         assert_eq!(
-            Action::action(&block_reader, &active, &requested, Height::from(10), &id_5),
+            Action::action(&block_reader, &active, &requested, &id_5),
             Action::Defer
         );
 
         // Messages for transcripts currently active
         assert_matches!(
-            Action::action(&block_reader, &active, &requested, Height::from(10), &id_1),
+            Action::action(&block_reader, &active, &requested, &id_1),
             Action::Process(_)
         );
         assert_matches!(
-            Action::action(&block_reader, &active, &requested, Height::from(20), &id_2),
+            Action::action(&block_reader, &active, &requested, &id_2),
             Action::Process(_)
         );
 
         // Messages for transcripts currently active that were created on another subnet
         assert_matches!(
-            Action::action(
-                &block_reader,
-                &active,
-                &requested,
-                xnet_id.source_height(),
-                &xnet_id
-            ),
+            Action::action(&block_reader, &active, &requested, &xnet_id),
             Action::Process(t) if t.transcript_id == xnet_id
         );
     }

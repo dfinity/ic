@@ -163,31 +163,15 @@ impl IDkgPreSignerImpl {
         // TranscriptId -> TranscriptParamsRef
         let transcript_param_map = self.requested_transcripts(block_reader);
 
-        let mut target_subnet_xnet_transcripts = BTreeSet::new();
-        for transcript_params_ref in block_reader.target_subnet_xnet_transcripts() {
-            target_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
-        }
-
         let dealings: Vec<_> = idkg_pool.unvalidated().signed_dealings().collect();
 
         let results = self.thread_pool.install(|| {
             dealings.into_par_iter().filter_map(|(id, signed_dealing)| {
                 let dealing = signed_dealing.idkg_dealing();
 
-                // Disable the height check on target subnet side for the initial transcripts.
-                // Since the transcript_id.source_height is from the source subnet, the height
-                // cannot be relied upon. This also lets us process the shares for the initial
-                // bootstrap with higher urgency, without deferring it.
-                let msg_height = if target_subnet_xnet_transcripts.contains(&dealing.transcript_id) {
-                    None
-                } else {
-                    Some(dealing.transcript_id.source_height())
-                };
-
                 match Action::action(
                     block_reader,
                     &transcript_param_map,
-                    msg_height,
                     &dealing.transcript_id,
                 ) {
                     Action::Process(transcript_params_ref) => {
@@ -385,11 +369,6 @@ impl IDkgPreSignerImpl {
             source_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
         }
 
-        let mut target_subnet_xnet_transcripts = BTreeSet::new();
-        for transcript_params_ref in block_reader.target_subnet_xnet_transcripts() {
-            target_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
-        }
-
         // Collect all unvalidated dealing support shares into a vector to be processed in parallel.
         // The vector is then evenly split between threads of the thread pool. Shares in the vector
         // are sorted by the IDkgTranscriptId. Therefore, this increases the chance of shares for the
@@ -407,20 +386,9 @@ impl IDkgPreSignerImpl {
                     ));
                 }
 
-                // Disable the height check on target subnet side for the initial transcripts.
-                // Since the transcript_id.source_height is from the source subnet, the height
-                // cannot be relied upon. This also lets us process the shares for the initial
-                // bootstrap with higher urgency, without deferring it.
-                let msg_height = if target_subnet_xnet_transcripts.contains(&support.transcript_id) {
-                    None
-                } else {
-                    Some(support.transcript_id.source_height())
-                };
-
                 match Action::action(
                     block_reader,
                     &transcript_param_map,
-                    msg_height,
                     &support.transcript_id,
                 ) {
                     Action::Process(transcript_params_ref) => {
@@ -1278,30 +1246,30 @@ enum Action<'a> {
 }
 
 impl<'a> Action<'a> {
-    /// Decides the action to take on a received message with the given
-    /// height/transcriptId
+    /// Decides the action to take on a received message for the given
+    /// transcript
     #[allow(clippy::self_named_constructors)]
     fn action(
         block_reader: &'a dyn IDkgBlockReader,
         requested_transcripts: &'a BTreeMap<IDkgTranscriptId, &'a IDkgTranscriptParamsRef>,
-        msg_height: Option<Height>,
         msg_transcript_id: &IDkgTranscriptId,
     ) -> Action<'a> {
-        if let Some(height) = msg_height
-            && height > block_reader.tip_height()
-        {
+        // Messages for requested transcripts are processed regardless of their height:
+        // the height of a transcript created on another subnet (e.g. a key transcript
+        // reshared to this subnet via xnet) is a height of that subnet, so it cannot be
+        // compared with our tip.
+        if let Some(transcript_params_ref) = requested_transcripts.get(msg_transcript_id) {
+            return Action::Process(transcript_params_ref);
+        }
+
+        if msg_transcript_id.source_height() > block_reader.tip_height() {
             // Message is from a node ahead of us, keep it to be
             // processed later
             return Action::Defer;
         }
 
-        match requested_transcripts.get(msg_transcript_id) {
-            Some(transcript_params_ref) => Action::Process(transcript_params_ref),
-            None => {
-                // Its for a transcript that has not been requested, drop it
-                Action::Drop
-            }
-        }
+        // It's for a transcript that has not been requested, drop it
+        Action::Drop
     }
 }
 
@@ -1389,7 +1357,7 @@ mod tests {
         crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHash},
         time::UNIX_EPOCH,
     };
-    use ic_types_test_utils::ids::node_test_id;
+    use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
     use std::collections::HashSet;
 
     impl IDkgPreSignerImpl {
@@ -1410,13 +1378,16 @@ mod tests {
     fn test_ecdsa_pre_signer_action() {
         let key_id = fake_ecdsa_idkg_master_public_key_id();
         let (id_1, id_2, id_3, id_4) = (
-            create_transcript_id(1),
-            create_transcript_id(2),
-            create_transcript_id(3),
-            create_transcript_id(4),
+            create_transcript_id_with_height(1, Height::from(100)),
+            create_transcript_id_with_height(2, Height::from(10)),
+            create_transcript_id_with_height(3, Height::from(10)),
+            create_transcript_id_with_height(4, Height::from(200)),
         );
+        // A transcript created on another subnet (e.g. a key transcript reshared via
+        // xnet), whose source height is a height of that subnet, far above our tip.
+        let xnet_id = IDkgTranscriptId::new(subnet_test_id(1), 5, Height::from(1_000_000));
 
-        // The finalized block requests transcripts 1, 2, 3
+        // The finalized block requests transcripts 1, 2, 3 and the xnet transcript
         let nodes = [NODE_1];
         let block_reader = TestIDkgBlockReader::for_pre_signer_test(
             Height::from(100),
@@ -1424,6 +1395,7 @@ mod tests {
                 create_transcript_param(&key_id, id_1, &nodes, &nodes),
                 create_transcript_param(&key_id, id_2, &nodes, &nodes),
                 create_transcript_param(&key_id, id_3, &nodes, &nodes),
+                create_transcript_param(&key_id, xnet_id, &nodes, &nodes),
             ],
         );
         let mut requested = BTreeMap::new();
@@ -1433,7 +1405,7 @@ mod tests {
 
         // Message from a node ahead of us
         assert_eq!(
-            Action::action(&block_reader, &requested, Some(Height::from(200)), &id_4),
+            Action::action(&block_reader, &requested, &id_4),
             Action::Defer
         );
 
@@ -1442,8 +1414,7 @@ mod tests {
             Action::action(
                 &block_reader,
                 &requested,
-                Some(Height::from(100)),
-                &create_transcript_id(234)
+                &create_transcript_id_with_height(234, Height::from(100))
             ),
             Action::Drop
         );
@@ -1451,18 +1422,21 @@ mod tests {
             Action::action(
                 &block_reader,
                 &requested,
-                Some(Height::from(10)),
-                &create_transcript_id(234)
+                &create_transcript_id_with_height(234, Height::from(10))
             ),
             Action::Drop
         );
 
         // Messages for transcripts currently requested
-        let action = Action::action(&block_reader, &requested, Some(Height::from(100)), &id_1);
+        let action = Action::action(&block_reader, &requested, &id_1);
         assert_matches!(action, Action::Process(_));
 
-        let action = Action::action(&block_reader, &requested, Some(Height::from(10)), &id_2);
+        let action = Action::action(&block_reader, &requested, &id_2);
         assert_matches!(action, Action::Process(_));
+
+        // Messages for requested transcripts that were created on another subnet
+        let action = Action::action(&block_reader, &requested, &xnet_id);
+        assert_matches!(action, Action::Process(t) if t.transcript_id == xnet_id);
     }
 
     // Tests that dealings are sent for new transcripts, and requests already
@@ -1733,8 +1707,9 @@ mod tests {
             create_transcript_id_with_height(4, Height::from(5)),
             // A dealing for a transcript that is not requested and references a future block height (deferred)
             create_transcript_id_with_height(5, Height::from(500)),
-            // A dealing for a XNet transcript that is requested and references a future block height (accepted)
-            create_transcript_id_with_height(6, Height::from(500)),
+            // A dealing for a XNet transcript that is requested and references a future block height
+            // of another subnet (accepted)
+            IDkgTranscriptId::new(subnet_test_id(1), 6, Height::from(500)),
         );
         let mut artifacts = vec![];
 
@@ -1760,38 +1735,13 @@ mod tests {
         let t2 = create_transcript_param(&key_id, id_2, &[NODE_2], &[NODE_1]);
         let t3 = create_transcript_param(&key_id, id_3, &[NODE_2], &[NODE_1]);
         let t6 = create_transcript_param(&key_id, id_6, &[NODE_2], &[NODE_1]);
-        let block_reader = TestIDkgBlockReader::for_pre_signer_test(
-            Height::from(100),
-            vec![t2, t3.clone(), t6.clone()],
-        );
+        let block_reader =
+            TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t2, t3, t6]);
 
-        // Validate dealings using `CryptoReturningOk`. Requested dealings should be moved to validated
+        // Validate dealings using `CryptoReturningOk`. Requested dealings (including those for
+        // XNet transcripts at future heights) should be moved to validated
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-
-                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
-
-                let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 3);
-                assert!(is_moved_to_validated(&change_set, msg_id_2));
-                assert!(is_moved_to_validated(&change_set, msg_id_3));
-                assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
-            })
-        });
-
-        // Validate dealings using `CryptoReturningOk`. Requested dealings should be moved to validated.
-        // Dealings for requested target subnet xnet transcripts (even for future heights) should also be validated.
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let block_reader = block_reader
-                    .clone()
-                    .with_target_subnet_xnet_transcripts(vec![
-                        t3.transcript_params_ref.clone(),
-                        t6.transcript_params_ref.clone(),
-                    ]);
-
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
 
@@ -1818,7 +1768,7 @@ mod tests {
                 let block_reader = block_reader.clone().with_fail_to_resolve();
 
                 let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 3);
+                assert_eq!(change_set.len(), 4);
                 assert!(is_handle_invalid(
                     &change_set,
                     msg_id_2,
@@ -1830,6 +1780,11 @@ mod tests {
                     "validate_dealings(): failed to translate transcript_params_ref"
                 ));
                 assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    msg_id_6,
+                    "validate_dealings(): failed to translate transcript_params_ref"
+                ));
             })
         });
 
@@ -1846,7 +1801,7 @@ mod tests {
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
                 let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 3);
+                assert_eq!(change_set.len(), 4);
                 assert!(is_handle_invalid(
                     &change_set,
                     msg_id_2,
@@ -1858,6 +1813,11 @@ mod tests {
                     "Dealing validation(permanent error)"
                 ));
                 assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    msg_id_6,
+                    "Dealing validation(permanent error)"
+                ));
             })
         });
 
