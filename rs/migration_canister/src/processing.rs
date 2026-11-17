@@ -13,9 +13,9 @@ use crate::{
     controller_recovery::controller_recovery,
     external_interfaces::{
         management::{
-            CanisterStatusType, assert_no_snapshots, canister_status, delete_canister,
-            get_canister_info, get_registry_version, rename_canister, set_controllers,
-            set_exclusive_controller,
+            CanisterStatusType, MigratedCanisterProperties, assert_no_snapshots, canister_metrics,
+            canister_status, delete_canister, get_canister_info, get_registry_version,
+            rename_canister, set_controllers, set_exclusive_controller,
         },
         registry::migrate_canister,
     },
@@ -192,6 +192,19 @@ pub async fn process_controllers_changed(
         });
     }
 
+    // Determine metrics of migrated canister
+    let canister_metrics = match canister_metrics(request.migrated_canister).await {
+        ProcessingResult::Success(m) => m,
+        ProcessingResult::FatalFailure(()) => {
+            return ProcessingResult::FatalFailure(RequestState::Failed {
+                request,
+                recovery_state: RecoveryState::new(),
+                reason: "Migrated canister has been deleted".to_string(),
+            });
+        }
+        ProcessingResult::NoProgress => return ProcessingResult::NoProgress,
+    };
+
     // Determine history length of migrated canister
     get_canister_info(request.migrated_canister)
         .await
@@ -200,6 +213,12 @@ pub async fn process_controllers_changed(
             stopped_since: time(),
             canister_version,
             canister_history_total_num: canister_info_result.total_num_changes,
+            migrated_canister_properties: Box::new(MigratedCanisterProperties {
+                canister_creation_timestamp: migrated_canister_status.canister_creation_timestamp,
+                log_memory_store_next_idx: migrated_canister_status.log_memory_store_next_idx,
+                canister_metrics,
+                query_stats: migrated_canister_status.query_stats.clone(),
+            }),
         })
         .map_failure(|()| RequestState::Failed {
             request,
@@ -219,6 +238,7 @@ pub async fn process_stopped(
         stopped_since,
         canister_version,
         canister_history_total_num,
+        migrated_canister_properties,
     } = request
     else {
         println!("Error: list_by StoppedAndReady returned bad variant");
@@ -230,6 +250,7 @@ pub async fn process_stopped(
         request.replaced_canister,
         request.replaced_canister_subnet,
         canister_history_total_num,
+        *migrated_canister_properties,
         request.caller,
     )
     .await

@@ -10,7 +10,7 @@ use ic_cdk_management_canister::{
     CanisterInfoArgs, CanisterInfoResult, ListCanisterSnapshotsArgs, canister_info,
     list_canister_snapshots,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{ValidationError, processing::ProcessingResult};
 
@@ -102,10 +102,21 @@ pub struct CanisterStatusResponse {
     pub status: CanisterStatusType,
     pub ready_for_migration: bool,
     pub version: u64,
+    pub canister_creation_timestamp: Option<u64>,
+    pub log_memory_store_next_idx: u64,
     pub settings: DefiniteCanisterSettingsArgs,
     pub cycles: candid::Nat,
     pub freezing_threshold: candid::Nat,
     pub reserved_cycles: candid::Nat,
+    pub query_stats: QueryStats,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct QueryStats {
+    pub num_calls_total: candid::Nat,
+    pub num_instructions_total: candid::Nat,
+    pub request_payload_bytes_total: candid::Nat,
+    pub response_payload_bytes_total: candid::Nat,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
@@ -197,6 +208,73 @@ pub async fn get_canister_info(canister_id: Principal) -> ProcessingResult<Canis
 }
 
 // ========================================================================= //
+// `canister_metrics`
+
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CyclesConsumed {
+    pub memory: candid::Nat,
+    pub compute_allocation: candid::Nat,
+    pub ingress_induction: candid::Nat,
+    pub instructions: candid::Nat,
+    pub request_and_response_transmission: candid::Nat,
+    pub uninstall: candid::Nat,
+    pub canister_creation: candid::Nat,
+    pub http_outcalls: candid::Nat,
+    pub burned_cycles: candid::Nat,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CanisterMetricsResult {
+    pub cycles_consumed: CyclesConsumed,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+struct CanisterMetricsArgs {
+    pub canister_id: Principal,
+}
+
+/// This is a success if the call is a success
+/// and a fatal failure if the canister does not exist.
+/// Otherwise, this function returns no progress.
+pub async fn canister_metrics(
+    canister_id: Principal,
+) -> ProcessingResult<CanisterMetricsResult, ()> {
+    let args = CanisterMetricsArgs { canister_id };
+
+    match Call::bounded_wait(Principal::management_canister(), "canister_metrics")
+        .with_arg(args)
+        .await
+    {
+        Ok(response) => match response.candid::<CanisterMetricsResult>() {
+            Ok(canister_metrics) => ProcessingResult::Success(canister_metrics),
+            Err(e) => {
+                println!(
+                    "Decoding `CanisterMetricsResult` for canister: {} failed: {:?}",
+                    canister_id, e
+                );
+                ProcessingResult::NoProgress
+            }
+        },
+        Err(e) => {
+            println!(
+                "Call `canister_metrics` for canister: {} failed: {:?}",
+                canister_id, e
+            );
+            match e {
+                CallFailed::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::FatalFailure(())
+                    } else {
+                        ProcessingResult::NoProgress
+                    }
+                }
+                _ => ProcessingResult::NoProgress,
+            }
+        }
+    }
+}
+
+// ========================================================================= //
 // `rename_canister`
 
 #[derive(Clone, Debug, Deserialize, CandidType, PartialEq)]
@@ -207,11 +285,28 @@ pub struct RenameCanisterArgs {
     pub sender_canister_version: u64,
 }
 
+/// The properties of the migrated canister that the replaced canister adopts
+/// together with its ID.
 #[derive(Clone, Debug, Deserialize, CandidType, PartialEq)]
 pub struct RenameToArgs {
     pub canister_id: Principal,
     pub version: u64,
     pub total_num_changes: u64,
+    pub canister_creation_timestamp: Option<u64>,
+    pub log_memory_store_next_idx: u64,
+    pub canister_metrics: CanisterMetricsResult,
+    pub query_stats: QueryStats,
+}
+
+/// The properties of the migrated canister that are read from the management
+/// canister while the request is being processed and proxied to
+/// `rename_canister` once the replaced canister is ready to adopt them.
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct MigratedCanisterProperties {
+    pub canister_creation_timestamp: Option<u64>,
+    pub log_memory_store_next_idx: u64,
+    pub canister_metrics: CanisterMetricsResult,
+    pub query_stats: QueryStats,
 }
 
 /// This is a success if the call is a success or the replaced canister does not exist,
@@ -222,14 +317,25 @@ pub async fn rename_canister(
     replaced_canister: Principal,
     replaced_canister_subnet: Principal,
     total_num_changes: u64,
+    migrated_canister_properties: MigratedCanisterProperties,
     requested_by: Principal,
 ) -> ProcessingResult<(), Infallible> {
+    let MigratedCanisterProperties {
+        canister_creation_timestamp,
+        log_memory_store_next_idx,
+        canister_metrics,
+        query_stats,
+    } = migrated_canister_properties;
     let args = RenameCanisterArgs {
         canister_id: replaced_canister,
         rename_to: RenameToArgs {
             canister_id: migrated_canister,
             version: migrated_canister_version,
             total_num_changes,
+            canister_creation_timestamp,
+            log_memory_store_next_idx,
+            canister_metrics,
+            query_stats,
         },
         requested_by,
         sender_canister_version: canister_version(),

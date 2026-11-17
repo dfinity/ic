@@ -12,6 +12,7 @@ use strum_macros::Display;
 use crate::{
     canister_state::{limiter::num_successes_in_past_24_h, requests::num_requests},
     controller_recovery::ControllerRecoveryState,
+    external_interfaces::management::MigratedCanisterProperties,
     processing::{
         process_accepted, process_all_by_predicate, process_all_failed, process_all_succeeded,
         process_controllers_changed, process_migrated_canister_deleted, process_renamed,
@@ -233,17 +234,25 @@ pub enum RequestState {
     ///     * Replaced canister has no snapshots.
     ///     * Replaced canister has sufficient cycles above the freezing threshold.
     ///     * Migrated canister version is not absurdly high.
+    ///     * Migrated canister creation timestamp, log record index and query stats.
     /// * Called mgmt `canister_info` to determine the history length of migrated canister.
+    /// * Called mgmt `canister_metrics` to determine the metrics of migrated canister.
     ///
-    /// Record the canister version and history length of migrated canister and the current time.
+    /// Record the canister version and history length of migrated canister, the properties
+    /// it hands over to the replaced canister, and the current time. The version, history
+    /// length and properties are proxied to mgmt `rename_canister` so that the replaced
+    /// canister adopts them together with the ID of the migrated canister.
     #[strum(
-        to_string = "RequestState::StoppedAndReady {{ request: {request}, stopped_since: {stopped_since}, canister_version: {canister_version}, canister_history_total_num: {canister_history_total_num} }}"
+        to_string = "RequestState::StoppedAndReady {{ request: {request}, stopped_since: {stopped_since}, canister_version: {canister_version}, canister_history_total_num: {canister_history_total_num}, migrated_canister_properties: {migrated_canister_properties:?} }}"
     )]
     StoppedAndReady {
         request: Request,
         stopped_since: u64,
         canister_version: u64,
         canister_history_total_num: u64,
+        // Boxed to keep the size of this variant (and thus of `RequestState`)
+        // close to that of the other variants.
+        migrated_canister_properties: Box<MigratedCanisterProperties>,
     },
 
     /// Called mgmt `rename_canister`. Subsequent mgmt calls have to use the explicit subnet ID, not `aaaaa-aa`.

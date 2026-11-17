@@ -3229,9 +3229,6 @@ impl ExecutionEnvironment {
         origin: CanisterChangeOrigin,
     ) -> Result<Vec<u8>, UserError> {
         let old_id = args.get_canister_id();
-        let new_id = args.rename_to.get_canister_id();
-        let to_version = args.rename_to.version;
-        let to_total_num_changes = args.rename_to.total_num_changes;
         let requested_by = args.requested_by();
 
         let resource_saturation = self.subnet_memory_saturation(
@@ -3257,9 +3254,7 @@ impl ExecutionEnvironment {
                 Arc::make_mut(&mut canister),
                 origin,
                 old_id,
-                new_id,
-                to_version,
-                to_total_num_changes,
+                args.rename_to,
                 requested_by,
                 state,
                 round_limits,
