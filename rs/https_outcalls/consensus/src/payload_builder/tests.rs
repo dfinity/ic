@@ -3,10 +3,10 @@
 //!
 //! Some tests are run over a range of subnet configurations to check for corner cases.
 
-use super::{CanisterHttpPayloadBuilderImpl, parse};
+use super::CanisterHttpPayloadBuilderImpl;
 use crate::payload_builder::{
     divergence_response_into_reject,
-    parse::{bytes_to_payload, payload_to_bytes},
+    parse::{PayloadMessage, bytes_to_payload, messages_to_bytes},
 };
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
@@ -50,7 +50,8 @@ use ic_types::{
     batch::{
         CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
         FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
-        MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext, slice_to_messages,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE, MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE,
+        ValidationContext, slice_to_messages,
     },
     canister_http::{
         CANDID_OVERHEAD_RESERVE_BYTES, CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
@@ -89,7 +90,7 @@ const TEST_MAX_PAYLOAD_BYTES: NumBytes = NumBytes::new(2 * MAX_CANISTER_HTTP_PAY
 
 #[test]
 fn default_payload_serializes_to_empty_vec() {
-    let bytes = parse::payload_to_bytes(
+    let bytes = payload_to_bytes(
         CanisterHttpPayload::default(),
         NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
     );
@@ -2336,8 +2337,9 @@ fn flexible_build_delivers_ok_with_fewer_than_max_when_size_limited() {
     let max = 4_u32;
 
     setup_test_with_flexible_context(num_nodes, callback_id, committee, min, max, |pb, pool| {
-        // For responses just under half of MAX_CANISTER_HTTP_PAYLOAD_SIZE, only exactly 2 fit.
-        let content_size = MAX_CANISTER_HTTP_PAYLOAD_SIZE / 2 - 1000;
+        // For responses just under half of MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE, only
+        // exactly 2 fit.
+        let content_size = MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE / 2 - 1000;
         {
             let mut pool_access = pool.write().unwrap();
             for node_idx in 0..num_nodes as u64 {
@@ -2355,6 +2357,81 @@ fn flexible_build_delivers_ok_with_fewer_than_max_when_size_limited() {
         assert_eq!(parsed.flexible_responses.len(), 1);
         assert_eq!(parsed.flexible_responses[0].responses.len(), 2);
     });
+}
+
+/// The responses a flexible outcall delivers must be within
+/// `MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE`, even where they would fit into the payload.
+#[test]
+fn flexible_responses_over_the_group_limit_are_too_large() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 2, |pb, pool| {
+        // Any two of the responses exceed the limit, but not the payload.
+        let content = vec![0xAB; MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE / 2 + 1000];
+        add_flexible_ok_shares(&pool, callback_id, 0..num_nodes as u64, &content);
+
+        let parsed = build_and_validate_and_parse_payload(&pb);
+
+        assert!(parsed.flexible_responses.is_empty());
+        assert_matches!(
+            parsed.flexible_errors.as_slice(),
+            [FlexibleCanisterHttpError::ResponsesTooLarge { callback_id: id, .. }]
+                if *id == callback_id
+        );
+    });
+}
+
+/// Messages are serialized in the order in which they are selected, by callback id, so
+/// that a message can only be crowded out of the payload by those selected before it.
+#[test]
+fn payload_messages_are_serialized_in_the_order_selected() {
+    use pb::canister_http_response_message::MessageType;
+
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let flexible_cb = CallbackId::from(1);
+    let regular_cb = CallbackId::from(2);
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![
+            (flexible_cb, flexible_request_context(committee, 1, 1)),
+            (regular_cb, request_context(Replication::FullyReplicated)),
+        ],
+        |payload_builder, pool| {
+            add_flexible_shares_to_pool(&pool, flexible_cb, 0..num_nodes as u64);
+            {
+                let mut pool_access = pool.write().unwrap();
+                let (response, metadata) = test_response_and_metadata(regular_cb.get());
+                let shares = metadata_to_shares(num_nodes, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                add_received_shares_to_pool(pool_access.deref_mut(), shares[1..].to_vec());
+            }
+
+            let context = default_validation_context();
+            let payload = payload_builder.build_payload(
+                Height::new(1),
+                NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
+                &[],
+                &context,
+            );
+
+            let callback_ids: Vec<_> =
+                slice_to_messages::<pb::CanisterHttpResponseMessage>(&payload)
+                    .unwrap()
+                    .into_iter()
+                    .map(|message| match message.message_type {
+                        Some(MessageType::FlexibleResponses(group)) => group.callback_id,
+                        Some(MessageType::Response(response)) => response.response.unwrap().id,
+                        other => panic!("unexpected message {other:?}"),
+                    })
+                    .collect();
+            // The older flexible group comes first, ahead of the plain response.
+            assert_eq!(callback_ids, vec![flexible_cb.get(), regular_cb.get()]);
+        },
+    );
 }
 
 #[test]
@@ -8323,6 +8400,43 @@ fn build_and_validate_and_parse_payload_with_context(
         Ok(())
     );
     bytes_to_payload(&payload).expect("parse error")
+}
+
+/// Serializes the payload, one message type after the other.
+fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes) -> Vec<u8> {
+    let CanisterHttpPayload {
+        timeouts,
+        divergence_responses,
+        out_of_cycles,
+        responses,
+        flexible_responses,
+        flexible_errors,
+        async_receipts,
+    } = payload;
+
+    let messages = timeouts
+        .into_iter()
+        .map(PayloadMessage::Timeout)
+        .chain(
+            divergence_responses
+                .into_iter()
+                .map(PayloadMessage::Divergence),
+        )
+        .chain(responses.into_iter().map(PayloadMessage::Response))
+        .chain(
+            flexible_responses
+                .into_iter()
+                .map(PayloadMessage::FlexibleResponses),
+        )
+        .chain(
+            flexible_errors
+                .into_iter()
+                .map(PayloadMessage::FlexibleError),
+        )
+        .chain(out_of_cycles.into_iter().map(PayloadMessage::OutOfCycles))
+        .chain(async_receipts.into_iter().map(PayloadMessage::AsyncReceipt));
+
+    messages_to_bytes(messages, max_size)
 }
 
 fn payload_to_bytes_max_4mb(payload: CanisterHttpPayload) -> Vec<u8> {

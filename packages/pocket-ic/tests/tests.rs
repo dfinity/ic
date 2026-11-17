@@ -2636,9 +2636,9 @@ fn test_flexible_canister_http_responses_too_large() {
 
     // Both responses are well below the 2 MB cap on a single response
     // (`MAX_CANISTER_HTTP_RESPONSE_BYTES`), but the two of them together exceed the
-    // 2 MiB a block has for HTTP outcall responses
-    // (`MAX_CANISTER_HTTP_PAYLOAD_SIZE`), and both of them have to be delivered
-    // (`min_responses == 2`).
+    // 2 MiB − 64 KiB a block delivers for one flexible outcall
+    // (`MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE`), and both of them have to be
+    // delivered (`min_responses == 2`).
     let body = vec![b'x'; 1_100_000];
     mock_committee(&pic, &request, vec![reply(&body); 2]);
 
@@ -2651,7 +2651,7 @@ fn test_flexible_canister_http_responses_too_large() {
     // details report the size of every response the committee was seen to produce.
     assert!(
         err.message.starts_with(
-            "Responses too large: need at least 2 OK responses to fit within 2097152 bytes"
+            "Responses too large: need at least 2 OK responses to fit within 2031616 bytes"
         ),
         "unexpected message {:?}",
         err.message
