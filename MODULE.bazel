@@ -11,7 +11,7 @@ register_toolchains("@rules_buf_toolchains//:all")
 
 # General Bazel helpers
 bazel_dep(name = "bazel_skylib", version = "1.9.0")
-bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
+bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 bazel_dep(name = "rules_shell", version = "0.6.1")
 
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
@@ -177,7 +177,7 @@ use_repo(
 #   2nd PR: add it below
 
 bazel_dep(name = "rules_pkg", version = "1.0.1")
-bazel_dep(name = "rules_oci", version = "2.0.0")
+bazel_dep(name = "rules_oci", version = "2.3.5")
 
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 
