@@ -34,8 +34,8 @@ use ic_test_utilities_execution_environment::{
     get_reject, get_reply,
 };
 use ic_test_utilities_metrics::{
-    HistogramStats, fetch_histogram_stats, fetch_histogram_vec_count, fetch_histogram_vec_stats,
-    fetch_int_counter_vec, metric_vec, nonzero_values,
+    HistogramStats, fetch_histogram_vec_count, fetch_histogram_vec_stats, fetch_int_counter_vec,
+    metric_vec, nonzero_values,
 };
 use ic_types::{
     CanisterId, CountBytes, NumInstructions, PrincipalId, RegistryVersion,
@@ -6180,7 +6180,7 @@ fn test_schnorr_public_key_api_is_enabled() {
 }
 
 #[test]
-fn threshold_public_key_derivation_path_metrics() {
+fn derivation_path_metrics() {
     let ecdsa_key_id = make_ecdsa_key("correct_key");
     let schnorr_key_id = make_bip340_key("correct_key");
     let own_subnet = subnet_test_id(1);
@@ -6203,7 +6203,7 @@ fn threshold_public_key_derivation_path_metrics() {
         )
     };
 
-    // ECDSA: one call with 3 elements of 1 + 29 + 32 = 62 bytes
+    // `ecdsa_public_key`: one call with 3 elements of 1 + 29 + 32 = 62 bytes
     // and one call with 2 elements of 0 + 10 = 10 bytes.
     for derivation_path in [
         path(vec![vec![1], vec![2; 29], vec![3; 32]]),
@@ -6220,13 +6220,36 @@ fn threshold_public_key_derivation_path_metrics() {
             Cycles::new(0),
         );
     }
-    // Schnorr: one call with an empty derivation path.
+    // `schnorr_public_key`: one call with an empty derivation path.
     test.inject_call_to_ic00(
         Method::SchnorrPublicKey,
         ic00::SchnorrPublicKeyArgs {
             canister_id: None,
             derivation_path: DerivationPath::default(),
+            key_id: into_inner_schnorr(schnorr_key_id.clone()),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
+    // `sign_with_ecdsa`: one call with 1 element of 5 bytes.
+    test.inject_call_to_ic00(
+        Method::SignWithECDSA,
+        ic00::SignWithECDSAArgs {
+            message_hash: [1; 32],
+            derivation_path: path(vec![vec![5; 5]]),
+            key_id: into_inner_ecdsa(ecdsa_key_id.clone()),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
+    // `sign_with_schnorr`: one call with 3 elements of 0 + 7 + 3 = 10 bytes.
+    test.inject_call_to_ic00(
+        Method::SignWithSchnorr,
+        ic00::SignWithSchnorrArgs {
+            message: vec![6; 32],
+            derivation_path: path(vec![vec![], vec![7; 7], vec![8; 3]]),
             key_id: into_inner_schnorr(schnorr_key_id),
+            aux: None,
         }
         .encode(),
         Cycles::new(0),
@@ -6237,51 +6260,71 @@ fn threshold_public_key_derivation_path_metrics() {
         Method::SchnorrPublicKey,
         ic00::SchnorrPublicKeyArgs {
             canister_id: None,
-            derivation_path: path(vec![vec![5; 100]]),
+            derivation_path: path(vec![vec![9; 100]]),
             key_id: into_inner_schnorr(make_bip340_key("nonexistent_key_id")),
         }
         .encode(),
         Cycles::new(0),
     );
+    test.inject_call_to_ic00(
+        Method::SignWithECDSA,
+        ic00::SignWithECDSAArgs {
+            message_hash: [1; 32],
+            derivation_path: path(vec![vec![9; 100]]),
+            key_id: into_inner_ecdsa(make_ecdsa_key("nonexistent_key_id")),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
     test.execute_all();
-    assert_eq!(test.xnet_messages().len(), 4);
+    // The public key calls and the calls for a nonexistent key are answered immediately
+    // while the signing calls are still processing (i.e., they were not rejected).
+    assert_eq!(test.xnet_messages().len(), 5);
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_threshold_contexts_count(&ecdsa_key_id),
+        1
+    );
 
-    let expected = |ecdsa: (u64, f64), schnorr: (u64, f64)| {
-        metric_vec(&[
-            (
-                &[("method_name", "ic00_ecdsa_public_key")],
-                HistogramStats {
-                    count: ecdsa.0,
-                    sum: ecdsa.1,
-                },
-            ),
-            (
-                &[("method_name", "ic00_schnorr_public_key")],
-                HistogramStats {
-                    count: schnorr.0,
-                    sum: schnorr.1,
-                },
-            ),
-        ])
+    let expected = |stats: [(&str, u64, f64); 4]| {
+        let labels = stats.map(|(method_name, _, _)| [("method_name", method_name)]);
+        let entries: Vec<_> = labels
+            .iter()
+            .zip(stats)
+            .map(|(labels, (_, count, sum))| (&labels[..], HistogramStats { count, sum }))
+            .collect();
+        metric_vec(&entries)
     };
     assert_eq!(
         fetch_histogram_vec_stats(
             test.metrics_registry(),
-            "execution_threshold_public_key_derivation_path_length"
+            "execution_threshold_derivation_path_length"
         ),
-        expected((2, 5.0), (1, 0.0))
+        expected([
+            ("ic00_ecdsa_public_key", 2, 5.0),
+            ("ic00_schnorr_public_key", 1, 0.0),
+            ("ic00_sign_with_ecdsa", 1, 1.0),
+            ("ic00_sign_with_schnorr", 1, 3.0),
+        ])
     );
     assert_eq!(
         fetch_histogram_vec_stats(
             test.metrics_registry(),
-            "execution_threshold_public_key_derivation_path_bytes"
+            "execution_threshold_derivation_path_bytes"
         ),
-        expected((2, 72.0), (1, 0.0))
+        expected([
+            ("ic00_ecdsa_public_key", 2, 72.0),
+            ("ic00_schnorr_public_key", 1, 0.0),
+            ("ic00_sign_with_ecdsa", 1, 5.0),
+            ("ic00_sign_with_schnorr", 1, 10.0),
+        ])
     );
 }
 
 #[test]
-fn vetkd_public_key_context_metrics() {
+fn vetkd_context_metrics() {
     let key_id = make_vetkd_key("correct_key");
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
@@ -6293,7 +6336,7 @@ fn vetkd_public_key_context_metrics() {
         .with_chain_key(key_id.clone())
         .build();
 
-    // Two calls with contexts of 0 + 32 = 32 bytes.
+    // `vetkd_public_key`: two calls with contexts of 0 + 32 = 32 bytes.
     for context in [vec![], vec![1; 32]] {
         test.inject_call_to_ic00(
             Method::VetKdPublicKey,
@@ -6306,30 +6349,60 @@ fn vetkd_public_key_context_metrics() {
             Cycles::new(0),
         );
     }
+    // `vetkd_derive_key`: one call with a context of 20 bytes.
+    let mut derive_key_args = ic00::VetKdDeriveKeyArgs::decode(&sign_with_threshold_key_payload(
+        Method::VetKdDeriveKey,
+        key_id.clone(),
+    ))
+    .unwrap();
+    derive_key_args.context = vec![2; 20];
+    test.inject_call_to_ic00(
+        Method::VetKdDeriveKey,
+        derive_key_args.encode(),
+        Cycles::new(0),
+    );
     // Calls for a key that the subnet does not hold are rejected before
     // the derivation and thus not observed.
     test.inject_call_to_ic00(
         Method::VetKdPublicKey,
         ic00::VetKdPublicKeyArgs {
             canister_id: None,
-            context: vec![2; 100],
+            context: vec![3; 100],
             key_id: into_inner_vetkd(make_vetkd_key("nonexistent_key_id")),
         }
         .encode(),
         Cycles::new(0),
     );
     test.execute_all();
+    // The public key calls and the call for a nonexistent key are answered immediately
+    // while the `vetkd_derive_key` call is still processing (i.e., it was not rejected).
     assert_eq!(test.xnet_messages().len(), 3);
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_threshold_contexts_count(&key_id),
+        1
+    );
 
     assert_eq!(
-        fetch_histogram_stats(
-            test.metrics_registry(),
-            "execution_vetkd_public_key_context_bytes"
-        ),
-        Some(HistogramStats {
-            count: 2,
-            sum: 32.0
-        })
+        fetch_histogram_vec_stats(test.metrics_registry(), "execution_vetkd_context_bytes"),
+        metric_vec(&[
+            (
+                &[("method_name", "ic00_vetkd_public_key")],
+                HistogramStats {
+                    count: 2,
+                    sum: 32.0
+                },
+            ),
+            (
+                &[("method_name", "ic00_vetkd_derive_key")],
+                HistogramStats {
+                    count: 1,
+                    sum: 20.0
+                },
+            ),
+        ])
     );
 }
 

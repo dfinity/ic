@@ -30,14 +30,39 @@ pub const CRITICAL_ERROR_CALL_ID_WITHOUT_INSTALL_CODE_CALL: &str =
     "execution_environment_call_id_without_install_code_call";
 
 /// Management canister methods whose derivation paths are observed by
-/// `ExecutionEnvironmentMetrics::observe_threshold_public_key_derivation_path`.
-const THRESHOLD_PUBLIC_KEY_METHODS: [ic00::Method; 2] =
-    [ic00::Method::ECDSAPublicKey, ic00::Method::SchnorrPublicKey];
+/// `ExecutionEnvironmentMetrics::observe_derivation_path`.
+const DERIVATION_PATH_METHODS: [ic00::Method; 4] = [
+    ic00::Method::ECDSAPublicKey,
+    ic00::Method::SchnorrPublicKey,
+    ic00::Method::SignWithECDSA,
+    ic00::Method::SignWithSchnorr,
+];
+
+/// Management canister methods whose vetKD contexts are observed by
+/// `ExecutionEnvironmentMetrics::observe_vetkd_context`.
+const VETKD_CONTEXT_METHODS: [ic00::Method; 2] =
+    [ic00::Method::VetKdPublicKey, ic00::Method::VetKdDeriveKey];
 
 /// Returns the `method_name` label value of a management canister method,
 /// e.g., `ic00_ecdsa_public_key`.
 fn method_name_label(method: ic00::Method) -> String {
     format!("ic00_{method}")
+}
+
+/// Creates a histogram vector with a single `method_name` label and initializes
+/// the time series for the given management canister methods.
+fn method_name_histogram_vec(
+    metrics_registry: &MetricsRegistry,
+    name: &str,
+    help: &str,
+    buckets: Vec<f64>,
+    methods: &[ic00::Method],
+) -> HistogramVec {
+    let histogram = metrics_registry.histogram_vec(name, help, buckets, &["method_name"]);
+    for method in methods {
+        histogram.with_label_values(&[&method_name_label(*method)]);
+    }
+    histogram
 }
 
 /// Metrics used to monitor the performance of the execution environment.
@@ -46,14 +71,15 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     pub(crate) canister_log_resize_duration: Histogram,
     pub executions_aborted: IntCounter,
     pub(crate) call_durations: Histogram,
-    /// Number of elements in the derivation path of threshold public key calls
-    /// (`ecdsa_public_key` and `schnorr_public_key`), by method name.
-    threshold_public_key_derivation_path_length: HistogramVec,
+    /// Number of elements in the derivation path of threshold ECDSA and Schnorr calls
+    /// (see `DERIVATION_PATH_METHODS`), by method name.
+    derivation_path_length: HistogramVec,
     /// Total number of bytes in the elements of the derivation path of threshold
-    /// public key calls (`ecdsa_public_key` and `schnorr_public_key`), by method name.
-    threshold_public_key_derivation_path_bytes: HistogramVec,
-    /// Number of bytes in the context of `vetkd_public_key` calls.
-    pub(crate) vetkd_public_key_context_bytes: Histogram,
+    /// ECDSA and Schnorr calls (see `DERIVATION_PATH_METHODS`), by method name.
+    derivation_path_bytes: HistogramVec,
+    /// Number of bytes in the context of vetKD calls (see `VETKD_CONTEXT_METHODS`),
+    /// by method name.
+    vetkd_context_bytes: HistogramVec,
 
     /// Critical error for responses above the maximum allowed size.
     pub(crate) response_cycles_refund_error: IntCounter,
@@ -135,39 +161,31 @@ impl ExecutionEnvironmentMetrics {
                 // Buckets: 0s, 0.1s, 0.2s, 0.5s, ..., 5M seconds
                 decimal_buckets_with_zero(-1, 6),
             ),
-            threshold_public_key_derivation_path_length: {
-                let histogram = metrics_registry.histogram_vec(
-                    "execution_threshold_public_key_derivation_path_length",
-                    "Number of elements in the derivation path of threshold public key calls.",
-                    // Buckets: 0, 1, 2, 5, ..., 100, 200, 500 (at most 254 elements are allowed).
-                    decimal_buckets_with_zero(0, 2),
-                    &["method_name"],
-                );
-                for method in THRESHOLD_PUBLIC_KEY_METHODS {
-                    histogram.with_label_values(&[&method_name_label(method)]);
-                }
-                histogram
-            },
-            threshold_public_key_derivation_path_bytes: {
-                let histogram = metrics_registry.histogram_vec(
-                    "execution_threshold_public_key_derivation_path_bytes",
-                    "Total number of bytes in the elements of the derivation path of threshold public key calls.",
-                    // Buckets: 0B, 1B, 2B, 5B, ..., 10MB, 20MB, 50MB (requests on the same
-                    // subnet can be up to 10 MiB).
-                    decimal_buckets_with_zero(0, 7),
-                    &["method_name"],
-                );
-                for method in THRESHOLD_PUBLIC_KEY_METHODS {
-                    histogram.with_label_values(&[&method_name_label(method)]);
-                }
-                histogram
-            },
-            vetkd_public_key_context_bytes: metrics_registry.histogram(
-                "execution_vetkd_public_key_context_bytes",
-                "Number of bytes in the context of vetkd_public_key calls.",
+            derivation_path_length: method_name_histogram_vec(
+                metrics_registry,
+                "execution_threshold_derivation_path_length",
+                "Number of elements in the derivation path of threshold ECDSA and Schnorr calls.",
+                // Buckets: 0, 1, 2, 5, ..., 100, 200, 500 (at most 254 elements are allowed).
+                decimal_buckets_with_zero(0, 2),
+                &DERIVATION_PATH_METHODS,
+            ),
+            derivation_path_bytes: method_name_histogram_vec(
+                metrics_registry,
+                "execution_threshold_derivation_path_bytes",
+                "Total number of bytes in the elements of the derivation path of threshold ECDSA and Schnorr calls.",
                 // Buckets: 0B, 1B, 2B, 5B, ..., 10MB, 20MB, 50MB (requests on the same
                 // subnet can be up to 10 MiB).
                 decimal_buckets_with_zero(0, 7),
+                &DERIVATION_PATH_METHODS,
+            ),
+            vetkd_context_bytes: method_name_histogram_vec(
+                metrics_registry,
+                "execution_vetkd_context_bytes",
+                "Number of bytes in the context of vetKD calls.",
+                // Buckets: 0B, 1B, 2B, 5B, ..., 10MB, 20MB, 50MB (requests on the same
+                // subnet can be up to 10 MiB).
+                decimal_buckets_with_zero(0, 7),
+                &VETKD_CONTEXT_METHODS,
             ),
             response_cycles_refund_error: metrics_registry
                 .error_counter(CRITICAL_ERROR_RESPONSE_CYCLES_REFUND),
@@ -316,19 +334,28 @@ impl ExecutionEnvironmentMetrics {
     }
 
     /// Observes the number of elements and the total number of bytes
-    /// in the derivation path of a threshold public key call.
-    pub(crate) fn observe_threshold_public_key_derivation_path(
+    /// in the derivation path of a threshold ECDSA or Schnorr call.
+    pub(crate) fn observe_derivation_path(
         &self,
         method: ic00::Method,
         derivation_path: &[Vec<u8>],
     ) {
+        debug_assert!(DERIVATION_PATH_METHODS.contains(&method));
         let method_name = method_name_label(method);
-        self.threshold_public_key_derivation_path_length
+        self.derivation_path_length
             .with_label_values(&[&method_name])
             .observe(derivation_path.len() as f64);
-        self.threshold_public_key_derivation_path_bytes
+        self.derivation_path_bytes
             .with_label_values(&[&method_name])
             .observe(derivation_path.iter().map(Vec::len).sum::<usize>() as f64);
+    }
+
+    /// Observes the number of bytes in the context of a vetKD call.
+    pub(crate) fn observe_vetkd_context(&self, method: ic00::Method, context_bytes: usize) {
+        debug_assert!(VETKD_CONTEXT_METHODS.contains(&method));
+        self.vetkd_context_bytes
+            .with_label_values(&[&method_name_label(method)])
+            .observe(context_bytes as f64);
     }
 
     pub(crate) fn observe_http_outcall_delivered(

@@ -3857,7 +3857,7 @@ impl ExecutionEnvironment {
         derivation_path: Vec<Vec<u8>>,
     ) -> Result<PublicKey, UserError> {
         self.metrics
-            .observe_threshold_public_key_derivation_path(method, &derivation_path);
+            .observe_derivation_path(method, &derivation_path);
         derive_threshold_public_key(
             subnet_public_key,
             ExtendedDerivationPath {
@@ -3875,8 +3875,7 @@ impl ExecutionEnvironment {
         context: Vec<u8>,
     ) -> Result<Vec<u8>, UserError> {
         self.metrics
-            .vetkd_public_key_context_bytes
-            .observe(context.len() as f64);
+            .observe_vetkd_context(Ic00Method::VetKdPublicKey, context.len());
         if subnet_public_key.algorithm_id != ic_types::crypto::AlgorithmId::VetKD {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
@@ -3980,6 +3979,19 @@ impl ExecutionEnvironment {
         max_queue_size_registry: u32,
         state: &mut ReplicatedState,
     ) -> Result<(), UserError> {
+        match &args {
+            ThresholdArguments::Ecdsa(_) => self
+                .metrics
+                .observe_derivation_path(Ic00Method::SignWithECDSA, &derivation_path),
+            ThresholdArguments::Schnorr(_) => self
+                .metrics
+                .observe_derivation_path(Ic00Method::SignWithSchnorr, &derivation_path),
+            // The derivation path of a vetKD call consists of its context only.
+            ThresholdArguments::VetKd(_) => self.metrics.observe_vetkd_context(
+                Ic00Method::VetKdDeriveKey,
+                derivation_path.iter().map(Vec::len).sum(),
+            ),
+        }
         if let ThresholdArguments::Schnorr(schnorr) = &args {
             let alg = schnorr.key_id.algorithm;
             match (alg, &schnorr.taproot_tree_root) {
