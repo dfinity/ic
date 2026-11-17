@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "eb44a59d804ba333a44a21fca501bae2682a57ca10706d8957275b785e859582",
+  "checksum": "1b3c0d4a27380cfeed1948628234fc02297280feb8969e56ffc684e84ecf01be",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -17238,10 +17238,6 @@
           {
             "id": "build-info-build 0.0.45",
             "target": "build_info_build"
-          },
-          {
-            "id": "byteorder 1.5.0",
-            "target": "byteorder"
           },
           {
             "id": "bytes 1.12.1",
@@ -66886,7 +66882,6 @@
     "bs58 0.5.1",
     "build-info 0.0.45",
     "build-info-build 0.0.45",
-    "byteorder 1.5.0",
     "bytes 1.12.1",
     "canbench-rs 0.7.0",
     "candid 0.10.37",
