@@ -27,58 +27,58 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     #[clap(long, required = true, alias = "subnet-id")]
     pub subnet: SubnetDescriptor,
 
-    #[clap(long)]
     /// If set, the created proposal will contain a desired override of that
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
     /// of this field.
+    #[clap(long)]
     pub max_ingress_bytes_per_message: Option<u64>,
 
-    #[clap(long)]
     /// If set, the created proposal will contain a desired override of that
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
     /// of this field.
+    #[clap(long)]
     pub max_ingress_bytes_per_block: Option<u64>,
 
-    #[clap(long)]
     /// If set, the created proposal will contain a desired override of that
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
     /// of this field.
+    #[clap(long)]
     pub max_ingress_messages_per_block: Option<u64>,
 
-    #[clap(long)]
     /// If set, the created proposal will contain a desired override of that
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
     /// of this field.
+    #[clap(long)]
     pub max_block_payload_size: Option<u64>,
 
-    #[clap(long)]
     /// If set, the created proposal will contain a desired override of that
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
     /// of this field.
+    #[clap(long)]
     pub unit_delay_millis: Option<u64>,
 
-    #[clap(long)]
     /// If set, the created proposal will contain a desired override of that
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
     /// of this field.
+    #[clap(long)]
     pub initial_notary_delay_millis: Option<u64>,
 
-    #[clap(long)]
     /// If set, the created proposal will contain a desired override of that
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
     /// of this field.
+    #[clap(long)]
     pub dkg_interval_length: Option<u64>,
 
-    #[clap(long)]
     /// If set, the created proposal will contain a desired override of that
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
     /// of this field.
+    #[clap(long)]
     pub dkg_dealings_per_block: Option<u64>,
 
-    #[clap(long)]
     /// If set, the created proposal will contain a desired override of that
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
     /// of this field.
+    #[clap(long)]
     pub start_as_nns: Option<bool>,
 
     /// If set, the subnet will be halted: it will no longer create or execute
@@ -97,7 +97,6 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     #[clap(long)]
     pub cooling_down: Option<bool>,
 
-    #[clap(long)]
     /// Configuration for chain key:
     /// The key configurations to be added to (or edited) for this subnet. If a key configuration
     /// is new for the specified subnet, it must also not already exist on the IC.
@@ -127,22 +126,23 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     ///     }
     /// ]'
     /// ```
+    #[clap(long)]
     pub chain_key_configs_to_generate: Option<String>,
 
-    #[clap(long)]
     /// Configuration for chain key:
     /// Enable key signing on this subnet for a particular key_id.
     /// Only one key_id is permitted at a time at the moment.
     ///
     /// Keys must be given in Scheme:AlgorithmID:KeyName format, like `ecdsa:Secp256k1:some_key_name`.
+    #[clap(long)]
     chain_key_signing_enable: Option<Vec<String>>,
 
-    #[clap(long)]
     /// Configuration for chain key:
     /// Disable key signing on this subnet for a particular key_id.
     /// Cannot have same values as ecdsa_key_signing_enable, or proposal will not execute.
     ///
     /// Keys must be given in Scheme:AlgorithmID:KeyName format, like `ecdsa:Secp256k1:some_key_name`.
+    #[clap(long)]
     pub chain_key_signing_disable: Option<Vec<String>>,
 
     /// Configuration for chain key:
