@@ -349,6 +349,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         lsmt_config_default(),
         state_manager_metrics.clone(),
         MaliciousFlags::default(),
+        Default::default(),
     );
 
     let mut state = ReplicatedState::new(SUBNET_A, SubnetType::Application);

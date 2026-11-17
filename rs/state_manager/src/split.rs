@@ -197,6 +197,7 @@ fn write_checkpoint(
         config.lsmt_config.clone(),
         metrics.clone(),
         MaliciousFlags::default(),
+        Default::default(),
     );
 
     let new_height = old_height.increment();

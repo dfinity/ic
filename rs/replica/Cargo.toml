@@ -27,7 +27,6 @@ ic-http-endpoints-xnet = { path = "../http_endpoints/xnet" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
-ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-tracing-logging-layer = { path = "../monitoring/tracing/logging_layer" }
 ic-logger = { path = "../monitoring/logger" }
 ic-messaging = { path = "../messaging" }
@@ -40,7 +39,6 @@ ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replica-setup-ic-network = { path = "./setup_ic_network" }
 ic-replicated-state = { path = "../replicated_state" }
-ic-state-layout = { path = "../state_layout" }
 ic-state-manager = { path = "../state_manager" }
 ic-sys = { path = "../sys" }
 ic-tracing = { path = "../monitoring/tracing" }
