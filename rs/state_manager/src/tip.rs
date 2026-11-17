@@ -40,6 +40,7 @@ use prometheus::HistogramTimer;
 use std::cmp::Reverse;
 use std::collections::BTreeSet;
 use std::convert::identity;
+use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -477,6 +478,7 @@ pub(crate) fn spawn_tip_thread(
                             parallel_map(
                                 &mut thread_pool,
                                 pagemaps.into_iter(),
+                                NonZeroUsize::MIN,
                                 |PageMapToFlush {
                                      page_map_type,
                                      truncate,
@@ -1001,6 +1003,7 @@ fn merge_candidates_and_storage_info(
         parallel_map(
             thread_pool,
             pagemaptypes.iter(),
+            NonZeroUsize::MIN,
             |page_map_type| -> StorageResult<(Vec<MergeCandidate>, StorageInfo)> {
                 let mut storage_info = StorageInfo {
                     disk_size: 0,
@@ -1210,13 +1213,18 @@ fn merge(
 
     // Largest first, so that `parallel_map` starts them right away.
     scheduled_merges.sort_by_key(|m| Reverse(m.write_size_bytes()));
-    parallel_map(thread_pool, scheduled_merges.iter(), |m| {
-        m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
-            // A failed merge may have removed its input files from the tip and left a partial
-            // output behind, so the next checkpoint would include a corrupt `PageMap`.
-            fatal!(log, "Failed to merge PageMap files: {}", err);
-        })
-    });
+    parallel_map(
+        thread_pool,
+        scheduled_merges.iter(),
+        NonZeroUsize::MIN,
+        |m| {
+            m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
+                // A failed merge may have removed its input files from the tip and left a partial
+                // output behind, so the next checkpoint would include a corrupt `PageMap`.
+                fatal!(log, "Failed to merge PageMap files: {}", err);
+            })
+        },
+    );
 }
 
 fn serialize_protos_to_checkpoint_readwrite(
@@ -1274,17 +1282,25 @@ fn serialize_protos_to_checkpoint_readwrite(
         query_stats: state.query_stats().as_query_stats(),
     })?;
 
-    let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_protos_to_checkpoint_readwrite(canister_state, checkpoint_readwrite)?;
-        for canister_snapshot in canister_state.canister_snapshots.iter() {
-            serialize_snapshot_protos_to_checkpoint_readwrite(
-                canister_snapshot.0,
-                canister_snapshot.1,
+    let results = parallel_map(
+        thread_pool,
+        state.canisters_iter(),
+        NonZeroUsize::MIN,
+        |canister_state| {
+            serialize_canister_protos_to_checkpoint_readwrite(
+                canister_state,
                 checkpoint_readwrite,
-            )?
-        }
-        Ok::<_, CheckpointError>(())
-    });
+            )?;
+            for canister_snapshot in canister_state.canister_snapshots.iter() {
+                serialize_snapshot_protos_to_checkpoint_readwrite(
+                    canister_snapshot.0,
+                    canister_snapshot.1,
+                    checkpoint_readwrite,
+                )?
+            }
+            Ok::<_, CheckpointError>(())
+        },
+    );
 
     for result in results.into_iter() {
         result?;
@@ -1308,13 +1324,18 @@ fn serialize_wasm_binaries(
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<(), CheckpointError> {
-    parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_wasm_binary(canister_state, tip)?;
-        for (snapshot_id, snapshot) in canister_state.canister_snapshots.iter() {
-            serialize_snapshot_wasm_binary(snapshot_id, snapshot, tip)?;
-        }
-        Ok::<_, CheckpointError>(())
-    })
+    parallel_map(
+        thread_pool,
+        state.canisters_iter(),
+        NonZeroUsize::MIN,
+        |canister_state| {
+            serialize_canister_wasm_binary(canister_state, tip)?;
+            for (snapshot_id, snapshot) in canister_state.canister_snapshots.iter() {
+                serialize_snapshot_wasm_binary(snapshot_id, snapshot, tip)?;
+            }
+            Ok::<_, CheckpointError>(())
+        },
+    )
     .into_iter()
     .try_for_each(identity)
 }
