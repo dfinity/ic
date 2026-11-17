@@ -475,13 +475,15 @@ pub fn check_success(
 /// test is already set up and ignores all `config` parameters related to the
 /// IC topology (e.g., `nodes_per_subnet`).
 ///
-/// The canisters are torn down via the most up-to-date node of their subnet (see
-/// `most_up_to_date_runtime()`) rather than via the given runtimes. That node is
-/// taken from the topology of `env` and called with the identity that
-/// `runtime_from_url()` uses, which must therefore control the canisters.
+/// The canisters of a subnet with more than one node are torn down via its most
+/// up-to-date node (see `most_up_to_date_runtime()`), which need not be the node
+/// of the given runtime. That node is taken from the topology of `env` and called
+/// with the identity that `runtime_from_url()` uses, so the given runtimes must
+/// use that identity too.
 ///
 /// # Panics
 /// - If the nodes provided in `nodes` are incompatible with `config`.
+/// - If `env` holds no topology.
 /// - On test failure.
 pub async fn test_async_impl(
     env: TestEnv,
@@ -506,10 +508,8 @@ pub async fn test_async_impl(
     );
     tokio::time::sleep(Duration::from_secs(config.runtime.as_secs())).await;
 
-    // A node may have fallen behind its subnet while the canisters were exchanging
-    // messages. Such a node answers queries and `read_state` requests late or with
-    // an error, and drops the update calls it receives once it is too far behind.
-    // So tear down via the most up-to-date node of each subnet.
+    // Tear down via the most up-to-date node of each subnet: a node that has fallen
+    // behind its subnet answers late or with an error, and drops update calls.
     let teardown_runtimes = most_up_to_date_runtimes(&env, &canisters, logger).await;
     let canisters = canisters
         .iter()
@@ -539,7 +539,7 @@ pub async fn test_async_impl(
 
 /// Returns, for the canisters of each subnet in `canisters`, a runtime for the
 /// most up-to-date node of the subnet hosting them (see
-/// `most_up_to_date_runtime()`).
+/// `most_up_to_date_runtime()`), or `None` if no subnet of the topology hosts them.
 async fn most_up_to_date_runtimes(
     env: &TestEnv,
     canisters: &[Vec<Canister<'_>>],
@@ -550,23 +550,28 @@ async fn most_up_to_date_runtimes(
         .subnets()
         .map(|subnet| (subnet.subnet_canister_ranges(), subnet))
         .collect::<Vec<_>>();
-    join_all(canisters.iter().map(|subnet_canisters| async {
-        let canister_id = subnet_canisters.first()?.canister_id();
-        let Some((_, subnet)) = subnets
-            .iter()
-            .find(|(ranges, _)| ranges.iter().any(|range| range.contains(&canister_id)))
-        else {
-            warn!(
-                logger,
-                "Found no subnet hosting canister {}, tearing it down via the node it was \
-                 installed through",
-                canister_id
-            );
-            return None;
-        };
-        most_up_to_date_runtime(subnet, logger).await
-    }))
-    .await
+    let subnets = &subnets;
+    let runtimes = canisters
+        .iter()
+        .enumerate()
+        .map(|(subnet_idx, subnet_canisters)| async move {
+            let canister_id = subnet_canisters.first()?.canister_id();
+            let Some((_, subnet)) = subnets
+                .iter()
+                .find(|(ranges, _)| ranges.iter().any(|range| range.contains(&canister_id)))
+            else {
+                warn!(
+                    logger,
+                    "Found no subnet hosting canister {}, tearing down the canisters on \
+                     subnet_idx={} via the node they were installed through",
+                    canister_id,
+                    subnet_idx
+                );
+                return None;
+            };
+            most_up_to_date_runtime(subnet_idx, subnet, logger).await
+        });
+    join_all(runtimes).await
 }
 
 /// Returns a runtime for the healthy node of `subnet` with the highest certified
@@ -574,7 +579,11 @@ async fn most_up_to_date_runtimes(
 ///
 /// Returns `None` if `subnet` has a single node or no healthy node, in which case
 /// there is no better node than the one its canisters already use.
+///
+/// `subnet_idx` identifies the subnet in the log messages, like in those of
+/// `tear_down()`.
 async fn most_up_to_date_runtime(
+    subnet_idx: usize,
     subnet: &SubnetSnapshot,
     logger: &slog::Logger,
 ) -> Option<Runtime> {
@@ -583,10 +592,13 @@ async fn most_up_to_date_runtime(
         return None;
     }
 
-    // The health status and certified height of each node, if it reports them.
+    // The health status and certified height that each node reports, or why its
+    // status request failed.
     let statuses = join_all(nodes.iter().map(|node| async move {
-        let status = node.status_async().await.ok()?;
-        Some((status.replica_health_status?, status.certified_height?))
+        node.status_async()
+            .await
+            .map(|status| (status.replica_health_status, status.certified_height))
+            .map_err(|err| format!("{err:#}"))
     }))
     .await;
     let statuses = nodes
@@ -600,7 +612,7 @@ async fn most_up_to_date_runtime(
         .iter()
         .zip(&statuses)
         .filter_map(|(node, (_, status))| match status {
-            Some((ReplicaHealthStatus::Healthy, certified_height)) => {
+            Ok((Some(ReplicaHealthStatus::Healthy), Some(certified_height))) => {
                 Some((node, *certified_height))
             }
             _ => None,
@@ -609,19 +621,22 @@ async fn most_up_to_date_runtime(
     let Some((node, _)) = most_up_to_date else {
         warn!(
             logger,
-            "Subnet {} has no healthy node, tearing down its canisters via the node they were \
-             installed through; health status and certified height of its nodes: {:?}",
+            "Subnet {} has no healthy node, tearing down the canisters on subnet_idx={} via the \
+             node they were installed through; health status and certified height of its nodes: \
+             {:?}",
             subnet.subnet_id,
+            subnet_idx,
             statuses
         );
         return None;
     };
     info!(
         logger,
-        "Tearing down the canisters of subnet {} via node {}; health status and certified \
-         height of its nodes: {:?}",
-        subnet.subnet_id,
+        "Tearing down the canisters on subnet_idx={} via node {} of subnet {}; health status \
+         and certified height of its nodes: {:?}",
+        subnet_idx,
         node.node_id,
+        subnet.subnet_id,
         statuses
     );
     Some(runtime_from_url(
