@@ -92,7 +92,7 @@ jobs:
       - *checkout
       - name: Linting
         run: |
-          cargo clippy -p pocket-ic --locked --all-features --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off -A clippy::uninlined_format_args -A clippy::double_must_use -A clippy::redundant_field_names
+          cargo clippy -p pocket-ic --locked --all-features --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off -A clippy::uninlined_format_args -A clippy::redundant_field_names
 
   pocket-ic-tests-on-windows:
     name: PocketIC Tests on Windows
