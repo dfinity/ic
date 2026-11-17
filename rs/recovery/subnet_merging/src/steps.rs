@@ -13,7 +13,7 @@ use ic_recovery::{
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::remove_dir,
     registry_helper::RegistryHelper,
-    steps::{CopyLocalIcStateStep, DownloadIcDataStep, Step},
+    steps::{CMD_STOP_REPLICA, CopyLocalIcStateStep, DownloadIcDataStep, Step},
     util::{CheckpointHeight, DataLocation, ExecutionMode, block_on},
 };
 use ic_state_layout::{CheckpointStatus, StateLayout};
@@ -249,9 +249,9 @@ impl WaitForHaltingCupStep {
     }
 }
 
-/// Stops the replica of the node the state of a subnet is downloaded from, but
-/// only once the node holds a finished checkpoint at the height of the CUP the
-/// subnet halts at.
+/// Stops the replica and crypto vault of the node the state of a subnet is
+/// downloaded from, but only once the node holds a finished checkpoint at the
+/// height of the CUP the subnet halts at.
 ///
 /// Holding the halting CUP does not imply holding the checkpoint at its
 /// height: the node may hold the CUP before it has written the checkpoint (e.g.
@@ -271,7 +271,7 @@ impl Step for StopReplicaAtHaltingCheckpointStep {
     fn descr(&self) -> String {
         format!(
             "Wait until {} holds a finished checkpoint at the height of the CUP subnet {} halts \
-             at, then stop its replica.",
+             at, then stop its replica and crypto vault.",
             self.node, self.subnet_id,
         )
     }
@@ -296,11 +296,14 @@ impl Step for StopReplicaAtHaltingCheckpointStep {
             self.subnet_id,
         );
 
-        info!(self.logger, "Stopping the replica on {}", self.node);
+        info!(
+            self.logger,
+            "Stopping the replica and crypto vault on {}", self.node
+        );
         // Unlike the checks on the node, stopping its replica asks for
         // confirmation on a local node too.
         self.node.execute(
-            "sudo systemctl stop ic-replica".to_string(),
+            CMD_STOP_REPLICA.to_string(),
             self.require_confirmation.then_some(&self.logger),
         )?;
         Ok(())
