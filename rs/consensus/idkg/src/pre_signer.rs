@@ -1429,10 +1429,10 @@ mod tests {
 
         // Messages for transcripts currently requested
         let action = Action::action(&block_reader, &requested, &id_1);
-        assert_matches!(action, Action::Process(_));
+        assert_matches!(action, Action::Process(t) if t.transcript_id == id_1);
 
         let action = Action::action(&block_reader, &requested, &id_2);
-        assert_matches!(action, Action::Process(_));
+        assert_matches!(action, Action::Process(t) if t.transcript_id == id_2);
 
         // Messages for requested transcripts that were created on another subnet
         let action = Action::action(&block_reader, &requested, &xnet_id);

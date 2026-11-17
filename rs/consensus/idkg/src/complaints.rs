@@ -1092,11 +1092,11 @@ mod tests {
         // Messages for transcripts currently active
         assert_matches!(
             Action::action(&block_reader, &active, &requested, &id_1),
-            Action::Process(_)
+            Action::Process(t) if t.transcript_id == id_1
         );
         assert_matches!(
             Action::action(&block_reader, &active, &requested, &id_2),
-            Action::Process(_)
+            Action::Process(t) if t.transcript_id == id_2
         );
 
         // Messages for transcripts currently active that were created on another subnet
