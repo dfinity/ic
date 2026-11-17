@@ -475,6 +475,10 @@ pub fn check_success(
 /// test is already set up and ignores all `config` parameters related to the
 /// IC topology (e.g., `nodes_per_subnet`).
 ///
+/// The canisters are torn down via the most up-to-date node of their subnet (see
+/// `most_up_to_date_runtime()`) rather than via the given runtimes. That node is
+/// taken from the topology of `env` and called with the identity that
+/// `runtime_from_url()` uses, which must therefore control the canisters.
 ///
 /// # Panics
 /// - If the nodes provided in `nodes` are incompatible with `config`.
@@ -548,9 +552,18 @@ async fn most_up_to_date_runtimes(
         .collect::<Vec<_>>();
     join_all(canisters.iter().map(|subnet_canisters| async {
         let canister_id = subnet_canisters.first()?.canister_id();
-        let (_, subnet) = subnets
+        let Some((_, subnet)) = subnets
             .iter()
-            .find(|(ranges, _)| ranges.iter().any(|range| range.contains(&canister_id)))?;
+            .find(|(ranges, _)| ranges.iter().any(|range| range.contains(&canister_id)))
+        else {
+            warn!(
+                logger,
+                "Found no subnet hosting canister {}, tearing it down via the node it was \
+                 installed through",
+                canister_id
+            );
+            return None;
+        };
         most_up_to_date_runtime(subnet, logger).await
     }))
     .await
@@ -570,40 +583,46 @@ async fn most_up_to_date_runtime(
         return None;
     }
 
-    // Only a healthy node answers queries and `read_state` requests.
-    let certified_heights = join_all(nodes.iter().map(|node| async move {
+    // The health status and certified height of each node, if it reports them.
+    let statuses = join_all(nodes.iter().map(|node| async move {
         let status = node.status_async().await.ok()?;
-        (status.replica_health_status == Some(ReplicaHealthStatus::Healthy))
-            .then_some(status.certified_height)
-            .flatten()
+        Some((status.replica_health_status?, status.certified_height?))
     }))
     .await;
+    let statuses = nodes
+        .iter()
+        .map(|node| node.node_id)
+        .zip(statuses)
+        .collect::<Vec<_>>();
 
+    // Only a healthy node answers queries and `read_state` requests.
     let most_up_to_date = nodes
         .iter()
-        .zip(&certified_heights)
-        .filter_map(|(node, certified_height)| Some((node, (*certified_height)?)))
+        .zip(&statuses)
+        .filter_map(|(node, (_, status))| match status {
+            Some((ReplicaHealthStatus::Healthy, certified_height)) => {
+                Some((node, *certified_height))
+            }
+            _ => None,
+        })
         .max_by_key(|(_, certified_height)| *certified_height);
     let Some((node, _)) = most_up_to_date else {
         warn!(
             logger,
             "Subnet {} has no healthy node, tearing down its canisters via the node they were \
-             installed through",
-            subnet.subnet_id
+             installed through; health status and certified height of its nodes: {:?}",
+            subnet.subnet_id,
+            statuses
         );
         return None;
     };
     info!(
         logger,
-        "Tearing down the canisters of subnet {} via node {}; certified heights of its healthy \
-         nodes: {:?}",
+        "Tearing down the canisters of subnet {} via node {}; health status and certified \
+         height of its nodes: {:?}",
         subnet.subnet_id,
         node.node_id,
-        nodes
-            .iter()
-            .map(|node| node.node_id)
-            .zip(&certified_heights)
-            .collect::<Vec<_>>()
+        statuses
     );
     Some(runtime_from_url(
         node.get_public_url(),
