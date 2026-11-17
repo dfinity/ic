@@ -2,7 +2,7 @@
 # Run `./bin/bazel-pin.sh` from the top-level directory of the working tree after changing this file
 # to regenerate Cargo Bazel lockfiles.
 
-bazel_dep(name = "rules_rust", version = "0.74.0")
+bazel_dep(name = "rules_rust", version = "0.75.0")
 single_version_override(
     module_name = "rules_rust",
     patch_strip = 1,
