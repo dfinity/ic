@@ -34,8 +34,8 @@ use ic_test_utilities_execution_environment::{
     get_reject, get_reply,
 };
 use ic_test_utilities_metrics::{
-    HistogramStats, fetch_histogram_vec_count, fetch_histogram_vec_stats, fetch_int_counter_vec,
-    metric_vec, nonzero_values,
+    HistogramStats, fetch_histogram_stats, fetch_histogram_vec_count, fetch_histogram_vec_stats,
+    fetch_int_counter_vec, metric_vec, nonzero_values,
 };
 use ic_types::{
     CanisterId, CountBytes, NumInstructions, PrincipalId, RegistryVersion,
@@ -6277,6 +6277,59 @@ fn threshold_public_key_derivation_path_metrics() {
             "execution_threshold_public_key_derivation_path_bytes"
         ),
         expected((2, 72.0), (1, 0.0))
+    );
+}
+
+#[test]
+fn vetkd_public_key_context_metrics() {
+    let key_id = make_vetkd_key("correct_key");
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .with_chain_key(key_id.clone())
+        .build();
+
+    // Two calls with contexts of 0 + 32 = 32 bytes.
+    for context in [vec![], vec![1; 32]] {
+        test.inject_call_to_ic00(
+            Method::VetKdPublicKey,
+            ic00::VetKdPublicKeyArgs {
+                canister_id: None,
+                context,
+                key_id: into_inner_vetkd(key_id.clone()),
+            }
+            .encode(),
+            Cycles::new(0),
+        );
+    }
+    // Calls for a key that the subnet does not hold are rejected before
+    // the derivation and thus not observed.
+    test.inject_call_to_ic00(
+        Method::VetKdPublicKey,
+        ic00::VetKdPublicKeyArgs {
+            canister_id: None,
+            context: vec![2; 100],
+            key_id: into_inner_vetkd(make_vetkd_key("nonexistent_key_id")),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
+    test.execute_all();
+    assert_eq!(test.xnet_messages().len(), 3);
+
+    assert_eq!(
+        fetch_histogram_stats(
+            test.metrics_registry(),
+            "execution_vetkd_public_key_context_bytes"
+        ),
+        Some(HistogramStats {
+            count: 2,
+            sum: 32.0
+        })
     );
 }
 

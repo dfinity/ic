@@ -3874,6 +3874,9 @@ impl ExecutionEnvironment {
         caller: PrincipalId,
         context: Vec<u8>,
     ) -> Result<Vec<u8>, UserError> {
+        self.metrics
+            .vetkd_public_key_context_bytes
+            .observe(context.len() as f64);
         if subnet_public_key.algorithm_id != ic_types::crypto::AlgorithmId::VetKD {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,

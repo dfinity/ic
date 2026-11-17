@@ -52,6 +52,8 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     /// Total number of bytes in the elements of the derivation path of threshold
     /// public key calls (`ecdsa_public_key` and `schnorr_public_key`), by method name.
     threshold_public_key_derivation_path_bytes: HistogramVec,
+    /// Number of bytes in the context of `vetkd_public_key` calls.
+    pub(crate) vetkd_public_key_context_bytes: Histogram,
 
     /// Critical error for responses above the maximum allowed size.
     pub(crate) response_cycles_refund_error: IntCounter,
@@ -160,6 +162,13 @@ impl ExecutionEnvironmentMetrics {
                 }
                 histogram
             },
+            vetkd_public_key_context_bytes: metrics_registry.histogram(
+                "execution_vetkd_public_key_context_bytes",
+                "Number of bytes in the context of vetkd_public_key calls.",
+                // Buckets: 0B, 1B, 2B, 5B, ..., 10MB, 20MB, 50MB (requests on the same
+                // subnet can be up to 10 MiB).
+                decimal_buckets_with_zero(0, 7),
+            ),
             response_cycles_refund_error: metrics_registry
                 .error_counter(CRITICAL_ERROR_RESPONSE_CYCLES_REFUND),
             execution_cycles_refund_error: metrics_registry
