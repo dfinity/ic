@@ -202,6 +202,9 @@ mod output_addresses {
         0xff, 0xff, 0xff,
     ];
     const MALFORMED_PUBLIC_KEY: [u8; 33] = [0x05; 33];
+    // The hybrid encoding of the generator point with the prefix for an odd y-coordinate,
+    // although its y-coordinate is even.
+    const HYBRID_PUBLIC_KEY_WITH_WRONG_PARITY: &str = "0779be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8";
 
     fn key(hex: &str) -> PushBytesBuf {
         PushBytesBuf::try_from(hex::decode(hex).unwrap()).unwrap()
@@ -275,10 +278,11 @@ mod output_addresses {
                 key(COMPRESSED_PUBLIC_KEY),
                 PushBytesBuf::from(INVALID_PUBLIC_KEY),
                 PushBytesBuf::from(MALFORMED_PUBLIC_KEY),
+                key(HYBRID_PUBLIC_KEY_WITH_WRONG_PARITY),
                 key(OTHER_PUBLIC_KEY),
                 key(UNCOMPRESSED_PUBLIC_KEY),
             ],
-            5,
+            6,
         );
         assert!(script.is_multisig());
 
@@ -312,6 +316,7 @@ mod output_addresses {
         for public_key in [
             PushBytesBuf::from(INVALID_PUBLIC_KEY),
             PushBytesBuf::from(MALFORMED_PUBLIC_KEY),
+            key(HYBRID_PUBLIC_KEY_WITH_WRONG_PARITY),
         ] {
             assert_eq!(
                 output_addresses(&p2pk(public_key), Network::Bitcoin),

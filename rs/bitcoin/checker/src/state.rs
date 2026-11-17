@@ -237,12 +237,19 @@ fn script_num(instruction: &Instruction) -> Option<i64> {
 /// P2WPKH and P2SH-P2WPKH addresses of its compressed encoding.
 ///
 /// The key may be in any encoding accepted by script execution without the `STRICTENC` flag,
-/// i.e. compressed, uncompressed, or hybrid (an uncompressed key prefixed with `0x06` or `0x07`).
+/// i.e. compressed, uncompressed, or hybrid (an uncompressed key prefixed with `0x06` if its
+/// y-coordinate is even, or `0x07` if it is odd).
 /// If it is not a valid public key, it cannot be used to spend an output and no address
 /// is returned.
 pub fn public_key_addresses(key: &[u8], network: bitcoin::Network) -> Vec<Address> {
     let mut sec1 = key.to_vec();
     if sec1.len() == 65 && matches!(sec1[0], 0x06 | 0x07) {
+        // Like libsecp256k1, reject a hybrid key whose prefix does not match the parity of
+        // its y-coordinate.
+        let is_y_odd = sec1[64] & 1 == 1;
+        if is_y_odd != (sec1[0] == 0x07) {
+            return vec![];
+        }
         sec1[0] = 0x04;
     }
     let Ok(public_key) = ic_secp256k1::PublicKey::deserialize_sec1(&sec1) else {
