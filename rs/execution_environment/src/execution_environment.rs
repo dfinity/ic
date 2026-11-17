@@ -3983,14 +3983,23 @@ impl ExecutionEnvironment {
             ThresholdArguments::Ecdsa(_) => self
                 .metrics
                 .observe_derivation_path(Ic00Method::SignWithECDSA, &derivation_path),
-            ThresholdArguments::Schnorr(_) => self
-                .metrics
-                .observe_derivation_path(Ic00Method::SignWithSchnorr, &derivation_path),
-            // The derivation path of a vetKD call consists of its context only.
-            ThresholdArguments::VetKd(_) => self.metrics.observe_vetkd_context(
-                Ic00Method::VetKdDeriveKey,
-                derivation_path.iter().map(Vec::len).sum(),
-            ),
+            ThresholdArguments::Schnorr(schnorr) => {
+                self.metrics
+                    .observe_derivation_path(Ic00Method::SignWithSchnorr, &derivation_path);
+                self.metrics
+                    .sign_with_schnorr_message_bytes
+                    .observe(schnorr.message.len() as f64);
+            }
+            ThresholdArguments::VetKd(vetkd) => {
+                // The derivation path of a vetKD call consists of its context only.
+                self.metrics.observe_vetkd_context(
+                    Ic00Method::VetKdDeriveKey,
+                    derivation_path.iter().map(Vec::len).sum(),
+                );
+                self.metrics
+                    .vetkd_derive_key_input_bytes
+                    .observe(vetkd.input.len() as f64);
+            }
         }
         if let ThresholdArguments::Schnorr(schnorr) = &args {
             let alg = schnorr.key_id.algorithm;

@@ -80,6 +80,10 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     /// Number of bytes in the context of vetKD calls (see `VETKD_CONTEXT_METHODS`),
     /// by method name.
     vetkd_context_bytes: HistogramVec,
+    /// Number of bytes in the message of `sign_with_schnorr` calls.
+    pub(crate) sign_with_schnorr_message_bytes: Histogram,
+    /// Number of bytes in the input of `vetkd_derive_key` calls.
+    pub(crate) vetkd_derive_key_input_bytes: Histogram,
 
     /// Critical error for responses above the maximum allowed size.
     pub(crate) response_cycles_refund_error: IntCounter,
@@ -186,6 +190,20 @@ impl ExecutionEnvironmentMetrics {
                 // subnet can be up to 10 MiB).
                 decimal_buckets_with_zero(0, 7),
                 &VETKD_CONTEXT_METHODS,
+            ),
+            sign_with_schnorr_message_bytes: metrics_registry.histogram(
+                "execution_sign_with_schnorr_message_bytes",
+                "Number of bytes in the message of sign_with_schnorr calls.",
+                // Buckets: 0B, 1B, 2B, 5B, ..., 10MB, 20MB, 50MB (requests on the same
+                // subnet can be up to 10 MiB).
+                decimal_buckets_with_zero(0, 7),
+            ),
+            vetkd_derive_key_input_bytes: metrics_registry.histogram(
+                "execution_vetkd_derive_key_input_bytes",
+                "Number of bytes in the input of vetkd_derive_key calls.",
+                // Buckets: 0B, 1B, 2B, 5B, ..., 10MB, 20MB, 50MB (requests on the same
+                // subnet can be up to 10 MiB).
+                decimal_buckets_with_zero(0, 7),
             ),
             response_cycles_refund_error: metrics_registry
                 .error_counter(CRITICAL_ERROR_RESPONSE_CYCLES_REFUND),

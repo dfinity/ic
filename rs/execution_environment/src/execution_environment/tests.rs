@@ -34,8 +34,8 @@ use ic_test_utilities_execution_environment::{
     get_reject, get_reply,
 };
 use ic_test_utilities_metrics::{
-    HistogramStats, fetch_histogram_vec_count, fetch_histogram_vec_stats, fetch_int_counter_vec,
-    metric_vec, nonzero_values,
+    HistogramStats, fetch_histogram_stats, fetch_histogram_vec_count, fetch_histogram_vec_stats,
+    fetch_int_counter_vec, metric_vec, nonzero_values,
 };
 use ic_types::{
     CanisterId, CountBytes, NumInstructions, PrincipalId, RegistryVersion,
@@ -6321,6 +6321,16 @@ fn derivation_path_metrics() {
             ("ic00_sign_with_schnorr", 1, 10.0),
         ])
     );
+    assert_eq!(
+        fetch_histogram_stats(
+            test.metrics_registry(),
+            "execution_sign_with_schnorr_message_bytes"
+        ),
+        Some(HistogramStats {
+            count: 1,
+            sum: 32.0
+        })
+    );
 }
 
 #[test]
@@ -6349,13 +6359,14 @@ fn vetkd_context_metrics() {
             Cycles::new(0),
         );
     }
-    // `vetkd_derive_key`: one call with a context of 20 bytes.
+    // `vetkd_derive_key`: one call with a context of 20 bytes and an input of 50 bytes.
     let mut derive_key_args = ic00::VetKdDeriveKeyArgs::decode(&sign_with_threshold_key_payload(
         Method::VetKdDeriveKey,
         key_id.clone(),
     ))
     .unwrap();
     derive_key_args.context = vec![2; 20];
+    derive_key_args.input = vec![4; 50];
     test.inject_call_to_ic00(
         Method::VetKdDeriveKey,
         derive_key_args.encode(),
@@ -6403,6 +6414,16 @@ fn vetkd_context_metrics() {
                 },
             ),
         ])
+    );
+    assert_eq!(
+        fetch_histogram_stats(
+            test.metrics_registry(),
+            "execution_vetkd_derive_key_input_bytes"
+        ),
+        Some(HistogramStats {
+            count: 1,
+            sum: 50.0
+        })
     );
 }
 
