@@ -67,11 +67,11 @@ pub enum StepType {
     WaitForHaltingCupOnDestinationSubnet,
     /// Wait until the node of the source subnet the state is downloaded from
     /// holds a finished checkpoint at the height of the CUP the subnet halts
-    /// at, then stop its replica.
+    /// at, then stop its replica and crypto vault.
     StopSourceReplica,
     /// Wait until the node of the destination subnet the state is downloaded
     /// from holds a finished checkpoint at the height of the CUP the subnet
-    /// halts at, then stop its replica.
+    /// halts at, then stop its replica and crypto vault.
     StopDestinationReplica,
     /// Download the checkpoint at the height of the CUP the source subnet
     /// halted at.

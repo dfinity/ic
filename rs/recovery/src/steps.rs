@@ -24,6 +24,30 @@ use ic_types::{Height, ReplicaVersion, SubnetId, consensus::certification::Certi
 use slog::{Logger, debug, info, warn};
 use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
 
+/// Stops ic-replica, then the crypto vault (`ic-crypto-csp`) and its socket.
+///
+/// The vault keeps running when only ic-replica is stopped, and may still be rewriting its key
+/// store for a request ic-replica sent before stopping, which creates and deletes temporary
+/// files in `/var/lib/ic/crypto`. Steps that stop the replica use this command, so that a node
+/// they stopped is in the state [CMD_RESTART_REPLICA] expects. Stopping ic-replica first leaves
+/// no client that could start the vault again through its socket.
+pub const CMD_STOP_REPLICA: &str = "\
+    sudo systemctl stop ic-replica && \
+    sudo systemctl stop ic-crypto-csp.socket ic-crypto-csp.service;";
+
+/// Re-runs `setup-permissions`, then starts the crypto vault and ic-replica. Expects
+/// [CMD_STOP_REPLICA] to have run.
+///
+/// `setup-permissions` aborts if a file disappears while it walks `/var/lib/ic`, leaving the
+/// directories it hasn't reached yet, such as a replaced `ic_state`, with the wrong owner. So,
+/// as at boot, it must not run while the crypto vault is running. The commands are joined by `;`
+/// so that the vault and ic-replica are started even if `setup-permissions` fails.
+pub const CMD_RESTART_REPLICA: &str = "\
+    sudo systemctl restart setup-permissions;\n\
+    sudo systemctl start ic-crypto-csp.socket ic-crypto-csp.service;\n\
+    sudo systemctl start ic-replica;\n\
+    sudo systemctl status ic-replica;";
+
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
 /// derived. Thus, changing the execution or state of a step ideally implies
@@ -622,27 +646,6 @@ pub struct UploadStateAndRestartStep {
     pub check_ic_replay_height: bool,
 }
 
-impl UploadStateAndRestartStep {
-    const CMD_STOP_REPLICA: &str = "sudo systemctl stop ic-replica;";
-    /// Expects ic-replica to be stopped.
-    ///
-    /// `setup-permissions` aborts if a file disappears while it walks `/var/lib/ic`, leaving
-    /// the directories it hasn't reached yet, such as the `ic_state` this step moved in, with
-    /// the wrong owner. The crypto vault keeps running when ic-replica stops and may still be
-    /// rewriting its key store for a request ic-replica sent before stopping, which creates and
-    /// deletes temporary files in `/var/lib/ic/crypto`. So, as at boot, the vault isn't running
-    /// while `setup-permissions` runs. Its socket is stopped as well, so that a connection to it
-    /// can't start the vault in the meantime.
-    ///
-    /// The script returned by `UploadCUPAndTarStep::get_restart_commands` ends with the same
-    /// commands; keep the two in sync.
-    const CMD_RESTART_REPLICA: &str = "\
-        sudo systemctl stop ic-crypto-csp.socket ic-crypto-csp.service;\
-        sudo systemctl restart setup-permissions;\
-        sudo systemctl start ic-crypto-csp.socket ic-crypto-csp.service;\
-        sudo systemctl start ic-replica;\
-        sudo systemctl status ic-replica;";
-}
 impl Step for UploadStateAndRestartStep {
     fn descr(&self) -> String {
         let replica = match self.upload_method {
@@ -650,8 +653,8 @@ impl Step for UploadStateAndRestartStep {
             DataLocation::Local => "local replica",
         };
         format!(
-            "Stopping {replica}, uploading and replacing state from {}, set access \
-            rights with the crypto vault stopped, restart crypto vault and replica.",
+            "Stopping {replica} and its crypto vault, uploading and replacing state from {}, \
+            set access rights, restart crypto vault and replica.",
             self.data_src.display()
         )
     }
@@ -738,16 +741,13 @@ impl Step for UploadStateAndRestartStep {
             );
 
             info!(self.logger, "Restarting replica...");
-            ssh_helper.ssh(Self::CMD_STOP_REPLICA.to_string())?;
+            ssh_helper.ssh(CMD_STOP_REPLICA.to_string())?;
             ssh_helper.ssh(cmd_replace_state)?;
-            ssh_helper.ssh(Self::CMD_RESTART_REPLICA.to_string())?;
+            ssh_helper.ssh(CMD_RESTART_REPLICA.to_string())?;
         } else {
             let log = self.require_confirmation.then_some(&self.logger);
             info!(self.logger, "Stopping replica...");
-            confirm_exec_cmd(
-                Command::new("bash").arg("-c").arg(Self::CMD_STOP_REPLICA),
-                log,
-            )?;
+            confirm_exec_cmd(Command::new("bash").arg("-c").arg(CMD_STOP_REPLICA), log)?;
 
             // For local recoveries we first backup the original state, and
             // then simply `mv` the new state to the upload directory. No
@@ -772,12 +772,7 @@ impl Step for UploadStateAndRestartStep {
             confirm_exec_cmd(&mut mv_to_target, log)?;
 
             info!(self.logger, "Restarting replica...");
-            confirm_exec_cmd(
-                Command::new("bash")
-                    .arg("-c")
-                    .arg(Self::CMD_RESTART_REPLICA),
-                log,
-            )?;
+            confirm_exec_cmd(Command::new("bash").arg("-c").arg(CMD_RESTART_REPLICA), log)?;
         }
         Ok(())
     }
@@ -835,7 +830,7 @@ pub(crate) struct StopReplicaStep {
 
 impl Step for StopReplicaStep {
     fn descr(&self) -> String {
-        format!("Stopping replica on {}.", self.node_ip)
+        format!("Stopping replica and crypto vault on {}.", self.node_ip)
     }
 
     fn exec(&self) -> RecoveryResult<()> {
@@ -846,7 +841,7 @@ impl Step for StopReplicaStep {
             self.require_confirmation,
             self.key_file.clone(),
         );
-        ssh_helper.ssh("sudo systemctl stop ic-replica".to_string())?;
+        ssh_helper.ssh(CMD_STOP_REPLICA.to_string())?;
         Ok(())
     }
 }
@@ -957,8 +952,6 @@ pub(crate) struct UploadCUPAndTarStep {
 }
 
 impl UploadCUPAndTarStep {
-    /// The returned commands end like `UploadStateAndRestartStep::CMD_RESTART_REPLICA`, whose doc
-    /// comment explains why the crypto vault is stopped while `setup-permissions` runs.
     fn get_restart_commands(&self) -> String {
         format!(
             r#"
@@ -971,14 +964,10 @@ sudo chown -R "$OWNER_UID:$GROUP_UID" ic_registry_local_store;
 OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/cups);
 GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/cups);
 sudo chown -R "$OWNER_UID:$GROUP_UID" cup.proto;
-sudo systemctl stop ic-replica;
+{CMD_STOP_REPLICA}
 sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/;
 sudo cp cup.proto /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb;
-sudo systemctl stop ic-crypto-csp.socket ic-crypto-csp.service;
-sudo systemctl restart setup-permissions;
-sudo systemctl start ic-crypto-csp.socket ic-crypto-csp.service;
-sudo systemctl start ic-replica;
-sudo systemctl status ic-replica;
+{CMD_RESTART_REPLICA}
 "#,
             UploadCUPAndTarStep::get_upload_dir_name().display(),
         )
