@@ -66,7 +66,7 @@ pub(crate) struct Layout {
 
 impl Layout {
     /// Creates the working directories of the two subnets being merged and of
-    /// the merged state, and warns if one of the two subnets' already holds
+    /// the merged state, and warns if one of the two subnets already holds
     /// checkpoints, e.g. from an earlier merge.
     pub(crate) fn new(recovery: &Recovery, logger: &Logger) -> RecoveryResult<Self> {
         let layout = Self {
