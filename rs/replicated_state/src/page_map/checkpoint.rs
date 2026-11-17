@@ -25,6 +25,38 @@ pub(crate) struct Checkpoint {
     mapping: Option<Arc<Mapping>>,
 }
 
+/// Applies `madvise(advice)` to `[addr, addr + len)` (benchmarking prototype). Errors are
+/// ignored: advice only affects performance. `MADV_WILLNEED` reads at most the larger of the
+/// device's maximum request size and the read-ahead window per call, so it is issued in 1 MiB
+/// pieces.
+pub(crate) fn madvise_range(addr: usize, len: usize, advice: libc::c_int) {
+    const PIECE: usize = 1 << 20;
+    let piece = if advice == libc::MADV_WILLNEED {
+        PIECE
+    } else {
+        len.max(1)
+    };
+    let end = addr + len;
+    let mut from = addr;
+    while from < end {
+        let n = (end - from).min(piece);
+        unsafe { libc::madvise(from as *mut libc::c_void, n, advice) };
+        from += n;
+    }
+}
+
+/// A mapped file's address range and descriptor, so that pages referenced through the mapping
+/// can be read with `pread` instead (benchmarking prototype).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PreadSource {
+    /// Start address of the mapping.
+    pub(crate) addr: usize,
+    /// Length of the mapping, from file offset 0.
+    pub(crate) len: usize,
+    /// Descriptor of the mapped file, valid while the mapping lives.
+    pub(crate) fd: std::os::unix::io::RawFd,
+}
+
 /// A memory map of a (section of a) file containing pages of size `PAGE_SIZE`.
 /// The memory map is read-only and most functions are helper functions to read pages.
 pub(crate) struct Mapping {
@@ -62,6 +94,28 @@ impl Mapping {
                 mmap,
             }))
         }
+    }
+
+    /// Applies `madvise(advice)` to the whole mapping (benchmarking prototype). Errors are
+    /// ignored: advice only affects performance.
+    pub(crate) fn advise(&self, advice: libc::c_int) {
+        madvise_range(self.mmap.addr() as usize, self.mmap.len(), advice);
+    }
+
+    /// Where this mapping's pages come from (see `PreadSource`).
+    pub(crate) fn pread_source(&self) -> PreadSource {
+        PreadSource {
+            addr: self.mmap.addr() as usize,
+            len: self.mmap.len(),
+            fd: self.file_descriptor.fd,
+        }
+    }
+
+    /// Marks the mapped file `POSIX_FADV_NOREUSE`, so that accesses through this file's mappings
+    /// don't count as recent use for page reclaim (benchmarking prototype). Applies to every
+    /// mapping of the same open file. Errors are ignored.
+    pub(crate) fn fadvise_noreuse(&self) {
+        unsafe { libc::posix_fadvise(self.file_descriptor.fd, 0, 0, libc::POSIX_FADV_NOREUSE) };
     }
 
     fn open(path: &Path) -> Result<Option<Mapping>, PersistenceError> {
@@ -158,6 +212,25 @@ impl Checkpoint {
         Mapping::open(path).map(|mapping| Checkpoint {
             mapping: mapping.map(Arc::new),
         })
+    }
+
+    /// Applies `madvise(advice)` to the whole file's mapping, if any (benchmarking prototype).
+    pub(crate) fn advise(&self, advice: libc::c_int) {
+        if let Some(mapping) = &self.mapping {
+            mapping.advise(advice);
+        }
+    }
+
+    /// Where the mapped file's pages come from, if mapped (see `PreadSource`).
+    pub(crate) fn pread_source(&self) -> Option<PreadSource> {
+        self.mapping.as_ref().map(|mapping| mapping.pread_source())
+    }
+
+    /// Marks the file `POSIX_FADV_NOREUSE`, if mapped (benchmarking prototype).
+    pub(crate) fn fadvise_noreuse(&self) {
+        if let Some(mapping) = &self.mapping {
+            mapping.fadvise_noreuse();
+        }
     }
 
     /// Returns a serialization-friendly representation of `Checkpoint`.

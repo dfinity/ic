@@ -14,7 +14,7 @@ use crate::page_map::{
     CheckpointSerialization, LABEL_OP_FLUSH, LABEL_OP_MERGE, LABEL_TYPE_INDEX,
     LABEL_TYPE_PAGE_DATA, MappingSerialization, MemoryInstruction, MemoryInstructions,
     MemoryMapOrData, PageDelta, PersistenceError, StorageMetrics,
-    checkpoint::{Checkpoint, Mapping, ZEROED_PAGE},
+    checkpoint::{Checkpoint, Mapping, PreadSource, ZEROED_PAGE, madvise_range},
 };
 
 use bit_vec::BitVec;
@@ -485,6 +485,7 @@ impl OverlayFile {
                 &storage_layout.overlay(height, Shard::new(shard)),
                 metrics,
                 LABEL_OP_FLUSH,
+                &[],
             )?;
         }
         Ok(())
@@ -1226,6 +1227,40 @@ impl MergeCandidate {
                 internal_error: io_err.to_string(),
             })?;
         }
+        if let Some(advice) = merge_madvise() {
+            if let Some(base) = &base {
+                base.advise(advice);
+            }
+            for overlay in &overlays {
+                overlay.mapping.advise(advice);
+            }
+        }
+        // The merge opened these files itself, so only its own mappings are affected.
+        if merge_noreuse() {
+            if let Some(base) = &base {
+                base.fadvise_noreuse();
+            }
+            for overlay in &overlays {
+                overlay.mapping.fadvise_noreuse();
+            }
+        }
+        // Benchmarking switch: read the inputs' pages with `pread` rather than through their
+        // mappings (see `PreadWindows`).
+        let sources: Vec<PreadSource> = if merge_pread() {
+            let mut sources: Vec<PreadSource> = base
+                .iter()
+                .filter_map(|base| base.pread_source())
+                .chain(
+                    overlays
+                        .iter()
+                        .map(|overlay| overlay.mapping.pread_source()),
+                )
+                .collect();
+            sources.sort_by_key(|source| source.addr);
+            sources
+        } else {
+            Vec::new()
+        };
         let pages_with_indices = Self::merge_data(&base, &overlays);
 
         let (num_output_shards, shard_num_pages) = match &self.dst {
@@ -1263,8 +1298,14 @@ impl MergeCandidate {
                     } else {
                         (page_data, page_indices)
                     };
-                    let overlay =
-                        write_overlay(&page_data, &page_indices, path, metrics, LABEL_OP_MERGE)?;
+                    let overlay = write_overlay(
+                        &page_data,
+                        &page_indices,
+                        path,
+                        metrics,
+                        LABEL_OP_MERGE,
+                        &sources,
+                    )?;
 
                     // Validate that the pages in the merged overlay shard fall within the
                     // `[shard * N, (shard + 1) * N)` range. This is the per-file equivalent of the
@@ -1294,7 +1335,15 @@ impl MergeCandidate {
                 } else {
                     (page_data[0].clone(), page_indices[0].clone())
                 };
-                write_overlay(&page_data, &page_indices, path, metrics, LABEL_OP_MERGE).map(|_| ())
+                write_overlay(
+                    &page_data,
+                    &page_indices,
+                    path,
+                    metrics,
+                    LABEL_OP_MERGE,
+                    &sources,
+                )
+                .map(|_| ())
             }
             MergeDestination::BaseFile(path) => write_base(
                 &page_data[0],
@@ -1302,6 +1351,7 @@ impl MergeCandidate {
                 path,
                 metrics,
                 LABEL_OP_MERGE,
+                &sources,
             ),
         }
     }
@@ -1635,17 +1685,36 @@ fn group_pages_into_ranges(page_indices: &[PageIndex]) -> Vec<PageIndexRange> {
         .collect()
 }
 
+/// How `PageMap` files are written (benchmarking switch, `IC_PAGEMAP_WRITE_MODE`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum WriteMode {
+    /// `O_DSYNC`: each write returns once its data and a cache flush reach the device.
+    Dsync,
+    /// Plain buffered writes; durability comes from the checkpoint's `syncfs`.
+    Buffered,
+    /// Buffered writes, with writeback of each chunk started right away and the previous
+    /// chunk's writeback awaited, bounding dirty data to two chunks per file.
+    SyncFileRange,
+}
+
+fn write_mode() -> WriteMode {
+    static MODE: std::sync::OnceLock<WriteMode> = std::sync::OnceLock::new();
+    *MODE.get_or_init(|| match std::env::var("IC_PAGEMAP_WRITE_MODE").as_deref() {
+        Ok("buffered") => WriteMode::Buffered,
+        Ok("sfr") => WriteMode::SyncFileRange,
+        _ => WriteMode::Dsync,
+    })
+}
+
 /// Create a new file to write `PageMap` data to. Because we write asynchonously with execution we
 /// open file with `O_DIRECT | O_DSYNC`, otherwise it tends to cause lock congestion in Qemu.
 fn create_file_for_write(path: &Path) -> Result<File, PersistenceError> {
     let mut open_options = OpenOptions::new();
     open_options.write(true).create_new(true);
     #[cfg(target_os = "linux")]
-    {
+    if write_mode() == WriteMode::Dsync {
         use std::os::unix::fs::OpenOptionsExt;
-        open_options
-            .custom_flags(libc::O_DIRECT)
-            .custom_flags(libc::O_DSYNC);
+        open_options.custom_flags(libc::O_DSYNC);
     }
     open_options
         .open(path)
@@ -1697,6 +1766,7 @@ fn write_base(
     path: &Path,
     metrics: &StorageMetrics,
     op_label: &str, // `LABEL_OP_FLUSH` or `LABEL_OP_MERGE`.
+    sources: &[PreadSource],
 ) -> Result<(), PersistenceError> {
     assert_eq!(pages.len(), indices.len());
     if pages.is_empty() {
@@ -1705,7 +1775,13 @@ fn write_base(
     let mut file = create_file_for_write(path)?;
     let (pages, _) = expand_with_zeroes(pages, indices, ExpandBeforeStart::Yes);
 
-    write_pages(&mut file, &pages).map_err(|err| PersistenceError::FileSystemError {
+    write_pages(
+        &mut file,
+        &pages,
+        op_label == LABEL_OP_MERGE && merge_prefetch(),
+        sources,
+    )
+    .map_err(|err| PersistenceError::FileSystemError {
         path: path.display().to_string(),
         context: format!("Failed to write base file {}", path.display()),
         internal_error: err.to_string(),
@@ -1723,17 +1799,305 @@ fn write_base(
     Ok(())
 }
 
-/// Helper function to write the data section of an overlay file.
-fn write_pages(file: &mut File, data: &Vec<&[u8]>) -> std::io::Result<()> {
+/// `madvise` advice for all merge inputs (benchmarking switch, `IC_MERGE_MADVISE`: `seq` for
+/// `MADV_SEQUENTIAL`, `willneed` for `MADV_WILLNEED`, `huge` for `MADV_HUGEPAGE`); none by
+/// default.
+fn merge_madvise() -> Option<libc::c_int> {
+    static ADVICE: std::sync::OnceLock<Option<libc::c_int>> = std::sync::OnceLock::new();
+    *ADVICE.get_or_init(|| match std::env::var("IC_MERGE_MADVISE").as_deref() {
+        Ok("seq") => Some(libc::MADV_SEQUENTIAL),
+        Ok("willneed") => Some(libc::MADV_WILLNEED),
+        Ok("huge") => Some(libc::MADV_HUGEPAGE),
+        _ => None,
+    })
+}
+
+/// Whether merges open their inputs `POSIX_FADV_NOREUSE`, so that reading them doesn't count as
+/// recent use for page reclaim (benchmarking switch, `IC_NOREUSE=1`).
+fn merge_noreuse() -> bool {
+    static NOREUSE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *NOREUSE.get_or_init(|| std::env::var("IC_NOREUSE").as_deref() == Ok("1"))
+}
+
+/// Whether merges read their inputs with `pread` instead of through their mappings
+/// (benchmarking switch, `IC_MERGE_PREAD=1`; see `PreadWindows`).
+fn merge_pread() -> bool {
+    static PREAD: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *PREAD.get_or_init(|| std::env::var("IC_MERGE_PREAD").as_deref() == Ok("1"))
+}
+
+/// Size of the windows in which `PreadWindows` reads each input file.
+const PREAD_WINDOW: usize = 4 << 20;
+
+/// Reads merge inputs with buffered `pread` instead of through their mappings (benchmarking
+/// prototype). Each input file is read in consecutive `PREAD_WINDOW`-aligned windows,
+/// superseded pages included: skipping them would make the reads non-sequential, and the
+/// kernel's read-ahead would stop.
+struct PreadWindows<'a> {
+    /// The inputs, sorted by address.
+    sources: &'a [PreadSource],
+    /// Per source: the current window's file offset and contents (empty before the first read).
+    windows: Vec<(u64, Vec<u8>)>,
+}
+
+impl<'a> PreadWindows<'a> {
+    fn new(sources: &'a [PreadSource]) -> Self {
+        Self {
+            sources,
+            windows: vec![(0, Vec::new()); sources.len()],
+        }
+    }
+
+    /// Index of the source containing `page`, and the page's offset in its file.
+    fn locate(&self, page: &[u8]) -> Option<(usize, u64)> {
+        let addr = page.as_ptr() as usize;
+        let i = self.sources.partition_point(|source| source.addr <= addr);
+        let source = self.sources.get(i.checked_sub(1)?)?;
+        (addr < source.addr + source.len).then(|| (i - 1, (addr - source.addr) as u64))
+    }
+
+    /// Copies `pages` into `buf`, back to back: pages inside a source from that source's window,
+    /// reading the window that holds them if needed; others directly.
+    fn read_pages(&mut self, pages: &[&[u8]], buf: &mut [u8]) -> std::io::Result<()> {
+        use std::os::unix::fs::FileExt;
+        use std::os::unix::io::FromRawFd;
+        for (i, page) in pages.iter().enumerate() {
+            let dst = &mut buf[i * PAGE_SIZE..(i + 1) * PAGE_SIZE];
+            let Some((source, offset)) = self.locate(page) else {
+                dst.copy_from_slice(page);
+                continue;
+            };
+            let start = offset - offset % PREAD_WINDOW as u64;
+            let (window_start, window) = &mut self.windows[source];
+            if window.is_empty() || *window_start != start {
+                let len = (self.sources[source].len as u64 - start).min(PREAD_WINDOW as u64);
+                window.resize(len as usize, 0);
+                // SAFETY: the descriptor stays open while its mapping lives, and `ManuallyDrop`
+                // keeps this `File` from closing it.
+                let file = std::mem::ManuallyDrop::new(unsafe {
+                    File::from_raw_fd(self.sources[source].fd)
+                });
+                file.read_exact_at(window, start)?;
+                *window_start = start;
+            }
+            let at = (offset - start) as usize;
+            dst.copy_from_slice(&window[at..at + PAGE_SIZE]);
+        }
+        Ok(())
+    }
+}
+
+/// Whether merges prefetch (`MADV_WILLNEED`) the input pages of the next `PREFETCH_CHUNKS`
+/// chunks while copying and writing the current one (benchmarking switch, `IC_MERGE_PREFETCH=1`).
+fn merge_prefetch() -> bool {
+    static PREFETCH: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *PREFETCH.get_or_init(|| std::env::var("IC_MERGE_PREFETCH").as_deref() == Ok("1"))
+}
+
+/// Pages per `BUF_SIZE` chunk.
+const PAGES_PER_CHUNK: usize = BUF_SIZE / PAGE_SIZE;
+
+/// How many chunks ahead merges prefetch their input.
+const PREFETCH_CHUNKS: usize = 2;
+
+/// Asks the kernel to read ahead (`MADV_WILLNEED`) the mapped pages in
+/// `data[start..start + PAGES_PER_CHUNK]`, coalesced into address ranges with gaps of at most
+/// 1 MiB, so that each input file gets few, large requests. Superseded pages in the gaps are read
+/// too. Errors are ignored: advice only affects performance.
+fn prefetch_chunk(data: &[&[u8]], start: usize) {
+    const MAX_GAP: usize = 1 << 20;
+    let end = (start + PAGES_PER_CHUNK).min(data.len());
+    if start >= end {
+        return;
+    }
+    let mut addrs: Vec<usize> = data[start..end]
+        .iter()
+        .map(|page| page.as_ptr() as usize & !(PAGE_SIZE - 1))
+        .collect();
+    addrs.sort_unstable();
+    let advise = |(from, to): (usize, usize)| madvise_range(from, to - from, libc::MADV_WILLNEED);
+    let mut range = (addrs[0], addrs[0] + PAGE_SIZE);
+    for &addr in &addrs[1..] {
+        if addr <= range.1 + MAX_GAP {
+            range.1 = range.1.max(addr + PAGE_SIZE);
+        } else {
+            advise(range);
+            range = (addr, addr + PAGE_SIZE);
+        }
+    }
+    advise(range);
+}
+
+/// Number of threads writing one file's pages (benchmarking switch,
+/// `IC_PAGEMAP_WRITE_THREADS`, default 1).
+fn write_threads() -> usize {
+    static THREADS: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *THREADS.get_or_init(|| {
+        std::env::var("IC_PAGEMAP_WRITE_THREADS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1)
+    })
+}
+
+/// Whether to preallocate each file's data section before writing it (benchmarking switch,
+/// `IC_PAGEMAP_FALLOCATE=1`).
+fn preallocate() -> bool {
+    static PREALLOCATE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *PREALLOCATE.get_or_init(|| std::env::var("IC_PAGEMAP_FALLOCATE").as_deref() == Ok("1"))
+}
+
+/// Helper function to write the data section of an overlay file. Leaves the file position at
+/// the end of the data.
+///
+/// With more than one `write_threads()` and more than one buffer's worth of data, splits the
+/// pages into that many contiguous ranges and writes them concurrently with positioned writes.
+fn write_pages(
+    file: &mut File,
+    data: &Vec<&[u8]>,
+    prefetch: bool,
+    sources: &[PreadSource],
+) -> std::io::Result<()> {
+    let threads = write_threads();
+    let total: usize = data.iter().map(|page| page.len()).sum();
+    #[cfg(target_os = "linux")]
+    if preallocate() && total > 0 {
+        // One allocation for the whole data section, so that concurrent writers of other files
+        // cannot interleave their extents with this file's. Failure only means no preallocation.
+        use std::os::unix::io::AsRawFd;
+        let _ = unsafe { libc::fallocate(file.as_raw_fd(), 0, 0, total as i64) };
+    }
+    if prefetch || !sources.is_empty() || threads <= 1 || total <= BUF_SIZE {
+        return write_pages_sequential(file, data, prefetch, sources);
+    }
+    let per_thread = data.len().div_ceil(threads);
+    let shared: &File = file;
+    std::thread::scope(|scope| {
+        let mut offset = 0_u64;
+        let mut handles = Vec::new();
+        for part in data.chunks(per_thread) {
+            let start = offset;
+            offset += part.iter().map(|page| page.len() as u64).sum::<u64>();
+            handles.push(scope.spawn(move || write_page_range_at(shared, part, start)));
+        }
+        handles
+            .into_iter()
+            .try_for_each(|h| h.join().expect("page writer thread panicked"))
+    })?;
+    use std::io::Seek;
+    file.seek(std::io::SeekFrom::Start(total as u64))?;
+    Ok(())
+}
+
+/// Writes `pages` at `start` with positioned writes, in `BUF_SIZE` chunks, with the same
+/// writeback pacing as `write_pages_sequential`.
+fn write_page_range_at(file: &File, pages: &[&[u8]], start: u64) -> std::io::Result<()> {
+    use std::os::unix::fs::FileExt;
     let mut buf: Vec<u8> = Vec::with_capacity(BUF_SIZE);
-    for page in data {
+    let mut offset = start as i64;
+    let mut prev: Option<(i64, i64)> = None;
+    let mut flush = |buf: &[u8]| -> std::io::Result<()> {
+        file.write_all_at(buf, offset as u64)?;
+        #[cfg(target_os = "linux")]
+        if write_mode() == WriteMode::SyncFileRange {
+            use std::os::unix::io::AsRawFd;
+            let fd = file.as_raw_fd();
+            let len = buf.len() as i64;
+            unsafe { libc::sync_file_range(fd, offset, len, libc::SYNC_FILE_RANGE_WRITE) };
+            if let Some((o, l)) = prev {
+                unsafe {
+                    libc::sync_file_range(
+                        fd,
+                        o,
+                        l,
+                        libc::SYNC_FILE_RANGE_WAIT_BEFORE
+                            | libc::SYNC_FILE_RANGE_WRITE
+                            | libc::SYNC_FILE_RANGE_WAIT_AFTER,
+                    )
+                };
+            }
+            prev = Some((offset, len));
+        }
+        offset += buf.len() as i64;
+        Ok(())
+    };
+    for page in pages {
         if buf.len() + page.len() > BUF_SIZE {
-            file.write_all(&buf)?;
+            flush(&buf)?;
             buf.clear();
         }
         buf.extend(*page);
     }
-    file.write_all(&buf)?;
+    flush(&buf)
+}
+
+/// Writes the data section from the current file position, one `BUF_SIZE` chunk at a time. With
+/// `prefetch`, prefetches the input of the next `PREFETCH_CHUNKS` chunks (see `prefetch_chunk`).
+/// With `sources`, reads the pages inside them with `pread` (see `PreadWindows`), and doesn't
+/// prefetch.
+fn write_pages_sequential(
+    file: &mut File,
+    data: &Vec<&[u8]>,
+    prefetch: bool,
+    sources: &[PreadSource],
+) -> std::io::Result<()> {
+    let prefetch = prefetch && sources.is_empty();
+    if prefetch {
+        for chunk in 0..PREFETCH_CHUNKS {
+            prefetch_chunk(data, chunk * PAGES_PER_CHUNK);
+        }
+    }
+    let mut buf: Vec<u8> = Vec::with_capacity(BUF_SIZE);
+    // Offset and length of the previous chunk, whose writeback is still in progress.
+    let mut offset = 0;
+    let mut prev: Option<(i64, i64)> = None;
+    let mut flush = |file: &mut File, buf: &[u8]| -> std::io::Result<()> {
+        file.write_all(buf)?;
+        #[cfg(target_os = "linux")]
+        if write_mode() == WriteMode::SyncFileRange {
+            use std::os::unix::io::AsRawFd;
+            let fd = file.as_raw_fd();
+            let len = buf.len() as i64;
+            // Start writeback of this chunk, then wait for the previous one.
+            unsafe { libc::sync_file_range(fd, offset, len, libc::SYNC_FILE_RANGE_WRITE) };
+            if let Some((o, l)) = prev {
+                unsafe {
+                    libc::sync_file_range(
+                        fd,
+                        o,
+                        l,
+                        libc::SYNC_FILE_RANGE_WAIT_BEFORE
+                            | libc::SYNC_FILE_RANGE_WRITE
+                            | libc::SYNC_FILE_RANGE_WAIT_AFTER,
+                    )
+                };
+            }
+            prev = Some((offset, len));
+        }
+        offset += buf.len() as i64;
+        Ok(())
+    };
+    if !sources.is_empty() {
+        let mut windows = PreadWindows::new(sources);
+        buf.resize(BUF_SIZE, 0);
+        for chunk in data.chunks(PAGES_PER_CHUNK) {
+            let len = chunk.len() * PAGE_SIZE;
+            windows.read_pages(chunk, &mut buf[..len])?;
+            flush(file, &buf[..len])?;
+        }
+        return Ok(());
+    }
+    for (i, page) in data.iter().enumerate() {
+        if prefetch && i % PAGES_PER_CHUNK == 0 {
+            prefetch_chunk(data, i + PREFETCH_CHUNKS * PAGES_PER_CHUNK);
+        }
+        if buf.len() + page.len() > BUF_SIZE {
+            flush(file, &buf)?;
+            buf.clear();
+        }
+        buf.extend(*page);
+    }
+    flush(file, &buf)?;
     Ok(())
 }
 
@@ -1746,6 +2110,7 @@ fn write_overlay(
     path: &Path,
     metrics: &StorageMetrics,
     op_label: &str, // `LABEL_OP_FLUSH` or `LABEL_OP_MERGE`
+    sources: &[PreadSource],
 ) -> Result<Option<OverlayFile>, PersistenceError> {
     if pages.is_empty() {
         return Ok(None);
@@ -1763,7 +2128,13 @@ fn write_overlay(
 
     let mut file = create_file_for_write(path)?;
 
-    write_pages(&mut file, pages).map_err(|err| PersistenceError::FileSystemError {
+    write_pages(
+        &mut file,
+        pages,
+        op_label == LABEL_OP_MERGE && merge_prefetch(),
+        sources,
+    )
+    .map_err(|err| PersistenceError::FileSystemError {
         path: path.display().to_string(),
         context: format!("Failed to write overlay file {}", path.display()),
         internal_error: err.to_string(),
