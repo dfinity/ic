@@ -363,10 +363,12 @@ fn main() -> io::Result<()> {
         // Blocking on `SIGINT` or `SIGTERM`.
         shutdown_signal(logger.clone()).await;
         spawn_shutdown_watchdog(logger.clone());
-        // Lets the state manager finish the checkpoint work that the next start needs
-        // (verifying the latest checkpoint), skipping the rest.
-        if let Err(err) = tokio::task::spawn_blocking(move || state_manager.shutdown()).await {
-            error!(logger, "State manager shutdown failed: {}", err);
+        // So that a restart neither archives the latest checkpoint nor recomputes its
+        // manifest.
+        if let Err(err) =
+            tokio::task::spawn_blocking(move || state_manager.wait_for_latest_checkpoint()).await
+        {
+            error!(logger, "Waiting for the latest checkpoint failed: {}", err);
         }
     });
     info!(save_logger, "IC Replica Terminating");

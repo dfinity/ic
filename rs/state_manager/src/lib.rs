@@ -86,7 +86,7 @@ use std::os::unix::prelude::IntoRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, AtomicU64, Ordering},
+    atomic::{AtomicU64, Ordering},
 };
 use std::time::{Duration, Instant, SystemTime};
 use std::{
@@ -1037,10 +1037,6 @@ pub struct StateManagerImpl {
     /// tip thread then publishes the result via a paired `WaitForManifest` request.
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
-    /// Set by `shutdown`; the tip and manifest threads then skip the work that only
-    /// matters to a replica that keeps running: resetting the tip, merging and
-    /// rehashing.
-    shutting_down: Arc<AtomicBool>,
     hash_channel: Sender<HashRequest>,
     _hash_thread_handle: JoinOnDrop<()>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
@@ -1317,7 +1313,8 @@ fn release_lock_and_persist_metadata(
     persist_metadata_lock: &Arc<Mutex<()>>,
 ) {
     let states_metadata = states.states_metadata.clone();
-    // This should be the only place where we lock this mutex
+    // The only place where this mutex is locked to persist (`wait_for_latest_checkpoint`
+    // locks it only to wait for a persist to complete).
     let _guard = persist_metadata_lock.lock().unwrap();
     drop(states);
     persist_metadata_or_die(log, metrics, state_layout, &states_metadata);
@@ -1466,7 +1463,6 @@ impl StateManagerImpl {
                 file_backed_memory_allocator: config.file_backed_memory_allocator,
             });
 
-        let shutting_down = Arc::new(AtomicBool::new(false));
         let (_tip_thread_handle, tip_channel) = spawn_tip_thread(
             log.clone(),
             state_layout.capture_tip_handler(),
@@ -1474,7 +1470,6 @@ impl StateManagerImpl {
             config.lsmt_config.clone(),
             metrics.clone(),
             malicious_flags.clone(),
-            Arc::clone(&shutting_down),
         );
         let persist_metadata_guard = Arc::new(Mutex::new(()));
         let (_hash_thread_handle, hash_channel) = spawn_hash_thread(
@@ -1764,7 +1759,6 @@ impl StateManagerImpl {
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
-            shutting_down,
             hash_channel,
             _hash_thread_handle,
             fd_factory,
@@ -2817,20 +2811,48 @@ impl StateManagerImpl {
         })
     }
 
-    /// Prepares for the replica to exit: waits for the checkpoint work already
-    /// queued, notably verifying the latest checkpoint, so that it isn't archived
-    /// on restart. Skips the part of it that only matters to a replica that keeps
-    /// running (resetting the tip, merging, rehashing), so the replica must exit
-    /// soon after: a later checkpoint would find the tip not reset.
-    pub fn shutdown(&self) {
+    /// Waits until the latest checkpoint is verified and its manifest persisted, so
+    /// that a restart neither archives the checkpoint nor recomputes the manifest,
+    /// checking every 100 ms. Returns right away if there is no checkpoint.
+    ///
+    /// For shutting down: doesn't wait for the rest of the checkpoint work (resetting
+    /// the tip, merging), which a replica about to exit doesn't need.
+    pub fn wait_for_latest_checkpoint(&self) {
         let start = Instant::now();
-        info!(
-            self.log,
-            "Shutting down: waiting for queued checkpoint work"
-        );
-        self.shutting_down.store(true, Ordering::SeqCst);
-        self.flush_tip_channel();
-        info!(self.log, "Shut down in {:?}", start.elapsed());
+        loop {
+            let Some(height) = self
+                .state_layout
+                .unfiltered_checkpoint_heights()
+                .ok()
+                .and_then(|heights| heights.last().copied())
+            else {
+                return;
+            };
+            let unverified = matches!(
+                self.state_layout.checkpoint_status(height),
+                Ok(CheckpointStatus::UnverifiedRegular)
+            );
+            let has_manifest = self
+                .states
+                .read()
+                .states_metadata
+                .get(&height)
+                .is_some_and(|metadata| metadata.bundled_manifest.is_some());
+            if !unverified && has_manifest {
+                // Publishing the manifest locks this before releasing the `states` lock
+                // (under which we saw the manifest) and until the metadata is persisted.
+                drop(self.persist_metadata_guard.lock().unwrap());
+                info!(
+                    self.log,
+                    "Checkpoint @{} verified and its manifest persisted after {:?}",
+                    height,
+                    start.elapsed()
+                );
+                return;
+            }
+            info!(every_n_seconds => 5, self.log, "Waiting for checkpoint @{} to be verified and its manifest persisted", height);
+            std::thread::sleep(Duration::from_millis(100));
+        }
     }
 }
 

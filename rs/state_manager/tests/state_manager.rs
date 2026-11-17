@@ -1509,16 +1509,14 @@ fn missing_manifest_is_computed_incrementally() {
 }
 
 #[test]
-fn shutdown_verifies_the_latest_checkpoint_without_resetting_the_tip() {
-    state_manager_test(|metrics, state_manager| {
-        // With nothing pending, returns right away.
-        state_manager.shutdown();
+fn wait_for_latest_checkpoint_waits_for_verification_and_manifest() {
+    state_manager_test(|_metrics, state_manager| {
+        // No checkpoint: returns right away.
+        state_manager.wait_for_latest_checkpoint();
 
-        // A checkpoint made after `shutdown` started is still verified, by the next
-        // `shutdown`, but the tip isn't reset to it.
         let (_, tip) = state_manager.take_tip();
         state_manager.commit_and_certify(tip, CertificationScope::Full, None);
-        state_manager.shutdown();
+        state_manager.wait_for_latest_checkpoint();
 
         let height = state_manager.latest_state_height();
         assert!(
@@ -1527,11 +1525,7 @@ fn shutdown_verifies_the_latest_checkpoint_without_resetting_the_tip() {
                 .checkpoint_verified(height)
                 .is_ok()
         );
-        assert_eq!(
-            tip_request_count(metrics, "validate_replicated_state_and_finalize"),
-            1
-        );
-        assert_eq!(tip_request_count(metrics, "reset_tip_to"), 0);
+        assert!(state_manager.get_state_hash_at(height).is_ok());
     });
 }
 
@@ -9661,19 +9655,6 @@ fn no_state_clone_count(metrics: &MetricsRegistry) -> u64 {
     fetch_int_counter_vec(metrics, "state_manager_no_state_clone_count")
         .values()
         .sum::<u64>()
-}
-
-/// The number of tip thread requests labeled `request` handled so far.
-fn tip_request_count(metrics: &MetricsRegistry, request: &str) -> u64 {
-    let mut labels = BTreeMap::new();
-    labels.insert("request".to_string(), request.to_string());
-    fetch_histogram_vec_stats(
-        metrics,
-        "state_manager_tip_handler_request_duration_seconds",
-    )
-    .get(&labels)
-    .map(|stats| stats.count)
-    .unwrap_or_default()
 }
 
 fn flush_unflushed_delta_count(metrics: &MetricsRegistry) -> u64 {

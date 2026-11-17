@@ -41,7 +41,6 @@ use std::cmp::Reverse;
 use std::collections::BTreeSet;
 use std::convert::identity;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -213,7 +212,6 @@ pub(crate) fn spawn_tip_thread(
     lsmt_config: LsmtConfig,
     metrics: StateManagerMetrics,
     malicious_flags: MaliciousFlags,
-    shutting_down: Arc<AtomicBool>,
 ) -> (JoinOnDrop<()>, Sender<TipRequest>) {
     #[allow(clippy::disallowed_methods)]
     let (tip_sender, tip_receiver) = unbounded();
@@ -234,7 +232,6 @@ pub(crate) fn spawn_tip_thread(
         let metrics = metrics.clone();
         let log = log.clone();
         let malicious_flags = malicious_flags.clone();
-        let shutting_down = Arc::clone(&shutting_down);
         std::thread::Builder::new()
             .name("TipManifest".to_string())
             .spawn(move || {
@@ -254,7 +251,6 @@ pub(crate) fn spawn_tip_thread(
                                 &malicious_flags,
                                 &mut rehash_divergence,
                                 manifest_sender,
-                                &shutting_down,
                                 &metrics,
                                 &log,
                             );
@@ -537,14 +533,6 @@ pub(crate) fn spawn_tip_thread(
                             checkpoint_layout,
                             pagemaptypes,
                         } => {
-                            if shutting_down.load(Ordering::SeqCst) {
-                                info!(
-                                    log,
-                                    "Shutting down: skipping the tip reset and merges @{}",
-                                    checkpoint_layout.height()
-                                );
-                                continue;
-                            }
                             let timer = request_timer(&metrics, "reset_tip_to");
                             tip_state.tip_folder_state = Default::default();
                             tip_state.tip_folder_state.page_maps_height =
@@ -575,7 +563,6 @@ pub(crate) fn spawn_tip_thread(
                                 &pagemaptypes,
                                 height,
                                 &mut thread_pool,
-                                &shutting_down,
                                 &log,
                                 &lsmt_config,
                                 &metrics,
@@ -1108,7 +1095,6 @@ fn merge(
     pagemaptypes: &[PageMapType],
     height: Height,
     thread_pool: &mut scoped_threadpool::Pool,
-    shutting_down: &AtomicBool,
     log: &ReplicaLogger,
     lsmt_config: &LsmtConfig,
     metrics: &StateManagerMetrics,
@@ -1225,10 +1211,6 @@ fn merge(
     // Largest first, so that `parallel_map` starts them right away.
     scheduled_merges.sort_by_key(|m| Reverse(m.write_size_bytes()));
     parallel_map(thread_pool, scheduled_merges.iter(), |m| {
-        // Merges not yet started when the replica begins shutting down are pointless.
-        if shutting_down.load(Ordering::SeqCst) {
-            return;
-        }
         m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
             // A failed merge may have removed its input files from the tip and left a partial
             // output behind, so the next checkpoint would include a corrupt `PageMap`.
@@ -1583,7 +1565,6 @@ fn handle_compute_manifest_request(
     #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
     rehash_divergence: &mut bool,
     manifest_sender: Sender<crate::BundledManifest>,
-    shutting_down: &AtomicBool,
     metrics: &StateManagerMetrics,
     log: &ReplicaLogger,
 ) {
@@ -1785,10 +1766,6 @@ fn handle_compute_manifest_request(
         *rehash_divergence = false;
         return;
     }
-    // The rehash only checks the next manifest's base: pointless when shutting down.
-    if shutting_down.load(Ordering::SeqCst) {
-        return;
-    }
     let _timer = request_timer(metrics, "compute_manifest_rehash");
     let start = Instant::now();
     let rehash_manifest_info = BaseManifestInfo {
@@ -1879,7 +1856,6 @@ mod test {
                 lsmt_config_default(),
                 metrics,
                 MaliciousFlags::default(),
-                Default::default(),
             );
         });
     }

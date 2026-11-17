@@ -122,7 +122,6 @@ fn init(
         lsmt_config_default(),
         state_manager_metrics.clone(),
         MaliciousFlags::default(),
-        Default::default(),
     );
     (h, s, layout, state_manager_metrics)
 }
