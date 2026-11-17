@@ -163,6 +163,52 @@ fn merge_manifests_common_canister() {
     );
 }
 
+/// What is taken from the source, and what counts as a collision, depends only
+/// on the entry of `canister_states/` or `snapshots/` a file is in, not on
+/// whether that entry is named after a canister ID.
+#[test]
+fn merge_manifests_entries_not_named_after_canister_ids() {
+    let destination = manifest_of(
+        CURRENT_STATE_SYNC_VERSION,
+        &[canister_pbuf_path(CANISTER_1)],
+    );
+    let source = manifest_of(
+        CURRENT_STATE_SYNC_VERSION,
+        &[
+            "canister_states/other/file".to_string(),
+            "other/file".to_string(),
+            "snapshots/other/file".to_string(),
+        ],
+    );
+
+    let merged = merge_manifests(&destination, &source).unwrap();
+
+    let paths: Vec<_> = merged
+        .file_table
+        .iter()
+        .map(|file| file.relative_path.to_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        paths,
+        vec![
+            canister_pbuf_path(CANISTER_1),
+            "canister_states/other/file".to_string(),
+            "snapshots/other/file".to_string(),
+            SUBNET_MERGED_FILE.to_string(),
+        ]
+    );
+
+    let colliding_destination = manifest_of(
+        CURRENT_STATE_SYNC_VERSION,
+        &["canister_states/other/another_file".to_string()],
+    );
+    assert_matches!(
+        merge_manifests(&colliding_destination, &source),
+        Err(ManifestValidationError::InconsistentManifest { reason })
+            if reason == "both manifests hold files in canister_states/other"
+    );
+}
+
 #[test]
 fn merge_manifests_unsupported_version() {
     let supported = manifest_of(

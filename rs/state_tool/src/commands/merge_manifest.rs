@@ -126,6 +126,20 @@ mod tests {
     }
 
     #[test]
+    fn merge_manifest_matches_the_merged_checkpoint_with_entries_not_named_after_canister_ids() {
+        let tmp = TempDir::new().unwrap();
+        let base = checkpoint(tmp.path(), "base", &[CANISTER_1]);
+        let source = checkpoint(tmp.path(), "source", &[CANISTER_2]);
+        for dir in [CANISTER_STATES_DIR, SNAPSHOTS_DIR] {
+            let entry = source.join(dir).join("other");
+            fs::create_dir_all(&entry).unwrap();
+            fs::write(entry.join("file"), dir).unwrap();
+        }
+
+        assert_merged_manifest_is_expected(&tmp, base, source);
+    }
+
+    #[test]
     fn merge_manifest_matches_the_merged_checkpoint_of_a_merged_base() {
         let tmp = TempDir::new().unwrap();
         let base = checkpoint(tmp.path(), "base", &[CANISTER_1]);

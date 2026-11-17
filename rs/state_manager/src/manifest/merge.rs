@@ -2,7 +2,7 @@ use super::builder::{ManifestBuilder, files_with_chunks};
 use super::{ManifestValidationError, validate_manifest_internal_consistency};
 use crate::state_sync::types::{ChunkInfo, FileInfo, MAX_SUPPORTED_STATE_SYNC_VERSION, Manifest};
 use ic_protobuf::state::system_metadata::v1 as pb_metadata;
-use ic_state_layout::{SUBNET_MERGED_FILE, canister_id_from_path};
+use ic_state_layout::{CANISTER_STATES_DIR, SNAPSHOTS_DIR, SUBNET_MERGED_FILE};
 use ic_types::state_sync::StateSyncVersion;
 use prost::Message;
 use std::collections::{BTreeMap, BTreeSet};
@@ -19,8 +19,8 @@ mod tests;
 ///
 /// This is intended to replicate the exact manifest computed from the
 /// checkpoint that `ic-state-tool merge` assembles from the two checkpoints:
-/// every file of `destination` and the files of the canisters and canister
-/// snapshots of `source`, plus a `subnet_merged.pbuf` marking the result of a
+/// every file of `destination` and every file under `canister_states/` and
+/// `snapshots/` of `source`, plus a `subnet_merged.pbuf` marking the result of a
 /// merge, which replaces any marker that `destination` holds.
 ///
 /// Only supports manifest versions 3 and up (because earlier versions had
@@ -73,7 +73,7 @@ pub fn merge_manifests(
         .filter(|(file, _)| file.relative_path != Path::new(SUBNET_MERGED_FILE))
         .chain(
             files_with_chunks(source)
-                .filter(|(file, _)| canister_id_from_path(&file.relative_path).is_some()),
+                .filter(|(file, _)| canister_dir(&file.relative_path).is_some()),
         )
         .map(|(file, chunks)| (file.relative_path.as_path(), (file, chunks)))
         .collect();
@@ -96,18 +96,26 @@ pub fn merge_manifests(
     builder.build()
 }
 
-/// The directories of `manifest` holding the files of a canister or of a
-/// canister snapshot, e.g. `canister_states/<canister ID>`.
+/// The entries of `canister_states/` and `snapshots/` that `manifest` holds
+/// files in, e.g. `canister_states/<canister ID>`.
 fn canister_dirs(manifest: &Manifest) -> BTreeSet<[&OsStr; 2]> {
     manifest
         .file_table
         .iter()
-        .filter(|file| canister_id_from_path(&file.relative_path).is_some())
-        .filter_map(|file| {
-            let mut components = file.relative_path.iter();
-            Some([components.next()?, components.next()?])
-        })
+        .filter_map(|file| canister_dir(&file.relative_path))
         .collect()
+}
+
+/// The entry of `canister_states/` or `snapshots/` that `path` is or is in,
+/// e.g. `canister_states/<canister ID>`, if any. A merge takes these entries
+/// over from the source as a whole, whatever their names.
+fn canister_dir(path: &Path) -> Option<[&OsStr; 2]> {
+    let mut components = path.iter();
+    let top_level = components.next()?;
+    if top_level != OsStr::new(CANISTER_STATES_DIR) && top_level != OsStr::new(SNAPSHOTS_DIR) {
+        return None;
+    }
+    Some([top_level, components.next()?])
 }
 
 impl ManifestBuilder {
