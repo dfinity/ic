@@ -142,6 +142,7 @@ impl<T> WritePolicy for RwPolicy<'_, T> {}
 
 pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CheckpointStatus {
     /// Locally created checkpoint that has been fully verified.
     Verified,
@@ -1941,6 +1942,10 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     ///
     /// This is the canonical method for determining checkpoint status.
     /// Other methods should use this function rather than checking markers directly.
+    ///
+    /// `ExecutionMode::checkpoint_status` in `ic-recovery` duplicates this logic
+    /// with shell commands, as it also checks checkpoints on remote nodes; keep
+    /// the two in sync.
     pub fn checkpoint_status(&self) -> CheckpointStatus {
         if self.state_sync_checkpoint_marker().exists() {
             // The state sync marker alone makes the checkpoint unverified. The unverified marker is
@@ -2883,6 +2888,11 @@ impl<T> WasmFile<T>
 where
     T: WritePolicy,
 {
+    /// Writes `wasm` to the file, replacing any existing one, and marks it readonly.
+    ///
+    /// Does not sync the file to disk: as with protobufs, the checkpoint's sync in
+    /// `finalize_and_remove_unverified_marker` makes it durable before the checkpoint is
+    /// marked verified.
     pub fn serialize(&self, wasm: &CanisterModule) -> Result<(), LayoutError> {
         // If there already exists a wasm file, delete it first to avoid writing hardlinked/readonly files.
         self.try_delete_file()?;
@@ -2898,12 +2908,6 @@ where
         file.flush().map_err(|err| LayoutError::IoError {
             path: self.path.clone(),
             message: "failed to flush wasm binary to disk".to_string(),
-            io_err: err,
-        })?;
-
-        file.sync_all().map_err(|err| LayoutError::IoError {
-            path: self.path.clone(),
-            message: "failed to sync wasm binary to disk".to_string(),
             io_err: err,
         })?;
 

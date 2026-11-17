@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added the `args_hash` field to `CodeDeploymentRecord`, the SHA-256 hash of the init/post-upgrade argument of `install_code`. It is `None` for entries recorded before `args_hash` started being recorded in canister history.
+
 ## [0.11.0] - 2026-10-02
 
 ### Added

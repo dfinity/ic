@@ -100,7 +100,6 @@ pub fn start_nns_delegation_manager(
     tls_config: Arc<dyn TlsConfig>,
     cancellation_token: CancellationToken,
 ) -> (JoinHandle<()>, NNSDelegationReader) {
-    let logger = log.clone();
     let manager = DelegationManager {
         config,
         log,
@@ -124,18 +123,17 @@ pub fn start_nns_delegation_manager(
             .await
     });
 
-    (join_handle, NNSDelegationReader::new(rx, logger))
+    (join_handle, NNSDelegationReader::new(rx))
 }
 
 /// What the [`DelegationManager`] last published to the [`NNSDelegationReader`]s.
-#[allow(clippy::large_enum_variant)]
 enum PublishedDelegation {
     /// Nothing has been published yet, i.e. the readers are still waiting to be initialized.
     Uninitialized,
     /// We are on the NNS subnet, where there is no delegation. Published as `None`.
     AbsentBecauseNNS,
     /// A delegation which has been published.
-    Present(NNSDelegationBuilder),
+    Present(Arc<NNSDelegationBuilder>),
 }
 
 struct DelegationManager {
@@ -243,7 +241,7 @@ impl DelegationManager {
         None
     }
 
-    async fn run(mut self, sender: watch::Sender<Option<NNSDelegationBuilder>>) {
+    async fn run(mut self, sender: watch::Sender<Option<Arc<NNSDelegationBuilder>>>) {
         let mut proactive_interval = tokio::time::interval(DELEGATION_PROACTIVE_UPDATE_INTERVAL);
         let mut reactive_interval = tokio::time::interval(DELEGATION_REACTIVE_UPDATE_INTERVAL);
         // If we miss a tick because fetching the delegation took too long (f.ex. because the NNS
@@ -261,6 +259,7 @@ impl DelegationManager {
                 // No new delegation was fetched. Retry on the next tick.
                 continue;
             };
+            let new_delegation = new_delegation.map(Arc::new);
 
             sender.send_replace(new_delegation.clone());
             self.metrics.updates.inc();
@@ -516,7 +515,7 @@ async fn try_fetch_delegation_from_nns(
         labeled_tree,
         response.certificate,
         subnet_id,
-        log,
+        log.clone(),
     );
 
     observe_delegation_sizes(&nns_delegation_builder, metrics);
@@ -1268,6 +1267,7 @@ mod tests {
 
         assert!(
             reader
+                .snapshot()
                 .get_delegation(
                     CanisterRangesCheck::AllSubnetRanges,
                     &*mutable_state.read().unwrap()
@@ -1310,6 +1310,7 @@ mod tests {
             reader.wait_until_updated().await.unwrap();
 
             let delegation = reader
+                .snapshot()
                 .get_delegation(
                     CanisterRangesCheck::AllSubnetRanges,
                     &*mutable_state.read().unwrap(),
@@ -1517,7 +1518,6 @@ mod tests {
                     .build_verified(
                         CanisterRangesCheck::AllSubnetRanges,
                         &*mutable_state.read().unwrap(),
-                        &no_op_logger(),
                     )
                     .expect("Delegation should be valid")
                     .certificate,
@@ -1679,20 +1679,22 @@ mod tests {
         rt_handle: &tokio::runtime::Handle,
         registry_client: &dyn RegistryClient,
         tls_config: &dyn TlsConfig,
-    ) -> NNSDelegationBuilder {
-        load_root_delegation(
-            &Config::default(),
-            &no_op_logger(),
-            rt_handle,
-            APP_SUBNET_ID,
-            SubnetType::Application,
-            NNS_SUBNET_ID,
-            registry_client,
-            tls_config,
-            &DelegationManagerMetrics::new(&MetricsRegistry::new()),
+    ) -> Arc<NNSDelegationBuilder> {
+        Arc::new(
+            load_root_delegation(
+                &Config::default(),
+                &no_op_logger(),
+                rt_handle,
+                APP_SUBNET_ID,
+                SubnetType::Application,
+                NNS_SUBNET_ID,
+                registry_client,
+                tls_config,
+                &DelegationManagerMetrics::new(&MetricsRegistry::new()),
+            )
+            .await
+            .expect("Should fetch an initial delegation on an app subnet"),
         )
-        .await
-        .expect("Should fetch an initial delegation on an app subnet")
     }
 
     #[tokio::test]
@@ -1943,7 +1945,7 @@ mod tests {
         .unwrap();
 
         assert_matches!(
-            reader.get_delegation(
+            reader.snapshot().get_delegation(
                 CanisterRangesCheck::AllSubnetRanges,
                 &*mutable_state.read().unwrap()
             ),

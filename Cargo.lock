@@ -6470,7 +6470,6 @@ name = "ic-artifact-pool"
 version = "0.9.0"
 dependencies = [
  "bincode",
- "byteorder",
  "clap",
  "criterion",
  "ic-config",
@@ -7830,6 +7829,7 @@ name = "ic-consensus-chain-key"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "candid",
  "ic-artifact-pool",
  "ic-consensus-mocks",
  "ic-consensus-utils",
@@ -9513,6 +9513,7 @@ dependencies = [
  "ic-metrics",
  "ic-nns-constants",
  "ic-query-stats",
+ "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
  "ic-registry-resource-limits",
  "ic-registry-routing-table",
@@ -12805,6 +12806,7 @@ dependencies = [
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-replay",
+ "ic-state-layout",
  "ic-state-manager",
  "ic-test-utilities-consensus",
  "ic-test-utilities-tmpdir",
@@ -14442,6 +14444,7 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-messaging",
  "ic-metrics",
+ "ic-nns-delegation-reader",
  "ic-protobuf",
  "ic-query-stats",
  "ic-registry-client-fake",
@@ -14610,15 +14613,19 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "futures",
+ "hex",
  "ic-base-types",
+ "ic-cup-explorer",
  "ic-interfaces-registry",
  "ic-protobuf",
  "ic-recovery",
  "ic-registry-client-helpers",
  "ic-registry-subnet-type",
+ "ic-state-layout",
  "ic-subnet-tools",
  "ic-types",
  "prometheus-parse",
+ "prost",
  "reqwest",
  "serde",
  "serde_json",
@@ -15723,6 +15730,7 @@ dependencies = [
  "hyper-util",
  "ic-base-types",
  "ic-canonical-state",
+ "ic-canonical-state-tree-hash",
  "ic-config",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
@@ -22880,9 +22888,6 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 [[package]]
 name = "stable_reader"
 version = "0.9.0"
-dependencies = [
- "byteorder",
-]
 
 [[package]]
 name = "stable_structures"
@@ -25750,6 +25755,7 @@ dependencies = [
  "futures",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
+ "ic-types",
  "slog",
  "systest-message-routing-common",
  "tokio",

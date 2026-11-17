@@ -32,6 +32,7 @@ rust_library(
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/cycles_account_manager",
         "//rs/execution_environment",
+        "//rs/http_endpoints/nns_delegation_reader",
         "//rs/http_endpoints/public",
         "//rs/https_outcalls/consensus",
         "//rs/ingress_manager",

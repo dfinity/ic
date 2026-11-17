@@ -20,9 +20,8 @@ All commands run from the repository root (`cd "$(git rev-parse --show-toplevel)
 
 ## The `hunt` script
 
-Diagnosis is driven by the upstream `hunt` reproducibility script. It is **not
-checked into this repo** — get it from [its gist](https://gist.github.com/nmattia/dc8a1d4f3bc36c9c0133d15f06acc74e), save it
-at the repo root as `hunt`, and `chmod +x` it. It builds a target **twice**, each
+Diagnosis is driven by the [`hunt`](hunt) reproducibility script in this skill's
+directory, `.claude/skills/fix-build-determinism/hunt`. It builds a target **twice**, each
 time in a *freshly cloned* checkout under an output base nested at a **different
 depth** — so the absolute build path differs between the two runs the same way
 it would differ between two machines. It writes each build's
@@ -31,7 +30,7 @@ digest) of every action. Any output whose digest differs between the two runs is
 a non-reproducible artifact. A clean run ends with `builds 1 - 2: no diff ✓`.
 
 ```
-usage: ./hunt [--root ROOT] [--startup-options OPTS] [--build-options OPTS] [--runs N] TARGET
+usage: .claude/skills/fix-build-determinism/hunt [--root ROOT] [--startup-options OPTS] [--build-options OPTS] [--runs N] TARGET
 
   --root ROOT            dir for the per-run checkouts, output bases and execlogs.
                          Default: a fresh `mktemp -d`.
@@ -58,11 +57,11 @@ See the **run-in-dev-container** skill for how to invoke `container-run.sh`
 
 ```sh
 # quick pass/fail (artifacts land in an ephemeral in-container tempdir):
-./ci/container/container-run.sh ./hunt --build-options='--config=local' //my:target
+./ci/container/container-run.sh .claude/skills/fix-build-determinism/hunt --build-options='--config=local' //my:target
 
 # to *diagnose* (step 3 needs the two builds' outputs to survive the container),
 # point --root at a path inside the checkout (mounted at its host path) so the artifacts persist on the host:
-./ci/container/container-run.sh ./hunt --root "$PWD/,hunt" --build-options='--config=local' //my:target
+./ci/container/container-run.sh .claude/skills/fix-build-determinism/hunt --root "$PWD/,hunt" --build-options='--config=local' //my:target
 ```
 
 Gotchas:

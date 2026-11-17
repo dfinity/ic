@@ -8,7 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 bincode = { workspace = true }
-byteorder = { workspace = true }
 clap = { workspace = true }
 ic-config = { path = "../config" }
 ic-interfaces = { path = "../interfaces" }
