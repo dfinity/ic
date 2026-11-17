@@ -19,7 +19,6 @@ use ic_state_layout::{CheckpointLayout, ReadOnly, RwPolicy, StateLayout, error::
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{CryptoHashOfState, Height, malicious_flags::MaliciousFlags};
 use ic_utils::thread::parallel_map;
-use std::num::NonZeroUsize;
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -379,17 +378,12 @@ impl IncompleteState {
             }
         }
 
-        parallel_map(
-            thread_pool,
-            by_parent.into_iter(),
-            NonZeroUsize::MIN,
-            |(_parent, files)| {
-                for file_info in files {
-                    let path = root.join(&file_info.relative_path);
-                    Self::create_file_and_set_len(log, &path, file_info.size_bytes);
-                }
-            },
-        );
+        parallel_map(thread_pool, by_parent.into_iter(), 1, |(_parent, files)| {
+            for file_info in files {
+                let path = root.join(&file_info.relative_path);
+                Self::create_file_and_set_len(log, &path, file_info.size_bytes);
+            }
+        });
     }
 
     /// Creates a file and sets its length.

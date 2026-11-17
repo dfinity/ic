@@ -25,7 +25,6 @@ use ic_utils::thread::maybe_parallel_map;
 use ic_validate_eq::ValidateEq;
 use std::collections::BTreeMap;
 use std::convert::{TryFrom, identity};
-use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -125,7 +124,7 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
         maybe_parallel_map(
             &mut thread_pool,
             checkpoint_layout.all_existing_pagemaps()?.into_iter(),
-            NonZeroUsize::MIN,
+            1,
             |pm| validate(pm),
         )
         .into_iter()
@@ -134,7 +133,7 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
         maybe_parallel_map(
             &mut thread_pool,
             checkpoint_layout.all_existing_wasm_files()?.into_iter(),
-            NonZeroUsize::MIN,
+            1,
             |wasm_file| try_mmap_wasm_file(wasm_file),
         )
         .into_iter()
@@ -513,23 +512,18 @@ impl CheckpointLoader {
                 .or_default()
                 .push(snapshot_id);
         }
-        let results = maybe_parallel_map(
-            thread_pool,
-            canister_ids.iter(),
-            NonZeroUsize::MIN,
-            |canister_id| {
-                load_canister_state_from_checkpoint(
-                    &self.checkpoint_layout,
-                    canister_id,
-                    snapshot_ids_per_canister
-                        .get(canister_id)
-                        .cloned()
-                        .unwrap_or_default(),
-                    Arc::clone(&self.fd_factory),
-                    &self.metrics,
-                )
-            },
-        );
+        let results = maybe_parallel_map(thread_pool, canister_ids.iter(), 1, |canister_id| {
+            load_canister_state_from_checkpoint(
+                &self.checkpoint_layout,
+                canister_id,
+                snapshot_ids_per_canister
+                    .get(canister_id)
+                    .cloned()
+                    .unwrap_or_default(),
+                Arc::clone(&self.fd_factory),
+                &self.metrics,
+            )
+        });
 
         for result in results.into_iter() {
             let (canister_state, durations) = result?;
@@ -571,34 +565,29 @@ impl CheckpointLoader {
                 .or_default()
                 .push(snapshot_id);
         }
-        maybe_parallel_map(
-            thread_pool,
-            ref_canister_ids.iter(),
-            NonZeroUsize::MIN,
-            |canister_id| {
-                load_canister_state_from_checkpoint(
-                    &self.checkpoint_layout,
-                    canister_id,
-                    snapshot_ids_per_canister
-                        .get(canister_id)
-                        .cloned()
-                        .unwrap_or_default(),
-                    Arc::clone(&self.fd_factory),
-                    &self.metrics,
+        maybe_parallel_map(thread_pool, ref_canister_ids.iter(), 1, |canister_id| {
+            load_canister_state_from_checkpoint(
+                &self.checkpoint_layout,
+                canister_id,
+                snapshot_ids_per_canister
+                    .get(canister_id)
+                    .cloned()
+                    .unwrap_or_default(),
+                Arc::clone(&self.fd_factory),
+                &self.metrics,
+            )
+            .map_err(|err| {
+                format!(
+                    "Failed to load canister state for validation for key #{canister_id}: {err}"
                 )
-                .map_err(|err| {
-                    format!(
-                        "Failed to load canister state for validation for key #{canister_id}: {err}"
-                    )
-                })?
-                .0
-                .validate_eq(
-                    ref_canister_states
-                        .get(canister_id)
-                        .expect("Failed to get canister from canister_states"),
-                )
-            },
-        )
+            })?
+            .0
+            .validate_eq(
+                ref_canister_states
+                    .get(canister_id)
+                    .expect("Failed to get canister from canister_states"),
+            )
+        })
         .into_iter()
         .try_for_each(identity)
     }

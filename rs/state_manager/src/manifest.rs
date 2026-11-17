@@ -35,7 +35,6 @@ use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::OsStr;
 use std::fmt;
-use std::num::NonZeroUsize;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
@@ -674,7 +673,7 @@ fn files_with_sizes(
         for entry in parallel_map(
             thread_pool,
             paths_to_process.into_iter(),
-            NonZeroUsize::MIN,
+            1,
             |relative_path| file_with_size_or_dir(root, relative_path.to_path_buf()),
         ) {
             match entry? {
@@ -823,7 +822,7 @@ fn files_with_same_inodes(
     parallel_map(
         thread_pool,
         files.iter(),
-        NonZeroUsize::MIN,
+        1,
         |FileWithSize(relative_path, _size_bytes)| {
             use std::os::unix::fs::MetadataExt;
             let new_path = checkpoint.raw_path().join(relative_path);
