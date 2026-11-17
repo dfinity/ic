@@ -1829,6 +1829,8 @@ fn check_custom_sections_and_code_size(
     let mut parser = wasmparser::Parser::new(0);
     let mut data = wasm.as_slice();
     let mut custom_sections: usize = 0;
+    // Running total of function-name entries across every name section in the module.
+    let mut name_section_entries: usize = 0;
     let mut code_section_size = NumBytes::from(0);
     let mut seen_code_section = false;
     loop {
@@ -1866,19 +1868,20 @@ fn check_custom_sections_and_code_size(
                         allowed: MAX_RAW_CUSTOM_SECTIONS,
                     });
                 }
-                // Bound the function name subsection of the name section.
-                // A well-formed name section names each function at most once,
-                // so the count cannot legitimately exceed the function limit.
+                // Bound the function name subsections of the name section(s).
+                // A well-formed module has a single name section naming each
+                // function at most once, so the module-wide total cannot
+                // legitimately exceed the function limit.
                 if let wasmparser::KnownCustom::Name(name_reader) = reader.as_known() {
-                    let mut names: usize = 0;
                     for subsection in name_reader {
                         // A malformed name section is reported later by Wasmtime.
                         let Ok(subsection) = subsection else { break };
                         if let wasmparser::Name::Function(map) = subsection {
-                            names = names.saturating_add(map.count() as usize);
-                            if names > MAX_FUNCTIONS {
+                            name_section_entries =
+                                name_section_entries.saturating_add(map.count() as usize);
+                            if name_section_entries > MAX_FUNCTIONS {
                                 return Err(WasmValidationError::TooManyNameSectionEntries {
-                                    defined: names,
+                                    defined: name_section_entries,
                                     allowed: MAX_FUNCTIONS,
                                 });
                             }
