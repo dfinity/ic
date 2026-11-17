@@ -16,12 +16,9 @@ fn main() -> Result<()> {
     let config = Config::new(SUBNETS, NODES_PER_SUBNET, RUNTIME, REQUEST_RATE)
         // Guaranteed-response calls and best-effort calls with 30 second timeout.
         .with_call_timeouts(&[None, Some(30)])
-        // The 120 single-node subnets share their Farm hosts with the VMs of other
-        // tests. A node that gets less CPU time than it needs executes rounds slower
-        // than blocks are made, so consensus delays the blocks of its subnet and the
-        // subnet's send rate drops from above 1 to as low as 0.1. So use a lower send
-        // rate threshold than the default 0.3, and tolerate a few subnets that are
-        // slower still.
+        // The subnets share their Farm hosts with the VMs of other tests, and the
+        // subnet of a node that gets too little CPU time there is slow. So use a lower
+        // send rate threshold than the default 0.3 and tolerate a few slow subnets.
         .with_send_rate_threshold(0.2)
         .with_max_slow_subnets(SUBNETS / 20);
     let test = config.clone().test();
