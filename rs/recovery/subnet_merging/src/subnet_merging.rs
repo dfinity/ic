@@ -340,7 +340,9 @@ impl SubnetMerging {
             chain_key_config: _,
             // Set by the tool itself to halt both subnets.
             halt_at_cup_height: _,
-            // Capacity, left to the merge step.
+            // Capacity, not checked yet: a follow-up is to load the merged
+            // state into a `StateMachine` with the destination subnet's
+            // settings and check that the merged state is fine there.
             max_number_of_canisters: _,
             resource_limits: _,
             // Settings of each subnet on its own: the merged subnet keeps those
