@@ -547,9 +547,9 @@ fn streams_as_tree<'a>(
         )
     };
 
-    // The loopback stream is not part of the certified state.
     fork(MapTransformFork {
         map: streams,
+        // The loopback stream is not part of the certified state.
         map_filter: StreamsFilter { own_subnet_id },
         certification_version,
         mk_tree,

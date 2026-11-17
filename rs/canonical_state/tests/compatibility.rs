@@ -24,8 +24,18 @@ use strum::IntoEnumIterator;
 /// A named combination of canonical type; and the certification version range
 /// that it may be applied within; for encoding and decoding values of type `T`.
 ///
-/// E.g. `StreamHeaderV6` may be used for encoding and decoding `StreamHeader`
-/// values for any certification version in range `0..=6`.
+/// E.g. if certification version `V31` changed the canonical `StreamHeader`,
+/// the previous canonical type would be moved to `old_types` (as e.g.
+/// `StreamHeaderV30`) and remain applicable within `..=V30`; while the new
+/// canonical `StreamHeader` would be applicable to all supported versions. The
+/// `*_ENCODINGS` collections below then hold both, and the tests check that they
+/// produce the same encoding at every version that both apply to. Values that
+/// only the new canonical type can encode (e.g. a new field or enum variant) are
+/// produced by a separate `arb_*` strategy arm whose version range starts at
+/// `V31`; while the existing arm must then exclude them (e.g. leave the new field
+/// unset), so that its values remain valid at all supported versions. The
+/// `*_ENCODINGS` collections and `arb_*` strategies below each contain a
+/// commented-out example of such an addition.
 ///
 /// Per https://stackoverflow.com/questions/67342223/one-type-function-pointer-is-more-general-than-the-other
 /// the Rust compiler is unable to "automatically convert generic functions
@@ -66,28 +76,57 @@ impl<T> VersionedEncoding<T> {
 pub(crate) fn arb_valid_versioned_stream_header(
     max_signal_count: usize,
 ) -> impl Strategy<Value = (StreamHeader, RangeInclusive<CertificationVersion>)> {
-    prop_oneof![(
-        arb_stream_header(
-            /* min_signal_count */ 0,
-            max_signal_count,
-            /* with_reject_reasons */ RejectReason::all(),
+    prop_oneof![
+        (
+            arb_stream_header(
+                /* min_signal_count */ 0,
+                max_signal_count,
+                /* with_reject_reasons */ RejectReason::all(),
+            ),
+            Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
-        Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
-    )]
+        // Headers that are only valid starting with a newer certification version,
+        // e.g. if `V31` added a new `RejectReason` (which the arm above must then
+        // exclude, so that its headers remain valid at all supported versions):
+        //
+        // (
+        //     arb_stream_header(
+        //         /* min_signal_count */ 0,
+        //         max_signal_count,
+        //         /* with_reject_reasons */ RejectReason::all(),
+        //     ),
+        //     Just(CertificationVersion::V31..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        // ),
+    ]
 }
 
 /// Produces a `StreamHeader` invalid at all certification versions in the range.
 pub(crate) fn arb_invalid_versioned_stream_header(
     max_signal_count: usize,
 ) -> impl Strategy<Value = (StreamHeader, RangeInclusive<CertificationVersion>)> {
-    prop_oneof![(
-        arb_invalid_stream_header(
-            /* min_signal_count */ 1,
-            max_signal_count,
-            /* with_reject_reasons */ RejectReason::all(),
+    prop_oneof![
+        (
+            arb_invalid_stream_header(
+                /* min_signal_count */ 1,
+                max_signal_count,
+                /* with_reject_reasons */ RejectReason::all(),
+            ),
+            Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION),
         ),
-        Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION),
-    )]
+        // Headers that are only invalid up to some certification version, e.g. if
+        // `V31` added a new `RejectReason` (which the arm above must then exclude,
+        // so that its headers remain invalid at all supported versions), headers
+        // using it would be invalid before `V31`:
+        //
+        // (
+        //     arb_stream_header(
+        //         /* min_signal_count */ 1,
+        //         max_signal_count,
+        //         /* with_reject_reasons */ vec![RejectReason::NewReason],
+        //     ),
+        //     Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V30),
+        // ),
+    ]
 }
 
 lazy_static! {
@@ -101,13 +140,21 @@ lazy_static! {
             |v| StreamHeaderV26::proxy_encode(v),
             |v| StreamHeaderV26::proxy_decode(v),
         ),
+        // Previous canonical type, applicable up to the last certification
+        // version that used it, e.g.:
+        //
+        // VersionedEncoding::new(
+        //     MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V30,
+        //     "StreamHeaderV30",
+        //     |v| StreamHeaderV30::proxy_encode(v),
+        //     |v| StreamHeaderV30::proxy_decode(v),
+        // ),
     ];
 }
 
-/// Tests that given a `StreamHeader` that is valid for a given certification
-/// version range (e.g. no `reject_signals` before certification version 8) all
-/// supported canonical type (e.g. `StreamHeaderV6` or `StreamHeader`) and
-/// certification version combinations produce the exact same encoding.
+/// Tests that, given a `StreamHeader` that is valid for a given certification
+/// version range, all canonical types in `STREAM_HEADER_ENCODINGS` that are
+/// applicable to a given certification version produce the exact same encoding.
 #[test_strategy::proptest]
 fn stream_header_unique_encoding(
     #[strategy(arb_valid_versioned_stream_header(
@@ -152,8 +199,8 @@ fn stream_header_unique_encoding(
 }
 
 /// Tests that, given a `StreamHeader` that is valid for a given certification
-/// version range (e.g. no `reject_signals` before certification version 8),
-/// all supported encodings will decode back into the same `StreamHeader`.
+/// version range, all supported encodings will decode back into the same
+/// `StreamHeader`.
 #[test_strategy::proptest]
 fn stream_header_roundtrip_encoding(
     #[strategy(arb_valid_versioned_stream_header(
@@ -184,8 +231,8 @@ fn stream_header_roundtrip_encoding(
 }
 
 /// Tests that, given a `StreamHeader` that is invalid for a given certification
-/// version range (e.g. `reject_signals` before certification version 8),
-/// encoding will panic.
+/// version range (e.g. with a reject signal at `signals_end`), encoding will
+/// panic.
 ///
 /// Be aware that the output generated by this test failing includes all panics
 /// (e.g. stack traces), including those produced by previous iterations where
@@ -217,10 +264,20 @@ fn stream_header_encoding_panic_on_invalid(
 /// Produces a `StreamMessage` valid at all certification versions in the range.
 pub(crate) fn arb_valid_versioned_message()
 -> impl Strategy<Value = (StreamMessage, RangeInclusive<CertificationVersion>)> {
-    prop_oneof![(
-        arbitrary::stream_message_with_config(true),
-        Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
-    )]
+    prop_oneof![
+        (
+            arbitrary::stream_message_with_config(true),
+            Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        ),
+        // Messages that are only valid starting with a newer certification version,
+        // e.g. if `V31` added a new field (which the arm above must then leave
+        // unset, so that its messages remain valid at all supported versions):
+        //
+        // (
+        //     arb_stream_message_with_new_field(),
+        //     Just(CertificationVersion::V31..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        // ),
+    ]
 }
 
 lazy_static! {
@@ -234,13 +291,21 @@ lazy_static! {
             |v| StreamMessageV23::proxy_encode(v),
             |v| StreamMessageV23::proxy_decode(v),
         ),
+        // Previous canonical type, applicable up to the last certification
+        // version that used it, e.g.:
+        //
+        // VersionedEncoding::new(
+        //     MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V30,
+        //     "StreamMessageV30",
+        //     |v| StreamMessageV30::proxy_encode(v),
+        //     |v| StreamMessageV30::proxy_decode(v),
+        // ),
     ];
 }
 
-/// Tests that given a `StreamMessage` that is valid for a given certification
-/// version range (e.g. no `refund` before certification version 22) all
-/// supported canonical types (e.g. `RequestOrResponseV21` or `StreamMessage`)
-/// the exact same encoding for a given certification version.
+/// Tests that, given a `StreamMessage` that is valid for a given certification
+/// version range, all canonical types in `MESSAGE_ENCODINGS` that are applicable
+/// to a given certification version produce the exact same encoding.
 #[test_strategy::proptest]
 fn message_unique_encoding(
     #[strategy(arb_valid_versioned_message())] test_message: (
@@ -323,20 +388,39 @@ lazy_static! {
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
             MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
-            "SubnetMetricsV15",
+            "SubnetMetricsV21",
             |(metrics, version)| SubnetMetricsV21::proxy_encode((metrics, version)),
             |_v| unimplemented!(),
         ),
+        // Previous canonical type, applicable up to the last certification
+        // version that used it, e.g.:
+        //
+        // VersionedEncoding::new(
+        //     MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V30,
+        //     "SubnetMetricsV30",
+        //     |(metrics, version)| SubnetMetricsV30::proxy_encode((metrics, version)),
+        //     |_v| unimplemented!(),
+        // ),
     ];
 }
 
 /// Produces a `SubnetMetrics` valid at all certification versions in the range.
 pub(crate) fn arb_valid_subnet_metrics()
 -> impl Strategy<Value = (SubnetMetrics, RangeInclusive<CertificationVersion>)> {
-    prop_oneof![(
-        arb_subnet_metrics(),
-        Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
-    )]
+    prop_oneof![
+        (
+            arb_subnet_metrics(),
+            Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        ),
+        // Metrics that are only valid starting with a newer certification version,
+        // e.g. if `V31` added a new metric (which the arm above must then leave
+        // unset, so that its metrics remain valid at all supported versions):
+        //
+        // (
+        //     arb_subnet_metrics_with_new_metric(),
+        //     Just(CertificationVersion::V31..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        // ),
+    ]
 }
 
 /// Tests that given a `SubnetMetrics` that is valid for a given certification

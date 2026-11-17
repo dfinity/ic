@@ -1482,6 +1482,7 @@ fn reject_signals(
     _certification_version: CertificationVersion,
 ) -> (VecDeque<RejectSignal>, StreamIndex) {
     let reject_signals = vec![
+        RejectSignal::new(RejectReason::EngineNotAllowed, 248.into()),
         RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
         RejectSignal::new(RejectReason::CanisterNotFound, 250.into()),
         RejectSignal::new(RejectReason::CanisterStopped, 251.into()),
@@ -1489,7 +1490,6 @@ fn reject_signals(
         RejectSignal::new(RejectReason::QueueFull, 253.into()),
         RejectSignal::new(RejectReason::OutOfMemory, 254.into()),
         RejectSignal::new(RejectReason::Unknown, 255.into()),
-        RejectSignal::new(RejectReason::EngineNotAllowed, 248.into()),
     ];
     (reject_signals.into(), 256.into())
 }
