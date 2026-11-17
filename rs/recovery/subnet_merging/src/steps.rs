@@ -249,9 +249,9 @@ impl WaitForHaltingCupStep {
     }
 }
 
-/// Stops the replica of the node the state of a subnet is downloaded from, but
-/// only once the node holds a finished checkpoint at the height of the CUP the
-/// subnet halts at.
+/// Stops the replica and crypto vault of the node the state of a subnet is
+/// downloaded from, but only once the node holds a finished checkpoint at the
+/// height of the CUP the subnet halts at.
 ///
 /// Holding the halting CUP does not imply holding the checkpoint at its
 /// height: the node may hold the CUP before it has written the checkpoint (e.g.

@@ -29,8 +29,10 @@ use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, th
 /// The vault keeps running when only ic-replica is stopped, and may still be rewriting its key
 /// store for a request ic-replica sent before stopping, which creates and deletes temporary
 /// files in `/var/lib/ic/crypto`. Steps that stop the replica use this command, so that a node
-/// they stopped is in the state [CMD_RESTART_REPLICA] expects. Stopping ic-replica first leaves
-/// no client that could start the vault again through its socket.
+/// they stopped is in the state [CMD_RESTART_REPLICA] expects. The vault's socket is stopped as
+/// well, so that a connection to it can't start the vault again. The two commands are joined by
+/// `&&`, so that the vault, which ic-replica uses, is only stopped once ic-replica has stopped,
+/// and the command fails if ic-replica can't be stopped.
 pub const CMD_STOP_REPLICA: &str = "\
     sudo systemctl stop ic-replica && \
     sudo systemctl stop ic-crypto-csp.socket ic-crypto-csp.service;";
@@ -746,7 +748,7 @@ impl Step for UploadStateAndRestartStep {
             ssh_helper.ssh(CMD_RESTART_REPLICA.to_string())?;
         } else {
             let log = self.require_confirmation.then_some(&self.logger);
-            info!(self.logger, "Stopping replica...");
+            info!(self.logger, "Stopping replica and crypto vault...");
             confirm_exec_cmd(Command::new("bash").arg("-c").arg(CMD_STOP_REPLICA), log)?;
 
             // For local recoveries we first backup the original state, and
