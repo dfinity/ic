@@ -376,7 +376,7 @@ http_file(
 )
 
 # TLA+ tools
-bazel_dep(name = "rules_java", version = "9.3.0")
+bazel_dep(name = "rules_java", version = "9.9.0")
 
 http_jar(
     name = "tlaplus_community_modules",
