@@ -6,7 +6,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     CallOrigin,
-    canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES},
+    canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES, system_state::ConnectionMetrics},
 };
 use ic_state_machine_tests::WasmResult;
 use ic_sys::PAGE_SIZE;
@@ -16,6 +16,7 @@ use ic_types::{CanisterId, NumBytes, NumInstructions, NumOsPages};
 use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::assert_gt;
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use ic_config::embedders::MemoryPageLimit;
@@ -1180,7 +1181,7 @@ fn dts_abort_of_replicated_execution_works() {
 }
 
 #[test]
-fn dts_abort_of_replicated_execution_records_load_metrics_once() {
+fn dts_abort_of_replicated_execution_records_canister_metrics_once() {
     // Test steps:
     // 1. Canister A runs an update method that calls canister B.
     // 2. The called update method of canister B runs with DTS.
@@ -1206,12 +1207,14 @@ fn dts_abort_of_replicated_execution_records_load_metrics_once() {
     test.execute_message(a_id);
     test.induct_messages();
 
+    let request_time = test.time();
     test.execute_slice(b_id);
     assert_eq!(
         test.canister_state(b_id).next_execution(),
         NextExecution::ContinueLong,
     );
     test.abort_all_paused_executions();
+    test.advance_time(Duration::from_secs(1));
     test.execute_message(b_id);
 
     test.induct_messages();
@@ -1219,13 +1222,25 @@ fn dts_abort_of_replicated_execution_records_load_metrics_once() {
     let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![42]));
 
-    // The request from A is recorded once, despite B executing it twice.
-    let load_metrics = test
-        .canister_state(b_id)
-        .system_state
-        .canister_metrics()
-        .load_metrics();
-    assert_eq!(load_metrics.local_subnet_messages_executed(), 1);
+    // The request from A is recorded once, when B first executes it, despite B executing it
+    // twice.
+    let canister_metrics = test.canister_state(b_id).system_state.canister_metrics();
+    assert_eq!(
+        canister_metrics
+            .load_metrics()
+            .local_subnet_messages_executed(),
+        1
+    );
+    assert_eq!(
+        canister_metrics.connection_metrics().get(),
+        &BTreeMap::from([(
+            a_id,
+            ConnectionMetrics {
+                last_access_timestamp: request_time,
+                count: 1,
+            }
+        )])
+    );
 }
 
 #[test]

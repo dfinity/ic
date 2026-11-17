@@ -184,3 +184,121 @@ fn assert_eq_message(r: &RequestOrResponse, s: &StreamMessage) {
         _ => panic!("Mismatched variants: {:?} vs {:?}", r, s),
     }
 }
+
+fn start_canister_request(target: CanisterId) -> Request {
+    Request {
+        receiver: CanisterId::ic_00(),
+        sender: canister_test_id(1),
+        sender_reply_callback: CallbackId::from(2),
+        payment: Cycles::zero(),
+        method_name: Method::StartCanister.to_string(),
+        method_payload: CanisterIdRecord::from(target).encode(),
+        metadata: Default::default(),
+        deadline: NO_DEADLINE,
+        effective_canister_id: None,
+    }
+}
+
+#[test]
+fn effective_canister_id_is_cached() {
+    let target = canister_test_id(13);
+
+    let mut request = start_canister_request(target);
+    // Not cached: decoded from the payload.
+    assert_eq!(request.effective_canister_id, None);
+    assert_eq!(request.effective_canister_id(), Some(target));
+
+    // The cached value takes precedence over the payload.
+    let other = canister_test_id(14);
+    request.effective_canister_id = Some(Box::new(other));
+    assert_eq!(request.effective_canister_id(), Some(other));
+}
+
+#[test]
+fn effective_canister_id_of_invalid_payload() {
+    let mut request = start_canister_request(canister_test_id(13));
+    request.method_payload = vec![1, 2, 3];
+
+    assert_eq!(request.extract_effective_canister_id(), None);
+    assert_eq!(request.effective_canister_id(), None);
+}
+
+#[test]
+fn request_effective_canister_id_proto_round_trip() {
+    let target = canister_test_id(13);
+    for (effective_canister_id, expected_encoding) in [
+        (None, None),
+        (
+            Some(Box::new(target)),
+            Some(pb_types::CanisterId::from(target)),
+        ),
+    ] {
+        let request = Request {
+            effective_canister_id,
+            ..start_canister_request(target)
+        };
+
+        let encoded = pb_queues::Request::from(&request);
+        assert_eq!(encoded.effective_canister_id, expected_encoding);
+        let decoded = Request::try_from(encoded).unwrap();
+        assert_eq!(request, decoded);
+    }
+}
+
+#[test]
+fn cache_effective_canister_id() {
+    let target = canister_test_id(13);
+
+    // Uncached and not shared: cached in place.
+    let mut request = Arc::new(start_canister_request(target));
+    let ptr = Arc::as_ptr(&request);
+    Request::cache_effective_canister_id(&mut request);
+    assert_eq!(request.effective_canister_id, Some(Box::new(target)));
+    assert_eq!(Arc::as_ptr(&request), ptr);
+
+    // Already cached and shared: not copied.
+    let shared = Arc::clone(&request);
+    Request::cache_effective_canister_id(&mut request);
+    assert!(Arc::ptr_eq(&request, &shared));
+
+    // No effective canister ID (invalid payload) and shared: not copied.
+    let mut request = Arc::new(Request {
+        method_payload: vec![1, 2, 3],
+        ..start_canister_request(target)
+    });
+    let shared = Arc::clone(&request);
+    Request::cache_effective_canister_id(&mut request);
+    assert!(Arc::ptr_eq(&request, &shared));
+    assert_eq!(request.effective_canister_id, None);
+}
+
+#[test]
+fn count_bytes_includes_cached_effective_canister_id() {
+    let target = canister_test_id(13);
+    let uncached = start_canister_request(target);
+    let cached = Request {
+        effective_canister_id: Some(Box::new(target)),
+        ..uncached.clone()
+    };
+
+    assert_eq!(
+        uncached.count_bytes(),
+        size_of::<RequestOrResponse>()
+            + size_of::<Request>()
+            + uncached.payload_size_bytes().get() as usize
+    );
+    assert_eq!(
+        cached.count_bytes(),
+        uncached.count_bytes() + size_of::<CanisterId>()
+    );
+    // Consistent with the wrapping types.
+    let cached = Arc::new(cached);
+    assert_eq!(
+        RequestOrResponse::Request(Arc::clone(&cached)).count_bytes(),
+        cached.count_bytes()
+    );
+    assert_eq!(
+        StreamMessage::Request(Arc::clone(&cached)).count_bytes(),
+        cached.count_bytes()
+    );
+}

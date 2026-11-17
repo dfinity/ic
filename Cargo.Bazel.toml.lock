@@ -3799,7 +3799,6 @@ dependencies = [
  "bs58",
  "build-info",
  "build-info-build",
- "byteorder",
  "bytes",
  "canbench-rs",
  "candid",

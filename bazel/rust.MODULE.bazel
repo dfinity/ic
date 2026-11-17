@@ -252,10 +252,6 @@ crate.spec(
     rev = BUILD_INFO_REV,
 )
 crate.spec(
-    package = "byteorder",
-    version = "^1.3.4",
-)
-crate.spec(
     package = "bytes",
     version = "^1.12.1",
 )

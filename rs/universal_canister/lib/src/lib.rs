@@ -588,6 +588,24 @@ impl PayloadBuilder {
         self
     }
 
+    /// Executes `then` on a fresh stack if the blob on top of the stack equals
+    /// `data`.
+    pub fn if_eq<P: AsRef<[u8]>>(mut self, data: P, then: PayloadBuilder) -> Self {
+        self = self.push_bytes(data.as_ref());
+        self = self.push_bytes(&then.build());
+        self.0.push(Ops::IfEq as u8);
+        self
+    }
+
+    /// Executes `then` on a fresh stack if the blob on top of the stack does
+    /// not equal `data`.
+    pub fn if_neq<P: AsRef<[u8]>>(mut self, data: P, then: PayloadBuilder) -> Self {
+        self = self.push_bytes(data.as_ref());
+        self = self.push_bytes(&then.build());
+        self.0.push(Ops::IfNeq as u8);
+        self
+    }
+
     pub fn accept_cycles<Cycles: Into<u128>>(mut self, cycles: Cycles) -> Self {
         let (amount_high, amount_low) = cycles_into_parts(cycles.into());
         self = self.push_int64(amount_high);

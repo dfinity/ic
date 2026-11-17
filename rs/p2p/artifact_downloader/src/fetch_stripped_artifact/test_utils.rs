@@ -22,7 +22,7 @@ use ic_types::{
     },
     consensus::{
         Block, BlockPayload, BlockProposal, ConsensusMessage, ConsensusMessageHash, DataPayload,
-        Payload, Rank, SummaryPayload,
+        Payload, Rank, StrippedMessageIds, SummaryPayload,
         dkg::{DkgDataPayload, DkgSummary},
         idkg::{
             IDkgArtifactId, IDkgArtifactIdData, IDkgArtifactIdDataOf, IDkgObject, IDkgPayload,
@@ -60,14 +60,10 @@ use crate::fetch_stripped_artifact::{
             GetCanisterHttpResponseInBlockResponse, GetIDkgDealingInBlockResponse,
             GetIngressMessageInBlockResponse,
         },
-        stripped::{StrippedCanisterHttpResponses, StrippedIDkgDealings},
     },
 };
 
-use super::types::{
-    SignedIngressId,
-    stripped::{StrippedBlockProposal, StrippedIngressPayload},
-};
+use super::types::{SignedIngressId, stripped::StrippedBlockProposal};
 
 impl StrippedMessage {
     pub(crate) fn id(&self) -> StrippedMessageId {
@@ -224,26 +220,30 @@ pub(crate) fn fake_block_proposal(
 pub(crate) fn fake_stripped_block_proposal_with_messages(
     stripped_messages: Vec<StrippedMessageId>,
 ) -> StrippedBlockProposal {
-    let mut ingress_messages = Vec::new();
-    let mut stripped_dealings = Vec::new();
-    let mut stripped_responses = Vec::new();
+    let mut stripped_message_ids = StrippedMessageIds::default();
     for msg_id in stripped_messages {
         match msg_id {
-            StrippedMessageId::Ingress(ingress_id) => ingress_messages.push(ingress_id),
+            StrippedMessageId::Ingress(ingress_id) => {
+                stripped_message_ids
+                    .ingress_messages
+                    .insert(ingress_id.ingress_message_id, ingress_id.ingress_bytes_hash);
+            }
             StrippedMessageId::IDkgDealing(dealing_id, node_index) => {
-                stripped_dealings.push((node_index, dealing_id))
+                stripped_message_ids
+                    .idkg_dealings
+                    .insert((node_index, dealing_id));
             }
             StrippedMessageId::CanisterHttpResponse(content_hash) => {
-                stripped_responses.push(content_hash)
+                stripped_message_ids
+                    .canister_http_responses
+                    .insert(content_hash);
             }
         }
     }
     StrippedBlockProposal {
         pruned_block_proposal_proto: pb::BlockProposal::default(),
-        stripped_ingress_payload: StrippedIngressPayload { ingress_messages },
         unstripped_consensus_message_id: fake_consensus_message_id(),
-        stripped_idkg_dealings: StrippedIDkgDealings { stripped_dealings },
-        stripped_canister_http_responses: StrippedCanisterHttpResponses { stripped_responses },
+        stripped_message_ids,
     }
 }
 

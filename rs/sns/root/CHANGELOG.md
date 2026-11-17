@@ -11,6 +11,19 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-11-16: Proposal 144846
+
+http://dashboard.internetcomputer.org/proposal/144846
+
+## Added
+
+* New methods `take_canister_snapshot` and `load_canister_snapshot`. Like
+  `change_canister`, they can only be called by SNS Governance. They only
+  accept registered dapp canisters as targets. Governance will use them for
+  canister snapshot proposals (e.g. to roll a dapp canister back to how it was
+  before an upgrade).
+
+
 # 2026-08-28: Proposal 143739
 
 http://dashboard.internetcomputer.org/proposal/143739

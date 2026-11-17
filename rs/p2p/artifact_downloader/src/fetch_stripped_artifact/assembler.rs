@@ -26,8 +26,8 @@ use ic_types::{
     batch::IngressPayload,
     canister_http::CanisterHttpResponse,
     consensus::{
-        BlockProposal, ConsensusMessage,
-        idkg::{IDkgArtifactId, IDkgMessage},
+        BlockProposal, ConsensusMessage, PayloadType, StrippedMessageIds,
+        idkg::{IDkgArtifactId, IDkgMessage, IDkgObject},
     },
     crypto::{
         Signed,
@@ -58,7 +58,7 @@ use super::{
     types::{
         SignedIngressId,
         stripped::{
-            MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedConsensusMessageId,
+            MaybeStrippedConsensusMessage, MaybeStrippedConsensusMessageId, StrippedBlockProposal,
         },
     },
 };
@@ -84,7 +84,7 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrip
     }
 }
 
-impl<Pool, Factory> BouncerFactory<StrippedConsensusMessageId, Pool>
+impl<Pool, Factory> BouncerFactory<MaybeStrippedConsensusMessageId, Pool>
     for BouncerFactoryWrapper<Factory>
 where
     Factory: BouncerFactory<ConsensusMessageId, Pool>,
@@ -92,7 +92,7 @@ where
     fn new_bouncer(
         &self,
         pool: &Pool,
-    ) -> ic_interfaces::p2p::consensus::Bouncer<StrippedConsensusMessageId> {
+    ) -> ic_interfaces::p2p::consensus::Bouncer<MaybeStrippedConsensusMessageId> {
         let nested = self.bouncer_factory.new_bouncer(pool);
 
         Box::new(move |id| nested(id.as_ref()))
@@ -204,7 +204,7 @@ impl FetchStrippedConsensusArtifact {
     /// Tries to assemble the message from the pushed artifact, or from one downloaded from a peer.
     async fn try_assemble_message<P: Peers + Clone + Send + 'static>(
         &self,
-        id: &StrippedConsensusMessageId,
+        id: &MaybeStrippedConsensusMessageId,
         artifact: Option<(MaybeStrippedConsensusMessage, NodeId)>,
         peer_rx: P,
         deadline: Instant,
@@ -228,6 +228,23 @@ impl FetchStrippedConsensusArtifact {
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) => stripped,
             MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
                 total_timer.stop_and_discard();
+                // Peers strip every data block proposal, and no other artifact has this id.
+                if matches!(&unstripped, ConsensusMessage::BlockProposal(proposal)
+                    if proposal.as_ref().payload.payload_type() == PayloadType::Data)
+                {
+                    self.fetch_stripped
+                        .metrics
+                        .download_task_invalid_artifacts_total
+                        .inc();
+                    warn!(
+                        self.log,
+                        "Peer {} sent an invalid artifact {:?}, not fetching it again: {}",
+                        peer,
+                        id,
+                        AssemblyError::UnstrippedDataBlockProposal
+                    );
+                    return Attempt::Unwanted;
+                }
                 return Attempt::Done {
                     message: unstripped,
                     peer_id: peer,
@@ -436,6 +453,10 @@ pub(crate) enum AssemblyError {
     DeserializationFailed(ProxyDecodeError),
     #[error("The reassembled block proposal fails the integrity check")]
     IntegrityCheckFailed,
+    #[error("The IDKG dealing {0:?} has no slot in the block proposal")]
+    UnusedIDkgDealing(IDkgArtifactId),
+    #[error("The data block proposal was sent unstripped")]
+    UnstrippedDataBlockProposal,
 }
 
 /// A trait keeps track of the missing artifacts in a stripped payload,
@@ -512,7 +533,7 @@ impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
 
 impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
     type ArtifactId = (NodeIndex, IDkgArtifactId);
-    type Payload = pb::IDkgPayload;
+    type Payload = Option<pb::IDkgPayload>;
 
     fn missing_artifacts(&self) -> impl Iterator<Item = Self::ArtifactId> {
         self.signed_dealings
@@ -553,13 +574,20 @@ impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
             let signed_dealing = signed_dealing
                 .ok_or_else(|| AssemblyError::MissingIDkgDealing(dealing_id.clone()))?;
             let transcript_id = signed_dealing.idkg_dealing().transcript_id;
-            idkg_dealings
+            let previous = idkg_dealings
                 .entry(transcript_id)
                 .or_default()
                 .insert(dealer_index, signed_dealing);
+            // Two dealings for the same slot leave one of them unused.
+            if previous.is_some() {
+                return Err(AssemblyError::UnusedIDkgDealing(dealing_id));
+            }
         }
 
-        for transcript in &mut payload.idkg_transcripts {
+        for transcript in payload
+            .iter_mut()
+            .flat_map(|idkg| idkg.idkg_transcripts.iter_mut())
+        {
             let transcript_id =
                 try_from_option_field(transcript.transcript_id.clone(), "transcript_id")
                     .map_err(AssemblyError::DeserializationFailed)?;
@@ -572,6 +600,14 @@ impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
                     .ok_or_else(|| AssemblyError::MissingIDkgNodeIndex(dealer_index))?;
                 dealing.signed_dealing_tuple = Some(idkg_dealing_proto(found_dealing));
             }
+        }
+        // Peers list exactly the dealings of the block.
+        if let Some(unused) = idkg_dealings
+            .into_values()
+            .flat_map(BTreeMap::into_values)
+            .next()
+        {
+            return Err(AssemblyError::UnusedIDkgDealing(unused.message_id()));
         }
         Ok(())
     }
@@ -610,11 +646,6 @@ impl PayloadAssembler<CanisterHttpResponse> for BlockProposalAssembler {
         responses: BTreeMap<Self::ArtifactId, Option<CanisterHttpResponse>>,
         payload: &mut Self::Payload,
     ) -> Result<(), AssemblyError> {
-        if responses.is_empty() {
-            // No response was declared stripped from this payload.
-            return Ok(());
-        }
-
         *payload = reinsert_responses(payload, &responses)?;
         Ok(())
     }
@@ -656,26 +687,32 @@ impl BlockProposalAssembler {
         let StrippedBlockProposal {
             pruned_block_proposal_proto,
             unstripped_consensus_message_id,
-            stripped_ingress_payload,
-            stripped_idkg_dealings,
-            stripped_canister_http_responses,
+            stripped_message_ids:
+                StrippedMessageIds {
+                    ingress_messages,
+                    idkg_dealings,
+                    canister_http_responses,
+                },
         } = stripped_block_proposal;
 
         Self {
             pruned_block_proposal_proto,
             unstripped_consensus_message_id,
-            ingress_messages: stripped_ingress_payload
-                .ingress_messages
+            ingress_messages: ingress_messages
                 .into_iter()
-                .map(|signed_ingress_id| (signed_ingress_id, None))
+                .map(|(ingress_message_id, ingress_bytes_hash)| {
+                    let signed_ingress_id = SignedIngressId {
+                        ingress_message_id,
+                        ingress_bytes_hash,
+                    };
+                    (signed_ingress_id, None)
+                })
                 .collect(),
-            signed_dealings: stripped_idkg_dealings
-                .stripped_dealings
+            signed_dealings: idkg_dealings
                 .into_iter()
                 .map(|dealer_and_dealing_id| (dealer_and_dealing_id, None))
                 .collect(),
-            canister_http_responses: stripped_canister_http_responses
-                .stripped_responses
+            canister_http_responses: canister_http_responses
                 .into_iter()
                 .map(|content_hash| (content_hash, None))
                 .collect(),
@@ -718,9 +755,9 @@ impl BlockProposalAssembler {
 
     /// Tries to reassemble a block.
     ///
-    /// Fails if there are still some stripped messages missing,
-    /// the assembled proposal can't be deserialized, or it fails
-    /// the integrity check against the claimed ID.
+    /// Fails if there are still some stripped messages missing, the proposal isn't
+    /// properly stripped, the assembled proposal can't be deserialized, or it
+    /// fails the integrity check against the claimed ID.
     pub(crate) fn try_assemble(self) -> Result<ConsensusMessage, AssemblyError> {
         let BlockProposalAssembler {
             pruned_block_proposal_proto: mut reconstructed_block_proposal_proto,
@@ -732,9 +769,7 @@ impl BlockProposalAssembler {
 
         if let Some(block) = reconstructed_block_proposal_proto.value.as_mut() {
             Self::try_reconstruct_payload(ingress_messages, &mut block.ingress_payload)?;
-            if let Some(idkg) = block.idkg_payload.as_mut() {
-                Self::try_reconstruct_payload(signed_dealings, idkg)?;
-            }
+            Self::try_reconstruct_payload(signed_dealings, &mut block.idkg_payload)?;
             Self::try_reconstruct_payload(
                 canister_http_responses,
                 &mut block.canister_http_payload_bytes,
@@ -766,7 +801,6 @@ mod tests {
         fake_ingress_message_with_sig, fake_stripped_block_proposal_with_messages,
         fake_summary_block_proposal, rpc_response,
     };
-    use crate::fetch_stripped_artifact::types::stripped::StrippedCanisterHttpResponses;
     use assert_matches::assert_matches;
     use axum::http::{Request, StatusCode};
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
@@ -782,7 +816,7 @@ mod tests {
         make_genesis,
     };
     use ic_test_utilities_types::ids::test_replica_version;
-    use ic_types::consensus::{ConsensusMessageHashable, idkg::IDkgObject};
+    use ic_types::consensus::ConsensusMessageHashable;
     use ic_types::{
         Height,
         artifact::PbArtifact,
@@ -837,9 +871,11 @@ mod tests {
             panic!("Didn't strip the block proposal");
         };
         let declared = stripped_block_proposal
-            .stripped_canister_http_responses
-            .stripped_responses
-            .clone();
+            .stripped_message_ids
+            .canister_http_responses
+            .iter()
+            .cloned()
+            .collect();
 
         let reassembled = assembler
             .assemble_message(stripped.id(), Some((stripped, NODE_1)), MockPeers(NODE_1))
@@ -1015,10 +1051,12 @@ mod tests {
         };
 
         // A malicious node sends us a stripped proposal with a missing dealing ID:
-        stripped_block_proposal
-            .stripped_idkg_dealings
-            .stripped_dealings
-            .remove(1);
+        assert!(
+            stripped_block_proposal
+                .stripped_message_ids
+                .idkg_dealings
+                .remove(&(2, dealing_2.message_id()))
+        );
 
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
@@ -1067,10 +1105,12 @@ mod tests {
         };
 
         // A malicious node sends us a stripped proposal with a missing transcript ID:
-        stripped_block_proposal
-            .stripped_idkg_dealings
-            .stripped_dealings
-            .remove(1);
+        assert!(
+            stripped_block_proposal
+                .stripped_message_ids
+                .idkg_dealings
+                .remove(&(node_index, dealing_2.message_id()))
+        );
 
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
@@ -1087,6 +1127,131 @@ mod tests {
         let assembly_error = assembler.try_assemble().unwrap_err();
 
         assert_matches!(assembly_error, AssemblyError::MissingIDkgTranscript(t) if t == transcript_id_2);
+    }
+
+    /// A dealing listed for a dealer that has no slot in the block is not part of it.
+    #[test]
+    fn strip_assemble_fails_with_an_unused_idkg_dealing_test() {
+        let dealing_1 = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        let dealing_2 = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_2);
+        let idkg = fake_idkg_payload_with_dealings(vec![(dealing_1.clone(), 1)]);
+        let block_proposal = fake_block_proposal_with_ingresses_and_idkg(vec![], Some(idkg), false);
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
+            ConsensusMessage::BlockProposal(block_proposal).strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
+        // A malicious node lists a dealing of another dealer:
+        stripped_block_proposal
+            .stripped_message_ids
+            .idkg_dealings
+            .insert((2, dealing_2.message_id()));
+
+        let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
+        assembler
+            .try_insert((1, dealing_1.message_id()), dealing_1)
+            .unwrap();
+        assembler
+            .try_insert((2, dealing_2.message_id()), dealing_2.clone())
+            .unwrap();
+
+        assert_matches!(
+            assembler.try_assemble(),
+            Err(AssemblyError::UnusedIDkgDealing(id)) if id == dealing_2.message_id()
+        );
+    }
+
+    /// Two dealings listed for the same slot can't both be part of the block.
+    #[test]
+    fn strip_assemble_fails_with_two_idkg_dealings_for_one_slot_test() {
+        let dealing = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        let other_dealing = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_2);
+        assert_ne!(dealing.message_id(), other_dealing.message_id());
+        let idkg = fake_idkg_payload_with_dealings(vec![(dealing.clone(), 1)]);
+        let block_proposal = fake_block_proposal_with_ingresses_and_idkg(vec![], Some(idkg), false);
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
+            ConsensusMessage::BlockProposal(block_proposal).strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
+        // A malicious node lists another dealing for the same dealer:
+        stripped_block_proposal
+            .stripped_message_ids
+            .idkg_dealings
+            .insert((1, other_dealing.message_id()));
+
+        let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
+        assembler
+            .try_insert((1, dealing.message_id()), dealing)
+            .unwrap();
+        assembler
+            .try_insert((1, other_dealing.message_id()), other_dealing)
+            .unwrap();
+
+        assert_matches!(
+            assembler.try_assemble(),
+            Err(AssemblyError::UnusedIDkgDealing(_))
+        );
+    }
+
+    /// Without an IDKG payload, a block has no slot for any dealing.
+    #[test]
+    fn strip_assemble_fails_with_an_idkg_dealing_but_no_idkg_payload_test() {
+        let dealing = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
+            ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![])).strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
+        stripped_block_proposal
+            .stripped_message_ids
+            .idkg_dealings
+            .insert((1, dealing.message_id()));
+
+        let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
+        assembler
+            .try_insert((1, dealing.message_id()), dealing.clone())
+            .unwrap();
+
+        assert_matches!(
+            assembler.try_assemble(),
+            Err(AssemblyError::UnusedIDkgDealing(id)) if id == dealing.message_id()
+        );
+    }
+
+    /// Peers strip every response worth stripping, so a proposal that declares none, while
+    /// its payload still holds one, is not what peers send.
+    #[test]
+    fn strip_assemble_fails_with_a_canister_http_response_left_in_test() {
+        let response = fake_canister_http_response(1, 1024);
+        let payload = fake_canister_http_payload(vec![fake_canister_http_response_message(
+            &response,
+            &[NODE_1],
+        )]);
+        let block_proposal = fake_block_proposal_with_canister_http(payload.clone());
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
+            ConsensusMessage::BlockProposal(block_proposal).strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
+        // A malicious node leaves the response in, and declares none:
+        stripped_block_proposal
+            .pruned_block_proposal_proto
+            .value
+            .as_mut()
+            .unwrap()
+            .canister_http_payload_bytes = payload;
+        stripped_block_proposal
+            .stripped_message_ids
+            .canister_http_responses
+            .clear();
+
+        assert_matches!(
+            BlockProposalAssembler::new(stripped_block_proposal).try_assemble(),
+            Err(AssemblyError::CanisterHttpPayload(
+                CanisterHttpPayloadError::MismatchedStrippedResponses
+            ))
+        );
     }
 
     #[test]
@@ -1282,7 +1447,7 @@ mod tests {
     /// do.
     async fn request_consensus_message(
         router: axum::Router,
-        id: StrippedConsensusMessageId,
+        id: MaybeStrippedConsensusMessageId,
     ) -> Result<MaybeStrippedConsensusMessage, StatusCode> {
         let request = Request::builder()
             .uri("/strippedconsensus/rpc")
@@ -1421,7 +1586,7 @@ mod tests {
     }
 
     /// A content that goes back into several slots is fetched only once, even if
-    /// the stripped proposal declares it once for each of them.
+    /// the stripped proposal declares it once for each of them on the wire.
     #[tokio::test]
     async fn assemble_canister_http_response_of_several_slots_test() {
         let response = fake_canister_http_response(1, 1024);
@@ -1432,23 +1597,20 @@ mod tests {
                     &[(response.clone(), NODE_1), (response.clone(), NODE_2)],
                 ),
             ]));
-        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped) =
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) =
             ConsensusMessage::BlockProposal(block_proposal.clone()).strip()
         else {
             panic!("Didn't properly strip the block proposal");
         };
         // We declare each content once, but a peer need not.
-        stripped
+        let mut proto = pb::StrippedBlockProposal::from(stripped);
+        proto
             .stripped_canister_http_responses
-            .stripped_responses
-            .push(ic_types::crypto::crypto_hash(&response));
-        assert_eq!(
-            stripped
-                .stripped_canister_http_responses
-                .stripped_responses
-                .len(),
-            2
-        );
+            .push(pb::StrippedCanisterHttpResponse {
+                content_hash: ic_types::crypto::crypto_hash(&response).get().0,
+            });
+        assert_eq!(proto.stripped_canister_http_responses.len(), 2);
+        let stripped = StrippedBlockProposal::try_from(proto).unwrap();
 
         let assembler = set_up_assembler_with_canister_http_responses(
             /*pool=*/ vec![],
@@ -1577,22 +1739,18 @@ mod tests {
 
         // Every response was worth stripping, and is declared...
         assert_eq!(
-            stripped
-                .stripped_canister_http_responses
-                .stripped_responses
-                .iter()
-                .cloned()
-                .collect::<BTreeSet<_>>(),
+            stripped.stripped_message_ids.canister_http_responses,
             stripped_responses
                 .iter()
                 .map(ic_types::crypto::crypto_hash)
                 .collect()
         );
         // ...at a cost of exactly 36 bytes each...
-        let undeclared = StrippedBlockProposal {
-            stripped_canister_http_responses: StrippedCanisterHttpResponses::default(),
-            ..stripped.clone()
-        };
+        let mut undeclared = stripped.clone();
+        undeclared
+            .stripped_message_ids
+            .canister_http_responses
+            .clear();
         assert_eq!(
             pb::StrippedBlockProposal::proxy_encode(stripped.clone()).len()
                 - pb::StrippedBlockProposal::proxy_encode(undeclared).len(),
@@ -1798,19 +1956,23 @@ mod tests {
         );
     }
 
-    /// The assembler of `NODE_1`, whose peer `NODE_2` serves `message` once.
+    /// The assembler of `NODE_1`, whose peer `NODE_2` serves `messages`, one per request.
     fn set_up_assembler_with_peer_serving(
-        message: MaybeStrippedConsensusMessage,
+        messages: Vec<MaybeStrippedConsensusMessage>,
     ) -> FetchStrippedConsensusArtifact {
-        let response = bytes::Bytes::from(pb::StrippedConsensusMessage::proxy_encode(message));
+        let requests = messages.len();
+        let mut messages = messages.into_iter();
         let mut mock_transport = MockTransport::new();
         mock_transport
             .expect_rpc()
-            .times(1)
+            .times(requests)
             .returning(move |peer, _| {
                 assert_eq!(*peer, NODE_2);
+                let message = messages.next().unwrap();
                 Ok(axum::response::Response::builder()
-                    .body(response.clone())
+                    .body(bytes::Bytes::from(
+                        pb::StrippedConsensusMessage::proxy_encode(message),
+                    ))
                     .unwrap())
             });
 
@@ -1829,7 +1991,7 @@ mod tests {
         message: ConsensusMessage,
     ) {
         assert_eq!(invalid_artifact.id().as_ref(), &message.id());
-        let assembler = set_up_assembler_with_peer_serving(message.clone().strip());
+        let assembler = set_up_assembler_with_peer_serving(vec![message.clone().strip()]);
         let start = Instant::now();
 
         let result = assembler
@@ -1897,6 +2059,106 @@ mod tests {
             message,
         )
         .await;
+    }
+
+    /// A fetched stripped proposal listing other messages has another id, so it is fetched again.
+    #[tokio::test(start_paused = true)]
+    async fn assemble_refetches_stripped_block_proposal_listing_other_messages() {
+        let message = ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![]));
+        let stripped = message.clone().strip();
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut other) = stripped.clone()
+        else {
+            unreachable!();
+        };
+        let (_, ingress_id) = fake_ingress_message_with_arg_size("fake_1", 8);
+        other
+            .stripped_message_ids
+            .ingress_messages
+            .insert(ingress_id.ingress_message_id, ingress_id.ingress_bytes_hash);
+        let assembler = set_up_assembler_with_peer_serving(vec![
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(other),
+            stripped.clone(),
+        ]);
+
+        let result = assembler
+            .assemble_message(stripped.id(), None, MockPeers(NODE_2))
+            .await;
+
+        assert_matches!(
+            result,
+            AssembleResult::Done { message: assembled, peer_id }
+                if peer_id == NODE_2 && assembled == message
+        );
+        assert_eq!(
+            assembler
+                .fetch_stripped
+                .metrics
+                .download_task_invalid_artifacts_total
+                .get(),
+            1
+        );
+    }
+
+    /// A fetched unstripped proposal has another id, so the stripped one is fetched again.
+    #[tokio::test(start_paused = true)]
+    async fn assemble_refetches_stripped_block_proposal_served_unstripped() {
+        let message = ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![]));
+        let stripped = message.clone().strip();
+        let assembler = set_up_assembler_with_peer_serving(vec![
+            MaybeStrippedConsensusMessage::Unstripped(message.clone()),
+            stripped.clone(),
+        ]);
+
+        let result = assembler
+            .assemble_message(stripped.id(), None, MockPeers(NODE_2))
+            .await;
+
+        assert_matches!(
+            result,
+            AssembleResult::Done { message: assembled, peer_id }
+                if peer_id == NODE_2 && assembled == message
+        );
+        assert_eq!(
+            assembler
+                .fetch_stripped
+                .metrics
+                .download_task_invalid_artifacts_total
+                .get(),
+            1
+        );
+    }
+
+    /// Peers strip data blocks, so an unstripped one is counted as invalid and not fetched again.
+    #[tokio::test]
+    async fn assemble_rejects_unstripped_data_block_proposal() {
+        let message = ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![]));
+        let artifact = MaybeStrippedConsensusMessage::Unstripped(message);
+        let id = artifact.id();
+        let assembler = build_assembler(
+            MockValidatedPoolReader::<SignedIngress>::default(),
+            FakeCanisterHttpPool::empty(),
+            wanting_bouncer_factory(),
+            MockTransport::new(),
+        );
+
+        let result = assembler
+            .try_assemble_message(
+                &id,
+                Some((artifact, NODE_1)),
+                MockPeers(NODE_2),
+                Instant::now(),
+            )
+            .await;
+
+        assert!(matches!(result, Attempt::Unwanted));
+        assert_eq!(
+            assembler
+                .fetch_stripped
+                .metrics
+                .download_task_invalid_artifacts_total
+                .get(),
+            1
+        );
     }
 
     #[tokio::test(start_paused = true)]
