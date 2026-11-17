@@ -607,6 +607,16 @@ async fn test_check_fetched() {
             CheckTransactionIrrecoverableError::InvalidTransaction(err)
         )) if err.contains("has an unsupported script")
     ));
+    env.assert_get_tx_call(txid_1, INITIAL_MAX_RESPONSE_BYTES);
+    env.assert_get_tx_call(txid_2, INITIAL_MAX_RESPONSE_BYTES);
+    // Checking again looks up the spent output in the cached transaction, with the same result.
+    assert!(matches!(
+        env.check_fetched(txid_0, &fetched).await,
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
+            CheckTransactionIrrecoverableError::InvalidTransaction(err)
+        )) if err.contains("has an unsupported script")
+    ));
+    env.assert_no_more_get_tx_call();
 
     // case Error: the spent output does not exist. It should never happen
     // unless blockdata is corrupted.
@@ -626,6 +636,16 @@ async fn test_check_fetched() {
             CheckTransactionIrrecoverableError::InvalidTransaction(err)
         )) if err.contains("has no vout 1")
     ));
+    env.assert_get_tx_call(txid_1, INITIAL_MAX_RESPONSE_BYTES);
+    env.assert_get_tx_call(txid_2, INITIAL_MAX_RESPONSE_BYTES);
+    // Checking again looks up the spent output in the cached transaction, with the same result.
+    assert!(matches!(
+        env.check_fetched(txid_0, &fetched).await,
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
+            CheckTransactionIrrecoverableError::InvalidTransaction(err)
+        )) if err.contains("has no vout 1")
+    ));
+    env.assert_no_more_get_tx_call();
 }
 
 #[tokio::test]
@@ -659,10 +679,10 @@ async fn should_check_input_spending_p2pk_output() {
     match state::get_fetch_status(txid_0) {
         Some(FetchTxStatus::Fetched(fetched)) => assert_eq!(
             fetched.input_addresses,
-            vec![Some(vec![Address::p2pkh(
-                public_key.pubkey_hash(),
+            vec![Some(state::public_key_addresses(
+                &public_key.to_bytes(),
                 bitcoin::Network::Bitcoin
-            )])]
+            ))]
         ),
         status => panic!("unexpected status {status:?}"),
     }

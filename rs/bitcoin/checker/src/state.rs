@@ -2,7 +2,12 @@ use crate::{
     BtcNetwork, CheckMode,
     providers::{Provider, parse_authorization_header_from_url},
 };
-use bitcoin::{Address, PubkeyHash, Script, Transaction, hashes::Hash, script::Instruction};
+use bitcoin::{
+    Address, PubkeyHash, Script, ScriptBuf, Transaction, WPubkeyHash,
+    hashes::Hash,
+    opcodes::all::{OP_CHECKMULTISIG, OP_CHECKSIG, OP_PUSHNUM_1, OP_PUSHNUM_16, OP_PUSHNUM_NEG1},
+    script::Instruction,
+};
 use ic_btc_interface::Txid;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{Cell, DefaultMemoryImpl, Storable, storable::Bound};
@@ -136,38 +141,122 @@ impl TransactionCheckData {
 
 /// Return the addresses to check when the output with the given `script_pubkey` is spent:
 /// - If the script has a standard address (P2PKH, P2SH, or a witness program), return it.
-/// - If the script is P2PK or bare multisig, return the P2PKH address of each of its
-///   public keys, in the same (compressed or uncompressed) encoding. Pushes that are not
-///   encoded like a public key are skipped, since they cannot be used to spend the output.
-///   Public keys are not checked to be valid points on the curve.
+/// - If the script is P2PK (`<key> OP_CHECKSIG`) or bare multisig
+///   (`<m> <key_1> ... <key_n> <n> OP_CHECKMULTISIG`), return the addresses of each of its
+///   public keys, see [`public_key_addresses`]. Pushes that are not valid public keys are
+///   skipped, since they cannot be used to spend the output.
 /// - Otherwise, the script is not supported and `None` is returned, so that spending such
 ///   an output does not pass the check.
+///
+/// Note that the addresses derived from a public key do not include its Taproot address,
+/// since the output key of a Taproot address is a tweaked key.
 pub fn output_addresses(script_pubkey: &Script, network: bitcoin::Network) -> Option<Vec<Address>> {
     if let Ok(address) = Address::from_script(script_pubkey, network) {
         return Some(vec![address]);
     }
-    if !script_pubkey.is_p2pk() && !script_pubkey.is_multisig() {
-        return None;
+    let mut addresses = vec![];
+    for key in script_public_keys(script_pubkey)? {
+        for address in public_key_addresses(key, network) {
+            if !addresses.contains(&address) {
+                addresses.push(address);
+            }
+        }
     }
-    Some(
-        script_pubkey
-            .instructions()
-            .map_while(Result::ok)
-            .filter_map(|instruction| match instruction {
-                Instruction::PushBytes(bytes) if is_public_key_encoding(bytes.as_bytes()) => {
-                    Some(Address::p2pkh(PubkeyHash::hash(bytes.as_bytes()), network))
-                }
-                _ => None,
-            })
-            .collect(),
-    )
+    Some(addresses)
 }
 
-fn is_public_key_encoding(bytes: &[u8]) -> bool {
-    matches!(
-        (bytes.len(), bytes.first()),
-        (33, Some(0x02 | 0x03)) | (65, Some(0x04))
-    )
+/// Maximum number of public keys of a bare multisig script, see `MAX_PUBKEYS_PER_MULTISIG`
+/// in Bitcoin Core.
+const MAX_PUBKEYS_PER_MULTISIG: i64 = 20;
+
+/// Maximum size of a number on the script stack, see `CScriptNum::nDefaultMaxNumSize`
+/// in Bitcoin Core.
+const MAX_SCRIPT_NUM_SIZE: usize = 4;
+
+/// Return the pushes of the public keys of a P2PK or bare multisig script, or `None`
+/// if the script is neither.
+fn script_public_keys(script: &Script) -> Option<Vec<&[u8]>> {
+    let instructions: Vec<Instruction> = script.instructions().collect::<Result<_, _>>().ok()?;
+    match instructions.as_slice() {
+        [Instruction::PushBytes(key), Instruction::Op(OP_CHECKSIG)] => Some(vec![key.as_bytes()]),
+        [m, keys @ .., n, Instruction::Op(OP_CHECKMULTISIG)] => {
+            let (m, n) = (script_num(m)?, script_num(n)?);
+            if n != keys.len() as i64 || n > MAX_PUBKEYS_PER_MULTISIG || m < 1 || m > n {
+                return None;
+            }
+            keys.iter()
+                .map(|key| match key {
+                    Instruction::PushBytes(key) => Some(key.as_bytes()),
+                    Instruction::Op(_) => None,
+                })
+                .collect()
+        }
+        _ => None,
+    }
+}
+
+/// Decode an instruction that pushes a number onto the stack, accepting the same
+/// (possibly non-minimal) encodings as script execution without the `MINIMALDATA` flag.
+fn script_num(instruction: &Instruction) -> Option<i64> {
+    match instruction {
+        Instruction::Op(op) => match op.to_u8() {
+            n if n == OP_PUSHNUM_NEG1.to_u8() => Some(-1),
+            n if (OP_PUSHNUM_1.to_u8()..=OP_PUSHNUM_16.to_u8()).contains(&n) => {
+                Some(i64::from(n - OP_PUSHNUM_1.to_u8() + 1))
+            }
+            _ => None,
+        },
+        Instruction::PushBytes(bytes) => {
+            let bytes = bytes.as_bytes();
+            if bytes.len() > MAX_SCRIPT_NUM_SIZE {
+                return None;
+            }
+            let Some((&last, _)) = bytes.split_last() else {
+                return Some(0);
+            };
+            let mut magnitude = 0_i64;
+            for (i, byte) in bytes.iter().enumerate() {
+                let byte = if i == bytes.len() - 1 {
+                    byte & 0x7f
+                } else {
+                    *byte
+                };
+                magnitude |= i64::from(byte) << (8 * i);
+            }
+            Some(if last & 0x80 != 0 {
+                -magnitude
+            } else {
+                magnitude
+            })
+        }
+    }
+}
+
+/// Return the addresses of the given public key that are checked when an output locked to it
+/// is spent: the P2PKH addresses of its compressed and uncompressed encodings, and the
+/// P2WPKH and P2SH-P2WPKH addresses of its compressed encoding.
+///
+/// The key may be in any encoding accepted by script execution without the `STRICTENC` flag,
+/// i.e. compressed, uncompressed, or hybrid (an uncompressed key prefixed with `0x06` or `0x07`).
+/// If it is not a valid public key, it cannot be used to spend an output and no address
+/// is returned.
+pub fn public_key_addresses(key: &[u8], network: bitcoin::Network) -> Vec<Address> {
+    let mut sec1 = key.to_vec();
+    if sec1.len() == 65 && matches!(sec1[0], 0x06 | 0x07) {
+        sec1[0] = 0x04;
+    }
+    let Ok(public_key) = ic_secp256k1::PublicKey::deserialize_sec1(&sec1) else {
+        return vec![];
+    };
+    let compressed = PubkeyHash::hash(&public_key.serialize_sec1(true));
+    let uncompressed = PubkeyHash::hash(&public_key.serialize_sec1(false));
+    let p2wpkh = ScriptBuf::new_p2wpkh(&WPubkeyHash::from_byte_array(compressed.to_byte_array()));
+    vec![
+        Address::p2pkh(compressed, network),
+        Address::p2pkh(uncompressed, network),
+        Address::from_script(&p2wpkh, network).expect("BUG: P2WPKH script has an address"),
+        Address::p2sh(&p2wpkh, network).expect("BUG: P2WPKH script is not too large for P2SH"),
+    ]
 }
 
 // Max number of concurrent http outcalls.

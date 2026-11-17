@@ -29,6 +29,7 @@ ic-cdk = { workspace = true }
 ic-cdk-management-canister = { workspace = true }
 ic-management-canister-types = { workspace = true }
 ic-metrics-encoder = { workspace = true }
+ic-secp256k1 = { path = "../../../packages/ic-secp256k1" }
 ic-stable-structures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
