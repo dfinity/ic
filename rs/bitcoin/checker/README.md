@@ -34,7 +34,7 @@ The main endpoint to check a Bitcoin transaction is `check_transaction`, which t
 1. If there is a match, it makes another HTTPS outcall for each input in the transaction as the inputs themselves are only references to previous transactions with an index that identifies the output that is consumed with the given input.
 1. For each received input transaction, the Bitcoin addresses to check are derived from the output at the right index:
     * If the output has a standard address (P2PKH, P2SH, or a witness program such as P2WPKH, P2WSH, or P2TR), this address is checked.
-    * If the output is pay-to-public-key (P2PK) or bare multisig, the addresses of each of its public keys are checked: the P2PKH addresses of the key's compressed and uncompressed encodings, and the P2WPKH and P2SH-P2WPKH addresses of its compressed encoding. Taproot addresses of the keys are not derived, since they depend on a tweaked key.
+    * If the output is pay-to-public-key (P2PK) or bare multisig, the addresses of each of its public keys are checked: the P2PKH addresses of the key's compressed and uncompressed encodings, and the P2WPKH and P2SH-P2WPKH addresses of its compressed encoding. By design, other addresses of the keys, such as their single-key Taproot (BIP-86) addresses or the P2WPKH addresses of their uncompressed encodings, are not checked.
     * Spending an output with any other script results in an error.
 1. Each address is looked up in the SDN list. If any address appears on the list, `Failed` is returned. Otherwise, the result is `Passed`.
 

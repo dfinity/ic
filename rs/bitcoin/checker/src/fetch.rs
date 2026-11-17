@@ -39,11 +39,11 @@ pub enum FetchResult {
     Fetched(FetchedTx),
 }
 
-pub enum TryFetchResult<F> {
+pub enum TryFetchResult<T, F> {
     Pending,
     HighLoad,
     NotEnoughCycles,
-    Fetched(FetchedTx),
+    Fetched(T),
     ToFetch(F),
 }
 
@@ -62,33 +62,39 @@ pub trait FetchEnv {
     fn cycles_accept(&self, cycles: u128) -> u128;
 
     /// Try to fetch a transaction given its txid:
-    /// - If it is already available, return `Fetched`.
+    /// - If it is already available, return `Fetched` with the result of applying
+    ///   `on_fetched` to it, without cloning the cache entry.
     /// - If it is already pending, return `Pending`.
     /// - If it is pending retry or not found, return a future that calls `fetch_tx`.
     /// - Or return other conditions like `HighLoad` or `Error`.
-    fn try_fetch_tx(
+    fn try_fetch_tx<T>(
         &self,
         txid: Txid,
-    ) -> TryFetchResult<impl futures::Future<Output = Result<FetchResult, Infallible>>> {
-        let (provider, max_response_bytes) = match state::get_fetch_status(txid) {
-            None => (
-                providers::next_provider(self.config().btc_network()),
+        on_fetched: impl FnOnce(&FetchedTx) -> T,
+    ) -> TryFetchResult<T, impl futures::Future<Output = Result<FetchResult, Infallible>>> {
+        let btc_network = self.config().btc_network();
+        let to_fetch = state::with_fetch_status(txid, |status| match status {
+            None => Ok((
+                providers::next_provider(btc_network),
                 INITIAL_MAX_RESPONSE_BYTES,
-            ),
+            )),
             Some(FetchTxStatus::PendingRetry {
                 max_response_bytes, ..
-            }) => (
-                providers::next_provider(self.config().btc_network()),
-                max_response_bytes,
-            ),
-            Some(FetchTxStatus::PendingOutcall) => return TryFetchResult::Pending,
-            Some(FetchTxStatus::Error(err)) => (
+            }) => Ok((providers::next_provider(btc_network), *max_response_bytes)),
+            Some(FetchTxStatus::PendingOutcall) => Err(TryFetchResult::Pending),
+            Some(FetchTxStatus::Error(err)) => Ok((
                 // An FetchTxStatus error can be retried with another provider
                 err.provider.next(),
                 // The next provider can use the same max_response_bytes
                 err.max_response_bytes,
-            ),
-            Some(FetchTxStatus::Fetched(fetched)) => return TryFetchResult::Fetched(fetched),
+            )),
+            Some(FetchTxStatus::Fetched(fetched)) => {
+                Err(TryFetchResult::Fetched(on_fetched(fetched)))
+            }
+        });
+        let (provider, max_response_bytes) = match to_fetch {
+            Ok(to_fetch) => to_fetch,
+            Err(result) => return result,
         };
         let guard = match self.new_fetch_guard(txid) {
             Ok(guard) => guard,
@@ -180,32 +186,29 @@ pub trait FetchEnv {
             if fetched.input_addresses[index].is_some() {
                 continue;
             }
-            // If the input transaction is already fetched, look up the addresses of the
-            // spent output under a borrow of the cache instead of cloning the whole entry.
-            let spent_output = match state::get_fetched_output_addresses(input.txid, input.vout) {
-                Some(spent_output) => spent_output,
-                None => {
-                    use TryFetchResult::*;
-                    match self.try_fetch_tx(input.txid) {
-                        ToFetch(do_fetch) => {
-                            jobs.push((index, input.txid, input.vout));
-                            futures.push(do_fetch);
-                            continue;
-                        }
-                        Fetched(fetched) => fetched
-                            .tx
-                            .spent_output_addresses(input.vout)
-                            .map(<[Address]>::to_vec),
-                        Pending => continue,
-                        HighLoad => {
-                            high_load = true;
-                            continue;
-                        }
-                        NotEnoughCycles => {
-                            not_enough_cycles = true;
-                            continue;
-                        }
-                    }
+            // If the input transaction is already fetched, only the addresses of the spent
+            // output are cloned, not the whole cache entry.
+            use TryFetchResult::*;
+            let spent_output = match self.try_fetch_tx(input.txid, |fetched| {
+                fetched
+                    .tx
+                    .spent_output_addresses(input.vout)
+                    .map(<[Address]>::to_vec)
+            }) {
+                Fetched(spent_output) => spent_output,
+                ToFetch(do_fetch) => {
+                    jobs.push((index, input.txid, input.vout));
+                    futures.push(do_fetch);
+                    continue;
+                }
+                Pending => continue,
+                HighLoad => {
+                    high_load = true;
+                    continue;
+                }
+                NotEnoughCycles => {
+                    not_enough_cycles = true;
+                    continue;
                 }
             };
             match spent_output {

@@ -213,22 +213,28 @@ fn test_try_fetch_tx() {
     });
     state::set_fetch_status(txid_0, fetched_0.clone());
     assert!(matches!(
-        env.try_fetch_tx(txid_0),
+        env.try_fetch_tx(txid_0, |_| ()),
         TryFetchResult::Fetched(_)
     ));
 
     // case Pending
     state::set_fetch_status(txid_1, FetchTxStatus::PendingOutcall);
-    assert!(matches!(env.try_fetch_tx(txid_1), TryFetchResult::Pending));
+    assert!(matches!(
+        env.try_fetch_tx(txid_1, |_| ()),
+        TryFetchResult::Pending
+    ));
 
     // case HighLoad
     env.high_load = true;
-    assert!(matches!(env.try_fetch_tx(txid_2), TryFetchResult::HighLoad));
+    assert!(matches!(
+        env.try_fetch_tx(txid_2, |_| ()),
+        TryFetchResult::HighLoad
+    ));
     env.high_load = false;
 
     // case NotEnoughCycles
     assert!(matches!(
-        MockEnv::new(0).try_fetch_tx(txid_2),
+        MockEnv::new(0).try_fetch_tx(txid_2, |_| ()),
         TryFetchResult::NotEnoughCycles
     ));
 
@@ -236,7 +242,7 @@ fn test_try_fetch_tx() {
     let available = env.cycles_available();
     assert!(state::get_fetch_status(txid_2).is_none());
     assert!(matches!(
-        env.try_fetch_tx(mock_txid(2)),
+        env.try_fetch_tx(mock_txid(2), |_| ()),
         TryFetchResult::ToFetch(_)
     ));
     assert_eq!(

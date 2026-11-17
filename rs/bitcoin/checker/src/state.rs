@@ -148,8 +148,9 @@ impl TransactionCheckData {
 /// - Otherwise, the script is not supported and `None` is returned, so that spending such
 ///   an output does not pass the check.
 ///
-/// Note that the addresses derived from a public key do not include its Taproot address,
-/// since the output key of a Taproot address is a tweaked key.
+/// Note that, by design, not every address that a public key could be spent from is derived:
+/// in particular, neither its single-key Taproot address (BIP-86) nor the P2WPKH address of
+/// its uncompressed encoding are checked.
 pub fn output_addresses(script_pubkey: &Script, network: bitcoin::Network) -> Option<Vec<Address>> {
     if let Ok(address) = Address::from_script(script_pubkey, network) {
         return Some(vec![address]);
@@ -239,19 +240,24 @@ fn script_num(instruction: &Instruction) -> Option<i64> {
 /// The key may be in any encoding accepted by script execution without the `STRICTENC` flag,
 /// i.e. compressed, uncompressed, or hybrid (an uncompressed key prefixed with `0x06` if its
 /// y-coordinate is even, or `0x07` if it is odd).
-/// If it is not a valid public key, it cannot be used to spend an output and no address
-/// is returned.
+/// If it is not a valid public key in one of these encodings, it cannot be used to spend an
+/// output and no address is returned.
 pub fn public_key_addresses(key: &[u8], network: bitcoin::Network) -> Vec<Address> {
-    let mut sec1 = key.to_vec();
-    if sec1.len() == 65 && matches!(sec1[0], 0x06 | 0x07) {
-        // Like libsecp256k1, reject a hybrid key whose prefix does not match the parity of
-        // its y-coordinate.
-        let is_y_odd = sec1[64] & 1 == 1;
-        if is_y_odd != (sec1[0] == 0x07) {
-            return vec![];
+    // Only accept the encodings accepted by libsecp256k1, since other SEC1 encodings (e.g.
+    // the compact encoding `0x05 || x`) are accepted by `deserialize_sec1`.
+    let sec1 = match (key.len(), key.first()) {
+        (33, Some(0x02 | 0x03)) | (65, Some(0x04)) => key.to_vec(),
+        (65, Some(&prefix @ (0x06 | 0x07))) => {
+            // Like libsecp256k1, reject a hybrid key whose prefix does not match the parity
+            // of its y-coordinate.
+            let is_y_odd = key[64] & 1 == 1;
+            if is_y_odd != (prefix == 0x07) {
+                return vec![];
+            }
+            [&[0x04], &key[1..]].concat()
         }
-        sec1[0] = 0x04;
-    }
+        _ => return vec![],
+    };
     let Ok(public_key) = ic_secp256k1::PublicKey::deserialize_sec1(&sec1) else {
         return vec![];
     };
@@ -374,23 +380,10 @@ pub fn clear_fetch_status(txid: Txid) {
     FETCH_TX_CACHE.with(|cache| cache.borrow_mut().clear_status(txid))
 }
 
-/// If the status of `txid` is `Fetched`, return the addresses to check when its output
-/// `vout` is spent (see [`TransactionCheckData::spent_output_addresses`]).
-/// Return `None` otherwise.
-/// Only the addresses of that output are cloned, not the whole cache entry.
-pub fn get_fetched_output_addresses(
-    txid: Txid,
-    vout: u32,
-) -> Option<Result<Vec<Address>, SpentOutputError>> {
-    FETCH_TX_CACHE.with(|cache| match cache.borrow().get_status(txid) {
-        Some(FetchTxStatus::Fetched(fetched)) => Some(
-            fetched
-                .tx
-                .spent_output_addresses(vout)
-                .map(<[Address]>::to_vec),
-        ),
-        _ => None,
-    })
+/// Apply `f` to the status of `txid` under a borrow of the cache, so that e.g. only the
+/// needed parts of a `Fetched` status are cloned instead of the whole cache entry.
+pub fn with_fetch_status<R>(txid: Txid, f: impl FnOnce(Option<&FetchTxStatus>) -> R) -> R {
+    FETCH_TX_CACHE.with(|cache| f(cache.borrow().get_status(txid)))
 }
 
 /// Set the addresses of the input at the given `index` in the `Fetched` status of the given `txid`.

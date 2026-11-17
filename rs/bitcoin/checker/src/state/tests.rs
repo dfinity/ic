@@ -69,15 +69,26 @@ fn test_fetch_status() {
         Some(FetchTxStatus::Fetched(_))
     ));
     let address = Address::from_script(&tx.output[0].script_pubkey, Network::Bitcoin).unwrap();
+    let spent_output_addresses = |txid, vout| {
+        with_fetch_status(txid, |status| match status {
+            Some(FetchTxStatus::Fetched(fetched)) => Some(
+                fetched
+                    .tx
+                    .spent_output_addresses(vout)
+                    .map(<[Address]>::to_vec),
+            ),
+            _ => None,
+        })
+    };
     assert_eq!(
-        get_fetched_output_addresses(txid_1, 0),
+        spent_output_addresses(txid_1, 0),
         Some(Ok(vec![address.clone()]))
     );
     assert_eq!(
-        get_fetched_output_addresses(txid_1, 2),
+        spent_output_addresses(txid_1, 2),
         Some(Err(SpentOutputError::MissingOutput))
     );
-    assert_eq!(get_fetched_output_addresses(txid_0, 0), None);
+    assert_eq!(spent_output_addresses(txid_0, 0), None);
     set_fetched_addresses(txid_1, 0, vec![address.clone()]);
     match get_fetch_status(txid_1) {
         Some(FetchTxStatus::Fetched(fetched)) => {
@@ -201,10 +212,23 @@ mod output_addresses {
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
         0xff, 0xff, 0xff,
     ];
-    const MALFORMED_PUBLIC_KEY: [u8; 33] = [0x05; 33];
+    // The generator point in the SEC1 compact encoding, which is not a valid public key encoding
+    // in Bitcoin.
+    const COMPACT_PUBLIC_KEY: &str =
+        "0579be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
     // The hybrid encoding of the generator point with the prefix for an odd y-coordinate,
     // although its y-coordinate is even.
     const HYBRID_PUBLIC_KEY_WITH_WRONG_PARITY: &str = "0779be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8";
+
+    // The hybrid encoding of the public key of the private key n - 1, i.e. -G, whose
+    // y-coordinate is odd.
+    const ODD_HYBRID_PUBLIC_KEY: &str = "0779be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798b7c52588d95c3b9aa25b0403f1eef75702e84bb7597aabe663b82f6f04ef2777";
+    const ODD_HYBRID_PUBLIC_KEY_ADDRESSES: [&str; 4] = [
+        "1GrLCmVQXoyJXaPJQdqssNqwxvha1eUo2E",
+        "1JPbzbsAx1HyaDQoLMapWGoqf9pD5uha5m",
+        "bc1q4h0ycu78h88wzldxc7e79vhw5xsde0n8jk4wl5",
+        "38Kw57SDszoUEikRwJNBpypPSdpbAhToeD",
+    ];
 
     fn key(hex: &str) -> PushBytesBuf {
         PushBytesBuf::try_from(hex::decode(hex).unwrap()).unwrap()
@@ -271,13 +295,21 @@ mod output_addresses {
     }
 
     #[test]
+    fn should_return_addresses_of_hybrid_key_with_odd_y_coordinate() {
+        assert_eq!(
+            output_addresses(&p2pk(key(ODD_HYBRID_PUBLIC_KEY)), Network::Bitcoin),
+            Some(addresses(&ODD_HYBRID_PUBLIC_KEY_ADDRESSES))
+        );
+    }
+
+    #[test]
     fn should_return_addresses_of_all_keys_of_bare_multisig() {
         let script = multisig(
             1,
             &[
                 key(COMPRESSED_PUBLIC_KEY),
                 PushBytesBuf::from(INVALID_PUBLIC_KEY),
-                PushBytesBuf::from(MALFORMED_PUBLIC_KEY),
+                key(COMPACT_PUBLIC_KEY),
                 key(HYBRID_PUBLIC_KEY_WITH_WRONG_PARITY),
                 key(OTHER_PUBLIC_KEY),
                 key(UNCOMPRESSED_PUBLIC_KEY),
@@ -313,9 +345,14 @@ mod output_addresses {
 
     #[test]
     fn should_return_no_address_for_p2pk_output_with_invalid_public_key() {
+        // The compact encoding is a valid SEC1 encoding, but not a valid public key in Bitcoin.
+        assert!(
+            ic_secp256k1::PublicKey::deserialize_sec1(&hex::decode(COMPACT_PUBLIC_KEY).unwrap())
+                .is_ok()
+        );
         for public_key in [
             PushBytesBuf::from(INVALID_PUBLIC_KEY),
-            PushBytesBuf::from(MALFORMED_PUBLIC_KEY),
+            key(COMPACT_PUBLIC_KEY),
             key(HYBRID_PUBLIC_KEY_WITH_WRONG_PARITY),
         ] {
             assert_eq!(
