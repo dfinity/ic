@@ -109,10 +109,13 @@ Runbook::
    `Validate{Source,Destination}SubnetCup`, which validate each downloaded state
    against the CUP its subnet halted at and the subnet's public key in the NNS
    signed state tree.
-15. The following step of the tool is executed: `MergeStates`, which assembles
-   the merged state locally, as a checkpoint holding the state of `D` with the
-   canisters and canister snapshots of `S` added to it, and computes its
-   manifest. Neither subnet nor the registry is touched.
+15. The following steps of the tool are executed:
+   `ComputeExpectedMergedManifest`, which derives the manifest the merged state
+   is expected to have from the manifests of the two validated states; and
+   `MergeStates`, which assembles the merged state locally, as a checkpoint
+   holding the state of `D` with the canisters and canister snapshots of `S`
+   added to it, and checks that its manifest has the expected root hash.
+   Neither subnet nor the registry is touched.
 16. After `MergeStates`: check that the merged state is a single checkpoint that
    holds exactly the canisters of the two downloaded checkpoints of `S` and `D`.
 
@@ -687,8 +690,12 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     );
 
     info!(logger, "Step 15: Merging the states of subnets S and D");
+    exec_next_step(StepType::ComputeExpectedMergedManifest);
     exec_next_step(StepType::MergeStates);
-    info!(logger, "Step 15 done: the merged state is assembled");
+    info!(
+        logger,
+        "Step 15 done: the merged state is assembled and has the expected state hash"
+    );
     check_merged_state(env, context);
 
     if let Some((step_type, _)) = merging.next() {

@@ -40,6 +40,7 @@ struct CoolingDownRegistryVersion {
 /// |  |-- ${source_subnet_id}.pem
 /// |  |-- ${destination_subnet_id}.pem
 /// |  |-- cooling_down_registry_version.json
+/// |  |-- expected_merged.manifest
 /// |  |-- merged.manifest
 /// |  |-- nns.pem
 /// |  |-- ${source_subnet_id}.pruned_state_tree.cbor
@@ -100,6 +101,12 @@ impl Layout {
     /// The manifest of the merged state.
     pub(crate) fn merged_state_manifest_file(&self) -> PathBuf {
         self.root.join("merged.manifest")
+    }
+
+    /// The manifest the merged state is expected to have, derived from the
+    /// manifests of the two downloaded states.
+    pub(crate) fn expected_merged_state_manifest_file(&self) -> PathBuf {
+        self.root.join("expected_merged.manifest")
     }
 
     pub(crate) fn actual_manifest_file(&self, subnet_id: SubnetId) -> PathBuf {

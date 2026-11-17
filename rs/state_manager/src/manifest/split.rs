@@ -1,9 +1,6 @@
-use super::hash::{ManifestHash, chunk_hasher, file_hasher};
-use super::{ManifestValidationError, validate_manifest_internal_consistency, write_chunk_hash};
-use crate::state_sync::types::{
-    ChunkInfo, DEFAULT_CHUNK_SIZE, FileInfo, MAX_SUPPORTED_STATE_SYNC_VERSION, Manifest,
-    ManifestData,
-};
+use super::builder::{ManifestBuilder, files_with_chunks};
+use super::{ManifestValidationError, validate_manifest_internal_consistency};
+use crate::state_sync::types::{MAX_SUPPORTED_STATE_SYNC_VERSION, Manifest};
 use ic_base_types::{SubnetId, subnet_id_into_protobuf};
 use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_registry_routing_table::RoutingTable;
@@ -19,7 +16,7 @@ use prost::Message;
 use std::path::PathBuf;
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;
 
 /// Splits a manifest, assumed to be that of `subnet_a`, distributing all
 /// canister states between `subnet_a` and `subnet_b`, based on the mapping in
@@ -59,10 +56,9 @@ pub fn split_manifest(
     let mut manifest_a = ManifestBuilder::new(manifest.version);
     let mut manifest_b = ManifestBuilder::new(manifest.version);
 
-    let mut chunk_start: usize = 0;
     let split_marker_path = PathBuf::from(SPLIT_MARKER_FILE);
     let mut split_marker_appended = false;
-    for (file_index, file) in manifest.file_table.iter().enumerate() {
+    for (file, chunks) in files_with_chunks(manifest) {
         let path = file.relative_path.as_path();
 
         // Insert split marker at the right position.
@@ -71,12 +67,6 @@ pub fn split_manifest(
             manifest_b.append_split_marker(subnet_a);
             split_marker_appended = true;
         }
-
-        let chunk_count: usize = manifest.chunk_table[chunk_start..]
-            .iter()
-            .take_while(|chunk| chunk.file_index as usize == file_index)
-            .count();
-        let chunks = &manifest.chunk_table[chunk_start..chunk_start + chunk_count];
 
         if let Some(canister_id) = canister_id_from_path(path) {
             // Part of a canister state.
@@ -145,8 +135,6 @@ pub fn split_manifest(
                 }
             }
         }
-
-        chunk_start += chunk_count;
     }
     if !split_marker_appended {
         manifest_a.append_split_marker(subnet_a);
@@ -156,46 +144,7 @@ pub fn split_manifest(
     Ok((manifest_a.build()?, manifest_b.build()?))
 }
 
-struct ManifestBuilder {
-    manifest: ManifestData,
-}
-
 impl ManifestBuilder {
-    fn new(version: StateSyncVersion) -> Self {
-        Self {
-            manifest: ManifestData {
-                version,
-                file_table: vec![],
-                chunk_table: vec![],
-            },
-        }
-    }
-
-    fn build(self) -> Result<Manifest, ManifestValidationError> {
-        let manifest = Manifest::new(
-            self.manifest.version,
-            self.manifest.file_table,
-            self.manifest.chunk_table,
-        );
-
-        // Sanity check.
-        validate_manifest_internal_consistency(&manifest)?;
-
-        Ok(manifest)
-    }
-
-    /// Appends `file_info` and `chunks` to `manifest`, adjusting chunk file indices
-    /// as necessary.
-    fn append(&mut self, file_info: &FileInfo, chunks: &[ChunkInfo]) {
-        for mut chunk_info in chunks.iter().cloned() {
-            // Set the correct file index.
-            chunk_info.file_index = self.manifest.file_table.len() as u32;
-            self.manifest.chunk_table.push(chunk_info);
-        }
-
-        self.manifest.file_table.push(file_info.clone());
-    }
-
     /// Appends a `SystemMetadata` consisting of only the provided `own_subnet_id`,
     /// `own_subnet_type` and `batch_time`.
     fn append_system_metadata(
@@ -223,37 +172,5 @@ impl ManifestBuilder {
         .unwrap();
 
         self.append_single_chunk_file(SPLIT_MARKER_FILE, split_marker_bytes.as_slice());
-    }
-
-    /// Appends a single-chunk file to the manifest.
-    fn append_single_chunk_file(&mut self, path: &str, data: &[u8]) {
-        assert!(data.len() <= DEFAULT_CHUNK_SIZE as usize);
-        let mut file_hasher = file_hasher();
-
-        if data.is_empty() {
-            // File has zero chunks.
-            0_u32.update_hash(&mut file_hasher);
-        } else {
-            let mut chunk_hasher = chunk_hasher();
-            chunk_hasher.write(data);
-            let chunk_info = ChunkInfo {
-                file_index: self.manifest.file_table.len() as u32,
-                size_bytes: data.len() as u32,
-                offset: 0,
-                hash: chunk_hasher.finish(),
-            };
-
-            // File has one chunk.
-            1_u32.update_hash(&mut file_hasher);
-            write_chunk_hash(&mut file_hasher, &chunk_info, self.manifest.version);
-
-            self.manifest.chunk_table.push(chunk_info);
-        };
-
-        self.manifest.file_table.push(FileInfo {
-            relative_path: PathBuf::from(path),
-            size_bytes: data.len() as u64,
-            hash: file_hasher.finish(),
-        });
     }
 }

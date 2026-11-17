@@ -489,6 +489,41 @@ impl Step for ValidateCupStep {
     }
 }
 
+/// Computes the manifest the merged state is expected to have from the
+/// manifests of the states the two subnets halted at, which the validation
+/// steps checked against the halting CUPs. This ties the state hash of the
+/// merged state to the state hashes in the two halting CUPs.
+pub(crate) struct ComputeExpectedMergedManifestStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) destination_subnet_id: SubnetId,
+    pub(crate) layout: Layout,
+}
+
+impl Step for ComputeExpectedMergedManifestStep {
+    fn descr(&self) -> String {
+        format!(
+            "Compute the manifest the merged state is expected to have from the manifests {} and \
+             {} of the validated states of the destination and source subnets, and write it to \
+             {}.",
+            self.layout
+                .actual_manifest_file(self.destination_subnet_id)
+                .display(),
+            self.layout
+                .actual_manifest_file(self.source_subnet_id)
+                .display(),
+            self.layout.expected_merged_state_manifest_file().display(),
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        state_tool_helper::merge_manifests(
+            &self.layout.actual_manifest_file(self.destination_subnet_id),
+            &self.layout.actual_manifest_file(self.source_subnet_id),
+            &self.layout.expected_merged_state_manifest_file(),
+        )
+    }
+}
+
 /// Assembles the merged state from the states the two subnets halted at: the
 /// state of the destination subnet, with the canisters and canister snapshots
 /// of the source subnet added to it, as a new checkpoint that the destination
@@ -504,11 +539,12 @@ impl Step for MergeStatesStep {
     fn descr(&self) -> String {
         format!(
             "Assemble the merged state from the checkpoints downloaded to {} and {} at the \
-             heights of the CUPs the two subnets halted at, as a new checkpoint in {}, and \
-             compute its manifest.",
+             heights of the CUPs the two subnets halted at, as a new checkpoint in {}, compute \
+             its manifest, and check it against the expected manifest {}.",
             self.layout.work_dir(TargetSubnet::Source).display(),
             self.layout.work_dir(TargetSubnet::Destination).display(),
             self.layout.merged_work_dir().display(),
+            self.layout.expected_merged_state_manifest_file().display(),
         )
     }
 
@@ -556,9 +592,23 @@ impl Step for MergeStatesStep {
         info!(self.logger, "Validating the manifest of the merged state");
         let state_hash = state_tool_helper::verify_manifest(&manifest_path)
             .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
+
+        let expected_manifest_path = self.layout.expected_merged_state_manifest_file();
+        let expected_state_hash = state_tool_helper::verify_manifest(&expected_manifest_path)
+            .map_err(|err| {
+                RecoveryError::validation_failed("Expected manifest verification failed", err)
+            })?;
+        if state_hash != expected_state_hash {
+            return Err(RecoveryError::ValidationFailed(format!(
+                "The merged state at height {merged_height} has the state hash {state_hash}, but \
+                 the state hash {expected_state_hash} is expected; compare {} with {}",
+                manifest_path.display(),
+                expected_manifest_path.display(),
+            )));
+        }
         info!(
             self.logger,
-            "The merged state at height {merged_height} has the state hash {state_hash}"
+            "The merged state at height {merged_height} has the expected state hash {state_hash}"
         );
 
         Ok(())
