@@ -139,14 +139,14 @@ single_version_override(
 )
 
 # protobuf linter
-bazel_dep(name = "rules_buf", version = "0.5.2")
+bazel_dep(name = "rules_buf", version = "0.6.1")
 
 # Go dependencies
 
 # 0.62.0 matches what the resolved dependency graph selects (pulled in via
 # the llvm module); keep the declaration in line with the resolution.
 bazel_dep(name = "rules_go", version = "0.62.0")
-bazel_dep(name = "gazelle", version = "0.51.3")
+bazel_dep(name = "gazelle", version = "0.54.0")
 
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
 go_deps.from_file(go_mod = "//:go.mod")
