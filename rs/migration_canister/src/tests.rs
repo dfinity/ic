@@ -8,7 +8,9 @@ use candid::Principal;
 use candid_parser::utils::{CandidSource, service_equal};
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::MAX_ALLOWED_CONTROLLERS_COUNT;
-use ic_management_canister_types_private::CanisterChange;
+use ic_management_canister_types_private::{
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
+};
 use ic_replicated_state::canister_state::system_state::MAX_CANISTER_HISTORY_CHANGES;
 
 use crate::{
@@ -25,13 +27,26 @@ use crate::{
 /// it may contain.
 #[test]
 fn memory_reserved_for_canister_history_covers_maximum_canister_history_size() {
-    // The memory usage of a canister change is `size_of::<CanisterChange>()` plus
-    // `size_of::<PrincipalId>()` for every controller stored in it (the controllers are stored
-    // on heap and thus not accounted for in `size_of::<CanisterChange>()`); the only canister
-    // changes containing controllers are canister creation, controllers change, and settings
-    // change, all of which are subject to the limit on the number of controllers.
-    let max_canister_change_size =
-        size_of::<CanisterChange>() + MAX_ALLOWED_CONTROLLERS_COUNT * size_of::<PrincipalId>();
+    // The memory usage of a canister change is determined by `CanisterChange::count_bytes`,
+    // i.e., the very function the system uses to account for canister history. It only depends
+    // on the number of controllers stored in the canister change and thus we take the maximum
+    // over all kinds of canister changes storing controllers, each of which is subject to
+    // the limit on the number of controllers.
+    let max_controllers = vec![PrincipalId::new_anonymous(); MAX_ALLOWED_CONTROLLERS_COUNT];
+    let max_canister_change_size = [
+        CanisterChangeDetails::canister_creation(max_controllers.clone(), Some([0; 32])),
+        CanisterChangeDetails::controllers_change(max_controllers.clone()),
+        CanisterChangeDetails::settings_change(Some(max_controllers), Some([0; 32])),
+    ]
+    .into_iter()
+    .map(|details| {
+        let origin = CanisterChangeOrigin::from_canister(PrincipalId::new_anonymous(), Some(0));
+        CanisterChange::new(0, 0, origin, details)
+            .count_bytes()
+            .get() as usize
+    })
+    .max()
+    .unwrap();
     let max_canister_history_size =
         MAX_CANISTER_HISTORY_CHANGES as usize * max_canister_change_size;
     assert!(

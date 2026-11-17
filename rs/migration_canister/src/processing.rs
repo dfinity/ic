@@ -81,27 +81,19 @@ pub async fn process_accepted(
         return ProcessingResult::NoProgress;
     };
 
-    // Set controller and memory allocation of migrated canister:
-    // changing its controllers records a canister history entry and can increase its memory
-    // usage. We reserve memory for these entries in the very same call that makes the migration
-    // canister its exclusive controller. `process_controllers_changed` checks that the canister
-    // is stopped and its non-history memory usage did not grow since validation before relying
-    // on the reservation (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY` for the recovery limitation).
-    // The original memory allocation is restored together with the original controllers.
+    // Set controller and memory allocation of migrated canister: the very same call that makes
+    // the migration canister its exclusive controller also reserves memory for its canister
+    // history (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`).
     //
     // If the outcome of the call is unknown, then the call is retried (making the migration
     // canister the exclusive controller of a canister is idempotent). If the request fails,
-    // then controller recovery inspects the canister to determine whether the original
-    // controllers (and memory allocation) must be restored: the outcome of an earlier attempt
-    // might be unknown and thus a later attempt that definitely had no effect does not imply
-    // that the migration canister did not change the canister.
+    // then controller recovery inspects the canister to determine whether it must be restored
+    // (see `controller_recovery`).
     //
     // Note that a retry of this function (e.g., because the outcome of the call for the replaced
     // canister below is unknown) repeats the call for the migrated canister even if an earlier
     // attempt succeeded. Every such call records one more canister history entry for the
-    // migrated canister (possibly evicting older entries). This is safe: the memory allocation
-    // set by the first successful call covers the maximum possible size of the canister history
-    // provided that the rest of the memory usage did not grow since validation.
+    // migrated canister (possibly evicting older entries), which is covered by the reservation.
     match set_exclusive_controller(
         request.migrated_canister,
         request
@@ -142,12 +134,9 @@ pub async fn process_accepted(
 }
 
 /// Checks that the memory usage of the given canister excluding its canister history
-/// did not grow since the request was validated: the memory allocation that the migration
-/// canister set for the canister only reserves memory for the canister history entries that
-/// the migration canister records for the canister (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`)
-/// and thus recording those entries could fail if the rest of the canister's memory usage grew
-/// after validation. A decrease is harmless since the memory allocation then still covers
-/// the memory usage plus the maximum possible size of the canister history.
+/// did not grow since the request was validated, i.e., that the memory allocation set by the
+/// migration canister still covers the maximum possible size of its canister history
+/// (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`). A decrease is harmless.
 ///
 /// This check is vacuous for a request validated by a version of the migration canister
 /// that did not manage the memory allocation of the canister yet.
@@ -495,9 +484,8 @@ async fn process_failed(request: RequestState) -> RecoveryResult {
         recovery_state.restore_migrated_canister_controllers,
         request.migrated_canister,
         request.migrated_canister_original_controllers.clone(),
-        // The memory allocation of the migrated canister is bumped in the very same call that
-        // makes the migration canister the exclusive controller of the migrated canister and
-        // thus it must be restored whenever the controllers are restored.
+        // The original memory allocation is restored together with the original controllers
+        // (see `controller_recovery`).
         request
             .migrated_canister_memory_allocation
             .map(|memory_allocation| memory_allocation.original),
@@ -507,9 +495,6 @@ async fn process_failed(request: RequestState) -> RecoveryResult {
         recovery_state.restore_replaced_canister_controllers,
         request.replaced_canister,
         request.replaced_canister_original_controllers.clone(),
-        // The memory allocation of the replaced canister is bumped in the very same call that
-        // makes the migration canister the exclusive controller of the replaced canister and
-        // thus it must be restored whenever the controllers are restored.
         request
             .replaced_canister_memory_allocation
             .map(|memory_allocation| memory_allocation.original),
