@@ -46,7 +46,9 @@ def _zstd_compress(ctx):
         executable = ctx.file._zstd,
         # Higher --long setting produces compressed files that most zstd decompressors (e.g. zstd, tar or mc) won't
         # decompress unless additional args are specified.
-        arguments = ["-q", "--threads=0", "--long=27", "-8", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
+        # --single-thread: zstd's multi-threaded mode (-T#) produces different output (the same for any number of
+        # threads), which for the GuestOS images is ~3% larger.
+        arguments = ["-q", "--single-thread", "--long=27", "-8", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
         inputs = ctx.files.srcs,
         outputs = [out],
         env = {"ZSTDMT_NBWORKERS_MAX": str(_COMPRESS_CONCURRENCY)},
