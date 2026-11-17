@@ -11,10 +11,10 @@
 # This patch prefers the static runtime for shared libraries too, falling back
 # to the dynamic one for toolchains that ship no static runtime.
 diff --git a/rust/private/rustc.bzl b/rust/private/rustc.bzl
-index d447c9730..2e576db84 100644
+index 72d776f9b..c3cd025a9 100644
 --- a/rust/private/rustc.bzl
 +++ b/rust/private/rustc.bzl
-@@ -667,6 +667,44 @@ def _depend_on_metadata(crate_info, force_depend_on_objects):
+@@ -732,6 +732,44 @@ def _depend_on_metadata(crate_info, force_depend_on_objects):
 
      return crate_info.type in ("rlib", "lib")
 
@@ -59,7 +59,7 @@ index d447c9730..2e576db84 100644
  def collect_inputs(
          ctx,
          file,
-@@ -784,12 +822,8 @@ def collect_inputs(
+@@ -849,12 +887,8 @@ def collect_inputs(
 
      if not cc_toolchain:
          runtime_libs = depset()
@@ -73,7 +73,7 @@ index d447c9730..2e576db84 100644
 
      nolinkstamp_compile_inputs = depset(
          nolinkstamp_compile_direct_inputs +
-@@ -3053,34 +3087,18 @@ def _add_native_link_flags(
+@@ -3155,34 +3189,18 @@ def _add_native_link_flags(
      args.add_all(linkstamp_outs, format_each = "-Clink-args=%s")
 
      if cc_toolchain:
@@ -119,10 +119,10 @@ index d447c9730..2e576db84 100644
  def _get_out_dir_path(file):
      """Return the path suitable for `--out-dir=<value>`.
 diff --git a/rust/private/rustdoc.bzl b/rust/private/rustdoc.bzl
-index 2114d3790..339c3a376 100644
+index ef125d60d..72bcb9d9a 100644
 --- a/rust/private/rustdoc.bzl
 +++ b/rust/private/rustdoc.bzl
-@@ -17,7 +17,7 @@
+@@ -18,7 +18,7 @@ load("@rules_cc//cc:find_cc_toolchain.bzl", "use_cc_toolchain")
  load("//rust/private:common.bzl", "rust_common")
  load("//rust/private:pic_utils.bzl", "should_use_pic")
  load("//rust/private:providers.bzl", "LintsInfo")
@@ -131,7 +131,7 @@ index 2114d3790..339c3a376 100644
  load(
      "//rust/private:utils.bzl",
      "dedent",
-@@ -185,13 +185,10 @@ def rustdoc_compile_action(
+@@ -186,13 +186,10 @@ def rustdoc_compile_action(
          # below the archives sit on the search path with nothing referencing
          # them, and every doc test fails to link with undefined `_Unwind_*`.
          #
