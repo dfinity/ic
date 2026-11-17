@@ -16,13 +16,14 @@ fn main() -> Result<()> {
     let config = Config::new(SUBNETS, NODES_PER_SUBNET, RUNTIME, REQUEST_RATE)
         // Guaranteed-response calls and best-effort calls with 30 second timeout.
         .with_call_timeouts(&[None, Some(30)])
-        // With 120 single-node subnets colocated on shared performance hardware, the
-        // per-subnet block production rate varies between runs. On loaded runs a few
-        // "straggler" subnets dip just below the default 0.3 send rate threshold (down
-        // to ~0.28), while on unloaded runs the minimum is ~0.43. Lower the threshold to
-        // 0.2 to absorb this hardware variance while still catching systemic XNet
-        // regressions (the median send rate is ~0.7).
-        .with_send_rate_threshold(0.2);
+        // The 120 single-node subnets share their Farm hosts with the VMs of other
+        // tests. A node that gets less CPU time than it needs executes rounds slower
+        // than blocks are made, so consensus delays the blocks of its subnet and the
+        // subnet's send rate drops, from above 1 to 0.2 or less. So use a lower send
+        // rate threshold than the default 0.3, and tolerate a few subnets missing the
+        // SLO.
+        .with_send_rate_threshold(0.2)
+        .with_max_subnets_missing_slo(SUBNETS / 20);
     let test = config.clone().test();
 
     SystemTestGroup::new()

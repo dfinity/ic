@@ -66,6 +66,9 @@ pub struct Config {
     send_rate_threshold: f64,
     error_percentage_threshold: f64,
     targeted_latency_seconds: u64,
+    /// Number of subnets that may miss the thresholds above without failing the
+    /// test.
+    max_subnets_missing_slo: usize,
     subnet_to_subnet_rate: usize,
     canisters_per_subnet: usize,
     canister_to_subnet_rate: usize,
@@ -117,6 +120,7 @@ impl Config {
             send_rate_threshold,
             error_percentage_threshold,
             targeted_latency_seconds,
+            max_subnets_missing_slo: 0,
             subnet_to_subnet_rate,
             canisters_per_subnet,
             canister_to_subnet_rate,
@@ -137,6 +141,11 @@ impl Config {
 
     pub fn with_send_rate_threshold(mut self, send_rate_threshold: f64) -> Self {
         self.send_rate_threshold = send_rate_threshold;
+        self
+    }
+
+    pub fn with_max_subnets_missing_slo(mut self, max_subnets_missing_slo: usize) -> Self {
+        self.max_subnets_missing_slo = max_subnets_missing_slo;
         self
     }
 
@@ -349,17 +358,22 @@ pub async fn tear_down(canisters: &[Vec<Canister<'_>>], logger: &slog::Logger) -
 /// rate and received responses aoove threshold, no sequence errors. Logs the
 /// outcome of each check.
 ///
-/// Returns `true` on success, `false` otherwise.
+/// Returns `true` if no subnet has sequence errors and at most
+/// `max_subnets_missing_slo` subnets fail any of the other checks; `false`
+/// otherwise.
 pub fn check_success(
     aggregated_metrics: Vec<Metrics>,
     config: &Config,
     logger: &slog::Logger,
 ) -> bool {
     info!(logger, "Asserting metrics are within limits...");
-    let mut success = true;
+    let mut sequence_errors = false;
+    let mut subnets_missing_slo = std::collections::BTreeSet::new();
     let mut expect =
         |cond: bool, subnet: usize, ok_msg: &str, fail_msg: &str, val: &dyn Display| {
-            success &= cond;
+            if !cond {
+                subnets_missing_slo.insert(subnet);
+            }
             info!(
                 logger,
                 "Subnet {}: {} {}: {}",
@@ -384,6 +398,7 @@ pub fn check_success(
             );
         }
 
+        sequence_errors |= m.seq_errors != 0;
         expect(
             m.seq_errors == 0,
             i,
@@ -465,7 +480,15 @@ pub fn check_success(
         }
     }
 
-    success
+    info!(
+        logger,
+        "{} of {} subnets missed the SLO (at most {} may): {:?}",
+        subnets_missing_slo.len(),
+        aggregated_metrics.len(),
+        config.max_subnets_missing_slo,
+        subnets_missing_slo
+    );
+    !sequence_errors && subnets_missing_slo.len() <= config.max_subnets_missing_slo
 }
 
 /// Takes as input a testing environment, a list of nodes s.t. each node is on
@@ -558,4 +581,76 @@ pub async fn collect_metrics(canisters: &[Vec<Canister<'_>>]) -> Vec<Vec<Metrics
         });
     }
     join_all(futures.into_iter().map(|x| async { join_all(x).await })).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SUBNETS: usize = 4;
+
+    fn config() -> Config {
+        Config::new(SUBNETS, 1, Duration::from_secs(600), 10)
+    }
+
+    /// Metrics of a subnet whose canister sent at `send_rate` and got a response to
+    /// every call after 1 second.
+    fn metrics(config: &Config, send_rate: f64) -> Metrics {
+        let calls = (send_rate
+            * ((config.subnets - 1)
+                * config.runtime.as_secs() as usize
+                * config.canisters_per_subnet
+                * config.canister_to_subnet_rate) as f64) as usize;
+        let mut metrics = Metrics {
+            calls_attempted: calls,
+            ..Default::default()
+        };
+        for _ in 0..calls {
+            metrics.latency_distribution.observe(Duration::from_secs(1));
+        }
+        metrics
+    }
+
+    fn check(config: &Config, metrics: Vec<Metrics>) -> bool {
+        check_success(
+            metrics,
+            config,
+            &slog::Logger::root(slog::Discard, slog::o!()),
+        )
+    }
+
+    #[test]
+    fn all_subnets_within_slo() {
+        let config = config();
+        assert!(check(&config, vec![metrics(&config, 1.0); SUBNETS]));
+    }
+
+    #[test]
+    fn subnets_missing_slo() {
+        let config = config();
+        let ok = metrics(&config, 1.0);
+        let slow = metrics(&config, SEND_RATE_THRESHOLD / 2.);
+        let one_slow = vec![ok.clone(), slow.clone(), ok.clone(), ok.clone()];
+        let two_slow = vec![ok.clone(), slow.clone(), ok, slow];
+
+        assert!(!check(&config, one_slow.clone()));
+
+        let config = config.with_max_subnets_missing_slo(1);
+        assert!(check(&config, one_slow));
+        assert!(!check(&config, two_slow));
+    }
+
+    #[test]
+    fn sequence_errors_are_never_tolerated() {
+        let config = config().with_max_subnets_missing_slo(SUBNETS);
+        let ok = metrics(&config, 1.0);
+        let seq_errors = Metrics {
+            seq_errors: 1,
+            ..ok.clone()
+        };
+        assert!(!check(
+            &config,
+            vec![ok.clone(), seq_errors, ok.clone(), ok]
+        ));
+    }
 }

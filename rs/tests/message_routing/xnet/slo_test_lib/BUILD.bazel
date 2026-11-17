@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -17,4 +17,9 @@ rust_library(
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
+)
+
+rust_test(
+    name = "xnet_slo_test_lib_test",
+    crate = ":xnet_slo_test_lib",
 )
