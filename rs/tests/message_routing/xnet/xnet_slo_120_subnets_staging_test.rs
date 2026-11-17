@@ -19,11 +19,11 @@ fn main() -> Result<()> {
         // The 120 single-node subnets share their Farm hosts with the VMs of other
         // tests. A node that gets less CPU time than it needs executes rounds slower
         // than blocks are made, so consensus delays the blocks of its subnet and the
-        // subnet's send rate drops, from above 1 to 0.2 or less. So use a lower send
-        // rate threshold than the default 0.3, and tolerate a few subnets missing the
-        // SLO.
+        // subnet's send rate drops from above 1 to as low as 0.1. So use a lower send
+        // rate threshold than the default 0.3, and tolerate a few subnets that are
+        // slower still.
         .with_send_rate_threshold(0.2)
-        .with_max_subnets_missing_slo(SUBNETS / 20);
+        .with_max_slow_subnets(SUBNETS / 20);
     let test = config.clone().test();
 
     SystemTestGroup::new()
