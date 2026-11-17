@@ -784,8 +784,14 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             => Valid(vec![other_subnet_id]),
         };
         let mut routing_table = RoutingTable::new();
-        routing_table_insert_subnet(&mut routing_table, own_subnet_id).unwrap();
-        routing_table_insert_subnet(&mut routing_table, other_subnet_id).unwrap();
+        let next_unallocated_canister_index =
+            routing_table_insert_subnet(&mut routing_table, own_subnet_id, 0).unwrap();
+        routing_table_insert_subnet(
+            &mut routing_table,
+            other_subnet_id,
+            next_unallocated_canister_index,
+        )
+        .unwrap();
         let mut canister_migrations = CanisterMigrations::new();
         canister_migrations
             .insert_ranges(
@@ -1859,10 +1865,20 @@ fn setup_three_subnet_registry() -> (Arc<FakeRegistryClient>, SubnetId, SubnetId
     };
 
     let mut routing_table = RoutingTable::new();
-    routing_table_insert_subnet(&mut routing_table, app_subnet_id).unwrap();
-    routing_table_insert_subnet(&mut routing_table, engine_subnet_id).unwrap();
-    routing_table_insert_subnet(&mut routing_table, nns_subnet_id).unwrap();
-    routing_table_insert_subnet(&mut routing_table, engine_subnet_id).unwrap();
+    let mut next_unallocated_canister_index = 0;
+    for subnet_id in [
+        app_subnet_id,
+        engine_subnet_id,
+        nns_subnet_id,
+        engine_subnet_id,
+    ] {
+        next_unallocated_canister_index = routing_table_insert_subnet(
+            &mut routing_table,
+            subnet_id,
+            next_unallocated_canister_index,
+        )
+        .unwrap();
+    }
 
     let fixture = RegistryFixture::new();
     fixture
@@ -1952,9 +1968,15 @@ fn setup_three_subnet_registry_with_chain_keys()
     };
 
     let mut routing_table = RoutingTable::new();
-    routing_table_insert_subnet(&mut routing_table, app_subnet_id).unwrap();
-    routing_table_insert_subnet(&mut routing_table, engine_subnet_id).unwrap();
-    routing_table_insert_subnet(&mut routing_table, nns_subnet_id).unwrap();
+    let mut next_unallocated_canister_index = 0;
+    for subnet_id in [app_subnet_id, engine_subnet_id, nns_subnet_id] {
+        next_unallocated_canister_index = routing_table_insert_subnet(
+            &mut routing_table,
+            subnet_id,
+            next_unallocated_canister_index,
+        )
+        .unwrap();
+    }
 
     let chain_key_enabled_subnets = btreemap! {
         shared_chain_key() => Valid(vec![app_subnet_id, engine_subnet_id]),
@@ -2249,8 +2271,14 @@ fn process_batch_updates_subnet_metrics() {
             => Valid(vec![other_subnet_id]),
         };
         let mut routing_table = RoutingTable::new();
-        routing_table_insert_subnet(&mut routing_table, own_subnet_id).unwrap();
-        routing_table_insert_subnet(&mut routing_table, other_subnet_id).unwrap();
+        let next_unallocated_canister_index =
+            routing_table_insert_subnet(&mut routing_table, own_subnet_id, 0).unwrap();
+        routing_table_insert_subnet(
+            &mut routing_table,
+            other_subnet_id,
+            next_unallocated_canister_index,
+        )
+        .unwrap();
         let mut canister_migrations = CanisterMigrations::new();
         canister_migrations
             .insert_ranges(
