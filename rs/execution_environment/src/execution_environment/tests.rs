@@ -34,7 +34,8 @@ use ic_test_utilities_execution_environment::{
     get_reject, get_reply,
 };
 use ic_test_utilities_metrics::{
-    fetch_histogram_vec_count, fetch_int_counter_vec, metric_vec, nonzero_values,
+    HistogramStats, fetch_histogram_vec_count, fetch_histogram_vec_stats, fetch_int_counter_vec,
+    metric_vec, nonzero_values,
 };
 use ic_types::{
     CanisterId, CountBytes, NumInstructions, PrincipalId, RegistryVersion,
@@ -6176,6 +6177,107 @@ fn test_schnorr_public_key_api_is_enabled() {
         assert_eq!(response.originator, nns_canister);
         assert_eq!(response.respondent, own_subnet.into());
     }
+}
+
+#[test]
+fn threshold_public_key_derivation_path_metrics() {
+    let ecdsa_key_id = make_ecdsa_key("correct_key");
+    let schnorr_key_id = make_bip340_key("correct_key");
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .with_chain_key(ecdsa_key_id.clone())
+        .with_chain_key(schnorr_key_id.clone())
+        .build();
+
+    let path = |elements: Vec<Vec<u8>>| {
+        DerivationPath::new(
+            elements
+                .into_iter()
+                .map(serde_bytes::ByteBuf::from)
+                .collect(),
+        )
+    };
+
+    // ECDSA: one call with 3 elements of 1 + 29 + 32 = 62 bytes
+    // and one call with 2 elements of 0 + 10 = 10 bytes.
+    for derivation_path in [
+        path(vec![vec![1], vec![2; 29], vec![3; 32]]),
+        path(vec![vec![], vec![4; 10]]),
+    ] {
+        test.inject_call_to_ic00(
+            Method::ECDSAPublicKey,
+            ic00::ECDSAPublicKeyArgs {
+                canister_id: None,
+                derivation_path,
+                key_id: into_inner_ecdsa(ecdsa_key_id.clone()),
+            }
+            .encode(),
+            Cycles::new(0),
+        );
+    }
+    // Schnorr: one call with an empty derivation path.
+    test.inject_call_to_ic00(
+        Method::SchnorrPublicKey,
+        ic00::SchnorrPublicKeyArgs {
+            canister_id: None,
+            derivation_path: DerivationPath::default(),
+            key_id: into_inner_schnorr(schnorr_key_id),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
+    // Calls for a key that the subnet does not hold are rejected before
+    // the derivation and thus not observed.
+    test.inject_call_to_ic00(
+        Method::SchnorrPublicKey,
+        ic00::SchnorrPublicKeyArgs {
+            canister_id: None,
+            derivation_path: path(vec![vec![5; 100]]),
+            key_id: into_inner_schnorr(make_bip340_key("nonexistent_key_id")),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
+    test.execute_all();
+    assert_eq!(test.xnet_messages().len(), 4);
+
+    let expected = |ecdsa: (u64, f64), schnorr: (u64, f64)| {
+        metric_vec(&[
+            (
+                &[("method_name", "ic00_ecdsa_public_key")],
+                HistogramStats {
+                    count: ecdsa.0,
+                    sum: ecdsa.1,
+                },
+            ),
+            (
+                &[("method_name", "ic00_schnorr_public_key")],
+                HistogramStats {
+                    count: schnorr.0,
+                    sum: schnorr.1,
+                },
+            ),
+        ])
+    };
+    assert_eq!(
+        fetch_histogram_vec_stats(
+            test.metrics_registry(),
+            "execution_threshold_public_key_derivation_path_length"
+        ),
+        expected((2, 5.0), (1, 0.0))
+    );
+    assert_eq!(
+        fetch_histogram_vec_stats(
+            test.metrics_registry(),
+            "execution_threshold_public_key_derivation_path_bytes"
+        ),
+        expected((2, 72.0), (1, 0.0))
+    );
 }
 
 #[test]

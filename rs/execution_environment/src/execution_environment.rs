@@ -1491,6 +1491,7 @@ impl ExecutionEnvironment {
                                         None => *msg.sender(),
                                     };
                                     self.get_threshold_public_key(
+                                        Ic00Method::ECDSAPublicKey,
                                         pubkey,
                                         canister_id,
                                         args.derivation_path.into_inner(),
@@ -1537,6 +1538,7 @@ impl ExecutionEnvironment {
                                         None => *msg.sender(),
                                     };
                                     self.get_threshold_public_key(
+                                        Ic00Method::SchnorrPublicKey,
                                         pubkey,
                                         canister_id,
                                         args.derivation_path.into_inner(),
@@ -3849,10 +3851,13 @@ impl ExecutionEnvironment {
 
     fn get_threshold_public_key(
         &self,
+        method: Ic00Method,
         subnet_public_key: &MasterPublicKey,
         caller: PrincipalId,
         derivation_path: Vec<Vec<u8>>,
     ) -> Result<PublicKey, UserError> {
+        self.metrics
+            .observe_threshold_public_key_derivation_path(method, &derivation_path);
         derive_threshold_public_key(
             subnet_public_key,
             ExtendedDerivationPath {
