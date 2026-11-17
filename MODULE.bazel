@@ -17,7 +17,7 @@ bazel_dep(name = "rules_shell", version = "0.6.1")
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
 
 # CC dependencies (for C libs like miracl-core, etc)
-bazel_dep(name = "rules_cc", version = "0.2.22")
+bazel_dep(name = "rules_cc", version = "0.2.28")
 bazel_dep(name = "platforms", version = "1.1.0")
 
 # Hermetic clang/lld-based CC toolchain
@@ -1375,6 +1375,8 @@ register_toolchains(
     # macOS executors: wasm only. Native macOS targets deliberately stay on the system Xcode toolchain:
     # hermetic-llvm's macOS support (trimmed Apple SDK sysroot, resource-dir handling)
     # is not yet mature enough for the full darwin build (e.g. configure-based cargo build scripts fail to find SDK headers).
+    # That Xcode toolchain is the one apple_support (a dependency of rules_cc) registers: under Bazel 9,
+    # rules_cc doesn't autodetect a toolchain on macOS.
     "//bazel:hermetic_cc_macos_x86_64_to_none_wasm32",
     "//bazel:hermetic_cc_macos_aarch64_to_none_wasm32",
 
