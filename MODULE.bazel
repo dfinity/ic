@@ -316,18 +316,69 @@ use_repo(oci, "alpine_openssl", "alpine_openssl_linux_amd64")
 
 # Ubuntu snapshots
 
-bazel_dep(name = "rules_distroless", version = "0.8.0")
+bazel_dep(name = "rules_distroless", version = "0.9.4")
 
 apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
 
-# Packageset based on an Ubuntu resolute snapshot, see manifest file
-# for details
-# To update, comment out the `lock` field below and run:
-#   bazel run @resolute//:lock
+# Package set based on an Ubuntu resolute snapshot, used by the system-test
+# runtime image (see //rs/tests:ubuntu_test_runtime_image_src). The `apt`
+# extension resolves the packages below against the snapshot's package indices
+# each time it is evaluated; the snapshot timestamp in `uris` pins the result.
+# The extension records the indices' checksums only in MODULE.bazel.lock, which
+# we don't use (see `--lockfile_mode` in bazel/conf/.bazelrc.build), so every
+# new Bazel server that needs `@resolute` downloads and parses them again.
+# To update the packages, bump the timestamp in both `apt.sources_list` calls.
+apt.sources_list(
+    architectures = ["amd64"],
+    components = [
+        "main",
+        "universe",
+    ],
+    suites = ["resolute"],
+    types = ["deb"],
+    uris = ["https://snapshot.ubuntu.com/ubuntu/20260422T000000Z"],
+)
+apt.sources_list(
+    architectures = ["amd64"],
+    components = ["main"],
+    suites = [
+        "resolute-security",
+        "resolute-updates",
+    ],
+    types = ["deb"],
+    uris = ["https://snapshot.ubuntu.com/ubuntu/20260422T000000Z"],
+)
+
+# `@resolute//<package>/<arch>` targets are only generated for the packages
+# listed here, not for their dependencies. A listed virtual package gets the
+# name of the package that provides it (e.g. `coreutils` resolves to
+# `coreutils-from-uutils`, `libvirt0` to `libvirt0-hwe`).
 apt.install(
-    name = "resolute",
-    lock = "//bazel:resolute.lock.json",
-    manifest = "//bazel:resolute.yaml",
+    dependency_set = "resolute",
+    packages = [
+        "apt",
+        "bash",
+        "ca-certificates",
+        "coreutils",  # for chmod
+        "dmsetup",
+        "dosfstools",
+        "dpkg",  # for apt list --installed
+        "e2fsprogs",  # for mkfs.ext4 used in ICOS device tests
+        "gawk",  # for build-bootstrap-config-image
+        "gzip",  # for tar-ing up ic regsitry store in systests
+        "libcryptsetup-dev",
+        "libssl3t64",
+        "libunwind8",
+        "libvirt0",  # so colocated test binaries linking libvirt.so.0 can load (see rs/tests/driver/src/driver/local_backend.rs)
+        "mtools",
+        "openssh-client",  # used to SSH into image
+        "perl",
+        "rsync",
+        "tar",
+        "udev",  # for device-mapper tests
+        "xz-utils",
+        "zstd",
+    ],
 )
 use_repo(apt, "resolute")
 
@@ -342,8 +393,8 @@ http_jar = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_j
 # OVMF (UEFI) firmware for the local system-test backend's QEMU VMs. At the
 # moment there are no official prebuilt firmwares so we extract one from a
 # `.deb`. We download the `.deb` instead of going through the
-# `rules_distroless` snapshot to avoid bloating the lockfile with (unused)
-# dependencies from the ovmf package.
+# `rules_distroless` snapshot to avoid pulling the ovmf package's (unused)
+# dependencies into the `resolute` package set.
 # https://github.com/tianocore/tianocore.github.io/issues/101
 http_file(
     name = "ovmf_deb",
@@ -355,8 +406,8 @@ http_file(
 # OVMF (UEFI) firmware for AMD SEV-SNP confidential VMs, extracted from the
 # `ovmf-amdsev` `.deb` (see https://packages.debian.org/sid/ovmf-amdsev). Same
 # rationale as `ovmf_deb` above: no official prebuilt firmware, so we pull it
-# from a `.deb` snapshot instead of `rules_distroless` to avoid bloating the
-# lockfile.
+# from a `.deb` snapshot instead of `rules_distroless` to avoid pulling its
+# (unused) dependencies into a package set.
 http_file(
     name = "ovmf_amdsev_deb",
     downloaded_file_path = "ovmf-amdsev.deb",
