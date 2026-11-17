@@ -1,22 +1,18 @@
-use ic_base_types::PrincipalId;
 use ic_canonical_state::{
     CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
     encoding::{
         CborProxyDecoder, CborProxyEncoder,
-        old_types::{RequestOrResponseV21, StreamHeaderV19, StreamHeaderV25, StreamMessageV22},
         types::{
             StreamHeader as StreamHeaderV26, StreamMessage as StreamMessageV23,
-            SubnetMetrics as SubnetMetricsV21, SystemMetadata as SystemMetadataV21,
+            SubnetMetrics as SubnetMetricsV21,
         },
     },
 };
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_replicated_state::{SystemMetadata, metadata_state::SubnetMetrics};
+use ic_replicated_state::metadata_state::SubnetMetrics;
 use ic_test_utilities_state::{arb_invalid_stream_header, arb_stream_header, arb_subnet_metrics};
 use ic_test_utilities_types::arbitrary;
 use ic_types::{
-    CryptoHashOfPartialState,
-    crypto::CryptoHash,
     messages::StreamMessage,
     xnet::{RejectReason, StreamHeader},
 };
@@ -70,54 +66,28 @@ impl<T> VersionedEncoding<T> {
 pub(crate) fn arb_valid_versioned_stream_header(
     max_signal_count: usize,
 ) -> impl Strategy<Value = (StreamHeader, RangeInclusive<CertificationVersion>)> {
-    prop_oneof![
-        // Stream headers may have flavours of reject signals other than `CanisterMigrating`
-        // starting from certification version 19, except `EngineNotAllowed` (valid from V26).
-        (
-            arb_stream_header(
-                /* min_signal_count */ 0,
-                max_signal_count,
-                /* with_reject_reasons */
-                RejectReason::all()
-                    .into_iter()
-                    .filter(|reason| *reason != RejectReason::EngineNotAllowed)
-                    .collect(),
-            ),
-            Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+    prop_oneof![(
+        arb_stream_header(
+            /* min_signal_count */ 0,
+            max_signal_count,
+            /* with_reject_reasons */ RejectReason::all(),
         ),
-        // `EngineNotAllowed` reject signals are valid from certification version 26.
-        (
-            arb_stream_header(
-                /* min_signal_count */ 0,
-                max_signal_count,
-                /* with_reject_reasons */ RejectReason::all(),
-            ),
-            Just(CertificationVersion::V26..=MAX_SUPPORTED_CERTIFICATION_VERSION)
-        )
-    ]
+        Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+    )]
 }
 
 /// Produces a `StreamHeader` invalid at all certification versions in the range.
 pub(crate) fn arb_invalid_versioned_stream_header(
     max_signal_count: usize,
 ) -> impl Strategy<Value = (StreamHeader, RangeInclusive<CertificationVersion>)> {
-    prop_oneof![
-        // Encoding a stream header with reject signal flavors other than `CanisterMigrating`
-        // before certification version 19 should panic. `EngineNotAllowed` is excluded as it is
-        // only encodable from V26.
-        (
-            arb_invalid_stream_header(
-                /* min_signal_count */ 1,
-                max_signal_count,
-                /* with_reject_reasons */
-                RejectReason::all()
-                    .into_iter()
-                    .filter(|reason| *reason != RejectReason::EngineNotAllowed)
-                    .collect(),
-            ),
-            Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION),
+    prop_oneof![(
+        arb_invalid_stream_header(
+            /* min_signal_count */ 1,
+            max_signal_count,
+            /* with_reject_reasons */ RejectReason::all(),
         ),
-    ]
+        Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION),
+    )]
 }
 
 lazy_static! {
@@ -125,18 +95,6 @@ lazy_static! {
     /// certification versions.
     static ref STREAM_HEADER_ENCODINGS: Vec<VersionedEncoding<StreamHeader>> = vec![
         #[allow(clippy::redundant_closure)]
-        VersionedEncoding::new(
-            MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V19,
-            "StreamHeaderV19",
-            |v| StreamHeaderV19::proxy_encode(v),
-            |v| StreamHeaderV19::proxy_decode(v),
-        ),
-        VersionedEncoding::new(
-            MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V25,
-            "StreamHeaderV25",
-            |v| StreamHeaderV25::proxy_encode(v),
-            |v| StreamHeaderV25::proxy_decode(v),
-        ),
         VersionedEncoding::new(
             MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "StreamHeader",
@@ -259,16 +217,10 @@ fn stream_header_encoding_panic_on_invalid(
 /// Produces a `StreamMessage` valid at all certification versions in the range.
 pub(crate) fn arb_valid_versioned_message()
 -> impl Strategy<Value = (StreamMessage, RangeInclusive<CertificationVersion>)> {
-    prop_oneof![
-        (
-            arbitrary::stream_message_with_config(false),
-            Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION)
-        ),
-        (
-            arbitrary::stream_message_with_config(true),
-            Just(CertificationVersion::V22..=CertificationVersion::V22)
-        ),
-    ]
+    prop_oneof![(
+        arbitrary::stream_message_with_config(true),
+        Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+    )]
 }
 
 lazy_static! {
@@ -276,18 +228,6 @@ lazy_static! {
     /// certification versions.
     static ref MESSAGE_ENCODINGS: Vec<VersionedEncoding<StreamMessage>> = vec![
         #[allow(clippy::redundant_closure)]
-        VersionedEncoding::new(
-            MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V21,
-            "RequestOrResponseV21",
-            |v| RequestOrResponseV21::proxy_encode(v),
-            |v| RequestOrResponseV21::proxy_decode(v),
-        ),
-        VersionedEncoding::new(
-            MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V22,
-            "StreamMessageV22",
-            |v| StreamMessageV22::proxy_encode(v),
-            |v| StreamMessageV22::proxy_decode(v),
-        ),
         VersionedEncoding::new(
             MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "StreamMessage",
@@ -369,99 +309,6 @@ fn message_roundtrip_encoding(
                     &result,
                     "Roundtrip encoding {}@{:?} failed",
                     encoding.name,
-                    version
-                );
-            }
-        }
-    }
-}
-
-lazy_static! {
-    /// Current and previous canonical `SystemMetadata` types and applicable
-    /// certification versions.
-    static ref SYSTEM_METADATA_ENCODINGS: Vec<VersionedEncoding<SystemMetadata>> = vec![
-        #[allow(clippy::redundant_closure)]
-        VersionedEncoding::new(
-            MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
-            "SystemMetadataV21",
-            |v| SystemMetadataV21::proxy_encode(v),
-            |_v| unimplemented!(),
-        ),
-    ];
-}
-
-prop_compose! {
-    /// Returns an arbitrary [`SystemMetadata`] (with only the fields relevant to
-    /// its canonical representation filled).
-    pub fn arb_system_metadata()(
-        prev_state_hash in prop::collection::vec(any::<u8>(), 32)
-    ) -> SystemMetadata {
-        let mut metadata = SystemMetadata::new(
-            PrincipalId::new_subnet_test_id(1).into(),
-            ic_registry_subnet_type::SubnetType::Application
-        );
-        metadata.prev_state_hash = Some(CryptoHashOfPartialState::new(CryptoHash(prev_state_hash)));
-        metadata
-    }
-}
-
-/// Produces a `SystemMetadata` valid at all certification versions in the range.
-///
-/// Returns one of two disjoint version ranges, because the encoding of the same
-/// `SystemMetadata` is different between the two version ranges.
-///
-pub(crate) fn arb_valid_system_metadata()
--> impl Strategy<Value = (SystemMetadata, RangeInclusive<CertificationVersion>)> {
-    prop_oneof![
-        // `SystemMetadata` `V10` and later have an optional `id_counter` field for
-        // backwards compatibility, but it is no longer populated.
-        (
-            arb_system_metadata(),
-            Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
-        ),
-    ]
-}
-
-/// Tests that given a `SystemMetadata` that is valid for a given certification
-/// version range, all supported canonical type (e.g. `SystemMetadataV9` or
-/// `SystemMetadataV10`) and certification version combinations produce the
-/// exact same encoding.
-#[test_strategy::proptest]
-fn system_metadata_unique_encoding(
-    #[strategy(arb_valid_system_metadata())] test_metadata: (
-        SystemMetadata,
-        RangeInclusive<CertificationVersion>,
-    ),
-) {
-    let (metadata, version_range) = test_metadata;
-
-    let mut results = vec![];
-    for version in iter(version_range) {
-        let results_before = results.len();
-        for encoding in &*SYSTEM_METADATA_ENCODINGS {
-            if encoding.version_range.contains(&version) {
-                let bytes = (encoding.encode)((&metadata, version))
-                    .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
-                results.push((version, encoding.name, bytes));
-            }
-        }
-        prop_assert!(
-            results.len() > results_before,
-            "No supported encodings for certification version {version:?}"
-        );
-    }
-
-    if results.len() > 1 {
-        let (current_version, current_name, current_bytes) = results.pop().unwrap();
-        for (version, name, bytes) in &results {
-            if version == &current_version {
-                prop_assert_eq!(
-                    &current_bytes,
-                    bytes,
-                    "Different encodings: {}@{:?} and {}@{:?}",
-                    current_name,
-                    current_version,
-                    name,
                     version
                 );
             }

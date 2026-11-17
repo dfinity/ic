@@ -3,8 +3,8 @@
 use crate::{
     CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
     encoding::{
-        encode_controllers, encode_message, encode_metadata, encode_stream_header,
-        encode_subnet_canister_ranges, encode_subnet_metrics,
+        encode_controllers, encode_message, encode_stream_header, encode_subnet_canister_ranges,
+        encode_subnet_metrics,
     },
 };
 use LazyTree::Blob;
@@ -461,7 +461,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
                 )
             })
             .with("metadata", move || {
-                system_metadata_as_tree(&state.metadata, height, certification_version)
+                system_metadata_as_tree(&state.metadata, height)
             })
             .with("streams", move || {
                 streams_as_tree(state.streams(), own_subnet_id, certification_version)
@@ -487,17 +487,13 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
                 "time",
                 num(state.metadata.batch_time.as_nanos_since_unix_epoch()),
             )
-            .with_if(
-                certification_version >= CertificationVersion::V21,
-                "canister_ranges",
-                move || {
-                    canister_ranges_as_tree(
-                        state.metadata.network_topology.subnets(),
-                        Arc::clone(&split_routing_table),
-                        certification_version,
-                    )
-                },
-            ),
+            .with("canister_ranges", move || {
+                canister_ranges_as_tree(
+                    state.metadata.network_topology.subnets(),
+                    Arc::clone(&split_routing_table),
+                    certification_version,
+                )
+            }),
     )
 }
 
@@ -551,23 +547,13 @@ fn streams_as_tree<'a>(
         )
     };
 
-    if certification_version >= CertificationVersion::V20 {
-        // Starting with `V20`, filter out the loopback stream.
-        fork(MapTransformFork {
-            map: streams,
-            map_filter: StreamsFilter { own_subnet_id },
-            certification_version,
-            mk_tree,
-        })
-    } else {
-        // Before `V20`, output all streams.
-        fork(MapTransformFork {
-            map: streams,
-            map_filter: NoFilter,
-            certification_version,
-            mk_tree,
-        })
-    }
+    // The loopback stream is not part of the certified state.
+    fork(MapTransformFork {
+        map: streams,
+        map_filter: StreamsFilter { own_subnet_id },
+        certification_version,
+        mk_tree,
+    })
 }
 
 /// Expands `$ty`/`$variant` to a 1-leaf [`HashTree`] (re-encoding the message
@@ -586,17 +572,6 @@ macro_rules! message_expander {
 
         fn $select(version: CertificationVersion) -> SubtreeExpander {
             match version {
-                CertificationVersion::V19 => $expand::<{ CertificationVersion::V19 as u32 }>,
-                CertificationVersion::V20 => $expand::<{ CertificationVersion::V20 as u32 }>,
-                CertificationVersion::V21 => $expand::<{ CertificationVersion::V21 as u32 }>,
-                CertificationVersion::V22 => $expand::<{ CertificationVersion::V22 as u32 }>,
-                CertificationVersion::V23 => $expand::<{ CertificationVersion::V23 as u32 }>,
-                CertificationVersion::V24 => $expand::<{ CertificationVersion::V24 as u32 }>,
-                CertificationVersion::V25 => $expand::<{ CertificationVersion::V25 as u32 }>,
-                CertificationVersion::V26 => $expand::<{ CertificationVersion::V26 as u32 }>,
-                CertificationVersion::V27 => $expand::<{ CertificationVersion::V27 as u32 }>,
-                CertificationVersion::V28 => $expand::<{ CertificationVersion::V28 as u32 }>,
-                CertificationVersion::V29 => $expand::<{ CertificationVersion::V29 as u32 }>,
                 CertificationVersion::V30 => $expand::<{ CertificationVersion::V30 as u32 }>,
             }
         }
@@ -689,16 +664,8 @@ impl<'a> LazyFork<'a> for MetadataFork<'a> {
     }
 }
 
-fn system_metadata_as_tree(
-    metadata: &SystemMetadata,
-    height: Height,
-    version: CertificationVersion,
-) -> LazyTree<'_> {
-    if version >= CertificationVersion::V24 {
-        fork(MetadataFork { height, metadata })
-    } else {
-        blob(move || encode_metadata(metadata, version))
-    }
+fn system_metadata_as_tree(metadata: &SystemMetadata, height: Height) -> LazyTree<'_> {
+    fork(MetadataFork { height, metadata })
 }
 
 struct IngressHistoryFork<'a>(&'a IngressHistoryState);
@@ -938,29 +905,27 @@ impl<'a> CanisterFork<'a> {
         } else {
             vec![CONTROLLERS_LABEL]
         };
-        // The `last_install_timestamp` leaf is only exposed from certification
-        // version `V27` onwards, and only when the execution state has a recorded
-        // install timestamp. It is therefore omitted for canisters with no
-        // installed code and for code installed before the field existed.
-        if self.version >= CertificationVersion::V27
-            && self
-                .canister
-                .execution_state
-                .as_ref()
-                .is_some_and(|execution_state| execution_state.last_install_timestamp.is_some())
+        // The `last_install_timestamp` leaf is only exposed when the execution
+        // state has a recorded install timestamp. It is therefore omitted for
+        // canisters with no installed code and for code installed before the
+        // field existed.
+        if self
+            .canister
+            .execution_state
+            .as_ref()
+            .is_some_and(|execution_state| execution_state.last_install_timestamp.is_some())
         {
             labels.push(LAST_INSTALL_TIMESTAMP_LABEL);
         }
-        // The `canister_creation_timestamp` leaf is exposed from certification
-        // version `V28` onwards for every canister (with or without installed
-        // code) that has a recorded creation timestamp. It is omitted for
-        // canisters created before the field existed.
-        if self.version >= CertificationVersion::V28
-            && self
-                .canister
-                .system_state
-                .canister_creation_timestamp
-                .is_some()
+        // The `canister_creation_timestamp` leaf is exposed for every canister
+        // (with or without installed code) that has a recorded creation
+        // timestamp. It is omitted for canisters created before the field
+        // existed.
+        if self
+            .canister
+            .system_state
+            .canister_creation_timestamp
+            .is_some()
         {
             labels.push(CANISTER_CREATION_TIMESTAMP_LABEL);
         }
@@ -1014,17 +979,6 @@ fn expand_canister<const V: u32>(source: &SubtreeSource) -> Result<HashTree, Has
 /// (rather than replicating it in every stub).
 fn select_canister_expander(version: CertificationVersion) -> SubtreeExpander {
     match version {
-        CertificationVersion::V19 => expand_canister::<{ CertificationVersion::V19 as u32 }>,
-        CertificationVersion::V20 => expand_canister::<{ CertificationVersion::V20 as u32 }>,
-        CertificationVersion::V21 => expand_canister::<{ CertificationVersion::V21 as u32 }>,
-        CertificationVersion::V22 => expand_canister::<{ CertificationVersion::V22 as u32 }>,
-        CertificationVersion::V23 => expand_canister::<{ CertificationVersion::V23 as u32 }>,
-        CertificationVersion::V24 => expand_canister::<{ CertificationVersion::V24 as u32 }>,
-        CertificationVersion::V25 => expand_canister::<{ CertificationVersion::V25 as u32 }>,
-        CertificationVersion::V26 => expand_canister::<{ CertificationVersion::V26 as u32 }>,
-        CertificationVersion::V27 => expand_canister::<{ CertificationVersion::V27 as u32 }>,
-        CertificationVersion::V28 => expand_canister::<{ CertificationVersion::V28 as u32 }>,
-        CertificationVersion::V29 => expand_canister::<{ CertificationVersion::V29 as u32 }>,
         CertificationVersion::V30 => expand_canister::<{ CertificationVersion::V30 as u32 }>,
     }
 }
@@ -1145,13 +1099,9 @@ fn subnets_as_tree<'a>(
                     .with_tree_if(
                         subnet_id == &own_subnet_id,
                         "metrics",
-                        // Starting with `V29`, the reported total also includes
-                        // the cycles consumed by all non-deleted canisters
-                        // (starting with `V30`, as monotonic amounts).
                         blob(move || encode_subnet_metrics(metrics, certification_version)),
                     )
-                    .with_tree_if(
-                        certification_version >= CertificationVersion::V25,
+                    .with_tree(
                         "type",
                         string(subnet_type_as_string(subnet_topology.subnet_type)),
                     ),
