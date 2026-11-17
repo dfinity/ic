@@ -6,7 +6,7 @@ use ic_error_types::ErrorCode;
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private as ic00;
 use ic_metrics::MetricsRegistry;
-use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
+use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_types::CanisterId;
 use ic_types::canister_http::{
@@ -47,15 +47,6 @@ const VETKD_CONTEXT_METHODS: [ic00::Method; 2] =
 /// e.g., `ic00_ecdsa_public_key`.
 fn method_name_label(method: ic00::Method) -> String {
     format!("ic00_{method}")
-}
-
-/// Buckets for the sizes of the inputs of threshold key calls, in bytes:
-/// 0B, 1B, 2B, 5B, ..., 1MB, 2MB, 5MB, 10MB, 20MB.
-///
-/// The last bucket is 20MB since requests on the same subnet can be up to
-/// 10 MiB (and requests from other subnets up to 2 MiB).
-fn input_bytes_buckets() -> Vec<f64> {
-    add_bucket(20e6, add_bucket(10e6, decimal_buckets_with_zero(0, 6)))
 }
 
 /// Creates a histogram vector with a single `method_name` label and initializes
@@ -186,25 +177,33 @@ impl ExecutionEnvironmentMetrics {
                 metrics_registry,
                 "execution_threshold_derivation_path_bytes",
                 "Total number of bytes in the elements of the derivation path of threshold ECDSA and Schnorr calls.",
-                input_bytes_buckets(),
+                // Buckets: 0B, 1B, 2B, 5B, ..., 10MB, 20MB, 50MB (requests on the same
+                // subnet can be up to 10 MiB).
+                decimal_buckets_with_zero(0, 7),
                 &DERIVATION_PATH_METHODS,
             ),
             vetkd_context_bytes: method_name_histogram_vec(
                 metrics_registry,
                 "execution_vetkd_context_bytes",
                 "Number of bytes in the context of vetKD calls.",
-                input_bytes_buckets(),
+                // Buckets: 0B, 1B, 2B, 5B, ..., 10MB, 20MB, 50MB (requests on the same
+                // subnet can be up to 10 MiB).
+                decimal_buckets_with_zero(0, 7),
                 &VETKD_CONTEXT_METHODS,
             ),
             sign_with_schnorr_message_bytes: metrics_registry.histogram(
                 "execution_sign_with_schnorr_message_bytes",
                 "Number of bytes in the message of sign_with_schnorr calls.",
-                input_bytes_buckets(),
+                // Buckets: 0B, 1B, 2B, 5B, ..., 10MB, 20MB, 50MB (requests on the same
+                // subnet can be up to 10 MiB).
+                decimal_buckets_with_zero(0, 7),
             ),
             vetkd_derive_key_input_bytes: metrics_registry.histogram(
                 "execution_vetkd_derive_key_input_bytes",
                 "Number of bytes in the input of vetkd_derive_key calls.",
-                input_bytes_buckets(),
+                // Buckets: 0B, 1B, 2B, 5B, ..., 10MB, 20MB, 50MB (requests on the same
+                // subnet can be up to 10 MiB).
+                decimal_buckets_with_zero(0, 7),
             ),
             response_cycles_refund_error: metrics_registry
                 .error_counter(CRITICAL_ERROR_RESPONSE_CYCLES_REFUND),
