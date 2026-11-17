@@ -1404,44 +1404,6 @@ impl StateManagerImpl {
         self.state_layout().flush_checkpoint_removal_channel();
     }
 
-    /// Prepares for the replica to exit: waits until the latest checkpoint is
-    /// verified, so that it isn't archived on restart, and its manifest is
-    /// published. Skips the queued work that only matters to a replica that keeps
-    /// running (resetting the tip, merging, rehashing), so the replica must exit
-    /// soon after: a later checkpoint would find the tip not reset.
-    ///
-    /// Doesn't wait for a state sync checkpoint, which may remain unverified until
-    /// superseded.
-    pub fn shutdown(&self) {
-        let start = Instant::now();
-        info!(
-            self.log,
-            "Shutting down: waiting for the latest checkpoint's verification"
-        );
-        self.shutting_down.store(true, Ordering::SeqCst);
-        loop {
-            self.flush_tip_channel();
-            // A checkpoint created while flushing has its validation queued after the
-            // flush, so flush again until the latest checkpoint is verified.
-            let unverified = self
-                .state_layout
-                .unfiltered_checkpoint_heights()
-                .ok()
-                .and_then(|heights| heights.last().copied())
-                .is_some_and(|height| {
-                    matches!(
-                        self.state_layout.checkpoint_status(height),
-                        Ok(CheckpointStatus::UnverifiedRegular)
-                    )
-                });
-            if !unverified {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(100));
-        }
-        info!(self.log, "Shut down in {:?}", start.elapsed());
-    }
-
     /// Height for the initial default state.
     const INITIAL_STATE_HEIGHT: Height = Height::new(0);
 
@@ -2853,6 +2815,22 @@ impl StateManagerImpl {
             certification,
             hash_tree,
         })
+    }
+
+    /// Prepares for the replica to exit: waits for the checkpoint work already
+    /// queued, notably verifying the latest checkpoint, so that it isn't archived
+    /// on restart. Skips the part of it that only matters to a replica that keeps
+    /// running (resetting the tip, merging, rehashing), so the replica must exit
+    /// soon after: a later checkpoint would find the tip not reset.
+    pub fn shutdown(&self) {
+        let start = Instant::now();
+        info!(
+            self.log,
+            "Shutting down: waiting for queued checkpoint work"
+        );
+        self.shutting_down.store(true, Ordering::SeqCst);
+        self.flush_tip_channel();
+        info!(self.log, "Shut down in {:?}", start.elapsed());
     }
 }
 
