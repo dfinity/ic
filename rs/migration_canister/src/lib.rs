@@ -42,6 +42,10 @@ const RATE_LIMIT: u64 = 50;
 const MAX_ONGOING_VALIDATIONS: u64 = 200;
 /// 10 Trillion Cycles
 const CYCLES_COST_PER_MIGRATION: u64 = 10_000_000_000_000;
+/// Both the migrated and replaced canisters must have enough cycles
+/// to not become frozen within this duration (at their current idle burn rate).
+/// For the migrated canister, this is in addition to `CYCLES_COST_PER_MIGRATION`.
+const MIN_DURATION_UNTIL_FROZEN: Duration = Duration::from_secs(12 * 60 * 60);
 
 #[derive(Clone, Display, Debug, CandidType, Deserialize)]
 pub enum ValidationError {
@@ -73,6 +77,7 @@ pub enum ValidationError {
     ReplacedCanisterNotStopped(Reserved),
     ReplacedCanisterHasSnapshots(Reserved),
     MigratedCanisterInsufficientCycles(Reserved),
+    ReplacedCanisterInsufficientCycles(Reserved),
     #[strum(to_string = "ValidationError::CloudEngineSubnet {{ subnet: {subnet} }}")]
     CloudEngineSubnet {
         subnet: Principal,
@@ -216,7 +221,10 @@ pub enum RequestState {
     /// * Called mgmt `canister_status` to determine:
     ///     * We are controller of migrated and replaced canisters.
     ///     * The original controllers of migrated and replaced canisters.
-    ///     * If the replaced canister has sufficient cycles above the freezing threshold.
+    ///     * If the migrated canister has sufficient cycles for the migration and to not
+    ///       become frozen within `MIN_DURATION_UNTIL_FROZEN` afterwards.
+    ///     * If the replaced canister has sufficient cycles to not become frozen
+    ///       within `MIN_DURATION_UNTIL_FROZEN`.
     #[strum(to_string = "RequestState::Accepted {{ request: {request} }}")]
     Accepted { request: Request },
 
@@ -231,7 +239,10 @@ pub enum RequestState {
     ///     * Migrated and replaced canisters are stopped.
     ///     * Migrated canister is ready for migration.
     ///     * Replaced canister has no snapshots.
-    ///     * Replaced canister has sufficient cycles above the freezing threshold.
+    ///     * Migrated canister has sufficient cycles for the migration and to not become
+    ///       frozen within `MIN_DURATION_UNTIL_FROZEN` afterwards.
+    ///     * Replaced canister has sufficient cycles to not become frozen within
+    ///       `MIN_DURATION_UNTIL_FROZEN`.
     ///     * Migrated canister version is not absurdly high.
     /// * Called mgmt `canister_info` to determine the history length of migrated canister.
     ///

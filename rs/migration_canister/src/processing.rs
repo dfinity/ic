@@ -4,7 +4,8 @@
 //! process several requests concurrently.
 
 use crate::{
-    CYCLES_COST_PER_MIGRATION, EventType, RecoveryState, RequestState, ValidationError,
+    CYCLES_COST_PER_MIGRATION, EventType, MIN_DURATION_UNTIL_FROZEN, RecoveryState, RequestState,
+    ValidationError,
     canister_state::{
         MethodGuard,
         events::insert_event,
@@ -181,13 +182,31 @@ pub async fn process_controllers_changed(
         }
     }
 
-    if migrated_canister_status.cycles < CYCLES_COST_PER_MIGRATION {
+    let required_cycles = migrated_canister_status
+        .required_cycles(CYCLES_COST_PER_MIGRATION, MIN_DURATION_UNTIL_FROZEN);
+    if migrated_canister_status.cycles < required_cycles {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
             reason: format!(
-                "Migrated canister does not have sufficient cycles: {} < {}.",
-                migrated_canister_status.cycles, CYCLES_COST_PER_MIGRATION
+                "Migrated canister does not have sufficient cycles for the migration ({}) and to not become frozen within {} seconds: {} < {}.",
+                CYCLES_COST_PER_MIGRATION,
+                MIN_DURATION_UNTIL_FROZEN.as_secs(),
+                migrated_canister_status.cycles,
+                required_cycles
+            ),
+        });
+    }
+    let required_cycles = replaced_canister_status.required_cycles(0, MIN_DURATION_UNTIL_FROZEN);
+    if replaced_canister_status.cycles < required_cycles {
+        return ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            recovery_state: RecoveryState::new(),
+            reason: format!(
+                "Replaced canister does not have sufficient cycles to not become frozen within {} seconds: {} < {}.",
+                MIN_DURATION_UNTIL_FROZEN.as_secs(),
+                replaced_canister_status.cycles,
+                required_cycles
             ),
         });
     }

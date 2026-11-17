@@ -1,4 +1,4 @@
-use std::convert::Infallible;
+use std::{convert::Infallible, time::Duration};
 
 use candid::{CandidType, Principal, Reserved};
 use ic_cdk::{
@@ -106,6 +106,25 @@ pub struct CanisterStatusResponse {
     pub cycles: candid::Nat,
     pub freezing_threshold: candid::Nat,
     pub reserved_cycles: candid::Nat,
+    pub idle_cycles_burned_per_day: candid::Nat,
+}
+
+impl CanisterStatusResponse {
+    /// Returns the cycles balance the canister needs so that, after spending
+    /// `spent_cycles`, its balance stays at or above its freezing threshold for
+    /// (at least) the given `duration`, assuming that the canister keeps burning
+    /// cycles at its current idle rate.
+    ///
+    /// Reserved cycles are conservatively ignored, i.e., this function might
+    /// overestimate the required balance of a canister whose reserved cycles
+    /// would actually cover part of its idle consumption.
+    pub fn required_cycles(&self, spent_cycles: u64, duration: Duration) -> candid::Nat {
+        const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
+        let freezing_threshold_cycles = self.idle_cycles_burned_per_day.clone()
+            * (self.settings.freezing_threshold.clone() + duration.as_secs())
+            / SECONDS_PER_DAY;
+        freezing_threshold_cycles + spent_cycles
+    }
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
