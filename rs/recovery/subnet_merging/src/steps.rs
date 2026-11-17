@@ -34,6 +34,9 @@ use std::{
     time::Duration,
 };
 
+#[cfg(test)]
+mod tests;
+
 /// Waits until the record of the subnet that is being merged away is labeled
 /// "cooling down" and persists the registry version `V` it was read at (not
 /// necessarily the version that set the label), which is what the merge
@@ -563,9 +566,7 @@ impl Step for MergeStatesStep {
             .layout
             .checkpoint_dir(TargetSubnet::Destination, destination_height);
 
-        // The recovery CUP is created at the next recovery height above the one
-        // the destination subnet halted at, exactly as in any other recovery.
-        let merged_height = Recovery::get_recovery_height(destination_height);
+        let merged_height = merged_recovery_height(source_height, destination_height);
         let merged_checkpoint = self.layout.merged_checkpoint_dir(merged_height);
 
         info!(
@@ -613,6 +614,13 @@ impl Step for MergeStatesStep {
 
         Ok(())
     }
+}
+
+/// Overlay files retain the heights at which either subnet wrote them. The
+/// recovery height must exceed both halting heights so that subsequent writes
+/// take precedence over all imported overlays when the page maps are reloaded.
+fn merged_recovery_height(source_height: Height, destination_height: Height) -> Height {
+    Recovery::get_recovery_height(source_height.max(destination_height))
 }
 
 /// Removes the file at `path`, which need not exist.
