@@ -2620,8 +2620,8 @@ fn test_flexible_canister_http_fire_and_forget() {
     }
 }
 
-/// Once the responses that would have to be delivered no longer fit into a block,
-/// a flexible outcall fails with `ResponsesTooLarge`.
+/// Once the responses that would have to be delivered exceed the 2 MiB − 64 KiB
+/// that one flexible outcall delivers, the outcall fails with `ResponsesTooLarge`.
 #[test]
 fn test_flexible_canister_http_responses_too_large() {
     let pic = flexible_outcalls_pic();
