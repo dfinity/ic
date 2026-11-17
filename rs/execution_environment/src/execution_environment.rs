@@ -958,35 +958,42 @@ impl ExecutionEnvironment {
                                     response: Err(err),
                                     refund: msg.take_cycles(),
                                 },
-                                Ok(_) => match self.sign_with_threshold(
-                                    (**request).clone(),
-                                    ThresholdArguments::Ecdsa(EcdsaArguments {
-                                        key_id: args.key_id,
-                                        message_hash: args.message_hash,
-                                        pre_signature: None,
-                                    }),
-                                    args.derivation_path.into_inner(),
-                                    registry_settings
-                                        .chain_key_settings
-                                        .get(&key_id)
-                                        .map(|setting| setting.max_queue_size)
-                                        .unwrap_or_default(),
-                                    &mut state,
-                                ) {
-                                    Err(err) => ExecuteSubnetMessageResult::Finished {
-                                        response: Err(err),
-                                        refund: msg.take_cycles(),
-                                    },
-                                    Ok(()) => {
-                                        self.metrics.observe_message_with_label(
-                                            &request.method_name,
-                                            since.elapsed().as_secs_f64(),
-                                            SUBMITTED_OUTCOME_LABEL.into(),
-                                            SUCCESS_STATUS_LABEL.into(),
-                                        );
-                                        ExecuteSubnetMessageResult::Processing
+                                Ok(_) => {
+                                    let derivation_path = args.derivation_path.into_inner();
+                                    self.metrics.observe_derivation_path(
+                                        Ic00Method::SignWithECDSA,
+                                        &derivation_path,
+                                    );
+                                    match self.sign_with_threshold(
+                                        (**request).clone(),
+                                        ThresholdArguments::Ecdsa(EcdsaArguments {
+                                            key_id: args.key_id,
+                                            message_hash: args.message_hash,
+                                            pre_signature: None,
+                                        }),
+                                        derivation_path,
+                                        registry_settings
+                                            .chain_key_settings
+                                            .get(&key_id)
+                                            .map(|setting| setting.max_queue_size)
+                                            .unwrap_or_default(),
+                                        &mut state,
+                                    ) {
+                                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                                            response: Err(err),
+                                            refund: msg.take_cycles(),
+                                        },
+                                        Ok(()) => {
+                                            self.metrics.observe_message_with_label(
+                                                &request.method_name,
+                                                since.elapsed().as_secs_f64(),
+                                                SUBMITTED_OUTCOME_LABEL.into(),
+                                                SUCCESS_STATUS_LABEL.into(),
+                                            );
+                                            ExecuteSubnetMessageResult::Processing
+                                        }
                                     }
-                                },
+                                }
                             }
                         }
                     }
@@ -1606,40 +1613,50 @@ impl ExecutionEnvironment {
                                     response: Err(err),
                                     refund: msg.take_cycles(),
                                 },
-                                Ok(_) => match self.sign_with_threshold(
-                                    (**request).clone(),
-                                    ThresholdArguments::Schnorr(SchnorrArguments {
-                                        key_id: args.key_id,
-                                        message: Arc::new(args.message),
-                                        taproot_tree_root: args.aux.map(|v| match v {
-                                            SignWithSchnorrAux::Bip341(v) => {
-                                                Arc::new(v.merkle_root_hash.into_vec())
-                                            }
+                                Ok(_) => {
+                                    let derivation_path = args.derivation_path.into_inner();
+                                    self.metrics.observe_derivation_path(
+                                        Ic00Method::SignWithSchnorr,
+                                        &derivation_path,
+                                    );
+                                    self.metrics
+                                        .sign_with_schnorr_message_bytes
+                                        .observe(args.message.len() as f64);
+                                    match self.sign_with_threshold(
+                                        (**request).clone(),
+                                        ThresholdArguments::Schnorr(SchnorrArguments {
+                                            key_id: args.key_id,
+                                            message: Arc::new(args.message),
+                                            taproot_tree_root: args.aux.map(|v| match v {
+                                                SignWithSchnorrAux::Bip341(v) => {
+                                                    Arc::new(v.merkle_root_hash.into_vec())
+                                                }
+                                            }),
+                                            pre_signature: None,
                                         }),
-                                        pre_signature: None,
-                                    }),
-                                    args.derivation_path.into_inner(),
-                                    registry_settings
-                                        .chain_key_settings
-                                        .get(&key_id)
-                                        .map(|setting| setting.max_queue_size)
-                                        .unwrap_or_default(),
-                                    &mut state,
-                                ) {
-                                    Err(err) => ExecuteSubnetMessageResult::Finished {
-                                        response: Err(err),
-                                        refund: msg.take_cycles(),
-                                    },
-                                    Ok(()) => {
-                                        self.metrics.observe_message_with_label(
-                                            &request.method_name,
-                                            since.elapsed().as_secs_f64(),
-                                            SUBMITTED_OUTCOME_LABEL.into(),
-                                            SUCCESS_STATUS_LABEL.into(),
-                                        );
-                                        ExecuteSubnetMessageResult::Processing
+                                        derivation_path,
+                                        registry_settings
+                                            .chain_key_settings
+                                            .get(&key_id)
+                                            .map(|setting| setting.max_queue_size)
+                                            .unwrap_or_default(),
+                                        &mut state,
+                                    ) {
+                                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                                            response: Err(err),
+                                            refund: msg.take_cycles(),
+                                        },
+                                        Ok(()) => {
+                                            self.metrics.observe_message_with_label(
+                                                &request.method_name,
+                                                since.elapsed().as_secs_f64(),
+                                                SUBMITTED_OUTCOME_LABEL.into(),
+                                                SUCCESS_STATUS_LABEL.into(),
+                                            );
+                                            ExecuteSubnetMessageResult::Processing
+                                        }
                                     }
-                                },
+                                }
                             }
                         }
                     }
@@ -3933,6 +3950,11 @@ impl ExecutionEnvironment {
                 "The provided transport public key is invalid.",
             ));
         }
+        self.metrics
+            .observe_vetkd_context(Ic00Method::VetKdDeriveKey, args.context.len());
+        self.metrics
+            .vetkd_derive_key_input_bytes
+            .observe(args.input.len() as f64);
         self.sign_with_threshold(
             (*request).clone(),
             ThresholdArguments::VetKd(VetKdArguments {
@@ -3979,28 +4001,6 @@ impl ExecutionEnvironment {
         max_queue_size_registry: u32,
         state: &mut ReplicatedState,
     ) -> Result<(), UserError> {
-        match &args {
-            ThresholdArguments::Ecdsa(_) => self
-                .metrics
-                .observe_derivation_path(Ic00Method::SignWithECDSA, &derivation_path),
-            ThresholdArguments::Schnorr(schnorr) => {
-                self.metrics
-                    .observe_derivation_path(Ic00Method::SignWithSchnorr, &derivation_path);
-                self.metrics
-                    .sign_with_schnorr_message_bytes
-                    .observe(schnorr.message.len() as f64);
-            }
-            ThresholdArguments::VetKd(vetkd) => {
-                // The derivation path of a vetKD call consists of its context only.
-                self.metrics.observe_vetkd_context(
-                    Ic00Method::VetKdDeriveKey,
-                    derivation_path.iter().map(Vec::len).sum(),
-                );
-                self.metrics
-                    .vetkd_derive_key_input_bytes
-                    .observe(vetkd.input.len() as f64);
-            }
-        }
         if let ThresholdArguments::Schnorr(schnorr) = &args {
             let alg = schnorr.key_id.algorithm;
             match (alg, &schnorr.taproot_tree_root) {
