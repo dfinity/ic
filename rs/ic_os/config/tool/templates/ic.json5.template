@@ -336,7 +336,7 @@ table ip6 filter {\n\
         whitelisted_nodes_udp_ports_whitelist: [4100],
         all_nodes_tcp_ports_whitelist: [2497],
         all_nodes_udp_ports_whitelist: [],
-        ports_for_http_adapter_blacklist: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 9314, 9324, 19100, 19522, 19523, 19531],
+        ports_for_http_adapter_blacklist: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 9314, 9324, 19100, 19300, 19522, 19523, 19531],
         max_simultaneous_connections_per_ip_address: 1000,
     },
 
@@ -494,7 +494,7 @@ table ip6 filter {\n\
         whitelisted_nodes_udp_ports_whitelist: [4100],
         all_nodes_tcp_ports_whitelist: [2497],
         all_nodes_udp_ports_whitelist: [],
-        ports_for_http_adapter_blacklist: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 9314, 9324, 19100, 19522, 19523, 19531],
+        ports_for_http_adapter_blacklist: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 9314, 9324, 19100, 19300, 19522, 19523, 19531],
         max_simultaneous_connections_per_ip_address: 1000,
     },
 
@@ -613,7 +613,8 @@ table ip6 filter {\n\
     icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
     ct state invalid drop\n\
     ct state { established, related } accept\n\
-    ct state new tcp dport { 53, 80, 443, 4460, 8080, 19300 } accept\n\
+    ct state new tcp dport { 53, 80, 443, 4460, 8080 } accept\n\
+    ip6 daddr { {{ ipv6_prefix }} } ct state new tcp dport 19300 accept\n\
     ct state new udp dport { 53, 123 } accept\n\
   }\n\
 }\n",

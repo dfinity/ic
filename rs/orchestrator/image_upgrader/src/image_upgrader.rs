@@ -6,7 +6,7 @@ use std::str::FromStr;
 use std::{
     fmt::Debug,
     io::Write,
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::Output,
     time::{Duration, SystemTime},
 };
@@ -133,7 +133,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     }
     /// Return the logger to be passed to the upgrade functions.
     fn log(&self) -> &ReplicaLogger;
-    /// Return the release package url and SHA256 hex string for the given version.
+    /// Return the release package urls and SHA256 hex string for the given version.
     /// Used to download the release package during `prepare_upgrade()`.
     fn get_release_package_urls_and_hash(
         &self,
@@ -185,14 +185,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         if matches!(
             tokio::time::timeout(
                 UPGRADE_PROXY_TOTAL_TIMEOUT,
-                try_download_from_urls(
-                    self.log(),
-                    version,
-                    &release_package_urls,
-                    &hash,
-                    self.image_path(),
-                    true,
-                )
+                self.try_download_from_urls(version, &release_package_urls, &hash, true,)
             )
             .await,
             Ok(Ok(())),
@@ -201,15 +194,8 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         }
 
         // Otherwise, download the artifact ourselves, directly
-        try_download_from_urls(
-            self.log(),
-            version,
-            &release_package_urls,
-            &hash,
-            self.image_path(),
-            false,
-        )
-        .await
+        self.try_download_from_urls(version, &release_package_urls, &hash, false)
+            .await
     }
 
     /// Downloads release package associated with the given version,
@@ -342,50 +328,49 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     /// * Optionally prepare the upgrade in advance using `prepare_upgrade`.
     /// * Once it is time to upgrade, execute it using `execute_upgrade`
     async fn check_for_upgrade(&mut self) -> UpgradeResult<Self::UpgradeType>;
-}
 
-/// Try to download from a set of urls, returning the last error in case of
-/// failure. If `use_proxy` is set, attempt the downloads through the HostOS
-/// upgrade proxy.
-async fn try_download_from_urls<V>(
-    logger: &ReplicaLogger,
-    version: V,
-    release_package_urls: &[String],
-    hash: &str,
-    image_path: &Path,
-    use_proxy: bool,
-) -> UpgradeResult<()>
-where
-    V: Clone + Debug + PartialEq + Eq + Send + Sync,
-{
-    // We return the last error if download attempts from all the URLs fail.
-    // We will always either set `error`, or return `Ok` from this loop.
-    let mut error = UpgradeError::GenericError("unreachable".to_string());
+    /// Try to download from a set of urls, returning the last error in case of
+    /// failure. If `use_proxy` is set, attempt the downloads through the HostOS
+    /// upgrade proxy.
+    async fn try_download_from_urls(
+        &self,
+        version: &V,
+        release_package_urls: &[String],
+        hash: &str,
+        use_proxy: bool,
+    ) -> UpgradeResult<()> {
+        let logger = self.log();
+        let image_path = self.image_path();
 
-    for release_package_url in release_package_urls {
-        let release_package_url = if use_proxy {
-            &format!("{UPGRADE_PROXY_URL}/{hash}/{release_package_url}")
-        } else {
-            release_package_url
-        };
+        // We return the last error if download attempts from all the URLs fail.
+        // We will always either set `error`, or return `Ok` from this loop.
+        let mut error = UpgradeError::GenericError("unreachable".to_string());
 
-        let req = format!("Request to download image {version:?} from {release_package_url}");
-        let file_downloader =
-            FileDownloader::new_with_timeout(Some(logger.clone()), Duration::from_secs(60));
-        let start_time = std::time::Instant::now();
-        let download_result = file_downloader
-            .download_file(release_package_url, image_path, Some(hash.to_owned()))
-            .await;
-        let duration = start_time.elapsed();
+        for release_package_url in release_package_urls {
+            let release_package_url = if use_proxy {
+                &format!("{UPGRADE_PROXY_URL}/{hash}/{release_package_url}")
+            } else {
+                release_package_url
+            };
 
-        if let Err(e) = download_result {
-            warn!(logger, "{} failed in {:?}: {:?}", req, duration, e);
-            error = UpgradeError::from(e);
-        } else {
-            info!(logger, "{} processed in {:?}", req, duration);
-            return Ok(());
+            let req = format!("Request to download image {version:?} from {release_package_url}");
+            let file_downloader =
+                FileDownloader::new_with_timeout(Some(logger.clone()), Duration::from_secs(60));
+            let start_time = std::time::Instant::now();
+            let download_result = file_downloader
+                .download_file(release_package_url, image_path, Some(hash.to_owned()))
+                .await;
+            let duration = start_time.elapsed();
+
+            if let Err(e) = download_result {
+                warn!(logger, "{} failed in {:?}: {:?}", req, duration, e);
+                error = UpgradeError::from(e);
+            } else {
+                info!(logger, "{} processed in {:?}", req, duration);
+                return Ok(());
+            }
         }
-    }
 
-    Err(error)
+        Err(error)
+    }
 }
