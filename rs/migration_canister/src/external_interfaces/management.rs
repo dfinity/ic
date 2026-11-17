@@ -32,10 +32,11 @@ struct UpdateSettingsArgs {
 /// Makes the migration canister the only controller of the given canister and,
 /// if `memory_allocation` is not `None`, sets its memory allocation in the same call.
 ///
-/// This is a success if the call is a success and a fatal failure if the call definitely
-/// had no effect. If the outcome of the call is unknown (its response might have been dropped),
-/// then this function returns no progress so that the call is retried: this way, the caller
-/// always knows whether the migration canister became the exclusive controller.
+/// This is a success if this attempt succeeds and a fatal failure if this attempt definitely
+/// had no effect. If its outcome is unknown (its response might have been dropped), this function
+/// returns no progress so that the call is retried. A fatal failure does not rule out an earlier
+/// attempt having taken effect, so controller recovery must inspect the canister to determine
+/// whether the migration canister became its exclusive controller.
 pub async fn set_exclusive_controller(
     canister_id: Principal,
     memory_allocation: Option<u64>,
@@ -78,8 +79,9 @@ pub async fn set_exclusive_controller(
 }
 
 /// Sets the controllers of the given canister and, if `memory_allocation` is not `None`,
-/// its memory allocation in the same call: the memory freed by lowering the memory allocation
-/// covers the memory of the canister history entry recorded for the controllers change.
+/// its memory allocation in the same call. Restoring the original allocation needs no additional
+/// subnet memory if the reservation still covers the canister's memory usage including the
+/// controller change's history entry (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`).
 ///
 /// This is a success if the call is a success
 /// and a fatal failure if the canister does not exist.

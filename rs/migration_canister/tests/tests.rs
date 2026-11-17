@@ -1834,12 +1834,12 @@ async fn after_validation_insufficient_cycles() {
     assert!(reason.contains("Migrated canister does not have sufficient cycles"));
 }
 
-/// The migration fails if the memory usage of the migrated or replaced canister changed after
+/// The migration fails if the memory usage of the migrated or replaced canister grew after
 /// validation: the memory allocation that the migration canister sets for those canisters when
 /// making itself their exclusive controller only reserves memory for the canister history
 /// entries that the migration canister records for them.
 #[tokio::test]
-async fn after_validation_memory_usage_changed() {
+async fn after_validation_memory_usage_grew() {
     for interfere_with_migrated_canister in [true, false] {
         let Setup {
             pic,
@@ -1882,9 +1882,9 @@ async fn after_validation_memory_usage_changed() {
             panic!("Unexpected status: {:?}", status.unwrap())
         };
         let expected_reason = if interfere_with_migrated_canister {
-            "Migrated canister memory usage changed."
+            "Migrated canister memory usage grew."
         } else {
-            "Replaced canister memory usage changed."
+            "Replaced canister memory usage grew."
         };
         assert_eq!(reason, expected_reason);
 

@@ -82,12 +82,11 @@ pub async fn process_accepted(
     };
 
     // Set controller and memory allocation of migrated canister:
-    // every management canister call that the migration canister performs on the migrated
-    // canister (e.g., restoring its original controllers) records a canister history entry
-    // and thus increases the canister's memory usage. To make sure that such a call cannot
-    // fail because the subnet of the migrated canister cannot accommodate that increase,
-    // we bump the memory allocation of the migrated canister in the very same call that
-    // makes the migration canister the exclusive controller of the migrated canister.
+    // changing its controllers records a canister history entry and can increase its memory
+    // usage. We reserve memory for these entries in the very same call that makes the migration
+    // canister its exclusive controller. `process_controllers_changed` checks that the canister
+    // is stopped and its non-history memory usage did not grow since validation before relying
+    // on the reservation (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY` for the recovery limitation).
     // The original memory allocation is restored together with the original controllers.
     //
     // If the outcome of the call is unknown, then the call is retried (making the migration
@@ -96,6 +95,13 @@ pub async fn process_accepted(
     // controllers (and memory allocation) must be restored: the outcome of an earlier attempt
     // might be unknown and thus a later attempt that definitely had no effect does not imply
     // that the migration canister did not change the canister.
+    //
+    // Note that a retry of this function (e.g., because the outcome of the call for the replaced
+    // canister below is unknown) repeats the call for the migrated canister even if an earlier
+    // attempt succeeded. Every such call records one more canister history entry for the
+    // migrated canister (possibly evicting older entries). This is safe: the memory allocation
+    // set by the first successful call covers the maximum possible size of the canister history
+    // provided that the rest of the memory usage did not grow since validation.
     match set_exclusive_controller(
         request.migrated_canister,
         request
@@ -136,21 +142,22 @@ pub async fn process_accepted(
 }
 
 /// Checks that the memory usage of the given canister excluding its canister history
-/// did not change since the request was validated: the memory allocation that the migration
+/// did not grow since the request was validated: the memory allocation that the migration
 /// canister set for the canister only reserves memory for the canister history entries that
 /// the migration canister records for the canister (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`)
 /// and thus recording those entries could fail if the rest of the canister's memory usage grew
-/// after validation.
+/// after validation. A decrease is harmless since the memory allocation then still covers
+/// the memory usage plus the maximum possible size of the canister history.
 ///
 /// This check is vacuous for a request validated by a version of the migration canister
 /// that did not manage the memory allocation of the canister yet.
-fn memory_usage_unchanged(
+fn memory_usage_did_not_grow(
     memory_allocation: Option<ManagedMemoryAllocation>,
     canister_status: &CanisterStatusResponse,
 ) -> bool {
     memory_allocation.is_none_or(|memory_allocation| {
         canister_status.memory_usage_excluding_canister_history()
-            == memory_allocation.usage_excluding_canister_history
+            <= memory_allocation.usage_excluding_canister_history
     })
 }
 
@@ -241,25 +248,25 @@ pub async fn process_controllers_changed(
     // The migration canister is the exclusive controller of the migrated and replaced canisters
     // at this point and both of them are stopped. Hence, only the migration canister can change
     // their memory usage from now on (by recording canister history entries for them) and thus
-    // it suffices to check here that their memory usage did not change since validation.
-    if !memory_usage_unchanged(
+    // it suffices to check here that their memory usage did not grow since validation.
+    if !memory_usage_did_not_grow(
         request.migrated_canister_memory_allocation,
         &migrated_canister_status,
     ) {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
-            reason: "Migrated canister memory usage changed.".to_string(),
+            reason: "Migrated canister memory usage grew.".to_string(),
         });
     }
-    if !memory_usage_unchanged(
+    if !memory_usage_did_not_grow(
         request.replaced_canister_memory_allocation,
         &replaced_canister_status,
     ) {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
-            reason: "Replaced canister memory usage changed.".to_string(),
+            reason: "Replaced canister memory usage grew.".to_string(),
         });
     }
 

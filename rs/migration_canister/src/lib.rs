@@ -43,26 +43,30 @@ const MAX_ONGOING_VALIDATIONS: u64 = 200;
 /// 10 Trillion Cycles
 const CYCLES_COST_PER_MIGRATION: u64 = 10_000_000_000_000;
 /// Changing the controllers of a canister (and renaming it) records a canister history entry and
-/// thus increases the canister's memory usage. If the subnet of that canister cannot accommodate
+/// can increase the canister's memory usage. If the subnet of that canister cannot accommodate
 /// that increase, then the corresponding management canister call fails: the call to
 /// `rename_canister` in `RequestState::StoppedAndReady` and the calls restoring the original
-/// controllers of a successful or failed request would keep failing forever.
+/// controllers of a successful or failed request can keep failing while the subnet stays full.
 ///
 /// To prevent this, the migration canister bumps the memory allocation of the migrated and
 /// replaced canisters to their memory usage plus this amount when making itself their exclusive
-/// controller (and restores the original memory allocation when restoring the original
-/// controllers: the memory freed by lowering the memory allocation covers the canister history
-/// entry recorded by that very call).
+/// controller and restores the original memory allocation when restoring the original
+/// controllers. As long as the reservation covers the canister's memory usage including the
+/// restoration's history entry, restoring the allocation needs no additional subnet memory.
 ///
 /// This amount covers the maximum possible size of a canister's canister history: the system
 /// only retains a bounded number of the most recent canister changes and the size of a single
 /// canister change is bounded, too (this is checked in the unit test
-/// `memory_reserved_for_canister_history_covers_maximum_canister_history_size`). Together with
-/// the migration canister checking that the memory usage of the migrated and replaced canisters
-/// excluding their canister history does not change while it is their exclusive controller
-/// (see `memory_usage_unchanged`), this guarantees that the memory allocation always covers
-/// the canister history entries recorded by the migration canister no matter how many of them
-/// are recorded and how large the canister history already was at validation time.
+/// `memory_reserved_for_canister_history_covers_maximum_canister_history_size`). Once
+/// `process_controllers_changed` confirms that both canisters are stopped and their memory
+/// usage excluding canister history did not grow since validation (see `memory_usage_did_not_grow`),
+/// the reservation covers all subsequent history entries recorded by the migration canister,
+/// regardless of their number or the history size at validation time.
+///
+/// Controllers can grow a canister beyond the reservation before those checks, however:
+/// `update_settings` does not cap memory usage. In that case, restoring the original allocation
+/// may free no memory and controller recovery may need fresh subnet memory. Recovery can remain
+/// blocked indefinitely if the subnet stays full.
 const MEMORY_RESERVED_FOR_CANISTER_HISTORY: u64 = 16 * 1024;
 
 #[derive(Clone, Display, Debug, CandidType, Deserialize)]
@@ -300,7 +304,7 @@ pub enum RequestState {
     ///     * Replaced canister has sufficient cycles above the freezing threshold.
     ///     * Migrated canister version is not absurdly high.
     ///     * The memory usage of the migrated and replaced canisters excluding their canister
-    ///       history did not change since validation so that their memory allocation still
+    ///       history did not grow since validation so that their memory allocation still
     ///       covers the canister history entries recorded by the migration canister
     ///       (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`).
     /// * Called mgmt `canister_info` to determine the history length of migrated canister.

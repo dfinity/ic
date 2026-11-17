@@ -17,8 +17,8 @@ use crate::{
 };
 
 /// The migration canister checks that the memory usage of the migrated and replaced canisters
-/// excluding their canister history does not change while it is their exclusive controller
-/// (see `memory_usage_unchanged`). Hence, the memory that the migration canister reserves on
+/// excluding their canister history did not grow since validation once it is their exclusive
+/// controller (see `memory_usage_did_not_grow`). Hence, the memory that the migration canister reserves on
 /// top of that memory usage only needs to cover the canister history of those canisters, whose
 /// size is bounded because the system only retains the most recent `MAX_CANISTER_HISTORY_CHANGES`
 /// canister changes and a single canister change is bounded by the number of controllers
