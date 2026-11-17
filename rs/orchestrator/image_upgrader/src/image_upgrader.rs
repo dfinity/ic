@@ -47,6 +47,7 @@ pub struct Rebooting;
 
 const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 const UPGRADE_PROXY_URL: &str = "http://hostos:19300";
+const UPGRADE_PROXY_TOTAL_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 /// Defines the image upgrader trait and default implementation. It receives a generic version identifier `V`
 /// and a return value `R` stemming from a periodically called `check_for_upgrade` function.
@@ -181,17 +182,21 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         release_package_urls.rotate_right(self.get_load_balance_number() % url_count);
 
         // If downloading from the proxy works, we're done
-        if try_download_from_urls(
-            self.log(),
-            version,
-            &release_package_urls,
-            &hash,
-            self.image_path(),
-            true,
-        )
-        .await
-        .is_ok()
-        {
+        if matches!(
+            tokio::time::timeout(
+                UPGRADE_PROXY_TOTAL_TIMEOUT,
+                try_download_from_urls(
+                    self.log(),
+                    version,
+                    &release_package_urls,
+                    &hash,
+                    self.image_path(),
+                    true,
+                )
+            )
+            .await,
+            Ok(Ok(())),
+        ) {
             return Ok(());
         }
 
