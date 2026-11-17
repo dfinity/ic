@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Requests to the bitcoin and dogecoin adapters (fetching blocks and sending transactions) time out after 1 s instead of 50 ms,
   so that sending a transaction through the bitcoin or dogecoin canister is much less likely to fail spuriously on a loaded machine.
+- A PocketIC instance no longer becomes permanently busy after the machine running the PocketIC server
+  was suspended or hibernated.
 
 
 
