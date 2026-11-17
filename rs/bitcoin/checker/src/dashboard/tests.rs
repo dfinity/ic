@@ -1,5 +1,7 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
-use crate::dashboard::{DEFAULT_TX_TABLE_PAGE_SIZE, DashboardTemplate, Fetched, Status, filters};
+use crate::dashboard::{
+    DEFAULT_TX_TABLE_PAGE_SIZE, DashboardTemplate, Fetched, InputAddress, Status, filters,
+};
 use crate::state::{Config, Timestamp, TransactionCheckData};
 use crate::{dashboard, state};
 use bitcoin::Address;
@@ -47,10 +49,10 @@ fn should_display_metadata() {
         .has_no_status();
 }
 
-fn parse_address(addresses: &[&str]) -> Vec<Option<Address>> {
+fn parse_address(addresses: &[&str]) -> Vec<InputAddress> {
     addresses
         .iter()
-        .map(|s| Some(Address::from_str(s).unwrap().assume_checked()))
+        .map(|s| InputAddress::Address(Address::from_str(s).unwrap().assume_checked()))
         .collect()
 }
 
@@ -113,6 +115,74 @@ fn should_display_statuses() {
             2,
             &format!("<code style=\"color: red\">{blocked_address}</code>"),
         );
+}
+
+#[test]
+fn should_display_all_addresses_of_fetched_inputs() {
+    let txid = mock_txid(1);
+    let good_address = "bc1q4h3mm2r8cn3ceu6908j56jeava8rjywppjhukp";
+    let blocked_address = BTC_ADDRESS_BLOCKLIST[0];
+    let addresses = parse_address(&[good_address, blocked_address])
+        .into_iter()
+        .map(|address| match address {
+            InputAddress::Address(address) => address,
+            _ => unreachable!(),
+        })
+        .collect::<Vec<_>>();
+    let previous_output = |vout| state::PreviousOutput {
+        txid: mock_txid(2),
+        vout,
+    };
+    let fetched = state::FetchedTx {
+        tx: TransactionCheckData {
+            inputs: vec![previous_output(0), previous_output(1), previous_output(2)],
+            outputs: vec![],
+        },
+        input_addresses: vec![Some(addresses.clone()), None, Some(vec![])],
+    };
+
+    let status = Status::Fetched(Fetched::from(&fetched));
+    assert_eq!(
+        status.fetched().unwrap().input_addresses,
+        vec![
+            InputAddress::Address(addresses[0].clone()),
+            InputAddress::Address(addresses[1].clone()),
+            InputAddress::NotFetched,
+            InputAddress::NoAddress,
+        ]
+    );
+    // No addresses are listed if none of the inputs has been fetched yet.
+    let not_fetched = state::FetchedTx {
+        input_addresses: vec![None; 3],
+        ..fetched
+    };
+    assert_eq!(Fetched::from(&not_fetched).input_addresses, vec![]);
+
+    let dashboard = DashboardTemplate {
+        config: Config::new_and_validate(BtcNetwork::Mainnet, CheckMode::Normal, TEST_SUBNET_NODES)
+            .unwrap(),
+        outcall_capacity: 50,
+        cached_entries: 1,
+        tx_table_page_size: 10,
+        tx_table_page_index: 0,
+        oldest_entry_time: None,
+        latest_entry_time: None,
+        fetch_tx_status: vec![(txid, 0, status.clone())],
+    };
+    DashboardAssert::assert_that(dashboard)
+        .has_status(1, txid, 0, &status)
+        .has_address_html(
+            1,
+            1,
+            &format!("<code style=\"color: green\">{good_address}</code>"),
+        )
+        .has_address_html(
+            1,
+            2,
+            &format!("<code style=\"color: red\">{blocked_address}</code>"),
+        )
+        .has_address_html(1, 3, "<code>N/A</code>")
+        .has_address_html(1, 4, "<code>No address</code>");
 }
 
 #[test]
@@ -271,10 +341,10 @@ mod assertions {
                 addresses = fetched
                     .input_addresses
                     .iter()
-                    .map(|s| {
-                        s.clone()
-                            .map(|s| s.to_string())
-                            .unwrap_or("N/A".to_string())
+                    .map(|address| match address {
+                        InputAddress::Address(address) => address.to_string(),
+                        InputAddress::NotFetched => "N/A".to_string(),
+                        InputAddress::NoAddress => "No address".to_string(),
                     })
                     .collect::<Vec<_>>();
                 expected_values.append(&mut addresses.iter().map(|s| s.as_ref()).collect());
