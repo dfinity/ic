@@ -194,6 +194,11 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         }
 
         // Otherwise, download the artifact ourselves, directly
+
+        // Clear out any partial files from the proxy, before trying again
+        if let Err(e) = std::fs::remove_file(self.image_path()) {
+            warn!(self.log(), "Couldn't clear partial image: {e}");
+        }
         self.try_download_from_urls(version, &release_package_urls, &hash, false)
             .await
     }
