@@ -143,10 +143,16 @@ fn load_metrics_e2e_test() {
             .lines()
             .map(|line| CanisterIdRange::from_str(line).expect("Not a valid CanisterIdRange"))
             .collect();
+        // With at most `MAX_CUTS` cuts, the canisters, ordered by ID, form at most `MAX_CUTS + 1`
+        // segments, which alternate between the two subnets. The `split-finder` reports the
+        // segments of one of the subnets, so at most `MAX_CUTS / 2 + 1` ranges.
+        let max_ranges = MAX_CUTS / 2 + 1;
         assert!(
-            canister_id_ranges.len() <= MAX_CUTS.div_ceil(2),
-            "The split-finder script should have produced at most {MAX_CUTS} because we \
-            passed {MAX_CUTS} as the `--max-cuts` argument"
+            canister_id_ranges.len() <= max_ranges,
+            "The split-finder script should have produced at most {max_ranges} canister ranges \
+            because we passed {MAX_CUTS} as the `--max-cuts` argument, but it produced {}: \
+            {canister_id_ranges:?}",
+            canister_id_ranges.len(),
         );
 
         // And finally use the `subnet-splitting-tool` to estimate the loads on each subnet after a
