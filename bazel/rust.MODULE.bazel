@@ -12,7 +12,44 @@ single_version_override(
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    versions = ["1.99.1"],
+    # rules_rust has no checksums for Rust 1.100.0 (see its rust/private/known_shas.bzl),
+    # so it downloads any 1.100.0 archive missing from this dict without verifying it.
+    # The dict covers the 1.100.0 archives that our builds fetch on the supported hosts:
+    # * rustc, cargo, clippy, llvm-tools and rust-analyzer for the hosts:
+    #   aarch64-apple-darwin, aarch64-unknown-linux-gnu and x86_64-unknown-linux-gnu,
+    # * rust-std for the five `supported_platform_triples` of `crate.from_specs` below:
+    #   the hosts, wasm32-unknown-unknown, and x86_64-apple-darwin, which
+    #   aarch64-apple-darwin cross-compiles to (//:macos-intel),
+    # * rust-src.
+    # A new host needs its rustc, cargo, clippy, llvm-tools, rust-analyzer and rust-std
+    # archives, a new target its rust-std. The checksums are the `xz_hash`es from
+    # https://static.rust-lang.org/dist/channel-rust-1.100.0.toml. When changing
+    # `versions`, update the dict, or delete it if rules_rust has the checksums for the
+    # new version.
+    sha256s = {
+        "cargo-1.100.0-aarch64-apple-darwin.tar.xz": "7e18265d2d2cda8dec6cac4d0faa3bbafe927b401e5185350abc7d669f9adafb",
+        "cargo-1.100.0-aarch64-unknown-linux-gnu.tar.xz": "d07ee80eb6ba3c5845c554ac88086e1ff5d63f83d99c3c09cb32504cbedd6844",
+        "cargo-1.100.0-x86_64-unknown-linux-gnu.tar.xz": "7e29ce07d7c6e92d1826870575ba27d57fff6cb3e754aa57d99099cb88fab35d",
+        "clippy-1.100.0-aarch64-apple-darwin.tar.xz": "fb57f639b5b9bcf1262df1ff81bcfc9e44338fbc729b0d5aad531b96493d6391",
+        "clippy-1.100.0-aarch64-unknown-linux-gnu.tar.xz": "941f71acaf2a181d66776b3b889b72d64a90cc405b8f6c41a4b5ac8cd99a36b1",
+        "clippy-1.100.0-x86_64-unknown-linux-gnu.tar.xz": "0d18df3bff6c852ef8243727fed075ecb33dbf93b8ab8c138c2f45e3f270102a",
+        "llvm-tools-1.100.0-aarch64-apple-darwin.tar.xz": "855138deaa04b955a7dadef55e7d583c5bbefd9fb7db6879aac126c4e4c2e526",
+        "llvm-tools-1.100.0-aarch64-unknown-linux-gnu.tar.xz": "929514c642010b884575525fce876d3fb9b9eeec76cd825b79b3b917a7088fc6",
+        "llvm-tools-1.100.0-x86_64-unknown-linux-gnu.tar.xz": "2c84cada1aef73339b1a2d101a35cd78d71072c8f6a3921bf1abb852c3f42ad3",
+        "rust-analyzer-1.100.0-aarch64-apple-darwin.tar.xz": "b011b03fd0f5bfa66f36fc4a56ed9f068b9c783b17293e993df1afb8bad5298f",
+        "rust-analyzer-1.100.0-aarch64-unknown-linux-gnu.tar.xz": "f9f6284ccf8df19bd30acfe50a6b9b3844b893cb426ec1345b8c03402ae51958",
+        "rust-analyzer-1.100.0-x86_64-unknown-linux-gnu.tar.xz": "eecc8bc9a73c8b543c3cbf634200cc96887dc466acac56d61861b17d8b1a5674",
+        "rust-src-1.100.0.tar.xz": "107afa7819b500c573b21a160b08f1a20bc2dfd99550717e1ffbbdb09da7ec6e",
+        "rust-std-1.100.0-aarch64-apple-darwin.tar.xz": "9345645b6f56eea28bf8cc2c0f628a61d507a688f91c1bec5ae6bfad216a16c7",
+        "rust-std-1.100.0-aarch64-unknown-linux-gnu.tar.xz": "c73f62fbe5d837f9807ed9e0076575dd8d3475c79af2b30e3570d328e6713f8f",
+        "rust-std-1.100.0-wasm32-unknown-unknown.tar.xz": "19b7954d650fc0d22767eceb76b8e03d07ce0d6a9f4234f33c32a17ee8d6d7b9",
+        "rust-std-1.100.0-x86_64-apple-darwin.tar.xz": "1cc179e8e58af18b6fcfc095065a75fb6ed9afb9e33dc7fd596551cf755efe9f",
+        "rust-std-1.100.0-x86_64-unknown-linux-gnu.tar.xz": "4591b6486594ded52ecd6135db95bf9355bbd3ca7a380888b141528bbcf9a5d4",
+        "rustc-1.100.0-aarch64-apple-darwin.tar.xz": "3fcd7f1709f62dda58bf4db2dcfd630a451e750aadaaa551a21cc4a627a37b4c",
+        "rustc-1.100.0-aarch64-unknown-linux-gnu.tar.xz": "fcbfa5b8a0cb28f0c4edfb6dda6910ee910993db31f05258613f5cd5b851263a",
+        "rustc-1.100.0-x86_64-unknown-linux-gnu.tar.xz": "f1d0b1dec81dab6f523cd098507763487b0d4bd7fd2c87582f154128719be03b",
+    },
+    versions = ["1.100.0"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
@@ -2170,6 +2207,7 @@ crate.from_specs(
     name = "crate_index",
     cargo_lockfile = "//:Cargo.Bazel.toml.lock",
     lockfile = "//:Cargo.Bazel.json.lock",
+    # A triple added here also needs its rust-std checksum in `rust.toolchain`'s `sha256s` above.
     supported_platform_triples =
         [
             "aarch64-apple-darwin",
