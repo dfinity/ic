@@ -417,18 +417,19 @@ fn build_chunk_table_parallel(
         .collect();
     // Spans are queued round-robin across files (every file's first span, then
     // every file's second span, and so on), so that concurrent tasks rarely read
-    // the same file. Each entry is `(index of the span in its file, its chunks)`.
+    // the same file. Sorting them by offset does that, as every file's n-th span
+    // starts at the same offset.
     let mut spans = Vec::new();
     for file_chunks in chunks.chunk_by_mut(|a, b| a.info.file_index == b.info.file_index) {
-        spans.extend(file_chunks.chunks_mut(MANIFEST_SPAN_CHUNKS).enumerate());
+        spans.extend(file_chunks.chunks_mut(MANIFEST_SPAN_CHUNKS));
     }
-    spans.sort_by_key(|(span_index, span)| (*span_index, span[0].index));
+    spans.sort_by_key(|span| (span[0].info.offset, span[0].index));
 
     // Compute real chunk hashes in parallel.
     // NB. We must populate hashes of all the chunks in a file before we compute
     // file hashes.
     thread_pool.scoped(|scope| {
-        for (_, span) in spans {
+        for span in spans {
             let file_path = root.join(&file_table[span[0].info.file_index as usize].relative_path);
             scope.execute(move || hash_span(metrics, log, &file_path, span));
         }
