@@ -136,13 +136,14 @@ Runbook::
    of `D` at the merged state, stamped with the time it is proposed at, which
    the tool checks to be past the times of the CUPs both subnets halted at, and
    running a fresh DKG for `D`'s membership.
-20. After `ProposeCupForDestinationSubnet`: check that the registry holds the
-   recovery CUP contents of `D` at the height of the merged checkpoint, which
-   is above the heights both subnets halted at, with the root hash of the
-   merged state's manifest as its state hash and a time past the times of the
-   CUPs both subnets halted at. Recovering a subnet that was instructed to halt
-   at its next CUP replaces that instruction with a plain halt, so check that
-   `D` is halted.
+20. After `ProposeCupForDestinationSubnet`: wait until the registry holds the
+   recovery CUP contents of `D`, which it only does once the fresh DKG for `D`
+   has completed. Check that they are at the height of the merged checkpoint,
+   which is above the heights both subnets halted at, with the root hash of the
+   merged state's manifest as their state hash and a time past the times of
+   the CUPs both subnets halted at. Recovering a subnet that was instructed to
+   halt at its next CUP replaces that instruction with a plain halt, so check
+   that `D` is halted.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -198,7 +199,11 @@ use ic_universal_canister::{
     CallInterface, PayloadBuilder, call_args, get_universal_canister_wasm, management, wasm,
 };
 use slog::{Logger, info};
-use std::{collections::BTreeSet, net::IpAddr, time::Duration};
+use std::{
+    collections::BTreeSet,
+    net::IpAddr,
+    time::{Duration, Instant},
+};
 use tokio::runtime::Runtime;
 
 /// The value of the `type` label selecting the `install_code` call contexts of
@@ -279,6 +284,10 @@ const REGISTRY_TIMEOUT: Duration = Duration::from_secs(120);
 /// waits for. Longer than a driver retry because every evaluation scrapes the
 /// metrics of all subnets.
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
+/// Timeout for the registry to hold the recovery CUP contents of `D` once they
+/// are proposed: unlike other proposals, the one recovering `D` only takes
+/// effect once a fresh DKG for `D` has completed.
+const RECOVERY_CUP_TIMEOUT: Duration = Duration::from_secs(300);
 /// Timeout for a subnet to reach the CUP it halts at. As a DKG summary takes
 /// its registry version from the previous summary, that CUP is up to two DKG
 /// intervals, i.e. about `2 * (DKG_INTERVAL_LENGTH + 1)` = 1000 rounds, away.
@@ -886,7 +895,8 @@ fn test_registry_helper(env: &TestEnv, logger: &Logger) -> RegistryHelper {
     )
 }
 
-/// Step 20: check the recovery CUP contents of `D` in the registry: their
+/// Step 20: wait until the registry holds the recovery CUP contents of `D`,
+/// and check them, at the registry version they were first read at: their
 /// height is the one of the merged checkpoint, above the heights both subnets
 /// halted at; their state hash is the root hash of the merged state's manifest;
 /// and their time is past the times of the CUPs both subnets halted at. Also
@@ -901,24 +911,39 @@ fn check_recovery_cup_contents(env: &TestEnv, context: &Context<'_>) {
         "Step 20: Checking the recovery CUP contents of subnet D in the registry"
     );
 
+    // `ic-admin` returns once the proposal is submitted, but the registry only
+    // holds the recovery CUP contents (and halts `D`) once the DKG for `D` has
+    // completed, so poll for them.
     let registry_helper = test_registry_helper(env, logger);
-    let latest_version = registry_helper
-        .latest_registry_version()
-        .expect("failed to fetch the latest registry version");
     let registry_client = registry_helper.registry_client();
-    let cup_contents = registry_client
-        .get_cup_contents(d_subnet_id, latest_version)
-        .unwrap_or_else(|e| {
-            panic!("failed to read the CUP contents of subnet D at version {latest_version}: {e}")
-        })
-        .value
-        .unwrap_or_else(|| panic!("no CUP contents of subnet D at version {latest_version}"));
-    let Some(CupType::Recovery(recovery_args)) = cup_contents.cup_type else {
-        panic!(
-            "the CUP contents of subnet D at version {latest_version} are not for a recovery: \
-             {:?}",
-            cup_contents.cup_type,
+    let deadline = Instant::now() + RECOVERY_CUP_TIMEOUT;
+    let (registry_version, recovery_args) = loop {
+        let latest_version = registry_helper
+            .latest_registry_version()
+            .expect("failed to fetch the latest registry version");
+        let cup_type = registry_client
+            .get_cup_contents(d_subnet_id, latest_version)
+            .unwrap_or_else(|e| {
+                panic!(
+                    "failed to read the CUP contents of subnet D at version {latest_version}: {e}"
+                )
+            })
+            .value
+            .unwrap_or_else(|| panic!("no CUP contents of subnet D at version {latest_version}"))
+            .cup_type;
+        if let Some(CupType::Recovery(recovery_args)) = cup_type {
+            break (latest_version, recovery_args);
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the CUP contents of subnet D are not for a recovery at version {latest_version}, \
+             {RECOVERY_CUP_TIMEOUT:?} after the recovery CUP was proposed: {cup_type:?}",
         );
+        info!(
+            logger,
+            "The CUP contents of subnet D are not for a recovery yet at version {latest_version}"
+        );
+        std::thread::sleep(POLL_INTERVAL);
     };
 
     let merged_checkpoints_dir = recovery_dir
@@ -988,11 +1013,11 @@ fn check_recovery_cup_contents(env: &TestEnv, context: &Context<'_>) {
     }
 
     let d_subnet_record = registry_client
-        .get_subnet_record(d_subnet_id, latest_version)
+        .get_subnet_record(d_subnet_id, registry_version)
         .unwrap_or_else(|e| {
-            panic!("failed to read the subnet record of D at version {latest_version}: {e}")
+            panic!("failed to read the subnet record of D at version {registry_version}: {e}")
         })
-        .unwrap_or_else(|| panic!("no subnet record of D at version {latest_version}"));
+        .unwrap_or_else(|| panic!("no subnet record of D at version {registry_version}"));
     assert!(
         d_subnet_record.is_halted && !d_subnet_record.halt_at_cup_height,
         "subnet D is not plainly halted after its recovery was proposed: is_halted = {}, \
