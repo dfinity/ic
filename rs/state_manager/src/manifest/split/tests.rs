@@ -1,4 +1,5 @@
 use super::*;
+use crate::state_sync::types::{ChunkInfo, FileInfo};
 use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
@@ -316,7 +317,7 @@ fn split_manifest_3_canisters() {
 }
 
 /// Returns a `FileInfo` for a zero length file with the given relative path.
-fn empty_file_info(path: &str) -> FileInfo {
+pub(in crate::manifest) fn empty_file_info(path: &str) -> FileInfo {
     FileInfo {
         relative_path: PathBuf::from(path),
         size_bytes: 0,
@@ -326,7 +327,7 @@ fn empty_file_info(path: &str) -> FileInfo {
 
 /// Generates a valid `(FileInfo, ChunkInfo)` pair for a non-empty file with
 /// the given relative path..
-fn non_empty_file_and_chunk_infos(path: &str) -> (FileInfo, ChunkInfo) {
+pub(in crate::manifest) fn non_empty_file_and_chunk_infos(path: &str) -> (FileInfo, ChunkInfo) {
     (
         FileInfo {
             relative_path: PathBuf::from(path),
@@ -346,7 +347,7 @@ fn non_empty_file_and_chunk_infos(path: &str) -> (FileInfo, ChunkInfo) {
 }
 
 /// Returns the relative path to the `canister.pbuf` for the given canister.
-fn canister_pbuf_path(canister_id: CanisterId) -> String {
+pub(in crate::manifest) fn canister_pbuf_path(canister_id: CanisterId) -> String {
     // Empty root so that all paths are relative like in the manifest.
     let checkpoint_layout =
         CheckpointLayout::<ReadOnly>::new_untracked("".into(), Height::new(0)).unwrap();
@@ -362,7 +363,7 @@ fn canister_pbuf_path(canister_id: CanisterId) -> String {
 }
 
 /// Returns the relative path to the `snapshot.pbuf` for the given snapshot.
-fn snapshot_pbuf_path(snapshot_id: SnapshotId) -> String {
+pub(in crate::manifest) fn snapshot_pbuf_path(snapshot_id: SnapshotId) -> String {
     // Empty root so that all paths are relative like in the manifest.
     let checkpoint_layout =
         CheckpointLayout::<ReadOnly>::new_untracked("".into(), Height::new(0)).unwrap();
