@@ -332,25 +332,38 @@ fn test_simple_manifest_computation() {
     }
 }
 
-#[test]
-fn test_manifest_computation_hashes_files_over_several_spans() {
-    let metrics_registry = MetricsRegistry::new();
-    let manifest_metrics = ManifestMetrics::new(&metrics_registry);
-    let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
-    let root = dir.path();
+/// Chunk size for the tests of files over several spans: a span
+/// (`MANIFEST_SPAN_CHUNKS` chunks) is then 128 KiB.
+const SPAN_TEST_CHUNK_SIZE: u32 = 512;
 
-    // Files of 3, 2 and 1 spans, the first two ending in a partial chunk.
-    const CHUNK_SIZE: u32 = 512;
-    let span_bytes = MANIFEST_SPAN_CHUNKS * CHUNK_SIZE as usize;
+/// Writes `a.bin`, `b.bin` and `c.bin` under `root`, of 3, 2 and 1 spans of
+/// `SPAN_TEST_CHUNK_SIZE` chunks, the first two ending in a partial chunk, and
+/// returns their sizes. Each 4-byte word holds its index in the file, with the
+/// file's index in its top byte, so that no two chunks are alike.
+fn write_files_over_several_spans(root: &Path) -> Vec<usize> {
+    let span_bytes = MANIFEST_SPAN_CHUNKS * SPAN_TEST_CHUNK_SIZE as usize;
     let files = [
         ("a.bin", 2 * span_bytes + 1000),
         ("b.bin", span_bytes + 7),
         ("c.bin", 100),
     ];
     for (i, (name, len)) in files.iter().enumerate() {
-        let data: Vec<u8> = (0..*len).map(|j| (j * 31 + i) as u8).collect();
+        let data: Vec<u8> = (0..len.div_ceil(4) as u32)
+            .flat_map(|word| (((i as u32) << 24) | word).to_le_bytes())
+            .take(*len)
+            .collect();
         fs::write(root.join(name), data).expect("failed to create file");
     }
+    files.iter().map(|(_, len)| *len).collect()
+}
+
+#[test]
+fn test_manifest_computation_hashes_files_over_several_spans() {
+    let metrics_registry = MetricsRegistry::new();
+    let manifest_metrics = ManifestMetrics::new(&metrics_registry);
+    let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+    let root = dir.path();
+    let sizes = write_files_over_several_spans(root);
 
     let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
     let manifest = compute_manifest(
@@ -359,7 +372,7 @@ fn test_manifest_computation_hashes_files_over_several_spans() {
         &no_op_logger(),
         CURRENT_STATE_SYNC_VERSION,
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
-        CHUNK_SIZE,
+        SPAN_TEST_CHUNK_SIZE,
         None,
         RehashManifest::No,
     )
@@ -377,12 +390,70 @@ fn test_manifest_computation_hashes_files_over_several_spans() {
             num_chunks += 1;
         }
     }
-    let expected_chunks: usize = files
+    let expected_chunks: usize = sizes
         .iter()
-        .map(|(_, len)| len.div_ceil(CHUNK_SIZE as usize))
+        .map(|len| len.div_ceil(SPAN_TEST_CHUNK_SIZE as usize))
         .sum();
     assert_eq!(num_chunks, expected_chunks);
     assert_eq!(Ok(()), validate_manifest_internal_consistency(&manifest));
+}
+
+#[test]
+fn test_chunk_actions_follow_their_chunks_over_several_spans() {
+    let metrics_registry = MetricsRegistry::new();
+    let manifest_metrics = ManifestMetrics::new(&metrics_registry);
+    let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+    let root = dir.path();
+    write_files_over_several_spans(root);
+
+    let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
+    let manifest = compute_manifest(
+        &mut thread_pool,
+        &manifest_metrics,
+        &no_op_logger(),
+        CURRENT_STATE_SYNC_VERSION,
+        &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
+        SPAN_TEST_CHUNK_SIZE,
+        None,
+        RehashManifest::No,
+    )
+    .expect("failed to compute manifest");
+
+    // Reuse, compare and recompute in turn, except for a wrong hash to compare
+    // against on the first chunk of `a.bin`'s second span.
+    let chunk_actions = manifest
+        .chunk_table
+        .iter()
+        .enumerate()
+        .map(|(index, chunk_info)| {
+            if index == MANIFEST_SPAN_CHUNKS {
+                ChunkAction::RecomputeAndCompare([0; 32])
+            } else {
+                match index % 3 {
+                    0 => ChunkAction::UseHash(chunk_info.hash),
+                    1 => ChunkAction::RecomputeAndCompare(chunk_info.hash),
+                    _ => ChunkAction::Recompute,
+                }
+            }
+        })
+        .collect();
+    let mut files =
+        files_with_sizes(root, "".into(), &mut thread_pool).expect("failed to traverse the files");
+    files.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
+    let (file_table, chunk_table) = build_chunk_table_parallel(
+        &mut thread_pool,
+        &manifest_metrics,
+        &no_op_logger(),
+        root,
+        files,
+        SPAN_TEST_CHUNK_SIZE,
+        chunk_actions,
+        CURRENT_STATE_SYNC_VERSION,
+    );
+
+    assert_eq!(file_table, manifest.file_table);
+    assert_eq!(chunk_table, manifest.chunk_table);
+    assert_eq!(manifest_metrics.reused_chunk_hash_error_count.get(), 1);
 }
 
 #[test]
