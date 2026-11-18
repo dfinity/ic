@@ -14,6 +14,19 @@ bazel_dep(name = "bazel_skylib", version = "1.9.0")
 bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 bazel_dep(name = "rules_shell", version = "0.6.1")
 
+# Keep aspect_bazel_lib from registering toolchains for the toolchain types it
+# only aliases from bazel_lib and tar.bzl, so that these types resolve to the
+# toolchains of the module that defines them; see the patch header for details.
+# Bazel would also apply this MODULE.bazel patch to the older versions that
+# other modules ask for, so the override pins the version the patch is made for
+# (keep it in line with the bazel_dep above).
+single_version_override(
+    module_name = "aspect_bazel_lib",
+    patch_strip = 1,
+    patches = ["//bazel:aspect_bazel_lib_aliased_toolchains.patch"],
+    version = "2.22.5",
+)
+
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
 
 # CC dependencies (for C libs like miracl-core, etc)
