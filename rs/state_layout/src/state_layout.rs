@@ -3028,9 +3028,9 @@ enum FSync {
 
 /// How many consecutive files of a copy plan (grouped by directory) each thread
 /// takes at a time. Threads linking into the same directory at once serialize on
-/// its lock; chunks this large keep them in different directories, while still
-/// balancing tens of thousands of files across threads.
-const HARDLINK_CHUNK_SIZE: usize = 1000;
+/// its lock; chunks this large keep them in different directories, yet are
+/// small enough that the last few don't leave the other threads idle for long.
+const HARDLINK_CHUNK_SIZE: usize = 256;
 
 /// Recursively copies `src` to `dst` using the given permission policy for
 /// files. If a thread-pool is provided then files are copied in parallel.
