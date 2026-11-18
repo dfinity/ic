@@ -1,0 +1,26 @@
+load("@gazelle//:def.bzl", "gazelle")
+
+package(default_visibility = ["//visibility:public"])
+
+# Run these as //:gazelle and //:gazelle-update-repos: the root package aliases
+# them and holds the gazelle directives for the repository.
+#
+# They are not defined in the root package itself because loading
+# @gazelle//:def.bzl evaluates gazelle's go_deps extension, which fetches the Go
+# SDK, and every Linux build loads the root package: --platforms and
+# --host_platform point at //:linux-glibc-2.31 (see bazel/conf/.bazelrc.build).
+
+# See https://github.com/bazelbuild/bazel-gazelle#running-gazelle-with-bazel
+gazelle(
+    name = "gazelle",
+)
+
+gazelle(
+    name = "gazelle-update-repos",
+    args = [
+        "-from_file=go.mod",
+        "-to_macro=go_deps.bzl%go_dependencies",
+        "-prune",
+    ],
+    command = "update-repos",
+)
