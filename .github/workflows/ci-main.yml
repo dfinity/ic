@@ -713,6 +713,19 @@ jobs:
             ./build/ic-admin-arm64-${{ matrix.os }}.gz
             ./build/sns-arm64-${{ matrix.os }}.gz
 
+      # MODULE.bazel.lock is generated on amd64-linux (bazel-lockfile.yml). The bazel commands above
+      # rewrite it when this platform records something else, like a module extension result of its own.
+      - name: Check MODULE.bazel.lock
+        # Outside pull requests and the merge queue (pushes to master and release branches, dispatched runs)
+        # only report: failing would skip upload-external-artifacts.
+        continue-on-error: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
+        shell: bash
+        run: |
+          if ! git diff --exit-code --stat -- MODULE.bazel.lock; then
+              echo "::error file=MODULE.bazel.lock,title=MODULE.bazel.lock differs on arm64-${{ matrix.os }}::Bazel on arm64-${{ matrix.os }} rewrote MODULE.bazel.lock. If CI Main's Bazel Lockfile job failed too, the file is just outdated. Otherwise this platform records something that amd64-linux doesn't, see \"MODULE.bazel.lock\" in bazel/README.md."
+              exit 1
+          fi
+
   # Upload external artifacts, retrieved from non-DFINITY runner builds.
   upload-external-artifacts:
     name: Upload external artifacts
@@ -994,7 +1007,7 @@ jobs:
             cargo:
               - "**/*.rs"
               - "**/*.toml"
-              - "**/*.lock"
+              - "**/Cargo*.lock"
               - "ci/scripts/rust-lint.sh"
               - "ci/container/TAG"
               - "ci/container/ic-build.digest"
@@ -1039,6 +1052,19 @@ jobs:
           # The exclusion of the Infer Bazel Targets step of bazel-test-all, so that a Farm variant of a
           # system-test listed in PULL_REQUEST_BAZEL_TARGETS fails the check instead of silently not running.
           run: ./ci/scripts/targets.py check --exclude_tags=farm_system_test
+
+  bazel-lockfile:
+    name: Bazel Lockfile
+    # Keeps an outdated MODULE.bazel.lock out of master: in the merge queue, CI PR Only (which updates it on
+    # pull requests) doesn't run and ci-pr-only-status is always a success.
+    uses: ./.github/workflows/bazel-lockfile.yml
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      mode: check
+      commit-sha: ${{ inputs.commit-sha }}
+      untrusted-code: ${{ inputs.untrusted-code }}
 
 # only run on pull-request event - they are also triggered from schedule-daily.yml
   pocket-ic-tests-windows:
