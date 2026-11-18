@@ -49,7 +49,8 @@ pandas
 psycopg
 tabulate
 codeowners
-protobuf>=5.29.0
+# At least the Python version of the protobuf module in MODULE.bazel, see there.
+protobuf>=7.36.2
 dacite
 
 # For //rs/recovery/subnet_splitting:split_finder

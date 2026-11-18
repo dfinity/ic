@@ -1,0 +1,25 @@
+# Make protobuf's use of rules_rust's crate_universe extension a dev dependency
+# again, as it was up to protobuf 34.1.
+#
+# protobuf 35.0 to 36.2 call `crate.from_specs()` without a lockfile, which
+# rules_rust 0.71.1 and later refuse in a non-root module. Builds never use the
+# repositories of that call: they hold the crates of protobuf's own Rust
+# runtime (@protobuf//rust), and this repository generates its Rust code with
+# prost instead. But every `bazel mod` command (graph, deps, explain, show_repo,
+# show_extension, tidy) evaluates all module extensions and fails with
+#   crate_universe extension call `crates` is in a non-root module but has no
+#   lockfile.
+# https://github.com/protocolbuffers/protobuf/issues/29866
+# protobuf's main branch passes a lockfile instead. Drop this patch on the
+# upgrade to a release that does.
+--- a/MODULE.bazel
++++ b/MODULE.bazel
+@@ -193,7 +193,7 @@
+     versions = ["1.85.0"],
+ )
+
+-crate = use_extension("@rules_rust//crate_universe:extension.bzl", "crate")
++crate = use_extension("@rules_rust//crate_universe:extension.bzl", "crate", dev_dependency = True)
+ crate.spec(
+     package = "googletest",
+     version = ">0.0.0",

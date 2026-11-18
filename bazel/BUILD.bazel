@@ -137,9 +137,9 @@ volatile_status(
 # protoc for tools that run it themselves, like prost-build and
 # tonic-prost-build in cargo build scripts (PROTOC=$(execpath //bazel:protoc)).
 # It's the protoc of the resolved proto toolchain: the prebuilt one that
-# protobuf downloads for the exec platform (see prefer_prebuilt_protoc in
-# bazel/conf/.bazelrc.build). current_protoc fails rather than return a protoc
-# compiled from C++ source.
+# protobuf downloads for the exec platform (see the protobuf bazel_dep in
+# MODULE.bazel). current_protoc fails rather than return a protoc compiled from
+# C++ source.
 current_protoc(
     name = "protoc",
     visibility = ["//visibility:public"],
