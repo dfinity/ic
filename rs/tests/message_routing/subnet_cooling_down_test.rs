@@ -347,6 +347,9 @@ fn main() -> Result<()> {
         .add_test(systest!(test))
         .with_timeout_per_test(PER_TEST_TIMEOUT)
         .with_overall_timeout(OVERALL_TIMEOUT)
+        // The nodes of `D` restart their replicas once they see the recovery
+        // CUP of `D` in the registry.
+        .update_orchestrator_metrics_to_check("orchestrator_processes_start_attempts_total", 2)
         .execute_from_args()?;
     Ok(())
 }
