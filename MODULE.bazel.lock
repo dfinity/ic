@@ -1236,7 +1236,7 @@
             "repoRuleId": "@@yq.bzl+//yq/toolchain:platforms.bzl%yq_platform_repo",
             "attributes": {
               "platform": "darwin_amd64",
-              "version": "4.45.1"
+              "version": "4.45.0"
             }
           },
           "yq_darwin_arm64": {
