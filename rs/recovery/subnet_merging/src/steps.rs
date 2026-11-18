@@ -1,7 +1,8 @@
 use crate::{
+    admin_helper::get_propose_recovery_cup_command,
     layout::Layout,
     readiness,
-    subnet_merging::{SubnetMergingArgs, TargetSubnet},
+    subnet_merging::TargetSubnet,
     utils::{
         ensure_default_initial_dkg_subnet_is_not_merged, get_subnet_record_at_version, wait_for,
     },
@@ -9,7 +10,7 @@ use crate::{
 
 use ic_base_types::SubnetId;
 use ic_cup_explorer::get_cup;
-use ic_protobuf::{registry::subnet::v1::CatchUpPackageContents, types::v1 as pb};
+use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery,
     admin_helper::AdminHelper,
@@ -19,7 +20,6 @@ use ic_recovery::{
     steps::{AdminStep, CMD_STOP_REPLICA, CopyLocalIcStateStep, DownloadIcDataStep, Step},
     util::{CheckpointHeight, DataLocation, ExecutionMode, block_on},
 };
-use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_state_layout::{CheckpointStatus, StateLayout};
 use ic_subnet_tools::{
     agent_helper::AgentHelper,
@@ -37,15 +37,11 @@ use url::Url;
 use std::{
     net::{IpAddr, Ipv6Addr},
     path::{Path, PathBuf},
-    sync::OnceLock,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 #[cfg(test)]
 mod tests;
-
-mod recovery_cup;
-use recovery_cup::{ProposalOutcome, RecoveryCupProposal};
 
 /// Waits until the record of the subnet that is being merged away is labeled
 /// "cooling down" and persists the registry version `V` it was read at (not
@@ -746,113 +742,54 @@ fn check_time_is_past_halting_times(
 /// rather than when it is created: a step that fails to be created is skipped,
 /// and the tool would then carry on without a recovery CUP.
 pub(crate) struct ProposeRecoveryCupStep {
-    source_subnet_id: SubnetId,
-    destination_subnet_id: SubnetId,
-    admin_helper: AdminHelper,
-    registry_helper: RegistryHelper,
-    layout: Layout,
-    logger: Logger,
-    timeout: Duration,
-    poll_interval: Duration,
-    /// The height and state hash of the merged state, once they have been read
-    /// successfully, so that the manifests are verified only once and the
-    /// command that is run is the one that was described.
-    merged_state: OnceLock<(Height, String)>,
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) destination_subnet_id: SubnetId,
+    pub(crate) admin_helper: AdminHelper,
+    pub(crate) registry_helper: RegistryHelper,
+    pub(crate) layout: Layout,
+    pub(crate) logger: Logger,
 }
 
 impl ProposeRecoveryCupStep {
-    pub(crate) fn new(
-        params: &SubnetMergingArgs,
-        admin_helper: AdminHelper,
-        registry_helper: RegistryHelper,
-        layout: Layout,
-        logger: Logger,
-    ) -> Self {
-        Self {
-            source_subnet_id: params.source_subnet_id,
-            destination_subnet_id: params.destination_subnet_id,
-            admin_helper,
-            registry_helper,
-            layout,
-            logger,
-            timeout: Duration::from_secs(params.registry_timeout_secs),
-            poll_interval: Duration::from_secs(params.poll_interval_secs),
-            merged_state: OnceLock::new(),
-        }
-    }
-
-    /// The height and state hash of the merged state: the height follows from
-    /// the heights of the CUPs the two subnets halted at, as in
-    /// [MergeStatesStep].
-    fn merged_state_height_and_hash(&self) -> RecoveryResult<(Height, String)> {
-        if let Some(merged_state) = self.merged_state.get() {
-            return Ok(merged_state.clone());
-        }
+    /// The proposal for the recovery CUP at the merged state, stamped with
+    /// `time`. The height of the merged state follows from the heights of the
+    /// CUPs the two subnets halted at, as in [MergeStatesStep].
+    fn admin_step(&self, time: SystemTime) -> RecoveryResult<AdminStep> {
         let source_height =
             read_cup_file(&self.layout.halting_cup_file(self.source_subnet_id))?.height();
         let destination_height =
             read_cup_file(&self.layout.halting_cup_file(self.destination_subnet_id))?.height();
-        let merged_state = (
-            merged_recovery_height(source_height, destination_height),
-            merged_state_hash(&self.layout)?,
-        );
-        Ok(self.merged_state.get_or_init(|| merged_state).clone())
-    }
-
-    /// The proposal for the recovery CUP at the merged state, stamped with
-    /// `time`.
-    fn admin_step(&self, time: SystemTime) -> RecoveryResult<AdminStep> {
-        let (height, state_hash) = self.merged_state_height_and_hash()?;
 
         Ok(AdminStep {
             logger: self.logger.clone(),
-            ic_admin_cmd: self
-                .admin_helper
-                .get_propose_to_update_recovery_cup_command(
-                    self.destination_subnet_id,
-                    height,
-                    state_hash,
-                    /*initial_dkg_subnet_id=*/ None,
-                    /*chain_key_config=*/ None,
-                    /*replacement_nodes=*/ &[],
-                    /*registry_params=*/ None,
-                    time,
-                ),
+            ic_admin_cmd: get_propose_recovery_cup_command(
+                &self.admin_helper,
+                self.source_subnet_id,
+                self.destination_subnet_id,
+                merged_recovery_height(source_height, destination_height),
+                merged_state_hash(&self.layout)?,
+                time,
+            ),
         })
     }
 
-    /// The batch times of both checkpoints the merged state is assembled from,
-    /// i.e. the times of the CUPs the two subnets halted at. The merged subnet has
+    /// Checks that `time`, which the recovery CUP is stamped with, is past the
+    /// batch times of both checkpoints the merged state is assembled from, i.e.
+    /// the times of the CUPs the two subnets halted at: the merged subnet has
     /// to resume past both, as either subnet's canisters may have run ahead of
     /// the merged state's own batch time, which is the destination subnet's.
-    fn halting_times(&self) -> RecoveryResult<Vec<(SubnetId, Time)>> {
-        [self.source_subnet_id, self.destination_subnet_id]
+    ///
+    /// Both subnets halted well before this step runs, so this only fails if
+    /// the clock of this machine is behind the clocks of the subnets.
+    fn check_time_is_past_halting_cups(&self, time: SystemTime) -> RecoveryResult<()> {
+        let halting_times = [self.source_subnet_id, self.destination_subnet_id]
             .into_iter()
             .map(|subnet_id| {
                 get_batch_time_from_cup(&self.layout.halting_cup_file(subnet_id))
                     .map(|halting_time| (subnet_id, halting_time))
             })
-            .collect()
-    }
-
-    fn registry_cup(&self) -> RecoveryResult<CatchUpPackageContents> {
-        let version = self.registry_helper.latest_registry_version()?;
-        self.registry_helper
-            .registry_client()
-            .get_cup_contents(self.destination_subnet_id, version)
-            .map_err(|err| {
-                RecoveryError::RegistryError(format!(
-                    "Failed to read the recovery CUP contents of subnet {}: {err}",
-                    self.destination_subnet_id,
-                ))
-            })?
-            .value
-            .ok_or_else(|| {
-                RecoveryError::RegistryError(format!(
-                    "No CUP contents of subnet {} at registry version {version}",
-                    self.destination_subnet_id,
-                ))
-            })
+            .collect::<RecoveryResult<Vec<_>>>()?;
+        check_time_is_past_halting_times(time, &halting_times)
     }
 }
 
@@ -861,21 +798,18 @@ impl Step for ProposeRecoveryCupStep {
         let summary = format!(
             "Propose a recovery CUP for subnet {} at the height and state hash of the merged \
              state, whose manifest is {}, with its DKG run by the default initial DKG subnet (or the \
-             NNS subnet if none is set), which must be neither subnet of the merge. Reuse an \
-             existing matching recovery CUP; if a submission was already attempted, wait for \
-             its CUP instead of submitting again. Submission attempts are recorded in {}.",
+             NNS subnet if none is set), which must be neither subnet of the merge.",
             self.destination_subnet_id,
             self.layout.merged_state_manifest_file().display(),
-            self.layout.recovery_cup_proposal_file().display(),
         );
         // Like the description of any other proposal, this shows the command
-        // used for a new submission, except for its timestamp, which is taken
+        // that is about to run, except for its timestamp, which is taken anew
         // when the step is executed. The command cannot be shown if the merged
         // state is not available, e.g. because `MergeStates` was skipped or
         // failed.
         match self.admin_step(SystemTime::now()) {
             Ok(step) => format!(
-                "{summary} The command for a new submission, up to its timestamp: {}",
+                "{summary} The command, up to the timestamp, which is taken when it is run: {}",
                 step.descr(),
             ),
             Err(err) => format!("{summary} The command cannot be shown yet: {err}"),
@@ -883,66 +817,16 @@ impl Step for ProposeRecoveryCupStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let (height, state_hash) = self.merged_state_height_and_hash()?;
-        let proposal = RecoveryCupProposal {
-            source_subnet_id: self.source_subnet_id,
-            destination_subnet_id: self.destination_subnet_id,
-            height,
-            state_hash,
-        };
-        let halting_times = self.halting_times()?;
-        let record = self.layout.recovery_cup_proposal_file();
-        let outcome = proposal.propose(
-            &record,
-            &halting_times,
-            || self.registry_cup(),
-            || {
-                // Recheck before a new submission, but an already completed or
-                // pending submission needs no new DKG or wall-clock timestamp.
-                ensure_default_initial_dkg_subnet_is_not_merged(
-                    &self.registry_helper,
-                    self.source_subnet_id,
-                    self.destination_subnet_id,
-                )?;
-                let time = SystemTime::now();
-                check_time_is_past_halting_times(time, &halting_times)?;
-                let step = self.admin_step(time)?;
-                info!(self.logger, "{}", step.descr());
-                Ok(step)
-            },
+        // Checked when the tool starts, but the default may have changed since.
+        ensure_default_initial_dkg_subnet_is_not_merged(
+            &self.registry_helper,
+            self.source_subnet_id,
+            self.destination_subnet_id,
         )?;
-        match outcome {
-            ProposalOutcome::AlreadyExecuted => {
-                info!(
-                    self.logger,
-                    "The matching recovery CUP is already in the registry"
-                );
-                Ok(())
-            }
-            ProposalOutcome::Submitted => Ok(()),
-            ProposalOutcome::Pending => wait_for(
-                &format!(
-                    "the attempted recovery CUP proposal recorded in {} takes effect",
-                    record.display()
-                ),
-                self.timeout,
-                self.poll_interval,
-                &self.logger,
-                || {
-                    if proposal.matches_cup(&self.registry_cup()?, &halting_times)? {
-                        Ok(())
-                    } else {
-                        Err(RecoveryError::ValidationFailed(format!(
-                            "A recovery CUP submission was already attempted. Wait for its proposal \
-                             to execute. Remove {} only after verifying in governance that the \
-                             attempt did not submit a proposal, or that its proposal was rejected \
-                             or failed and cannot still execute. Retrying must not start a second \
-                             DKG at the same height.",
-                            record.display(),
-                        )))
-                    }
-                },
-            ),
-        }
+        let time = SystemTime::now();
+        self.check_time_is_past_halting_cups(time)?;
+        let step = self.admin_step(time)?;
+        info!(self.logger, "{}", step.descr());
+        step.exec()
     }
 }

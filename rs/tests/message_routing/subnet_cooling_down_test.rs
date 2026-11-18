@@ -138,14 +138,11 @@ Runbook::
 20. After `ProposeCupForDestinationSubnet`: wait until the registry holds the
    recovery CUP contents of `D`, which it only does once the fresh DKG for `D`
    has completed. Check that they are at the height of the merged checkpoint,
-   which is above the heights both subnets halted at, with the root hash of the
-   merged state's manifest as their state hash and a time past the times of
-   the CUPs both subnets halted at. Recovering a subnet that was instructed to
+   which is above the heights both subnets halted at, with the state hash of
+   that checkpoint, computed anew, as their state hash and a time past the
+   times of the CUPs both subnets halted at. Recovering a subnet that was instructed to
    halt at its next CUP replaces that instruction with a plain halt, so check
-   that `D` is halted. Resume the tool at the proposal step both immediately
-   after submission (when the DKG may still be pending) and after publication.
-   Check that resuming preserves the CUP contents, their registry version and
-   the durable submission record.
+   that `D` is halted.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -163,12 +160,9 @@ use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_agent::Agent;
 use ic_agent::agent::RejectCode;
-use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, catch_up_package_contents::CupType,
-};
+use ic_protobuf::registry::subnet::v1::catch_up_package_contents::CupType;
 use ic_recovery::{
     CHECKPOINTS, IC_STATE, RECOVERY_DIRECTORY_NAME, RecoveryArgs, get_node_metrics,
-    recovery_iterator::RecoveryIterator,
     registry_helper::{RegistryHelper, RegistryPollingStrategy},
     util::DataLocation,
 };
@@ -182,7 +176,7 @@ use ic_subnet_merging::readiness::{
     Term, evaluate_merge_readiness,
 };
 use ic_subnet_merging::subnet_merging::{StepType, SubnetMerging, SubnetMergingArgs};
-use ic_subnet_tools::{state_tool_helper::verify_manifest, utils::get_cup};
+use ic_subnet_tools::utils::{get_cup, get_state_hash};
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -291,8 +285,9 @@ const REGISTRY_TIMEOUT: Duration = Duration::from_secs(120);
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// Timeout for the registry to hold the recovery CUP contents of `D` once they
 /// are proposed: unlike other proposals, the one recovering `D` only takes
-/// effect once a fresh DKG for `D` has completed.
-const RECOVERY_CUP_TIMEOUT: Duration = Duration::from_secs(300);
+/// effect once a fresh DKG for `D` has completed, which may take up to two DKG
+/// intervals of the subnet running it.
+const RECOVERY_CUP_TIMEOUT: Duration = Duration::from_secs(600);
 /// Timeout for a subnet to reach the CUP it halts at. As a DKG summary takes
 /// its registry version from the previous summary, that CUP is up to two DKG
 /// intervals, i.e. about `2 * (DKG_INTERVAL_LENGTH + 1)` = 1000 rounds, away.
@@ -686,9 +681,9 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     );
     let mut merging = SubnetMerging::new(
         logger.clone(),
-        recovery_args.clone(),
+        recovery_args,
         /*neuron_args=*/ None,
-        merging_args.clone(),
+        merging_args,
     );
     let mut exec_next_step = |expected_step_type: StepType| {
         let (step_type, step) = merging
@@ -763,37 +758,7 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
         "Step 19: Proposing the recovery CUP of subnet D at the merged state"
     );
     exec_next_step(StepType::ProposeCupForDestinationSubnet);
-    let submission_record = env
-        .get_path(MERGING_DIR)
-        .join(RECOVERY_DIRECTORY_NAME)
-        .join("recovery_cup_proposal.json");
-    let attempted = std::fs::read(&submission_record).expect("no recovery CUP submission record");
-    let resume_proposal = || {
-        let mut args = merging_args.clone();
-        args.next_step = Some(StepType::ProposeCupForDestinationSubnet);
-        args.registry_timeout_secs = RECOVERY_CUP_TIMEOUT.as_secs();
-        let mut resumed = SubnetMerging::new(logger.clone(), recovery_args.clone(), None, args);
-        resumed.resume(StepType::ProposeCupForDestinationSubnet);
-        let (step_type, step) = resumed.next().expect("missing resumed recovery CUP step");
-        assert_eq!(step_type, StepType::ProposeCupForDestinationSubnet);
-        step.exec()
-            .expect("resuming the recovery CUP proposal failed");
-        assert!(resumed.next().is_none());
-    };
-    // The DKG can still be in progress. Resuming waits for that attempt rather
-    // than submitting a second proposal. Resume once more after publication.
-    resume_proposal();
-    let (cup_version, cup_contents) = check_recovery_cup_contents(env, context);
-    resume_proposal();
-    let registry_helper = test_registry_helper(env, logger);
-    let version = registry_helper.latest_registry_version().unwrap();
-    let after_resume = registry_helper
-        .registry_client()
-        .get_cup_contents(context.d_subnet.subnet_id, version)
-        .unwrap();
-    assert_eq!(after_resume.version, cup_version);
-    assert_eq!(after_resume.value, Some(cup_contents));
-    assert_eq!(std::fs::read(&submission_record).unwrap(), attempted);
+    check_recovery_cup_contents(env, context);
 
     if let Some((step_type, _)) = merging.next() {
         panic!("unexpected step {step_type:?}");
@@ -936,14 +901,11 @@ fn test_registry_helper(env: &TestEnv, logger: &Logger) -> RegistryHelper {
 /// Step 20: wait until the registry holds the recovery CUP contents of `D`,
 /// and check them, at the registry version they were first read at: their
 /// height is the one of the merged checkpoint, above the heights both subnets
-/// halted at; their state hash is the root hash of the merged state's manifest;
+/// halted at; their state hash is the one of that checkpoint, computed anew;
 /// and their time is past the times of the CUPs both subnets halted at. Also
 /// check that `D` is halted, as the recovery turned its instruction to halt at
 /// its next CUP into a plain halt.
-fn check_recovery_cup_contents(
-    env: &TestEnv,
-    context: &Context<'_>,
-) -> (RegistryVersion, CatchUpPackageContents) {
+fn check_recovery_cup_contents(env: &TestEnv, context: &Context<'_>) {
     let logger = &context.logger;
     let recovery_dir = env.get_path(MERGING_DIR).join(RECOVERY_DIRECTORY_NAME);
     let d_subnet_id = context.d_subnet.subnet_id;
@@ -992,38 +954,33 @@ fn check_recovery_cup_contents(
         .join("data")
         .join(IC_STATE)
         .join(CHECKPOINTS);
-    let merged_heights = std::fs::read_dir(&merged_checkpoints_dir)
+    let merged_checkpoints = std::fs::read_dir(&merged_checkpoints_dir)
         .unwrap_or_else(|e| panic!("failed to read {}: {e}", merged_checkpoints_dir.display()))
-        .map(|entry| {
-            let name = entry.expect("failed to read a directory entry").file_name();
-            let name = name.to_string_lossy();
-            u64::from_str_radix(&name, 16)
-                .unwrap_or_else(|e| panic!("checkpoint {name} is not named by its height: {e}"))
-        })
-        .collect::<Vec<u64>>();
-    let [merged_height] = merged_heights.as_slice() else {
-        panic!(
-            "expected a single merged checkpoint in {}, got the heights {merged_heights:?}",
-            merged_checkpoints_dir.display(),
-        );
+        .map(|entry| entry.expect("failed to read a directory entry").path())
+        .collect::<Vec<_>>();
+    let [merged_checkpoint] = merged_checkpoints.as_slice() else {
+        panic!("expected a single merged checkpoint, got {merged_checkpoints:?}");
     };
+    let name = merged_checkpoint.file_name().unwrap().to_string_lossy();
+    let merged_height = u64::from_str_radix(&name, 16)
+        .unwrap_or_else(|e| panic!("checkpoint {name} is not named by its height: {e}"));
     assert_eq!(
-        recovery_args.height, *merged_height,
+        recovery_args.height, merged_height,
         "the recovery CUP of subnet D is not at the height of the merged checkpoint",
     );
 
-    let merged_manifest = recovery_dir.join("merged.manifest");
-    let merged_state_hash = verify_manifest(&merged_manifest).unwrap_or_else(|e| {
+    // Hash the checkpoint itself rather than trust the manifest the tool wrote.
+    let merged_state_hash = get_state_hash(merged_checkpoint).unwrap_or_else(|e| {
         panic!(
-            "failed to compute the root hash of {}: {e}",
-            merged_manifest.display()
+            "failed to compute the state hash of {}: {e}",
+            merged_checkpoint.display()
         )
     });
     assert_eq!(
         hex::encode(&recovery_args.state_hash),
         merged_state_hash,
-        "the state hash of the recovery CUP of subnet D is not the root hash of {}",
-        merged_manifest.display(),
+        "the state hash of the recovery CUP of subnet D is not the one of {}",
+        merged_checkpoint.display(),
     );
 
     for (name, subnet_id) in [
@@ -1072,10 +1029,6 @@ fn check_recovery_cup_contents(
         "Step 20 done: the recovery CUP contents of subnet D are at height {merged_height}, with \
          the state hash {merged_state_hash}, and D is halted"
     );
-    let record = registry_client
-        .get_cup_contents(d_subnet_id, registry_version)
-        .unwrap();
-    (record.version, record.value.unwrap())
 }
 
 /// Step 16: check that the merged state the tool assembled is a single
