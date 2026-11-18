@@ -96,7 +96,9 @@ pip.parse(
 )
 
 # simple-parsing fails to import on Python 3.15, see the patch header for details. pip.override applies to this
-# exact wheel only: when bumping simple-parsing, update the file name (and the patch) or drop the override.
+# exact wheel only, so requirements.in pins simple-parsing to this release: when bumping it, update the file name
+# (and the patch) or drop the override. //toolchains/sysimage:build_container_base_image_help_test fails when
+# simple-parsing doesn't import.
 pip.override(
     file = "simple_parsing-0.1.7-py3-none-any.whl",
     patch_strip = 1,

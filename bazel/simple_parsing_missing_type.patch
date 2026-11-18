@@ -1,11 +1,13 @@
 # simple-parsing imports dataclasses._MISSING_TYPE, the class of dataclasses.MISSING. Python 3.15 made
 # dataclasses.MISSING a sentinel (PEP 661) and removed that class, so importing simple_parsing fails with
 #   ImportError: cannot import name '_MISSING_TYPE' from 'dataclasses'
-# This patch defines _MISSING_TYPE as type(dataclasses.MISSING) wherever simple-parsing uses it. On older
-# Pythons that is the class it imported. simple-parsing's latest release (0.1.9) and its main branch still
-# import dataclasses._MISSING_TYPE: drop this patch once a release supports Python 3.15.
+# This patch puts type(dataclasses.MISSING) in its place in type annotations. On Python 3.14 and older, that is the
+# class simple-parsing imported. On 3.15 it is the builtin class sentinel, which all sentinels share
+# (dataclasses.KW_ONLY too), so field()'s one isinstance() check becomes an identity check with MISSING.
+# simple-parsing's latest release (0.1.9) and its main branch still import dataclasses._MISSING_TYPE: drop this
+# patch once a release supports Python 3.15.
 diff --git a/simple_parsing/helpers/fields.py b/simple_parsing/helpers/fields.py
-index a200808..4f5ac62 100644
+index a200808..9862e00 100644
 --- a/simple_parsing/helpers/fields.py
 +++ b/simple_parsing/helpers/fields.py
 @@ -6,7 +6,7 @@ import functools
@@ -33,7 +35,7 @@ index a200808..4f5ac62 100644
              metadata=_metadata,
          )
 -    elif not isinstance(default_factory, dataclasses._MISSING_TYPE):
-+    elif not isinstance(default_factory, _MISSING_TYPE):
++    elif default_factory is not MISSING:
          return dataclasses.field(
              default_factory=default_factory,
              init=init,
