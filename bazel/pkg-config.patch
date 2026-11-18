@@ -25,7 +25,7 @@
 diff --git a/src/lib.rs b/src/lib.rs
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -477,7 +477,7 @@
+@@ -486,7 +486,7 @@
              max_version: Bound::Unbounded,
              extra_args: vec![],
              print_system_cflags: true,
@@ -33,4 +33,4 @@ diff --git a/src/lib.rs b/src/lib.rs
 +            print_system_libs: false,
              cargo_metadata: true,
              env_metadata: true,
-         }
+             probe_cflags: true,
