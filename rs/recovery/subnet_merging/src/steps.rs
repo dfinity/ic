@@ -30,9 +30,12 @@ use url::Url;
 
 use std::{
     net::{IpAddr, Ipv6Addr},
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::Duration,
 };
+
+#[cfg(test)]
+mod tests;
 
 /// Waits until the record of the subnet that is being merged away is labeled
 /// "cooling down" and persists the registry version `V` it was read at (not
@@ -489,5 +492,146 @@ impl Step for ValidateCupStep {
             self.subnet_id,
             &self.logger,
         )
+    }
+}
+
+/// Computes the manifest the merged state is expected to have from the
+/// manifests of the states the two subnets halted at, which the validation
+/// steps checked against the halting CUPs. This ties the state hash of the
+/// merged state to the state hashes in the two halting CUPs.
+pub(crate) struct ComputeExpectedMergedManifestStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) destination_subnet_id: SubnetId,
+    pub(crate) layout: Layout,
+}
+
+impl Step for ComputeExpectedMergedManifestStep {
+    fn descr(&self) -> String {
+        format!(
+            "Compute the manifest the merged state is expected to have from the manifests {} and \
+             {} of the validated states of the destination and source subnets, and write it to \
+             {}.",
+            self.layout
+                .actual_manifest_file(self.destination_subnet_id)
+                .display(),
+            self.layout
+                .actual_manifest_file(self.source_subnet_id)
+                .display(),
+            self.layout.expected_merged_state_manifest_file().display(),
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        state_tool_helper::merge_manifests(
+            &self.layout.actual_manifest_file(self.destination_subnet_id),
+            &self.layout.actual_manifest_file(self.source_subnet_id),
+            &self.layout.expected_merged_state_manifest_file(),
+        )
+    }
+}
+
+/// Assembles the merged state from the states the two subnets halted at: the
+/// state of the destination subnet, with the canisters and canister snapshots
+/// of the source subnet added to it, as a new checkpoint that the destination
+/// subnet is then recovered at.
+pub(crate) struct MergeStatesStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) destination_subnet_id: SubnetId,
+    pub(crate) layout: Layout,
+    pub(crate) logger: Logger,
+}
+
+impl Step for MergeStatesStep {
+    fn descr(&self) -> String {
+        format!(
+            "Assemble the merged state from the checkpoints downloaded to {} and {} at the \
+             heights of the CUPs the two subnets halted at, as a new checkpoint in {}, compute \
+             its manifest, and check it against the expected manifest {}.",
+            self.layout.work_dir(TargetSubnet::Source).display(),
+            self.layout.work_dir(TargetSubnet::Destination).display(),
+            self.layout.merged_work_dir().display(),
+            self.layout.expected_merged_state_manifest_file().display(),
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        // The checkpoints the two subnets halted at, which the validation steps
+        // checked against the halting CUPs, selected by height like in the
+        // steps that downloaded and validated them.
+        let source_height =
+            read_cup_file(&self.layout.halting_cup_file(self.source_subnet_id))?.height();
+        let destination_height =
+            read_cup_file(&self.layout.halting_cup_file(self.destination_subnet_id))?.height();
+        let source_checkpoint = self
+            .layout
+            .checkpoint_dir(TargetSubnet::Source, source_height);
+        let destination_checkpoint = self
+            .layout
+            .checkpoint_dir(TargetSubnet::Destination, destination_height);
+
+        let merged_height = merged_recovery_height(source_height, destination_height);
+        let merged_checkpoint = self.layout.merged_checkpoint_dir(merged_height);
+
+        info!(
+            self.logger,
+            "The source subnet halted at height {source_height} and the destination subnet at \
+             height {destination_height}; the merged state is the checkpoint {merged_height}",
+        );
+
+        // Clean up after a previous run of this step.
+        let manifest_path = self.layout.merged_state_manifest_file();
+        remove_file_if_exists(&manifest_path)?;
+        remove_dir(&self.layout.merged_checkpoints_dir())?;
+
+        info!(self.logger, "Merging the states");
+        state_tool_helper::merge_checkpoints(
+            &destination_checkpoint,
+            &source_checkpoint,
+            &merged_checkpoint,
+        )?;
+
+        info!(self.logger, "Computing the manifest of the merged state");
+        state_tool_helper::compute_manifest(&merged_checkpoint, &manifest_path)?;
+
+        info!(self.logger, "Validating the manifest of the merged state");
+        let state_hash = state_tool_helper::verify_manifest(&manifest_path)
+            .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
+
+        let expected_manifest_path = self.layout.expected_merged_state_manifest_file();
+        let expected_state_hash = state_tool_helper::verify_manifest(&expected_manifest_path)
+            .map_err(|err| {
+                RecoveryError::validation_failed("Expected manifest verification failed", err)
+            })?;
+        if state_hash != expected_state_hash {
+            return Err(RecoveryError::ValidationFailed(format!(
+                "The merged state at height {merged_height} has the state hash {state_hash}, but \
+                 the state hash {expected_state_hash} is expected; compare {} with {}",
+                manifest_path.display(),
+                expected_manifest_path.display(),
+            )));
+        }
+        info!(
+            self.logger,
+            "The merged state at height {merged_height} has the expected state hash {state_hash}"
+        );
+
+        Ok(())
+    }
+}
+
+/// Overlay files retain the heights at which either subnet wrote them. The
+/// recovery height must exceed both halting heights so that subsequent writes
+/// take precedence over all imported overlays when the page maps are reloaded.
+fn merged_recovery_height(source_height: Height, destination_height: Height) -> Height {
+    Recovery::get_recovery_height(source_height.max(destination_height))
+}
+
+/// Removes the file at `path`, which need not exist.
+fn remove_file_if_exists(path: &Path) -> RecoveryResult<()> {
+    match std::fs::remove_file(path) {
+        Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
+            Err(RecoveryError::file_error(path, err))
+        }
+        _ => Ok(()),
     }
 }
