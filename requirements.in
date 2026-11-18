@@ -1,5 +1,6 @@
 cbor>=1.0.0
-cbor2>=5.9.0
+# 6.1.5 is the first release with wheels for Python 3.15.
+cbor2>=6.1.5
 configargparse
 cryptography>=50.0.0
 cvss>=2.5
@@ -43,9 +44,16 @@ uuid
 # packages not directly used, but required by other packages and need to be manually version pinned for python 3.12
 typing_extensions>=4.6.0
 urllib3>=2.8.0
+# Transitive dependencies (cffi via cryptography and pynacl, numpy via pandas): the first releases that support
+# Python 3.15. The packages that need them also accept older releases, which have no wheels for Python 3.15, so pip
+# would build them from source. cffi 2.1.0 has wheels for Python 3.15, but they crash on 3.15.0b4 and later
+# (https://github.com/python-cffi/cffi/issues/263).
+cffi>=2.1.1
+numpy>=2.5.2
 
 # For ci/githubstats/query.py
-pandas
+# 3.0.6 is the first release with wheels for Python 3.15.
+pandas>=3.0.6
 psycopg
 tabulate
 codeowners

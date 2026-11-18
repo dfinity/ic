@@ -1,0 +1,118 @@
+# simple-parsing imports dataclasses._MISSING_TYPE, the class of dataclasses.MISSING. Python 3.15 made
+# dataclasses.MISSING a sentinel (PEP 661) and removed that class, so importing simple_parsing fails with
+#   ImportError: cannot import name '_MISSING_TYPE' from 'dataclasses'
+# This patch defines _MISSING_TYPE as type(dataclasses.MISSING) wherever simple-parsing uses it. On older
+# Pythons that is the class it imported. simple-parsing's latest release (0.1.9) and its main branch still
+# import dataclasses._MISSING_TYPE: drop this patch once a release supports Python 3.15.
+diff --git a/simple_parsing/helpers/fields.py b/simple_parsing/helpers/fields.py
+index a200808..4f5ac62 100644
+--- a/simple_parsing/helpers/fields.py
++++ b/simple_parsing/helpers/fields.py
+@@ -6,7 +6,7 @@ import functools
+ import inspect
+ import warnings
+ from collections import OrderedDict
+-from dataclasses import _MISSING_TYPE, MISSING
++from dataclasses import MISSING
+ from enum import Enum
+ from logging import getLogger
+ from typing import Any, Callable, Hashable, Iterable, TypeVar, overload
+@@ -24,6 +24,10 @@ from .subgroups import subgroups  # noqa: F401
+ 
+ logger = getLogger(__name__)
+ 
++# The type of dataclasses.MISSING. Python 3.15 made dataclasses.MISSING a sentinel (PEP 661) and removed
++# its class dataclasses._MISSING_TYPE.
++_MISSING_TYPE = type(MISSING)
++
+ E = TypeVar("E", bound=Enum)
+ K = TypeVar("K", bound=Hashable)
+ V = TypeVar("V")
+@@ -145,7 +149,7 @@ def field(
+             compare=compare,
+             metadata=_metadata,
+         )
+-    elif not isinstance(default_factory, dataclasses._MISSING_TYPE):
++    elif not isinstance(default_factory, _MISSING_TYPE):
+         return dataclasses.field(
+             default_factory=default_factory,
+             init=init,
+diff --git a/simple_parsing/helpers/hparams/hparam.py b/simple_parsing/helpers/hparams/hparam.py
+index d38126d..c22d4d1 100644
+--- a/simple_parsing/helpers/hparams/hparam.py
++++ b/simple_parsing/helpers/hparams/hparam.py
+@@ -61,7 +61,7 @@ def uniform(
+     min: Union[int, float],
+     max: Union[int, float],
+     discrete: bool = None,
+-    default: Union[int, float, dataclasses._MISSING_TYPE] = dataclasses.MISSING,
++    default: Union[int, float, type(dataclasses.MISSING)] = dataclasses.MISSING,
+     strict: bool = False,
+     shape: Union[int, Tuple[int, ...]] = None,
+     **kwargs,
+@@ -170,7 +170,7 @@ def log_uniform(
+     min: Union[int, float],
+     max: Union[int, float],
+     discrete: bool = False,
+-    default: Union[int, float, dataclasses._MISSING_TYPE] = dataclasses.MISSING,
++    default: Union[int, float, type(dataclasses.MISSING)] = dataclasses.MISSING,
+     shape: Union[int, Tuple[int, ...]] = None,
+     **kwargs,
+ ) -> Union[int, float]:
+@@ -206,7 +206,7 @@ loguniform = log_uniform
+ @wraps(_choice)
+ def categorical(
+     *choices: T,
+-    default: Union[T, dataclasses._MISSING_TYPE] = dataclasses.MISSING,
++    default: Union[T, type(dataclasses.MISSING)] = dataclasses.MISSING,
+     probabilities: Union[List[float], Dict[str, float]] = None,
+     strict: bool = False,
+     **kwargs: Any,
+diff --git a/simple_parsing/helpers/subgroups.py b/simple_parsing/helpers/subgroups.py
+index 8b16794..0d78dd3 100644
+--- a/simple_parsing/helpers/subgroups.py
++++ b/simple_parsing/helpers/subgroups.py
+@@ -3,7 +3,7 @@ from __future__ import annotations
+ import functools
+ import inspect
+ import typing
+-from dataclasses import _MISSING_TYPE, MISSING
++from dataclasses import MISSING
+ from enum import Enum
+ from logging import getLogger as get_logger
+ from typing import Any, Callable, TypeVar, Union, overload
+@@ -14,6 +14,10 @@ from simple_parsing.utils import DataclassT, is_dataclass_instance, is_dataclass
+ 
+ logger = get_logger(__name__)
+ 
++# The type of dataclasses.MISSING. Python 3.15 made dataclasses.MISSING a sentinel (PEP 661) and removed
++# its class dataclasses._MISSING_TYPE.
++_MISSING_TYPE = type(MISSING)
++
+ SubgroupKey: TypeAlias = Union[str, int, bool, Enum]
+ 
+ Key = TypeVar("Key", str, int, bool, Enum)
+diff --git a/simple_parsing/utils.py b/simple_parsing/utils.py
+index ef90530..c47544b 100644
+--- a/simple_parsing/utils.py
++++ b/simple_parsing/utils.py
+@@ -14,7 +14,7 @@ import types
+ import typing
+ from collections import OrderedDict, defaultdict
+ from collections import abc as c_abc
+-from dataclasses import _MISSING_TYPE, MISSING, Field
++from dataclasses import MISSING, Field
+ from enum import Enum
+ from logging import getLogger
+ from typing import (
+@@ -67,6 +67,10 @@ def get_forward_arg(fr: ForwardRef) -> str:
+ 
+ logger = getLogger(__name__)
+ 
++# The type of dataclasses.MISSING. Python 3.15 made dataclasses.MISSING a sentinel (PEP 661) and removed
++# its class dataclasses._MISSING_TYPE.
++_MISSING_TYPE = type(MISSING)
++
+ builtin_types = [
+     getattr(builtins, d) for d in dir(builtins) if isinstance(getattr(builtins, d), type)
+ ]

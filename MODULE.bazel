@@ -81,7 +81,9 @@ include("//bazel:rust.MODULE.bazel")
 
 bazel_dep(name = "rules_python", version = "2.5.1")
 
-python_version = "3.12"
+# The CI jobs that install requirements.txt or run ci/src code outside Bazel set up the same Python version with
+# actions/setup-python (see .github/workflows).
+python_version = "3.15"
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(python_version = python_version)
@@ -91,6 +93,14 @@ pip.parse(
     hub_name = "python_deps",
     python_version = python_version,
     requirements_lock = "//:requirements.txt",
+)
+
+# simple-parsing fails to import on Python 3.15, see the patch header for details. pip.override applies to this
+# exact wheel only: when bumping simple-parsing, update the file name (and the patch) or drop the override.
+pip.override(
+    file = "simple_parsing-0.1.7-py3-none-any.whl",
+    patch_strip = 1,
+    patches = ["//bazel:simple_parsing_missing_type.patch"],
 )
 use_repo(pip, "python_deps")
 
