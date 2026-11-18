@@ -2003,7 +2003,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
         let files_traversed = paths.len();
 
-        let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
+        let results = maybe_parallel_map(&mut thread_pool, paths.iter(), 1, |p| {
             match mark_readonly_if_file(p) {
                 Ok(was_made_readonly) => {
                     #[cfg(not(target_os = "linux"))]
@@ -2997,6 +2997,7 @@ fn dir_list_recursive(
         let next_paths_to_iterate = maybe_parallel_map(
             thread_pool,
             paths_to_iterate.iter(),
+            1,
             |path| -> std::io::Result<Vec<PathBuf>> {
                 let metadata = path.metadata()?;
                 if metadata.is_dir() {
@@ -3024,6 +3025,12 @@ enum FSync {
     Yes,
     No,
 }
+
+/// How many consecutive files of a copy plan (grouped by directory) each thread
+/// takes at a time. Threads linking into the same directory at once serialize on
+/// its lock; chunks this large keep them in different directories, yet are
+/// small enough that the last few don't leave the other threads idle for long.
+const HARDLINK_CHUNK_SIZE: usize = 256;
 
 /// Recursively copies `src` to `dst` using the given permission policy for
 /// files. If a thread-pool is provided then files are copied in parallel.
@@ -3066,6 +3073,7 @@ where
     let results = maybe_parallel_map(
         &mut thread_pool,
         copy_plan.create_and_sync_dir.iter(),
+        1,
         |op| {
             // We keep directories writeable to make sure we can rename
             // them or delete the files.
@@ -3076,6 +3084,7 @@ where
     let results = maybe_parallel_map(
         &mut thread_pool,
         copy_plan.copy_and_sync_file.iter(),
+        HARDLINK_CHUNK_SIZE,
         |op| copy_checkpoint_file(log, metrics, &op.src, &op.dst, fsync),
     );
     results.into_iter().try_for_each(identity)?;
@@ -3083,6 +3092,7 @@ where
         let results = maybe_parallel_map(
             &mut thread_pool,
             copy_plan.create_and_sync_dir.iter(),
+            1,
             |op| sync_path(&op.dst),
         );
         results.into_iter().try_for_each(identity)?;
