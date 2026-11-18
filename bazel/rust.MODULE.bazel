@@ -1608,7 +1608,6 @@ crate.spec(
     package = "tui-textarea",
     version = "^0.7",
 )
-
 crate.spec(
     package = "thiserror",
     version = "^2.0.21",
