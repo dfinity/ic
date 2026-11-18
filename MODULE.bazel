@@ -10,9 +10,9 @@ use_repo(ext, "rules_buf_toolchains")
 register_toolchains("@rules_buf_toolchains//:all")
 
 # General Bazel helpers
-bazel_dep(name = "bazel_skylib", version = "1.9.0")
+bazel_dep(name = "bazel_skylib", version = "1.9.2")
 bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
-bazel_dep(name = "rules_shell", version = "0.6.1")
+bazel_dep(name = "rules_shell", version = "0.10.0")
 
 # Keep aspect_bazel_lib from registering toolchains for the toolchain types it
 # only aliases from bazel_lib and tar.bzl, so that these types resolve to the
@@ -30,15 +30,15 @@ single_version_override(
     version = "2.22.5",
 )
 
-bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
+bazel_dep(name = "buildifier_prebuilt", version = "10.2.0", dev_dependency = True)
 
 # CC dependencies (for C libs like miracl-core, etc)
-bazel_dep(name = "rules_cc", version = "0.2.22")
+bazel_dep(name = "rules_cc", version = "0.2.28")
 bazel_dep(name = "platforms", version = "1.1.0")
 
 # Hermetic clang/lld-based CC toolchain
 # (https://github.com/hermeticbuild/hermetic-llvm)
-bazel_dep(name = "llvm", version = "0.8.16")
+bazel_dep(name = "llvm", version = "0.8.27")
 
 # Keep clang from warning that the toolchain's own --unwindlib=none is unused
 # on rustc links (surfaced by rustc's linker_messages lint); see the patch
@@ -74,7 +74,7 @@ archive_override(
 
 # Misc tools
 
-bazel_dep(name = "pigz", version = "2.8.bcr.1")  # (parallel) gzip
+bazel_dep(name = "pigz", version = "2.8.bcr.3")  # (parallel) gzip
 bazel_dep(name = "zstd", version = "1.5.7.bcr.1")  # zstd can change format across versions
 
 # QEMU, for the local system test backend. We only use the prebuilt (hermetic)
@@ -95,7 +95,7 @@ include("//bazel:rust.MODULE.bazel")
 
 # Python dependencies
 
-bazel_dep(name = "rules_python", version = "2.4.6")
+bazel_dep(name = "rules_python", version = "2.5.1")
 
 python_version = "3.12"
 
@@ -119,39 +119,13 @@ rules_python_config = use_extension("@rules_python//python/extensions:config.bzl
 rules_python_config.explicit_init_py(default = True)
 
 # Protobuf dependencies
-# toolchains_protoc must be declared before protobuf so its toolchain registration wins
-bazel_dep(name = "toolchains_protoc", version = "0.6.1")
 
-# Pin protoc to the prebuilt binary toolchains_protoc provides (v33.0, its
-# latest) and pin the `protobuf` module to the matching 33.0 below. protobuf 33+
-# enforces (via ProtocAuthenticityCheck) that protoc and the protobuf module
-# share the same version, so they are kept in lockstep.
-# https://registry.bazel.build/modules/toolchains_protoc
-protoc = use_extension("@toolchains_protoc//protoc:extensions.bzl", "protoc")
-protoc.toolchain(version = "v33.0")
-use_repo(
-    protoc,
-    "toolchains_protoc_hub",
-    "toolchains_protoc_hub.linux_aarch_64",
-    "toolchains_protoc_hub.linux_x86_64",
-    "toolchains_protoc_hub.osx_aarch_64",
-    "toolchains_protoc_hub.osx_x86_64",
-)
-
-register_toolchains("@toolchains_protoc_hub//:all")
-
+# The proto toolchain and //bazel:protoc use the protoc that this module
+# downloads prebuilt from its GitHub release, see prefer_prebuilt_protoc in
+# bazel/conf/.bazelrc.build.
 bazel_dep(
     name = "protobuf",
-    version = "33.0",
-)
-
-# Bazel 9's builtin modules (rules_cc/rules_go/rules_python/...) pull in
-# protobuf 33.4, but toolchains_protoc only ships a prebuilt protoc up to v33.0.
-# Pin protobuf to 33.0 so it matches the prebuilt protoc and satisfies
-# protobuf's ProtocAuthenticityCheck (33.0 and 33.4 are the same release line).
-single_version_override(
-    module_name = "protobuf",
-    version = "33.0",
+    version = "33.4",
 )
 
 # protobuf linter
@@ -162,7 +136,7 @@ bazel_dep(name = "rules_buf", version = "0.5.2")
 # 0.62.0 matches what the resolved dependency graph selects (pulled in via
 # the llvm module); keep the declaration in line with the resolution.
 bazel_dep(name = "rules_go", version = "0.62.0")
-bazel_dep(name = "gazelle", version = "0.51.3")
+bazel_dep(name = "gazelle", version = "0.54.0")
 
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
 go_deps.from_file(go_mod = "//:go.mod")
@@ -192,7 +166,7 @@ use_repo(
 #   1st PR: add it to the list .github/workflows/container-mirror-images.json
 #   2nd PR: add it below
 
-bazel_dep(name = "rules_pkg", version = "1.0.1")
+bazel_dep(name = "rules_pkg", version = "1.3.0")
 bazel_dep(name = "rules_oci", version = "2.0.0")
 
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
@@ -392,7 +366,7 @@ http_file(
 )
 
 # TLA+ tools
-bazel_dep(name = "rules_java", version = "9.3.0")
+bazel_dep(name = "rules_java", version = "9.9.0")
 
 http_jar(
     name = "tlaplus_community_modules",
@@ -1391,6 +1365,8 @@ register_toolchains(
     # macOS executors: wasm only. Native macOS targets deliberately stay on the system Xcode toolchain:
     # hermetic-llvm's macOS support (trimmed Apple SDK sysroot, resource-dir handling)
     # is not yet mature enough for the full darwin build (e.g. configure-based cargo build scripts fail to find SDK headers).
+    # That Xcode toolchain is the one apple_support (a dependency of rules_cc) registers: under Bazel 9,
+    # rules_cc doesn't autodetect a toolchain on macOS.
     "//bazel:hermetic_cc_macos_x86_64_to_none_wasm32",
     "//bazel:hermetic_cc_macos_aarch64_to_none_wasm32",
 

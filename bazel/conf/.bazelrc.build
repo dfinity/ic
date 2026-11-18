@@ -9,10 +9,13 @@ common --lockfile_mode=off
 common --experimental_remote_downloader_local_fallback
 common --experimental_remote_downloader_propagate_credentials
 
-# Use prebuilt protoc binary via toolchain resolution instead of compiling from C++ source.
-# See https://github.com/protocolbuffers/protobuf/issues/19558
-# (Removing this still builds, but reverts to compiling protoc/libprotoc from source.)
-common --incompatible_enable_proto_toolchain_resolution
+# Resolve the proto toolchain to the prebuilt protoc that protobuf downloads
+# from its GitHub release for the exec platform, instead of to a protoc compiled
+# from C++ source. proto_library uses it, and so does everything that runs
+# protoc through //bazel:protoc (prost/tonic build scripts, generators and
+# generated-file checks). Proto toolchain resolution itself is on by default
+# since Bazel 9.
+build --@protobuf//bazel/toolchains:prefer_prebuilt_protoc
 
 # protobuf 33's upb bootstrap tools (protoc-gen-upb*, protoc_minimal, ...) use
 # __start_/__stop_ linker-array sections (e.g. linkarr_upb_AllExts). lld (used
@@ -24,6 +27,10 @@ common --incompatible_enable_proto_toolchain_resolution
 # --gc-sections stays in effect. Scoped to the exec config (these are
 # build-time `[for tool]` targets) and to Linux via
 # --enable_platform_specific_config (the macOS linker rejects this flag).
+# The proto toolchain and //bazel:protoc use a prebuilt protoc (see above), but
+# these tools are still built for protobuf 33's Python runtime, which
+# py_proto_library adds (e.g. in //ci/githubstats): it generates its
+# well-known-type modules with a protoc compiled from C++ source.
 common --enable_platform_specific_config
 build:linux --host_linkopt=-Wl,-z,nostart-stop-gc
 
@@ -48,8 +55,8 @@ build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
 # Don't generate empty __init__.py files in the runfiles of other modules' Python executables (rules_pkg's
-# build_tar, rules_foreign_cc's meson, rules_python's py_console_script_gen_py, @bazel_tools' sha256 and
-# proguard_allowlister) either: explicit_init_py in MODULE.bazel only covers this module's targets.
+# build_tar, rules_foreign_cc's meson, @bazel_tools' sha256 and proguard_allowlister) either: explicit_init_py
+# in MODULE.bazel only covers this module's targets. rules_python opts out its own targets in its MODULE.bazel.
 # rules_python's MODULE.bazel aliases this flag to its
 # @rules_python//python/config_settings:incompatible_default_to_explicit_init_py.
 build --incompatible_default_to_explicit_init_py
