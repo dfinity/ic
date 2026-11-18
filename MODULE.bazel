@@ -117,9 +117,9 @@ bazel_dep(name = "rules_buf", version = "0.5.2")
 
 # Go dependencies
 
-# 0.62.0 matches what the resolved dependency graph selects (pulled in via
-# the llvm module); keep the declaration in line with the resolution.
-bazel_dep(name = "rules_go", version = "0.62.0")
+# The llvm module requires rules_go 0.62.0 or later. Keep this declaration at
+# or above that, so that it is the version the resolved dependency graph selects.
+bazel_dep(name = "rules_go", version = "0.65.0")
 bazel_dep(name = "gazelle", version = "0.54.0")
 
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
