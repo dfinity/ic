@@ -45,6 +45,9 @@ use std::io::Write;
 /// timeout at reboot (90 s), so that the replica exits on its own.
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(70);
 
+/// How long to wait for P2P's tasks to stop, once the replica is shutting down.
+const P2P_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(1);
+
 /// Determine sha256 hash of the current replica binary
 ///
 /// Returns tuple (path of the replica binary, hex encoded sha256 of binary)
@@ -371,6 +374,10 @@ fn main() -> io::Result<()> {
             error!(logger, "Waiting for the latest checkpoint failed: {}", err);
         }
     });
+    // P2P delivers artifacts to the artifact processors, which the IC stack's join
+    // guards stop when `main` returns. Stop P2P first, or it logs an error for
+    // every artifact it can no longer deliver.
+    rt_p2p.shutdown_timeout(P2P_SHUTDOWN_TIMEOUT);
     info!(save_logger, "IC Replica Terminating");
 
     #[cfg(feature = "profiler")]
