@@ -326,7 +326,7 @@ pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
     info!(logger, "GuestOS console logs...");
     execute_and_log(
         host,
-        "sudo tail -n 200 /var/log/libvirt/qemu/guestos-serial.log",
+        "sudo tail -n 200 /var/log/libvirt/qemu/guestos-serial*.log",
     );
 
     match host.get_guest_ssh() {

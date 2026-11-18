@@ -18,3 +18,9 @@ libc = { workspace = true }
 libnss = { workspace = true }
 nix = { workspace = true }
 paste = { workspace = true }
+
+# Test-only: deterministic_ips pulls in ic-types, which must not be linked into
+# a library glibc dlopens into every process that resolves a host name.
+[dev-dependencies]
+deterministic_ips = { path = "../deterministic_ips" }
+macaddr = { workspace = true }

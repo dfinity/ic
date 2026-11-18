@@ -23,6 +23,8 @@ pub static DEFAULT_GUESTOS_CONFIG_OBJECT_PATH: &str = "/run/config/config.json";
 pub static DEFAULT_BOOTSTRAP_DIR: &str = "/run/config/bootstrap";
 pub static DEFAULT_IC_JSON5_OUTPUT_PATH: &str = "/run/ic-node/config/ic.json5";
 
+pub static DEFAULT_HOSTOS_METRICS_PROXY_OUTPUT_PATH: &str = "/run/ic-node/etc/metrics-proxy.yaml";
+
 pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Result<()> {
     let serialized_config =
         serde_json::to_string_pretty(config).expect("Failed to serialize configuration");

@@ -30,6 +30,7 @@ strum = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+serde_yaml = { workspace = true }
 tempfile = { workspace = true }
 url = { workspace = true }
 
