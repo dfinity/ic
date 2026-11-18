@@ -13310,7 +13310,6 @@ dependencies = [
  "ic-https-outcalls-adapter-client",
  "ic-interfaces",
  "ic-interfaces-registry",
- "ic-interfaces-state-manager",
  "ic-logger",
  "ic-messaging",
  "ic-metrics",
