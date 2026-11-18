@@ -1,21 +1,29 @@
-# aspect_bazel_lib 2.22 turned five of its toolchain types into aliases of the
-# toolchain types of the modules it now wraps: copy_directory,
-# copy_to_directory, coreutils and expand_template alias bazel_lib's, and tar
-# aliases tar.bzl's. It still registers its own toolchains for them, though.
-# aspect_bazel_lib is a direct dependency of the root module, so these
-# registrations come before bazel_lib's and tar.bzl's and win for every rule
-# that requests one of the shared types. hermetic-llvm's toolchain setup
-# (bazel_lib's copy_file and copy_to_directory) would then run
-# aspect_bazel_lib's own builds of these tools, e.g. an older uutils coreutils.
-# With bazel_lib >= 3.8.0 in the graph copy_to_directory fails outright:
-# bazel_lib's rule then passes its arguments in a params file, which
-# aspect_bazel_lib's binary doesn't accept
-# (https://github.com/bazel-contrib/bazel-lib/issues/1312).
+# aspect_bazel_lib turned five of its toolchain types into aliases of the
+# toolchain types of the modules it now wraps: tar became an alias of tar.bzl's
+# in 2.21.1 (https://github.com/bazel-contrib/bazel-lib/pull/1153), and
+# copy_directory, copy_to_directory, coreutils and expand_template became
+# aliases of bazel_lib's in 2.22.0
+# (https://github.com/bazel-contrib/bazel-lib/pull/1216). It still registers
+# its own toolchains for them, though. aspect_bazel_lib is a direct dependency
+# of the root module, so these registrations come before bazel_lib's and
+# tar.bzl's and win for every rule that requests one of the shared types:
+# - hermetic-llvm's toolchain setup (bazel_lib's copy_file and
+#   copy_to_directory) would run aspect_bazel_lib's own builds of these tools,
+#   e.g. an older uutils coreutils. With bazel_lib >= 3.8.0 in the graph
+#   copy_to_directory fails outright: bazel_lib's rule then passes its
+#   arguments in a params file, which aspect_bazel_lib's binary doesn't accept
+#   (https://github.com/bazel-contrib/bazel-lib/issues/1312).
+# - tar.bzl's tar (e.g. //rs/tests:sh and :awk) would run aspect_bazel_lib's
+#   expand_template and bsdtar instead of bazel_lib's and tar.bzl's.
 # Without these registrations each shared type resolves to the toolchains of
 # the module that defines it. jq, yq, zstd and bats are still aspect_bazel_lib's
 # own toolchain types, so their registrations stay.
-# TODO: drop this patch once an aspect_bazel_lib release stops registering
-# toolchains for the aliased types.
+# Upstream's fix for bazel-lib issue 1312 on its 2.x branch
+# (https://github.com/bazel-contrib/bazel-lib/pull/1313, not in a release yet)
+# removes only the copy_directory, copy_to_directory and coreutils
+# registrations.
+# TODO: once a release has that fix, reduce this patch to the expand_template
+# and bsd_tar registrations. Drop it once a release registers none of the five.
 --- a/MODULE.bazel
 +++ b/MODULE.bazel
 @@ -37,14 +37,9 @@
