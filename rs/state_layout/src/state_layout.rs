@@ -20,7 +20,7 @@ use ic_replicated_state::{
     },
     page_map::{Shard, StorageLayout, StorageResult},
 };
-use ic_sys::{fs::sync_path, mmap::ScopedMmap};
+use ic_sys::fs::sync_path;
 use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, ExecutionRound, Height, MemoryAllocation,
     NumInstructions, PrincipalId, SnapshotId, Time, batch::TotalQueryStats,
@@ -33,7 +33,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{From, TryFrom, identity};
 use std::ffi::OsStr;
 use std::fs::OpenOptions;
-use std::io::{Error, Write};
+use std::io::{Error, Read, Write};
 
 /// Result of marking files readonly, containing counts for monitoring
 #[derive(Clone, Debug)]
@@ -2750,13 +2750,18 @@ where
         }
     }
 
-    fn deserialize_file(&self, f: std::fs::File) -> Result<T, LayoutError> {
-        let mmap = ScopedMmap::mmap_file_readonly(f).map_err(|io_err| LayoutError::IoError {
-            path: self.path.clone(),
-            message: "failed to mmap a file".to_string(),
-            io_err,
-        })?;
-        self.deserialize_buffer(mmap.as_slice())
+    fn deserialize_file(&self, mut f: std::fs::File) -> Result<T, LayoutError> {
+        // Read rather than map: unmapping flushes the mapping from the TLB of every
+        // CPU the replica's threads run on, which costs far more than copying a small
+        // file, and a checkpoint has several protobufs per canister.
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf)
+            .map_err(|io_err| LayoutError::IoError {
+                path: self.path.clone(),
+                message: "failed to read a file".to_string(),
+                io_err,
+            })?;
+        self.deserialize_buffer(&buf)
     }
 
     fn deserialize_buffer(&self, buf: &[u8]) -> Result<T, LayoutError> {
