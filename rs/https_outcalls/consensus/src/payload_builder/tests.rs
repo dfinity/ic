@@ -31,8 +31,8 @@ use ic_interfaces::{
 use ic_interfaces_mocks::crypto::MockCrypto;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
-    CanisterHttpResponsePayload, FlexibleHttpGlobalError, FlexibleHttpRequestResult, HttpHeader,
-    HttpRequestResourceReport,
+    BoundedHttpHeaders, CanisterHttpResponsePayload, FlexibleHttpGlobalError,
+    FlexibleHttpRequestResult, HttpHeader, HttpRequestResourceReport,
 };
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
@@ -3308,15 +3308,15 @@ fn flexible_ok_responses_into_messages_success_round_trip() {
 
     let payload_a = CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![HttpHeader {
+        headers: BoundedHttpHeaders::new(vec![HttpHeader {
             name: "content-type".to_string(),
             value: "text/plain".to_string(),
-        }],
+        }]),
         body: b"hello from node A".to_vec(),
     };
     let payload_b = CanisterHttpResponsePayload {
         status: 201,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: b"hello from node B".to_vec(),
     };
 
@@ -3367,7 +3367,7 @@ fn into_messages_emits_initial_spend_reports() {
     let flex_callback = CallbackId::from(42);
     let content = Encode!(&CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: vec![],
     })
     .unwrap();
@@ -3531,7 +3531,7 @@ fn flexible_ok_responses_into_messages_skips_reject_entries() {
 
     let good_payload = CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: b"ok".to_vec(),
     };
     let success_entry = flexible_response(99, 0, &Encode!(&good_payload).unwrap());
@@ -3576,7 +3576,7 @@ fn flexible_ok_responses_into_messages_skips_reject_entries() {
 fn flexible_ok_responses_into_messages_stats_count_multiple_groups() {
     let payload_data = Encode!(&CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: vec![],
     })
     .unwrap();
@@ -3616,7 +3616,7 @@ fn flexible_ok_responses_into_messages_decode_failure_is_skipped() {
 
     let valid_data = Encode!(&CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: vec![],
     })
     .unwrap();
@@ -6332,7 +6332,7 @@ fn flexible_response_group_is_topped_up_with_extra_shares() {
     // consensus response (and hence a spend report) further down.
     let content = Encode!(&CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: vec![],
     })
     .unwrap();
@@ -6750,7 +6750,7 @@ fn flexible_response_group_waits_for_shares_covering_consensus_cost() {
 
     let content = Encode!(&CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: vec![],
     })
     .unwrap();

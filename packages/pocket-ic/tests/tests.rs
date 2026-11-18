@@ -2388,7 +2388,7 @@ fn test_canister_http_transform() {
         for payload in outcome.payloads(&label) {
             // The transform function clears the response headers and replaces the
             // body with its transform context.
-            assert!(payload.headers.is_empty(), "{label}");
+            assert!(payload.headers.get().is_empty(), "{label}");
             assert_eq!(payload.body, context, "{label}");
         }
     }

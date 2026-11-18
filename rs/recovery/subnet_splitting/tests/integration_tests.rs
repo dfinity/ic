@@ -1,7 +1,9 @@
 use std::{fs::read_to_string, io::Write, str::FromStr};
 
 use candid::Encode;
-use ic_management_canister_types_private::{CanisterHttpResponsePayload, HttpMethod};
+use ic_management_canister_types_private::{
+    BoundedHttpHeaders, CanisterHttpResponsePayload, HttpMethod,
+};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_machine_tests::{StateMachine, two_subnets_simple};
 use ic_subnet_splitting::post_split_estimations::{LoadEstimates, StateSizeEstimates};
@@ -336,7 +338,7 @@ fn set_up(
         state_machine.execute_round();
         state_machine.handle_http_call("unused", |_| CanisterHttpResponsePayload {
             status: 200,
-            headers: vec![],
+            headers: BoundedHttpHeaders::new(vec![]),
             body: vec![],
         });
         state_machine
