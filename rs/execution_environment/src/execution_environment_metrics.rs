@@ -450,7 +450,7 @@ impl ExecutionEnvironmentMetrics {
         outcome_label: String,
         status_label: String,
     ) {
-        let (method_name_label, speed_label) = match ic00::Method::from_str(method_name) {
+        let (method_label, speed_label) = match ic00::Method::from_str(method_name) {
             Ok(method_name) => {
                 let speed_label = match method_name {
                     ic00::Method::CanisterStatus
@@ -510,7 +510,7 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::BitcoinSendTransactionInternal
                     | ic00::Method::BitcoinGetSuccessors => String::from("slow"),
                 };
-                (format!("ic00_{method_name}"), speed_label)
+                (method_name_label(method_name), speed_label)
             }
             Err(_) => (
                 String::from("unknown_method"),
@@ -519,12 +519,7 @@ impl ExecutionEnvironmentMetrics {
         };
 
         self.subnet_messages
-            .with_label_values(&[
-                &method_name_label,
-                &outcome_label,
-                &status_label,
-                &speed_label,
-            ])
+            .with_label_values(&[&method_label, &outcome_label, &status_label, &speed_label])
             .observe(duration);
     }
 
