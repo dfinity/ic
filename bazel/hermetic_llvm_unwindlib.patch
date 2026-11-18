@@ -13,10 +13,11 @@
 # The warning is also reported upstream (through rust cc-crate build scripts,
 # which additionally apply the flag at compile time):
 # https://github.com/hermeticbuild/hermetic-llvm/issues/304
-# TODO: upstream this fix and drop the patch on the next version bump.
+# TODO: drop this patch once that issue is fixed upstream (llvm 0.8.27 still
+# passes the bare flag).
 --- a/toolchain/args/BUILD.bazel
 +++ b/toolchain/args/BUILD.bazel
-@@ -902,7 +902,14 @@
+@@ -1175,7 +1175,14 @@
          # would result in a warning when targeting macOS.
          "@platforms//os:macos": [],
          # Will prevent clang from choosing which libunwind to link against.

@@ -72,9 +72,11 @@ cc_headers_dir(
 # respects action_env CC/CXX/LD — needed by --config=afl.
 # See: https://github.com/dfinity/ic/pull/3508
 #
-# These mirror the toolchains hermetic-llvm generates in @llvm_toolchains
+# These mirror the C/C++ toolchains hermetic-llvm generates in @llvm_toolchains
 # (same constraints and target_settings, same underlying cc_toolchain); only
-# the :use_hermetic_cc gate is added.
+# the :use_hermetic_cc gate is added. Its cc_runtimes_<os> toolchains, which
+# supply libc++ as a Clang header module, aren't mirrored: we don't use header
+# modules.
 [
     toolchain(
         name = "hermetic_cc_%s_%s_to_%s_%s" % (exec_os, exec_cpu, target_os, target_cpu),

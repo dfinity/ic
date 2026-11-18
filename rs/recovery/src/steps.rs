@@ -1,7 +1,7 @@
 use crate::{
     CHECKPOINTS, DataLocation, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_CONSENSUS_POOL_PATH,
     IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, NEW_IC_STATE, OLD_IC_STATE,
-    Recovery,
+    Recovery, STATES_METADATA,
     admin_helper::IcAdmin,
     cli::consent_given,
     command_helper::{confirm_exec_cmd, exec_cmd},
@@ -22,7 +22,13 @@ use ic_metrics::MetricsRegistry;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
 use ic_types::{Height, ReplicaVersion, SubnetId, consensus::certification::CertificationMessage};
 use slog::{Logger, debug, info, warn};
-use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
+use std::{
+    collections::HashMap,
+    net::IpAddr,
+    path::{Path, PathBuf},
+    process::Command,
+    thread, time,
+};
 
 /// Stops ic-replica, then the crypto vault (`ic-crypto-csp`) and its socket.
 ///
@@ -728,8 +734,29 @@ impl Step for UploadStateAndRestartStep {
             );
             ssh_helper.ssh(cmd_create_and_copy_checkpoint_dir)?;
 
+            // The states metadata is only a cache that the state manager
+            // rebuilds if it is missing, so it is uploaded only if present.
+            // If it is absent, any copy left in the upload directory by an
+            // interrupted upload is removed. This is a command of its own, so
+            // that a failure stops the upload.
+            let has_states_metadata = self.data_src.join(STATES_METADATA).exists();
+            if !has_states_metadata {
+                info!(
+                    self.logger,
+                    "Removing stale states metadata from the remote upload directory..."
+                );
+                ssh_helper.ssh(format!(
+                    "rm -f {}",
+                    upload_dir.join(STATES_METADATA).display()
+                ))?;
+            }
+
             info!(self.logger, "Uploading state...");
-            let includes = Recovery::get_state_includes_with_given_checkpoint(max_checkpoint);
+            let includes: Vec<_> =
+                Recovery::get_state_includes_with_given_checkpoint(max_checkpoint)
+                    .into_iter()
+                    .filter(|path| has_states_metadata || path != Path::new(STATES_METADATA))
+                    .collect();
             ssh_helper.rsync_includes(
                 &includes,
                 &self.data_src,
