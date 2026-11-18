@@ -2,7 +2,9 @@ use crate::{
     layout::Layout,
     readiness,
     subnet_merging::TargetSubnet,
-    utils::{get_subnet_record_at_version, wait_for},
+    utils::{
+        ensure_default_initial_dkg_subnet_is_not_merged, get_subnet_record_at_version, wait_for,
+    },
 };
 
 use ic_base_types::SubnetId;
@@ -10,15 +12,18 @@ use ic_cup_explorer::get_cup;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery,
+    admin_helper::AdminHelper,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::remove_dir,
     registry_helper::RegistryHelper,
-    steps::{CMD_STOP_REPLICA, CopyLocalIcStateStep, DownloadIcDataStep, Step},
+    steps::{AdminStep, CMD_STOP_REPLICA, CopyLocalIcStateStep, DownloadIcDataStep, Step},
     util::{CheckpointHeight, DataLocation, ExecutionMode, block_on},
 };
 use ic_state_layout::{CheckpointStatus, StateLayout};
 use ic_subnet_tools::{
-    agent_helper::AgentHelper, state_tool_helper, utils::get_cup as read_cup_file,
+    agent_helper::AgentHelper,
+    state_tool_helper,
+    utils::{get_batch_time_from_cup, get_cup as read_cup_file},
     validation::validate_artifacts,
 };
 use ic_types::{
@@ -31,7 +36,7 @@ use url::Url;
 use std::{
     net::{IpAddr, Ipv6Addr},
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 #[cfg(test)]
@@ -693,5 +698,151 @@ impl Step for CheckRoutingTableStep {
 
         self.layout
             .write_merge_registry_version(source_subnet_id, merge_registry_version.get())
+    }
+}
+
+/// The height and state hash of the merged state assembled by
+/// [MergeStatesStep]: the height follows from the heights of the CUPs the two
+/// subnets halted at, and the state hash is the root hash of the manifest of
+/// the merged state, which has to match the expected one.
+fn merged_state_height_and_hash(
+    layout: &Layout,
+    source_subnet_id: SubnetId,
+    destination_subnet_id: SubnetId,
+) -> RecoveryResult<(Height, String)> {
+    let source_height = read_cup_file(&layout.halting_cup_file(source_subnet_id))?.height();
+    let destination_height =
+        read_cup_file(&layout.halting_cup_file(destination_subnet_id))?.height();
+
+    let manifest_path = layout.merged_state_manifest_file();
+    let state_hash = state_tool_helper::verify_manifest(&manifest_path)
+        .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
+    let expected_manifest_path = layout.expected_merged_state_manifest_file();
+    let expected_state_hash =
+        state_tool_helper::verify_manifest(&expected_manifest_path).map_err(|err| {
+            RecoveryError::validation_failed("Expected manifest verification failed", err)
+        })?;
+    if state_hash != expected_state_hash {
+        return Err(RecoveryError::ValidationFailed(format!(
+            "The merged state has the state hash {state_hash}, but the state hash \
+             {expected_state_hash} is expected; compare {} with {}",
+            manifest_path.display(),
+            expected_manifest_path.display(),
+        )));
+    }
+
+    Ok((
+        merged_recovery_height(source_height, destination_height),
+        state_hash,
+    ))
+}
+
+/// Proposes the recovery CUP of the destination subnet at the merged state
+/// assembled by [MergeStatesStep].
+///
+/// Its height and state hash are read when the step is executed rather than
+/// when it is created: a step that fails to be created is skipped, and the tool
+/// would then carry on without a recovery CUP.
+pub(crate) struct ProposeRecoveryCupStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) destination_subnet_id: SubnetId,
+    pub(crate) admin_helper: AdminHelper,
+    pub(crate) registry_helper: RegistryHelper,
+    pub(crate) layout: Layout,
+    pub(crate) logger: Logger,
+}
+
+impl ProposeRecoveryCupStep {
+    /// The proposal for the recovery CUP at the merged state, stamped with
+    /// `time`.
+    fn admin_step(&self, time: SystemTime) -> RecoveryResult<AdminStep> {
+        let (height, state_hash) = merged_state_height_and_hash(
+            &self.layout,
+            self.source_subnet_id,
+            self.destination_subnet_id,
+        )?;
+
+        Ok(AdminStep {
+            logger: self.logger.clone(),
+            ic_admin_cmd: self
+                .admin_helper
+                .get_propose_to_update_recovery_cup_command(
+                    self.destination_subnet_id,
+                    height,
+                    state_hash,
+                    /*initial_dkg_subnet_id=*/ None,
+                    /*chain_key_config=*/ None,
+                    /*replacement_nodes=*/ &[],
+                    /*registry_params=*/ None,
+                    time,
+                ),
+        })
+    }
+
+    /// Checks that `time`, which the recovery CUP is stamped with, is past the
+    /// batch times of both checkpoints the merged state is assembled from, i.e.
+    /// the times of the CUPs the two subnets halted at: the merged subnet has
+    /// to resume past both, as either subnet's canisters may have run ahead of
+    /// the merged state's own batch time, which is the destination subnet's.
+    ///
+    /// Both subnets halted well before this step runs, so this only fails if
+    /// the clock of this machine is behind the clocks of the subnets.
+    fn check_time_is_past_halting_cups(&self, time: SystemTime) -> RecoveryResult<()> {
+        let time_nanos = time
+            .duration_since(UNIX_EPOCH)
+            .map_err(|err| {
+                RecoveryError::UnexpectedError(format!(
+                    "The clock of this machine is before the Unix epoch: {err}"
+                ))
+            })?
+            .as_nanos();
+        for subnet_id in [self.source_subnet_id, self.destination_subnet_id] {
+            let batch_time = get_batch_time_from_cup(&self.layout.halting_cup_file(subnet_id))?;
+            if time_nanos <= u128::from(batch_time.as_nanos_since_unix_epoch()) {
+                return Err(RecoveryError::ValidationFailed(format!(
+                    "The time the recovery CUP would be stamped with ({time_nanos} ns since the \
+                     Unix epoch) is not past the time {batch_time} of the CUP subnet {subnet_id} \
+                     halted at. Check the clock of this machine and retry.",
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Step for ProposeRecoveryCupStep {
+    fn descr(&self) -> String {
+        let summary = format!(
+            "Propose a recovery CUP for subnet {} at the height and state hash of the merged \
+             state, whose manifest is {}, with its DKG run by the default initial DKG subnet (or the \
+             NNS subnet if none is set), which must be neither subnet of the merge.",
+            self.destination_subnet_id,
+            self.layout.merged_state_manifest_file().display(),
+        );
+        // Like the description of any other proposal, this shows the command
+        // that is about to run. The merged state may not be assembled yet
+        // when the step is described (see above), and the timestamp is taken
+        // anew when the step is executed.
+        match self.admin_step(SystemTime::now()) {
+            Ok(step) => format!(
+                "{summary} The command, up to the timestamp, which is taken when it is run: {}",
+                step.descr(),
+            ),
+            Err(err) => format!("{summary} The command cannot be shown yet: {err}"),
+        }
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        // Checked when the tool starts, but the default may have changed since.
+        ensure_default_initial_dkg_subnet_is_not_merged(
+            &self.registry_helper,
+            self.source_subnet_id,
+            self.destination_subnet_id,
+        )?;
+        let time = SystemTime::now();
+        self.check_time_is_past_halting_cups(time)?;
+        let step = self.admin_step(time)?;
+        info!(self.logger, "{}", step.descr());
+        step.exec()
     }
 }

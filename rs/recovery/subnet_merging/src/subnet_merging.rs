@@ -4,8 +4,10 @@ use crate::{
     steps::{
         CheckCoolingDownStep, CheckMergeReadinessStep, CheckRoutingTableStep,
         ComputeExpectedMergedManifestStep, DownloadStateStep, MergeStatesStep,
-        StopReplicaAtHaltingCheckpointStep, ValidateCupStep, WaitForHaltingCupStep,
+        ProposeRecoveryCupStep, StopReplicaAtHaltingCheckpointStep, ValidateCupStep,
+        WaitForHaltingCupStep,
     },
+    utils::ensure_default_initial_dkg_subnet_is_not_merged,
 };
 
 use clap::Parser;
@@ -98,6 +100,9 @@ pub enum StepType {
     /// Wait until the registry routes no canister ID range to the source subnet
     /// anymore, and record the registry version at which this was read.
     CheckRegistryForRoutingTableEntry,
+    /// Submit a proposal for a recovery CUP of the destination subnet at the
+    /// merged state.
+    ProposeCupForDestinationSubnet,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -217,6 +222,7 @@ impl SubnetMerging {
             &recovery,
             subnet_merging_args.source_subnet_id,
             subnet_merging_args.destination_subnet_id,
+            subnet_merging_args.next_step,
         )
         .expect("Subnets should satisfy all the preconditions");
 
@@ -295,14 +301,20 @@ impl SubnetMerging {
     /// 3) Neither holds any chain keys;
     /// 4) Neither is halted (`is_halted`), as a halted subnet never reaches the
     ///    CUP it is halted at by the tool (which sets `halt_at_cup_height`, but
-    ///    never `is_halted`);
+    ///    never `is_halted`), unless the tool is resumed at or past
+    ///    `ProposeCupForDestinationSubnet`: the recovery of the destination
+    ///    subnet at the merged state halts it, and a resumed run cannot tell
+    ///    whether that proposal was executed before the run was interrupted;
     /// 5) The destination subnet is not cooling down;
     /// 6) Both have the same subnet type, cycles cost schedule, subnet admins,
-    ///    SEV setting and replica version.
+    ///    SEV setting and replica version;
+    /// 7) Neither is the default initial DKG subnet, which runs the DKG for the
+    ///    recovery of the destination subnet.
     fn check_subnets_preconditions(
         recovery: &Recovery,
         source_subnet_id: SubnetId,
         destination_subnet_id: SubnetId,
+        next_step: Option<StepType>,
     ) -> RecoveryResult<()> {
         if source_subnet_id == destination_subnet_id {
             return Err(RecoveryError::ValidationFailed(format!(
@@ -310,15 +322,28 @@ impl SubnetMerging {
             )));
         }
 
-        let source = Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id)?;
-        let destination =
-            Self::get_and_pre_validate_subnet_record(recovery, destination_subnet_id)?;
+        let check_not_halted = next_step.is_none_or(|next_step| {
+            (next_step as usize) < StepType::ProposeCupForDestinationSubnet as usize
+        });
+        let source =
+            Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id, check_not_halted)?;
+        let destination = Self::get_and_pre_validate_subnet_record(
+            recovery,
+            destination_subnet_id,
+            check_not_halted,
+        )?;
 
         Self::ensure_compatible_subnet_records(
             source_subnet_id,
             &source,
             destination_subnet_id,
             &destination,
+        )?;
+
+        ensure_default_initial_dkg_subnet_is_not_merged(
+            &recovery.registry_helper,
+            source_subnet_id,
+            destination_subnet_id,
         )
     }
 
@@ -445,6 +470,7 @@ impl SubnetMerging {
     fn get_and_pre_validate_subnet_record(
         recovery: &Recovery,
         subnet_id: SubnetId,
+        check_not_halted: bool,
     ) -> RecoveryResult<SubnetRecord> {
         let validation_error = |error_message| {
             Err(RecoveryError::ValidationFailed(format!(
@@ -465,7 +491,7 @@ impl SubnetMerging {
             return validation_error("Subnet should not hold any chain keys".to_string());
         }
 
-        if subnet_record.is_halted {
+        if check_not_halted && subnet_record.is_halted {
             return validation_error("Subnet should not be halted".to_string());
         }
 
@@ -680,7 +706,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             | StepType::ComputeExpectedMergedManifest
             | StepType::MergeStates
             | StepType::MergeSubnets
-            | StepType::CheckRegistryForRoutingTableEntry => {}
+            | StepType::CheckRegistryForRoutingTableEntry
+            | StepType::ProposeCupForDestinationSubnet => {}
         }
     }
 
@@ -781,6 +808,16 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 layout: self.layout.clone(),
                 timeout: Duration::from_secs(self.params.registry_timeout_secs),
                 poll_interval: Duration::from_secs(self.params.poll_interval_secs),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
+
+            StepType::ProposeCupForDestinationSubnet => ProposeRecoveryCupStep {
+                source_subnet_id: self.params.source_subnet_id,
+                destination_subnet_id: self.params.destination_subnet_id,
+                admin_helper: self.recovery.admin_helper.clone(),
+                registry_helper: self.recovery.registry_helper.clone(),
+                layout: self.layout.clone(),
                 logger: self.recovery.logger.clone(),
             }
             .into(),

@@ -151,8 +151,10 @@ system_test_nns(
     },
     deps = [
         # Keep sorted.
+        "//rs/protobuf",
         "//rs/recovery",
         "//rs/recovery/subnet_merging",
+        "//rs/recovery/subnet_tools",
         "//rs/registry/helpers",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -160,6 +162,7 @@ system_test_nns(
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
+        "@crate_index//:hex",
         "@crate_index//:ic-agent",
         "@crate_index//:serde_json",
         "@crate_index//:slog",
