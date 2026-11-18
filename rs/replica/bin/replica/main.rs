@@ -40,13 +40,12 @@ use std::fs::File;
 use std::io::Write;
 
 /// How long shutting down may take after `SIGTERM` or `SIGINT`, before the
-/// replica exits with an error. Shorter than both the orchestrator's grace
-/// period before escalating to `SIGKILL` (75 s) and systemd's default stop
-/// timeout at reboot (90 s), so that the replica exits on its own.
-const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(70);
-
-/// How long to wait for P2P's tasks to stop, once the replica is shutting down.
-const P2P_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(1);
+/// replica exits with an error. Long enough to wait for the latest checkpoint's
+/// verification, which took up to 39 s with 200k canisters under heavy load;
+/// shorter than both the orchestrator's grace period before escalating to
+/// `SIGKILL` (60 s) and systemd's default stop timeout at reboot (90 s), so that
+/// the replica exits on its own.
+const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(55);
 
 /// Determine sha256 hash of the current replica binary
 ///
@@ -358,7 +357,6 @@ fn main() -> io::Result<()> {
         });
     }
 
-    let save_logger = logger.clone();
     rt_main.block_on(async move {
         let _drop_async_log_guard = async_log_guard;
         let _drop_sigpipe_handler = sigpipe_handler;
@@ -373,19 +371,19 @@ fn main() -> io::Result<()> {
         {
             error!(logger, "Waiting for the latest checkpoint failed: {}", err);
         }
+        info!(logger, "IC Replica Terminating");
     });
-    // P2P delivers artifacts to the artifact processors, which the IC stack's join
-    // guards stop when `main` returns. Stop P2P first, or it logs an error for
-    // every artifact it can no longer deliver.
-    rt_p2p.shutdown_timeout(P2P_SHUTDOWN_TIMEOUT);
-    info!(save_logger, "IC Replica Terminating");
 
     #[cfg(feature = "profiler")]
     finalize_report(&guard);
     // Ensure cleanup of the temporary directory is triggered; error
     // otherwise.
     tmpdir.close()?;
-    Ok(())
+
+    // Exit without dropping the IC stack: its teardown would wait for the tip
+    // thread's queued work (resetting the tip, merging), which a restart redoes
+    // anyway, and stop the artifact processors while P2P still delivers to them.
+    std::process::exit(0)
 }
 
 #[cfg(feature = "profiler")]
