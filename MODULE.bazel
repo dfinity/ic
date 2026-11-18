@@ -19,7 +19,10 @@ bazel_dep(name = "rules_shell", version = "0.6.1")
 # toolchains of the module that defines them; see the patch header for details.
 # Bazel would also apply this MODULE.bazel patch to the older versions that
 # other modules ask for, so the override pins the version the patch is made for
-# (keep it in line with the bazel_dep above).
+# (keep it in line with the bazel_dep above). The pin also overrides newer
+# versions that other modules ask for, without a warning. So when upgrading a
+# module that depends on aspect_bazel_lib, check which version it asks for,
+# e.g. with `bazel mod explain aspect_bazel_lib --verbose`.
 single_version_override(
     module_name = "aspect_bazel_lib",
     patch_strip = 1,
