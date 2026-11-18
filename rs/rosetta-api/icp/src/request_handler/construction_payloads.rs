@@ -46,9 +46,12 @@ const MAX_INGRESS_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 /// into an update and a read state signing payload, and `/construction/combine`
 /// needs a signature for each of them, i.e. about 1.1 to 1.2 KB of JSON per
 /// pair depending on the key type. It allows 4 requests over the maximum
-/// ingress window (720 ingress expiries), so that the combine request for any
-/// transaction built here stays within the 4 MiB request body limit, also with
-/// uncompressed secp256k1 public keys.
+/// ingress window (720 ingress expiries), which keeps the combine request for
+/// typical workflows over that window, such as staking a neuron and starting to
+/// dissolve it, within the 4 MiB request body limit. The limit bounds the work
+/// and memory per call, but it doesn't guarantee that every transaction built
+/// here can be combined and submitted, since the request sizes also depend on
+/// the number and size of the updates.
 const MAX_REQUEST_INGRESS_EXPIRY_PAIRS: usize = 4 * 720;
 
 /// Maximum permitted size of a CBOR-encoded canister update in

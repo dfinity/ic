@@ -1029,12 +1029,13 @@ fn should_reject_payloads_with_repeated_requests() {
     assert_invalid_request_containing(result, "repeated canister updates");
 }
 
-/// The combine request for the largest transaction that `/construction/payloads`
-/// builds, signed for every signing payload with an uncompressed secp256k1
-/// public key (the largest supported key encoding), fits in the 4 MiB request
-/// body limit of the Rosetta server, and is combined.
+/// The combine request for a neuron workflow of 4 requests over the maximum
+/// ingress window, i.e. at the pair limit, signed for every signing payload
+/// with an uncompressed secp256k1 public key (the largest supported key
+/// encoding), fits in the 4 MiB request body limit of the Rosetta server, and
+/// is combined.
 #[test]
-fn should_combine_largest_transaction_within_request_body_limit() {
+fn should_combine_neuron_workflow_over_max_ingress_window() {
     const MAX_REQUEST_BODY_BYTES: usize = 4 * 1024 * 1024;
 
     let (account, _, public_key, _) = ic_rosetta_test_utils::make_user_ecdsa_secp256k1(1);
