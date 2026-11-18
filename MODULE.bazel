@@ -111,7 +111,7 @@ bazel_dep(
 )
 
 # protobuf linter
-bazel_dep(name = "rules_buf", version = "0.5.2")
+bazel_dep(name = "rules_buf", version = "0.6.1")
 
 # Go dependencies
 
