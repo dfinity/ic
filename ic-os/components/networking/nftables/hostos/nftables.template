@@ -54,6 +54,7 @@ table ip filter {
 
   chain OUTPUT {
     type filter hook output priority filter; policy drop;
+    meta skuid upgrade-proxy ip daddr 127.0.0.1 tcp dport 19301 accept comment "Allow the upgrade proxy to reach itself."
     meta skuid upgrade-proxy ct state { new } reject comment "Block all IPv4 egress from the upgrade proxy."
     oif "lo" accept
     ct state { invalid } drop

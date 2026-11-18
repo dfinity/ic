@@ -104,7 +104,8 @@ RUN systemctl disable \
     apt-daily-upgrade.service \
     apt-daily-upgrade.timer \
     motd-news.service \
-    motd-news.timer
+    motd-news.timer \
+    nginx.service
 
 # ------ HOSTOS WORK ---------------------------------------------
 

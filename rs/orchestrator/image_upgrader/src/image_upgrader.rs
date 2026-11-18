@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use ic_http_utils::file_downloader::FileDownloader;
+use ic_http_utils::file_downloader::{FileDownloader, check_file_hash};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use std::ffi::OsStr;
 use std::str::FromStr;
@@ -46,7 +46,8 @@ impl ManagebootRunner for ManagebootRunnerImpl {
 pub struct Rebooting;
 
 const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
-const UPGRADE_PROXY_URL: &str = "http://hostos:19300";
+const UPGRADE_PROXY_ADDRESS: &str = "hostos:19300";
+const UPGRADE_PROXY_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const UPGRADE_PROXY_TOTAL_TIMEOUT: Duration = Duration::from_mins(5);
 
 /// Defines the image upgrader trait and default implementation. It receives a generic version identifier `V`
@@ -181,24 +182,38 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         // This is okay because we do expect the first attempt to be successful.
         release_package_urls.rotate_right(self.get_load_balance_number() % url_count);
 
-        // If downloading from the proxy works, we're done
-        if matches!(
-            tokio::time::timeout(
-                UPGRADE_PROXY_TOTAL_TIMEOUT,
-                self.try_download_from_urls(version, &release_package_urls, &hash, true,)
-            )
-            .await,
-            Ok(Ok(())),
-        ) {
+        // Return early if we already have the release package downloaded.
+        if self.image_path().exists() && check_file_hash(self.image_path(), &hash).is_ok() {
             return Ok(());
         }
 
-        // Otherwise, download the artifact ourselves, directly
-
-        // Clear out any partial files from the proxy, before trying again
-        if let Err(e) = std::fs::remove_file(self.image_path()) {
-            warn!(self.log(), "Couldn't clear partial image: {e}");
+        // If we can reach the proxy
+        if matches!(
+            tokio::time::timeout(
+                UPGRADE_PROXY_CONNECT_TIMEOUT,
+                tokio::net::TcpStream::connect(UPGRADE_PROXY_ADDRESS),
+            )
+            .await,
+            Ok(Ok(_))
+        ) {
+            // And downloading from the proxy works, we're done.
+            if matches!(
+                tokio::time::timeout(
+                    UPGRADE_PROXY_TOTAL_TIMEOUT,
+                    self.try_download_from_urls(version, &release_package_urls, &hash, true),
+                )
+                .await,
+                Ok(Ok(()))
+            ) {
+                return Ok(());
+            }
         }
+
+        // Otherwise, download the artifact ourselves, directly
+        info!(
+            self.log(),
+            "Could not download through the upgrade proxy, downloading directly"
+        );
         self.try_download_from_urls(version, &release_package_urls, &hash, false)
             .await
     }
@@ -345,7 +360,13 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         use_proxy: bool,
     ) -> UpgradeResult<()> {
         let logger = self.log();
-        let image_path = self.image_path();
+
+        // Keep proxy downloads in a separate file to avoid pollution.
+        let image_path = if use_proxy {
+            self.image_path().with_added_extension("proxy")
+        } else {
+            self.image_path().clone()
+        };
 
         // We return the last error if download attempts from all the URLs fail.
         // We will always either set `error`, or return `Ok` from this loop.
@@ -353,7 +374,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
 
         for release_package_url in release_package_urls {
             let release_package_url = if use_proxy {
-                &format!("{UPGRADE_PROXY_URL}/{hash}/{release_package_url}")
+                &format!("http://{UPGRADE_PROXY_ADDRESS}/{hash}/{release_package_url}")
             } else {
                 release_package_url
             };
@@ -363,7 +384,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
                 FileDownloader::new_with_timeout(Some(logger.clone()), Duration::from_secs(60));
             let start_time = std::time::Instant::now();
             let download_result = file_downloader
-                .download_file(release_package_url, image_path, Some(hash.to_owned()))
+                .download_file(release_package_url, &image_path, Some(hash.to_owned()))
                 .await;
             let duration = start_time.elapsed();
 
@@ -372,7 +393,17 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
                 error = UpgradeError::from(e);
             } else {
                 info!(logger, "{} processed in {:?}", req, duration);
-                return Ok(());
+
+                if use_proxy {
+                    return std::fs::rename(&image_path, self.image_path()).map_err(|e| {
+                        UpgradeError::IoError(
+                            "Could not move the proxy downloaded image into place".to_string(),
+                            e,
+                        )
+                    });
+                } else {
+                    return Ok(());
+                }
             }
         }
 
