@@ -25,6 +25,11 @@ use std::{collections::BTreeMap, convert::TryFrom};
 
 pub const MAX_CANISTER_HTTP_PAYLOAD_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
 
+/// The total [`CountBytes`] up to which the payload builder delivers a flexible outcall's
+/// responses, so that the whole group still fits into a payload once encoded.
+pub const MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE: usize =
+    MAX_CANISTER_HTTP_PAYLOAD_SIZE - 64 * 1024;
+
 /// Payload that contains CanisterHttpPayload messages.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]

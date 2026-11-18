@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - In queries made through `/instances/<instance_id>/read/query`, the NNS delegation in the data certificate available
   to the canister only contains the canister ranges at `/subnet/<subnet_id>/canister_ranges` (the `/canister_ranges`
   subtree is pruned), as on the `/api/v2` query endpoint.
+- A flexible HTTP outcall delivers responses up to 2,031,616 bytes (2 MiB − 64 KiB) in total rather than 2 MiB:
+  it delivers fewer than `max_responses` responses where more would exceed that, and fails with `responses_too_large`
+  once the smallest responses that would have to be delivered exceed it.
 
 ### Fixed
 - Requests to the bitcoin and dogecoin adapters (fetching blocks and sending transactions) time out after 1 s instead of 50 ms,
