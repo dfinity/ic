@@ -11,8 +11,24 @@ register_toolchains("@rules_buf_toolchains//:all")
 
 # General Bazel helpers
 bazel_dep(name = "bazel_skylib", version = "1.9.2")
-bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
+bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 bazel_dep(name = "rules_shell", version = "0.10.0")
+
+# Keep aspect_bazel_lib from registering toolchains for the toolchain types it
+# only aliases from bazel_lib and tar.bzl, so that these types resolve to the
+# toolchains of the module that defines them; see the patch header for details.
+# Bazel would also apply this MODULE.bazel patch to the older versions that
+# other modules ask for, so the override pins the version the patch is made for
+# (keep it in line with the bazel_dep above). The pin also overrides newer
+# versions that other modules ask for, without a warning. So when upgrading a
+# module that depends on aspect_bazel_lib, check which version it asks for,
+# e.g. with `bazel mod explain aspect_bazel_lib --verbose`.
+single_version_override(
+    module_name = "aspect_bazel_lib",
+    patch_strip = 1,
+    patches = ["//bazel:aspect_bazel_lib_aliased_toolchains.patch"],
+    version = "2.22.5",
+)
 
 bazel_dep(name = "buildifier_prebuilt", version = "10.2.0", dev_dependency = True)
 
