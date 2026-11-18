@@ -27,7 +27,7 @@ use ic_subnet_tools::{
     validation::validate_artifacts,
 };
 use ic_types::{
-    Height,
+    Height, Time,
     consensus::{CatchUpPackage, HasHeight},
 };
 use slog::{Logger, info};
@@ -36,6 +36,7 @@ use url::Url;
 use std::{
     net::{IpAddr, Ipv6Addr},
     path::{Path, PathBuf},
+    sync::OnceLock,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -701,19 +702,9 @@ impl Step for CheckRoutingTableStep {
     }
 }
 
-/// The height and state hash of the merged state assembled by
-/// [MergeStatesStep]: the height follows from the heights of the CUPs the two
-/// subnets halted at, and the state hash is the root hash of the manifest of
-/// the merged state, which has to match the expected one.
-fn merged_state_height_and_hash(
-    layout: &Layout,
-    source_subnet_id: SubnetId,
-    destination_subnet_id: SubnetId,
-) -> RecoveryResult<(Height, String)> {
-    let source_height = read_cup_file(&layout.halting_cup_file(source_subnet_id))?.height();
-    let destination_height =
-        read_cup_file(&layout.halting_cup_file(destination_subnet_id))?.height();
-
+/// The state hash of the merged state assembled by [MergeStatesStep]: the root
+/// hash of its manifest, which has to match the expected one.
+fn merged_state_hash(layout: &Layout) -> RecoveryResult<String> {
     let manifest_path = layout.merged_state_manifest_file();
     let state_hash = state_tool_helper::verify_manifest(&manifest_path)
         .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
@@ -730,19 +721,41 @@ fn merged_state_height_and_hash(
             expected_manifest_path.display(),
         )));
     }
+    Ok(state_hash)
+}
 
-    Ok((
-        merged_recovery_height(source_height, destination_height),
-        state_hash,
-    ))
+/// Checks that `time`, which the recovery CUP is stamped with, is past each of
+/// `halting_times`, the times of the CUPs the given subnets halted at.
+fn check_time_is_past_halting_times(
+    time: SystemTime,
+    halting_times: &[(SubnetId, Time)],
+) -> RecoveryResult<()> {
+    let time_nanos = time
+        .duration_since(UNIX_EPOCH)
+        .map_err(|err| {
+            RecoveryError::UnexpectedError(format!(
+                "The clock of this machine is before the Unix epoch: {err}"
+            ))
+        })?
+        .as_nanos();
+    for (subnet_id, halting_time) in halting_times {
+        if time_nanos <= u128::from(halting_time.as_nanos_since_unix_epoch()) {
+            return Err(RecoveryError::ValidationFailed(format!(
+                "The time the recovery CUP would be stamped with ({time_nanos} ns since the \
+                 Unix epoch) is not past the time {halting_time} of the CUP subnet {subnet_id} \
+                 halted at. Check the clock of this machine and retry.",
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Proposes the recovery CUP of the destination subnet at the merged state
 /// assembled by [MergeStatesStep].
 ///
-/// Its height and state hash are read when the step is executed rather than
-/// when it is created: a step that fails to be created is skipped, and the tool
-/// would then carry on without a recovery CUP.
+/// Its height and state hash are read when the step is described or executed
+/// rather than when it is created: a step that fails to be created is skipped,
+/// and the tool would then carry on without a recovery CUP.
 pub(crate) struct ProposeRecoveryCupStep {
     pub(crate) source_subnet_id: SubnetId,
     pub(crate) destination_subnet_id: SubnetId,
@@ -750,17 +763,35 @@ pub(crate) struct ProposeRecoveryCupStep {
     pub(crate) registry_helper: RegistryHelper,
     pub(crate) layout: Layout,
     pub(crate) logger: Logger,
+    /// The height and state hash of the merged state, once they have been read
+    /// successfully, so that the manifests are verified only once and the
+    /// command that is run is the one that was described.
+    pub(crate) merged_state: OnceLock<(Height, String)>,
 }
 
 impl ProposeRecoveryCupStep {
+    /// The height and state hash of the merged state: the height follows from
+    /// the heights of the CUPs the two subnets halted at, as in
+    /// [MergeStatesStep].
+    fn merged_state_height_and_hash(&self) -> RecoveryResult<(Height, String)> {
+        if let Some(merged_state) = self.merged_state.get() {
+            return Ok(merged_state.clone());
+        }
+        let source_height =
+            read_cup_file(&self.layout.halting_cup_file(self.source_subnet_id))?.height();
+        let destination_height =
+            read_cup_file(&self.layout.halting_cup_file(self.destination_subnet_id))?.height();
+        let merged_state = (
+            merged_recovery_height(source_height, destination_height),
+            merged_state_hash(&self.layout)?,
+        );
+        Ok(self.merged_state.get_or_init(|| merged_state).clone())
+    }
+
     /// The proposal for the recovery CUP at the merged state, stamped with
     /// `time`.
     fn admin_step(&self, time: SystemTime) -> RecoveryResult<AdminStep> {
-        let (height, state_hash) = merged_state_height_and_hash(
-            &self.layout,
-            self.source_subnet_id,
-            self.destination_subnet_id,
-        )?;
+        let (height, state_hash) = self.merged_state_height_and_hash()?;
 
         Ok(AdminStep {
             logger: self.logger.clone(),
@@ -788,25 +819,14 @@ impl ProposeRecoveryCupStep {
     /// Both subnets halted well before this step runs, so this only fails if
     /// the clock of this machine is behind the clocks of the subnets.
     fn check_time_is_past_halting_cups(&self, time: SystemTime) -> RecoveryResult<()> {
-        let time_nanos = time
-            .duration_since(UNIX_EPOCH)
-            .map_err(|err| {
-                RecoveryError::UnexpectedError(format!(
-                    "The clock of this machine is before the Unix epoch: {err}"
-                ))
-            })?
-            .as_nanos();
-        for subnet_id in [self.source_subnet_id, self.destination_subnet_id] {
-            let batch_time = get_batch_time_from_cup(&self.layout.halting_cup_file(subnet_id))?;
-            if time_nanos <= u128::from(batch_time.as_nanos_since_unix_epoch()) {
-                return Err(RecoveryError::ValidationFailed(format!(
-                    "The time the recovery CUP would be stamped with ({time_nanos} ns since the \
-                     Unix epoch) is not past the time {batch_time} of the CUP subnet {subnet_id} \
-                     halted at. Check the clock of this machine and retry.",
-                )));
-            }
-        }
-        Ok(())
+        let halting_times = [self.source_subnet_id, self.destination_subnet_id]
+            .into_iter()
+            .map(|subnet_id| {
+                get_batch_time_from_cup(&self.layout.halting_cup_file(subnet_id))
+                    .map(|halting_time| (subnet_id, halting_time))
+            })
+            .collect::<RecoveryResult<Vec<_>>>()?;
+        check_time_is_past_halting_times(time, &halting_times)
     }
 }
 
@@ -820,9 +840,9 @@ impl Step for ProposeRecoveryCupStep {
             self.layout.merged_state_manifest_file().display(),
         );
         // Like the description of any other proposal, this shows the command
-        // that is about to run. The merged state may not be assembled yet
-        // when the step is described (see above), and the timestamp is taken
-        // anew when the step is executed.
+        // that is about to run. A step is described as soon as it is created,
+        // which may be before the merged state is assembled, and the timestamp
+        // is taken anew when the step is executed.
         match self.admin_step(SystemTime::now()) {
             Ok(step) => format!(
                 "{summary} The command, up to the timestamp, which is taken when it is run: {}",

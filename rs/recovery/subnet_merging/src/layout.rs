@@ -106,6 +106,12 @@ impl Layout {
     }
 
     /// The manifest of the merged state.
+    /// A layout rooted at `root`, none of whose directories are created.
+    #[cfg(test)]
+    pub(crate) fn for_test(root: PathBuf) -> Self {
+        Self { root }
+    }
+
     pub(crate) fn merged_state_manifest_file(&self) -> PathBuf {
         self.root.join("merged.manifest")
     }
