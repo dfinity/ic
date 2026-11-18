@@ -323,11 +323,16 @@ apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
 # Package set based on an Ubuntu resolute snapshot, used by the system-test
 # runtime image (see //rs/tests:ubuntu_test_runtime_image_src). The `apt`
 # extension resolves the packages below against the snapshot's package indices
-# each time it is evaluated; the snapshot timestamp in `uris` pins the result.
-# The extension records the indices' checksums only in MODULE.bazel.lock, which
-# we don't use (see `--lockfile_mode` in bazel/conf/.bazelrc.build), so every
-# new Bazel server that needs `@resolute` downloads and parses them again.
+# each time it is evaluated, so the result depends on both the snapshot
+# timestamp in `uris` and the rules_distroless version (its resolver). The
+# extension records the indices' checksums only in MODULE.bazel.lock, which we
+# don't use (see `--lockfile_mode` in bazel/conf/.bazelrc.build), so every new
+# Bazel server that needs `@resolute` downloads and parses them again.
 # To update the packages, bump the timestamp in both `apt.sources_list` calls.
+# No checked-in file records the resolved packages, so when bumping the
+# timestamp or rules_distroless, compare the `lock_content` that
+# `bazel mod show_repo @resolute` prints before and after: the packages, their
+# versions and sha256s, and each package's `depends_on` list.
 apt.sources_list(
     architectures = ["amd64"],
     components = [
@@ -350,9 +355,10 @@ apt.sources_list(
 )
 
 # `@resolute//<package>/<arch>` targets are only generated for the packages
-# listed here, not for their dependencies. A listed virtual package gets the
-# name of the package that provides it (e.g. `coreutils` resolves to
-# `coreutils-from-uutils`, `libvirt0` to `libvirt0-hwe`).
+# listed here, not for their dependencies. Unlike apt, rules_distroless prefers
+# a package that `Provides:` a listed name over a real package of that name,
+# and the target gets the provider's name: `coreutils` resolves to
+# `coreutils-from-uutils` and `libvirt0` to `libvirt0-hwe`.
 apt.install(
     dependency_set = "resolute",
     packages = [
