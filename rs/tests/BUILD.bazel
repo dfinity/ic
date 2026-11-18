@@ -37,8 +37,8 @@ download_file(
     url = "https://download.dfinity.systems/farm/prometheus-vm/%s/x86_64-linux/prometheus-vm.img.zst" % PROMETHEUS_VM_IMG_SHA256,
 )
 
-# Packages we install into the image; see base image definition and its
-# 'manifest = ...' field for more information
+# Packages we install into the image; see the `resolute` package set in
+# MODULE.bazel for more information
 PACKAGES = [
     "@resolute//bash/amd64",
     "@resolute//ca-certificates/amd64",
