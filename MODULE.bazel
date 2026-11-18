@@ -59,7 +59,7 @@ archive_override(
 # Misc tools
 
 bazel_dep(name = "pigz", version = "2.8.bcr.3")  # (parallel) gzip
-bazel_dep(name = "zstd", version = "1.5.7.bcr.1")  # zstd can change format across versions
+bazel_dep(name = "zstd", version = "1.5.7.bcr.3")  # zstd can change format across versions
 
 # QEMU, for the local system test backend. We only use the prebuilt (hermetic)
 # qemu binaries; calling qemu is handled by the system test driver.
