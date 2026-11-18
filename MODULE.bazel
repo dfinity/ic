@@ -22,7 +22,7 @@ bazel_dep(name = "platforms", version = "1.1.0")
 
 # Hermetic clang/lld-based CC toolchain
 # (https://github.com/hermeticbuild/hermetic-llvm)
-bazel_dep(name = "llvm", version = "0.8.16")
+bazel_dep(name = "llvm", version = "0.8.27")
 
 # Keep clang from warning that the toolchain's own --unwindlib=none is unused
 # on rustc links (surfaced by rustc's linker_messages lint); see the patch
