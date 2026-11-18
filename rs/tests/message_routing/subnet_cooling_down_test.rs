@@ -1,7 +1,7 @@
 /* tag::catalog[]
-Title:: Draining and halting a subnet that is "cooling down", and downloading,
-validating and merging the states of the subnets to merge, with the subnet
-merging tool.
+Title:: Draining and halting a subnet that is "cooling down", downloading,
+validating and merging the states of the subnets to merge, and rerouting the
+canister ID ranges of the subnet, with the subnet merging tool.
 
 Goal:: Verify that a subnet holding what a subnet merge has to drain violates
 the individual terms of the "merge readiness" condition, i.e. that the
@@ -11,10 +11,11 @@ is one that the subnet does not satisfy to begin with; and that once the tool
 subnet rejects ingress messages and query calls, the tool eventually finds the
 condition to hold, and it then halts the subnet and the subnet it is told to
 merge it into at their next CUP, downloads and validates the state each halted
-at, and assembles the merged state from them. The cooling down subnet also
-holds calls waiting for responses that never arrive: they are not drained, but
-make it possible to assert that a subnet merge populates the ingress history
-properly.
+at, assembles the merged state from them, and has the canister ID ranges of
+the subnet rerouted to the subnet it is merged into. The cooling down subnet
+also holds calls waiting for responses that never arrive: they are not drained,
+but make it possible to assert that a subnet merge populates the ingress
+history properly.
 
 The subnet that is cooled down, i.e. the one that would be merged away, is
 called `S`, and the Application subnet the tool is told to merge `S` into is
@@ -118,14 +119,20 @@ Runbook::
    Neither subnet nor the registry is touched.
 16. After `MergeStates`: check that the merged state is a single checkpoint that
    holds exactly the canisters of the two downloaded checkpoints of `S` and `D`.
+17. The following steps of the tool are executed: `MergeSubnets`, which submits
+   a proposal rerouting the canister ID ranges of `S` to `D`, and
+   `CheckRegistryForRoutingTableEntry`, which waits until the registry routes
+   no canister ID range to `S` anymore and records the registry version at
+   which it read this.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
 violated before `S` starts cooling down; `S` then rejects ingress messages and
 query calls and becomes "merge ready", and the loops of `UDS` and `UOS` of step
 2 are stalled; the tool then halts `S` and `D` at their next CUP, the states it
-downloads from them pass validation, and the merged state it assembles from
-them holds exactly the canisters of both.
+downloads from them pass validation, the merged state it assembles from them
+holds exactly the canisters of both, and the registry ends up routing no
+canister ID range to `S`.
 
 end::catalog[] */
 
@@ -593,7 +600,7 @@ async fn prepare<'a>(
     }
 }
 
-/// Steps 8 to 16: hand the scenario over to the subnet merging tool, and make
+/// Steps 8 to 17: hand the scenario over to the subnet merging tool, and make
 /// the checks of the steps in between its steps.
 ///
 /// Plain synchronous code, like `rs/tests/consensus/subnet_splitting_test.rs`:
@@ -698,14 +705,25 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     );
     check_merged_state(env, context);
 
+    info!(
+        logger,
+        "Step 17: Rerouting the canister ID ranges of subnet S to subnet D"
+    );
+    exec_next_step(StepType::MergeSubnets);
+    exec_next_step(StepType::CheckRegistryForRoutingTableEntry);
+    info!(
+        logger,
+        "Step 17 done: the registry routes no canister ID range to subnet S anymore"
+    );
+
     if let Some((step_type, _)) = merging.next() {
         panic!("unexpected step {step_type:?}");
     }
 
     info!(
         logger,
-        "Subnet S has been drained and halted, and the states of S and D downloaded, validated \
-         and merged, by the subnet merging tool"
+        "Subnet S has been drained and halted, the states of S and D downloaded, validated and \
+         merged, and the canister ID ranges of S rerouted to D, by the subnet merging tool"
     );
 }
 

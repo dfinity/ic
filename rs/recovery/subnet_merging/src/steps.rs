@@ -635,3 +635,63 @@ fn remove_file_if_exists(path: &Path) -> RecoveryResult<()> {
         _ => Ok(()),
     }
 }
+
+/// Waits until the routing table no longer assigns any canister ID range to the
+/// subnet that was merged away, and persists the registry version it was read
+/// at (not necessarily the version that rerouted the ranges), which is what
+/// every other subnet has to reach before that subnet may be deleted.
+pub(crate) struct CheckRoutingTableStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) destination_subnet_id: SubnetId,
+    pub(crate) registry_helper: RegistryHelper,
+    pub(crate) layout: Layout,
+    pub(crate) timeout: Duration,
+    pub(crate) poll_interval: Duration,
+    pub(crate) logger: Logger,
+}
+
+impl Step for CheckRoutingTableStep {
+    fn descr(&self) -> String {
+        format!(
+            "Wait until the routing table assigns no canister id range to subnet {} anymore, and \
+             record the registry version at which this was read.",
+            self.source_subnet_id,
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let source_subnet_id = self.source_subnet_id;
+        let (merge_registry_version, routing_table) = wait_for(
+            &format!("subnet {source_subnet_id} hosts no canister id range anymore"),
+            self.timeout,
+            self.poll_interval,
+            &self.logger,
+            || {
+                let (registry_version, routing_table) = self.registry_helper.get_routing_table()?;
+                let Some(routing_table) = routing_table else {
+                    return Err(RecoveryError::RegistryError(format!(
+                        "No routing table at registry version {registry_version}"
+                    )));
+                };
+                if !routing_table.ranges(source_subnet_id).is_empty() {
+                    return Err(RecoveryError::RegistryError(format!(
+                        "Subnet {source_subnet_id} still hosts canister id ranges at registry \
+                         version {registry_version}"
+                    )));
+                }
+                Ok((registry_version, routing_table))
+            },
+        )?;
+
+        info!(
+            self.logger,
+            "Subnet {source_subnet_id} hosts no canister id range anymore at registry version \
+             {merge_registry_version}; subnet {} hosts: {:#?}",
+            self.destination_subnet_id,
+            routing_table.ranges(self.destination_subnet_id),
+        );
+
+        self.layout
+            .write_merge_registry_version(source_subnet_id, merge_registry_version.get())
+    }
+}
