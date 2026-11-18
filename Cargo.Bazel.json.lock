@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "c1d951b4f8323630557b60e0186d8986ff35457dab32da0d55d434e1d2a93555",
+  "checksum": "0d1133cf9cdaa133cffc8fe377b25c8cafa704d7df31aa06ff0c526be5e73a75",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -17875,7 +17875,7 @@
             "target": "pin_project_lite"
           },
           {
-            "id": "ping 0.5.2",
+            "id": "ping 0.5.0",
             "target": "ping"
           },
           {
@@ -40976,7 +40976,7 @@
       ],
       "version": "0.2.17"
     },
-    "ping 0.5.2": {
+    "ping 0.5.0": {
       "common_attrs": {
         "deps": [
           {
@@ -41004,8 +41004,8 @@
       "package_url": "https://github.com/aisk/rust-ping",
       "repository": {
         "Http": {
-          "sha256": "122ee1f5a6843bec84fcbd5c6ba3622115337a6b8965b93a61aad347648f4e8d",
-          "url": "https://static.crates.io/crates/ping/0.5.2/download"
+          "sha256": "985c8af0584bf35ecfb95a65b74a457782966e1ab8f2c94c01697a36432a5814",
+          "url": "https://static.crates.io/crates/ping/0.5.0/download"
         }
       },
       "targets": [
@@ -41016,7 +41016,7 @@
           }
         }
       ],
-      "version": "0.5.2"
+      "version": "0.5.0"
     },
     "piper 0.2.5": {
       "common_attrs": {
@@ -66298,7 +66298,7 @@
     "paste 1.0.15",
     "pem 3.0.6",
     "pin-project-lite 0.2.17",
-    "ping 0.5.2",
+    "ping 0.5.0",
     "pkcs8 0.10.2",
     "pprof 0.15.0",
     "predicates 3.1.4",
