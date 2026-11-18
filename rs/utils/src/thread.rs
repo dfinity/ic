@@ -3,32 +3,45 @@
 /// function application order is non-deterministic and depends on the available
 /// threads in the given thread-pool.
 ///
-/// Each thread takes the next item as soon as it is done with its previous one,
-/// so that a few slow items don't leave the other threads idle. Items are taken
-/// in input order, so callers can put the slowest ones first.
+/// Each thread takes the next `chunk_size` consecutive items as soon as it is
+/// done with its previous ones, so that a few slow items don't leave the other
+/// threads idle. Chunks are taken in input order, so callers can put the slowest
+/// items first (with a `chunk_size` of 1).
 ///
-/// Taking an item costs a lock acquisition: about 0.2 µs per item with 16 busy
-/// threads. That is negligible for items doing file I/O or (de)serialization,
-/// but not for µs-scale items, which are better grouped into batches.
-pub fn parallel_map<S, T, I, F>(thread_pool: &mut scoped_threadpool::Pool, items: I, f: F) -> Vec<T>
+/// Choose `chunk_size` per use: 1 for items that take a while (file I/O,
+/// (de)serialization); more for µs-scale items, as taking a chunk costs a lock
+/// acquisition (about 0.2 µs with 16 busy threads), or for runs of items that
+/// contend if processed at the same time (e.g. creating files in the same
+/// directory, which serializes on the directory's lock).
+/// A `chunk_size` of 0 is treated as 1.
+pub fn parallel_map<S, T, I, F>(
+    thread_pool: &mut scoped_threadpool::Pool,
+    items: I,
+    chunk_size: usize,
+    f: F,
+) -> Vec<T>
 where
     S: Send,
     T: Send,
     I: Iterator<Item = S>,
     F: Fn(&S) -> T + Send + Copy,
 {
+    let chunk_size = chunk_size.max(1);
     let mut items: Vec<(S, Option<T>)> = items.map(|i| (i, None)).collect();
-    let threads = (thread_pool.thread_count() as usize).min(items.len());
-    let next = std::sync::Mutex::new(items.iter_mut());
+    let chunks = items.len().div_ceil(chunk_size);
+    let threads = (thread_pool.thread_count() as usize).min(chunks);
+    let next = std::sync::Mutex::new(items.chunks_mut(chunk_size));
     thread_pool.scoped(|scope| {
         for _ in 0..threads {
             let next = &next;
             scope.execute(move || {
                 loop {
                     // A statement of its own, so that the lock is released before `f` runs.
-                    let item = next.lock().unwrap().next();
-                    let Some(item) = item else { break };
-                    item.1.replace(f(&item.0));
+                    let chunk = next.lock().unwrap().next();
+                    let Some(chunk) = chunk else { break };
+                    for item in chunk {
+                        item.1.replace(f(&item.0));
+                    }
                 }
             });
         }
@@ -43,6 +56,7 @@ where
 pub fn maybe_parallel_map<S, T, I, F>(
     thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
     items: I,
+    chunk_size: usize,
     f: F,
 ) -> Vec<T>
 where
@@ -52,7 +66,7 @@ where
     F: Fn(&S) -> T + Send + Copy,
 {
     match thread_pool {
-        Some(thread_pool) => parallel_map(thread_pool, items, f),
+        Some(thread_pool) => parallel_map(thread_pool, items, chunk_size, f),
         None => items.map(|x| f(&x)).collect::<Vec<T>>(),
     }
 }
@@ -69,7 +83,7 @@ mod tests {
     fn test_parallel_map() {
         let items: Vec<usize> = (1..1000).collect();
         let expected: Vec<usize> = items.iter().map(|x| x * 2).collect();
-        let actual = parallel_map(&mut thread_pool(), items.into_iter(), |x| x * 2);
+        let actual = parallel_map(&mut thread_pool(), items.into_iter(), 1, |x| x * 2);
         assert_eq!(expected, actual);
     }
 
@@ -77,7 +91,7 @@ mod tests {
     fn test_parallel_map_empty() {
         let items: Vec<usize> = Vec::new();
         let expected: Vec<usize> = items.clone();
-        let actual = parallel_map(&mut thread_pool(), items.into_iter(), |x| x * 2);
+        let actual = parallel_map(&mut thread_pool(), items.into_iter(), 1, |x| x * 2);
         assert_eq!(expected, actual);
     }
 
@@ -85,8 +99,38 @@ mod tests {
     fn test_parallel_map_single() {
         let items: Vec<usize> = vec![1];
         let expected: Vec<usize> = vec![2];
-        let actual = parallel_map(&mut thread_pool(), items.into_iter(), |x| x * 2);
+        let actual = parallel_map(&mut thread_pool(), items.into_iter(), 1, |x| x * 2);
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn test_parallel_map_chunk_size_zero_is_one() {
+        let items: Vec<usize> = (1..100).collect();
+        let expected: Vec<usize> = items.iter().map(|x| x * 2).collect();
+        let actual = parallel_map(&mut thread_pool(), items.into_iter(), 0, |x| x * 2);
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn test_parallel_map_chunks_run_on_one_thread() {
+        use std::sync::Mutex;
+
+        // 95 items in chunks of 10: each chunk's items, the last chunk's 5 included, run on the
+        // thread that took the chunk.
+        let items: Vec<usize> = (0..95).collect();
+        let threads = Mutex::new(vec![None; items.len()]);
+        let threads_ref = &threads;
+        let actual = parallel_map(&mut thread_pool(), items.iter().copied(), 10, |&i| {
+            threads_ref.lock().unwrap()[i] = Some(std::thread::current().id());
+            i * 2
+        });
+        assert_eq!(items.iter().map(|i| i * 2).collect::<Vec<_>>(), actual);
+        for chunk in threads.into_inner().unwrap().chunks(10) {
+            assert!(
+                chunk.iter().all(|t| t.is_some() && *t == chunk[0]),
+                "{chunk:?}"
+            );
+        }
     }
 
     #[test]
@@ -99,7 +143,7 @@ mod tests {
         let items: Vec<usize> = (0..40).collect();
         let done = AtomicUsize::new(0);
         let done = &done;
-        let actual = parallel_map(&mut thread_pool(), items.iter().copied(), |&i| {
+        let actual = parallel_map(&mut thread_pool(), items.iter().copied(), 1, |&i| {
             if i == 0 {
                 let deadline = Instant::now() + Duration::from_secs(10);
                 while done.load(Ordering::SeqCst) < 39 {

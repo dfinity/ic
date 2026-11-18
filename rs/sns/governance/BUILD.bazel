@@ -94,9 +94,7 @@ DEPENDENCIES = [
 
 BUILD_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/types/base_types",
     "@crate_index//:build-info-build",
-    "@crate_index//:prost-build",
 ]
 
 DEV_DEPENDENCIES = [
