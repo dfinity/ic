@@ -1,11 +1,13 @@
 use crate::manifest::{
     BaseManifestInfo, ChunkAction, ChunkValidationError, DEFAULT_CHUNK_SIZE, DiffScript,
-    FileWithSize, MAX_FILE_SIZE_TO_GROUP_V3, MAX_FILE_SIZE_TO_GROUP_V4, ManifestMetrics,
-    ManifestValidationError, RehashManifest, StateSyncVersion, build_chunk_table_parallel,
-    build_file_group_chunks, build_meta_manifest, compute_manifest, diff_manifest,
-    file_chunk_range, files_with_same_inodes, files_with_sizes, filter_out_zero_chunks,
-    hash::ManifestHash, hash_plan, manifest_hash, manifest_hash_v1, manifest_hash_v2,
-    meta_manifest_hash, validate_chunk, validate_manifest, validate_manifest_internal_consistency,
+    FileWithSize, MANIFEST_SPAN_CHUNKS, MAX_FILE_SIZE_TO_GROUP_V3, MAX_FILE_SIZE_TO_GROUP_V4,
+    ManifestMetrics, ManifestValidationError, RehashManifest, StateSyncVersion,
+    build_chunk_table_parallel, build_file_group_chunks, build_meta_manifest, compute_manifest,
+    diff_manifest, file_chunk_range, files_with_same_inodes, files_with_sizes,
+    filter_out_zero_chunks,
+    hash::{ManifestHash, chunk_hasher},
+    hash_plan, manifest_hash, manifest_hash_v1, manifest_hash_v2, meta_manifest_hash,
+    validate_chunk, validate_manifest, validate_manifest_internal_consistency,
     validate_meta_manifest, validate_sub_manifest,
 };
 use crate::state_sync::types::{
@@ -328,6 +330,59 @@ fn test_simple_manifest_computation() {
     for num_threads in 1..32_u32 {
         test_computation_with_num_threads(num_threads)
     }
+}
+
+#[test]
+fn test_manifest_computation_hashes_files_over_several_spans() {
+    let metrics_registry = MetricsRegistry::new();
+    let manifest_metrics = ManifestMetrics::new(&metrics_registry);
+    let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+    let root = dir.path();
+
+    // Files of 3, 2 and 1 spans, the first two ending in a partial chunk.
+    const CHUNK_SIZE: u32 = 512;
+    let span_bytes = MANIFEST_SPAN_CHUNKS * CHUNK_SIZE as usize;
+    let files = [
+        ("a.bin", 2 * span_bytes + 1000),
+        ("b.bin", span_bytes + 7),
+        ("c.bin", 100),
+    ];
+    for (i, (name, len)) in files.iter().enumerate() {
+        let data: Vec<u8> = (0..*len).map(|j| (j * 31 + i) as u8).collect();
+        fs::write(root.join(name), data).expect("failed to create file");
+    }
+
+    let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
+    let manifest = compute_manifest(
+        &mut thread_pool,
+        &manifest_metrics,
+        &no_op_logger(),
+        CURRENT_STATE_SYNC_VERSION,
+        &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
+        CHUNK_SIZE,
+        None,
+        RehashManifest::No,
+    )
+    .expect("failed to compute manifest");
+
+    let mut num_chunks = 0;
+    for (file_index, file_info) in manifest.file_table.iter().enumerate() {
+        let data = fs::read(root.join(&file_info.relative_path)).expect("failed to read file");
+        let chunks = &manifest.chunk_table[file_chunk_range(&manifest.chunk_table, file_index)];
+        for chunk_info in chunks {
+            let start = chunk_info.offset as usize;
+            let mut hasher = chunk_hasher();
+            hasher.write(&data[start..start + chunk_info.size_bytes as usize]);
+            assert_eq!(chunk_info.hash, hasher.finish());
+            num_chunks += 1;
+        }
+    }
+    let expected_chunks: usize = files
+        .iter()
+        .map(|(_, len)| len.div_ceil(CHUNK_SIZE as usize))
+        .sum();
+    assert_eq!(num_chunks, expected_chunks);
+    assert_eq!(Ok(()), validate_manifest_internal_consistency(&manifest));
 }
 
 #[test]
