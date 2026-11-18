@@ -1,4 +1,6 @@
+mod builder;
 pub mod hash;
+pub mod merge;
 pub mod split;
 
 #[cfg(test)]
