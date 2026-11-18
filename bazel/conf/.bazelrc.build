@@ -9,34 +9,20 @@ common --lockfile_mode=off
 common --experimental_remote_downloader_local_fallback
 common --experimental_remote_downloader_propagate_credentials
 
-# Resolve the proto toolchain to the prebuilt protoc that protobuf downloads
-# from its GitHub release for the exec platform, instead of to a protoc compiled
-# from C++ source. proto_library uses it, and so does everything that runs
-# protoc through //bazel:protoc (prost/tonic build scripts, generators and
-# generated-file checks). Proto toolchain resolution itself is on by default
-# since Bazel 9.
-build --@protobuf//bazel/toolchains:prefer_prebuilt_protoc
-
-# protobuf 33's upb bootstrap tools (protoc-gen-upb*, protoc_minimal, ...) use
-# __start_/__stop_ linker-array sections (e.g. linkarr_upb_AllExts). lld (used
-# by the hermetic toolchain on Linux) garbage-collects these under its default
-# --start-stop-gc together with opt-mode --gc-sections, which either breaks
-# the link with "undefined symbol: __start_linkarr_upb_AllExts" or silently
-# empties upb's extension registry. -z nostart-stop-gc disables only that:
-# sections referenced via __start_/__stop_ symbols are kept, while ordinary
-# --gc-sections stays in effect. Scoped to the exec config (these are
-# build-time `[for tool]` targets) and to Linux via
-# --enable_platform_specific_config (the macOS linker rejects this flag).
-# The proto toolchain and //bazel:protoc use a prebuilt protoc (see above), but
-# these tools are still built for protobuf 33's Python runtime, which
-# py_proto_library adds (e.g. in //ci/githubstats): it generates its
-# well-known-type modules with a protoc compiled from C++ source.
-common --enable_platform_specific_config
-build:linux --host_linkopt=-Wl,-z,nostart-stop-gc
+# rules_android, which protobuf depends on through rules_kotlin, registers
+# Android SDK toolchains from its @androidsdk repository, so Bazel fetches that
+# repository whenever it resolves toolchains (build, test, run, cquery, ...).
+# Its repository rule uses the Android SDK that ANDROID_HOME points to, and
+# fails if that SDK has no platforms or its newest build-tools are older than
+# 35.0.0. With ANDROID_HOME empty it generates a stub instead, which is all we
+# need: nothing here builds Android code.
+common --repo_env=ANDROID_HOME=
 
 # Pin the glibc version the hermetic toolchain targets to 2.31 (see
 # //:linux-glibc-2.31). Both the target and the exec platform are pinned so
-# host tools and target binaries agree on the glibc floor.
+# host tools and target binaries agree on the glibc floor. Scoped to Linux via
+# --enable_platform_specific_config.
+common --enable_platform_specific_config
 build:linux --host_platform=//:linux-glibc-2.31
 build:linux --platforms=//:linux-glibc-2.31
 

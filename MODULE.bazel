@@ -115,11 +115,32 @@ rules_python_config.explicit_init_py(default = True)
 # Protobuf dependencies
 
 # The proto toolchain and //bazel:protoc use the protoc that this module
-# downloads prebuilt from its GitHub release, see prefer_prebuilt_protoc in
-# bazel/conf/.bazelrc.build.
+# downloads prebuilt from its GitHub release (the default of
+# @protobuf//bazel/flags:prefer_prebuilt_protoc), see bazel/protoc.bzl.
+#
+# //ci/githubstats runs the Python code that py_proto_library generates with
+# this module's protoc on the `protobuf` package from requirements.txt. The
+# generated modules refuse to load on a runtime older than the version they were
+# generated for, so keep that package at least at this release's Python version
+# (7.36.2 for 36.2).
 bazel_dep(
     name = "protobuf",
-    version = "33.4",
+    version = "36.2",
+)
+
+# Keep `bazel mod` commands working with rules_rust: see the patch header. The
+# patch only applies to this version, so the override pins it. The pin silently
+# beats higher protobuf versions that other modules require: when upgrading
+# Bazel or modules, check the "was <version>" notes of
+#   bazel mod all_paths protobuf --verbose --include_builtin
+# for each module's request. --include_builtin adds Bazel's own (bazel_tools),
+# and `bazel mod explain` would leave out some, such as rules_android's. Drop
+# the override together with the patch.
+single_version_override(
+    module_name = "protobuf",
+    patch_strip = 1,
+    patches = ["//bazel:protobuf_crate_dev_dependency.patch"],
+    version = "36.2",
 )
 
 # protobuf linter

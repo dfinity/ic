@@ -16,7 +16,7 @@ def _current_protoc_impl(ctx):
     # which compiles protoc from C++ source.
     if not protoc.is_source:
         fail(("{} resolved {}, which is compiled from C++ source. Is " +
-              "--@protobuf//bazel/toolchains:prefer_prebuilt_protoc set?").format(ctx.label, protoc.owner))
+              "--@protobuf//bazel/flags:prefer_prebuilt_protoc set to false?").format(ctx.label, protoc.owner))
 
     return [DefaultInfo(
         files = depset([protoc]),
