@@ -3,9 +3,7 @@
 //! networking component, and ensuring that the resulting responses are signed
 //! and eventually make it into consensus.
 use crate::metrics::CanisterHttpPoolManagerMetrics;
-use crate::payload_builder::utils::{
-    check_content_hash_length, check_content_size_within_limit, check_spent_within_limit,
-};
+use crate::payload_builder::utils::{check_metadata_matches_content, check_receipt_bounds};
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
@@ -365,11 +363,7 @@ impl CanisterHttpPoolManagerImpl {
                         payment_receipt,
                     };
 
-                    if let Err(err) = check_content_size_within_limit(
-                        &receipt_share.metadata,
-                        response.id,
-                        context,
-                    ) {
+                    if let Err(err) = check_receipt_bounds(&receipt_share, context) {
                         warn!(
                             self.log,
                             "Refusing to sign our own oversized response: {err:?}"
@@ -477,33 +471,8 @@ impl CanisterHttpPoolManagerImpl {
                     },
                 };
 
-                // Invalidate shares whose claimed spent cycles exceed what a
-                // single replica is allowed to consume.
-                if let Err(err) = check_spent_within_limit(&share.content.payment_receipt, context)
-                {
-                    return Some(CanisterHttpChangeAction::HandleInvalid(
-                        share.clone(),
-                        format!("{err:?}"),
-                    ));
-                }
-
-                // Invalidate shares claiming a larger response than an honest replica could have
-                // produced: a success exceeding `max_response_bytes`, or a reject exceeding the
-                // 1KB an error message is truncated to.
-                if let Err(err) = check_content_size_within_limit(
-                    &share.content.metadata,
-                    share.content.id(),
-                    context,
-                ) {
-                    return Some(CanisterHttpChangeAction::HandleInvalid(
-                        share.clone(),
-                        format!("{err:?}"),
-                    ));
-                }
-
-                if let Err(err) =
-                    check_content_hash_length(&share.content.metadata, share.content.id())
-                {
+                // Invalidate shares whose receipt no honest replica would have signed.
+                if let Err(err) = check_receipt_bounds(&share.content, context) {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
                         format!("{err:?}"),
@@ -522,39 +491,13 @@ impl CanisterHttpPoolManagerImpl {
                     Replication::NonReplicated(_) | Replication::Flexible { .. } => {
                         match &artifact.response {
                             Some(response) => {
-                                if response.id != share.content.id() {
+                                if let Err(err) = check_metadata_matches_content(
+                                    &share.content.metadata,
+                                    response,
+                                ) {
                                     return Some(CanisterHttpChangeAction::HandleInvalid(
                                         share.clone(),
-                                        format!(
-                                            "Response is for request ID {} rather than the share's {}",
-                                            response.id,
-                                            share.content.id(),
-                                        ),
-                                    ));
-                                }
-
-                                if share.content.content_hash()
-                                    != &ic_types::crypto::crypto_hash(response)
-                                {
-                                    return Some(CanisterHttpChangeAction::HandleInvalid(
-                                        share.clone(),
-                                        "Content hash does not match the response".to_string(),
-                                    ));
-                                }
-
-                                if share.content.content_size()
-                                    != response.content.count_bytes() as u32
-                                {
-                                    return Some(CanisterHttpChangeAction::HandleInvalid(
-                                        share.clone(),
-                                        "Content size does not match the response".to_string(),
-                                    ));
-                                }
-
-                                if share.content.is_reject() != response.content.is_reject() {
-                                    return Some(CanisterHttpChangeAction::HandleInvalid(
-                                        share.clone(),
-                                        "is_reject does not match the response content".to_string(),
+                                        format!("{err:?}"),
                                     ));
                                 }
                             }
@@ -1353,7 +1296,7 @@ pub mod test {
 
                     assert_matches!(
                         &changes[0],
-                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "Content hash does not match the response"
+                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason.starts_with("ContentHashMismatch")
                     );
                 }
 
@@ -1383,7 +1326,7 @@ pub mod test {
 
                     assert_matches!(
                         &changes[0],
-                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "Content size does not match the response"
+                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason.starts_with("ContentSizeMismatch")
                     );
                 }
 
@@ -1412,7 +1355,7 @@ pub mod test {
 
                     assert_matches!(
                         &changes[0],
-                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "is_reject does not match the response content"
+                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason.starts_with("IsRejectMismatch")
                     );
                 }
             })
@@ -3280,7 +3223,7 @@ pub mod test {
                     assert_matches!(
                         &changes[0],
                         CanisterHttpChangeAction::HandleInvalid(_, reason)
-                        if reason == "Content hash does not match the response"
+                        if reason.starts_with("ContentHashMismatch")
                     );
                 }
 
@@ -3309,7 +3252,7 @@ pub mod test {
                     assert_matches!(
                         &changes[0],
                         CanisterHttpChangeAction::HandleInvalid(_, reason)
-                        if reason == "Content size does not match the response"
+                        if reason.starts_with("ContentSizeMismatch")
                     );
                 }
 
@@ -3337,7 +3280,7 @@ pub mod test {
                     assert_matches!(
                         &changes[0],
                         CanisterHttpChangeAction::HandleInvalid(_, reason)
-                        if reason == "is_reject does not match the response content"
+                        if reason.starts_with("IsRejectMismatch")
                     );
                 }
 
@@ -3375,7 +3318,7 @@ pub mod test {
                     assert_matches!(
                         &changes[0],
                         CanisterHttpChangeAction::HandleInvalid(_, reason)
-                        if reason.starts_with("Response is for request ID")
+                        if reason.starts_with("InvalidMetadata")
                     );
                 }
             })

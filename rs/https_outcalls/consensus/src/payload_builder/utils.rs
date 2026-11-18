@@ -12,10 +12,9 @@ use ic_types::{
         FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     },
     canister_http::{
-        CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceipt,
-        CanisterHttpResponseShare, CanisterHttpResponseSignature,
-        CanisterHttpResponseWithConsensus, PricingVersion,
+        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseMetadata,
+        CanisterHttpResponseProof, CanisterHttpResponseReceipt, CanisterHttpResponseShare,
+        CanisterHttpResponseSignature, CanisterHttpResponseWithConsensus, PricingVersion,
     },
     crypto::{Signed, crypto_hash},
     messages::CallbackId,
@@ -85,59 +84,38 @@ pub(crate) fn check_metadata_matches_content(
     Ok(())
 }
 
-/// Enforces the per-replica spend limit from the request context: the amount
-/// the replica claims to have `spent` in the payment receipt must never exceed
-/// the maximum returned by [`CanisterHttpRequestContext::max_http_outcall_spend`].
-///
-/// On charging subnets this is the `per_replica_allowance`. Free subnets charge
-/// nothing, so their spend (used only for cost accounting) may exceed the (zero)
-/// allowance, but may never exceed [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
-pub(crate) fn check_spent_within_limit(
-    receipt: &CanisterHttpPaymentReceipt,
+/// Enforces what a signed `receipt` may claim for the request `context`: a spend of at
+/// most [`CanisterHttpRequestContext::max_http_outcall_spend`], a content size of at most
+/// [`CanisterHttpRequestContext::max_http_outcall_content_size`], and a content hash as
+/// long as a SHA-256 digest.
+pub(crate) fn check_receipt_bounds(
+    receipt: &CanisterHttpResponseReceipt,
     context: &CanisterHttpRequestContext,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
+    let spent = receipt.spent();
     let limit = context.max_http_outcall_spend();
-    if receipt.spent > limit {
-        return Err(InvalidCanisterHttpPayloadReason::SpentExceedsLimit {
-            spent: receipt.spent,
-            limit,
-        });
+    if spent > limit {
+        return Err(InvalidCanisterHttpPayloadReason::SpentExceedsLimit { spent, limit });
     }
-    Ok(())
-}
 
-/// Enforces the response size limit from the request context: the `content_size`
-/// the signed metadata claims must never exceed the maximum returned by
-/// [`CanisterHttpRequestContext::max_http_outcall_content_size`].
-pub(crate) fn check_content_size_within_limit(
-    metadata: &CanisterHttpResponseMetadata,
-    callback_id: CallbackId,
-    context: &CanisterHttpRequestContext,
-) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    let limit = context.max_http_outcall_content_size(metadata.is_reject);
-    if metadata.content_size as u64 > limit {
+    let content_size = receipt.content_size();
+    let limit = context.max_http_outcall_content_size(receipt.is_reject());
+    if content_size as u64 > limit {
         return Err(InvalidCanisterHttpPayloadReason::ContentSizeExceedsLimit {
-            callback_id,
-            content_size: metadata.content_size,
+            callback_id: receipt.id(),
+            content_size,
             limit,
         });
     }
-    Ok(())
-}
 
-/// Enforces that the `content_hash` the signed metadata claims is as long as a SHA-256
-/// digest, as the hash of every response is.
-pub(crate) fn check_content_hash_length(
-    metadata: &CanisterHttpResponseMetadata,
-    callback_id: CallbackId,
-) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    let length = metadata.content_hash.get_ref().0.len();
+    let length = receipt.content_hash().get_ref().0.len();
     if length != Sha256::DIGEST_LEN {
         return Err(InvalidCanisterHttpPayloadReason::InvalidContentHashLength {
-            callback_id,
+            callback_id: receipt.id(),
             length,
         });
     }
+
     Ok(())
 }
 
@@ -168,7 +146,7 @@ fn per_replica_consensus_allowance(context: &CanisterHttpRequestContext) -> Cons
 /// i.e. the sum of their [per-replica allowances](per_replica_consensus_allowance).
 ///
 /// Unlike the per-replica spends, which are bounded individually by
-/// [`check_spent_within_limit`], the collective spend also contains the consensus
+/// [`check_receipt_bounds`], the collective spend also contains the consensus
 /// cost of putting the response into a block. That cost is only covered if the
 /// contributing replicas left enough of their allowances unspent, which is what
 /// this check ensures.
@@ -405,7 +383,8 @@ pub(crate) fn find_async_receipts<'a>(
 /// Reconstructs, for every signer of an aggregated proof, the
 /// [`CanisterHttpResponseShare`] that signer actually signed: the shared
 /// [`CanisterHttpResponseMetadata`] combined with that signer's own
-/// [`CanisterHttpPaymentReceipt`], paired with that signer's basic signature.
+/// [`CanisterHttpPaymentReceipt`](ic_types::canister_http::CanisterHttpPaymentReceipt), paired
+/// with that signer's basic signature.
 pub(crate) fn reconstruct_individual_shares(
     proof: &CanisterHttpResponseProof,
 ) -> impl Iterator<Item = CanisterHttpResponseShare> {
@@ -500,9 +479,7 @@ pub(crate) fn validate_response_share(
         });
     }
 
-    check_spent_within_limit(&share.content.payment_receipt, context)?;
-    check_content_size_within_limit(&share.content.metadata, callback_id, context)?;
-    check_content_hash_length(&share.content.metadata, callback_id)?;
+    check_receipt_bounds(&share.content, context)?;
 
     let signer = share.signature.signer;
     if !seen_signers.insert(signer) {
@@ -1072,9 +1049,10 @@ mod tests {
     use ic_types::{
         CanisterId, NumberOfNodes,
         canister_http::{
-            CANDID_OVERHEAD_RESERVE_BYTES, CanisterHttpMethod, CanisterHttpReject,
-            MAX_CANISTER_HTTP_RESPONSE_BYTES, MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET,
-            MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, PricingVersion, RefundStatus, Replication,
+            CANDID_OVERHEAD_RESERVE_BYTES, CanisterHttpMethod, CanisterHttpPaymentReceipt,
+            CanisterHttpReject, MAX_CANISTER_HTTP_RESPONSE_BYTES,
+            MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET, MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES,
+            PricingVersion, RefundStatus, Replication,
         },
         crypto::{CryptoHash, CryptoHashOf},
         messages::{NO_DEADLINE, Request},
@@ -1083,14 +1061,24 @@ mod tests {
     use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
     use std::sync::Arc;
 
-    fn receipt(spent: u128) -> CanisterHttpPaymentReceipt {
-        CanisterHttpPaymentReceipt {
-            spent: Cycles::new(spent),
+    /// A receipt claiming to have spent `spent` cycles, within all other bounds.
+    fn receipt(spent: u128) -> CanisterHttpResponseReceipt {
+        CanisterHttpResponseReceipt {
+            metadata: CanisterHttpResponseMetadata {
+                id: CallbackId::from(1),
+                content_hash: CryptoHashOf::new(CryptoHash(vec![0; Sha256::DIGEST_LEN])),
+                content_size: 0,
+                is_reject: false,
+                replica_version: test_replica_version(),
+            },
+            payment_receipt: CanisterHttpPaymentReceipt {
+                spent: Cycles::new(spent),
+            },
         }
     }
 
     /// Builds a minimal request context pinning the given cost schedule and
-    /// per-replica allowance — the only fields [`check_spent_within_limit`] reads.
+    /// per-replica allowance.
     fn context(
         cost_schedule: CanisterCyclesCostSchedule,
         per_replica_allowance: Cycles,
@@ -1129,7 +1117,7 @@ mod tests {
     #[test]
     fn spent_within_allowance_is_accepted_when_charging() {
         assert!(
-            check_spent_within_limit(
+            check_receipt_bounds(
                 &receipt(50),
                 &context(CanisterCyclesCostSchedule::Normal, Cycles::new(100)),
             )
@@ -1140,7 +1128,7 @@ mod tests {
     #[test]
     fn spent_exceeding_allowance_is_rejected_when_charging() {
         assert!(matches!(
-            check_spent_within_limit(
+            check_receipt_bounds(
                 &receipt(101),
                 &context(CanisterCyclesCostSchedule::Normal, Cycles::new(100)),
             ),
@@ -1153,7 +1141,7 @@ mod tests {
         // A zero allowance on a charging subnet (e.g. the caller paid exactly the
         // base fee) must still reject any nonzero spend.
         assert!(matches!(
-            check_spent_within_limit(
+            check_receipt_bounds(
                 &receipt(1),
                 &context(CanisterCyclesCostSchedule::Normal, Cycles::zero()),
             ),
@@ -1167,7 +1155,7 @@ mod tests {
         // accounting; nothing is charged. It is bounded only by the free-subnet
         // maximum, which the spend here stays well below.
         assert!(
-            check_spent_within_limit(
+            check_receipt_bounds(
                 &receipt(1_000_000),
                 &context(CanisterCyclesCostSchedule::Free, Cycles::zero()),
             )
@@ -1179,7 +1167,7 @@ mod tests {
     fn spent_at_free_subnet_maximum_is_accepted() {
         // A spend exactly at the free-subnet maximum is still accepted.
         assert!(
-            check_spent_within_limit(
+            check_receipt_bounds(
                 &receipt(MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get()),
                 &context(CanisterCyclesCostSchedule::Free, Cycles::zero()),
             )
@@ -1193,15 +1181,10 @@ mod tests {
         is_reject: bool,
         context: &CanisterHttpRequestContext,
     ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-        let callback_id = CallbackId::from(1);
-        let metadata = CanisterHttpResponseMetadata {
-            id: callback_id,
-            content_hash: CryptoHashOf::new(CryptoHash(vec![])),
-            content_size,
-            is_reject,
-            replica_version: test_replica_version(),
-        };
-        check_content_size_within_limit(&metadata, callback_id, context)
+        let mut receipt = receipt(0);
+        receipt.metadata.content_size = content_size;
+        receipt.metadata.is_reject = is_reject;
+        check_receipt_bounds(&receipt, context)
     }
 
     #[test]
@@ -1254,7 +1237,7 @@ mod tests {
         // Free subnets may exceed their (zero) allowance, but not the free-subnet
         // maximum: the spend is bounded rather than unbounded.
         assert!(matches!(
-            check_spent_within_limit(
+            check_receipt_bounds(
                 &receipt(MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get() + 1),
                 &context(CanisterCyclesCostSchedule::Free, Cycles::zero()),
             ),
