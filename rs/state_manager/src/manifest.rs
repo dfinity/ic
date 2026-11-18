@@ -405,35 +405,32 @@ fn build_chunk_table_parallel(
         })
         .collect();
 
+    let mut chunks: Vec<ChunkToHash> = chunk_table
+        .iter_mut()
+        .zip(&chunk_actions)
+        .enumerate()
+        .map(|(index, (info, action))| ChunkToHash {
+            index,
+            info,
+            action,
+        })
+        .collect();
     // Spans are queued round-robin across files (every file's first span, then
     // every file's second span, and so on), so that concurrent tasks rarely read
-    // the same file. Each entry is `(index of the span in its file, index of its
-    // first chunk in the chunk table, its chunks)`.
+    // the same file. Each entry is `(index of the span in its file, its chunks)`.
     let mut spans = Vec::new();
-    let mut first_chunk = 0;
-    for file_chunks in chunk_table.chunk_by_mut(|a, b| a.file_index == b.file_index) {
-        let num_chunks = file_chunks.len();
-        for (span_index, span) in file_chunks.chunks_mut(MANIFEST_SPAN_CHUNKS).enumerate() {
-            spans.push((
-                span_index,
-                first_chunk + span_index * MANIFEST_SPAN_CHUNKS,
-                span,
-            ));
-        }
-        first_chunk += num_chunks;
+    for file_chunks in chunks.chunk_by_mut(|a, b| a.info.file_index == b.info.file_index) {
+        spans.extend(file_chunks.chunks_mut(MANIFEST_SPAN_CHUNKS).enumerate());
     }
-    spans.sort_by_key(|&(span_index, first_chunk, _)| (span_index, first_chunk));
+    spans.sort_by_key(|(span_index, span)| (*span_index, span[0].index));
 
     // Compute real chunk hashes in parallel.
     // NB. We must populate hashes of all the chunks in a file before we compute
     // file hashes.
     thread_pool.scoped(|scope| {
-        for (_, first_chunk, span) in spans {
-            let file_path = root.join(&file_table[span[0].file_index as usize].relative_path);
-            let chunk_actions = &chunk_actions[first_chunk..first_chunk + span.len()];
-            scope.execute(move || {
-                hash_span(metrics, log, &file_path, first_chunk, span, chunk_actions)
-            });
+        for (_, span) in spans {
+            let file_path = root.join(&file_table[span[0].info.file_index as usize].relative_path);
+            scope.execute(move || hash_span(metrics, log, &file_path, span));
         }
     });
 
@@ -451,22 +448,27 @@ fn build_chunk_table_parallel(
     (file_table, chunk_table)
 }
 
-/// Sets the hashes of `span`, consecutive chunks of the file at `file_path`
-/// starting at index `first_chunk` of the chunk table, as `chunk_actions` (one
-/// per chunk) say. Opens the file once, for the first chunk it reads, and reads
-/// the chunks to hash in order.
+/// A chunk to hash: its index in the chunk table, its entry there, and what to
+/// do with it.
+struct ChunkToHash<'a> {
+    index: usize,
+    info: &'a mut ChunkInfo,
+    action: &'a ChunkAction,
+}
+
+/// Sets the hashes of `span`, consecutive chunks of the file at `file_path`, as
+/// their actions say. Opens the file once, for the first chunk it reads, and
+/// reads the chunks to hash in order.
 fn hash_span(
     metrics: &ManifestMetrics,
     log: &ReplicaLogger,
     file_path: &Path,
-    first_chunk: usize,
-    span: &mut [ChunkInfo],
-    chunk_actions: &[ChunkAction],
+    span: &mut [ChunkToHash],
 ) {
     let mut file = None;
     let mut buf = Vec::new();
-    for (i, (chunk_info, chunk_action)) in span.iter_mut().zip(chunk_actions).enumerate() {
-        let (offset, size_bytes) = (chunk_info.offset, chunk_info.size_bytes);
+    for chunk in span {
+        let (offset, size_bytes) = (chunk.info.offset, chunk.info.size_bytes);
         let mut recompute_chunk_hash = || {
             let file = file.get_or_insert_with(|| {
                 std::fs::File::open(file_path).unwrap_or_else(|e| {
@@ -482,7 +484,7 @@ fn hash_span(
             hasher.finish()
         };
 
-        chunk_info.hash = match chunk_action {
+        chunk.info.hash = match chunk.action {
             ChunkAction::Recompute => {
                 metrics
                     .chunk_bytes
@@ -503,7 +505,7 @@ fn hash_span(
                         log,
                         "{}: Hash mismatch in chunk with index {} in file {}, recomputed hash {:?}, reused hash {:?}",
                         CRITICAL_ERROR_REUSED_CHUNK_HASH,
-                        first_chunk + i,
+                        chunk.index,
                         file_path.display(),
                         recomputed_hash,
                         precomputed_hash
