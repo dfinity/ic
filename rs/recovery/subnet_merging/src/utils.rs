@@ -69,8 +69,8 @@ pub(crate) fn get_subnet_record_at_version(
 ///
 /// The proposal for the recovery CUP of the destination subnet names no subnet
 /// to run the DKG for it, which leaves it to that default (and to the NNS
-/// subnet if there is none). The registry rejects the proposal if the default
-/// is the destination subnet itself, and the source subnet could not run the
+/// subnet if there is none). Executing the proposal fails if the default is
+/// the destination subnet itself, and the source subnet could not run the
 /// DKG: it is halted at its CUP by then.
 pub(crate) fn ensure_default_initial_dkg_subnet_is_not_merged(
     registry_helper: &RegistryHelper,

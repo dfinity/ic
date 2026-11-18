@@ -775,9 +775,8 @@ impl ProposeRecoveryCupStep {
 
     /// Checks that `time`, which the recovery CUP is stamped with, is past the
     /// batch times of both checkpoints the merged state is assembled from, i.e.
-    /// the times of the CUPs the two subnets halted at: the merged subnet has
-    /// to resume past both, as either subnet's canisters may have run ahead of
-    /// the merged state's own batch time, which is the destination subnet's.
+    /// the times of the CUPs the two subnets halted at, so that time is
+    /// strictly monotone from the point of view of every canister.
     ///
     /// Both subnets halted well before this step runs, so this only fails if
     /// the clock of this machine is behind the clocks of the subnets.
@@ -804,9 +803,9 @@ impl Step for ProposeRecoveryCupStep {
         );
         // Like the description of any other proposal, this shows the command
         // that is about to run, except for its timestamp, which is taken anew
-        // when the step is executed. The command cannot be shown if the merged
-        // state is not available, e.g. because `MergeStates` was skipped or
-        // failed.
+        // when the step is executed. The command can only be missing if the
+        // operator went on without the merged state, e.g. after skipping or
+        // declining `MergeStates`.
         match self.admin_step(SystemTime::now()) {
             Ok(step) => format!(
                 "{summary} The command, up to the timestamp, which is taken when it is run: {}",

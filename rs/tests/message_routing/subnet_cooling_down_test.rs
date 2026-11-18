@@ -137,12 +137,15 @@ Runbook::
    halted at. Executing the proposal runs a fresh DKG for the nodes of `D`.
 20. After `ProposeCupForDestinationSubnet`: wait until the registry holds the
    recovery CUP contents of `D`, which it only does once the fresh DKG for `D`
-   has completed. Check that they are at the height of the merged checkpoint,
-   which is above the heights both subnets halted at, with the state hash of
-   that checkpoint, computed anew, as their state hash and a time past the
-   times of the CUPs both subnets halted at. Recovering a subnet that was instructed to
-   halt at its next CUP replaces that instruction with a plain halt, so check
-   that `D` is halted.
+   has completed. Check their height, state hash and time:
+   * The height is the one of the merged checkpoint, which is above the heights
+     both subnets halted at.
+   * The state hash is the one of the merged checkpoint, computed from the
+     checkpoint itself rather than read from the manifest the tool wrote.
+   * The time is past the times of the CUPs both subnets halted at.
+
+   Recovering a subnet that was instructed to halt at its next CUP replaces
+   that instruction with a plain halt, so also check that `D` is halted.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -244,7 +247,7 @@ const LOOP_BREAK_TRIGGER: &[u8] = b"break";
 /// the replicas of a subnet, range over more than one replica.
 const SUBNET_SIZE: usize = 4;
 
-/// The DKG interval length of the Application subnets, i.e. one less than the
+/// The DKG interval length of all subnets, i.e. one less than the
 /// distance between two consecutive checkpoints (and CUPs). The default is long
 /// enough for an `install_code` burning `INIT_INSTRUCTIONS` to complete within
 /// one interval, which matters because a paused `install_code` is aborted at
@@ -268,14 +271,25 @@ const INDUCTION_BACKOFF: Duration = Duration::from_secs(1);
 /// the test environment.
 const MERGING_DIR: &str = "subnet_merging";
 
+/// The duration of a round that the timeouts counted in rounds assume. Every
+/// subnet is `Subnet::fast`, i.e. aims at rounds of a fraction of this; the
+/// rest is slack for slow testnets.
+const ROUND_MILLIS: u64 = 800;
+
+/// The number of rounds in two DKG intervals, the most it takes a subnet to
+/// reach the CUP it is instructed to halt at, and the NNS subnet to complete a
+/// DKG it is asked to run.
+const TWO_DKG_INTERVALS: u64 = 2 * (DKG_INTERVAL_LENGTH + 1);
+
 /// Timeout for the subnet to become "merge ready". The binding terms are the
 /// `install_code` calls of step 6, which take a couple of hundred rounds each
 /// (and are executed one at a time, as at most one long-running `install_code`
 /// makes progress per round), and the ingress history, which only becomes free
 /// of terminal statuses once the entries of the ingress messages submitted
 /// before the subnet started cooling down are pruned, i.e. at their (up to
-/// `MAX_INGRESS_TTL` = 5 minutes away) expiry times.
-const MERGE_READY_TIMEOUT: Duration = Duration::from_secs(900);
+/// `MAX_INGRESS_TTL` = 5 minutes away) expiry times. Hence `MAX_INGRESS_TTL`
+/// plus 400 rounds.
+const MERGE_READY_TIMEOUT: Duration = Duration::from_millis(5 * 60 * 1000 + 400 * ROUND_MILLIS);
 /// Timeout for the registry to reflect a proposal that `ic-admin` reported as
 /// executed.
 const REGISTRY_TIMEOUT: Duration = Duration::from_secs(120);
@@ -286,14 +300,13 @@ const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// Timeout for the registry to hold the recovery CUP contents of `D` once they
 /// are proposed: unlike other proposals, the one recovering `D` only takes
 /// effect once a fresh DKG for `D` has completed, which may take up to two DKG
-/// intervals of the subnet running it.
-const RECOVERY_CUP_TIMEOUT: Duration = Duration::from_secs(600);
+/// intervals of the NNS subnet running it.
+const RECOVERY_CUP_TIMEOUT: Duration = Duration::from_millis(TWO_DKG_INTERVALS * ROUND_MILLIS);
 /// Timeout for a subnet to reach the CUP it halts at. As a DKG summary takes
 /// its registry version from the previous summary, that CUP is up to two DKG
-/// intervals, i.e. about `2 * (DKG_INTERVAL_LENGTH + 1)` = 1000 rounds, away.
-/// Shorter than the default of the tool so that the test fits into the timeout
-/// of its Bazel target.
-const HALT_TIMEOUT: Duration = Duration::from_secs(1200);
+/// intervals away. Shorter than the default of the tool so that the test fits
+/// into the timeout of its Bazel target.
+const HALT_TIMEOUT: Duration = Duration::from_millis(TWO_DKG_INTERVALS * ROUND_MILLIS);
 
 /// How long the loops of `UDS` and `UOS` are observed to be stalled (step 11).
 const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
@@ -303,10 +316,11 @@ const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 
 /// Timeouts of the test itself, above the sum of the timeouts of its steps
-/// (dominated by `MERGE_READY_TIMEOUT` and `HALT_TIMEOUT`), so that a stuck
-/// step fails with its own error. `HALT_TIMEOUT` is counted once although it
-/// applies to each of the two subnets: both are scheduled to halt before either
-/// is waited for, so the two waits overlap. The overall timeout additionally
+/// (dominated by `MERGE_READY_TIMEOUT`, `HALT_TIMEOUT` and
+/// `RECOVERY_CUP_TIMEOUT`, about 2200s together), so that a stuck step fails
+/// with its own error. `HALT_TIMEOUT` is counted once although it applies to
+/// each of the two subnets: both are scheduled to halt before either is waited
+/// for, so the two waits overlap. The overall timeout additionally
 /// covers the setup (booting the IC and installing the NNS) and has to stay
 /// well below the 3600s of the `eternal` timeout of the Bazel target, which
 /// also covers what runs outside of the test driver's own timeouts.
@@ -880,8 +894,8 @@ fn check_merge_registry_version(env: &TestEnv, context: &Context<'_>) {
     );
 }
 
-/// A registry replica of the test's own, in a local store apart from the one
-/// of the tool, that fetches the latest registry version on every read.
+/// The test's own registry replica, which fetches the latest registry version
+/// on every read. It uses a local store separate from the one of the tool.
 fn test_registry_helper(env: &TestEnv, logger: &Logger) -> RegistryHelper {
     let recovery_dir = env.get_path(MERGING_DIR).join(RECOVERY_DIRECTORY_NAME);
     RegistryHelper::new(
@@ -901,7 +915,8 @@ fn test_registry_helper(env: &TestEnv, logger: &Logger) -> RegistryHelper {
 /// Step 20: wait until the registry holds the recovery CUP contents of `D`,
 /// and check them, at the registry version they were first read at: their
 /// height is the one of the merged checkpoint, above the heights both subnets
-/// halted at; their state hash is the one of that checkpoint, computed anew;
+/// halted at; their state hash is the one of that checkpoint, computed from
+/// the checkpoint itself rather than read from the manifest the tool wrote;
 /// and their time is past the times of the CUPs both subnets halted at. Also
 /// check that `D` is halted, as the recovery turned its instruction to halt at
 /// its next CUP into a plain halt.
