@@ -9,6 +9,15 @@ common --lockfile_mode=off
 common --experimental_remote_downloader_local_fallback
 common --experimental_remote_downloader_propagate_credentials
 
+# rules_android, which protobuf depends on through rules_kotlin, registers
+# Android SDK toolchains from its @androidsdk repository, so Bazel fetches that
+# repository whenever it resolves toolchains (build, test, run, cquery, ...).
+# Its repository rule uses the Android SDK that ANDROID_HOME points to, and
+# fails if that SDK has no platforms or its newest build-tools are older than
+# 35.0.0. With ANDROID_HOME empty it generates a stub instead, which is all we
+# need: nothing here builds Android code.
+common --repo_env=ANDROID_HOME=
+
 # Pin the glibc version the hermetic toolchain targets to 2.31 (see
 # //:linux-glibc-2.31). Both the target and the exec platform are pinned so
 # host tools and target binaries agree on the glibc floor. Scoped to Linux via

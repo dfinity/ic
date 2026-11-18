@@ -118,7 +118,10 @@ bazel_dep(
 )
 
 # Keep `bazel mod` commands working with rules_rust: see the patch header. The
-# patch only applies to this version, so the override pins it.
+# patch only applies to this version, so the override pins it. The pin silently
+# beats higher protobuf versions that other modules require: when upgrading
+# Bazel or modules, check `bazel mod explain protobuf --verbose`, which shows
+# the version each one asks for. Drop the override together with the patch.
 single_version_override(
     module_name = "protobuf",
     patch_strip = 1,
