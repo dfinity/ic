@@ -279,7 +279,7 @@ fn main() -> io::Result<()> {
     //   2. Layers for generating flamegraphs
     //   3. Jeager exporter if enabled
 
-    let (logging, _logging_drop_guard) = logging_layer(&config.logger, node_id, subnet_id);
+    let (logging, logging_drop_guard) = logging_layer(&config.logger, node_id, subnet_id);
     // TARPC is way too verbose. Turn it off for now.
     let logging = logging.with_filter(filter_fn(|metadata| metadata.target() != "tarpc::client"));
 
@@ -379,6 +379,9 @@ fn main() -> io::Result<()> {
     // Ensure cleanup of the temporary directory is triggered; error
     // otherwise.
     tmpdir.close()?;
+    // Flush what the non-blocking log writer still buffers, as exiting below runs
+    // no destructors.
+    drop(logging_drop_guard);
 
     // Exit without dropping the IC stack: its teardown would wait for the tip
     // thread's queued work (resetting the tip, merging), which a restart redoes
