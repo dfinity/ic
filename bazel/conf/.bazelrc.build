@@ -1,9 +1,12 @@
 # A .bazelrc needing build configuration. Without this configuration, the
 # build will most likely fail.
 
-# Until the lockfile format has settled, don't use a
-# lockfile for MODULE.bazel
-common --lockfile_mode=off
+# MODULE.bazel.lock is committed. Bazel keeps it in line with MODULE.bazel in its
+# default --lockfile_mode=update, see "MODULE.bazel.lock" in bazel/README.md.
+# Options that change what module extensions see, like --repo_env below, go on
+# `common` lines in this file: `bazel mod` reads no other lines, and the CI jobs
+# that generate and check MODULE.bazel.lock read no other rc file of this
+# repository.
 
 # If the download via the Remote Asset API on the bazel-remote cache failed, try it again locally.
 common --experimental_remote_downloader_local_fallback
