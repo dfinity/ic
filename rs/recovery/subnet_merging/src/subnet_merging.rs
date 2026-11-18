@@ -1,10 +1,10 @@
 use crate::{
-    admin_helper::get_propose_to_cool_down_subnet_command,
+    admin_helper::{get_propose_to_cool_down_subnet_command, get_propose_to_merge_subnets_command},
     layout::Layout,
     steps::{
-        CheckCoolingDownStep, CheckMergeReadinessStep, ComputeExpectedMergedManifestStep,
-        DownloadStateStep, MergeStatesStep, StopReplicaAtHaltingCheckpointStep, ValidateCupStep,
-        WaitForHaltingCupStep,
+        CheckCoolingDownStep, CheckMergeReadinessStep, CheckRoutingTableStep,
+        ComputeExpectedMergedManifestStep, DownloadStateStep, MergeStatesStep,
+        StopReplicaAtHaltingCheckpointStep, ValidateCupStep, WaitForHaltingCupStep,
     },
 };
 
@@ -92,6 +92,12 @@ pub enum StepType {
     /// Assemble the merged state from the two downloaded states, and check its
     /// manifest against the expected one.
     MergeStates,
+    /// Submit a proposal to route the canister ID ranges of the source subnet
+    /// to the destination subnet.
+    MergeSubnets,
+    /// Wait until the registry routes no canister ID range to the source subnet
+    /// anymore, and record the registry version at which this was read.
+    CheckRegistryForRoutingTableEntry,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -139,9 +145,9 @@ pub struct SubnetMergingArgs {
     #[clap(long, default_value = "1800")]
     pub halt_timeout_secs: u64,
 
-    /// How long to wait, in seconds, for the proposal labeling the source
-    /// subnet as "cooling down" to be adopted, executed and visible in the
-    /// registry.
+    /// How long to wait, in seconds, for the proposals labeling the source
+    /// subnet as "cooling down" and merging it into the destination subnet to
+    /// be adopted, executed and visible in the registry.
     #[clap(long, default_value = "3600")]
     pub registry_timeout_secs: u64,
 
@@ -672,7 +678,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             StepType::ValidateSourceSubnetCup
             | StepType::ValidateDestinationSubnetCup
             | StepType::ComputeExpectedMergedManifest
-            | StepType::MergeStates => {}
+            | StepType::MergeStates
+            | StepType::MergeSubnets
+            | StepType::CheckRegistryForRoutingTableEntry => {}
         }
     }
 
@@ -752,6 +760,27 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 source_subnet_id: self.params.source_subnet_id,
                 destination_subnet_id: self.params.destination_subnet_id,
                 layout: self.layout.clone(),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
+
+            StepType::MergeSubnets => AdminStep {
+                logger: self.recovery.logger.clone(),
+                ic_admin_cmd: get_propose_to_merge_subnets_command(
+                    &self.recovery.admin_helper,
+                    self.params.source_subnet_id,
+                    self.params.destination_subnet_id,
+                ),
+            }
+            .into(),
+
+            StepType::CheckRegistryForRoutingTableEntry => CheckRoutingTableStep {
+                source_subnet_id: self.params.source_subnet_id,
+                destination_subnet_id: self.params.destination_subnet_id,
+                registry_helper: self.recovery.registry_helper.clone(),
+                layout: self.layout.clone(),
+                timeout: Duration::from_secs(self.params.registry_timeout_secs),
+                poll_interval: Duration::from_secs(self.params.poll_interval_secs),
                 logger: self.recovery.logger.clone(),
             }
             .into(),
