@@ -1,7 +1,7 @@
 /* tag::catalog[]
-Title:: Draining and halting a subnet that is "cooling down", and downloading
-and validating the states of the subnets to merge, with the subnet merging
-tool.
+Title:: Draining and halting a subnet that is "cooling down", downloading,
+validating and merging the states of the subnets to merge, and rerouting the
+canister ID ranges of the subnet, with the subnet merging tool.
 
 Goal:: Verify that a subnet holding what a subnet merge has to drain violates
 the individual terms of the "merge readiness" condition, i.e. that the
@@ -10,10 +10,12 @@ is one that the subnet does not satisfy to begin with; and that once the tool
 (`rs/recovery/subnet_merging`) has labeled the subnet "cooling down", the
 subnet rejects ingress messages and query calls, the tool eventually finds the
 condition to hold, and it then halts the subnet and the subnet it is told to
-merge it into at their next CUP, and downloads and validates the state each
-halted at. The cooling down subnet also holds calls waiting for responses that
-never arrive: they are not drained, but make it possible to assert that a
-subnet merge populates the ingress history properly.
+merge it into at their next CUP, downloads and validates the state each halted
+at, assembles the merged state from them, and has the canister ID ranges of
+the subnet rerouted to the subnet it is merged into. The cooling down subnet
+also holds calls waiting for responses that never arrive: they are not drained,
+but make it possible to assert that a subnet merge populates the ingress
+history properly.
 
 The subnet that is cooled down, i.e. the one that would be merged away, is
 called `S`, and the Application subnet the tool is told to merge `S` into is
@@ -108,13 +110,34 @@ Runbook::
    `Validate{Source,Destination}SubnetCup`, which validate each downloaded state
    against the CUP its subnet halted at and the subnet's public key in the NNS
    signed state tree.
+15. The following steps of the tool are executed:
+   `ComputeExpectedMergedManifest`, which derives the manifest the merged state
+   is expected to have from the manifests of the two validated states; and
+   `MergeStates`, which assembles the merged state locally, as a checkpoint
+   holding the state of `D` with the canisters and canister snapshots of `S`
+   added to it, and checks that its manifest has the expected root hash.
+   Neither subnet nor the registry is touched.
+16. After `MergeStates`: check that the merged state is a single checkpoint that
+   holds exactly the canisters of the two downloaded checkpoints of `S` and `D`.
+17. The following steps of the tool are executed: `MergeSubnets`, which submits
+   a proposal rerouting the canister ID ranges of `S` to `D`, and
+   `CheckRegistryForRoutingTableEntry`, which waits until the registry routes
+   no canister ID range to `S` anymore and records the registry version at
+   which it read this.
+18. After `CheckRegistryForRoutingTableEntry`: check that the registry version
+   the tool recorded is recorded for `S`, is newer than the one at which `S`
+   was labeled "cooling down", and is one at which the registry routes no
+   canister ID range to `S` and every canister ID range `S` started out with
+   to `D`.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
 violated before `S` starts cooling down; `S` then rejects ingress messages and
 query calls and becomes "merge ready", and the loops of `UDS` and `UOS` of step
-2 are stalled; the tool then halts `S` and `D` at their next CUP, and the
-states it downloads from them pass validation.
+2 are stalled; the tool then halts `S` and `D` at their next CUP, the states it
+downloads from them pass validation, the merged state it assembles from them
+holds exactly the canisters of both, and the registry version the tool records
+routes the canister ID ranges of `S` to `D`.
 
 end::catalog[] */
 
@@ -122,7 +145,12 @@ use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_agent::Agent;
 use ic_agent::agent::RejectCode;
-use ic_recovery::{RecoveryArgs, get_node_metrics, util::DataLocation};
+use ic_recovery::{
+    CHECKPOINTS, IC_STATE, RECOVERY_DIRECTORY_NAME, RecoveryArgs, get_node_metrics,
+    registry_helper::{RegistryHelper, RegistryPollingStrategy},
+    util::DataLocation,
+};
+use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_merging::metrics_helper::{
     Labels, MetricsByReplica, ScrapeError, fetch_available_metrics, replica_values,
@@ -147,13 +175,13 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
     UniversalCanister, assert_create_agent, create_canister, set_controller,
 };
-use ic_types::Height;
+use ic_types::{Height, RegistryVersion};
 use ic_universal_canister::management::InstallMode;
 use ic_universal_canister::{
     CallInterface, PayloadBuilder, call_args, get_universal_canister_wasm, management, wasm,
 };
 use slog::{Logger, info};
-use std::{net::IpAddr, time::Duration};
+use std::{collections::BTreeSet, net::IpAddr, time::Duration};
 use tokio::runtime::Runtime;
 
 /// The value of the `type` label selecting the `install_code` call contexts of
@@ -579,7 +607,7 @@ async fn prepare<'a>(
     }
 }
 
-/// Steps 8 to 14: hand the scenario over to the subnet merging tool, and make
+/// Steps 8 to 18: hand the scenario over to the subnet merging tool, and make
 /// the checks of the steps in between its steps.
 ///
 /// Plain synchronous code, like `rs/tests/consensus/subnet_splitting_test.rs`:
@@ -675,15 +703,214 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
         "Step 14 done: the states S and D halted at are downloaded and valid"
     );
 
+    info!(logger, "Step 15: Merging the states of subnets S and D");
+    exec_next_step(StepType::ComputeExpectedMergedManifest);
+    exec_next_step(StepType::MergeStates);
+    info!(
+        logger,
+        "Step 15 done: the merged state is assembled and has the expected state hash"
+    );
+    check_merged_state(env, context);
+
+    info!(
+        logger,
+        "Step 17: Rerouting the canister ID ranges of subnet S to subnet D"
+    );
+    exec_next_step(StepType::MergeSubnets);
+    exec_next_step(StepType::CheckRegistryForRoutingTableEntry);
+    info!(
+        logger,
+        "Step 17 done: the registry routes no canister ID range to subnet S anymore"
+    );
+    check_merge_registry_version(env, context);
+
     if let Some((step_type, _)) = merging.next() {
         panic!("unexpected step {step_type:?}");
     }
 
     info!(
         logger,
-        "Subnet S has been drained and halted, and the states of S and D downloaded and \
-         validated, by the subnet merging tool"
+        "Subnet S has been drained and halted, the states of S and D downloaded, validated and \
+         merged, and the canister ID ranges of S rerouted to D, by the subnet merging tool"
     );
+}
+
+/// Step 18: check the registry version the tool recorded in
+/// `merge_registry_version.json`: it is recorded for `S`, it is newer than the
+/// version recorded in `cooling_down_registry_version.json`, and at it the
+/// registry routes no canister ID range to `S` and every canister ID range `S`
+/// started out with to `D`. At the cooling down version, `S` still holds its
+/// ranges, so the version records the rerouting rather than a version that
+/// happens to precede it.
+///
+/// The routing tables are read through a registry replica of the test's own,
+/// in a local store apart from the one of the tool.
+fn check_merge_registry_version(env: &TestEnv, context: &Context<'_>) {
+    let logger = &context.logger;
+    let recovery_dir = env.get_path(MERGING_DIR).join(RECOVERY_DIRECTORY_NAME);
+    let s_subnet_id = context.s_subnet.subnet_id;
+    let d_subnet_id = context.d_subnet.subnet_id;
+
+    let read_recorded_version = |file_name: &str| {
+        let path = recovery_dir.join(file_name);
+        let contents = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
+        let recorded: serde_json::Value = serde_json::from_str(&contents)
+            .unwrap_or_else(|e| panic!("failed to parse {}: {e}", path.display()));
+        assert_eq!(
+            recorded["source_subnet_id"],
+            serde_json::to_value(s_subnet_id).unwrap(),
+            "{} is not recorded for subnet S: {contents}",
+            path.display(),
+        );
+        let version = recorded["registry_version"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("{} holds no registry version: {contents}", path.display()));
+        RegistryVersion::from(version)
+    };
+    let merge_version = read_recorded_version("merge_registry_version.json");
+    let cooling_down_version = read_recorded_version("cooling_down_registry_version.json");
+    info!(
+        logger,
+        "Step 18: Checking the recorded merge registry version {merge_version} against the \
+         cooling down registry version {cooling_down_version}"
+    );
+    assert!(
+        merge_version > cooling_down_version,
+        "the merge registry version {merge_version} is not newer than the cooling down registry \
+         version {cooling_down_version}",
+    );
+
+    let registry_helper = RegistryHelper::new(
+        logger.clone(),
+        env.topology_snapshot()
+            .root_subnet()
+            .nodes()
+            .next()
+            .unwrap()
+            .get_public_url(),
+        env.get_path("merge_check_registry_local_store"),
+        &recovery_dir.join("nns.pem"),
+        RegistryPollingStrategy::WithEveryRead,
+    );
+    let latest_version = registry_helper
+        .latest_registry_version()
+        .expect("failed to fetch the latest registry version");
+    assert!(
+        latest_version >= merge_version,
+        "the registry is at version {latest_version}, before the recorded merge registry version \
+         {merge_version}",
+    );
+    let registry_client = registry_helper.registry_client();
+    let routing_table = |version: RegistryVersion| {
+        registry_client
+            .get_routing_table(version)
+            .unwrap_or_else(|e| {
+                panic!("failed to read the routing table at version {version}: {e}")
+            })
+            .unwrap_or_else(|| panic!("no routing table at version {version}"))
+    };
+
+    // The ranges of `S` as of the topology snapshot taken before the merge.
+    let original_ranges = context.s_subnet.subnet_canister_ranges();
+    assert!(
+        !original_ranges.is_empty(),
+        "subnet S held no canister ID range before the merge"
+    );
+    let at_cooling_down = routing_table(cooling_down_version);
+    let at_merge = routing_table(merge_version);
+    assert_eq!(
+        at_cooling_down
+            .ranges(s_subnet_id)
+            .iter()
+            .collect::<Vec<_>>(),
+        original_ranges.iter().collect::<Vec<_>>(),
+        "subnet S did not hold its original canister ID ranges at the cooling down registry \
+         version {cooling_down_version}",
+    );
+    assert!(
+        at_merge.ranges(s_subnet_id).is_empty(),
+        "subnet S still holds canister ID ranges at the merge registry version {merge_version}: \
+         {:?}",
+        at_merge.ranges(s_subnet_id),
+    );
+    for range in &original_ranges {
+        for canister_id in [range.start, range.end] {
+            let routed_to = at_merge
+                .lookup_entry(canister_id)
+                .map(|(_, subnet_id)| subnet_id);
+            assert_eq!(
+                routed_to,
+                Some(d_subnet_id),
+                "canister {canister_id} of the original range {range:?} of subnet S is routed to \
+                 {routed_to:?} rather than subnet D at the merge registry version {merge_version}",
+            );
+        }
+    }
+    info!(
+        logger,
+        "Step 18 done: at the merge registry version {merge_version}, the canister ID ranges \
+         {original_ranges:?} of S are routed to D"
+    );
+}
+
+/// Step 16: check that the merged state the tool assembled is a single
+/// checkpoint holding exactly the canisters of the checkpoints downloaded from
+/// `S` and `D`.
+fn check_merged_state(env: &TestEnv, context: &Context<'_>) {
+    let recovery_dir = env.get_path(MERGING_DIR).join(RECOVERY_DIRECTORY_NAME);
+    let single_checkpoint = |working_dir: &str| {
+        let checkpoints_dir = recovery_dir
+            .join(working_dir)
+            .join("data")
+            .join(IC_STATE)
+            .join(CHECKPOINTS);
+        let checkpoints: Vec<_> = std::fs::read_dir(&checkpoints_dir)
+            .unwrap_or_else(|e| panic!("failed to read {}: {e}", checkpoints_dir.display()))
+            .map(|entry| entry.expect("failed to read a directory entry").path())
+            .collect();
+        let [checkpoint] = checkpoints.as_slice() else {
+            panic!("expected a single checkpoint in {working_dir}, got {checkpoints:?}");
+        };
+        checkpoint.clone()
+    };
+
+    let merged_checkpoint = single_checkpoint("merged_working_dir");
+    let actual = canisters_in_checkpoint(&merged_checkpoint);
+    let downloaded: BTreeSet<String> = ["source_working_dir", "destination_working_dir"]
+        .into_iter()
+        .flat_map(|working_dir| canisters_in_checkpoint(&single_checkpoint(working_dir)))
+        .collect();
+    assert_eq!(
+        actual,
+        downloaded,
+        "the canisters in the merged checkpoint {} are not those of the checkpoints downloaded \
+         from S and D",
+        merged_checkpoint.display(),
+    );
+
+    info!(
+        context.logger,
+        "Step 16 done: the merged checkpoint {} holds exactly the {} canisters of S and D",
+        merged_checkpoint.display(),
+        actual.len(),
+    );
+}
+
+/// The names of the directories `checkpoint` keeps the states of its canisters
+/// in, i.e. the hex encodings of their IDs.
+fn canisters_in_checkpoint(checkpoint: &std::path::Path) -> BTreeSet<String> {
+    let canister_states_dir = checkpoint.join("canister_states");
+    std::fs::read_dir(&canister_states_dir)
+        .unwrap_or_else(|e| panic!("failed to read {}: {e}", canister_states_dir.display()))
+        .map(|entry| {
+            entry
+                .expect("failed to read a directory entry")
+                .file_name()
+                .into_string()
+                .expect("a canister directory name is not valid UTF-8")
+        })
+        .collect()
 }
 
 /// The node of `subnet` the tool waits for the halting CUP on, i.e. the one the

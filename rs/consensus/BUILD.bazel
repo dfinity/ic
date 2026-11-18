@@ -61,7 +61,6 @@ rust_library(
         # Keep sorted.
         "//packages/ic-error-types",
         "//rs/config",
-        "//rs/consensus/certification",
         "//rs/consensus/chain_key",
         "//rs/consensus/cup_utils",
         "//rs/consensus/dkg",

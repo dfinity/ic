@@ -1,0 +1,318 @@
+name: Bazel Lockfile
+# Keeps MODULE.bazel.lock what `bazel mod deps` generates (see "MODULE.bazel.lock" in bazel/README.md).
+#
+#   update (ci-pr-only.yml, on the head of a pull request): when the pull request changes a file that
+#          MODULE.bazel.lock is generated from, regenerate it. If that changes it, commit it onto the head
+#          branch (for a head branch in a fork: show the diff and upload the file instead) and fail.
+#   check  (ci-main.yml, on the commit CI runs on): fail unless MODULE.bazel.lock is what Bazel generates.
+#          This keeps an outdated MODULE.bazel.lock out of the merge queue, where ci-pr-only-status is
+#          always a success.
+#
+# MODULE.bazel.lock is generated on amd64-linux only: every module extension of the dependency graph
+# records the same result on every platform (its entries are keyed `general`). The "Check MODULE.bazel.lock"
+# step of bazel-test-arm64 (ci-main.yml) reports it on arm64-linux and arm64-darwin when that stops being true.
+#
+# No `permissions:`: the calling job grants them (contents: read, and pull-requests: read for the path
+# filter, which lists the files of a pull request through the API). No `concurrency:`: Kickoff's cancels
+# the runs of outdated heads.
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: "'update' or 'check', see above"
+        required: true
+        type: string
+      commit-sha:
+        description: The commit to work on; in update mode the head of the pull request, which the bot pushes onto
+        required: true
+        type: string
+      head-ref:
+        description: The head branch of the pull request (update mode)
+        required: false
+        default: ''
+        type: string
+      head-repo:
+        description: The repository the head branch lives in ("owner/repo"); the bot only pushes to this repository
+        required: false
+        default: ''
+        type: string
+      untrusted-code:
+        description: >-
+          'true' when commit-sha contains code that isn't trusted, like a reviewed pull request from a fork
+          (ci-kickoff-manual.yml): the job then runs on a copy of the runner profile without a cache volume,
+          as bazel-test-all does (ci-main.yml)
+        required: false
+        default: ''
+        type: string
+    secrets:
+      PR_CREATION_BOT_PRIVATE_KEY:
+        description: Mints the token that pushes MODULE.bazel.lock to a head branch in this repository (update mode)
+        required: false
+
+jobs:
+  amd64-linux:
+    name: ${{ case(inputs.mode == 'check', 'Check MODULE.bazel.lock', 'Update MODULE.bazel.lock') }}
+    runs-on: ${{ case(inputs.untrusted-code == 'true', 'namespace-profile-rbe-driver-amd64-linux-16x32-no-cache', 'namespace-profile-rbe-driver-amd64-linux-16x32') }}
+    container:
+      # The image of bazel-test-all (ci-main.yml): the update-image-references job of container-autobuild.yml
+      # rewrites both.
+      image: nscr.io/c9ptjuknd7oc6/ic-build@sha256:b897752c4c05ee6f26bf17e4dfb42f2f64ad409cbfb0b95203eeaa00ed1bd95c
+      volumes:
+        # nscloud-setup finds the runner's Namespace token in here and exports NSC_TOKEN_FILE, which nsc reads.
+        - /var/run/nsc/:/var/run/nsc/
+    timeout-minutes: 30
+    outputs:
+      changed: ${{ steps.compare.outputs.changed }}
+    steps:
+      - uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.commit-sha }}
+
+      - name: Detect a Branch from before MODULE.bazel.lock
+        id: predates
+        if: inputs.mode == 'update'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Such a branch would get a MODULE.bazel.lock of its own, which conflicts with master's.
+          if ! git cat-file -e HEAD:MODULE.bazel.lock 2>/dev/null &&
+              grep -qE '^[[:space:]]*common[[:space:]]+--lockfile_mode=off' bazel/conf/.bazelrc.build; then
+              echo "::notice title=MODULE.bazel.lock::This branch predates MODULE.bazel.lock: merge master into it."
+              echo "predates=true" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Filter Relevant Files
+        id: filter
+        # Pushes always check, so an input missing here only delays finding an outdated MODULE.bazel.lock.
+        if: |
+          (inputs.mode == 'update' && steps.predates.outputs.predates != 'true') ||
+          (inputs.mode == 'check' && (github.event_name == 'pull_request' || github.event_name == 'merge_group'))
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        with:
+          ref: ${{ inputs.commit-sha }}
+          # What MODULE.bazel.lock is generated from: MODULE.bazel with the files it includes, the patches of
+          # its module overrides and the .bzl files of its repository rules (all in bazel/), the rc files, the
+          # Bazel version and the requirements whose files the pip extension records.
+          filters: |
+            inputs:
+              - '.bazelrc'
+              - '.bazelversion'
+              - '.github/workflows/bazel-lockfile.yml'
+              - 'MODULE.bazel'
+              - 'MODULE.bazel.lock'
+              - 'bazel/**'
+              - 'go.mod'
+              - 'go.sum'
+              - 'requirements.txt'
+
+      - name: Decide What to Do
+        id: decide
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          FILTERED: ${{ steps.filter.outcome == 'success' }}
+          RELEVANT: ${{ steps.filter.outputs.inputs == 'true' }}
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+              update)
+                  # RELEVANT is false when the branch predates MODULE.bazel.lock (no filter ran).
+                  run="$RELEVANT"
+                  strip=true
+                  ;;
+              check)
+                  if [ "$FILTERED" = true ]; then
+                      # A pull request or merge group that changes an input: evaluate the module extensions
+                      # again, see "Regenerate MODULE.bazel.lock".
+                      run="$RELEVANT"
+                      strip=true
+                  else
+                      # A push: Bazel's plain update, which only evaluates the module extensions whose
+                      # recorded results are out of date.
+                      run=true
+                      strip=false
+                  fi
+                  ;;
+              *)
+                  echo "::error::Unknown mode '$MODE'"
+                  exit 1
+                  ;;
+          esac
+          echo "run=$run" >>"$GITHUB_OUTPUT"
+          echo "strip=$strip" >>"$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/netrc
+        if: steps.decide.outputs.run == 'true'
+
+      - name: Set Up the Bazel Cache
+        if: steps.decide.outputs.run == 'true'
+        run: |
+          # --command=common scopes the generated options to every bazel command, so that `bazel mod` also
+          # fetches through Namespace's remote asset API.
+          nsc bazel cache setup --command=common --enable_remote_asset_api --bazelrc=/tmp/bazel-cache.bazelrc
+
+      - name: Regenerate MODULE.bazel.lock
+        if: steps.decide.outputs.run == 'true'
+        shell: bash
+        env:
+          STRIP: ${{ steps.decide.outputs.strip }}
+        run: |
+          set -euo pipefail
+
+          # bazelisk runs the Bazel of .bazelversion, which writes the format of the committed file.
+          unset USE_BAZEL_VERSION
+          version="$(bazel --version)"
+          if [ "$version" != "bazel $(cat .bazelversion)" ]; then
+              echo "::error::'bazel' is $version, not the Bazel of .bazelversion ($(cat .bazelversion))"
+              exit 1
+          fi
+
+          if [ -e MODULE.bazel.lock ] && ! jq -e . MODULE.bazel.lock >/dev/null 2>&1; then
+              # Bazel refuses to run with it. Typically a merge conflict in it was committed.
+              echo "::warning file=MODULE.bazel.lock::MODULE.bazel.lock isn't valid JSON: generating it from scratch."
+              rm MODULE.bazel.lock
+          fi
+
+          if [ "$STRIP" = true ] && [ -e MODULE.bazel.lock ]; then
+              # Bazel takes a recorded module extension result as it is while the digests recorded with it
+              # match, so a hand edit or a bad merge of one would stay. Remove the results that apply to
+              # amd64-linux, so that Bazel evaluates those extensions again. Results for other platforms stay:
+              # only those platforms can evaluate them. jq's formatting never reaches a commit: Bazel rewrites
+              # the file when it adds the results back.
+              own='["general","os:linux","arch:amd64","os:linux,arch:amd64"]'
+              strip='.moduleExtensions |= (map_values(with_entries(select(.key | IN($own[]) | not))) | with_entries(select(.value != {})))'
+              if jq -e --argjson own "$own" "($strip) != ." MODULE.bazel.lock >/dev/null; then
+                  jq --argjson own "$own" "$strip" MODULE.bazel.lock >"$RUNNER_TEMP/stripped.lock"
+                  cp "$RUNNER_TEMP/stripped.lock" MODULE.bazel.lock
+              fi
+          fi
+
+          # A failed `bazel mod deps` can leave a partial MODULE.bazel.lock behind: retry from this one.
+          prepared="$RUNNER_TEMP/prepared.lock"
+          if [ -e MODULE.bazel.lock ]; then cp MODULE.bazel.lock "$prepared"; fi
+
+          # `bazel mod deps` evaluates every module extension, a build only those it needs. Of the rc files of
+          # this repository it reads only bazel/conf/.bazelrc.build, as bazel-test-arm64 does: the others add
+          # nothing that changes MODULE.bazel.lock, and DFINITY's cache in .bazelrc.internal can't be reached
+          # from here. The dependency graph it prints isn't needed.
+          mod_deps() {
+              bazel --nosystem_rc --nohome_rc --noworkspace_rc \
+                  --bazelrc=bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
+                  mod deps --lockfile_mode=update >/dev/null
+          }
+          if ! mod_deps; then
+              echo "::warning::bazel mod deps failed, trying once more."
+              if [ -e "$prepared" ]; then cp "$prepared" MODULE.bazel.lock; else rm -f MODULE.bazel.lock; fi
+              mod_deps
+          fi
+
+      - name: Compare with the Committed MODULE.bazel.lock
+        id: compare
+        if: steps.decide.outputs.run == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A MODULE.bazel.lock that only Bazel created is untracked, which `git diff` skips.
+          git add --intent-to-add MODULE.bazel.lock
+          if git diff --quiet -- MODULE.bazel.lock; then
+              echo "MODULE.bazel.lock is up to date."
+              echo "changed=false" >>"$GITHUB_OUTPUT"
+          else
+              git --no-pager diff --stat -- MODULE.bazel.lock
+              {
+                  echo '### MODULE.bazel.lock is out of date'
+                  echo '```'
+                  git --no-pager diff --stat -- MODULE.bazel.lock
+                  echo '```'
+              } >>"$GITHUB_STEP_SUMMARY"
+              echo "changed=true" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload MODULE.bazel.lock
+        if: steps.compare.outputs.changed == 'true'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          # Two names, because both modes run in the same Kickoff run on pull requests.
+          name: ${{ case(inputs.mode == 'check', 'bazel-lockfile-check', 'bazel-lockfile') }}
+          path: MODULE.bazel.lock
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+      - name: Fail on an Out-of-Date MODULE.bazel.lock
+        if: inputs.mode == 'check' && steps.compare.outputs.changed == 'true'
+        shell: bash
+        env:
+          # Whether the checked commit is the head of a branch. Otherwise it merges a pull request with master
+          # (pull_request, ci-kickoff-manual.yml) or is a merge group, whose MODULE.bazel.lock doesn't fit the
+          # branch of the pull request.
+          BRANCH_HEAD: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' && inputs.commit-sha == github.sha }}
+        run: |
+          if [ "$BRANCH_HEAD" = true ]; then
+              fix="Run 'bazel mod deps' and commit MODULE.bazel.lock, or commit the one in this run's bazel-lockfile-check artifact."
+          else
+              fix="This commit merges the branch with master (in the merge queue also with the pull requests ahead of it). If the Bazel Lockfile job of CI PR Only passed, master changed MODULE.bazel.lock: merge master into the branch. Otherwise that job pushes the update onto a branch in this repository, and for a fork its bazel-lockfile artifact holds it; running 'bazel mod deps' on the branch and committing MODULE.bazel.lock works too."
+          fi
+          echo "::error file=MODULE.bazel.lock,title=MODULE.bazel.lock is out of date::It isn't what 'bazel mod deps' generates for this commit. $fix See \"MODULE.bazel.lock\" in bazel/README.md."
+          exit 1
+
+  push:
+    name: Push MODULE.bazel.lock
+    needs: [amd64-linux]
+    if: inputs.mode == 'update' && needs.amd64-linux.outputs.changed == 'true'
+    # The only job that gets the bot's key. It runs neither the code of the pull request nor that of the
+    # modules it depends on, whose module extensions `bazel mod deps` runs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      HEAD_REF: ${{ inputs.head-ref }}
+      HEAD_REPO: ${{ inputs.head-repo }}
+      HEAD_SHA: ${{ inputs.commit-sha }}
+    steps:
+      - name: Create GitHub App Token
+        # Only the push below needs it, and only for a head branch in this repository.
+        if: env.HEAD_REPO == github.repository
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.commit-sha }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
+
+      - name: Download MODULE.bazel.lock
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bazel-lockfile
+          path: ${{ runner.temp }}/lockfile
+
+      - name: Push MODULE.bazel.lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/lockfile/MODULE.bazel.lock" MODULE.bazel.lock
+          git add MODULE.bazel.lock
+          git --no-pager diff --cached --stat
+          if [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
+              git config --global user.email "infra+github-automation@dfinity.org"
+              git config --global user.name "IDX GitHub Automation"
+              git commit -m "Automatically updated MODULE.bazel.lock"
+              # A fast-forward of exactly the commit that the job above evaluated (the lease): when the branch
+              # has moved on, the run for its new head updates MODULE.bazel.lock.
+              git push --force-with-lease="refs/heads/$HEAD_REF:$HEAD_SHA" origin HEAD:"refs/heads/$HEAD_REF"
+          else
+              echo "Head branch '$HEAD_REF' lives in '$HEAD_REPO', not in '$GITHUB_REPOSITORY': not pushing." \
+                   "Commit the MODULE.bazel.lock in this run's bazel-lockfile artifact instead:" \
+                   "gh run download $GITHUB_RUN_ID --repo $GITHUB_REPOSITORY --name bazel-lockfile"
+          fi
+
+          # Because MODULE.bazel.lock needs updating, fail the PR
+          exit 1

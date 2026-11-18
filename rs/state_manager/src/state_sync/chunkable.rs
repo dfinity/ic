@@ -378,7 +378,7 @@ impl IncompleteState {
             }
         }
 
-        parallel_map(thread_pool, by_parent.into_iter(), |(_parent, files)| {
+        parallel_map(thread_pool, by_parent.into_iter(), 1, |(_parent, files)| {
             for file_info in files {
                 let path = root.join(&file_info.relative_path);
                 Self::create_file_and_set_len(log, &path, file_info.size_bytes);

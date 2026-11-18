@@ -1,6 +1,7 @@
 load("@python_deps//:requirements.bzl", "requirement")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -42,6 +43,15 @@ py_binary(
         requirement("invoke"),
         requirement("simple_parsing"),
     ],
+)
+
+# build_container_base_image only runs in the builds of the local-base IC-OS variants, whose targets are manual. This
+# test checks that it starts, which needs the simple-parsing patch of MODULE.bazel (pip.override) to apply.
+sh_test(
+    name = "build_container_base_image_help_test",
+    srcs = ["build_container_base_image_help_test.sh"],
+    data = [":build_container_base_image"],
+    env = {"BUILD_CONTAINER_BASE_IMAGE": "$(rootpath :build_container_base_image)"},
 )
 
 py_binary(

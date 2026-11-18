@@ -1,5 +1,6 @@
 cbor>=1.0.0
-cbor2>=5.9.0
+# 6.1.5 is the first release with wheels for Python 3.15.
+cbor2>=6.1.5
 configargparse
 cryptography>=50.0.0
 cvss>=2.5
@@ -36,20 +37,31 @@ certifi>=2026.10.23
 oauthlib>=4.0.1
 # TODO: Switch to a versioned release once available.
 sev-snp-measure @ https://github.com/virtee/sev-snp-measure/archive/00a7883fa.zip
-simple-parsing
+# MODULE.bazel patches the wheel of exactly this release (see the pip.override there): when bumping simple-parsing,
+# update or drop that override.
+simple-parsing==0.1.7
 toml>=0.10.2
 tqdm
 uuid
-# packages not directly used, but required by other packages and need to be manually version pinned for python 3.12
+# Packages not directly used, but required by other packages, that need a manual lower bound. For typing_extensions,
+# 4.6.0 is the first release that can be imported on Python 3.12 and later.
 typing_extensions>=4.6.0
 urllib3>=2.8.0
+# cffi (via cryptography and pynacl) and numpy (via pandas): the first releases that support Python 3.15. The
+# packages that need them also accept older releases, which have no wheels for Python 3.15, so pip would build them
+# from source. cffi 2.1.0 has wheels for Python 3.15, but they crash on 3.15.0b4 and later
+# (https://github.com/python-cffi/cffi/issues/263).
+cffi>=2.1.1
+numpy>=2.5.2
 
 # For ci/githubstats/query.py
-pandas
+# 3.0.6 is the first release with wheels for Python 3.15.
+pandas>=3.0.6
 psycopg
 tabulate
 codeowners
-protobuf>=5.29.0
+# At least the Python version of the protobuf module in MODULE.bazel, see there.
+protobuf>=7.36.2
 dacite
 
 # For //rs/recovery/subnet_splitting:split_finder
