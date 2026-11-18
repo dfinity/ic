@@ -163,6 +163,18 @@ BUILDIFIER_EXCLUDES = [
     "./.git/*",
 ]
 
+# Lint warnings are set in .buildifier.json at the repository root, not with
+# lint_warnings. Buildifier loads that file by itself: it looks in its working
+# directory (for these targets, the workspace root) and the directories above
+# it. That way any other buildifier run inside the repository uses the same
+# warnings, including the editor integration in .vscode/settings.json.
+#
+# The file turns off make-location, which flags every "$(location ...)" and
+# "$(locations ...)". We still use them in many places, and they can't be
+# replaced mechanically: depending on the rule and attribute that expands it,
+# $(location ...) means $(execpath ...) or $(rootpath ...), so each use has to
+# be checked. Turn make-location back on once those uses are migrated.
+
 buildifier(
     name = "buildifier",
     exclude_patterns = BUILDIFIER_EXCLUDES,
