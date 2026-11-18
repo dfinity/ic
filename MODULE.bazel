@@ -198,7 +198,7 @@ use_repo(
 #   2nd PR: add it below
 
 bazel_dep(name = "rules_pkg", version = "1.3.0")
-bazel_dep(name = "rules_oci", version = "2.0.0")
+bazel_dep(name = "rules_oci", version = "2.3.5")
 
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 
