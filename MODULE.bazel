@@ -343,17 +343,16 @@ apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
 
 # Package set based on an Ubuntu resolute snapshot, used by the system-test
 # runtime image (see //rs/tests:ubuntu_test_runtime_image_src). The `apt`
-# extension resolves the packages below against the snapshot's package indices
-# each time it is evaluated, so the result depends on both the snapshot
-# timestamp in `uris` and the rules_distroless version (its resolver). The
-# extension records the indices' checksums only in MODULE.bazel.lock, which we
-# don't use (see `--lockfile_mode` in bazel/conf/.bazelrc.build), so every new
-# Bazel server that needs `@resolute` downloads and parses them again.
-# To update the packages, bump the timestamp in both `apt.sources_list` calls.
-# No checked-in file records the resolved packages, so when bumping the
-# timestamp or rules_distroless, compare the `lock_content` that
-# `bazel mod show_repo @resolute` prints before and after: the packages, their
-# versions and sha256s, and each package's `depends_on` list.
+# extension resolves the packages below against the snapshot's package indices,
+# so the result depends on both the snapshot timestamp in `uris` and the
+# rules_distroless version (its resolver). MODULE.bazel.lock records the
+# result, so Bazel evaluates the extension again only when one of its inputs
+# changes, like these tags or the rules_distroless version.
+# To update the packages, bump the timestamp in both `apt.sources_list` calls
+# and run `bazel mod deps` (see "MODULE.bazel.lock" in bazel/README.md). When
+# bumping the timestamp or rules_distroless, review the `apt` extension's entry
+# in the diff of MODULE.bazel.lock: it lists each resolved package with its URL,
+# sha256 and `depends_on` list.
 apt.sources_list(
     architectures = ["amd64"],
     components = [
@@ -420,8 +419,8 @@ http_jar = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_j
 # OVMF (UEFI) firmware for the local system-test backend's QEMU VMs. At the
 # moment there are no official prebuilt firmwares so we extract one from a
 # `.deb`. We download the `.deb` instead of going through the
-# `rules_distroless` snapshot to avoid pulling the ovmf package's (unused)
-# dependencies into the `resolute` package set.
+# `rules_distroless` snapshot to avoid bloating the lockfile with (unused)
+# dependencies from the ovmf package.
 # https://github.com/tianocore/tianocore.github.io/issues/101
 http_file(
     name = "ovmf_deb",
@@ -433,8 +432,8 @@ http_file(
 # OVMF (UEFI) firmware for AMD SEV-SNP confidential VMs, extracted from the
 # `ovmf-amdsev` `.deb` (see https://packages.debian.org/sid/ovmf-amdsev). Same
 # rationale as `ovmf_deb` above: no official prebuilt firmware, so we pull it
-# from a `.deb` snapshot instead of `rules_distroless` to avoid pulling its
-# (unused) dependencies into a package set.
+# from a `.deb` snapshot instead of `rules_distroless` to avoid bloating the
+# lockfile.
 http_file(
     name = "ovmf_amdsev_deb",
     downloaded_file_path = "ovmf-amdsev.deb",
