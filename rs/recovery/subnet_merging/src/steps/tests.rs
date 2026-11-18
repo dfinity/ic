@@ -111,6 +111,9 @@ fn merged_state_hash_is_the_root_hash_of_the_expected_manifest() {
     assert!(merged_state_hash(&layout).is_err());
 
     write_manifest(tmp.path(), "merged", "merged", &manifest);
+    // No expected manifest to check the merged state against.
+    assert!(merged_state_hash(&layout).is_err());
+
     write_manifest(tmp.path(), "expected", "merged", &expected_manifest);
     let state_hash = merged_state_hash(&layout).unwrap();
     assert_eq!(

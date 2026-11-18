@@ -33,7 +33,7 @@ use slog::{Logger, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 
-use std::{collections::BTreeSet, fmt::Debug, iter::Peekable, sync::OnceLock, time::Duration};
+use std::{collections::BTreeSet, fmt::Debug, iter::Peekable, time::Duration};
 
 const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
@@ -823,15 +823,14 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             }
             .into(),
 
-            StepType::ProposeCupForDestinationSubnet => ProposeRecoveryCupStep {
-                source_subnet_id: self.params.source_subnet_id,
-                destination_subnet_id: self.params.destination_subnet_id,
-                admin_helper: self.recovery.admin_helper.clone(),
-                registry_helper: self.recovery.registry_helper.clone(),
-                layout: self.layout.clone(),
-                logger: self.recovery.logger.clone(),
-                merged_state: OnceLock::new(),
-            }
+            StepType::ProposeCupForDestinationSubnet => ProposeRecoveryCupStep::new(
+                self.params.source_subnet_id,
+                self.params.destination_subnet_id,
+                self.recovery.admin_helper.clone(),
+                self.recovery.registry_helper.clone(),
+                self.layout.clone(),
+                self.recovery.logger.clone(),
+            )
             .into(),
         };
 

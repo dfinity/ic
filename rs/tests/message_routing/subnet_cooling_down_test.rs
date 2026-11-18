@@ -14,10 +14,9 @@ condition to hold, and it then halts the subnet and the subnet it is told to
 merge it into at their next CUP, downloads and validates the state each halted
 at, assembles the merged state from them, has the canister ID ranges of the
 subnet rerouted to the subnet it is merged into, and proposes the recovery CUP
-of that subnet at the merged state. The cooling down subnet
-also holds calls waiting for responses that never arrive: they are not drained,
-but make it possible to assert that a subnet merge populates the ingress
-history properly.
+of that subnet at the merged state. The cooling down subnet also holds calls
+waiting for responses that never arrive: they are not drained, but make it
+possible to assert that a subnet merge populates the ingress history properly.
 
 The subnet that is cooled down, i.e. the one that would be merged away, is
 called `S`, and the Application subnet the tool is told to merge `S` into is
@@ -133,9 +132,9 @@ Runbook::
    to `D`.
 19. The following step of the tool is executed:
    `ProposeCupForDestinationSubnet`, which submits a proposal for a recovery CUP
-   of `D` at the merged state, stamped with the time it is proposed at, which
-   the tool checks to be past the times of the CUPs both subnets halted at, and
-   running a fresh DKG for `D`'s membership.
+   of `D` at the merged state. The CUP is stamped with the time it is proposed
+   at, which the tool checks to be past the times of the CUPs both subnets
+   halted at. Executing the proposal runs a fresh DKG for the nodes of `D`.
 20. After `ProposeCupForDestinationSubnet`: wait until the registry holds the
    recovery CUP contents of `D`, which it only does once the fresh DKG for `D`
    has completed. Check that they are at the height of the merged checkpoint,

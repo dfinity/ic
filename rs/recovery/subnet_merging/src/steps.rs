@@ -600,22 +600,7 @@ impl Step for MergeStatesStep {
         state_tool_helper::compute_manifest(&merged_checkpoint, &manifest_path)?;
 
         info!(self.logger, "Validating the manifest of the merged state");
-        let state_hash = state_tool_helper::verify_manifest(&manifest_path)
-            .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
-
-        let expected_manifest_path = self.layout.expected_merged_state_manifest_file();
-        let expected_state_hash = state_tool_helper::verify_manifest(&expected_manifest_path)
-            .map_err(|err| {
-                RecoveryError::validation_failed("Expected manifest verification failed", err)
-            })?;
-        if state_hash != expected_state_hash {
-            return Err(RecoveryError::ValidationFailed(format!(
-                "The merged state at height {merged_height} has the state hash {state_hash}, but \
-                 the state hash {expected_state_hash} is expected; compare {} with {}",
-                manifest_path.display(),
-                expected_manifest_path.display(),
-            )));
-        }
+        let state_hash = merged_state_hash(&self.layout)?;
         info!(
             self.logger,
             "The merged state at height {merged_height} has the expected state hash {state_hash}"
@@ -757,19 +742,38 @@ fn check_time_is_past_halting_times(
 /// rather than when it is created: a step that fails to be created is skipped,
 /// and the tool would then carry on without a recovery CUP.
 pub(crate) struct ProposeRecoveryCupStep {
-    pub(crate) source_subnet_id: SubnetId,
-    pub(crate) destination_subnet_id: SubnetId,
-    pub(crate) admin_helper: AdminHelper,
-    pub(crate) registry_helper: RegistryHelper,
-    pub(crate) layout: Layout,
-    pub(crate) logger: Logger,
+    source_subnet_id: SubnetId,
+    destination_subnet_id: SubnetId,
+    admin_helper: AdminHelper,
+    registry_helper: RegistryHelper,
+    layout: Layout,
+    logger: Logger,
     /// The height and state hash of the merged state, once they have been read
     /// successfully, so that the manifests are verified only once and the
     /// command that is run is the one that was described.
-    pub(crate) merged_state: OnceLock<(Height, String)>,
+    merged_state: OnceLock<(Height, String)>,
 }
 
 impl ProposeRecoveryCupStep {
+    pub(crate) fn new(
+        source_subnet_id: SubnetId,
+        destination_subnet_id: SubnetId,
+        admin_helper: AdminHelper,
+        registry_helper: RegistryHelper,
+        layout: Layout,
+        logger: Logger,
+    ) -> Self {
+        Self {
+            source_subnet_id,
+            destination_subnet_id,
+            admin_helper,
+            registry_helper,
+            layout,
+            logger,
+            merged_state: OnceLock::new(),
+        }
+    }
+
     /// The height and state hash of the merged state: the height follows from
     /// the heights of the CUPs the two subnets halted at, as in
     /// [MergeStatesStep].
@@ -840,9 +844,10 @@ impl Step for ProposeRecoveryCupStep {
             self.layout.merged_state_manifest_file().display(),
         );
         // Like the description of any other proposal, this shows the command
-        // that is about to run. A step is described as soon as it is created,
-        // which may be before the merged state is assembled, and the timestamp
-        // is taken anew when the step is executed.
+        // that is about to run, except for its timestamp, which is taken anew
+        // when the step is executed. The command cannot be shown if the merged
+        // state is not available, e.g. because `MergeStates` was skipped or
+        // failed.
         match self.admin_step(SystemTime::now()) {
             Ok(step) => format!(
                 "{summary} The command, up to the timestamp, which is taken when it is run: {}",
