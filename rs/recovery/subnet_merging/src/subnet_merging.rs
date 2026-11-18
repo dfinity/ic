@@ -222,7 +222,6 @@ impl SubnetMerging {
             &recovery,
             subnet_merging_args.source_subnet_id,
             subnet_merging_args.destination_subnet_id,
-            subnet_merging_args.next_step,
         )
         .expect("Subnets should satisfy all the preconditions");
 
@@ -301,10 +300,7 @@ impl SubnetMerging {
     /// 3) Neither holds any chain keys;
     /// 4) Neither is halted (`is_halted`), as a halted subnet never reaches the
     ///    CUP it is halted at by the tool (which sets `halt_at_cup_height`, but
-    ///    never `is_halted`). The destination subnet may be halted if the tool
-    ///    is resumed at or past `ProposeCupForDestinationSubnet`: its recovery
-    ///    at the merged state halts it, and a resumed run cannot tell whether
-    ///    that proposal was executed before the run was interrupted;
+    ///    never `is_halted`);
     /// 5) The destination subnet is not cooling down;
     /// 6) Both have the same subnet type, cycles cost schedule, subnet admins,
     ///    SEV setting and replica version;
@@ -314,7 +310,6 @@ impl SubnetMerging {
         recovery: &Recovery,
         source_subnet_id: SubnetId,
         destination_subnet_id: SubnetId,
-        next_step: Option<StepType>,
     ) -> RecoveryResult<()> {
         if source_subnet_id == destination_subnet_id {
             return Err(RecoveryError::ValidationFailed(format!(
@@ -322,16 +317,9 @@ impl SubnetMerging {
             )));
         }
 
-        let source = Self::get_and_pre_validate_subnet_record(
-            recovery,
-            source_subnet_id,
-            Self::must_not_be_halted(TargetSubnet::Source, next_step),
-        )?;
-        let destination = Self::get_and_pre_validate_subnet_record(
-            recovery,
-            destination_subnet_id,
-            Self::must_not_be_halted(TargetSubnet::Destination, next_step),
-        )?;
+        let source = Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id)?;
+        let destination =
+            Self::get_and_pre_validate_subnet_record(recovery, destination_subnet_id)?;
 
         Self::ensure_compatible_subnet_records(
             source_subnet_id,
@@ -345,17 +333,6 @@ impl SubnetMerging {
             source_subnet_id,
             destination_subnet_id,
         )
-    }
-
-    /// Whether precondition 4) applies to `target_subnet` when the tool starts
-    /// at `next_step` (from scratch if `None`).
-    fn must_not_be_halted(target_subnet: TargetSubnet, next_step: Option<StepType>) -> bool {
-        match target_subnet {
-            TargetSubnet::Source => true,
-            TargetSubnet::Destination => next_step.is_none_or(|next_step| {
-                (next_step as usize) < StepType::ProposeCupForDestinationSubnet as usize
-            }),
-        }
     }
 
     /// Checks whether the records of the two (individually valid) subnets are
@@ -481,7 +458,6 @@ impl SubnetMerging {
     fn get_and_pre_validate_subnet_record(
         recovery: &Recovery,
         subnet_id: SubnetId,
-        check_not_halted: bool,
     ) -> RecoveryResult<SubnetRecord> {
         let validation_error = |error_message| {
             Err(RecoveryError::ValidationFailed(format!(
@@ -502,7 +478,7 @@ impl SubnetMerging {
             return validation_error("Subnet should not hold any chain keys".to_string());
         }
 
-        if check_not_halted && subnet_record.is_halted {
+        if subnet_record.is_halted {
             return validation_error("Subnet should not be halted".to_string());
         }
 
@@ -911,35 +887,6 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("--download-node-source"), "{err}");
-    }
-
-    #[test]
-    fn only_the_destination_subnet_may_be_halted_once_its_recovery_is_proposed() {
-        let before = StepType::iter()
-            .take_while(|step_type| *step_type != StepType::ProposeCupForDestinationSubnet)
-            .map(Some)
-            .chain([None]);
-        for next_step in before {
-            for target_subnet in [TargetSubnet::Source, TargetSubnet::Destination] {
-                assert!(
-                    SubnetMerging::must_not_be_halted(target_subnet, next_step),
-                    "{target_subnet} subnet, starting at {next_step:?}"
-                );
-            }
-        }
-
-        let from = StepType::iter()
-            .skip_while(|step_type| *step_type != StepType::ProposeCupForDestinationSubnet);
-        for next_step in from {
-            assert!(
-                SubnetMerging::must_not_be_halted(TargetSubnet::Source, Some(next_step)),
-                "source subnet, resumed at {next_step:?}"
-            );
-            assert!(
-                !SubnetMerging::must_not_be_halted(TargetSubnet::Destination, Some(next_step)),
-                "destination subnet, resumed at {next_step:?}"
-            );
-        }
     }
 
     #[test]
