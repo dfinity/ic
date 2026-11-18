@@ -61,6 +61,23 @@ pub fn split_manifest(
     Ok(())
 }
 
+/// Computes the manifest expected of the state merged from the states whose
+/// manifests are at `destination_manifest_path` (the state of the destination
+/// subnet of a merge) and `source_manifest_path` (the state of the subnet that
+/// is merged away), and writes it to `output_path`.
+pub fn merge_manifests(
+    destination_manifest_path: &Path,
+    source_manifest_path: &Path,
+    output_path: &Path,
+) -> RecoveryResult<()> {
+    ic_state_tool::commands::merge_manifest::merge_manifest(
+        destination_manifest_path,
+        source_manifest_path,
+    )
+    .map_err(|err| RecoveryError::StateToolError(format!("Failed to merge the manifests: {err}")))
+    .and_then(|manifest| write_file(output_path, manifest))
+}
+
 /// Assembles the checkpoint at `output` from the checkpoints at `base` (the
 /// state of the destination subnet of a merge) and `source` (the state of the
 /// subnet that is merged away).

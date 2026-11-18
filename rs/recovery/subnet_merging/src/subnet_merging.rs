@@ -2,8 +2,9 @@ use crate::{
     admin_helper::get_propose_to_cool_down_subnet_command,
     layout::Layout,
     steps::{
-        CheckCoolingDownStep, CheckMergeReadinessStep, DownloadStateStep,
-        StopReplicaAtHaltingCheckpointStep, ValidateCupStep, WaitForHaltingCupStep,
+        CheckCoolingDownStep, CheckMergeReadinessStep, ComputeExpectedMergedManifestStep,
+        DownloadStateStep, MergeStatesStep, StopReplicaAtHaltingCheckpointStep, ValidateCupStep,
+        WaitForHaltingCupStep,
     },
 };
 
@@ -85,6 +86,12 @@ pub enum StepType {
     /// Validate the state downloaded from the destination subnet against the
     /// CUP it halted at.
     ValidateDestinationSubnetCup,
+    /// Compute the manifest the merged state is expected to have from the
+    /// manifests of the two downloaded states.
+    ComputeExpectedMergedManifest,
+    /// Assemble the merged state from the two downloaded states, and check its
+    /// manifest against the expected one.
+    MergeStates,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -284,8 +291,8 @@ impl SubnetMerging {
     ///    CUP it is halted at by the tool (which sets `halt_at_cup_height`, but
     ///    never `is_halted`);
     /// 5) The destination subnet is not cooling down;
-    /// 6) Both have the same subnet type, cycles cost schedule, subnet admins
-    ///    and SEV setting.
+    /// 6) Both have the same subnet type, cycles cost schedule, subnet admins,
+    ///    SEV setting and replica version.
     fn check_subnets_preconditions(
         recovery: &Recovery,
         source_subnet_id: SubnetId,
@@ -325,6 +332,7 @@ impl SubnetMerging {
             canister_cycles_cost_schedule: _,
             subnet_admins: _,
             features: _, // Only `sev_enabled`.
+            replica_version_id: _,
             cooling_down: _,
             // Checked for each subnet on its own, by
             // `get_and_pre_validate_subnet_record`.
@@ -332,7 +340,9 @@ impl SubnetMerging {
             chain_key_config: _,
             // Set by the tool itself to halt both subnets.
             halt_at_cup_height: _,
-            // Capacity, left to the merge step.
+            // Capacity, not checked yet: a follow-up is to load the merged
+            // state into a `StateMachine` with the destination subnet's
+            // settings and check that the merged state is fine there.
             max_number_of_canisters: _,
             resource_limits: _,
             // Settings of each subnet on its own: the merged subnet keeps those
@@ -341,7 +351,6 @@ impl SubnetMerging {
             max_ingress_bytes_per_message: _,
             unit_delay_millis: _,
             initial_notary_delay_millis: _,
-            replica_version_id: _,
             recalled_replica_version_ids: _,
             dkg_interval_length: _,
             dkg_dealings_per_block: _,
@@ -411,6 +420,17 @@ impl SubnetMerging {
         let (source_sev, destination_sev) = (sev_enabled(source), sev_enabled(destination));
         if source_sev != destination_sev {
             return mismatch("SEV setting (sev_enabled)", &source_sev, &destination_sev);
+        }
+        // The merged state combines checkpoints written by the replicas of both
+        // subnets and is loaded by the replica of the destination subnet, so
+        // both subnets must run the same replica version (which, in
+        // particular, writes the same state sync version).
+        if source.replica_version_id != destination.replica_version_id {
+            return mismatch(
+                "replica version",
+                &source.replica_version_id,
+                &destination.replica_version_id,
+            );
         }
 
         Ok(())
@@ -649,7 +669,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                     ));
                 }
             }
-            StepType::ValidateSourceSubnetCup | StepType::ValidateDestinationSubnetCup => {}
+            StepType::ValidateSourceSubnetCup
+            | StepType::ValidateDestinationSubnetCup
+            | StepType::ComputeExpectedMergedManifest
+            | StepType::MergeStates => {}
         }
     }
 
@@ -717,6 +740,21 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             StepType::ValidateDestinationSubnetCup => {
                 self.validate_cup_step(TargetSubnet::Destination).into()
             }
+
+            StepType::ComputeExpectedMergedManifest => ComputeExpectedMergedManifestStep {
+                source_subnet_id: self.params.source_subnet_id,
+                destination_subnet_id: self.params.destination_subnet_id,
+                layout: self.layout.clone(),
+            }
+            .into(),
+
+            StepType::MergeStates => MergeStatesStep {
+                source_subnet_id: self.params.source_subnet_id,
+                destination_subnet_id: self.params.destination_subnet_id,
+                layout: self.layout.clone(),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
         };
 
         Ok(step)
@@ -843,6 +881,38 @@ mod tests {
             err.contains("WaitForHaltingCupOnDestinationSubnet"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn subnets_must_run_the_same_replica_version() {
+        let source_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
+        let destination_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
+        let record = |replica_version_id: &str| SubnetRecord {
+            replica_version_id: replica_version_id.to_string(),
+            ..Default::default()
+        };
+
+        assert!(
+            SubnetMerging::ensure_compatible_subnet_records(
+                source_subnet_id,
+                &record("version_a"),
+                destination_subnet_id,
+                &record("version_a"),
+            )
+            .is_ok()
+        );
+
+        let err = SubnetMerging::ensure_compatible_subnet_records(
+            source_subnet_id,
+            &record("version_a"),
+            destination_subnet_id,
+            &record("version_b"),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("replica version"), "{err}");
+        assert!(err.contains("version_a"), "{err}");
+        assert!(err.contains("version_b"), "{err}");
     }
 
     #[test]
