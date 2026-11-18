@@ -152,7 +152,8 @@ pub struct SubnetMergingArgs {
 
     /// How long to wait, in seconds, for the proposals labeling the source
     /// subnet as "cooling down" and merging it into the destination subnet to
-    /// be adopted, executed and visible in the registry.
+    /// be adopted, executed and visible in the registry. Also used when resuming
+    /// an attempted recovery CUP proposal whose outcome is not yet visible.
     #[clap(long, default_value = "3600")]
     pub registry_timeout_secs: u64,
 
@@ -824,8 +825,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             .into(),
 
             StepType::ProposeCupForDestinationSubnet => ProposeRecoveryCupStep::new(
-                self.params.source_subnet_id,
-                self.params.destination_subnet_id,
+                &self.params,
                 self.recovery.admin_helper.clone(),
                 self.recovery.registry_helper.clone(),
                 self.layout.clone(),

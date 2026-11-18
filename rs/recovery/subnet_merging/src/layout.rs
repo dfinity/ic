@@ -50,6 +50,7 @@ struct RecordedRegistryVersion {
 /// |  |-- merge_registry_version.json
 /// |  |-- merged.manifest
 /// |  |-- nns.pem
+/// |  |-- recovery_cup_proposal.json
 /// |  |-- ${source_subnet_id}.pruned_state_tree.cbor
 /// |  |-- ${destination_subnet_id}.pruned_state_tree.cbor
 /// |  |-- halting_cup_${source_subnet_id}.pb
@@ -114,6 +115,12 @@ impl Layout {
     /// The manifest of the merged state.
     pub(crate) fn merged_state_manifest_file(&self) -> PathBuf {
         self.root.join("merged.manifest")
+    }
+
+    /// Records an attempt to propose the destination subnet's recovery CUP.
+    /// Kept even when submission fails: the proposal may have reached governance.
+    pub(crate) fn recovery_cup_proposal_file(&self) -> PathBuf {
+        self.root.join("recovery_cup_proposal.json")
     }
 
     /// The manifest the merged state is expected to have, derived from the
