@@ -2282,6 +2282,62 @@ mod tests {
         panic_due_to_exit(output, pid);
     }
 
+    // Linux only: it reads the child's ignored signals from `/proc`.
+    #[cfg(target_os = "linux")]
+    #[rstest]
+    #[case::launcher(create_launcher_argv(&EmbeddersConfig::default()))]
+    #[case::canister_sandbox(create_sandbox_argv(&EmbeddersConfig::default()))]
+    #[case::compiler_sandbox(create_compiler_sandbox_argv().map(|mut argv| {
+        argv.push("--embedder-config".to_string());
+        argv.push(serde_json::to_string(&EmbeddersConfig::default()).unwrap());
+        argv
+    }))]
+    fn child_process_ignores_shutdown_signals_and_exits_on_eof(#[case] argv: Option<Vec<String>>) {
+        use crate::process::spawn_socketed_process;
+        use std::os::unix::net::UnixStream;
+
+        /// Calls `f` every 10 ms until it returns `Some`; panics after 60 s.
+        fn poll_until<T>(mut f: impl FnMut() -> Option<T>) -> T {
+            let deadline = Instant::now() + Duration::from_secs(60);
+            loop {
+                if let Some(result) = f() {
+                    return result;
+                }
+                assert!(Instant::now() < deadline, "Timed out");
+                thread::sleep(Duration::from_millis(10));
+            }
+        }
+
+        let argv = argv.unwrap();
+        let (socket, child_socket) = UnixStream::pair().unwrap();
+        let mut child =
+            spawn_socketed_process(&argv[0], &argv[1..], &[], child_socket.as_raw_fd()).unwrap();
+        drop(child_socket);
+        let pid = child.id();
+        let signals = [libc::SIGTERM, libc::SIGINT];
+
+        // Signal the child only once it ignores both signals, rather than racing its startup.
+        // `SigIgn` is the hex mask of ignored signals.
+        let ignores_signals = || {
+            let status = fs::read_to_string(format!("/proc/{pid}/status")).unwrap();
+            let mask = status
+                .lines()
+                .find_map(|l| l.strip_prefix("SigIgn:"))
+                .unwrap();
+            let mask = u64::from_str_radix(mask.trim(), 16).unwrap();
+            signals.iter().all(|sig| mask & (1 << (sig - 1)) != 0)
+        };
+        poll_until(|| ignores_signals().then_some(()));
+        for sig in signals {
+            assert_eq!(unsafe { kill(pid.try_into().unwrap(), sig) }, 0);
+        }
+        thread::sleep(Duration::from_millis(100));
+        assert_eq!(child.try_wait().unwrap(), None);
+
+        drop(socket);
+        assert!(poll_until(|| child.try_wait().unwrap()).success());
+    }
+
     fn sandboxed_execution_controller_dir_and_path(
         max_sandbox_count: usize,
         spawn_monitor_thread: bool,

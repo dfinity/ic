@@ -1415,7 +1415,8 @@ fn release_lock_and_persist_metadata(
     persist_metadata_lock: &Arc<Mutex<()>>,
 ) {
     let states_metadata = states.states_metadata.clone();
-    // This should be the only place where we lock this mutex
+    // The only place where this mutex is locked to persist (`wait_for_latest_checkpoint`
+    // locks it only to wait for a persist to complete).
     let _guard = persist_metadata_lock.lock().unwrap();
     drop(states);
     persist_metadata_or_die(log, metrics, state_layout, &states_metadata);
@@ -2910,6 +2911,54 @@ impl StateManagerImpl {
             certification,
             hash_tree,
         })
+    }
+
+    /// Waits until the latest checkpoint is verified and its manifest persisted, so
+    /// that a restart neither archives the checkpoint nor recomputes the manifest,
+    /// checking every 100 ms. Returns right away if there is no checkpoint.
+    ///
+    /// Only looks at the latest checkpoint: if it came from state sync (which stays
+    /// unverified until superseded, and is archived on restart), returns right away,
+    /// even if an older checkpoint is still being validated.
+    ///
+    /// For shutting down: doesn't wait for the rest of the checkpoint work (resetting
+    /// the tip, merging), which a replica about to exit doesn't need.
+    pub fn wait_for_latest_checkpoint(&self) {
+        let start = Instant::now();
+        loop {
+            let Some(height) = self
+                .state_layout
+                .unfiltered_checkpoint_heights()
+                .ok()
+                .and_then(|heights| heights.last().copied())
+            else {
+                return;
+            };
+            let unverified = matches!(
+                self.state_layout.checkpoint_status(height),
+                Ok(CheckpointStatus::UnverifiedRegular)
+            );
+            let has_manifest = self
+                .states
+                .read()
+                .states_metadata
+                .get(&height)
+                .is_some_and(|metadata| metadata.bundled_manifest.is_some());
+            if !unverified && has_manifest {
+                // Publishing the manifest locks this before releasing the `states` lock
+                // (under which we saw the manifest) and until the metadata is persisted.
+                drop(self.persist_metadata_guard.lock().unwrap());
+                info!(
+                    self.log,
+                    "Checkpoint @{} verified and its manifest persisted after {:?}",
+                    height,
+                    start.elapsed()
+                );
+                return;
+            }
+            info!(every_n_seconds => 5, self.log, "Waiting for checkpoint @{} to be verified and its manifest persisted", height);
+            std::thread::sleep(Duration::from_millis(100));
+        }
     }
 }
 

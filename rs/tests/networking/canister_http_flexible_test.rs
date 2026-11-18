@@ -764,13 +764,13 @@ fn test_single_request_nondeterministic(env: TestEnv) {
     );
 }
 
-/// The response count is capped by the block payload limit: `min_responses`
-/// responses fit within the ~2 MiB `MAX_CANISTER_HTTP_PAYLOAD_SIZE`, but
-/// `max_responses` of them would exceed it, so the outcall succeeds with exactly
-/// `min_responses` responses.
+/// The response count is capped by the limit on what one flexible outcall
+/// delivers: `min_responses` responses fit within the 2 MiB − 64 KiB
+/// `MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE`, but `max_responses` of them would
+/// exceed it, so the outcall succeeds with exactly `min_responses` responses.
 fn test_min_responses_fit_max_would_exceed(env: TestEnv) {
-    // Each node returns a 1 MB body: 2 bodies (2.0 MB) fit within the ~2 MiB
-    // (2_097_152 B) payload limit, but 3 (3.0 MB) exceed it.
+    // Each node returns a 1 MB body: 2 bodies (2.0 MB) fit within the
+    // 2_031_616 B limit, but 3 (3.0 MB) exceed it.
     const BODY_SIZE: usize = 1_000_000;
     run_flexible_test(
         env,
@@ -1350,10 +1350,10 @@ fn test_too_many_rejects_non_https(env: TestEnv) {
     );
 }
 
-/// When the aggregated responses are too large to fit in a block, the outcall
-/// reports `responses_too_large`. Each node returns a ~1 MB body (below the
-/// per-node 2 MB limit), but `min_responses` (3) of them exceed the ~2 MiB
-/// block payload limit.
+/// When the aggregated responses are too large, the outcall reports
+/// `responses_too_large`. Each node returns a ~1 MB body (below the per-node
+/// 2 MB limit), but `min_responses` (3) of them exceed the 2 MiB − 64 KiB that
+/// one flexible outcall delivers.
 fn test_responses_too_large(env: TestEnv) {
     run_flexible_test(
         env,

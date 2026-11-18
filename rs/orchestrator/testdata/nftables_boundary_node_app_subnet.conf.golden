@@ -115,6 +115,8 @@ ip6 saddr {::ffff:6.6.6.6} ct state { new } tcp dport {1006} accept # global
     ct state invalid drop
     ct state { established, related } accept
     ct state new tcp dport { 53, 80, 443, 4460, 8080 } accept
+    # Only BNs default to a drop policy, so we need to open up access to use the upgrade proxy
+    ip6 daddr { hostos } ct state new tcp dport 19300 accept
     ct state new udp dport { 53, 123 } accept
   }
 }

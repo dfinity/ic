@@ -337,18 +337,74 @@ use_repo(oci, "alpine_openssl", "alpine_openssl_linux_amd64")
 
 # Ubuntu snapshots
 
-bazel_dep(name = "rules_distroless", version = "0.8.0")
+bazel_dep(name = "rules_distroless", version = "0.9.4")
 
 apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
 
-# Packageset based on an Ubuntu resolute snapshot, see manifest file
-# for details
-# To update, comment out the `lock` field below and run:
-#   bazel run @resolute//:lock
+# Package set based on an Ubuntu resolute snapshot, used by the system-test
+# runtime image (see //rs/tests:ubuntu_test_runtime_image_src). The `apt`
+# extension resolves the packages below against the snapshot's package indices,
+# so the result depends on both the snapshot timestamp in `uris` and the
+# rules_distroless version (its resolver). MODULE.bazel.lock records the
+# result, so Bazel evaluates the extension again only when one of its inputs
+# changes, like these tags or the rules_distroless version.
+# To update the packages, bump the timestamp in both `apt.sources_list` calls
+# and run `bazel mod deps` (see "MODULE.bazel.lock" in bazel/README.md). When
+# bumping the timestamp or rules_distroless, review the `apt` extension's entry
+# in the diff of MODULE.bazel.lock: it lists each resolved package with its URL,
+# sha256 and `depends_on` list.
+apt.sources_list(
+    architectures = ["amd64"],
+    components = [
+        "main",
+        "universe",
+    ],
+    suites = ["resolute"],
+    types = ["deb"],
+    uris = ["https://snapshot.ubuntu.com/ubuntu/20260422T000000Z"],
+)
+apt.sources_list(
+    architectures = ["amd64"],
+    components = ["main"],
+    suites = [
+        "resolute-security",
+        "resolute-updates",
+    ],
+    types = ["deb"],
+    uris = ["https://snapshot.ubuntu.com/ubuntu/20260422T000000Z"],
+)
+
+# `@resolute//<package>/<arch>` targets are only generated for the packages
+# listed here, not for their dependencies. Unlike apt, rules_distroless prefers
+# a package that `Provides:` a listed name over a real package of that name,
+# and the target gets the provider's name: `coreutils` resolves to
+# `coreutils-from-uutils` and `libvirt0` to `libvirt0-hwe`.
 apt.install(
-    name = "resolute",
-    lock = "//bazel:resolute.lock.json",
-    manifest = "//bazel:resolute.yaml",
+    dependency_set = "resolute",
+    packages = [
+        "apt",
+        "bash",
+        "ca-certificates",
+        "coreutils",  # for chmod
+        "dmsetup",
+        "dosfstools",
+        "dpkg",  # for apt list --installed
+        "e2fsprogs",  # for mkfs.ext4 used in ICOS device tests
+        "gawk",  # for build-bootstrap-config-image
+        "gzip",  # for tar-ing up ic regsitry store in systests
+        "libcryptsetup-dev",
+        "libssl3t64",
+        "libunwind8",
+        "libvirt0",  # so colocated test binaries linking libvirt.so.0 can load (see rs/tests/driver/src/driver/local_backend.rs)
+        "mtools",
+        "openssh-client",  # used to SSH into image
+        "perl",
+        "rsync",
+        "tar",
+        "udev",  # for device-mapper tests
+        "xz-utils",
+        "zstd",
+    ],
 )
 use_repo(apt, "resolute")
 
