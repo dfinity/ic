@@ -52,14 +52,13 @@ use std::{
     sync::Arc,
 };
 
-use crate::fetch_stripped_artifact::{
-    canister_http::MIN_STRIPPED_CONTENT_BYTES,
-    types::{
-        StrippedMessage, StrippedMessageId,
-        rpc::{
-            GetCanisterHttpResponseInBlockResponse, GetIDkgDealingInBlockResponse,
-            GetIngressMessageInBlockResponse,
-        },
+use ic_types::batch::canister_http_stripping::MIN_STRIPPED_CONTENT_BYTES;
+
+use crate::fetch_stripped_artifact::types::{
+    StrippedMessage, StrippedMessageId,
+    rpc::{
+        GetCanisterHttpResponseInBlockResponse, GetIDkgDealingInBlockResponse,
+        GetIngressMessageInBlockResponse,
     },
 };
 

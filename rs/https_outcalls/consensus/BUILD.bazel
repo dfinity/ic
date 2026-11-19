@@ -18,6 +18,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-error-types",
+        "//rs/consensus/features",
         "//rs/consensus/utils",
         "//rs/https_outcalls/pricing",
         "//rs/https_outcalls/socks_proxy",

@@ -13,7 +13,7 @@ use ic_types::{
     messages::SignedRequestBytes,
 };
 
-use crate::fetch_stripped_artifact::canister_http::strip_responses;
+use ic_types::batch::canister_http_stripping::strip_responses;
 
 use super::types::stripped::{MaybeStrippedConsensusMessage, StrippedBlockProposal};
 

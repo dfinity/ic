@@ -33,6 +33,7 @@ impl BatchPayloadBuilder for FakeCanisterHttpPayloadBuilder {
         messages_to_bytes(
             self.0.iter().cloned().map(PayloadMessage::Response),
             max_size,
+            max_size,
         )
     }
 

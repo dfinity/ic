@@ -2,6 +2,7 @@
 //! Consensus and Message Routing.
 
 mod canister_http;
+pub mod canister_http_stripping;
 mod chain_key;
 mod execution_environment;
 mod ingress;

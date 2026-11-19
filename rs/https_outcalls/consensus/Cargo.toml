@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 hex = { workspace = true }
+ic-consensus-features = { path = "../../consensus/features" }
 ic-consensus-utils = { path = "../../consensus/utils" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-https-outcalls-pricing = { path = "../pricing" }
