@@ -78,8 +78,9 @@ Runbook::
    contexts (the `install_code` calls that are executing). The remaining three
    terms are expected to hold and are only logged; `VIOLATED_CONDITIONS` says
    why.
-8. Hand over to the subnet merging tool, which runs one step at a time; the
-   checks of steps 9 and 11 are made in between its steps, right after the
+8. Hand over to the subnet merging tool, which runs all of its steps one at a
+   time, in the order in which `StepType` declares them; the checks of steps
+   9, 11, 13, 16, 18 and 20 are made in between its steps, right after the
    step each of them names. The following steps of the tool are executed:
    `CoolDownSourceSubnet`, which labels `S` as "cooling down", and
    `CheckRegistryForCoolingDownFlag`, which records the registry version `V`
@@ -206,6 +207,7 @@ use std::{
     net::IpAddr,
     time::{Duration, Instant},
 };
+use strum::IntoEnumIterator;
 use tokio::runtime::Runtime;
 
 /// The value of the `type` label selecting the `install_code` call contexts of
@@ -692,90 +694,82 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
         logger,
         "Step 8: Handing subnet S ({}) over to the subnet merging tool", context.s_subnet.subnet_id,
     );
-    let mut merging = SubnetMerging::new(
+    let merging = SubnetMerging::new(
         logger.clone(),
         recovery_args,
         /*neuron_args=*/ None,
         merging_args,
     );
-    let mut exec_next_step = |expected_step_type: StepType| {
-        let (step_type, step) = merging
-            .next()
-            .unwrap_or_else(|| panic!("expected step {expected_step_type:?}, got none"));
-        assert_eq!(step_type, expected_step_type);
+    let mut executed_steps = vec![];
+    for (step_type, step) in merging {
         info!(logger, "Next step: {step_type:?}");
         info!(logger, "{}", step.descr());
         step.exec()
             .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
-    };
+        executed_steps.push(step_type);
 
-    exec_next_step(StepType::CoolDownSourceSubnet);
-    exec_next_step(StepType::CheckRegistryForCoolingDownFlag);
-    info!(logger, "Step 8 done: subnet S is labeled \"cooling down\"");
-    runtime.block_on(check_ingress_and_queries_rejected(context));
-
-    exec_next_step(StepType::CheckMergeReadiness);
-    info!(logger, "Step 10 done: subnet S is \"merge ready\"");
-    runtime.block_on(check_loops_stalled(context));
-
-    info!(logger, "Step 12: Halting subnets S and D at their next CUP");
-    exec_next_step(StepType::HaltSourceSubnetAtCupHeight);
-    exec_next_step(StepType::HaltDestinationSubnetAtCupHeight);
-    exec_next_step(StepType::WaitForHaltingCupOnSourceSubnet);
-    exec_next_step(StepType::WaitForHaltingCupOnDestinationSubnet);
-    info!(
-        logger,
-        "Step 12 done: the nodes of S and D the states would be downloaded from serve the CUPs \
-         their subnets halt at"
-    );
-    runtime.block_on(check_subnets_halted(context));
-
-    info!(
-        logger,
-        "Step 14: Downloading and validating the states of subnets S and D"
-    );
-    exec_next_step(StepType::StopSourceReplica);
-    exec_next_step(StepType::StopDestinationReplica);
-    exec_next_step(StepType::DownloadStateFromSourceSubnet);
-    exec_next_step(StepType::DownloadStateFromDestinationSubnet);
-    exec_next_step(StepType::ValidateSourceSubnetCup);
-    exec_next_step(StepType::ValidateDestinationSubnetCup);
-    info!(
-        logger,
-        "Step 14 done: the states S and D halted at are downloaded and valid"
-    );
-
-    info!(logger, "Step 15: Merging the states of subnets S and D");
-    exec_next_step(StepType::ComputeExpectedMergedManifest);
-    exec_next_step(StepType::MergeStates);
-    info!(
-        logger,
-        "Step 15 done: the merged state is assembled and has the expected state hash"
-    );
-    check_merged_state(env, context);
-
-    info!(
-        logger,
-        "Step 17: Rerouting the canister ID ranges of subnet S to subnet D"
-    );
-    exec_next_step(StepType::MergeSubnets);
-    exec_next_step(StepType::CheckRegistryForRoutingTableEntry);
-    info!(
-        logger,
-        "Step 17 done: the registry routes no canister ID range to subnet S anymore"
-    );
-    check_merge_registry_version(env, context);
-
-    info!(
-        logger,
-        "Step 19: Proposing the recovery CUP of subnet D at the merged state"
-    );
-    exec_next_step(StepType::ProposeCupForDestinationSubnet);
-    check_recovery_cup_contents(env, context);
-
-    if let Some((step_type, _)) = merging.next() {
-        panic!("unexpected step {step_type:?}");
+        match step_type {
+            StepType::CoolDownSourceSubnet => {}
+            StepType::CheckRegistryForCoolingDownFlag => {
+                info!(logger, "Step 8 done: subnet S is labeled \"cooling down\"");
+                runtime.block_on(check_ingress_and_queries_rejected(context));
+            }
+            StepType::CheckMergeReadiness => {
+                info!(logger, "Step 10 done: subnet S is \"merge ready\"");
+                runtime.block_on(check_loops_stalled(context));
+            }
+            StepType::HaltSourceSubnetAtCupHeight => {}
+            StepType::HaltDestinationSubnetAtCupHeight => {}
+            StepType::WaitForHaltingCupOnSourceSubnet => {}
+            StepType::WaitForHaltingCupOnDestinationSubnet => {
+                info!(
+                    logger,
+                    "Step 12 done: the nodes of S and D the states would be downloaded from \
+                     serve the CUPs their subnets halt at"
+                );
+                runtime.block_on(check_subnets_halted(context));
+            }
+            StepType::StopSourceReplica => {}
+            StepType::StopDestinationReplica => {}
+            StepType::DownloadStateFromSourceSubnet => {}
+            StepType::DownloadStateFromDestinationSubnet => {}
+            StepType::ValidateSourceSubnetCup => {}
+            StepType::ValidateDestinationSubnetCup => {
+                info!(
+                    logger,
+                    "Step 14 done: the states S and D halted at are downloaded and valid"
+                );
+            }
+            StepType::ComputeExpectedMergedManifest => {}
+            StepType::MergeStates => {
+                info!(
+                    logger,
+                    "Step 15 done: the merged state is assembled and has the expected state hash"
+                );
+                check_merged_state(env, context);
+            }
+            StepType::MergeSubnets => {}
+            StepType::CheckRegistryForRoutingTableEntry => {
+                info!(
+                    logger,
+                    "Step 17 done: the registry routes no canister ID range to subnet S anymore"
+                );
+                check_merge_registry_version(env, context);
+            }
+            StepType::ProposeCupForDestinationSubnet => {
+                info!(
+                    logger,
+                    "Step 19 done: the recovery CUP of subnet D at the merged state is proposed"
+                );
+                check_recovery_cup_contents(env, context);
+            }
+        }
     }
+    assert_eq!(
+        executed_steps,
+        StepType::iter().collect::<Vec<_>>(),
+        "the subnet merging tool did not execute all of its steps in order"
+    );
 
     info!(
         logger,

@@ -17839,6 +17839,7 @@ dependencies = [
  "rejoin-test-lib",
  "serde_json",
  "slog",
+ "strum 0.26.3",
  "tempfile",
  "tokio",
  "xnet-test",
