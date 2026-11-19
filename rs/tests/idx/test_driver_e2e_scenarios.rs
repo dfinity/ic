@@ -175,6 +175,14 @@ fn get_all_e2e_test_scenarios() -> HashMap<String, SystemTestGroup> {
                 .add_test(systest!(spawning_process))
                 .without_farm(),
         ),
+        (
+            "test_escaped_child_process".to_string(),
+            SystemTestGroup::new()
+                .with_timeout_per_test(Duration::from_secs(5))
+                .with_setup(setup_to_succeed)
+                .add_test(systest!(spawning_escaped_process))
+                .without_farm(),
+        ),
     ])
 }
 
@@ -243,6 +251,17 @@ fn spawning_process(_env: TestEnv) {
     let _ = std::process::Command::new("sh")
         .arg("-c")
         .arg("for i in `seq 100`; do echo magicchild$i; sleep 1; done")
+        .spawn();
+    std::thread::sleep(std::time::Duration::from_secs(100));
+}
+
+// Like `spawning_process`, but the loop runs in the background of a shell that exits right away,
+// so it leaves the process tree of the test while it keeps the test's stdout and stderr open. It
+// dies of SIGPIPE once the driver stops reading them.
+fn spawning_escaped_process(_env: TestEnv) {
+    let _ = std::process::Command::new("sh")
+        .arg("-c")
+        .arg("(while true; do echo escapedchild; sleep 1; done) &")
         .spawn();
     std::thread::sleep(std::time::Duration::from_secs(100));
 }

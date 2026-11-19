@@ -3,17 +3,19 @@
 //! in the parent process.
 
 use crate::driver::{
-    constants::LOG_CLOSE_TIMEOUT,
+    constants::{KILLED_TASK_EXIT_TIMEOUT, LOG_CLOSE_TIMEOUT},
     context::GroupContext,
     dsl::SubprocessFn,
     event::TaskId,
     logger::new_discard_logger,
     process::{KillFn, Process},
+    process_tree,
     subprocess_ipc::{LogReceiver, ReportOrFailure, log_panic_event},
     task::{Task, TaskHandle},
     task_scheduler::TaskResult,
 };
-use slog::{Logger, debug, error, info};
+use nix::unistd::Pid;
+use slog::{Logger, debug, error, info, warn};
 use std::{
     panic::catch_unwind,
     process::Command,
@@ -21,6 +23,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
+    time::Duration,
 };
 use tokio::{runtime::Handle as RtHandle, task::JoinHandle, time::timeout};
 
@@ -117,6 +120,7 @@ impl Task for SubprocessTask {
         let (proc, kill) =
             self.rt
                 .block_on(Process::new(self.task_id.clone(), child_cmd, log.clone()));
+        let pid = proc.pid();
 
         let task_state = shared_mutex(TaskState::Running(Box::new(kill)));
         let jh = self.rt.spawn({
@@ -202,10 +206,12 @@ impl Task for SubprocessTask {
 
         Box::new(ChildTaskHandle {
             task_id: self.task_id.clone(),
+            pid,
             log: self.group_ctx.logger(),
             task_state,
             jh: shared_mutex(Some(jh)),
             rt: self.rt.clone(),
+            exit_timeout: KILLED_TASK_EXIT_TIMEOUT,
         })
     }
 
@@ -230,38 +236,84 @@ impl Task for SubprocessTask {
 
 pub struct ChildTaskHandle {
     task_id: TaskId,
+    /// The pid of the subprocess that runs the task.
+    pid: Pid,
     log: Logger,
     task_state: Arc<Mutex<TaskState>>,
     jh: Arc<Mutex<Option<JoinHandle<()>>>>,
     rt: RtHandle,
+    /// How long to wait for the subprocess to finish after killing it.
+    exit_timeout: Duration,
 }
 
 impl ChildTaskHandle {
-    fn finish(&self, requested_state: TaskState) {
-        {
+    /// Kills the subprocess of the task and its descendants, if it's still
+    /// running, and waits at most `exit_timeout` for it to finish.
+    /// `failure_reason` is the reason the task is killed for when it failed,
+    /// e.g. because it timed out.
+    fn finish(&self, requested_state: TaskState, failure_reason: Option<&str>) {
+        // When the task failed, describe what its processes are doing before
+        // killing them, to show where it got stuck. Reading `/proc` and killing
+        // the processes can take a while, so both are done without holding the
+        // lock, which the task needs to report that it exited. Once the state is
+        // no longer `Running`, the task doesn't report anything.
+        let is_running = self.task_state.lock().unwrap().is_running();
+        let failure = match failure_reason {
+            Some(reason) if is_running => Some((reason, process_tree::describe_tree(self.pid))),
+            _ => None,
+        };
+        let kill = {
             let mut task_state = self.task_state.lock().unwrap();
-
-            if task_state.is_running() {
-                match std::mem::replace(&mut *task_state, requested_state) {
-                    TaskState::Running(kill) => (kill)(),
-                    _ => {
-                        unreachable!();
-                    }
-                }
-            } else {
+            if !task_state.is_running() {
                 debug!(self.log, "Task '{}' already terminated!", self.task_id);
                 return;
-            };
+            }
+            match std::mem::replace(&mut *task_state, requested_state) {
+                TaskState::Running(kill) => kill,
+                _ => unreachable!(),
+            }
+        };
+        if let Some((reason, processes)) = failure {
+            warn!(
+                self.log,
+                "Killing task '{}' (pid {}) because it failed: {reason}. \
+                 What its processes were doing in the kernel:\n{processes}",
+                self.task_id,
+                self.pid,
+            );
         }
+        let killed_descendants = kill();
+        let jh = self
+            .jh
+            .lock()
+            .unwrap()
+            .take()
+            .expect("JoinHandle already taken!");
+        // Bound the wait, so that a subprocess that survives `SIGKILL` doesn't
+        // block the driver, and with it the remaining tasks and the report,
+        // until Bazel kills the test.
+        match self
+            .rt
+            .block_on(async { timeout(self.exit_timeout, jh).await })
         {
-            let jh = self
-                .jh
-                .lock()
-                .unwrap()
-                .take()
-                .expect("JoinHandle already taken!");
-            if let Err(e) = self.rt.block_on(jh) {
-                error!(self.log, "ChildTask JoinHandle returned error: {e:?}");
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => error!(self.log, "ChildTask JoinHandle returned error: {e:?}"),
+            Err(_) => {
+                let pids = std::iter::once(self.pid)
+                    .chain(killed_descendants.into_iter().map(|(pid, _)| pid))
+                    .collect();
+                error!(
+                    self.log,
+                    "Task '{}' (pid {}) did not finish within {}s of being killed with SIGKILL. \
+                     A process only survives SIGKILL while one of its threads waits \
+                     uninterruptibly in the kernel, e.g. for I/O that doesn't complete. \
+                     Continuing without waiting for it. \
+                     What its processes are doing in the kernel:\n{}",
+                    self.task_id,
+                    self.pid,
+                    self.exit_timeout.as_secs(),
+                    process_tree::describe(pids),
+                );
             }
         }
     }
@@ -269,7 +321,11 @@ impl ChildTaskHandle {
 
 impl TaskHandle for ChildTaskHandle {
     fn cancel(&self) {
-        self.finish(TaskState::Cancelled);
+        self.finish(TaskState::Cancelled, None);
+    }
+
+    fn cancel_after_failure(&self, reason: &str) {
+        self.finish(TaskState::Cancelled, Some(reason));
     }
 }
 
@@ -304,4 +360,44 @@ fn panic_to_result(panic_res: std::thread::Result<()>) -> Result<(), String> {
 
 fn shared_mutex<T>(v: T) -> Arc<Mutex<T>> {
     Arc::new(Mutex::new(v))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+
+    /// A handle of a running task whose subprocess, `sleep`, survives being
+    /// killed, like a process that waits uninterruptibly in the kernel.
+    fn handle_of_unkillable_task(rt: &tokio::runtime::Runtime, sleep_pid: Pid) -> ChildTaskHandle {
+        ChildTaskHandle {
+            task_id: TaskId::Test("unkillable".to_string()),
+            pid: sleep_pid,
+            log: new_discard_logger(),
+            task_state: shared_mutex(TaskState::Running(Box::new(Vec::new))),
+            jh: shared_mutex(Some(rt.spawn(std::future::pending()))),
+            rt: rt.handle().clone(),
+            exit_timeout: Duration::from_millis(100),
+        }
+    }
+
+    #[test]
+    fn cancel_gives_up_on_a_subprocess_that_does_not_exit() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let mut sleep = Command::new("sleep").arg("1000").spawn().unwrap();
+        let handle = handle_of_unkillable_task(&rt, Pid::from_raw(sleep.id() as i32));
+
+        let start = Instant::now();
+        handle.cancel_after_failure("Timeout after 1s");
+
+        assert!(start.elapsed() < Duration::from_secs(30));
+        assert!(matches!(
+            *handle.task_state.lock().unwrap(),
+            TaskState::Cancelled
+        ));
+        // Cancelling again is a no-op.
+        handle.cancel();
+        sleep.kill().unwrap();
+        sleep.wait().unwrap();
+    }
 }
