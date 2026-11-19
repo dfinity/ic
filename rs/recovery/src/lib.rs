@@ -858,6 +858,7 @@ impl Recovery {
                     chain_key_config,
                     replacement_nodes,
                     registry_params,
+                    /*summary=*/ None,
                     SystemTime::now(),
                 ),
         })

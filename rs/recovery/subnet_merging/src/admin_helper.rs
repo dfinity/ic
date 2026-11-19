@@ -1,5 +1,8 @@
 use ic_base_types::SubnetId;
 use ic_recovery::admin_helper::{AdminHelper, CommandHelper, IcAdmin, SUMMARY_ARG, quote};
+use ic_types::Height;
+
+use std::time::SystemTime;
 
 const SUBNET_ARG: &str = "subnet";
 const SOURCE_SUBNET_ARG: &str = "source-subnet";
@@ -49,6 +52,32 @@ pub(crate) fn get_propose_to_merge_subnets_command(
     admin_helper.add_proposer_args(&mut ic_admin);
 
     ic_admin
+}
+
+/// Propose the recovery CUP of the destination subnet at the merged state,
+/// with a summary naming the merge rather than a plain subnet recovery.
+pub(crate) fn get_propose_recovery_cup_command(
+    admin_helper: &AdminHelper,
+    source_subnet_id: SubnetId,
+    destination_subnet_id: SubnetId,
+    height: Height,
+    state_hash: String,
+    time: SystemTime,
+) -> IcAdmin {
+    admin_helper.get_propose_to_update_recovery_cup_command(
+        destination_subnet_id,
+        height,
+        state_hash,
+        /*initial_dkg_subnet_id=*/ None,
+        /*chain_key_config=*/ None,
+        /*replacement_nodes=*/ &[],
+        /*registry_params=*/ None,
+        Some(format!(
+            "Recover subnet {destination_subnet_id} at the state merged from it and subnet \
+             {source_subnet_id}, which is merged into it",
+        )),
+        time,
+    )
 }
 
 #[cfg(test)]
@@ -104,6 +133,32 @@ mod tests {
             --summary \"Merge subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe into subnet mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\" \
             --source-subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             --destination-subnet mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe \
+            --test-neuron-proposer"
+        );
+    }
+
+    #[test]
+    fn get_propose_recovery_cup_command_test() {
+        let result = get_propose_recovery_cup_command(
+            &fake_admin_helper(),
+            subnet_id_from_str(FAKE_SUBNET_ID_1),
+            subnet_id_from_str(FAKE_SUBNET_ID_2),
+            Height::from(666),
+            "fake_state_hash".to_string(),
+            std::time::UNIX_EPOCH + std::time::Duration::from_nanos(123456),
+        )
+        .join(" ");
+
+        assert_eq!(
+            result,
+            "/fake/ic/admin/dir/ic-admin \
+            --nns-url \"https://fake_nns_url.com:8080/\" \
+            propose-to-update-recovery-cup \
+            --subnet-index mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe \
+            --height 666 \
+            --state-hash fake_state_hash \
+            --summary \"Recover subnet mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe at the state merged from it and subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe, which is merged into it\" \
+            --time-ns 123456 \
             --test-neuron-proposer"
         );
     }

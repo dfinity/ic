@@ -4,8 +4,10 @@ use crate::{
     steps::{
         CheckCoolingDownStep, CheckMergeReadinessStep, CheckRoutingTableStep,
         ComputeExpectedMergedManifestStep, DownloadStateStep, MergeStatesStep,
-        StopReplicaAtHaltingCheckpointStep, ValidateCupStep, WaitForHaltingCupStep,
+        ProposeRecoveryCupStep, StopReplicaAtHaltingCheckpointStep, ValidateCupStep,
+        WaitForHaltingCupStep,
     },
+    utils::ensure_default_initial_dkg_subnet_is_not_merged,
 };
 
 use clap::Parser;
@@ -98,6 +100,9 @@ pub enum StepType {
     /// Wait until the registry routes no canister ID range to the source subnet
     /// anymore, and record the registry version at which this was read.
     CheckRegistryForRoutingTableEntry,
+    /// Submit a proposal for a recovery CUP of the destination subnet at the
+    /// merged state.
+    ProposeCupForDestinationSubnet,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -298,7 +303,9 @@ impl SubnetMerging {
     ///    never `is_halted`);
     /// 5) The destination subnet is not cooling down;
     /// 6) Both have the same subnet type, cycles cost schedule, subnet admins,
-    ///    SEV setting and replica version.
+    ///    SEV setting and replica version;
+    /// 7) Neither is the default initial DKG subnet, which runs the DKG for the
+    ///    recovery of the destination subnet.
     fn check_subnets_preconditions(
         recovery: &Recovery,
         source_subnet_id: SubnetId,
@@ -319,6 +326,12 @@ impl SubnetMerging {
             &source,
             destination_subnet_id,
             &destination,
+        )?;
+
+        ensure_default_initial_dkg_subnet_is_not_merged(
+            &recovery.registry_helper,
+            source_subnet_id,
+            destination_subnet_id,
         )
     }
 
@@ -680,7 +693,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             | StepType::ComputeExpectedMergedManifest
             | StepType::MergeStates
             | StepType::MergeSubnets
-            | StepType::CheckRegistryForRoutingTableEntry => {}
+            | StepType::CheckRegistryForRoutingTableEntry
+            | StepType::ProposeCupForDestinationSubnet => {}
         }
     }
 
@@ -781,6 +795,16 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 layout: self.layout.clone(),
                 timeout: Duration::from_secs(self.params.registry_timeout_secs),
                 poll_interval: Duration::from_secs(self.params.poll_interval_secs),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
+
+            StepType::ProposeCupForDestinationSubnet => ProposeRecoveryCupStep {
+                source_subnet_id: self.params.source_subnet_id,
+                destination_subnet_id: self.params.destination_subnet_id,
+                admin_helper: self.recovery.admin_helper.clone(),
+                registry_helper: self.recovery.registry_helper.clone(),
+                layout: self.layout.clone(),
                 logger: self.recovery.logger.clone(),
             }
             .into(),
