@@ -127,7 +127,6 @@ pub struct SubnetMergingArgs {
     /// Asked for if missing, unless prompts are skipped. Remote access uses SSH
     /// with the admin key.
     #[clap(long, value_parser=ic_recovery::util::data_location_from_str)]
-    #[serde(alias = "download_node_source")]
     pub source_node: Option<DataLocation>,
 
     /// The node of the destination subnet to download the state from and upload
@@ -137,7 +136,6 @@ pub struct SubnetMergingArgs {
     /// if missing, unless prompts are skipped. Remote access uses SSH with the
     /// admin key.
     #[clap(long, value_parser=ic_recovery::util::data_location_from_str)]
-    #[serde(alias = "download_node_destination")]
     pub destination_node: Option<DataLocation>,
 
     /// How long to wait for the subnet that is cooling down to become ready to
@@ -980,34 +978,6 @@ mod tests {
         // Past the last step needing the destination node, no node is needed.
         args.skip = Some(vec![StepType::UploadStateToDestinationSubnet]);
         assert!(SubnetMerging::check_nodes(&args).is_ok());
-    }
-
-    /// The recovery state saved by earlier versions of the tool names the nodes
-    /// `download_node_source` and `download_node_destination`.
-    #[test]
-    fn saved_state_keeps_nodes_under_their_earlier_names() {
-        for location in [
-            DataLocation::Local,
-            DataLocation::Remote("::2".parse().unwrap()),
-        ] {
-            let mut args = args();
-            args.source_node = Some(location);
-            args.destination_node = Some(location);
-            let mut json = serde_json::to_value(&args).unwrap();
-            let fields = json.as_object_mut().unwrap();
-            for (name, earlier_name) in [
-                ("source_node", "download_node_source"),
-                ("destination_node", "download_node_destination"),
-            ] {
-                let node = fields.remove(name).unwrap();
-                fields.insert(earlier_name.to_string(), node);
-            }
-
-            assert_eq!(
-                serde_json::from_value::<SubnetMergingArgs>(json).unwrap(),
-                args
-            );
-        }
     }
 
     #[test]
