@@ -225,7 +225,6 @@ impl SubnetMerging {
             &recovery,
             subnet_merging_args.source_subnet_id,
             subnet_merging_args.destination_subnet_id,
-            subnet_merging_args.next_step,
         )
         .expect("Subnets should satisfy all the preconditions");
 
@@ -301,22 +300,15 @@ impl SubnetMerging {
     /// 1) They are two different subnets;
     /// 2) Both are `Application` (or `VerifiedApplication`) subnets;
     /// 3) Neither holds any chain keys;
-    /// 4) Neither is halted (`is_halted`), as a halted subnet never reaches the
-    ///    CUP it is halted at by the tool (which sets `halt_at_cup_height`, but
-    ///    never `is_halted`), unless the tool is resumed at or past
-    ///    `ProposeCupForDestinationSubnet`: the recovery of the destination
-    ///    subnet at the merged state halts it, and a resumed run cannot tell
-    ///    whether that proposal was executed before the run was interrupted;
-    /// 5) The destination subnet is not cooling down;
-    /// 6) Both have the same subnet type, cycles cost schedule, subnet admins,
+    /// 4) The destination subnet is not cooling down;
+    /// 5) Both have the same subnet type, cycles cost schedule, subnet admins,
     ///    SEV setting and replica version;
-    /// 7) Neither is the default initial DKG subnet, which runs the DKG for the
+    /// 6) Neither is the default initial DKG subnet, which runs the DKG for the
     ///    recovery of the destination subnet.
     fn check_subnets_preconditions(
         recovery: &Recovery,
         source_subnet_id: SubnetId,
         destination_subnet_id: SubnetId,
-        next_step: Option<StepType>,
     ) -> RecoveryResult<()> {
         if source_subnet_id == destination_subnet_id {
             return Err(RecoveryError::ValidationFailed(format!(
@@ -324,16 +316,9 @@ impl SubnetMerging {
             )));
         }
 
-        let check_not_halted = next_step.is_none_or(|next_step| {
-            (next_step as usize) < StepType::ProposeCupForDestinationSubnet as usize
-        });
-        let source =
-            Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id, check_not_halted)?;
-        let destination = Self::get_and_pre_validate_subnet_record(
-            recovery,
-            destination_subnet_id,
-            check_not_halted,
-        )?;
+        let source = Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id)?;
+        let destination =
+            Self::get_and_pre_validate_subnet_record(recovery, destination_subnet_id)?;
 
         Self::ensure_compatible_subnet_records(
             source_subnet_id,
@@ -369,9 +354,10 @@ impl SubnetMerging {
             cooling_down: _,
             // Checked for each subnet on its own, by
             // `get_and_pre_validate_subnet_record`.
-            is_halted: _,
             chain_key_config: _,
-            // Set by the tool itself to halt both subnets.
+            // Set by the tool itself, which halts both subnets and recovers the
+            // destination subnet.
+            is_halted: _,
             halt_at_cup_height: _,
             // Capacity, not checked yet: a follow-up is to load the merged
             // state into a `StateMachine` with the destination subnet's
@@ -472,7 +458,6 @@ impl SubnetMerging {
     fn get_and_pre_validate_subnet_record(
         recovery: &Recovery,
         subnet_id: SubnetId,
-        check_not_halted: bool,
     ) -> RecoveryResult<SubnetRecord> {
         let validation_error = |error_message| {
             Err(RecoveryError::ValidationFailed(format!(
@@ -491,10 +476,6 @@ impl SubnetMerging {
             .is_some_and(|chain_key_config| !chain_key_config.key_configs.is_empty())
         {
             return validation_error("Subnet should not hold any chain keys".to_string());
-        }
-
-        if check_not_halted && subnet_record.is_halted {
-            return validation_error("Subnet should not be halted".to_string());
         }
 
         let subnet_type = subnet_record
