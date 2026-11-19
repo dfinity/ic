@@ -288,7 +288,10 @@ const TWO_DKG_INTERVALS: u64 = 2 * (DKG_INTERVAL_LENGTH + 1);
 /// of terminal statuses once the entries of the ingress messages submitted
 /// before the subnet started cooling down are pruned, i.e. at their (up to
 /// `MAX_INGRESS_TTL` = 5 minutes away) expiry times. Hence `MAX_INGRESS_TTL`
-/// plus 400 rounds.
+/// plus 400 rounds. The 400 rounds cover the `install_code` calls: each burns
+/// `INIT_INSTRUCTIONS` at 2B instructions per round, i.e. takes about 150
+/// rounds. The two are added up, as the TTL only starts ticking once the
+/// `install_code` calls finish.
 const MERGE_READY_TIMEOUT: Duration = Duration::from_millis(5 * 60 * 1000 + 400 * ROUND_MILLIS);
 /// Timeout for the registry to reflect a proposal that `ic-admin` reported as
 /// executed.
@@ -794,8 +797,8 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
 /// ranges, so the version records the rerouting rather than a version that
 /// happens to precede it.
 ///
-/// The routing tables are read through a registry replica of the test's own,
-/// in a local store apart from the one of the tool.
+/// The routing tables are read through a registry helper of the test's own,
+/// with a local store separate from the one of the tool.
 fn check_merge_registry_version(env: &TestEnv, context: &Context<'_>) {
     let logger = &context.logger;
     let recovery_dir = env.get_path(MERGING_DIR).join(RECOVERY_DIRECTORY_NAME);
@@ -894,7 +897,7 @@ fn check_merge_registry_version(env: &TestEnv, context: &Context<'_>) {
     );
 }
 
-/// The test's own registry replica, which fetches the latest registry version
+/// The test's own registry helper, which fetches the latest registry version
 /// on every read. It uses a local store separate from the one of the tool.
 fn test_registry_helper(env: &TestEnv, logger: &Logger) -> RegistryHelper {
     let recovery_dir = env.get_path(MERGING_DIR).join(RECOVERY_DIRECTORY_NAME);
