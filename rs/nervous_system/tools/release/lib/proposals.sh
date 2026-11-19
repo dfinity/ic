@@ -524,7 +524,7 @@ generate_forum_post_proposals_section() {
     done
     if [ ${#BAD_ARGS[@]} -gt 0 ]; then
         echo >&2 "Arguments must be of the form <proposal_file>:<proposal_id> (e.g. nns-registry.md:144845), but these are not: ${BAD_ARGS[*]}"
-        exit 1
+        return 1
     fi
 
     # Cram arguments into one string, one line per proposal.
@@ -549,7 +549,7 @@ generate_forum_post_proposals_section() {
         echo "[Proposal $PROPOSAL_ID](https://dashboard.internetcomputer.org/proposal/$PROPOSAL_ID)"
         echo
         echo '````'
-        cat "$PROPOSAL_FILE"
+        cat "$PROPOSAL_FILE" || return 1
         echo '````'
         echo
     done <<<"$PROPOSAL_LINES"
