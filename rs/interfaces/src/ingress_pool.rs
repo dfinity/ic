@@ -1,10 +1,11 @@
 //! The ingress pool public interface.
 use crate::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifact};
 use ic_types::{
-    CountBytes, NodeId, Time,
+    CanisterId, CountBytes, NodeId, Time,
     artifact::IngressMessageId,
-    messages::{MessageId, SignedIngress},
+    messages::{MessageId, SignedIngress, extract_effective_canister_id},
 };
+use std::sync::OnceLock;
 
 // tag::interface[]
 
@@ -26,7 +27,19 @@ pub struct IngressPoolObject {
 
     /// Byte size of the ingress message.
     byte_size: usize,
+
+    /// The effective canister ID of the ingress message, see
+    /// [`IngressPoolObject::effective_canister_id`]. Determining it means decoding
+    /// the method payload, so this is done on first use and the outcome is kept
+    /// for as long as the message stays in the pool.
+    effective_canister_id: OnceLock<Result<Option<CanisterId>, InvalidManagementMessage>>,
 }
+
+/// The effective canister ID of an ingress message addressed to the management
+/// canister cannot be determined: the method does not exist, cannot be called via
+/// ingress messages, or its payload cannot be decoded.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct InvalidManagementMessage;
 
 impl IngressPoolObject {
     pub fn new(originator_id: NodeId, signed_ingress: SignedIngress) -> Self {
@@ -38,7 +51,23 @@ impl IngressPoolObject {
             message_id,
             originator_id,
             byte_size,
+            effective_canister_id: OnceLock::new(),
         }
+    }
+
+    /// Returns the effective canister ID of the ingress message, as determined by
+    /// [`extract_effective_canister_id`], i.e. `Ok(None)` for messages without an
+    /// effective canister ID.
+    ///
+    /// The method payload is decoded at most once per pool object, no matter how
+    /// often this is called. This holds for payloads that fail to decode as well:
+    /// such messages stay in the pool until they expire, so they would otherwise be
+    /// decoded again every time the ingress selector considers them.
+    pub fn effective_canister_id(&self) -> Result<Option<CanisterId>, InvalidManagementMessage> {
+        *self.effective_canister_id.get_or_init(|| {
+            extract_effective_canister_id(self.signed_ingress.content())
+                .map_err(|_| InvalidManagementMessage)
+        })
     }
 }
 

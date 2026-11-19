@@ -193,6 +193,10 @@ impl IngressSelector for IngressManager {
                     let result = self.validate_ingress(
                         IngressMessageId::from(ingress),
                         &ingress.signed_ingress,
+                        // The same pool object is considered again on every attempt
+                        // to build a payload until it is included in a block or
+                        // expires, so its effective canister ID is cached on it.
+                        || ingress.effective_canister_id(),
                         &state,
                         context,
                         &settings,
@@ -444,6 +448,7 @@ impl IngressSelector for IngressManager {
             self.validate_ingress(
                 ingress_id.clone(),
                 &ingress,
+                || extract_effective_canister_id(ingress.content()),
                 &state,
                 context,
                 &settings,
@@ -518,11 +523,17 @@ impl IngressSelector for IngressManager {
 }
 
 impl IngressManager {
+    /// Validates a single ingress message.
+    ///
+    /// `effective_canister_id` yields the effective canister ID of `signed_ingress`
+    /// (or an error if it cannot be determined). It is only called if the message
+    /// passes the checks preceding the cycles check.
     #[allow(clippy::too_many_arguments)]
-    fn validate_ingress(
+    fn validate_ingress<E>(
         &self,
         ingress_id: IngressMessageId,
         signed_ingress: &SignedIngress,
+        effective_canister_id: impl FnOnce() -> Result<Option<CanisterId>, E>,
         state: &ReplicatedState,
         context: &ValidationContext,
         settings: &IngressMessageSettings,
@@ -596,7 +607,7 @@ impl IngressManager {
         }
 
         // Skip the message if there aren't enough cycles to induct the message.
-        let effective_canister_id = extract_effective_canister_id(msg).map_err(|_| {
+        let effective_canister_id = effective_canister_id().map_err(|_| {
             ValidationError::InvalidArtifact(InvalidIngressPayloadReason::InvalidManagementMessage)
         })?;
         let subnet_cycles_config = state.get_own_subnet_cycles_config();
@@ -818,7 +829,7 @@ pub(crate) mod tests {
     use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
     use ic_interfaces::{
         execution_environment::IngressHistoryError,
-        ingress_pool::ChangeAction,
+        ingress_pool::{ChangeAction, IngressPool, InvalidManagementMessage},
         p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
         time_source::TimeSource,
     };
@@ -2381,6 +2392,109 @@ pub(crate) mod tests {
                         InvalidIngressPayloadReason::InvalidManagementMessage
                     ))
                 );
+            },
+        );
+    }
+
+    /// Messages stay in the ingress pool across attempts to build a payload, so every
+    /// attempt has to treat them the same way: management messages whose effective
+    /// canister ID can be determined are selected each time, and those for which it
+    /// cannot are skipped each time.
+    #[test]
+    fn test_get_ingress_payload_repeatedly_with_management_messages() {
+        let subnet_id = subnet_test_id(0);
+        let registry = set_up_registry(
+            subnet_id,
+            None,
+            MAX_INGRESS_MESSAGES_PER_BLOCK,
+            MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
+        );
+        setup_with_params(
+            None,
+            Some((registry, subnet_id)),
+            None,
+            Some(
+                ReplicatedStateBuilder::new()
+                    .with_subnet_id(subnet_id)
+                    .with_canister(
+                        CanisterStateBuilder::new()
+                            .with_canister_id(canister_test_id(2))
+                            .with_cycles(u128::MAX)
+                            .build(),
+                    )
+                    .build(),
+            ),
+            /*ingress_pool_max_count=*/ None,
+            |ingress_manager, ingress_pool| {
+                let expiry = UNIX_EPOCH + MAX_INGRESS_TTL;
+                let canister_msg = SignedIngressBuilder::new()
+                    .canister_id(canister_test_id(2))
+                    .expiry_time(expiry)
+                    .build();
+                let valid_management_msg = SignedIngressBuilder::new()
+                    .canister_id(IC_00)
+                    .method_name("canister_status")
+                    .method_payload(CanisterIdRecord::from(canister_test_id(2)).encode())
+                    .expiry_time(expiry)
+                    .build();
+                // Without a payload there is no canister to charge for the message.
+                let invalid_management_msg = SignedIngressBuilder::new()
+                    .canister_id(IC_00)
+                    .method_name("canister_status")
+                    .expiry_time(expiry)
+                    .build();
+                insert_unvalidated_ingress_with_timestamp(
+                    vec![
+                        canister_msg.clone(),
+                        valid_management_msg.clone(),
+                        invalid_management_msg.clone(),
+                    ],
+                    &ingress_pool,
+                    UNIX_EPOCH,
+                );
+
+                let validation_context = ValidationContext {
+                    time: UNIX_EPOCH,
+                    registry_version: RegistryVersion::from(1),
+                    certified_height: Height::from(0),
+                };
+                let expected_ids = HashSet::from([
+                    IngressMessageId::from(&canister_msg),
+                    IngressMessageId::from(&valid_management_msg),
+                ]);
+                for _ in 0..3 {
+                    let payload = ingress_manager.get_ingress_payload(
+                        &HashSet::new(),
+                        &validation_context,
+                        NumBytes::new(1_000_000),
+                    );
+                    assert_eq!(
+                        payload
+                            .payload
+                            .message_ids()
+                            .cloned()
+                            .collect::<HashSet<_>>(),
+                        expected_ids
+                    );
+                }
+
+                let ingress_pool = ingress_pool.read().unwrap();
+                for (msg, expected) in [
+                    (canister_msg, Ok(None)),
+                    (valid_management_msg, Ok(Some(canister_test_id(2)))),
+                    (invalid_management_msg, Err(InvalidManagementMessage)),
+                ] {
+                    let pool_object = &ingress_pool
+                        .validated()
+                        .get(&IngressMessageId::from(&msg))
+                        .unwrap()
+                        .msg;
+                    assert_eq!(pool_object.effective_canister_id(), expected);
+                    assert_eq!(
+                        pool_object.effective_canister_id().ok(),
+                        extract_effective_canister_id(msg.content()).ok()
+                    );
+                }
             },
         );
     }
