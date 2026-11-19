@@ -211,7 +211,7 @@ crate.spec(
 )
 crate.spec(
     package = "base64",
-    version = "^0.22",
+    version = "^0.23.1",
 )
 crate.spec(
     package = "bech32",
@@ -230,7 +230,7 @@ crate.spec(
 )
 crate.spec(
     package = "bit-vec",
-    version = "^0.6.3",
+    version = "^0.10.2",
 )
 crate.spec(
     features = [
@@ -1088,7 +1088,7 @@ crate.spec(
     default_features = False,
     features = ["std"],
     package = "pem",
-    version = "^3",
+    version = "^4.0.0",
 )
 crate.spec(
     package = "pin-project-lite",
@@ -1276,11 +1276,11 @@ crate.spec(
 )
 crate.spec(
     package = "ripemd",
-    version = "^0.1.1",
+    version = "^0.2.0",
 )
 crate.spec(
     package = "rlp",
-    version = "^0.5.2",
+    version = "^0.6.1",
 )
 crate.spec(
     default_features = False,
@@ -1888,7 +1888,7 @@ crate.spec(
 )
 crate.spec(
     package = "zstd",
-    version = "^0.13.3",
+    version = "^0.14.4",
 )
 
 # Crate annotations
