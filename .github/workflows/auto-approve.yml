@@ -1,46 +1,168 @@
 name: Auto Approve PR
 
-on: 
+# Approves the PRs in which ci/src/mainnet_revisions/mainnet_revisions.py, run by the
+# update-mainnet-*-revisions workflows, updates a mainnet revisions file. CODEOWNERS gives
+# those files no owner, so this approval is the only review such a PR needs.
+#
+# The PR bot that opens those PRs also pushes fix-up commits to other PRs, so an event
+# caused by the bot does not show that the bot produced the PR. An approval therefore
+# needs a PR that the bot opened from the branch of one revisions file, whose head is a
+# single commit that changes only that file and that the bot pushed itself. Approvals
+# survive later pushes to the PR, so every other event on a PR the bot opened dismisses
+# the github-actions[bot] approvals of anything but such a head.
+
+on:
+  # Not filtered by paths: a push that takes the revisions file out of the PR must still
+  # dismiss its approval.
   pull_request_target:
-    paths:
-      - "mainnet-canister-revisions.json"
-      - "mainnet-icos-revisions.json"
+    types: [opened, synchronize, reopened, edited]
+
+permissions: {}
 
 jobs:
-  auto-approve-canister:
+  auto-approve:
+    # The PR author, unlike github.actor (whoever caused this event), never changes.
+    if: github.event.pull_request.user.login == 'pr-creation-bot-dfinity-ic[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # One run per PR at a time. Each run judges the PR as it is when the run starts, so
+    # the last run sees every push that triggered a run.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     permissions:
-      pull-requests: write
-    if: github.actor == 'pr-creation-bot-dfinity-ic[bot]'
+      contents: read # compare and activity APIs
+      pull-requests: write # approve and dismiss reviews
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BOT: pr-creation-bot-dfinity-ic[bot]
+      PR: ${{ github.event.pull_request.number }}
+    # No checkout: this job holds a write token, so it must not run code from the PR.
     steps:
-      - name: Check file
-        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
-        id: filter
-        with:
-          filters: |
-            canister:
-              - "mainnet-canister-revisions.json"
-      - name: Auto-approve
-        uses: hmarr/auto-approve-action@93c80b3919aae15c0da0d3ca49c70f57e3c4a58f #v4.0.0
-        if: steps.filter.outputs.canister == 'true'
-        with:
-          review-message: "Auto approving mainnet-canister-revisions.json changes."
+      - name: Check the PR
+        id: check
+        shell: bash
+        env:
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
 
-  auto-approve-icos:
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-    if: github.actor == 'pr-creation-bot-dfinity-ic[bot]'
-    steps:
-      - name: Check file
-        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
-        id: filter
-        with:
-          filters: |
-            icos:
-              - "mainnet-icos-revisions.json"
-      - name: Auto-approve
-        uses: hmarr/auto-approve-action@93c80b3919aae15c0da0d3ca49c70f57e3c4a58f #v4.0.0
-        if: steps.filter.outputs.icos == 'true'
-        with:
-          review-message: "Auto approving mainnet-icos-revisions.json changes."
+          # Leaves the head output unset, so the next step dismisses every github-actions[bot] approval.
+          reject() {
+            echo "Not approving: $*" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          }
+
+          pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR")"
+          state="$(jq -r .state <<<"$pr")"
+          if [[ "$state" == closed ]]; then
+            echo "closed=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          author="$(jq -r .user.login <<<"$pr")"
+          head_repo="$(jq -r .head.repo.full_name <<<"$pr")"
+          head_ref="$(jq -r .head.ref <<<"$pr")"
+          head="$(jq -r .head.sha <<<"$pr")"
+          base_ref="$(jq -r .base.ref <<<"$pr")"
+
+          [[ "$author" == "$BOT" ]] || reject "opened by $author"
+          [[ "$head_repo" == "$GITHUB_REPOSITORY" ]] || reject "head branch in $head_repo"
+          [[ "$base_ref" == "$DEFAULT_BRANCH" ]] || reject "targets $base_ref"
+          # The branch and file of each mainnet_revisions.py subcommand.
+          case "$head_ref" in
+            ic-mainnet-revisions) file=mainnet-icos-revisions.json ;;
+            ic-nervous-system-wasms) file=mainnet-canister-revisions.json ;;
+            *) reject "head branch $head_ref is not a revisions branch" ;;
+          esac
+
+          # Pinned to the head commit, so these are the head's commits and files.
+          compare="$(gh api "repos/$GITHUB_REPOSITORY/compare/$DEFAULT_BRANCH...$head")"
+          jq -e --arg head "$head" --arg file "$file" '
+            .ahead_by == 1
+            and [.commits[].sha] == [$head]
+            and [.files[] | {filename, status}] == [{filename: $file, status: "modified"}]
+          ' <<<"$compare" >/dev/null || reject "$head is not a single commit that changes only $file"
+
+          # Only the run for the bot's own push approves, not a re-run that someone else started.
+          own_push=false
+          if [[ "$EVENT_ACTION" =~ ^(opened|synchronize)$ && "$EVENT_HEAD_SHA" == "$head" &&
+            "$ACTOR" == "$BOT" && "$TRIGGERING_ACTOR" == "$BOT" ]]; then
+            own_push=true
+          fi
+
+          # The last update of the head branch must be a git push of this head by the bot. A
+          # merge that GitHub's auto-merge made into the branch on the bot's behalf also names
+          # the bot, as a pr_merge. The activity log can trail the push that triggered this
+          # run by a few seconds, so the run for that push waits for it.
+          for attempt in 1 2 3 4 5 6; do
+            last_update="$(gh api "repos/$GITHUB_REPOSITORY/activity?ref=refs/heads/$head_ref&direction=desc&per_page=10" \
+              | jq -r --arg ref "refs/heads/$head_ref" \
+                'map(select(.ref == $ref)) | max_by(.id) | "\(.actor.login) \(.activity_type) \(.after)"')"
+            if [[ "$own_push" == false || "$last_update" == *" $head" || "$attempt" == 6 ]]; then
+              break
+            fi
+            sleep 10
+          done
+          case "$last_update" in
+            "$BOT push $head" | "$BOT force_push $head" | "$BOT branch_creation $head") ;;
+            *) reject "the last update of $head_ref is not the bot pushing $head: $last_update" ;;
+          esac
+
+          if [[ "$own_push" == false ]]; then
+            echo "Not approving: only the run for the bot's own push of $head approves. Approvals of $head stay." |
+              tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Approvals of this head may stay.
+          echo "head=$head" >>"$GITHUB_OUTPUT"
+          echo "file=$file" >>"$GITHUB_OUTPUT"
+          if [[ "$own_push" == true ]]; then
+            echo "approve=true" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Approve or dismiss
+        # Also after a failed check, which leaves no head whose approvals may stay.
+        if: ${{ !cancelled() && steps.check.outputs.closed != 'true' }}
+        shell: bash
+        env:
+          VERIFIED_HEAD: ${{ steps.check.outputs.head }}
+          FILE: ${{ steps.check.outputs.file }}
+          APPROVE: ${{ steps.check.outputs.approve }}
+        run: |
+          set -euo pipefail
+
+          reviews="repos/$GITHUB_REPOSITORY/pulls/$PR/reviews"
+          # The IDs of the github-actions[bot] approvals whose commit_id passes the jq condition $1.
+          approvals() {
+            gh api --paginate "$reviews" --jq ".[]
+              | select(.user.login == \"github-actions[bot]\" and .state == \"APPROVED\")
+              | select(.commit_id $1) | .id"
+          }
+
+          failed=0
+          if [[ "$APPROVE" == true ]]; then
+            existing="$(approvals '== env.VERIFIED_HEAD')"
+            if [[ -z "$existing" ]]; then
+              # If this fails, the step still dismisses the approvals of other heads, then fails.
+              gh api --method POST "$reviews" --silent \
+                -f event=APPROVE -f commit_id="$VERIFIED_HEAD" -f body="Auto approving $FILE changes." ||
+                failed=1
+            fi
+            # A push since the check makes the head unverified.
+            if [[ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.sha)" != "$VERIFIED_HEAD" ]]; then
+              export VERIFIED_HEAD=""
+            fi
+          fi
+
+          stale="$(approvals '!= env.VERIFIED_HEAD')"
+          for id in $stale; do
+            echo "Dismissing approval $id"
+            gh api --method PUT "$reviews/$id/dismissals" --silent -f event=DISMISS \
+              -f message="Auto-approvals stay only on the current head, and only if the PR bot pushed it as a single commit that changes only its revisions file." ||
+              failed=1
+          done
+          exit "$failed"

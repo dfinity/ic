@@ -8,7 +8,7 @@
 #       --bazelrc=bazel/conf/.bazelrc.build \
 #       --bazelrc=/tmp/bazel-rbe.bazelrc \
 #       --bazelrc=.github/actions/bazel-namespace/rbe.bazelrc \
-#       COMMAND [--build_event_binary_file=... --profile=...] ARGS...
+#       COMMAND [--build_event_binary_file=... --profile=... --noslim_profile ... [--execution_log_compact_file=...]] ARGS...
 #
 # * The real bazel is the next one on PATH: bazelisk at /usr/bin/bazel in the ic-build image.
 # * The workspace .bazelrc isn't read: it points at DFINITY's internal cache, which isn't
@@ -16,8 +16,9 @@
 #   written by `nsc bazel setup` in an earlier step of the job. ../rbe.bazelrc holds the RBE options.
 # * The startup options are the same for every command and only select rc files, which the bazel
 #   client handles itself, so all bazel commands of a job share one bazel server.
-# * build, test, run and coverage commands run by the action get their own BEP file and profile
-#   in $BAZEL_NAMESPACE_OUT, which the action uploads (the BEP files only encrypted).
+# * build, test and coverage commands run by the action get their own BEP file and profile in
+#   $BAZEL_NAMESPACE_OUT, which the action uploads (the BEP files only encrypted); build and test also
+#   write a compact execution log there when the action asks for it (BAZEL_NAMESPACE_EXECLOG).
 # * When the action's timeout-minutes is set, bazel runs under `timeout` until
 #   $BAZEL_NAMESPACE_DEADLINE (seconds since the epoch), see below.
 #
@@ -70,7 +71,10 @@ if [ $# -gt 0 ]; then
     shift
     args+=("$bazel_command")
     case "$bazel_command" in
-        build | test | run | coverage)
+        # Not `run`: a BEP file records the environment of the bazel client, and the artifact upload of
+        # bazel-test-all (ci-main.yml) is a `bazel run`, so it stays uninstrumented, like in
+        # ./.github/actions/bazel/bin/bazel.
+        build | test | coverage)
             if [ -n "${BAZEL_NAMESPACE_OUT:-}" ]; then
                 id="$bazel_command-$(date -u +%Y%m%dT%H%M%SZ)-$$"
                 args+=(
@@ -78,10 +82,21 @@ if [ $# -gt 0 ]; then
                     # github-stats reads profile-<id>.json as plain JSON and pairs it
                     # with bazel-bep-<id>.pb.gpg, the BEP file encrypted by the action.
                     --profile="$BAZEL_NAMESPACE_OUT/profile-$id.json"
+                    # Keep every event. Once a profile has 10,000 events, profile slimming (on by
+                    # default) merges short events with their neighbors, including the rewind plans
+                    # that the action's "Report action rewinding" step counts. This makes the profiles
+                    # of a master run about 5-9 times bigger (about 60-100 MB instead of 11-12 MB).
+                    --noslim_profile
                     # Associate each action in the profile with a target label, which helps
                     # tools like https://github.com/EngFlow/bazel_invocation_analyzer.
                     --experimental_profile_include_target_label
                 )
+                # The compact execution log of build and test commands, which the action converts to CSV
+                # and uploads when its execlogs-artifact-name input is set (./.github/actions/upload-execlogs),
+                # for the build-determinism job of ci-main.yml.
+                if [ -n "${BAZEL_NAMESPACE_EXECLOG:-}" ] && [ "$bazel_command" != coverage ]; then
+                    args+=(--execution_log_compact_file="$BAZEL_NAMESPACE_OUT/execlog-$id.zst")
+                fi
             fi
             ;;
     esac

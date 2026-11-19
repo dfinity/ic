@@ -16,6 +16,22 @@ If the dev container image genuinely needs to change (e.g.
 `ci/container/Dockerfile` was edited), let that workflow bump `TAG` and the
 digests — don't do it in your commit.
 
+# Code Comments
+
+In general, focus comments on the code as it CURRENTLY stands.
+
+Assume that the reader is NOT familiar with:
+
+- the way the code used to be
+- bugs that have been fixed
+
+In rare cases, the most efficient way for the reader to understand the present
+is to tell them about the past. Other than that, do not dredge up the past.
+
+Do not mention dangerous alternative ways to implement a similar effect unless
+the alternatives are particularly attractive. That is, the dangerous alternative
+somehow SEEMS right, AND the right way SEEMS wrong and/or inconvenient.
+
 # Rust
 
 After changing Rust code (`*.rs`) follow these steps in order:

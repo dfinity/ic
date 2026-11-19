@@ -1,5 +1,4 @@
 load("@bazel_skylib//rules:common_settings.bzl", "string_setting")
-load("@gazelle//:def.bzl", "gazelle")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 
@@ -49,21 +48,19 @@ alias(
     actual = "@rules_rust//tools/rust_analyzer:gen_rust_project",
 )
 
-# See https://github.com/bazelbuild/bazel-gazelle#running-gazelle-with-bazel
+# The gazelle targets are defined in //bazel/gazelle (see there for why). The
+# directives below configure gazelle for the whole repository, so they stay in
+# this BUILD.bazel at the repository root.
 # gazelle:prefix github.com/dfinity/ic
 # gazelle:proto disable
-gazelle(
+alias(
     name = "gazelle",
+    actual = "//bazel/gazelle",
 )
 
-gazelle(
+alias(
     name = "gazelle-update-repos",
-    args = [
-        "-from_file=go.mod",
-        "-to_macro=go_deps.bzl%go_dependencies",
-        "-prune",
-    ],
-    command = "update-repos",
+    actual = "//bazel/gazelle:gazelle-update-repos",
 )
 
 alias(

@@ -11,6 +11,22 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-11-16: Proposal 144844
+
+http://dashboard.internetcomputer.org/proposal/144844
+
+## Added
+
+- Added the optional `minimum_incoming_canister_call_cycles` and
+  `status_visibility` fields to `CanisterSettings` in the Candid API. The first
+  sets the minimum number of cycles that calls from other canisters must attach,
+  and the second sets who may read the canister's status. Until now, the cycles
+  minting canister ignored these two settings, so a new canister always got
+  their default values. This is a non-breaking change impacting the types
+  `CreateCanisterArg` and `NotifyCreateCanisterArg` and the endpoints
+  `create_canister` and `notify_create_canister`.
+
+
 # 2026-08-28: Proposal 143738
 
 http://dashboard.internetcomputer.org/proposal/143738

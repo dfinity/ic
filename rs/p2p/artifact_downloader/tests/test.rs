@@ -57,7 +57,7 @@ async fn priority_from_stash_to_fetch() {
         no_op_logger(),
         Handle::current(),
         Arc::new(RwLock::new(pool)),
-        Arc::new(mock_pfn),
+        mock_pfn,
         MetricsRegistry::default(),
     );
     let fetch_artifact: FetchArtifact<U64Artifact> = fetch_artifact(Arc::new(mock_transport));
@@ -124,7 +124,7 @@ async fn fetch_to_stash_to_fetch() {
         no_op_logger(),
         Handle::current(),
         Arc::new(RwLock::new(pool)),
-        Arc::new(mock_pfn),
+        mock_pfn,
         MetricsRegistry::default(),
     );
     let fetch_artifact: FetchArtifact<U64Artifact> = fetch_artifact(Arc::new(mock_transport));
@@ -187,7 +187,7 @@ async fn invalid_artifact_not_accepted() {
         no_op_logger(),
         Handle::current(),
         Arc::new(RwLock::new(pool)),
-        Arc::new(mock_pfn),
+        mock_pfn,
         MetricsRegistry::default(),
     );
     let fetch_artifact: FetchArtifact<U64Artifact> = fetch_artifact(Arc::new(mock_transport));
@@ -235,7 +235,7 @@ async fn priority_from_stash_to_drop() {
         no_op_logger(),
         Handle::current(),
         Arc::new(RwLock::new(pool)),
-        Arc::new(mock_pfn),
+        mock_pfn,
         MetricsRegistry::default(),
     );
     let fetch_artifact: FetchArtifact<U64Artifact> = fetch_artifact(Arc::new(mock_transport));

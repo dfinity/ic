@@ -28,6 +28,7 @@ const SSH_ARGS: &[&str] = &[
 
 /// Simplify SSH connections to a certion account@ip address using the given SSH
 /// arguments.
+#[derive(Clone)]
 pub struct SshHelper {
     logger: Logger,
     pub ssh_user: SshUser,

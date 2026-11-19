@@ -1,0 +1,20 @@
+[package]
+name = "ic-boundary-smoke-test"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "ic-boundary-smoke-test"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+clap = { workspace = true }
+ic-agent = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }

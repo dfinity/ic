@@ -3,11 +3,12 @@ use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_btc_replica_types::{
     BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BitcoinReject,
     GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, Network, SendTransactionRequest,
+    SendTransactionResponse,
 };
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
     BitcoinGetSuccessorsResponse, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
-    Payload as _,
+    CanisterIdRecord, EcdsaCurve, EcdsaKeyId, EmptyBlob, Method as Ic00Method, Payload as _,
 };
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -22,8 +23,9 @@ use ic_replicated_state::{
     metadata_state::{
         UnflushedCheckpointOp,
         subnet_call_context_manager::{
-            BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, InstallCodeCallId,
-            StopCanisterCall, SubnetCallContext,
+            BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, EcdsaArguments,
+            InstallCodeCallId, SignWithThresholdContext, StopCanisterCall, SubnetCallContext,
+            ThresholdArguments,
         },
         testing::{NetworkTopologyTesting, SystemMetadataTesting},
     },
@@ -39,7 +41,7 @@ use ic_test_utilities_state::{ExecutionStateBuilder, arb_replicated_state_with_o
 use ic_test_utilities_types::ids::{SUBNET_1, canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
-use ic_types::batch::RawQueryStats;
+use ic_types::batch::{ConsensusResponse, RawQueryStats};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{
     CallbackId, CanisterCall, CanisterMessage, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload,
@@ -764,6 +766,82 @@ fn push_input_queues_respects_local_remote_subnet() {
     assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 2);
 }
 
+fn start_canister_request(target: CanisterId) -> Request {
+    RequestBuilder::default()
+        .sender(CANISTER_ID)
+        .receiver(SUBNET_ID.into())
+        .method_name(Ic00Method::StartCanister)
+        .method_payload(CanisterIdRecord::from(target).encode())
+        .build()
+}
+
+/// Pushes `request` into the subnet queues of `state` and pops it back out.
+fn push_and_pop_subnet_request(state: &mut ReplicatedState, request: Arc<Request>) -> Arc<Request> {
+    assert_eq!(
+        state.push_input(
+            RequestOrResponse::Request(request),
+            &mut SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY.clone()
+        ),
+        Ok(true)
+    );
+    match state.pop_subnet_input() {
+        Some(SubnetMessage::Request(request)) => request,
+        msg => panic!("Expected a subnet request, got {msg:?}"),
+    }
+}
+
+#[test]
+fn subnet_queue_push_input_caches_effective_canister_id() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    // A request whose `Arc` is not shared (e.g. from an XNet stream slice) is
+    // cached in place, without a copy.
+    let target = canister_test_id(13);
+    let request = Arc::new(start_canister_request(target));
+    let request_ptr = Arc::as_ptr(&request);
+    let inducted = push_and_pop_subnet_request(&mut state, request);
+    assert_eq!(inducted.effective_canister_id, Some(Box::new(target)));
+    assert_eq!(Arc::as_ptr(&inducted), request_ptr);
+
+    // A request without an effective canister ID is not cached.
+    let mut request = start_canister_request(target);
+    request.method_payload = vec![1, 2, 3];
+    let inducted = push_and_pop_subnet_request(&mut state, Arc::new(request));
+    assert_eq!(inducted.effective_canister_id, None);
+}
+
+#[test]
+fn subnet_queue_push_input_shared_request_already_cached_is_not_copied() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    // An already cached request whose `Arc` is shared (as it is with the loopback
+    // stream).
+    let target = canister_test_id(13);
+    let mut request = start_canister_request(target);
+    request.effective_canister_id = Some(Box::new(target));
+    let request = Arc::new(request);
+
+    let inducted = push_and_pop_subnet_request(&mut state, Arc::clone(&request));
+
+    assert!(Arc::ptr_eq(&inducted, &request));
+}
+
+#[test]
+fn subnet_queue_push_input_shared_request_not_cached_is_copied() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    // An uncached request whose `Arc` is shared.
+    let target = canister_test_id(13);
+    let request = Arc::new(start_canister_request(target));
+
+    let inducted = push_and_pop_subnet_request(&mut state, Arc::clone(&request));
+
+    // The inducted request was copied and cached; the shared one is unchanged.
+    assert!(!Arc::ptr_eq(&inducted, &request));
+    assert_eq!(inducted.effective_canister_id, Some(Box::new(target)));
+    assert_eq!(request.effective_canister_id, None);
+}
+
 #[test]
 fn subnet_queue_push_input_response() {
     let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
@@ -802,10 +880,7 @@ fn insert_bitcoin_response_non_matching() {
     );
 }
 
-#[test]
-fn insert_bitcoin_response() {
-    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
-
+fn push_get_successors_context(state: &mut ReplicatedState) -> CallbackId {
     state.metadata.subnet_call_context_manager.push_context(
         SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
             request: RequestBuilder::default().build(),
@@ -816,64 +891,10 @@ fn insert_bitcoin_response() {
             },
             time: UNIX_EPOCH,
         }),
-    );
-
-    let response = GetSuccessorsResponseComplete {
-        blocks: vec![],
-        next: vec![],
-    };
-
-    state
-        .push_response_bitcoin(BitcoinAdapterResponse {
-            response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(response.clone()),
-            callback_id: 0,
-        })
-        .unwrap();
-
-    assert_eq!(
-        state.consensus_queue[0].payload,
-        Payload::Data(BitcoinGetSuccessorsResponse::Complete(response).encode())
-    );
+    )
 }
 
-#[test]
-fn insert_bitcoin_get_successor_reject_response() {
-    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
-
-    state.metadata.subnet_call_context_manager.push_context(
-        SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
-            request: RequestBuilder::default().build(),
-            payload: GetSuccessorsRequestInitial {
-                network: Network::BitcoinRegtest,
-                anchor: vec![],
-                processed_block_hashes: vec![],
-            },
-            time: UNIX_EPOCH,
-        }),
-    );
-
-    let error_message = "Request failed with error.".to_string();
-    let response = BitcoinReject {
-        message: error_message.clone(),
-        reject_code: RejectCode::SysTransient,
-    };
-
-    state
-        .push_response_bitcoin(BitcoinAdapterResponse {
-            response: BitcoinAdapterResponseWrapper::GetSuccessorsReject(response.clone()),
-            callback_id: 0,
-        })
-        .unwrap();
-    assert_eq!(
-        state.consensus_queue[0].payload,
-        Payload::Reject(RejectContext::new(RejectCode::SysTransient, error_message))
-    );
-}
-
-#[test]
-fn insert_bitcoin_send_transaction_reject_response() {
-    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
-
+fn push_send_transaction_context(state: &mut ReplicatedState) -> CallbackId {
     state.metadata.subnet_call_context_manager.push_context(
         SubnetCallContext::BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext {
             request: RequestBuilder::default().build(),
@@ -883,24 +904,204 @@ fn insert_bitcoin_send_transaction_reject_response() {
             },
             time: UNIX_EPOCH,
         }),
-    );
+    )
+}
 
-    let error_message = "Request failed with error.".to_string();
-    let response = BitcoinReject {
-        message: error_message.clone(),
+fn bitcoin_reject() -> BitcoinReject {
+    BitcoinReject {
+        message: "Request failed with error.".to_string(),
         reject_code: RejectCode::SysTransient,
-    };
+    }
+}
 
+fn bitcoin_reject_payload() -> Payload {
+    let reject = bitcoin_reject();
+    Payload::Reject(RejectContext::new(reject.reject_code, reject.message))
+}
+
+fn get_successors_response() -> BitcoinAdapterResponseWrapper {
+    BitcoinAdapterResponseWrapper::GetSuccessorsResponse(GetSuccessorsResponseComplete {
+        blocks: vec![],
+        next: vec![],
+    })
+}
+
+fn send_transaction_response() -> BitcoinAdapterResponseWrapper {
+    BitcoinAdapterResponseWrapper::SendTransactionResponse(SendTransactionResponse {})
+}
+
+fn send_transaction_reject() -> BitcoinAdapterResponseWrapper {
+    BitcoinAdapterResponseWrapper::SendTransactionReject(bitcoin_reject())
+}
+
+fn get_successors_reject() -> BitcoinAdapterResponseWrapper {
+    BitcoinAdapterResponseWrapper::GetSuccessorsReject(bitcoin_reject())
+}
+
+/// Pushes `response` for `callback_id` and asserts that it is the only response
+/// in the consensus queue, with the given `payload`.
+fn assert_bitcoin_response_accepted(
+    state: &mut ReplicatedState,
+    response: BitcoinAdapterResponseWrapper,
+    callback_id: CallbackId,
+    payload: Payload,
+) {
     state
         .push_response_bitcoin(BitcoinAdapterResponse {
-            response: BitcoinAdapterResponseWrapper::SendTransactionReject(response.clone()),
-            callback_id: 0,
+            response,
+            callback_id: callback_id.get(),
         })
         .unwrap();
     assert_eq!(
-        state.consensus_queue[0].payload,
-        Payload::Reject(RejectContext::new(RejectCode::SysTransient, error_message))
+        state.consensus_queue,
+        vec![ConsensusResponse::new(callback_id, payload)]
     );
+}
+
+/// Asserts that pushing `response` for `callback_id` is rejected and changes
+/// neither the consensus queue nor the stored `get_successors` follow-ups.
+fn assert_bitcoin_response_rejected(
+    state: &mut ReplicatedState,
+    response: BitcoinAdapterResponseWrapper,
+    callback_id: CallbackId,
+) {
+    let follow_ups_before = state
+        .metadata
+        .bitcoin_get_successors_follow_up_responses
+        .clone();
+    assert_eq!(
+        state.push_response_bitcoin(BitcoinAdapterResponse {
+            response,
+            callback_id: callback_id.get(),
+        }),
+        Err(StateError::BitcoinNonMatchingResponse {
+            callback_id: callback_id.get()
+        })
+    );
+    assert!(state.consensus_queue.is_empty());
+    assert_eq!(
+        state.metadata.bitcoin_get_successors_follow_up_responses,
+        follow_ups_before
+    );
+}
+
+#[test]
+fn insert_bitcoin_response() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+    push_send_transaction_context(&mut state);
+    let callback_id = push_get_successors_context(&mut state);
+
+    assert_bitcoin_response_accepted(
+        &mut state,
+        get_successors_response(),
+        callback_id,
+        Payload::Data(
+            BitcoinGetSuccessorsResponse::Complete(GetSuccessorsResponseComplete {
+                blocks: vec![],
+                next: vec![],
+            })
+            .encode(),
+        ),
+    );
+}
+
+#[test]
+fn insert_bitcoin_get_successor_reject_response() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+    push_send_transaction_context(&mut state);
+    let callback_id = push_get_successors_context(&mut state);
+
+    assert_bitcoin_response_accepted(
+        &mut state,
+        get_successors_reject(),
+        callback_id,
+        bitcoin_reject_payload(),
+    );
+}
+
+#[test]
+fn insert_bitcoin_send_transaction_reject_response() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+    push_get_successors_context(&mut state);
+    let callback_id = push_send_transaction_context(&mut state);
+
+    assert_bitcoin_response_accepted(
+        &mut state,
+        send_transaction_reject(),
+        callback_id,
+        bitcoin_reject_payload(),
+    );
+}
+
+#[test]
+fn insert_bitcoin_send_transaction_response() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+    push_get_successors_context(&mut state);
+    let callback_id = push_send_transaction_context(&mut state);
+
+    assert_bitcoin_response_accepted(
+        &mut state,
+        send_transaction_response(),
+        callback_id,
+        Payload::Data(EmptyBlob.encode()),
+    );
+}
+
+#[test]
+fn insert_bitcoin_response_without_pending_context_is_rejected() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    for response in [
+        get_successors_response(),
+        send_transaction_response(),
+        send_transaction_reject(),
+        get_successors_reject(),
+    ] {
+        assert_bitcoin_response_rejected(&mut state, response, CallbackId::new(0));
+    }
+}
+
+#[test]
+fn insert_bitcoin_response_for_sign_with_threshold_context_is_rejected() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+    let callback_id = state.metadata.subnet_call_context_manager.push_context(
+        SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
+            request: RequestBuilder::default().build_arc(),
+            args: ThresholdArguments::Ecdsa(EcdsaArguments {
+                key_id: EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "key_1".to_string(),
+                },
+                message_hash: [0; 32],
+                pre_signature: None,
+            }),
+            derivation_path: Arc::new(vec![]),
+            batch_time: UNIX_EPOCH,
+            nonce: None,
+        }),
+    );
+
+    // A Bitcoin adapter response must not resolve a pending signature request.
+    for response in [
+        get_successors_response(),
+        send_transaction_response(),
+        send_transaction_reject(),
+        get_successors_reject(),
+    ] {
+        assert_bitcoin_response_rejected(&mut state, response, callback_id);
+    }
+}
+
+#[test]
+fn insert_bitcoin_response_for_other_bitcoin_request_type_is_rejected() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+    let get_successors_id = push_get_successors_context(&mut state);
+    let send_transaction_id = push_send_transaction_context(&mut state);
+
+    assert_bitcoin_response_rejected(&mut state, send_transaction_response(), get_successors_id);
+    assert_bitcoin_response_rejected(&mut state, send_transaction_reject(), get_successors_id);
+    assert_bitcoin_response_rejected(&mut state, get_successors_response(), send_transaction_id);
+    assert_bitcoin_response_rejected(&mut state, get_successors_reject(), send_transaction_id);
 }
 
 #[test]

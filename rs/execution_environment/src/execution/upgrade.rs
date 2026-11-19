@@ -344,7 +344,14 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
 
     helper.deactivate_global_timer();
     helper.bump_canister_version();
-    helper.add_canister_change(round.time, context.origin, context.mode, module_hash.into());
+    let args_hash = ic_crypto_sha2::Sha256::hash(&context.arg);
+    helper.add_canister_change(
+        round.time,
+        context.origin,
+        context.mode,
+        module_hash.into(),
+        args_hash,
+    );
 
     // Stage 3: invoke the `start()` method (if present).
     let method = WasmMethod::System(SystemMethod::CanisterStart);

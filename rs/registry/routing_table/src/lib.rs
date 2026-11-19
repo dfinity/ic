@@ -224,7 +224,7 @@ pub fn routing_table_insert_subnet(
     routing_table: &mut RoutingTable,
     subnet_id: SubnetId,
 ) -> Result<(), WellFormedError> {
-    let start = match routing_table.iter().last() {
+    let start = match routing_table.iter().next_back() {
         Some((last_canister_id_range, _)) => canister_id_into_u64(last_canister_id_range.end) + 1,
         None => 0,
     };
@@ -482,7 +482,7 @@ impl RoutingTable {
         debug_assert_eq!(self.well_formed(), Ok(()));
     }
 
-    pub fn iter(&self) -> impl std::iter::Iterator<Item = (&CanisterIdRange, &SubnetId)> {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&CanisterIdRange, &SubnetId)> {
         self.0.iter()
     }
 

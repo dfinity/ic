@@ -468,7 +468,7 @@ fn call_increases_cycles_consumed_metric() {
         cycles_account_manager,
     );
 
-    api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &Heap::unchecked(&mut []))
+    api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &mut Heap::unchecked(&mut []))
         .unwrap();
     api.ic0_call_perform().unwrap();
 

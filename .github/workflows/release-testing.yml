@@ -111,6 +111,12 @@ jobs:
       - uses: ./.github/actions/netrc
       - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
         uses: ./.github/actions/bazel
+        env:
+          # The version is read from external dashboards (see
+          # determine-initial-guest-os-versions.py), so it reaches the shell only as
+          # the value of this variable: `run` below is evaluated as bash by the bazel
+          # action, hence must never have `${{ matrix.version }}` inlined into it.
+          OLD_VERSION: ${{ matrix.version }}
         with:
           bazel-bep-artifact-name: ${{ github.job }}-${{ matrix.version }}-${{ github.action }}-bep
           run: |
@@ -119,7 +125,7 @@ jobs:
               --config=flaky_retry \
               --test_tag_filters= \
               //rs/tests/dre:guest_os_qualification_farm_colocate \
-              --test_env=OLD_VERSION=${{ matrix.version }} \
+              --test_env=OLD_VERSION="$OLD_VERSION" \
               --keep_going --test_timeout=7200
           GPG_PASSPHRASE: ${{ secrets.BEP_GPG_PASSPHRASE }}
 

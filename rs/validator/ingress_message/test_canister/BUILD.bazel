@@ -29,7 +29,6 @@ rust_canister(
         ":build_script",
         "//rs/types/types",
         "//rs/validator/ingress_message",
-        "@crate_index//:build-info",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
     ],

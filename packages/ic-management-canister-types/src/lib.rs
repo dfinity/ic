@@ -716,6 +716,9 @@ pub struct CodeDeploymentRecord {
     /// A SHA256 hash of the new module installed on the canister.
     #[serde(with = "serde_bytes")]
     pub module_hash: Vec<u8>,
+    /// A SHA256 hash of the init/post-upgrade argument of `install_code`.
+    /// `None` for entries recorded before `args_hash` started being recorded in canister history.
+    pub args_hash: Option<Vec<u8>>,
 }
 
 /// # Load Snapshot Record

@@ -276,14 +276,26 @@ where
     G: AsRef<str>,
     R: Fn(&str, &ExecutionEnvironment, u64, BenchmarkArgs) + Copy,
 {
+    // The default embedders config already allows the largest Wasm64 heap
+    // (`MAX_WASM64_HEAP_NUM_PAGES` pages) declared by the Wasm64 benchmark modules.
+    run_benchmarks_with_config(c, group, benchmarks, Config::default(), routine)
+}
+
+/// Run all benchmark in the list with the specified execution config.
+pub fn run_benchmarks_with_config<G, R>(
+    c: &mut Criterion,
+    group: G,
+    benchmarks: &[Benchmark],
+    config: Config,
+    routine: R,
+) where
+    G: AsRef<str>,
+    R: Fn(&str, &ExecutionEnvironment, u64, BenchmarkArgs) + Copy,
+{
     let log = no_op_logger();
     let own_subnet_id = subnet_test_id(1);
     let own_subnet_type = SubnetType::Application;
     let subnet_configs = SubnetConfig::new(own_subnet_type);
-
-    // The default embedders config already allows the largest Wasm64 heap
-    // (`MAX_WASM64_HEAP_NUM_PAGES` pages) declared by the Wasm64 benchmark modules.
-    let config = Config::default();
 
     let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
     let metrics_registry = MetricsRegistry::new();

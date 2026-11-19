@@ -1,4 +1,5 @@
 use std::{
+    fmt::{Debug, Display},
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -35,35 +36,52 @@ use super::metrics::FetchArtifactMetrics;
 const MIN_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
 
-type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
-
 pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {
     Artifact::NAME.to_lowercase()
 }
 
-fn build_axum_router<Artifact: PbArtifact>(pool: ValidatedPoolReaderRef<Artifact>) -> Router {
-    Router::new()
-        .route(
-            &format!("/{}/rpc", uri_prefix::<Artifact>()),
-            any(rpc_handler),
-        )
-        .with_state(pool)
-        // Disable request size limit since consensus might push artifacts larger than limit.
-        .layer(DefaultBodyLimit::disable())
+/// Checks that `artifact` has the given `id`, and that the content passes
+/// [`PbArtifact::check_integrity`].
+pub(crate) fn check_id_and_integrity<Artifact: PbArtifact>(
+    artifact: &Artifact,
+    id: &Artifact::Id,
+) -> bool {
+    artifact.id() == *id && artifact.check_integrity()
 }
 
-async fn rpc_handler<Artifact: PbArtifact>(
-    State(pool): State<ValidatedPoolReaderRef<Artifact>>,
+/// A pool shared with the components writing to it, read by taking its lock on each access.
+pub(crate) struct SharedPool<Pool>(pub(crate) Arc<RwLock<Pool>>);
+
+// Cannot derive `Clone` because the macro would add a `Clone` bound on `Pool`, which does not
+// necessarily hold (see https://github.com/rust-lang/rust/issues/41481)
+impl<Pool> Clone for SharedPool<Pool> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<Artifact, Pool> ValidatedPoolReader<Artifact> for SharedPool<Pool>
+where
+    Artifact: IdentifiableArtifact,
+    Pool: ValidatedPoolReader<Artifact>,
+{
+    fn get(&self, id: &Artifact::Id) -> Option<Artifact> {
+        self.0.read().unwrap().get(id)
+    }
+}
+
+async fn rpc_handler<Artifact, Pool>(
+    State(pool): State<Pool>,
     payload: Bytes,
-) -> Result<Bytes, StatusCode> {
+) -> Result<Bytes, StatusCode>
+where
+    Artifact: PbArtifact,
+    Pool: ValidatedPoolReader<Artifact> + Clone + 'static,
+{
     let jh = tokio::task::spawn_blocking(move || {
         let id: Artifact::Id =
             Artifact::PbId::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
-        let artifact = pool
-            .read()
-            .unwrap()
-            .get(&id)
-            .ok_or(StatusCode::NO_CONTENT)?;
+        let artifact = pool.get(&id).ok_or(StatusCode::NO_CONTENT)?;
         Ok::<_, StatusCode>(Bytes::from(Artifact::PbMessage::proxy_encode(artifact)))
     });
     let bytes = jh.await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
@@ -75,7 +93,7 @@ pub struct FetchArtifact<Artifact: PbArtifact> {
     log: ReplicaLogger,
     transport: Arc<dyn Transport>,
     bouncer_rx: watch::Receiver<Bouncer<Artifact::Id>>,
-    metrics: FetchArtifactMetrics,
+    pub(crate) metrics: FetchArtifactMetrics,
     jh: Arc<JoinHandle<()>>,
 }
 
@@ -91,7 +109,11 @@ impl<Artifact: PbArtifact> Clone for FetchArtifact<Artifact> {
     }
 }
 
-impl<Artifact: PbArtifact> ArtifactAssembler<Artifact, Artifact> for FetchArtifact<Artifact> {
+impl<Artifact> ArtifactAssembler<Artifact, Artifact> for FetchArtifact<Artifact>
+where
+    Artifact: PbArtifact,
+    Artifact::Id: Debug,
+{
     fn disassemble_message(&self, msg: Artifact) -> Artifact {
         msg
     }
@@ -101,64 +123,99 @@ impl<Artifact: PbArtifact> ArtifactAssembler<Artifact, Artifact> for FetchArtifa
         artifact: Option<(Artifact, NodeId)>,
         peers: P,
     ) -> AssembleResult<Artifact> {
-        Self::download_artifact(
-            self.log.clone(),
-            id,
-            artifact,
-            peers,
-            self.bouncer_rx.clone(),
-            self.transport.clone(),
-            self.metrics.clone(),
-        )
+        let id = &id;
+        self.assemble_with_retries(id, artifact, move |artifact, deadline| {
+            self.try_fetch(id, artifact, peers.peers(), deadline)
+        })
         .await
     }
 }
 
+/// The outcome of one attempt to assemble a message.
+pub(crate) enum Attempt<T> {
+    Done {
+        message: T,
+        peer_id: NodeId,
+    },
+    Unwanted,
+    /// The attempt failed, and another one has to be made.
+    Retry,
+}
+
 impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
-    pub fn new<Pool>(
+    /// Downloads the `Artifact`s wanted by the bouncers built from `pool`, and serves the
+    /// `Artifact`s of `pool` to the peers.
+    pub fn new<Pool, Factory>(
         log: ReplicaLogger,
         rt: Handle,
         pool: Arc<RwLock<Pool>>,
-        bouncer_factory: Arc<dyn BouncerFactory<Artifact::Id, Pool>>,
+        bouncer_factory: Factory,
         metrics_registry: MetricsRegistry,
-    ) -> (impl Fn(Arc<dyn Transport>) -> Self, Router)
+    ) -> (impl FnOnce(Arc<dyn Transport>) -> Self, Router)
     where
-        Pool: ValidatedPoolReader<Artifact> + Send + Sync + 'static,
+        Pool: ValidatedPoolReader<Artifact> + 'static,
+        Factory: BouncerFactory<Artifact::Id, Pool> + 'static,
     {
-        let pool_clone = pool.clone();
         (
-            move |transport: Arc<dyn Transport>| {
-                let bouncer = {
-                    let p = pool.read().unwrap();
-                    bouncer_factory.new_bouncer(&p)
-                };
-                let (bouncer_tx, bouncer_rx) = watch::channel(bouncer);
-                let pool_clone = pool.clone();
-                let bouncer_factory_clone = bouncer_factory.clone();
-                let log_clone = log.clone();
-                let jh = rt.spawn(async move {
-                    loop {
-                        let bouncer = {
-                            let p = pool_clone.read().unwrap();
-                            bouncer_factory_clone.new_bouncer(&p)
-                        };
-                        if bouncer_tx.send(bouncer).is_err() {
-                            break;
-                        }
-
-                        tokio::time::sleep(bouncer_factory_clone.refresh_period()).await
-                    }
-                });
-                Self {
-                    log: log_clone,
-                    transport,
-                    bouncer_rx,
-                    metrics: FetchArtifactMetrics::new::<Artifact>(&metrics_registry),
-                    jh: Arc::new(jh),
-                }
-            },
-            build_axum_router(pool_clone),
+            Self::downloader(log, rt, pool.clone(), bouncer_factory, metrics_registry),
+            Self::router(SharedPool(pool)),
         )
+    }
+
+    /// Downloads the `Artifact`s wanted by the bouncers built from `pool`.
+    pub(crate) fn downloader<Pool, Factory>(
+        log: ReplicaLogger,
+        rt: Handle,
+        pool: Arc<RwLock<Pool>>,
+        bouncer_factory: Factory,
+        metrics_registry: MetricsRegistry,
+    ) -> impl FnOnce(Arc<dyn Transport>) -> Self
+    where
+        Pool: Send + Sync + 'static,
+        Factory: BouncerFactory<Artifact::Id, Pool> + 'static,
+    {
+        move |transport: Arc<dyn Transport>| {
+            let bouncer = {
+                let p = pool.read().unwrap();
+                bouncer_factory.new_bouncer(&p)
+            };
+            let (bouncer_tx, bouncer_rx) = watch::channel(bouncer);
+            let jh = rt.spawn(async move {
+                loop {
+                    let bouncer = {
+                        let p = pool.read().unwrap();
+                        bouncer_factory.new_bouncer(&p)
+                    };
+                    if bouncer_tx.send(bouncer).is_err() {
+                        break;
+                    }
+
+                    tokio::time::sleep(bouncer_factory.refresh_period()).await
+                }
+            });
+            Self {
+                log,
+                transport,
+                bouncer_rx,
+                metrics: FetchArtifactMetrics::new::<Artifact>(&metrics_registry),
+                jh: Arc::new(jh),
+            }
+        }
+    }
+
+    /// Serves the `Artifact`s of `pool` to the peers' downloaders.
+    pub(crate) fn router<Pool>(pool: Pool) -> Router
+    where
+        Pool: ValidatedPoolReader<Artifact> + Clone + 'static,
+    {
+        Router::new()
+            .route(
+                &format!("/{}/rpc", uri_prefix::<Artifact>()),
+                any(rpc_handler::<Artifact, Pool>),
+            )
+            .with_state(pool)
+            // Disable request size limit since consensus might push artifacts larger than limit.
+            .layer(DefaultBodyLimit::disable())
     }
 
     /// Returns a watcher over the bouncer used by this assembler, so callers can react to the
@@ -191,100 +248,137 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         BouncerValue::Unwanted != bouncer_value
     }
 
-    /// Downloads a given artifact.
+    /// Makes attempts to assemble the message until one succeeds or the message is unwanted.
     ///
-    /// The download will be scheduled based on the given bouncer function, `bouncer_watcher`.
-    ///
-    /// The download fails iff:
-    /// - The bouncer function evaluates the advert to [`BouncerValue::Unwanted`] -> [`AssembleResult::Unwanted`]
+    /// Before each attempt, waits until the bouncer wants the message. The first attempt gets the
+    /// pushed artifact, if still there, which needs no request, so if it fails, the next attempt
+    /// starts right away. Any other attempt gets a deadline for its request that backs off
+    /// exponentially, and if it fails, the next one starts once that deadline has passed.
     #[instrument(skip_all)]
-    async fn download_artifact(
-        log: ReplicaLogger,
-        id: Artifact::Id,
+    pub(crate) async fn assemble_with_retries<T, F, Fut>(
+        &self,
+        id: &Artifact::Id,
         // Only first peer for specific artifact ID is considered for push
         mut artifact: Option<(Artifact, NodeId)>,
-        peer_rx: impl Peers + Send + 'static,
-        mut bouncer_watcher: watch::Receiver<Bouncer<Artifact::Id>>,
-        transport: Arc<dyn Transport>,
-        metrics: FetchArtifactMetrics,
-    ) -> AssembleResult<Artifact> {
-        // Evaluate bouncer and wait until we should fetch.
-        if !Self::should_download(&id, &mut artifact, &metrics, &mut bouncer_watcher).await {
-            return AssembleResult::Unwanted;
-        }
-
-        let mut artifact_download_backoff = ExponentialBuilder::new()
+        mut attempt: F,
+    ) -> AssembleResult<T>
+    where
+        F: FnMut(Option<(Artifact, NodeId)>, Instant) -> Fut,
+        Fut: Future<Output = Attempt<T>>,
+    {
+        let mut bouncer_watcher = self.bouncer_rx.clone();
+        let mut backoff = ExponentialBuilder::new()
             .with_min_delay(MIN_ARTIFACT_RPC_TIMEOUT)
             .with_max_delay(MAX_ARTIFACT_RPC_TIMEOUT)
             .with_factor(1.5)
             .with_jitter()
             .without_max_times()
             .build();
+        // Records the download time when dropped.
+        let mut download_timer = None;
 
-        match artifact {
-            // Artifact was pushed by peer. In this case we don't need check that the artifact ID corresponds
-            // to the artifact because we earlier derived the ID from the artifact.
-            Some((artifact, peer_id)) => AssembleResult::Done {
-                message: artifact,
-                peer_id,
-            },
+        loop {
+            if !Self::should_download(id, &mut artifact, &self.metrics, &mut bouncer_watcher).await
+            {
+                return AssembleResult::Unwanted;
+            }
 
-            // Fetch artifact
-            None => {
-                let timer = metrics
-                    .download_task_artifact_download_duration
-                    .start_timer();
-                let mut rng = SmallRng::from_entropy();
-
-                let result = loop {
-                    let next_request_at = Instant::now()
-                        + artifact_download_backoff
-                            .next()
-                            .unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT);
-                    if let Some(peer) = peer_rx.peers().into_iter().choose(&mut rng) {
-                        let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));
-                        let request = Request::builder()
-                            .uri(format!("/{}/rpc", uri_prefix::<Artifact>()))
-                            .body(bytes)
-                            .unwrap();
-
-                        match timeout_at(next_request_at, transport.rpc(&peer, request)).await {
-                            Ok(Ok(response)) if response.status() == StatusCode::OK => {
-                                let body = response.into_body();
-                                if let Ok(message) = Artifact::PbMessage::proxy_decode(&body) {
-                                    if message.id() == id {
-                                        break AssembleResult::Done {
-                                            message,
-                                            peer_id: peer,
-                                        };
-                                    } else {
-                                        warn!(
-                                            log,
-                                            "Peer {} responded with wrong artifact for advert",
-                                            peer
-                                        );
-                                    }
-                                }
-                            }
-                            _ => {
-                                metrics.download_task_artifact_download_errors_total.inc();
-                            }
-                        }
-                    }
-
-                    // Wait before checking the bouncer so we might be able to avoid an unnecessary download.
-                    sleep_until(next_request_at).await;
-                    if !Self::should_download(&id, &mut artifact, &metrics, &mut bouncer_watcher)
-                        .await
-                    {
-                        return AssembleResult::Unwanted;
-                    }
-                };
-
-                timer.stop_and_record();
-
-                result
+            // Only the first attempt gets the pushed artifact, so that a failed one is followed by
+            // downloading the artifact from a random peer.
+            let pushed = artifact.take();
+            let deadline = if pushed.is_some() {
+                // The attempt makes no request, so it takes no step of the backoff, and if it
+                // fails, its deadline has passed already.
+                Instant::now()
+            } else {
+                if download_timer.is_none() {
+                    download_timer = Some(
+                        self.metrics
+                            .download_task_artifact_download_duration
+                            .start_timer(),
+                    );
+                }
+                Instant::now() + backoff.next().unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT)
+            };
+            match attempt(pushed, deadline).await {
+                Attempt::Done { message, peer_id } => {
+                    return AssembleResult::Done { message, peer_id };
+                }
+                Attempt::Unwanted => return AssembleResult::Unwanted,
+                // Wait before checking the bouncer so we might be able to avoid an unnecessary download.
+                Attempt::Retry => sleep_until(deadline).await,
             }
         }
+    }
+
+    /// Returns the pushed artifact, if any, or tries once to download the artifact from a random one
+    /// of the `peers` advertising it, giving up at `deadline`, if it passes the integrity check.
+    pub(crate) async fn try_fetch(
+        &self,
+        id: &Artifact::Id,
+        artifact: Option<(Artifact, NodeId)>,
+        peers: Vec<NodeId>,
+        deadline: Instant,
+    ) -> Attempt<Artifact>
+    where
+        Artifact::Id: Debug,
+    {
+        match artifact {
+            // The receiver derived the id of a pushed artifact from it, so only its integrity is
+            // left to check.
+            Some((message, peer)) if message.check_integrity() => Attempt::Done {
+                message,
+                peer_id: peer,
+            },
+            Some((_, peer)) => self.invalid_artifact(id, peer, "it fails the integrity check"),
+            None => {
+                let Some(peer) = peers.into_iter().choose(&mut SmallRng::from_entropy()) else {
+                    return Attempt::Retry;
+                };
+                let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));
+                let request = Request::builder()
+                    .uri(format!("/{}/rpc", uri_prefix::<Artifact>()))
+                    .body(bytes)
+                    .unwrap();
+                match timeout_at(deadline, self.transport.rpc(&peer, request)).await {
+                    Ok(Ok(response)) if response.status() == StatusCode::OK => {
+                        match Artifact::PbMessage::proxy_decode(&response.into_body()) {
+                            Ok(message) if check_id_and_integrity(&message, id) => Attempt::Done {
+                                message,
+                                peer_id: peer,
+                            },
+                            Ok(_) => {
+                                self.invalid_artifact(id, peer, "it fails the integrity check")
+                            }
+                            Err(err) => self.invalid_artifact(id, peer, err),
+                        }
+                    }
+                    _ => {
+                        self.metrics
+                            .download_task_artifact_download_errors_total
+                            .inc();
+                        Attempt::Retry
+                    }
+                }
+            }
+        }
+    }
+
+    /// Counts and logs an invalid artifact that `peer` sent.
+    pub(crate) fn invalid_artifact<T>(
+        &self,
+        id: &Artifact::Id,
+        peer: NodeId,
+        err: impl Display,
+    ) -> Attempt<T>
+    where
+        Artifact::Id: Debug,
+    {
+        self.metrics.download_task_invalid_artifacts_total.inc();
+        warn!(
+            self.log,
+            "Peer {} sent an invalid artifact {:?}, fetching it again: {}", peer, id, err
+        );
+        Attempt::Retry
     }
 }

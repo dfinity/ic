@@ -1,5 +1,6 @@
-use crate::SevFirmwareFactory;
-use crate::server::ConnInfo;
+use std::ops::Deref;
+use std::path::PathBuf;
+
 use attestation::attestation_package::{
     AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
@@ -14,12 +15,19 @@ use guest_upgrade_shared::api::{
 use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
-use std::ops::Deref;
-use std::path::PathBuf;
 use tokio::sync::watch::Sender;
 use tonic::{Request, Response, Status, async_trait};
 use x509_parser::nom::AsBytes;
 use x509_parser::parse_x509_certificate;
+
+use crate::SevFirmwareFactory;
+use crate::server::ConnInfo;
+
+/// The launch measurements that the NNS elected for one GuestOS version.
+pub(crate) struct ElectedGuestOsVersion {
+    pub(crate) guestos_version: String,
+    pub(crate) launch_measurements: Vec<Vec<u8>>,
+}
 
 pub struct DiskEncryptionKeyExchangeServiceImpl {
     sev_firmware_factory: SevFirmwareFactory,
@@ -28,6 +36,9 @@ pub struct DiskEncryptionKeyExchangeServiceImpl {
     status_sender: Sender<Result<(), String>>,
     /// Expected launch measurements of the client GuestOS.
     expected_measurements: Vec<Vec<u8>>,
+    /// GuestOS versions elected in the local registry, used to find the version whose launch
+    /// measurements include our own. See `GetDiskEncryptionKeyResponse::guestos_version`.
+    elected_guestos_versions: Vec<ElectedGuestOsVersion>,
     sev_root_certificate_verification: SevRootCertificateVerification,
     store_device_path: PathBuf,
     store_luks_header_path: PathBuf,
@@ -43,6 +54,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
         store_luks_header_path: PathBuf,
         status_sender: Sender<Result<(), String>>,
         expected_measurements: Vec<Vec<u8>>,
+        elected_guestos_versions: Vec<ElectedGuestOsVersion>,
     ) -> Self {
         Self {
             sev_firmware_factory,
@@ -50,10 +62,34 @@ impl DiskEncryptionKeyExchangeServiceImpl {
             trusted_execution_environment_config,
             status_sender,
             expected_measurements,
+            elected_guestos_versions,
             sev_root_certificate_verification,
             store_device_path,
             store_luks_header_path,
         }
+    }
+
+    /// Returns the elected GuestOS version whose launch measurements include `my_measurement`.
+    fn find_my_guestos_version(&self, my_measurement: &[u8]) -> Option<String> {
+        let my_guestos_version = self
+            .elected_guestos_versions
+            .iter()
+            .find(|elected| {
+                elected
+                    .launch_measurements
+                    .iter()
+                    .any(|measurement| measurement.as_slice() == my_measurement)
+            })
+            .map(|elected| elected.guestos_version.clone());
+
+        if my_guestos_version.is_none() {
+            eprintln!(
+                "Our launch measurement is not elected in the local registry, \
+                 not reporting our GuestOS version to the Upgrade VM"
+            );
+        }
+
+        my_guestos_version
     }
 
     // Return the client's public key in DER format.
@@ -170,6 +206,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
             ),
             sev_attestation_package: Some(my_attestation_package.into()),
             luks_header: Some(luks_header),
+            guestos_version: self.find_my_guestos_version(&my_attestation_report.measurement),
         }))
     }
 
@@ -182,8 +219,12 @@ impl DiskEncryptionKeyExchangeServiceImpl {
             .debug_info
             .as_deref()
             .unwrap_or("No debug info.");
+
         match request.get_ref().success {
             Some(true) => {
+                println!(
+                    "Upgrade VM reported success. Debug info from the Upgrade VM: {debug_info}"
+                );
                 let _ = self.status_sender.send(Ok(()));
             }
             Some(false) => {
@@ -193,7 +234,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
             }
             None => {
                 let _ = self.status_sender.send(Err(format!(
-                    "No status in SignalStatusRequest. Debug info from Upgrade VM: {debug_info}"
+                    "No status in SignalStatusRequest. Debug info from the Upgrade VM: {debug_info}"
                 )));
             }
         }

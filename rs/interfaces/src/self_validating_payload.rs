@@ -4,6 +4,7 @@ use ic_types::{
     Height, NumBytes, Time,
     batch::{SelfValidatingPayload, ValidationContext},
     consensus::Payload,
+    messages::CallbackId,
 };
 
 /// A SelfValidatingPayload is invalid.
@@ -11,12 +12,21 @@ use ic_types::{
 pub enum InvalidSelfValidatingPayloadReason {
     PayloadTooBig,
     DecodeError(ProxyDecodeError),
+    /// A response refers to a `CallbackId` without a pending request of the
+    /// matching type in the state at the certified height.
+    NonMatchingResponse(CallbackId),
+    /// The payload, or a past payload, already contains a response for this
+    /// `CallbackId`.
+    DuplicateResponse(CallbackId),
 }
 
 /// A SelfValidatingPayload validation failure which prevents us to determine whether the payload is
 /// valid or not.
 #[derive(Debug)]
-pub enum SelfValidatingPayloadValidationFailure {}
+pub enum SelfValidatingPayloadValidationFailure {
+    /// The state at the certified height was not available at the time of validation.
+    StateUnavailable,
+}
 
 /// A SelfValidationPayload error that results from payload validation.
 pub type SelfValidatingPayloadValidationError =

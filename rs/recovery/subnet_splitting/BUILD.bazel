@@ -57,6 +57,7 @@ rust_binary(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:clap",
+        "@crate_index//:colored",
         "@crate_index//:csv",
         "@crate_index//:serde",
         "@crate_index//:slog",

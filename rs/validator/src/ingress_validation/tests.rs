@@ -737,6 +737,30 @@ mod validate_sender_info {
     }
 
     #[test]
+    fn should_reject_too_big_sender_info_for_call() {
+        let request = http_call_request_with_sender_info(Some(RawSignedSenderInfo {
+            info: Blob(vec![0; MAXIMUM_NUMBER_OF_BYTES_IN_SENDER_INFO + 1]),
+            signer: Blob(canister_test_id(42).get().into_vec()),
+            sig: Blob(vec![4, 5, 6]),
+        }));
+        let (crypto, provider) = crypto_and_provider();
+        let result = validate_sender_info(&request, crypto.as_ref(), &provider);
+        assert_matches!(result, Err(RequestValidationError::InvalidSenderInfo(msg)) if msg.contains("too big"));
+    }
+
+    #[test]
+    fn should_reject_too_big_sender_info_for_query() {
+        let request = http_query_request_with_sender_info(Some(RawSignedSenderInfo {
+            info: Blob(vec![0; MAXIMUM_NUMBER_OF_BYTES_IN_SENDER_INFO + 1]),
+            signer: Blob(canister_test_id(42).get().into_vec()),
+            sig: Blob(vec![4, 5, 6]),
+        }));
+        let (crypto, provider) = crypto_and_provider();
+        let result = validate_sender_info(&request, crypto.as_ref(), &provider);
+        assert_matches!(result, Err(RequestValidationError::InvalidSenderInfo(msg)) if msg.contains("too big"));
+    }
+
+    #[test]
     fn should_accept_none_sender_info_for_query() {
         let request = http_query_request_with_sender_info(None);
         let (crypto, provider) = crypto_and_provider();

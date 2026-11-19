@@ -122,7 +122,7 @@ pub trait CyclesUseCaseNonRefundableKind: CyclesUseCaseKind {}
  * to allow the compiler to enforce type-safe operations on `CompoundCycles`
  * but also make it more clear to the reader which use case is handled as it
  * will be part of the type they see.
-*/
+ */
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct Memory;

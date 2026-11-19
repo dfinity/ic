@@ -181,7 +181,7 @@ struct SlotUpdate<Artifact: PbArtifact> {
 }
 
 enum Update<Artifact: PbArtifact> {
-    Artifact(Artifact),
+    Artifact(Artifact::Id, Artifact),
     Id(Artifact::Id),
 }
 

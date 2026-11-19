@@ -8,7 +8,7 @@ use ic_types::{
     CountBytes, NodeId, NumBytes, RegistryVersion,
     batch::{
         CanisterHttpOutOfCycles, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
-        FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
+        FlexibleCanisterHttpResponses, MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE,
     },
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpResponse,
@@ -744,7 +744,7 @@ struct FlexibleCandidate<'a> {
 /// - **TooManyRejects**: more nodes returned rejects than the slack
 ///   allows (`committee.len() - min_responses`).
 /// - **ResponsesTooLarge**: even the smallest `min_responses` many OK responses
-///   (approximated by `count_bytes()`) exceed [`MAX_CANISTER_HTTP_PAYLOAD_SIZE`].
+///   (approximated by `count_bytes()`) exceed [`MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE`].
 /// - **OutOfCycles**: delivering a response can never be paid for again (see
 ///   [`check_flexible_out_of_cycles`]).
 /// - **Pending**: not enough data to decide yet.
@@ -861,7 +861,7 @@ pub(crate) fn find_flexible_result(
         }
     }
 
-    // 3. Even the smallest OK responses exceed the absolute payload limit?
+    // 3. Even the smallest OK responses exceed the limit on a group's responses?
     // Unseen responses could still submit small OK responses, so we account for them.
     let num_unseen = committee.len().saturating_sub(all_shares.len());
     let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
@@ -872,7 +872,7 @@ pub(crate) fn find_flexible_result(
             .map(|candidate| candidate.size)
             .sum();
 
-        if smallest_content_sum > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
+        if smallest_content_sum > MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE {
             let all_seen_shares: Vec<_> = ok_candidates
                 .iter()
                 .chain(reject_candidates.iter())
@@ -939,8 +939,9 @@ struct FlexibleSelection<'a> {
 
 /// Returns how many (up to `max_to_select`) of `candidates` to include in the payload, and
 /// which extra shares of `all_shares` to fund them with. Returns `None` if even the smallest
-/// `min_to_select` responses do not fit into what is left of the block, or if the committee's
-/// unspent allowance can not cover their cost.
+/// `min_to_select` responses exceed [`MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE`] or do not fit
+/// into what is left of the block, or if the committee's unspent allowance can not cover their
+/// cost.
 ///
 /// `candidates` must be ordered smallest-response-first and `all_shares` smallest-spend-first,
 /// each holding at most one share per committee member.
@@ -958,10 +959,15 @@ fn select_flexible_responses<'a>(
     let max_to_select = max_to_select.min(candidates.len());
 
     // Start with as many candidates as possible (up to `max_to_select`). Check whether the
-    // current selection is funded (potentially by adding extra shares) and fits into the
-    // block. If not, give up the largest response and try again with one fewer.
+    // current selection is within the limit, is funded (potentially by adding extra shares)
+    // and fits into the block. If not, give up the largest response and try again with one
+    // fewer.
     for selected in (min_to_select..=max_to_select).rev() {
         let selected = &candidates[..selected];
+        let responses_size: usize = selected.iter().map(|candidate| candidate.size).sum();
+        if responses_size > MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE {
+            continue;
+        }
         // Compute the cost of the current selection without any extra shares.
         let selected_spend = flexible_initial_spent(
             selected.iter().map(|candidate| candidate.share),
@@ -986,10 +992,7 @@ fn select_flexible_responses<'a>(
             continue;
         };
         let size = FlexibleCanisterHttpResponses::base_count_bytes()
-            + selected
-                .iter()
-                .map(|candidate| candidate.size)
-                .sum::<usize>()
+            + responses_size
             + extra_shares
                 .iter()
                 .map(|share| share.count_bytes())
@@ -1087,6 +1090,7 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
+                effective_canister_id: None,
             }),
             url: String::new(),
             max_response_bytes: None,

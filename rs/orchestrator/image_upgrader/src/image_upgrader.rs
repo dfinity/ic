@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use ic_http_utils::file_downloader::FileDownloader;
+use ic_http_utils::file_downloader::{FileDownloader, check_file_hash};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use std::ffi::OsStr;
 use std::str::FromStr;
@@ -46,6 +46,9 @@ impl ManagebootRunner for ManagebootRunnerImpl {
 pub struct Rebooting;
 
 const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
+const UPGRADE_PROXY_ADDRESS: &str = "hostos:19300";
+const UPGRADE_PROXY_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const UPGRADE_PROXY_TOTAL_TIMEOUT: Duration = Duration::from_mins(5);
 
 /// Defines the image upgrader trait and default implementation. It receives a generic version identifier `V`
 /// and a return value `R` stemming from a periodically called `check_for_upgrade` function.
@@ -70,10 +73,10 @@ const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 ///     ...
 ///
 ///     /// Called by `prepare_upgrade()` to download the image.
-///     fn get_release_package_url_and_hash(
+///     fn get_release_package_urls_and_hash(
 ///         &self,
 ///         version: &Version,
-///     ) -> UpgradeResult<(Vec<String>, Option<String>)> {
+///     ) -> UpgradeResult<(Vec<String>, String)> {
 ///         // Collect and return release package information, i.e. from registry.
 ///         ...
 ///     }
@@ -131,12 +134,12 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     }
     /// Return the logger to be passed to the upgrade functions.
     fn log(&self) -> &ReplicaLogger;
-    /// Return the release package url and optional SHA256 hex string for the given version.
+    /// Return the release package urls and SHA256 hex string for the given version.
     /// Used to download the release package during `prepare_upgrade()`.
     fn get_release_package_urls_and_hash(
         &self,
         version: &V,
-    ) -> UpgradeResult<(Vec<String>, Option<String>)>;
+    ) -> UpgradeResult<(Vec<String>, String)>;
 
     /// Runs the disk encryption key exchange process for the target version if SEV is active.
     /// NOOP otherwise.
@@ -179,29 +182,40 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         // This is okay because we do expect the first attempt to be successful.
         release_package_urls.rotate_right(self.get_load_balance_number() % url_count);
 
-        // We return the last error if download attempts from all the URLs fail.
-        // We will always either set `error`, or return `Ok` from this loop.
-        let mut error = UpgradeError::GenericError("unreachable".to_string());
-        for release_package_url in release_package_urls.iter() {
-            let req = format!("Request to download image {version:?} from {release_package_url}");
-            let file_downloader =
-                FileDownloader::new_with_timeout(Some(self.log().clone()), Duration::from_secs(60));
-            let start_time = std::time::Instant::now();
-            let download_result = file_downloader
-                .download_file(release_package_url, self.image_path(), hash.clone())
-                .await;
-            let duration = start_time.elapsed();
+        // Return early if we already have the release package downloaded.
+        if self.image_path().exists() && check_file_hash(self.image_path(), &hash).is_ok() {
+            return Ok(());
+        }
 
-            if let Err(e) = download_result {
-                warn!(self.log(), "{} failed in {:?}: {}", req, duration, e);
-                error = UpgradeError::from(e);
-            } else {
-                info!(self.log(), "{} processed in {:?}", req, duration);
+        // If we can reach the proxy
+        if matches!(
+            tokio::time::timeout(
+                UPGRADE_PROXY_CONNECT_TIMEOUT,
+                tokio::net::TcpStream::connect(UPGRADE_PROXY_ADDRESS),
+            )
+            .await,
+            Ok(Ok(_))
+        ) {
+            // And downloading from the proxy works, we're done.
+            if matches!(
+                tokio::time::timeout(
+                    UPGRADE_PROXY_TOTAL_TIMEOUT,
+                    self.try_download_from_urls(version, &release_package_urls, &hash, true),
+                )
+                .await,
+                Ok(Ok(()))
+            ) {
                 return Ok(());
             }
         }
 
-        Err(error)
+        // Otherwise, download the artifact ourselves, directly
+        info!(
+            self.log(),
+            "Could not download through the upgrade proxy, downloading directly"
+        );
+        self.try_download_from_urls(version, &release_package_urls, &hash, false)
+            .await
     }
 
     /// Downloads release package associated with the given version,
@@ -334,4 +348,65 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     /// * Optionally prepare the upgrade in advance using `prepare_upgrade`.
     /// * Once it is time to upgrade, execute it using `execute_upgrade`
     async fn check_for_upgrade(&mut self) -> UpgradeResult<Self::UpgradeType>;
+
+    /// Try to download from a set of urls, returning the last error in case of
+    /// failure. If `use_proxy` is set, attempt the downloads through the HostOS
+    /// upgrade proxy.
+    async fn try_download_from_urls(
+        &self,
+        version: &V,
+        release_package_urls: &[String],
+        hash: &str,
+        use_proxy: bool,
+    ) -> UpgradeResult<()> {
+        let logger = self.log();
+
+        // Keep proxy downloads in a separate file to avoid pollution.
+        let image_path = if use_proxy {
+            self.image_path().with_added_extension("proxy")
+        } else {
+            self.image_path().clone()
+        };
+
+        // We return the last error if download attempts from all the URLs fail.
+        // We will always either set `error`, or return `Ok` from this loop.
+        let mut error = UpgradeError::GenericError("unreachable".to_string());
+
+        for release_package_url in release_package_urls {
+            let release_package_url = if use_proxy {
+                &format!("http://{UPGRADE_PROXY_ADDRESS}/{hash}/{release_package_url}")
+            } else {
+                release_package_url
+            };
+
+            let req = format!("Request to download image {version:?} from {release_package_url}");
+            let file_downloader =
+                FileDownloader::new_with_timeout(Some(logger.clone()), Duration::from_secs(60));
+            let start_time = std::time::Instant::now();
+            let download_result = file_downloader
+                .download_file(release_package_url, &image_path, Some(hash.to_owned()))
+                .await;
+            let duration = start_time.elapsed();
+
+            if let Err(e) = download_result {
+                warn!(logger, "{} failed in {:?}: {:?}", req, duration, e);
+                error = UpgradeError::from(e);
+            } else {
+                info!(logger, "{} processed in {:?}", req, duration);
+
+                if use_proxy {
+                    return std::fs::rename(&image_path, self.image_path()).map_err(|e| {
+                        UpgradeError::IoError(
+                            "Could not move the proxy downloaded image into place".to_string(),
+                            e,
+                        )
+                    });
+                } else {
+                    return Ok(());
+                }
+            }
+        }
+
+        Err(error)
+    }
 }

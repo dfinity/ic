@@ -1,0 +1,16 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+rust_binary(
+    name = "ic-boundary-smoke-test",
+    srcs = ["src/main.rs"],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:clap",
+        "@crate_index//:ic-agent",
+        "@crate_index//:serde",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
+)

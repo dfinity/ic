@@ -229,14 +229,6 @@ impl HasHeight for Certification {
     }
 }
 
-impl CountBytes for Certification {
-    fn count_bytes(&self) -> usize {
-        std::mem::size_of::<Height>()
-            + self.signed.content.hash.get_ref().0.len()
-            + self.signed.signature.count_bytes()
-    }
-}
-
 /// A certification share is the signature of a single replica on a
 /// CertificationContent
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]

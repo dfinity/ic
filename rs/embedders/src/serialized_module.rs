@@ -287,6 +287,9 @@ mod test {
 
     fn map_file_to_vec(file: &File) -> Vec<u8> {
         let mmap_size = file.metadata().unwrap().size() as usize;
+        if mmap_size == 0 {
+            return Vec::new();
+        }
         let mmap_ptr = unsafe {
             mmap(
                 None,

@@ -2316,13 +2316,17 @@ async fn download_pocketic_server(
     let binary = reqwest::get(server_url)
         .await
         .map_err(|e| format!("Failed to download PocketIC server: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("Failed to download PocketIC server: {e}"))?
         .bytes()
         .await
         .map_err(|e| format!("Failed to download PocketIC server: {e}"))?
         .to_vec();
     let mut gz = GzDecoder::new(&binary[..]);
-    let _ = std::io::copy(&mut gz, &mut out)
-        .map_err(|e| format!("Failed to write PocketIC server binary: {e}"));
+    std::io::copy(&mut gz, &mut out)
+        .map_err(|e| format!("Failed to decompress PocketIC server binary: {e}"))?;
+    out.sync_all()
+        .map_err(|e| format!("Failed to write PocketIC server binary: {e}"))?;
     Ok(())
 }
 

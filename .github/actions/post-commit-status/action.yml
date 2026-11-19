@@ -19,15 +19,26 @@ runs:
   using: "composite"
   steps:      
     - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      env:
+        COMMIT_SHA: ${{ inputs.commit-sha }}
+        RUN_RESULT: ${{ inputs.run-result }}
+        STATUS_CONTEXT: ${{ inputs.name }}
       with:
         script: |
+          const { COMMIT_SHA, RUN_RESULT, STATUS_CONTEXT } = process.env;
+          // Check before the API call: an error response echoes the SHA, and github-script
+          // prints it raw, where a line starting with `::` is read as a workflow command.
+          if (!/^[0-9a-f]{40}$/i.test(COMMIT_SHA || '')) {
+            core.setFailed('commit-sha must be a full 40-character commit SHA');
+            return;
+          }
           let state, description;
 
-          if ('${{ inputs.run-result }}' === 'success') {
+          if (RUN_RESULT === 'success') {
             state = 'success';
             description = 'Required checks passed';
 
-          } else if ('${{ inputs.run-result }}' === 'failure') {
+          } else if (RUN_RESULT === 'failure') {
             state = 'failure';
             description = 'Required checks failed';
 
@@ -39,11 +50,11 @@ runs:
           await github.rest.repos.createCommitStatus({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            sha: '${{ inputs.commit-sha }}',
+            sha: COMMIT_SHA,
             state: state,
             target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             description: description,
-            context: '${{ inputs.name }}'
+            context: STATUS_CONTEXT
           });
             
           console.log(`Set commit status: ${state} - ${description}`);

@@ -135,12 +135,12 @@ impl ArtifactPools {
 }
 
 struct Bouncers {
-    ingress: Arc<IngressBouncer>,
-    consensus: Arc<ConsensusBouncer>,
-    certifier: Arc<CertifierBouncer>,
-    dkg: Arc<DkgBouncer>,
-    idkg: Arc<IDkgBouncer>,
-    https_outcalls: Arc<CanisterHttpGossipImpl>,
+    ingress: IngressBouncer,
+    consensus: ConsensusBouncer,
+    certifier: CertifierBouncer,
+    dkg: DkgBouncer,
+    idkg: IDkgBouncer,
+    https_outcalls: CanisterHttpGossipImpl,
 }
 
 impl Bouncers {
@@ -152,21 +152,18 @@ impl Bouncers {
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
-        let ingress = Arc::new(IngressBouncer::new(time_source.clone()));
-        let consensus = Arc::new(ConsensusBouncer::new(metrics_registry, message_router));
-        let dkg = Arc::new(DkgBouncer::new(metrics_registry));
-        let certifier = Arc::new(CertifierBouncer::new(
-            metrics_registry,
-            consensus_pool_cache.clone(),
-        ));
-        let idkg = Arc::new(IDkgBouncer::new(
+        let ingress = IngressBouncer::new(time_source.clone());
+        let consensus = ConsensusBouncer::new(metrics_registry, message_router);
+        let dkg = DkgBouncer::new(metrics_registry);
+        let certifier = CertifierBouncer::new(metrics_registry, consensus_pool_cache.clone());
+        let idkg = IDkgBouncer::new(
             metrics_registry,
             subnet_id,
             consensus_pool_cache.clone(),
             state_reader.clone(),
-        ));
+        );
 
-        let https_outcalls = Arc::new(CanisterHttpGossipImpl::new(state_reader.clone()));
+        let https_outcalls = CanisterHttpGossipImpl::new(state_reader.clone());
 
         Self {
             ingress,

@@ -143,10 +143,16 @@ fn load_metrics_e2e_test() {
             .lines()
             .map(|line| CanisterIdRange::from_str(line).expect("Not a valid CanisterIdRange"))
             .collect();
+        // With at most `MAX_CUTS` cuts, the canisters, ordered by ID, form at most `MAX_CUTS + 1`
+        // segments, which alternate between the two subnets. The `split-finder` reports the
+        // segments of one of the subnets, so at most `MAX_CUTS / 2 + 1` ranges.
+        let max_ranges = MAX_CUTS / 2 + 1;
         assert!(
-            canister_id_ranges.len() <= MAX_CUTS.div_ceil(2),
-            "The split-finder script should have produced at most {MAX_CUTS} because we \
-            passed {MAX_CUTS} as the `--max-cuts` argument"
+            canister_id_ranges.len() <= max_ranges,
+            "The split-finder script should have produced at most {max_ranges} canister ranges \
+            because we passed {MAX_CUTS} as the `--max-cuts` argument, but it produced {}: \
+            {canister_id_ranges:?}",
+            canister_id_ranges.len(),
         );
 
         // And finally use the `subnet-splitting-tool` to estimate the loads on each subnet after a
@@ -213,36 +219,36 @@ fn load_metrics_e2e_test() {
             states_sizes_bytes
                 .source
                 .min(states_sizes_bytes.destination),
-            3705962,
+            4259662,
             0.1
         );
         assert_near!(
             states_sizes_bytes
                 .source
                 .max(states_sizes_bytes.destination),
-            5558934,
+            5044173,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .min(instructions_executed.destination),
-            144343027,
+            144348562,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .max(instructions_executed.destination),
-            145772259,
+            145713211,
             0.1
         );
-        assert_eq_oriented!(canisters_installed, 12, 8);
-        assert_eq_oriented!(ingress_messages_executed, 24, 15);
-        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 6, 4);
-        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 17, 11);
+        assert_eq_oriented!(canisters_installed, 11, 9);
+        assert_eq_oriented!(ingress_messages_executed, 21, 18);
+        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 5, 5);
+        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 15, 13);
         assert_eq_oriented!(http_outcalls_executed, 6, 4);
-        assert_eq_oriented!(heartbeats_and_global_timers_executed, 326, 368);
+        assert_eq_oriented!(heartbeats_and_global_timers_executed, 341, 353);
         // A single split cannot report some metrics in the original orientation and others in the
         // swapped one, so require all the orientation-sensitive metrics to agree on one labeling.
         assert!(

@@ -1,4 +1,5 @@
 use super::*;
+use crate::state_sync::types::{ChunkInfo, FileInfo};
 use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
@@ -316,7 +317,7 @@ fn split_manifest_3_canisters() {
 }
 
 /// Returns a `FileInfo` for a zero length file with the given relative path.
-fn empty_file_info(path: &str) -> FileInfo {
+pub(in crate::manifest) fn empty_file_info(path: &str) -> FileInfo {
     FileInfo {
         relative_path: PathBuf::from(path),
         size_bytes: 0,
@@ -326,7 +327,7 @@ fn empty_file_info(path: &str) -> FileInfo {
 
 /// Generates a valid `(FileInfo, ChunkInfo)` pair for a non-empty file with
 /// the given relative path..
-fn non_empty_file_and_chunk_infos(path: &str) -> (FileInfo, ChunkInfo) {
+pub(in crate::manifest) fn non_empty_file_and_chunk_infos(path: &str) -> (FileInfo, ChunkInfo) {
     (
         FileInfo {
             relative_path: PathBuf::from(path),
@@ -346,7 +347,7 @@ fn non_empty_file_and_chunk_infos(path: &str) -> (FileInfo, ChunkInfo) {
 }
 
 /// Returns the relative path to the `canister.pbuf` for the given canister.
-fn canister_pbuf_path(canister_id: CanisterId) -> String {
+pub(in crate::manifest) fn canister_pbuf_path(canister_id: CanisterId) -> String {
     // Empty root so that all paths are relative like in the manifest.
     let checkpoint_layout =
         CheckpointLayout::<ReadOnly>::new_untracked("".into(), Height::new(0)).unwrap();
@@ -362,7 +363,7 @@ fn canister_pbuf_path(canister_id: CanisterId) -> String {
 }
 
 /// Returns the relative path to the `snapshot.pbuf` for the given snapshot.
-fn snapshot_pbuf_path(snapshot_id: SnapshotId) -> String {
+pub(in crate::manifest) fn snapshot_pbuf_path(snapshot_id: SnapshotId) -> String {
     // Empty root so that all paths are relative like in the manifest.
     let checkpoint_layout =
         CheckpointLayout::<ReadOnly>::new_untracked("".into(), Height::new(0)).unwrap();
@@ -411,19 +412,19 @@ fn expected_subnet_1_system_metadata() -> (FileInfo, ChunkInfo) {
     (
         FileInfo {
             relative_path: PathBuf::from(SYSTEM_METADATA_FILE),
-            size_bytes: 75,
+            size_bytes: 78,
             hash: [
-                19, 61, 7, 13, 37, 118, 121, 151, 212, 179, 140, 186, 181, 129, 75, 103, 39, 249,
-                40, 90, 109, 124, 188, 62, 89, 125, 7, 13, 139, 238, 23, 242,
+                89, 146, 228, 76, 36, 224, 137, 48, 255, 83, 34, 247, 108, 202, 25, 28, 218, 49,
+                254, 104, 183, 48, 181, 30, 116, 168, 85, 89, 172, 82, 62, 149,
             ],
         },
         ChunkInfo {
-            file_index: 13,
-            size_bytes: 75,
+            file_index: 5,
+            size_bytes: 78,
             offset: 0,
             hash: [
-                38, 115, 120, 27, 53, 245, 121, 212, 22, 195, 5, 30, 32, 99, 213, 191, 31, 229, 39,
-                241, 17, 108, 28, 84, 165, 157, 11, 75, 18, 225, 42, 3,
+                173, 52, 219, 22, 101, 226, 139, 67, 90, 118, 156, 127, 152, 157, 197, 13, 71, 48,
+                155, 158, 245, 228, 107, 130, 8, 204, 53, 16, 37, 209, 201, 17,
             ],
         },
     )

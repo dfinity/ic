@@ -858,6 +858,41 @@ fn query_cache_returns_different_results_for_different_canister_balance128s() {
 }
 
 #[test]
+fn query_cache_returns_different_results_for_different_canister_liquid_balance128s() {
+    // The query must get the balance, otherwise the entry won't be invalidated.
+    let q = wasm().liquid_cycles_balance128().reply_data(&[42]);
+    for_query_and_composite_query(q, |mut test, a_id, b_id, method, q| {
+        let res_1 = test.non_replicated_query(a_id, method, q.clone());
+        assert_eq!(query_cache_metrics(&test).misses.get(), 1);
+        assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
+
+        // Change the canister balance.
+        test.canister_state_mut(b_id)
+            .system_state
+            .consume_cycles(CompoundCycles::<Memory>::new(
+                1_u64.into(),
+                CanisterCyclesCostSchedule::Normal,
+            ));
+
+        let res_2 = test.non_replicated_query(a_id, method, q);
+        let m = query_cache_metrics(&test);
+        assert_eq!(2, m.misses.get());
+        assert_eq!(res_1, res_2);
+        assert_eq!(1, m.invalidated_entries.get());
+        assert_eq!(0, m.invalidated_entries_by_time.get());
+        assert_eq!(0, m.invalidated_entries_by_max_expiry_time.get());
+        assert_eq!(
+            0,
+            m.invalidated_entries_by_data_certificate_expiry_time.get()
+        );
+        assert_eq!(0, m.invalidated_entries_by_canister_version.get());
+        assert_eq!(1, m.invalidated_entries_by_canister_balance.get());
+        assert_eq!(0, m.invalidated_entries_duration.get_sample_sum() as usize);
+        assert_eq!(1, m.invalidated_entries_duration.get_sample_count());
+    });
+}
+
+#[test]
 fn query_cache_returns_different_results_on_combined_invalidation() {
     // The query must get the time and balance, otherwise the entry won't be invalidated.
     // The data certificate can be called only in the normal query.
@@ -1823,8 +1858,9 @@ fn query_cache_future_proof_test() {
             //   `ic0.time()` is the only System API call providing
             //   different values for distinct `batch_time`s.
             // * Changes in `canister_balance` invalidate cache entries.
-            //   `ic0.canister_cycle_balance[128]()` is the sole System API
-            //   call dependent on canister balance.
+            //   `ic0.canister_cycle_balance[128]()` and
+            //   `ic0.canister_liquid_cycle_balance128()` are the only System API
+            //   calls dependent on canister balance.
             // * Changes in `canister_version` always invalidate cache entries.
             //   This includes update calls, configuration changes, upgrades...
             //
