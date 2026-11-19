@@ -13,7 +13,10 @@ use ic_types::{
         FlexibleCanisterHttpResponses, canister_http_stripping::stripped_size, slice_to_messages,
         slice_to_messages_iter,
     },
-    canister_http::CanisterHttpResponseShare,
+    canister_http::{
+        CanisterHttpResponseDivergence, CanisterHttpResponseShare,
+        CanisterHttpResponseWithConsensus,
+    },
     messages::CallbackId,
 };
 use prost::Message;
@@ -23,9 +26,8 @@ pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, Proxy
     messages_to_payload(slice_to_messages(data).map_err(ProxyDecodeError::DecodeError)?)
 }
 
-/// Like [`bytes_to_payload`], but fails unless `data` is exactly what
-/// [`payload_to_bytes`] writes, i.e. unless every message encodes to the very bytes
-/// it was decoded from.
+/// Like [`bytes_to_payload`], but fails unless every message encodes to the very bytes
+/// it was decoded from, as [`messages_to_bytes`] writes it.
 pub(crate) fn canonical_bytes_to_payload(
     data: &[u8],
 ) -> Result<CanisterHttpPayload, ProxyDecodeError> {
@@ -91,85 +93,48 @@ fn messages_to_payload(
     Ok(payload)
 }
 
-/// Serializes the payload, leaving out every message that does not fit within
-/// `memory_limit` bytes, or within `wire_limit` bytes of [`wire_size`].
-pub(crate) fn payload_to_bytes(
-    payload: CanisterHttpPayload,
+/// A message of a canister http payload.
+pub(crate) enum PayloadMessage {
+    Timeout(CallbackId),
+    Divergence(CanisterHttpResponseDivergence),
+    Response(CanisterHttpResponseWithConsensus),
+    FlexibleResponses(FlexibleCanisterHttpResponses),
+    FlexibleError(FlexibleCanisterHttpError),
+    OutOfCycles(CanisterHttpOutOfCycles),
+    AsyncReceipt(CanisterHttpResponseShare),
+}
+
+impl From<PayloadMessage> for CanisterHttpResponseMessage {
+    fn from(message: PayloadMessage) -> Self {
+        let message_type = match message {
+            PayloadMessage::Timeout(callback_id) => MessageType::Timeout(callback_id.get()),
+            PayloadMessage::Divergence(divergence) => {
+                MessageType::DivergenceResponse(divergence.into())
+            }
+            PayloadMessage::Response(response) => MessageType::Response(response.into()),
+            PayloadMessage::FlexibleResponses(group) => {
+                MessageType::FlexibleResponses(group.into())
+            }
+            PayloadMessage::FlexibleError(error) => MessageType::FlexibleError(error.into()),
+            PayloadMessage::OutOfCycles(error) => MessageType::OutOfCycles(error.into()),
+            PayloadMessage::AsyncReceipt(share) => MessageType::AsyncReceipt(share.into()),
+        };
+        Self {
+            message_type: Some(message_type),
+        }
+    }
+}
+
+/// Serializes the messages in the given order, leaving out every message that does not
+/// fit within `memory_limit` bytes, or within `wire_limit` bytes of [`wire_size`].
+pub(crate) fn messages_to_bytes(
+    messages: impl IntoIterator<Item = PayloadMessage>,
     memory_limit: NumBytes,
     wire_limit: NumBytes,
 ) -> Vec<u8> {
-    let CanisterHttpPayload {
-        timeouts,
-        divergence_responses,
-        out_of_cycles,
-        responses,
-        flexible_responses,
-        flexible_errors,
-        async_receipts,
-    } = payload;
-
-    let message_iterator =
-        timeouts
-            .into_iter()
-            .map(|timeout| CanisterHttpResponseMessage {
-                message_type: Some(MessageType::Timeout(timeout.get())),
-            })
-            .chain(
-                divergence_responses
-                    .into_iter()
-                    .map(|response| CanisterHttpResponseMessage {
-                        message_type: Some(MessageType::DivergenceResponse(
-                            pb::CanisterHttpResponseDivergence::from(response),
-                        )),
-                    }),
-            )
-            .chain(
-                responses
-                    .into_iter()
-                    .map(|response| CanisterHttpResponseMessage {
-                        message_type: Some(MessageType::Response(
-                            pb::CanisterHttpResponseWithConsensus::from(response),
-                        )),
-                    }),
-            )
-            .chain(flexible_responses.into_iter().map(|flex_responses| {
-                CanisterHttpResponseMessage {
-                    message_type: Some(MessageType::FlexibleResponses(
-                        pb::FlexibleCanisterHttpResponses::from(flex_responses),
-                    )),
-                }
-            }))
-            .chain(
-                flexible_errors
-                    .into_iter()
-                    .map(|flex_error| CanisterHttpResponseMessage {
-                        message_type: Some(MessageType::FlexibleError(
-                            pb::FlexibleCanisterHttpError::from(flex_error),
-                        )),
-                    }),
-            )
-            .chain(
-                out_of_cycles
-                    .into_iter()
-                    .map(|out_of_cycles| CanisterHttpResponseMessage {
-                        message_type: Some(MessageType::OutOfCycles(
-                            pb::CanisterHttpOutOfCycles::from(out_of_cycles),
-                        )),
-                    }),
-            )
-            .chain(
-                async_receipts
-                    .into_iter()
-                    .map(|share| CanisterHttpResponseMessage {
-                        message_type: Some(MessageType::AsyncReceipt(pb::CanisterHttpShare::from(
-                            share,
-                        ))),
-                    }),
-            );
-
     let mut bytes = vec![];
     let mut wire_size = 0;
-    for message in message_iterator {
+    for message in messages.into_iter().map(CanisterHttpResponseMessage::from) {
         // Like `iterator_to_bytes`, try the remaining messages after one that does
         // not fit, to give smaller ones a chance.
         let start = bytes.len();

@@ -96,9 +96,6 @@ ic-types = { path = "../../types/types" }
 [build-dependencies]
 build-info-build = { workspace = true }
 
-ic-base-types = { path = "../../types/base_types" }
-prost-build = { workspace = true }
-
 [dev-dependencies]
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }

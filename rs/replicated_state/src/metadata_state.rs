@@ -9,11 +9,13 @@ use self::subnet_schedule::SubnetSchedule;
 use crate::CanisterQueues;
 use crate::CanisterState;
 use crate::CheckpointLoadingMetrics;
+use crate::UpgradePermitMetrics;
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
+use ic_logger::{ReplicaLogger, error, info};
 use ic_management_canister_types_private::{
     IC_00, MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse,
 };
@@ -24,8 +26,9 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::consensus::upgrade::UpgradePermitAction;
 use ic_types::{
-    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
+    CountBytes, CryptoHashOfPartialState, Height, NodeId, NumBytes, PrincipalId, SubnetId,
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
@@ -194,6 +197,10 @@ pub struct SystemMetadata {
     /// Transient: reset to `None` on checkpoint load.
     #[validate_eq(Ignore)]
     pub subnet_ids_at_last_reject_generation: Option<Vec<SubnetId>>,
+
+    /// Phase-2 upgrade state accumulator: tracks outstanding reboot requests
+    /// and authorized nodes for the rolling GuestOS reboot.
+    pub upgrade_state: UpgradeState,
 }
 
 /// Full description of the IC network topology.
@@ -751,6 +758,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
             subnet_ids_at_last_reject_generation: None,
+            upgrade_state: Default::default(),
         }
     }
 
@@ -1100,6 +1108,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
             subnet_ids_at_last_reject_generation: _,
+            upgrade_state: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -1205,6 +1214,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
             subnet_ids_at_last_reject_generation: _,
+            upgrade_state: _,
         } = self;
 
         assert_eq!(None, split_from);
@@ -1317,6 +1327,8 @@ impl SystemMetadata {
             // Transient field; reset so that `generate_reject_responses_for_deleted_subnets()`
             // runs unconditionally on the first post-split round.
             subnet_ids_at_last_reject_generation: None,
+            // TODO: Still need to decide what will happen with upgrade_state during subnet splitting.
+            upgrade_state: Default::default(),
         })
     }
 
@@ -2413,6 +2425,71 @@ impl UnflushedCheckpointOps {
     }
 }
 
+/// The Phase 2 state during fast GuestOS upgrades, stored in `SystemMetadata`.
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct UpgradeState {
+    /// Nodes that have requested a reboot permit but not yet been authorized,
+    /// mapped to the height at which they requested.
+    pub unauthorized_upgrade_requests: BTreeMap<NodeId, Height>,
+    /// Nodes that have been authorized to reboot.
+    pub rebooting_nodes: BTreeSet<NodeId>,
+}
+
+impl UpgradeState {
+    /// Apply a block's upgrade actions at `height`, pruning  permits of
+    /// departed members.
+    pub fn apply(
+        &mut self,
+        actions: &[UpgradePermitAction],
+        height: Height,
+        logger: &ReplicaLogger,
+        metrics: &impl UpgradePermitMetrics,
+    ) {
+        for action in actions {
+            match action {
+                UpgradePermitAction::RequestPermit(request) => {
+                    self.unauthorized_upgrade_requests
+                        .insert(request.requestor, height);
+                }
+                UpgradePermitAction::AuthorizePermit(authorization) => {
+                    let node = authorization.content.requestor;
+                    self.unauthorized_upgrade_requests.remove(&node);
+                    self.rebooting_nodes.insert(node);
+                }
+                UpgradePermitAction::ReturnPermit { node } => {
+                    let warn = self.unauthorized_upgrade_requests.contains_key(node);
+
+                    // Perform all the actions upfront, so we can check values
+                    // after the debug assertion panic.
+                    self.unauthorized_upgrade_requests.remove(node);
+                    self.rebooting_nodes.remove(node);
+
+                    if warn {
+                        metrics.observe_unexpected_permit_return();
+                        debug_assert!(
+                            false,
+                            "Node '{node}' is rebooting while its upgrade request is still open."
+                        );
+                        error!(
+                            logger,
+                            "Node '{node}' is rebooting while its upgrade request is still open."
+                        );
+                    }
+                }
+                UpgradePermitAction::ExpirePermit { node } => {
+                    metrics.observe_expired_permit();
+                    info!(
+                        logger,
+                        "Upgrade permit request from '{}' expired at height '{}'", node, height,
+                    );
+                    self.unauthorized_upgrade_requests.remove(node);
+                    self.rebooting_nodes.remove(node);
+                }
+            }
+        }
+    }
+}
+
 pub mod testing {
     use super::*;
 
@@ -2555,6 +2632,7 @@ pub mod testing {
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
             subnet_ids_at_last_reject_generation: None,
+            upgrade_state: Default::default(),
         };
     }
 }

@@ -3,12 +3,10 @@ use ic_interfaces::{
     consensus::PayloadValidationError,
 };
 use ic_types::{
-    Height, NumBytes,
-    batch::{CanisterHttpPayload, ValidationContext},
-    canister_http::CanisterHttpResponseWithConsensus,
+    Height, NumBytes, batch::ValidationContext, canister_http::CanisterHttpResponseWithConsensus,
 };
 
-use crate::payload_builder::parse::payload_to_bytes;
+use crate::payload_builder::parse::{PayloadMessage, messages_to_bytes};
 
 #[derive(Default)]
 pub struct FakeCanisterHttpPayloadBuilder(Vec<CanisterHttpResponseWithConsensus>);
@@ -32,16 +30,11 @@ impl BatchPayloadBuilder for FakeCanisterHttpPayloadBuilder {
         _past_payloads: &[PastPayload],
         _context: &ValidationContext,
     ) -> Vec<u8> {
-        let payload = CanisterHttpPayload {
-            responses: self.0.clone(),
-            timeouts: vec![],
-            divergence_responses: vec![],
-            out_of_cycles: vec![],
-            flexible_responses: vec![],
-            flexible_errors: vec![],
-            async_receipts: vec![],
-        };
-        payload_to_bytes(payload, max_size, max_size)
+        messages_to_bytes(
+            self.0.iter().cloned().map(PayloadMessage::Response),
+            max_size,
+            max_size,
+        )
     }
 
     fn validate_payload(

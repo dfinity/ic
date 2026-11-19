@@ -70,7 +70,10 @@ impl FileDownloader {
     /// `overall_timeout` will be set to `chunk_timeout * OVERALL_TIMEOUT_MULTIPLIER`
     pub fn new_with_timeout(logger: Option<ReplicaLogger>, chunk_timeout: Duration) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .no_hickory_dns()
+                .build()
+                .expect("failed to build HTTP client"),
             logger,
             chunk_timeout,
             overall_timeout: chunk_timeout.mul_f32(OVERALL_TIMEOUT_MULTIPLIER),

@@ -3,7 +3,7 @@
 use crate::{
     metrics::CanisterHttpPayloadBuilderMetrics,
     payload_builder::{
-        parse::bytes_to_payload,
+        parse::{PayloadMessage, bytes_to_payload},
         utils::{
             FlexibleFindResult, PayloadBudget, PayloadSize, RefundedNodes, ResponseShareSigInput,
             find_async_receipts, find_flexible_result, find_fully_replicated_response,
@@ -48,7 +48,8 @@ use ic_types::{
     batch::{
         CanisterHttpAsyncSpent, CanisterHttpInitialSpent, CanisterHttpPayload, CanisterHttpSpent,
         ConsensusResponse, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
-        FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
+        FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
+        MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE, ValidationContext,
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CanisterHttpRequestContext,
@@ -145,13 +146,15 @@ impl CanisterHttpPayloadBuilderImpl {
             .map(|features| features.unwrap_or_default().http_requests)
     }
 
+    /// Selects the messages of a payload, in the order in which they are serialized, so
+    /// that a message can only be crowded out of the payload by those selected before it.
     fn get_canister_http_payload_impl(
         &self,
         validation_context: &ValidationContext,
         past_payloads: PastPayloads,
         memory_limit: NumBytes,
         wire_limit: NumBytes,
-    ) -> CanisterHttpPayload {
+    ) -> Vec<PayloadMessage> {
         let state = match self
             .state_reader
             .get_state_at(validation_context.certified_height)
@@ -163,7 +166,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     "CanisterHttpPayloadBuilder: state unavailable at height {}: {err:?}",
                     validation_context.certified_height,
                 );
-                return CanisterHttpPayload::default();
+                return vec![];
             }
         };
 
@@ -181,13 +184,7 @@ impl CanisterHttpPayloadBuilderImpl {
         let mut budget = PayloadBudget::new(memory_limit, wire_limit);
         let mut responses_included = 0;
 
-        let mut responses = vec![];
-        let mut timeouts = vec![];
-        let mut divergence_responses = vec![];
-        let mut out_of_cycles = vec![];
-        let mut flexible_responses = vec![];
-        let mut flexible_errors = vec![];
-        let mut async_receipts = vec![];
+        let mut messages = vec![];
 
         // Metrics counters
         let mut total_share_count = 0;
@@ -232,10 +229,10 @@ impl CanisterHttpPayloadBuilderImpl {
                             callback_id: *callback_id,
                         };
                         if budget.try_take(PayloadSize::unstripped(error.count_bytes())) {
-                            flexible_errors.push(error);
+                            messages.push(PayloadMessage::FlexibleError(error));
                         }
                     } else if budget.try_take(PayloadSize::unstripped(callback_id.count_bytes())) {
-                        timeouts.push(*callback_id);
+                        messages.push(PayloadMessage::Timeout(*callback_id));
                     }
                     let groups = shares_by_callback_id.get(callback_id);
                     let (groups, success, reject) = groups.map_or((0, 0, 0), |groups| {
@@ -296,7 +293,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             &self.metrics,
                         ) {
                             if budget.try_take(candidate.payload_size()) {
-                                responses.push(candidate.into_response());
+                                messages.push(PayloadMessage::Response(candidate.into_response()));
                                 responses_included += 1;
                             }
                         } else if grouped_shares_meet_divergence_criteria(
@@ -311,7 +308,7 @@ impl CanisterHttpPayloadBuilderImpl {
                                     .collect(),
                             };
                             if budget.try_take(PayloadSize::unstripped(divergence.count_bytes())) {
-                                divergence_responses.push(divergence);
+                                messages.push(PayloadMessage::Divergence(divergence));
                                 responses_included += 1;
                             }
                         } else if let Some(error) = find_non_flexible_out_of_cycles(
@@ -322,7 +319,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             request,
                         ) && budget.try_take(PayloadSize::unstripped(error.count_bytes()))
                         {
-                            out_of_cycles.push(error);
+                            messages.push(PayloadMessage::OutOfCycles(error));
                             responses_included += 1;
                         }
                     }
@@ -336,7 +333,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             &self.metrics,
                         ) {
                             if budget.try_take(candidate.payload_size()) {
-                                responses.push(candidate.into_response());
+                                messages.push(PayloadMessage::Response(candidate.into_response()));
                                 responses_included += 1;
                             }
                         } else if let Some(error) = find_non_flexible_out_of_cycles(
@@ -349,7 +346,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             request,
                         ) && budget.try_take(PayloadSize::unstripped(error.count_bytes()))
                         {
-                            out_of_cycles.push(error);
+                            messages.push(PayloadMessage::OutOfCycles(error));
                             responses_included += 1;
                         }
                     }
@@ -370,13 +367,13 @@ impl CanisterHttpPayloadBuilderImpl {
                         FlexibleFindResult::OkResponses(group, group_size) => {
                             // `find_flexible_result` only returns a group that fits.
                             if budget.try_take(group_size) {
-                                flexible_responses.push(group);
+                                messages.push(PayloadMessage::FlexibleResponses(group));
                                 responses_included += 1;
                             }
                         }
                         FlexibleFindResult::Error(error, error_size) => {
                             if budget.try_take(error_size) {
-                                flexible_errors.push(error);
+                                messages.push(PayloadMessage::FlexibleError(error));
                                 responses_included += 1;
                             }
                         }
@@ -415,7 +412,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         // fit, stop early to avoid iterating through all delivered contexts.
                         break 'delivered_contexts;
                     }
-                    async_receipts.push(share.clone());
+                    messages.push(PayloadMessage::AsyncReceipt(share.clone()));
                 }
             }
         }
@@ -430,15 +427,7 @@ impl CanisterHttpPayloadBuilderImpl {
             self.metrics.max_responses_per_block_reached.inc();
         }
 
-        CanisterHttpPayload {
-            responses,
-            timeouts,
-            divergence_responses,
-            out_of_cycles,
-            flexible_responses,
-            flexible_errors,
-            async_receipts,
-        }
+        messages
     }
 
     /// The set of replicas that may have produced a receipt for this request,
@@ -1070,7 +1059,7 @@ impl CanisterHttpPayloadBuilderImpl {
 
                     ok_entry_sizes.sort_unstable();
                     let smallest_sum: usize = ok_entry_sizes.iter().take(min_known_ok_needed).sum();
-                    if smallest_sum <= MAX_CANISTER_HTTP_PAYLOAD_SIZE {
+                    if smallest_sum <= MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE {
                         return invalid_artifact(
                             InvalidCanisterHttpPayloadReason::FlexibleResponsesNotTooLarge(
                                 callback_id,
@@ -1222,9 +1211,9 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         // stripped, so it is limited in memory separately.
         let memory_limit = NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64);
         let past_payloads = parse::parse_past_payloads(past_payloads, &self.log);
-        let payload =
+        let messages =
             self.get_canister_http_payload_impl(context, past_payloads, memory_limit, max_size);
-        parse::payload_to_bytes(payload, memory_limit, max_size)
+        parse::messages_to_bytes(messages, memory_limit, max_size)
     }
 
     fn validate_payload(
@@ -1637,7 +1626,7 @@ fn flexible_error_into_consensus_response(
 
             let message = format!(
                 "Responses too large: need at least {min_responses} \
-                 OK responses to fit within {MAX_CANISTER_HTTP_PAYLOAD_SIZE} bytes, \
+                 OK responses to fit within {MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE} bytes, \
                  but even the smallest {min_known_ok_needed} \
                  (= {min_responses} min_responses - {num_unseen} unseen) of {num_ok} \
                  OK responses have sizes [{}] bytes \

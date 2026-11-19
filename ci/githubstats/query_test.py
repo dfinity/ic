@@ -18,7 +18,9 @@ import query
 import requests
 
 TOKEN = "gho_test"
-RBE_JOB = "bazel-test-all-rbe-bazel-test-1"
+RBE_JOB = "bazel-test-all-bazel-test-1"
+# The job name of the RBE evaluation that preceded the move of bazel-test-all to RBE.
+RBE_EVALUATION_JOB = "bazel-test-all-rbe-bazel-test-1"
 BAZEL_REMOTE_URL = "https://artifacts.zh1-idx1.dfinity.network/cas/0123abcd"
 
 
@@ -409,7 +411,7 @@ class LastTest(unittest.TestCase):
         rows = [
             row("//rs/tests/foo:flaky_test_local", "FLAKY", "b1", 1, RBE_JOB),
             row("//rs/foo:cached_test", "SUCCESS", "b1", 1, RBE_JOB, cached=True),
-            row("//rs/foo:old_test", "FLAKY", "b2", 2, RBE_JOB),
+            row("//rs/foo:old_test", "FLAKY", "b2", 2, RBE_EVALUATION_JOB),
             row("//rs/foo:ci_main_test", "FAILED", "b3", 3, "bazel-test-all-__self_3"),
             row("//rs/foo:no_job_test", "FAILED", "b4", 4, None),
         ]

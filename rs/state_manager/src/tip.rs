@@ -477,6 +477,7 @@ pub(crate) fn spawn_tip_thread(
                             parallel_map(
                                 &mut thread_pool,
                                 pagemaps.into_iter(),
+                                1,
                                 |PageMapToFlush {
                                      page_map_type,
                                      truncate,
@@ -1001,6 +1002,7 @@ fn merge_candidates_and_storage_info(
         parallel_map(
             thread_pool,
             pagemaptypes.iter(),
+            1,
             |page_map_type| -> StorageResult<(Vec<MergeCandidate>, StorageInfo)> {
                 let mut storage_info = StorageInfo {
                     disk_size: 0,
@@ -1210,7 +1212,7 @@ fn merge(
 
     // Largest first, so that `parallel_map` starts them right away.
     scheduled_merges.sort_by_key(|m| Reverse(m.write_size_bytes()));
-    parallel_map(thread_pool, scheduled_merges.iter(), |m| {
+    parallel_map(thread_pool, scheduled_merges.iter(), 1, |m| {
         m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
             // A failed merge may have removed its input files from the tip and left a partial
             // output behind, so the next checkpoint would include a corrupt `PageMap`.
@@ -1274,7 +1276,7 @@ fn serialize_protos_to_checkpoint_readwrite(
         query_stats: state.query_stats().as_query_stats(),
     })?;
 
-    let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
+    let results = parallel_map(thread_pool, state.canisters_iter(), 1, |canister_state| {
         serialize_canister_protos_to_checkpoint_readwrite(canister_state, checkpoint_readwrite)?;
         for canister_snapshot in canister_state.canister_snapshots.iter() {
             serialize_snapshot_protos_to_checkpoint_readwrite(
@@ -1308,7 +1310,7 @@ fn serialize_wasm_binaries(
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<(), CheckpointError> {
-    parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
+    parallel_map(thread_pool, state.canisters_iter(), 1, |canister_state| {
         serialize_canister_wasm_binary(canister_state, tip)?;
         for (snapshot_id, snapshot) in canister_state.canister_snapshots.iter() {
             serialize_snapshot_wasm_binary(snapshot_id, snapshot, tip)?;

@@ -15,6 +15,7 @@ ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-management-canister-types = { workspace = true }
 ic-recovery = { path = "../../recovery" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-subnet-merging = { path = "../../recovery/subnet_merging" }
 ic-system-test-driver = { path = "../driver" }
@@ -25,6 +26,7 @@ itertools = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rejoin-test-lib = { path = "./rejoin_test_lib" }
+serde_json = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

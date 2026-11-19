@@ -8,7 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 ic-config = { path = "../config" }
-ic-consensus-certification = { path = "./certification" }
 ic-consensus-cup-utils = { path = "./cup_utils" }
 ic-consensus-idkg = { path = "./idkg" }
 ic-consensus-dkg = { path = "./dkg" }
@@ -45,6 +44,7 @@ ic-artifact-pool = { path = "../artifact_pool" }
 ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-config = { path = "../config" }
 ic-consensus = { path = ".", features = ["malicious_code"] }
+ic-consensus-certification = { path = "./certification" }
 ic-consensus-mocks = { path = "./mocks" }
 ic-consensus-upgrade = { path = "./upgrade" }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
