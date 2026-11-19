@@ -295,7 +295,7 @@ crate.spec(
 )
 crate.spec(
     package = "cc",
-    version = "~1.2",
+    version = "1.11",
 )
 crate.spec(
     package = "cfg-if",

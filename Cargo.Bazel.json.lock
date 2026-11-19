@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "baceca734df491f2089ae7470ee538bfa34d8f5c989a843b7460887aa7dccaff",
+  "checksum": "80a0903587ba21610ccb1b02e55c37a4a20b7b3ff18efb9a819f8d22c9c7c896",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -6423,7 +6423,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.67",
+              "id": "cc 1.11.2",
               "target": "cc"
             },
             {
@@ -8978,7 +8978,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.67",
+              "id": "cc 1.11.2",
               "target": "cc"
             }
           ],
@@ -9959,7 +9959,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           },
           {
@@ -10011,7 +10011,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.67",
+              "id": "cc 1.11.2",
               "target": "cc"
             }
           ],
@@ -11077,7 +11077,7 @@
       ],
       "version": "0.2.4"
     },
-    "cc 1.2.67": {
+    "cc 1.11.2": {
       "common_attrs": {
         "crate_features": {
           "common": [],
@@ -11150,7 +11150,7 @@
             ]
           }
         },
-        "edition": "2018"
+        "edition": "2021"
       },
       "library_target_name": "cc",
       "license": "MIT OR Apache-2.0",
@@ -11163,8 +11163,8 @@
       "package_url": "https://github.com/rust-lang/cc-rs",
       "repository": {
         "Http": {
-          "sha256": "e17dd265a7d0f31ef544e1b20e03add05d3b45b491b633b10d67145d2acc1a38",
-          "url": "https://static.crates.io/crates/cc/1.2.67/download"
+          "sha256": "33ef9e3e8154a45c7a95cff4c1299702106ad94062d7bb85fdc5d3a5afd91d45",
+          "url": "https://static.crates.io/crates/cc/1.11.2/download"
         }
       },
       "targets": [
@@ -11175,7 +11175,7 @@
           }
         }
       ],
-      "version": "1.2.67"
+      "version": "1.11.2"
     },
     "cesu8 1.1.0": {
       "common_attrs": {
@@ -12073,7 +12073,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ],
@@ -17448,7 +17448,7 @@
             "target": "cargo_metadata"
           },
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           },
           {
@@ -21239,7 +21239,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ]
@@ -25801,7 +25801,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ]
@@ -32852,7 +32852,7 @@
             "target": "bindgen"
           },
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           },
           {
@@ -32908,7 +32908,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           },
           {
@@ -33064,7 +33064,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ]
@@ -33121,7 +33121,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ]
@@ -33342,7 +33342,7 @@
             "target": "bindgen"
           },
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           },
           {
@@ -33403,7 +33403,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           },
           {
@@ -33470,7 +33470,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.67",
+              "id": "cc 1.11.2",
               "target": "cc"
             },
             {
@@ -33646,7 +33646,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.67",
+              "id": "cc 1.11.2",
               "target": "cc"
             },
             {
@@ -33714,7 +33714,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           },
           {
@@ -34086,7 +34086,7 @@
         ],
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           },
           {
@@ -38728,7 +38728,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ],
@@ -38772,7 +38772,7 @@
         ],
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           },
           {
@@ -43564,7 +43564,7 @@
             "target": "ar_archive_writer"
           },
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ]
@@ -46701,7 +46701,7 @@
         },
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ],
@@ -49550,7 +49550,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ],
@@ -49609,7 +49609,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ],
@@ -49655,7 +49655,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ],
@@ -49705,7 +49705,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ],
@@ -51511,7 +51511,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ]
@@ -53279,7 +53279,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ]
@@ -55976,7 +55976,7 @@
         },
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ],
@@ -61762,7 +61762,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ],
@@ -62314,7 +62314,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ],
@@ -62399,7 +62399,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           }
         ],
@@ -66261,7 +66261,7 @@
       "build_script_attrs": {
         "deps": [
           {
-            "id": "cc 1.2.67",
+            "id": "cc 1.11.2",
             "target": "cc"
           },
           {
@@ -66354,7 +66354,7 @@
     "candid 0.10.40",
     "candid_parser 0.1.4",
     "cargo_metadata 0.23.1",
-    "cc 1.2.67",
+    "cc 1.11.2",
     "cfg-if 1.0.5",
     "chrono 0.4.44",
     "chrono 0.4.45",
