@@ -277,8 +277,7 @@ const MERGING_DIR: &str = "subnet_merging";
 const ROUND_MILLIS: u64 = 800;
 
 /// The number of rounds in two DKG intervals, the most it takes a subnet to
-/// reach the CUP it is instructed to halt at, and the NNS subnet to complete a
-/// DKG it is asked to run.
+/// reach the CUP it is instructed to halt at.
 const TWO_DKG_INTERVALS: u64 = 2 * (DKG_INTERVAL_LENGTH + 1);
 
 /// Timeout for the subnet to become "merge ready". The binding terms are the
@@ -294,17 +293,15 @@ const TWO_DKG_INTERVALS: u64 = 2 * (DKG_INTERVAL_LENGTH + 1);
 /// `install_code` calls finish.
 const MERGE_READY_TIMEOUT: Duration = Duration::from_millis(5 * 60 * 1000 + 400 * ROUND_MILLIS);
 /// Timeout for the registry to reflect a proposal that `ic-admin` reported as
-/// executed.
+/// executed. Also bounds the wait for the recovery CUP contents of `D`, which
+/// the registry only holds once the NNS subnet has completed a fresh DKG for
+/// `D`: the NNS subnet runs that DKG in its data blocks, i.e. within a few
+/// rounds of the proposal's execution.
 const REGISTRY_TIMEOUT: Duration = Duration::from_secs(120);
 /// How long the merging tool waits between two evaluations of a condition it
 /// waits for. Longer than a driver retry because every evaluation scrapes the
 /// metrics of all subnets.
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
-/// Timeout for the registry to hold the recovery CUP contents of `D` once they
-/// are proposed: unlike other proposals, the one recovering `D` only takes
-/// effect once a fresh DKG for `D` has completed, which may take up to two DKG
-/// intervals of the NNS subnet running it.
-const RECOVERY_CUP_TIMEOUT: Duration = Duration::from_millis(TWO_DKG_INTERVALS * ROUND_MILLIS);
 /// Timeout for a subnet to reach the CUP it halts at. As a DKG summary takes
 /// its registry version from the previous summary, that CUP is up to two DKG
 /// intervals away. Shorter than the default of the tool so that the test fits
@@ -319,16 +316,15 @@ const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 
 /// Timeouts of the test itself, above the sum of the timeouts of its steps
-/// (dominated by `MERGE_READY_TIMEOUT`, `HALT_TIMEOUT` and
-/// `RECOVERY_CUP_TIMEOUT`, about 2200s together), so that a stuck step fails
-/// with its own error. `HALT_TIMEOUT` is counted once although it applies to
-/// each of the two subnets: both are scheduled to halt before either is waited
-/// for, so the two waits overlap. The overall timeout additionally
-/// covers the setup (booting the IC and installing the NNS) and has to stay
+/// (dominated by `MERGE_READY_TIMEOUT` and `HALT_TIMEOUT`, about 1400s
+/// together), so that a stuck step fails with its own error. `HALT_TIMEOUT`
+/// is counted once although it applies to each of the two subnets: both are
+/// scheduled to halt before either is waited for, so the two waits overlap.
+/// The overall timeout additionally covers the setup (booting the IC and installing the NNS) and has to stay
 /// well below the 3600s of the `eternal` timeout of the Bazel target, which
 /// also covers what runs outside of the test driver's own timeouts.
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2700);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(3300);
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(1900);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(2500);
 
 /// The conditions this scenario violates, i.e. the ones step 7 checks. This
 /// includes `CommonQuorum`, since the replicas do not satisfy the individual
@@ -934,10 +930,10 @@ fn check_recovery_cup_contents(env: &TestEnv, context: &Context<'_>) {
 
     // `ic-admin` returns once the proposal is submitted, but the registry only
     // holds the recovery CUP contents (and halts `D`) once the DKG for `D` has
-    // completed, so poll for them.
+    // completed (see `REGISTRY_TIMEOUT`), so poll for them.
     let registry_helper = test_registry_helper(env, logger);
     let registry_client = registry_helper.registry_client();
-    let deadline = Instant::now() + RECOVERY_CUP_TIMEOUT;
+    let deadline = Instant::now() + REGISTRY_TIMEOUT;
     let (registry_version, recovery_args) = loop {
         let latest_version = registry_helper
             .latest_registry_version()
@@ -958,7 +954,7 @@ fn check_recovery_cup_contents(env: &TestEnv, context: &Context<'_>) {
         assert!(
             Instant::now() < deadline,
             "the CUP contents of subnet D are not for a recovery at version {latest_version}, \
-             {RECOVERY_CUP_TIMEOUT:?} after the recovery CUP was proposed: {cup_type:?}",
+             {REGISTRY_TIMEOUT:?} after the recovery CUP was proposed: {cup_type:?}",
         );
         info!(
             logger,
