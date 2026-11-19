@@ -71,7 +71,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::{ReplicaLogger, no_op_logger};
 use ic_management_canister_types_private::{
-    BoundedVec, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs,
+    BoundedGlobals, BoundedVec, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs,
     CanisterSnapshotDataKind, CanisterSnapshotDataOffset, EcdsaCurve, EcdsaKeyId, LogVisibilityV2,
     MasterPublicKeyId, Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
@@ -4698,7 +4698,7 @@ impl Operation for CanisterSnapshotUpload {
                     canister_id: self.canister_id.into(),
                     replace_snapshot: self.replace_snapshot,
                     wasm_module_size: metadata.wasm_module_size,
-                    globals: metadata.globals,
+                    globals: BoundedGlobals::new(metadata.globals),
                     wasm_memory_size: metadata.wasm_memory_size,
                     stable_memory_size: metadata.stable_memory_size,
                     certified_data: metadata.certified_data,

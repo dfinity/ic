@@ -606,7 +606,7 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
 fn test_schnorr_sign_with_invalid_aux_field_rejected() {
     let test_cases = vec![
         (make_bip340_key("bip340_key"), 8),
-        (make_bip340_key("bip340_key"), 100),
+        (make_bip340_key("bip340_key"), 31),
         (make_ed25519_key("ed25519_key"), 0),
         (make_ed25519_key("ed25519_key"), 32),
     ];
@@ -662,6 +662,57 @@ fn test_schnorr_sign_with_invalid_aux_field_rejected() {
         };
 
         assert_eq!(result, Ok(WasmResult::Reject(expected_reason.to_string())));
+    }
+}
+
+#[test]
+fn test_schnorr_sign_with_too_long_aux_field_rejected() {
+    // An aux field longer than a hash is rejected when decoding the arguments,
+    // whatever the algorithm of the key.
+    for key in [
+        make_bip340_key("bip340_key"),
+        make_ed25519_key("ed25519_key"),
+    ] {
+        let env = StateMachineBuilder::new()
+            .with_checkpoints_enabled(false)
+            .with_subnet_id(subnet_test_id(1))
+            .with_nns_subnet_id(subnet_test_id(2))
+            .with_chain_key(key.clone())
+            .build();
+
+        let canister_id = create_universal_canister(&env);
+
+        let sign_with_schnorr_args = ic00::SignWithSchnorrArgs {
+            message: vec![],
+            derivation_path: DerivationPath::new(vec![]),
+            key_id: into_inner_schnorr(key),
+            aux: Some(SignWithSchnorrAux::Bip341(SignWithBip341Aux {
+                merkle_root_hash: vec![0; 33].into(),
+            })),
+        };
+
+        let result = env.execute_ingress(
+            canister_id,
+            "update",
+            wasm()
+                .call_with_cycles(
+                    ic00::IC_00,
+                    Method::SignWithSchnorr,
+                    call_args()
+                        .other_side(sign_with_schnorr_args.encode())
+                        .on_reject(wasm().reject_message().reject()),
+                    Cycles::from(100_000_000_000_u128),
+                )
+                .build(),
+        );
+
+        match result {
+            Ok(WasmResult::Reject(reason)) => assert!(
+                reason.contains("The blob length 33 exceeds maximum allowed 32"),
+                "Actual: {reason}"
+            ),
+            result => panic!("Unexpected result: {result:?}"),
+        }
     }
 }
 

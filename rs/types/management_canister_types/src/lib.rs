@@ -1,4 +1,5 @@
 //! Data types used for encoding/decoding the Candid payloads of ic:00.
+mod bounded_bytes;
 mod bounded_vec;
 mod data_size;
 mod http;
@@ -6,6 +7,9 @@ mod provisional;
 
 #[cfg(feature = "fuzzing_code")]
 use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
+use bounded_bytes::{
+    deserialize_bounded_blob, deserialize_bounded_byte_buf, is_bound_exceeded_error,
+};
 pub use bounded_vec::*;
 use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode, Reserved};
 pub use data_size::*;
@@ -14,9 +18,10 @@ pub use http::{
     ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO, BoundedHttpHeaders,
     CanisterHttpRequestArgs, CanisterHttpResponsePayload, DEFAULT_HTTP_OUTCALLS_PRICING_VERSION,
     FlexibleCanisterHttpRequestArgs, FlexibleHttpGlobalError, FlexibleHttpNodeDetail,
-    FlexibleHttpNodeError, FlexibleHttpRequestErr, FlexibleHttpRequestResult, HttpHeader,
-    HttpMethod, HttpRequestResourceReport, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO,
-    ReplicationCounts, ResourceUsage, TransformArgs, TransformContext, TransformFunc,
+    FlexibleHttpNodeError, FlexibleHttpRequestErr, FlexibleHttpRequestResult, HTTP_BODY_MAX_SIZE,
+    HTTP_URL_MAX_SIZE, HttpHeader, HttpMethod, HttpRequestResourceReport, PRICING_VERSION_LEGACY,
+    PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts, ResourceUsage, TransformArgs,
+    TransformContext, TransformFunc,
 };
 use ic_base_types::{
     CanisterId, EnvironmentVariables, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId,
@@ -2498,6 +2503,33 @@ pub struct EnvironmentVariable {
     pub value: String,
 }
 
+impl DataSize for EnvironmentVariable {
+    fn data_size(&self) -> usize {
+        self.name.data_size() + self.value.data_size()
+    }
+}
+
+/// Maximum number of environment variables allowed in a request.
+pub const MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT: usize = 32;
+
+/// Maximum length of the name of an environment variable allowed in a request.
+pub const MAX_ALLOWED_ENVIRONMENT_VARIABLE_NAME_LENGTH: usize = 128;
+
+/// Maximum length of the value of an environment variable allowed in a request.
+pub const MAX_ALLOWED_ENVIRONMENT_VARIABLE_VALUE_LENGTH: usize = 128;
+
+/// Environment variables bounded in number and in the size of a single
+/// variable, i.e. of its name and value together. An individual name or value
+/// can thus still exceed its own maximum length.
+pub type BoundedEnvironmentVariables = BoundedVec<
+    MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT,
+    UNBOUNDED,
+    {
+        MAX_ALLOWED_ENVIRONMENT_VARIABLE_NAME_LENGTH + MAX_ALLOWED_ENVIRONMENT_VARIABLE_VALUE_LENGTH
+    },
+    EnvironmentVariable,
+>;
+
 /// Struct used for encoding/decoding
 /// ```text
 /// record {
@@ -2530,7 +2562,7 @@ pub struct CanisterSettingsArgs {
     pub log_memory_limit: Option<candid::Nat>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
-    pub environment_variables: Option<Vec<EnvironmentVariable>>,
+    pub environment_variables: Option<BoundedEnvironmentVariables>,
 }
 
 impl Payload<'_> for CanisterSettingsArgs {}
@@ -2594,7 +2626,9 @@ impl CanisterSettingsArgsBuilder {
             log_memory_limit: self.log_memory_limit,
             wasm_memory_limit: self.wasm_memory_limit,
             wasm_memory_threshold: self.wasm_memory_threshold,
-            environment_variables: self.environment_variables,
+            environment_variables: self
+                .environment_variables
+                .map(BoundedEnvironmentVariables::new),
         }
     }
 
@@ -2764,7 +2798,7 @@ impl<'a> Payload<'a> for CreateCanisterArgs {
         match Decode!([decoder_config()]; blob, Self) {
             Err(err) => {
                 // First check if deserialization failed due to exceeding the maximum allowed limit.
-                if format!("{err:?}").contains("The number of elements exceeds maximum allowed") {
+                if is_bound_exceeded_error(&err) {
                     Err(UserError::new(
                         ErrorCode::InvalidManagementPayload,
                         format!("Payload deserialization error: {err:?}"),
@@ -2795,7 +2829,7 @@ impl<'a> Payload<'a> for CreateCanisterArgs {
 /// ```
 #[derive(Debug, CandidType, Deserialize)]
 pub struct SetupInitialDKGArgs {
-    node_ids: Vec<PrincipalId>,
+    node_ids: BoundedNodes,
     registry_version: u64,
     subnet_id: Option<SubnetId>,
 }
@@ -2809,7 +2843,7 @@ impl SetupInitialDKGArgs {
         subnet_id: Option<SubnetId>,
     ) -> Self {
         Self {
-            node_ids: node_ids.iter().map(|node_id| node_id.get()).collect(),
+            node_ids: BoundedNodes::new(node_ids.iter().map(|node_id| node_id.get()).collect()),
             registry_version: registry_version.get(),
             subnet_id,
         }
@@ -2817,7 +2851,7 @@ impl SetupInitialDKGArgs {
 
     pub fn get_set_of_node_ids(&self) -> Result<BTreeSet<NodeId>, UserError> {
         let mut set = BTreeSet::<NodeId>::new();
-        for node_id in self.node_ids.iter() {
+        for node_id in self.node_ids.get().iter() {
             if !set.insert(NodeId::new(*node_id)) {
                 return Err(UserError::new(
                     ErrorCode::InvalidManagementPayload,
@@ -3504,7 +3538,8 @@ pub struct ECDSAPublicKeyResponse {
 
 impl Payload<'_> for ECDSAPublicKeyResponse {}
 
-/// Maximum number of nodes allowed in a ComputeInitialDealings request.
+/// Maximum number of nodes allowed in a request naming the nodes of a subnet,
+/// i.e. `setup_initial_dkg` and `reshare_chain_key`.
 const MAX_ALLOWED_NODES_COUNT: usize = 100;
 
 pub type BoundedNodes = BoundedVec<MAX_ALLOWED_NODES_COUNT, UNBOUNDED, UNBOUNDED, PrincipalId>;
@@ -3598,6 +3633,8 @@ impl ReshareChainKeyResponse {
 /// ```
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct SignWithBip341Aux {
+    /// Either empty or a hash of `HASH_LENGTH` bytes.
+    #[serde(deserialize_with = "deserialize_bounded_byte_buf::<_, HASH_LENGTH>")]
     pub merkle_root_hash: ByteBuf,
 }
 
@@ -4097,6 +4134,10 @@ pub struct FetchCanisterLogsResponse {
 
 impl Payload<'_> for FetchCanisterLogsResponse {}
 
+/// Maximum length of a chunk allowed in a request to upload it to the Wasm
+/// chunk store.
+pub const MAX_ALLOWED_WASM_CHUNK_LENGTH: usize = 1024 * 1024;
+
 /// Struct used for encoding/decoding
 /// ```text
 /// record {
@@ -4107,7 +4148,7 @@ impl Payload<'_> for FetchCanisterLogsResponse {}
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct UploadChunkArgs {
     pub canister_id: PrincipalId,
-    #[serde(with = "serde_bytes")]
+    #[serde(deserialize_with = "deserialize_bounded_blob::<_, MAX_ALLOWED_WASM_CHUNK_LENGTH>")]
     pub chunk: Vec<u8>,
 }
 
@@ -4132,6 +4173,21 @@ pub struct ChunkHash {
 }
 
 impl Payload<'_> for ChunkHash {}
+
+impl DataSize for ChunkHash {
+    fn data_size(&self) -> usize {
+        self.hash.as_slice().data_size()
+    }
+}
+
+/// Maximum number of chunk hashes allowed in a request to install a Wasm
+/// module assembled from the chunks, which is the number of chunks of maximum
+/// length making up a Wasm module of maximum size.
+pub const MAX_ALLOWED_CHUNK_HASHES_COUNT: usize = 100;
+
+/// Chunk hashes bounded in number and in the length of a single hash.
+pub type BoundedChunkHashes =
+    BoundedVec<MAX_ALLOWED_CHUNK_HASHES_COUNT, UNBOUNDED, HASH_LENGTH, ChunkHash>;
 
 /// Struct to be returned when uploading a Wasm chunk.
 /// ```text
@@ -4164,8 +4220,8 @@ pub struct InstallChunkedCodeArgs {
     pub mode: CanisterInstallModeV2,
     pub target_canister: PrincipalId,
     pub store_canister: Option<PrincipalId>,
-    pub chunk_hashes_list: Vec<ChunkHash>,
-    #[serde(with = "serde_bytes")]
+    pub chunk_hashes_list: BoundedChunkHashes,
+    #[serde(deserialize_with = "deserialize_bounded_blob::<_, HASH_LENGTH>")]
     pub wasm_module_hash: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
@@ -4185,12 +4241,13 @@ impl std::fmt::Display for InstallChunkedCodeArgs {
 
 impl Payload<'_> for InstallChunkedCodeArgs {
     fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
-        let args = match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)
-        {
-            Ok(record) => record,
-            Err(_) => InstallChunkedCodeArgsLegacy::decode(blob)?.into(),
-        };
-        Ok(args)
+        match Decode!([decoder_config()]; blob, Self) {
+            Ok(record) => Ok(record),
+            // The payload has the expected type, so do not report that it is
+            // not of the legacy type.
+            Err(err) if is_bound_exceeded_error(&err) => Err(candid_error_to_user_error(err)),
+            Err(_) => Ok(InstallChunkedCodeArgsLegacy::decode(blob)?.into()),
+        }
     }
 }
 
@@ -4207,10 +4264,12 @@ impl InstallChunkedCodeArgs {
             mode,
             target_canister: target_canister.into(),
             store_canister: store_canister.map(|p| p.into()),
-            chunk_hashes_list: chunk_hashes_list
-                .into_iter()
-                .map(|hash| ChunkHash { hash })
-                .collect(),
+            chunk_hashes_list: BoundedChunkHashes::new(
+                chunk_hashes_list
+                    .into_iter()
+                    .map(|hash| ChunkHash { hash })
+                    .collect(),
+            ),
             wasm_module_hash,
             arg,
             sender_canister_version: None,
@@ -4230,6 +4289,11 @@ impl InstallChunkedCodeArgs {
             .map(CanisterId::unchecked_from_principal)
     }
 }
+
+/// Chunk hashes of the legacy version of `InstallChunkedCodeArgs`, bounded in
+/// number and in the length of a single hash.
+pub type BoundedChunkHashesLegacy =
+    BoundedVec<MAX_ALLOWED_CHUNK_HASHES_COUNT, UNBOUNDED, HASH_LENGTH, ByteBuf>;
 
 /// Struct used for encoding/decoding of legacy version of `InstallChunkedCodeArgs`,
 /// it is used to preserve backward compatibility.
@@ -4255,8 +4319,8 @@ pub struct InstallChunkedCodeArgsLegacy {
     pub mode: CanisterInstallModeV2,
     pub target_canister: PrincipalId,
     pub store_canister: Option<PrincipalId>,
-    pub chunk_hashes_list: Vec<Vec<u8>>,
-    #[serde(with = "serde_bytes")]
+    pub chunk_hashes_list: BoundedChunkHashesLegacy,
+    #[serde(deserialize_with = "deserialize_bounded_blob::<_, HASH_LENGTH>")]
     pub wasm_module_hash: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
@@ -4269,11 +4333,16 @@ impl From<InstallChunkedCodeArgsLegacy> for InstallChunkedCodeArgs {
             mode: value.mode,
             target_canister: value.target_canister,
             store_canister: value.store_canister,
-            chunk_hashes_list: value
-                .chunk_hashes_list
-                .into_iter()
-                .map(|hash| ChunkHash { hash })
-                .collect(),
+            chunk_hashes_list: BoundedChunkHashes::new(
+                value
+                    .chunk_hashes_list
+                    .into_vec()
+                    .into_iter()
+                    .map(|hash| ChunkHash {
+                        hash: hash.into_vec(),
+                    })
+                    .collect(),
+            ),
             wasm_module_hash: value.wasm_module_hash,
             arg: value.arg,
             sender_canister_version: value.sender_canister_version,
@@ -4296,7 +4365,9 @@ impl InstallChunkedCodeArgsLegacy {
             mode,
             target_canister: target_canister.into(),
             store_canister: store_canister.map(|p| p.into()),
-            chunk_hashes_list,
+            chunk_hashes_list: BoundedChunkHashesLegacy::new(
+                chunk_hashes_list.into_iter().map(ByteBuf::from).collect(),
+            ),
             wasm_module_hash,
             arg,
             sender_canister_version: None,
@@ -4945,7 +5016,10 @@ pub enum CanisterSnapshotDataKind {
     StableMemory { offset: u64, size: u64 },
     #[serde(rename = "wasm_chunk")]
     WasmChunk {
-        #[serde(with = "serde_bytes")]
+        #[serde(
+            serialize_with = "serde_bytes::serialize",
+            deserialize_with = "deserialize_bounded_blob::<_, HASH_LENGTH>"
+        )]
         hash: Vec<u8>,
     },
 }
@@ -4966,6 +5040,22 @@ impl Payload<'_> for ReadCanisterSnapshotDataResponse {}
 impl ReadCanisterSnapshotDataResponse {
     pub fn new(chunk: Vec<u8>) -> Self {
         Self { chunk }
+    }
+}
+
+/// Maximum number of globals allowed in a request to upload the metadata of a
+/// canister snapshot, which is the maximum number of globals of a Wasm module.
+pub const MAX_ALLOWED_GLOBALS_COUNT: usize = 1000;
+
+/// Maximum length of the certified data allowed in a request to upload the
+/// metadata of a canister snapshot.
+pub const MAX_ALLOWED_CERTIFIED_DATA_LENGTH: usize = 32;
+
+pub type BoundedGlobals = BoundedVec<MAX_ALLOWED_GLOBALS_COUNT, UNBOUNDED, UNBOUNDED, Global>;
+
+impl DataSize for Global {
+    fn data_size(&self) -> usize {
+        size_of::<Self>()
     }
 }
 
@@ -5002,10 +5092,13 @@ pub struct UploadCanisterSnapshotMetadataArgs {
     pub canister_id: PrincipalId,
     pub replace_snapshot: Option<SnapshotId>,
     pub wasm_module_size: u64,
-    pub globals: Vec<Global>,
+    pub globals: BoundedGlobals,
     pub wasm_memory_size: u64,
     pub stable_memory_size: u64,
-    #[serde(with = "serde_bytes")]
+    #[serde(
+        serialize_with = "serde_bytes::serialize",
+        deserialize_with = "deserialize_bounded_blob::<_, MAX_ALLOWED_CERTIFIED_DATA_LENGTH>"
+    )]
     pub certified_data: Vec<u8>,
     pub global_timer: Option<GlobalTimer>,
     pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
@@ -5029,7 +5122,7 @@ impl UploadCanisterSnapshotMetadataArgs {
             canister_id: canister_id.get(),
             replace_snapshot,
             wasm_module_size,
-            globals,
+            globals: BoundedGlobals::new(globals),
             wasm_memory_size,
             stable_memory_size,
             certified_data,
@@ -5052,7 +5145,7 @@ impl UploadCanisterSnapshotMetadataArgs {
             + self.wasm_memory_size
             + self.stable_memory_size
             + self.certified_data.len() as u64
-            + self.globals.len() as u64 * size_of::<Global>() as u64;
+            + self.globals.get().len() as u64 * size_of::<Global>() as u64;
 
         NumBytes::new(num_bytes)
     }
@@ -5717,6 +5810,375 @@ mod tests {
                 result.description()
             );
         }
+    }
+
+    /// Asserts that decoding failed because a value exceeds its bound.
+    fn assert_bound_exceeded<T: fmt::Debug>(result: Result<T, UserError>, expected: &str) {
+        let error = result.unwrap_err();
+        assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
+        assert!(
+            error.description().contains(expected),
+            "Expected: {expected}\nActual: {}",
+            error.description()
+        );
+    }
+
+    fn environment_variables(count: usize) -> Vec<EnvironmentVariable> {
+        (0..count)
+            .map(|i| EnvironmentVariable {
+                name: format!("name_{i}"),
+                value: format!("value_{i}"),
+            })
+            .collect()
+    }
+
+    fn settings_with(environment_variables: Vec<EnvironmentVariable>) -> CanisterSettingsArgs {
+        CanisterSettingsArgsBuilder::new()
+            .with_environment_variables(environment_variables)
+            .build()
+    }
+
+    type DecodeSettings = fn(&[u8]) -> Result<Option<CanisterSettingsArgs>, UserError>;
+
+    /// The payloads of all methods taking canister settings.
+    fn payloads_with(settings: &CanisterSettingsArgs) -> [(Vec<u8>, DecodeSettings); 3] {
+        [
+            (
+                CreateCanisterArgs {
+                    settings: Some(settings.clone()),
+                    sender_canister_version: None,
+                }
+                .encode(),
+                |blob| CreateCanisterArgs::decode(blob).map(|args| args.settings),
+            ),
+            (
+                UpdateSettingsArgs::new(CanisterId::from(1), settings.clone()).encode(),
+                |blob| UpdateSettingsArgs::decode(blob).map(|args| Some(args.settings)),
+            ),
+            (
+                ProvisionalCreateCanisterWithCyclesArgs {
+                    amount: None,
+                    settings: Some(settings.clone()),
+                    specified_id: None,
+                    sender_canister_version: None,
+                }
+                .encode(),
+                |blob| {
+                    ProvisionalCreateCanisterWithCyclesArgs::decode(blob).map(|args| args.settings)
+                },
+            ),
+        ]
+    }
+
+    #[test]
+    fn verify_max_environment_variables_count() {
+        for count in [0, 1, MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT] {
+            let settings = settings_with(environment_variables(count));
+            for (payload, decode) in payloads_with(&settings) {
+                assert_eq!(decode(&payload).unwrap(), Some(settings.clone()));
+            }
+        }
+
+        for count in MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT + 1
+            ..=MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT + 3
+        {
+            let settings = settings_with(environment_variables(count));
+            for (payload, decode) in payloads_with(&settings) {
+                assert_bound_exceeded(
+                    decode(&payload),
+                    &format!(
+                        "The number of elements exceeds maximum allowed {MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT}"
+                    ),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn verify_max_environment_variable_size() {
+        const MAX_NAME: usize = MAX_ALLOWED_ENVIRONMENT_VARIABLE_NAME_LENGTH;
+        const MAX_VALUE: usize = MAX_ALLOWED_ENVIRONMENT_VARIABLE_VALUE_LENGTH;
+        let settings = |name_length, value_length| {
+            settings_with(vec![EnvironmentVariable {
+                name: "n".repeat(name_length),
+                value: "v".repeat(value_length),
+            }])
+        };
+
+        for (name_length, value_length) in [
+            (0, 0),
+            (MAX_NAME, MAX_VALUE),
+            // The size of the variable is bounded, not that of its name and value.
+            (MAX_NAME + MAX_VALUE, 0),
+            (0, MAX_NAME + MAX_VALUE),
+        ] {
+            let settings = settings(name_length, value_length);
+            for (payload, decode) in payloads_with(&settings) {
+                assert_eq!(decode(&payload).unwrap(), Some(settings.clone()));
+            }
+        }
+
+        for (name_length, value_length) in [
+            (MAX_NAME + 1, MAX_VALUE),
+            (MAX_NAME, MAX_VALUE + 1),
+            (MAX_NAME + MAX_VALUE + 1, 0),
+            (0, MAX_NAME + MAX_VALUE + 1),
+        ] {
+            let settings = settings(name_length, value_length);
+            for (payload, decode) in payloads_with(&settings) {
+                assert_bound_exceeded(
+                    decode(&payload),
+                    &format!(
+                        "The single element data size exceeds maximum allowed {}",
+                        MAX_NAME + MAX_VALUE
+                    ),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn verify_max_setup_initial_dkg_nodes_count() {
+        let args = |count: usize| {
+            SetupInitialDKGArgs::new(
+                (0..count as u64)
+                    .map(|i| NodeId::from(PrincipalId::new_node_test_id(i)))
+                    .collect(),
+                RegistryVersion::new(1),
+                None,
+            )
+        };
+
+        for count in [0, 1, MAX_ALLOWED_NODES_COUNT] {
+            let args = args(count);
+            let decoded = SetupInitialDKGArgs::decode(&args.encode()).unwrap();
+            assert_eq!(decoded.node_ids, args.node_ids);
+            assert_eq!(decoded.get_set_of_node_ids().unwrap().len(), count);
+        }
+
+        for count in MAX_ALLOWED_NODES_COUNT + 1..=MAX_ALLOWED_NODES_COUNT + 3 {
+            assert_bound_exceeded(
+                SetupInitialDKGArgs::decode(&args(count).encode()),
+                &format!(
+                    "The number of elements exceeds maximum allowed {MAX_ALLOWED_NODES_COUNT}"
+                ),
+            );
+        }
+    }
+
+    #[test]
+    fn verify_max_schnorr_merkle_root_hash_length() {
+        let args = |merkle_root_hash_length| SignWithSchnorrArgs {
+            message: vec![1; 64],
+            derivation_path: DerivationPath::new(vec![]),
+            key_id: SchnorrKeyId {
+                algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+                name: "test".to_string(),
+            },
+            aux: Some(SignWithSchnorrAux::Bip341(SignWithBip341Aux {
+                merkle_root_hash: ByteBuf::from(vec![2; merkle_root_hash_length]),
+            })),
+        };
+
+        for length in [0, 1, HASH_LENGTH] {
+            let args = args(length);
+            assert_eq!(SignWithSchnorrArgs::decode(&args.encode()).unwrap(), args);
+        }
+
+        // In particular, the optional `aux` must not be decoded as `None`.
+        for length in HASH_LENGTH + 1..=HASH_LENGTH + 3 {
+            assert_bound_exceeded(
+                SignWithSchnorrArgs::decode(&args(length).encode()),
+                &format!("The blob length {length} exceeds maximum allowed {HASH_LENGTH}"),
+            );
+        }
+    }
+
+    #[test]
+    fn verify_max_upload_chunk_length() {
+        let args = |chunk_length| UploadChunkArgs {
+            canister_id: PrincipalId::new_user_test_id(1),
+            chunk: vec![1; chunk_length],
+        };
+
+        for length in [0, 1, MAX_ALLOWED_WASM_CHUNK_LENGTH] {
+            let args = args(length);
+            let decoded = UploadChunkArgs::decode(&args.encode()).unwrap();
+            assert_eq!(decoded.canister_id, args.canister_id);
+            assert_eq!(decoded.chunk, args.chunk);
+        }
+
+        let length = MAX_ALLOWED_WASM_CHUNK_LENGTH + 1;
+        assert_bound_exceeded(
+            UploadChunkArgs::decode(&args(length).encode()),
+            &format!(
+                "The blob length {length} exceeds maximum allowed {MAX_ALLOWED_WASM_CHUNK_LENGTH}"
+            ),
+        );
+    }
+
+    /// Encodes both versions of the arguments of `install_chunked_code`.
+    fn install_chunked_code_payloads(
+        chunk_hashes_list: Vec<Vec<u8>>,
+        wasm_module_hash: Vec<u8>,
+    ) -> [Vec<u8>; 2] {
+        let mode = CanisterInstallModeV2::Install;
+        let target_canister = CanisterId::from(1);
+        let store_canister = Some(CanisterId::from(2));
+        let arg = vec![3; 10];
+        [
+            InstallChunkedCodeArgs::new(
+                mode,
+                target_canister,
+                store_canister,
+                chunk_hashes_list.clone(),
+                wasm_module_hash.clone(),
+                arg.clone(),
+            )
+            .encode(),
+            InstallChunkedCodeArgsLegacy::new(
+                mode,
+                target_canister,
+                store_canister,
+                chunk_hashes_list,
+                wasm_module_hash,
+                arg,
+            )
+            .encode(),
+        ]
+    }
+
+    #[test]
+    fn verify_install_chunked_code_args_within_bounds() {
+        for (chunk_hashes_list, wasm_module_hash) in [
+            (vec![], vec![]),
+            (vec![vec![]], vec![1]),
+            (
+                vec![vec![1; HASH_LENGTH]; MAX_ALLOWED_CHUNK_HASHES_COUNT],
+                vec![2; HASH_LENGTH],
+            ),
+        ] {
+            for payload in
+                install_chunked_code_payloads(chunk_hashes_list.clone(), wasm_module_hash.clone())
+            {
+                let decoded = InstallChunkedCodeArgs::decode(&payload).unwrap();
+                assert_eq!(decoded.target_canister_id(), CanisterId::from(1));
+                assert_eq!(decoded.store_canister_id(), Some(CanisterId::from(2)));
+                assert_eq!(decoded.wasm_module_hash, wasm_module_hash);
+                assert_eq!(decoded.arg, vec![3; 10]);
+                assert_eq!(
+                    decoded
+                        .chunk_hashes_list
+                        .into_vec()
+                        .into_iter()
+                        .map(|chunk_hash| chunk_hash.hash)
+                        .collect::<Vec<_>>(),
+                    chunk_hashes_list
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn verify_install_chunked_code_args_exceeding_bounds() {
+        let hash = vec![1; HASH_LENGTH];
+        let long_hash = vec![1; HASH_LENGTH + 1];
+        for (chunk_hashes_list, wasm_module_hash, expected) in [
+            (
+                vec![hash.clone(); MAX_ALLOWED_CHUNK_HASHES_COUNT + 1],
+                hash.clone(),
+                format!(
+                    "The number of elements exceeds maximum allowed {MAX_ALLOWED_CHUNK_HASHES_COUNT}"
+                ),
+            ),
+            (
+                vec![hash.clone(), long_hash.clone()],
+                hash.clone(),
+                format!("The single element data size exceeds maximum allowed {HASH_LENGTH}"),
+            ),
+            (
+                vec![hash.clone()],
+                long_hash.clone(),
+                format!(
+                    "The blob length {} exceeds maximum allowed {HASH_LENGTH}",
+                    HASH_LENGTH + 1
+                ),
+            ),
+        ] {
+            for payload in install_chunked_code_payloads(chunk_hashes_list, wasm_module_hash) {
+                assert_bound_exceeded(InstallChunkedCodeArgs::decode(&payload), &expected);
+            }
+        }
+    }
+
+    #[test]
+    fn verify_max_read_canister_snapshot_chunk_hash_length() {
+        let args = |hash_length| {
+            ReadCanisterSnapshotDataArgs::new(
+                CanisterId::from(1),
+                SnapshotId::from((CanisterId::from(1), 2)),
+                CanisterSnapshotDataKind::WasmChunk {
+                    hash: vec![1; hash_length],
+                },
+            )
+        };
+
+        for length in [0, 1, HASH_LENGTH] {
+            let decoded = ReadCanisterSnapshotDataArgs::decode(&args(length).encode()).unwrap();
+            match decoded.kind {
+                CanisterSnapshotDataKind::WasmChunk { hash } => assert_eq!(hash, vec![1; length]),
+                kind => panic!("Unexpected kind: {kind:?}"),
+            }
+        }
+
+        for length in HASH_LENGTH + 1..=HASH_LENGTH + 3 {
+            assert_bound_exceeded(
+                ReadCanisterSnapshotDataArgs::decode(&args(length).encode()),
+                &format!("The blob length {length} exceeds maximum allowed {HASH_LENGTH}"),
+            );
+        }
+    }
+
+    #[test]
+    fn verify_upload_canister_snapshot_metadata_args_bounds() {
+        let args = |globals_count, certified_data_length| {
+            UploadCanisterSnapshotMetadataArgs::new(
+                CanisterId::from(1),
+                None,
+                1,
+                vec![Global::I64(1); globals_count],
+                0,
+                0,
+                vec![1; certified_data_length],
+                None,
+                None,
+            )
+        };
+
+        for (globals_count, certified_data_length) in [
+            (0, 0),
+            (1, 1),
+            (MAX_ALLOWED_GLOBALS_COUNT, MAX_ALLOWED_CERTIFIED_DATA_LENGTH),
+        ] {
+            let args = args(globals_count, certified_data_length);
+            let decoded = UploadCanisterSnapshotMetadataArgs::decode(&args.encode()).unwrap();
+            assert_eq!(decoded.globals, args.globals);
+            assert_eq!(decoded.certified_data, args.certified_data);
+        }
+
+        assert_bound_exceeded(
+            UploadCanisterSnapshotMetadataArgs::decode(
+                &args(MAX_ALLOWED_GLOBALS_COUNT + 1, 0).encode(),
+            ),
+            &format!("The number of elements exceeds maximum allowed {MAX_ALLOWED_GLOBALS_COUNT}"),
+        );
+        let length = MAX_ALLOWED_CERTIFIED_DATA_LENGTH + 1;
+        assert_bound_exceeded(
+            UploadCanisterSnapshotMetadataArgs::decode(&args(0, length).encode()),
+            &format!(
+                "The blob length {length} exceeds maximum allowed {MAX_ALLOWED_CERTIFIED_DATA_LENGTH}"
+            ),
+        );
     }
 
     #[test]
