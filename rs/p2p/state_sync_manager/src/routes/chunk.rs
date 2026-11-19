@@ -45,7 +45,8 @@ pub(crate) async fn state_sync_chunk_handler<T: 'static>(
     // Parse payload
     let pb::StateSyncChunkRequest { id, chunk_id } =
         pb::StateSyncChunkRequest::decode(payload).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let artifact_id: StateSyncArtifactId = id.map(From::from).ok_or(StatusCode::BAD_REQUEST)?;
+    let artifact_id = StateSyncArtifactId::try_from(id.ok_or(StatusCode::BAD_REQUEST)?)
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
     let chunk_id = ChunkId::from(chunk_id);
 
     let jh =

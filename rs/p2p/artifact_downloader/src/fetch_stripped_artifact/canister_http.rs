@@ -241,8 +241,10 @@ fn response_slots(message: &mut pb::CanisterHttpResponseMessage) -> Vec<Response
 
     match message.message_type.as_mut() {
         Some(MessageType::Response(response)) => {
-            let content_hash = CryptoHashOf::new(CryptoHash::from(response.hash.clone()));
-            vec![(content_hash, &mut response.response)]
+            match CryptoHash::try_from(response.hash.clone()) {
+                Ok(content_hash) => vec![(CryptoHashOf::new(content_hash), &mut response.response)],
+                Err(_) => vec![],
+            }
         }
         Some(MessageType::FlexibleResponses(group)) => {
             flexible_response_slots(&mut group.responses)
@@ -283,7 +285,7 @@ fn flexible_response_slots(
                 .content_hash
                 .clone();
             Some((
-                CryptoHashOf::new(CryptoHash::from(content_hash)),
+                CryptoHashOf::new(CryptoHash::try_from(content_hash).ok()?),
                 &mut response.response,
             ))
         })
