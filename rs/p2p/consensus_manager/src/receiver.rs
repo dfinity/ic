@@ -107,7 +107,8 @@ async fn update_handler<Artifact: PbArtifact>(
                             .try_into()
                             .map_err(|e| UpdateHandlerError::MessagePbConversion(e))
                     })?;
-                Update::Artifact(message)
+                // Derive the id here rather than on the event loop, as it can be costly.
+                Update::Artifact(message.id(), message)
             }
             None => return Err(UpdateHandlerError::MissingUpdate),
         },
@@ -347,7 +348,7 @@ where
         } = slot_update;
 
         let (id, artifact) = match update {
-            Update::Artifact(artifact) => (artifact.id(), Some(artifact)),
+            Update::Artifact(id, artifact) => (id, Some(artifact)),
             Update::Id(id) => (id, None),
         };
 

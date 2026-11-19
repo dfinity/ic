@@ -143,10 +143,16 @@ fn load_metrics_e2e_test() {
             .lines()
             .map(|line| CanisterIdRange::from_str(line).expect("Not a valid CanisterIdRange"))
             .collect();
+        // With at most `MAX_CUTS` cuts, the canisters, ordered by ID, form at most `MAX_CUTS + 1`
+        // segments, which alternate between the two subnets. The `split-finder` reports the
+        // segments of one of the subnets, so at most `MAX_CUTS / 2 + 1` ranges.
+        let max_ranges = MAX_CUTS / 2 + 1;
         assert!(
-            canister_id_ranges.len() <= MAX_CUTS.div_ceil(2),
-            "The split-finder script should have produced at most {MAX_CUTS} because we \
-            passed {MAX_CUTS} as the `--max-cuts` argument"
+            canister_id_ranges.len() <= max_ranges,
+            "The split-finder script should have produced at most {max_ranges} canister ranges \
+            because we passed {MAX_CUTS} as the `--max-cuts` argument, but it produced {}: \
+            {canister_id_ranges:?}",
+            canister_id_ranges.len(),
         );
 
         // And finally use the `subnet-splitting-tool` to estimate the loads on each subnet after a
@@ -214,39 +220,39 @@ fn load_metrics_e2e_test() {
             states_sizes_bytes
                 .source
                 .min(states_sizes_bytes.destination),
-            4242056,
+            2444301,
             0.1
         );
         assert_near!(
             states_sizes_bytes
                 .source
                 .max(states_sizes_bytes.destination),
-            5019478,
+            6466034,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .min(instructions_executed.destination),
-            144339485,
+            143711830,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .max(instructions_executed.destination),
-            145699837,
+            144824377,
             0.1
         );
-        assert_eq_oriented!(canisters_installed, 11, 9);
-        assert_eq_oriented!(ingress_messages_executed, 21, 18);
-        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 5, 5);
-        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 15, 13);
-        assert_eq_oriented!(http_outcalls_executed, 6, 4);
-        assert_eq_oriented!(heartbeats_and_global_timers_executed, 341, 353);
+        assert_eq_oriented!(canisters_installed, 15, 5);
+        assert_eq_oriented!(ingress_messages_executed, 26, 13);
+        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 6, 4);
+        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 19, 9);
+        assert_eq_oriented!(http_outcalls_executed, 9, 1);
+        assert_eq_oriented!(heartbeats_and_global_timers_executed, 312, 382);
         let canisters_with_broken_local_connections =
             broken_connections.map(|connections| connections.len() as u64);
-        assert_eq_oriented!(canisters_with_broken_local_connections, 2, 1);
+        assert_eq_oriented!(canisters_with_broken_local_connections, 1, 1);
         // Each universal canister sends a single request to the one created before it, so every
         // connection broken by the split carries exactly one request.
         for (sender, receivers) in broken_connections

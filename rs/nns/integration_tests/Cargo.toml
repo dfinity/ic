@@ -34,7 +34,6 @@ candid = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
-dfn_json = { path = "../../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
@@ -109,7 +108,6 @@ phantom_newtype = { path = "../../phantom_newtype" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
-rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }

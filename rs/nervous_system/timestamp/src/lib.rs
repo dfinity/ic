@@ -13,9 +13,10 @@
 pub fn format_timestamp(timestamp_seconds: u64) -> Option<String> {
     let timestamp_seconds = i64::try_from(timestamp_seconds).ok()?;
     let dt_offset = time::OffsetDateTime::from_unix_timestamp(timestamp_seconds).ok()?;
-    let format =
-        time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second] UTC")
-            .ok()?;
+    let format = time::format_description::parse_borrowed::<1>(
+        "[year]-[month]-[day] [hour]:[minute]:[second] UTC",
+    )
+    .ok()?;
     dt_offset.format(&format).ok()
 }
 

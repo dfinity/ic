@@ -8,7 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 bincode = { workspace = true }
-byteorder = { workspace = true }
 clap = { workspace = true }
 ic-config = { path = "../config" }
 ic-interfaces = { path = "../interfaces" }
@@ -31,7 +30,7 @@ tempfile = { workspace = true }
 
 # Support for rocksdb backend on macos
 [target.'cfg(target_os = "macos")'.dependencies]
-rocksdb = { version = "0.22.0", default-features = false }
+rocksdb = { version = "0.25.0", default-features = false, features = ["bindgen-runtime"] }
 
 [dev-dependencies]
 criterion = { workspace = true }

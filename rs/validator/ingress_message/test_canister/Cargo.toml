@@ -7,8 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-build-info = { workspace = true }
-
 candid = { workspace = true }
 ic-cdk = { workspace = true }
 ic-types = { path = "../../../types/types" }

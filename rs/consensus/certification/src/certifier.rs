@@ -19,7 +19,7 @@ use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CryptoHashOfPartialState, Height,
+    CryptoHashOfPartialState, Height, NodeId,
     artifact::CertificationMessageId,
     consensus::{
         Committee, HasCommittee, HasHeight,
@@ -33,6 +33,9 @@ use ic_types::{
 };
 use prometheus::{Histogram, IntCounter, IntGauge};
 use std::{cell::RefCell, collections::BTreeSet, sync::Arc, time::Instant};
+
+/// How many heights above the finalized height certification artifacts are fetched.
+const LOOK_AHEAD: u64 = 10;
 
 struct CertifierMetrics {
     shares_created: IntCounter,
@@ -78,27 +81,33 @@ impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for C
     // The priority function requires just the height of the artifact to decide if
     // it should be fetched or not: if we already have a full certification at
     // that height or this height is below the CUP height, we're not interested in
-    // any new artifacts at that height. If it is above the CUP height and we do not
-    // have a full certification at that height, we're interested in all artifacts.
+    // any new artifacts at that height. If it is more than `LOOK_AHEAD` heights above
+    // the finalized height, we may want them later. Otherwise, we're interested in all
+    // artifacts at that height.
     fn new_bouncer(&self, certification_pool: &Pool) -> Bouncer<CertificationMessageId> {
         let _timer = self.metrics.update_duration.start_timer();
 
         let certified_heights = certification_pool.certified_heights();
         let cup_height = self.consensus_pool_cache.catch_up_package().height();
+        let max_height =
+            self.consensus_pool_cache.finalized_block().height() + Height::from(LOOK_AHEAD);
         Box::new(move |id| {
             let height = id.height;
             // We drop all artifacts below the CUP height or those for which we have a full
             // certification already.
             if height < cup_height || certified_heights.contains(&height) {
                 BouncerValue::Unwanted
+            } else if height > max_height {
+                BouncerValue::MaybeWantsLater
             } else {
                 BouncerValue::Wants
             }
         })
     }
 
+    // Like consensus, so that deferred artifacts are fetched soon after they're wanted.
     fn refresh_period(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(3)
+        std::time::Duration::from_secs(1)
     }
 }
 
@@ -454,10 +463,21 @@ impl CertifierImpl {
                     }
                 }
 
+                // Signers with a validated share, including shares validated in this pass.
+                let mut signers: BTreeSet<NodeId> = certification_pool
+                    .shares_at_height(height)
+                    .map(|share| share.signed.signature.signer)
+                    .collect();
                 Box::new(
                     certification_pool
                         .unvalidated_shares_at_height(height)
-                        .filter_map(move |share| self.validate_share(certification_pool, share))
+                        .filter_map(move |share| {
+                            let change = self.validate_share(&signers, share)?;
+                            if let ChangeAction::MoveToValidated(_) = change {
+                                signers.insert(share.signed.signature.signer);
+                            }
+                            Some(change)
+                        })
                         .chain(cert_change_set),
                 )
             })
@@ -540,7 +560,7 @@ impl CertifierImpl {
 
     fn validate_share(
         &self,
-        certification_pool: &dyn CertificationPool,
+        validated_signers: &BTreeSet<NodeId>,
         share: &CertificationShare,
     ) -> Option<ChangeAction> {
         let msg = CertificationMessage::CertificationShare(share.clone());
@@ -584,10 +604,7 @@ impl CertifierImpl {
             // The signer is valid.
             Ok(true) => {
                 // If the signer has signed a share before, invalidate the new one.
-                if certification_pool
-                    .shares_at_height(share.height)
-                    .any(|valid_share| signer == valid_share.signed.signature.signer)
-                {
+                if validated_signers.contains(&signer) {
                     return Some(ChangeAction::RemoveFromUnvalidated(msg));
                 }
                 // Verify the signature.
@@ -722,6 +739,7 @@ mod tests {
         },
         crypto::{
             CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf,
+            ThresholdSigShare, ThresholdSigShareOf,
             threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         },
         signature::*,
@@ -904,11 +922,14 @@ mod tests {
                 cert_pool.apply(change_set);
 
                 let bouncer = bouncer_factory.new_bouncer(&cert_pool);
+                let max_height = pool.get_cache().finalized_block().height().get() + LOOK_AHEAD;
                 for (height, prio) in &[
                     (1, BouncerValue::Unwanted),
                     (2, BouncerValue::Wants),
                     (3, BouncerValue::Unwanted),
                     (4, BouncerValue::Wants),
+                    (max_height, BouncerValue::Wants),
+                    (max_height + 1, BouncerValue::MaybeWantsLater),
                 ] {
                     assert_eq!(
                         bouncer(&CertificationMessageId {
@@ -1534,6 +1555,22 @@ mod tests {
                     .chain((0..2).map(move |node_id| fake_share(Height::from(5), node_id))) // not enough
                     .for_each(|x| cert_pool.insert(x));
 
+                // A different share from the same signer, to be validated in the same pass.
+                let share = CertificationShare {
+                    height: Height::from(4),
+                    height_witness: Witness::new_for_testing_with_height(),
+                    signed: Signed {
+                        content: gen_content(Height::from(4)),
+                        signature: ThresholdSignatureShare {
+                            signature: ThresholdSigShareOf::new(ThresholdSigShare(vec![1])),
+                            signer: node_test_id(0),
+                        },
+                    },
+                };
+                cert_pool.insert(to_unvalidated(CertificationMessage::CertificationShare(
+                    share,
+                )));
+
                 // this moves unvalidated shares to validated
                 let state_heights_to_validate: Vec<_> = state_manager
                     .list_state_hashes_to_certify()
@@ -1543,6 +1580,15 @@ mod tests {
                 let change_set =
                     certifier.validate(&cert_pool, state_heights_to_validate.into_iter());
                 cert_pool.apply(change_set);
+
+                // Only one share per signer was validated.
+                assert_eq!(cert_pool.shares_at_height(Height::from(4)).count(), 4);
+                assert_eq!(
+                    cert_pool
+                        .unvalidated_shares_at_height(Height::from(4))
+                        .count(),
+                    0
+                );
 
                 // Let's insert valid shares from the same signer again:
                 cert_pool.insert(fake_share(Height::from(4), 0));
@@ -1845,17 +1891,11 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = DependenciesBuilder::new(pool_config.clone(), 4)
+                } = DependenciesBuilder::new(pool_config, 4)
                     .with_dkg_interval_length(TEST_DKG_INTERVAL)
                     .build();
 
                 let metrics_registry = MetricsRegistry::new();
-                let cert_pool = CertificationPoolImpl::new(
-                    replica_config.node_id,
-                    pool_config,
-                    ic_logger::replica_logger::no_op_logger(),
-                    metrics_registry.clone(),
-                );
                 let certifier = CertifierImpl::new(
                     replica_config,
                     registry,
@@ -1879,7 +1919,7 @@ mod tests {
                             },
                         };
 
-                        let result = certifier.validate_share(&cert_pool, &share);
+                        let result = certifier.validate_share(&BTreeSet::new(), &share);
                         if should_skip {
                             assert_eq!(
                                 result, None,

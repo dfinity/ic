@@ -745,9 +745,9 @@ mod tests {
             stats: test_stats.stats[2..3].to_vec(),
         };
 
-        for id in 0..3 {
+        for (id, canister_stats) in test_stats.stats.iter().enumerate().take(3) {
             let mut payload = template_payload.clone();
-            payload.stats.push(test_stats.stats[id].clone());
+            payload.stats.push(canister_stats.clone());
             let payload = payload.serialize_with_limit(MAX_PAYLOAD_SIZE);
 
             let validation_result = payload_builder.validate_payload_impl(

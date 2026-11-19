@@ -20,9 +20,8 @@ All commands run from the repository root (`cd "$(git rev-parse --show-toplevel)
 
 ## The `hunt` script
 
-Diagnosis is driven by the upstream `hunt` reproducibility script. It is **not
-checked into this repo** — get it from [its gist](https://gist.github.com/nmattia/dc8a1d4f3bc36c9c0133d15f06acc74e), save it
-at the repo root as `hunt`, and `chmod +x` it. It builds a target **twice**, each
+Diagnosis is driven by the [`hunt`](hunt) reproducibility script in this skill's
+directory, `.claude/skills/fix-build-determinism/hunt`. It builds a target **twice**, each
 time in a *freshly cloned* checkout under an output base nested at a **different
 depth** — so the absolute build path differs between the two runs the same way
 it would differ between two machines. It writes each build's
@@ -31,7 +30,7 @@ digest) of every action. Any output whose digest differs between the two runs is
 a non-reproducible artifact. A clean run ends with `builds 1 - 2: no diff ✓`.
 
 ```
-usage: ./hunt [--root ROOT] [--startup-options OPTS] [--build-options OPTS] [--runs N] TARGET
+usage: .claude/skills/fix-build-determinism/hunt [--root ROOT] [--startup-options OPTS] [--build-options OPTS] [--runs N] TARGET
 
   --root ROOT            dir for the per-run checkouts, output bases and execlogs.
                          Default: a fresh `mktemp -d`.
@@ -58,11 +57,11 @@ See the **run-in-dev-container** skill for how to invoke `container-run.sh`
 
 ```sh
 # quick pass/fail (artifacts land in an ephemeral in-container tempdir):
-./ci/container/container-run.sh ./hunt --build-options='--config=local' //my:target
+./ci/container/container-run.sh .claude/skills/fix-build-determinism/hunt --build-options='--config=local' //my:target
 
 # to *diagnose* (step 3 needs the two builds' outputs to survive the container),
 # point --root at a path inside the checkout (mounted at its host path) so the artifacts persist on the host:
-./ci/container/container-run.sh ./hunt --root "$PWD/,hunt" --build-options='--config=local' //my:target
+./ci/container/container-run.sh .claude/skills/fix-build-determinism/hunt --root "$PWD/,hunt" --build-options='--config=local' //my:target
 ```
 
 Gotchas:
@@ -192,8 +191,8 @@ Gotchas:
 
 | Dependency | Kind | Cause | Fix | Commit |
 | --- | --- | --- | --- | --- |
-| **askama** (`bazel/askama.patch`) | crate (derive macro) | `Path::canonicalize()` resolved the sandbox symlink to the repo's real path; the resulting relative path's `..`-count depended on the sandbox path *depth*, so the rlib changed across output-base/nest depths. | Skip `canonicalize()` so both paths stay anchored to the sandbox. | `0d9c593299` (#10167) |
-| **libssh2-sys** (`bazel/libssh2-sys.patch`) | crate (`build.rs`) | `build.rs` generated a pkgconfig file containing absolute build paths. | Disable that generation. | `737666659c` (#3197) |
+| **askama** (`bazel/askama.patch`; since removed, askama 0.16 has the fix) | crate (derive macro) | `Path::canonicalize()` resolved the sandbox symlink to the repo's real path; the resulting relative path's `..`-count depended on the sandbox path *depth*, so the rlib changed across output-base/nest depths. | Skip `canonicalize()` so both paths stay anchored to the sandbox. | `0d9c593299` (#10167) |
+| **libssh2-sys** (`bazel/libssh2-sys.patch`; since removed, libssh2-sys 0.3.4 writes a relocatable `.pc` file, and the rules_rust build-script runner deletes `*.pc` files from `OUT_DIR`) | crate (`build.rs`) | `build.rs` generated a pkgconfig file containing absolute build paths. | Disable that generation. | `737666659c` (#3197) |
 | **e2fsprogs / mke2fs** (`third_party/e2fsprogs_no_external_config.patch`) | `http_archive` (rules_foreign_cc) | `configure`'s `--prefix` is the per-build `$BUILD_TMPDIR`, so the compiled-in `mke2fs.conf` path (`ROOT_SYSCONFDIR`) landed in the binary's `.rodata`. | Empty `config_fn` (use the built-in default profile) + trim the unused, also-non-reproducible extra tools from the install tree. | `cf7fe5147b` |
 
 The askama case is the canonical illustration of *why* `hunt` varies the nest

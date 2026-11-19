@@ -2,6 +2,7 @@ use ic_base_types::{EnvironmentVariables, PrincipalId};
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_crypto_sha2::Sha256;
 use ic_error_types::{ErrorCode, UserError};
+use ic_limits::MAX_CANISTER_HISTORY_CHANGES;
 use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinstall, Upgrade};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
@@ -10,7 +11,6 @@ use ic_management_canister_types_private::{
     ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::MAX_CANISTER_HISTORY_CHANGES;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder, get_reply};
 use ic_types::{CanisterId, ingress::WasmResult};
@@ -34,6 +34,10 @@ const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 /// to make sure that the canister history stores the module hashes of these two canisters
 /// correctly, e.g., when upgrading or reinstalling the canister.
 const TEST_CANISTER: &str = "(module)";
+
+/// Non-empty init argument used when installing the test canister so that
+/// the canister history entry records a non-trivial `args_hash`.
+const INSTALL_ARGS: &[u8] = b"install args";
 
 fn universal_canister_payload(
     receiver: &PrincipalId,
@@ -190,7 +194,7 @@ fn canister_history_tracks_create_install_reinstall() {
         user_id2,
         ic00::IC_00,
         Method::InstallCode,
-        InstallCodeArgs::new(Install, canister_id, test_canister, vec![]).encode(),
+        InstallCodeArgs::new(Install, canister_id, test_canister, INSTALL_ARGS.to_vec()).encode(),
     )
     .unwrap();
     // check canister history
@@ -198,7 +202,11 @@ fn canister_history_tracks_create_install_reinstall() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         1,
         CanisterChangeOrigin::from_user(user_id2),
-        CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
+        CanisterChangeDetails::code_deployment(
+            Install,
+            test_canister_sha256,
+            Some(Sha256::hash(INSTALL_ARGS)),
+        ),
     ));
     let history = env.get_canister_history(canister_id);
     assert_eq!(
@@ -234,7 +242,11 @@ fn canister_history_tracks_create_install_reinstall() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Reinstall, *UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(
+            Reinstall,
+            *UNIVERSAL_CANISTER_WASM_SHA256,
+            Some(Sha256::hash(&[])),
+        ),
     ));
     let history = env.get_canister_history(canister_id);
     assert_eq!(
@@ -299,7 +311,7 @@ fn canister_history_tracks_upgrade() {
         user_id2,
         ic00::IC_00,
         Method::InstallCode,
-        InstallCodeArgs::new(Install, canister_id, test_canister, vec![]).encode(),
+        InstallCodeArgs::new(Install, canister_id, test_canister, INSTALL_ARGS.to_vec()).encode(),
     )
     .unwrap();
     // update reference canister history
@@ -307,7 +319,11 @@ fn canister_history_tracks_upgrade() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         1,
         CanisterChangeOrigin::from_user(user_id2),
-        CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
+        CanisterChangeDetails::code_deployment(
+            Install,
+            test_canister_sha256,
+            Some(Sha256::hash(INSTALL_ARGS)),
+        ),
     ));
 
     // upgrade to universal_canister via ingress from user_id1
@@ -331,7 +347,11 @@ fn canister_history_tracks_upgrade() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Upgrade, *UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(
+            Upgrade,
+            *UNIVERSAL_CANISTER_WASM_SHA256,
+            Some(Sha256::hash(&[])),
+        ),
     ));
     let history = env.get_canister_history(canister_id);
     assert_eq!(
@@ -433,7 +453,11 @@ where
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         1,
         CanisterChangeOrigin::from_user(user_id2),
-        CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
+        CanisterChangeDetails::code_deployment(
+            Install,
+            test_canister_sha256,
+            Some(Sha256::hash(&[])),
+        ),
     ));
 
     // uninstall code via ingress from user_id1
@@ -644,7 +668,11 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         1,
         CanisterChangeOrigin::from_user(user_id2),
-        CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
+        CanisterChangeDetails::code_deployment(
+            Install,
+            test_canister_sha256,
+            Some(Sha256::hash(&[])),
+        ),
     ));
 
     // drain cycle balance of test_canister to trigger code uninstall from system
@@ -759,7 +787,11 @@ fn canister_history_tracks_changes_from_canister() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is installed in the next round after the ingress message is received
         1,
         CanisterChangeOrigin::from_canister(ucan.into(), None),
-        CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
+        CanisterChangeDetails::code_deployment(
+            Install,
+            test_canister_sha256,
+            Some(Sha256::hash(&[])),
+        ),
     ));
     let history = env.get_canister_history(canister_id);
     assert_eq!(
@@ -934,7 +966,11 @@ fn canister_history_take_snapshot_with_uninstall_fails_with_incorrect_sender_ver
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         1,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
+        CanisterChangeDetails::code_deployment(
+            Install,
+            test_canister_sha256,
+            Some(Sha256::hash(&[])),
+        ),
     ));
 
     let check_history = |reference_change_entries: &Vec<CanisterChange>| {
@@ -1074,7 +1110,11 @@ fn canister_info_retrieval() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         1,
         CanisterChangeOrigin::from_user(user_id2),
-        CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
+        CanisterChangeDetails::code_deployment(
+            Install,
+            test_canister_sha256,
+            Some(Sha256::hash(&[])),
+        ),
     ));
 
     // upgrade to universal_canister via ingress from user_id1
@@ -1098,7 +1138,11 @@ fn canister_info_retrieval() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Upgrade, *UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(
+            Upgrade,
+            *UNIVERSAL_CANISTER_WASM_SHA256,
+            Some(Sha256::hash(&[])),
+        ),
     ));
 
     // create and install universal_canister
@@ -1309,7 +1353,11 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         1,
         CanisterChangeOrigin::from_user(ucan.into()),
-        CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
+        CanisterChangeDetails::code_deployment(
+            Install,
+            test_canister_sha256,
+            Some(Sha256::hash(&[])),
+        ),
     ));
     let history = env.get_canister_history(canister_id);
     assert_eq!(

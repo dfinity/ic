@@ -168,39 +168,186 @@ pub fn append_canister_log<Metrics: CanisterLogMetrics>(
 }
 
 impl SystemStateModifications {
+    /// Checks that the sum of the given prepayments (real and nominal parts
+    /// separately) equals the consumed cycles of the corresponding use case.
+    fn validate_prepayment_total<T: CyclesUseCaseKind>(
+        prepayments: impl Iterator<Item = CompoundCycles<T>>,
+        consumed: Option<CompoundCycles<T>>,
+        description: &str,
+    ) -> HypervisorResult<()> {
+        let overflow = || {
+            Self::error(format!(
+                "Invalid request prepayments: {description} prepayments overflow"
+            ))
+        };
+        let (mut real, mut nominal) = (0_u128, 0_u128);
+        for prepayment in prepayments {
+            real = real
+                .checked_add(prepayment.real().get())
+                .ok_or_else(overflow)?;
+            nominal = nominal
+                .checked_add(prepayment.nominal().get())
+                .ok_or_else(overflow)?;
+        }
+        let (consumed_real, consumed_nominal) =
+            consumed.map_or((0, 0), |c| (c.real().get(), c.nominal().get()));
+        if (real, nominal) != (consumed_real, consumed_nominal) {
+            return Err(Self::error(format!(
+                "Invalid request prepayments: {description} prepayments total (real: {real}, nominal: {nominal}), but consumed cycles are (real: {consumed_real}, nominal: {consumed_nominal})"
+            )));
+        }
+        Ok(())
+    }
+
+    /// Checks that every cycle prepayment stored in an outgoing request is
+    /// backed by cycles consumed during this execution.
+    fn validate_request_prepayments(&self) -> HypervisorResult<()> {
+        for request in &self.requests {
+            let response = request.prepayment_for_response_transmission;
+            let call = request.prepayment_for_call_transmission;
+            if response.real() > call.real() || response.nominal() > call.nominal() {
+                return Err(Self::error(format!(
+                    "Invalid request prepayments: response transmission prepayment {:?} exceeds call transmission prepayment {:?}",
+                    response, call
+                )));
+            }
+        }
+
+        Self::validate_prepayment_total(
+            self.requests
+                .iter()
+                .map(|request| request.prepayment_for_response_execution),
+            self.consumed_cycles_by_use_case.instructions,
+            "response execution",
+        )?;
+        Self::validate_prepayment_total(
+            self.requests
+                .iter()
+                .map(|request| request.prepayment_for_call_transmission),
+            self.consumed_cycles_by_use_case
+                .request_and_response_transmission,
+            "call transmission",
+        )
+    }
+
     /// Checks that no cycles were created during the execution of this message
     /// (unless the canister is the cycles minting canister).
-    fn validate_cycle_change(&self, is_cmc_canister: bool) -> HypervisorResult<()> {
-        let mut expected_change = CyclesBalanceChange::zero();
-
-        if let Some((_, call_context_balance_taken)) = self.call_context_balance_taken {
-            expected_change =
-                expected_change + CyclesBalanceChange::added(call_context_balance_taken);
+    fn validate_cycle_change(
+        &self,
+        system_state: &SystemState,
+        is_composite_query: bool,
+    ) -> HypervisorResult<()> {
+        // Composite query state is ephemeral and intentionally retains outgoing
+        // requests while discarding their cycle charges.
+        if !is_composite_query {
+            self.validate_request_prepayments()?;
         }
 
-        for req in self.requests.iter() {
-            expected_change = expected_change + CyclesBalanceChange::removed(req.payment);
-        }
+        let accepted_cycles = match self.call_context_balance_taken {
+            Some((call_context_id, amount)) if !amount.is_zero() => {
+                let available = system_state
+                    .call_context_manager()
+                    .and_then(|manager| manager.call_context(call_context_id))
+                    .map(|context| context.available_cycles())
+                    .ok_or_else(|| {
+                        Self::error("Canister accepted cycles from invalid call context")
+                    })?;
+                if amount > available {
+                    return Err(Self::error(format!(
+                        "Canister accepted {} cycles from a call context with only {} cycles",
+                        amount, available
+                    )));
+                }
+                amount
+            }
+            Some((_, _)) | None => Cycles::zero(),
+        };
 
-        for amount in self.consumed_cycles_by_use_case.iter_over_real() {
-            expected_change = expected_change + CyclesBalanceChange::removed(amount);
+        let mut removed_cycles = 0_u128;
+        for amount in self
+            .requests
+            .iter()
+            .map(|request| request.payment)
+            .chain(self.consumed_cycles_by_use_case.iter_over_real())
+            .chain(std::iter::once(self.reserved_cycles))
+        {
+            removed_cycles = removed_cycles
+                .checked_add(amount.get())
+                .ok_or_else(|| Self::error("Invalid cycle change: removed cycles overflow"))?;
         }
-
-        expected_change = expected_change + CyclesBalanceChange::removed(self.reserved_cycles);
+        let removed_cycles = Cycles::new(removed_cycles);
+        let expected_change = if accepted_cycles >= removed_cycles {
+            CyclesBalanceChange::added(accepted_cycles - removed_cycles)
+        } else {
+            CyclesBalanceChange::removed(removed_cycles - accepted_cycles)
+        };
 
         // If the canister is not the cycles minting canister, then the balance
         // change coming from the Wasm execution must match the expected balance
         // change that we just computed.
-        if is_cmc_canister || self.cycles_balance_change == expected_change {
-            Ok(())
-        } else {
-            Err(HypervisorError::WasmEngineError(
+        if system_state.canister_id() != CYCLES_MINTING_CANISTER_ID
+            && self.cycles_balance_change != expected_change
+        {
+            return Err(HypervisorError::WasmEngineError(
                 WasmEngineError::FailedToApplySystemChanges(format!(
                     "Invalid cycle change: expected {:?}, got {:?}",
                     expected_change, self.cycles_balance_change
                 )),
-            ))
+            ));
         }
+
+        self.validate_balance_changes(system_state)
+    }
+
+    /// Checks that `apply_balance_changes` applies these changes to the given
+    /// state exactly, i.e., every step is covered by the balance, no step
+    /// overflows, and the reservation of cycles succeeds.
+    fn validate_balance_changes(&self, system_state: &SystemState) -> HypervisorResult<()> {
+        let error = || {
+            Self::error(format!(
+                "Invalid cycle change: cannot apply {:?} with consumed cycles {:?} and reserved cycles {} to balance {}",
+                self.cycles_balance_change,
+                self.consumed_cycles_by_use_case.iter_over_real(),
+                self.reserved_cycles,
+                system_state.balance()
+            ))
+        };
+
+        // The main balance change excludes the consumed and reserved cycles,
+        // see `apply_balance_changes`.
+        let (mut added, removed) = match self.cycles_balance_change {
+            CyclesBalanceChange::Added(added) => (added.get(), 0),
+            CyclesBalanceChange::Removed(removed) => (0, removed.get()),
+        };
+        for amount in self
+            .consumed_cycles_by_use_case
+            .iter_over_real()
+            .into_iter()
+            .chain(std::iter::once(self.reserved_cycles))
+        {
+            added = added.checked_add(amount.get()).ok_or_else(error)?;
+        }
+        let mut balance = if added >= removed {
+            system_state.balance().get().checked_add(added - removed)
+        } else {
+            system_state.balance().get().checked_sub(removed - added)
+        }
+        .ok_or_else(error)?;
+
+        for amount in self.consumed_cycles_by_use_case.iter_over_real() {
+            balance = balance.checked_sub(amount.get()).ok_or_else(error)?;
+        }
+
+        // `can_reserve_cycles` does not detect an overflow of the reserved balance.
+        system_state
+            .reserved_balance()
+            .get()
+            .checked_add(self.reserved_cycles.get())
+            .ok_or_else(error)?;
+
+        system_state
+            .can_reserve_cycles(self.reserved_cycles, Cycles::new(balance))
+            .map_err(|err| Self::error(format!("Invalid cycle change: {err:?}")))
     }
 
     /// Returns number of removed cycles in the state changes.
@@ -454,7 +601,7 @@ impl SystemStateModifications {
         );
 
         // Verify total cycle change is not positive and update cycles balance.
-        self.validate_cycle_change(system_state.canister_id() == CYCLES_MINTING_CANISTER_ID)?;
+        self.validate_cycle_change(system_state, is_composite_query)?;
         self.apply_balance_changes(system_state);
 
         // Verify we don't accept more cycles than are available from call
@@ -1491,18 +1638,21 @@ mod tests {
     use ic_config::subnet_config::CyclesAccountManagerConfig;
     use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
+    use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{NetworkTopology, SystemState};
+    use ic_replicated_state::{
+        CallOrigin, NetworkTopology, SystemState, testing::OutputRequestBuilder,
+    };
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
-        CanisterTimer, ComputeAllocation, MAX_DELTA_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes,
-        NumInstructions, Time,
-        messages::{NO_DEADLINE, RequestMetadata},
+        CanisterId, CanisterTimer, ComputeAllocation, MAX_DELTA_LOG_MEMORY_LIMIT, MemoryAllocation,
+        NumBytes, NumInstructions, Time,
+        messages::{CallContextId, CallbackId, NO_DEADLINE, RequestMetadata},
         time::CoarseTime,
     };
     use ic_types_cycles::{
         BurnedCycles, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
-        CyclesUseCaseKind, Instructions, RequestAndResponseTransmission,
+        CyclesUseCaseKind, Instructions, NominalCycles, RequestAndResponseTransmission,
     };
 
     use super::{CanisterStatusView, SandboxSafeSystemState, SystemStateModifications};
@@ -1510,6 +1660,645 @@ mod tests {
         cycles_balance_change::CyclesBalanceChange,
         sandbox_safe_system_state::ConsumedCyclesDuringExecution,
     };
+
+    fn prepayment<T: CyclesUseCaseKind>(amount: u128) -> CompoundCycles<T> {
+        CompoundCycles::new(Cycles::new(amount), CanisterCyclesCostSchedule::Normal)
+    }
+
+    fn output_request() -> OutputRequestBuilder {
+        OutputRequestBuilder::new()
+            .sender(canister_test_id(0))
+            .receiver(canister_test_id(1))
+    }
+
+    fn free_prepayment<T: CyclesUseCaseKind>(amount: u128) -> CompoundCycles<T> {
+        CompoundCycles::new(Cycles::new(amount), CanisterCyclesCostSchedule::Free)
+    }
+
+    fn system_state_with_id(canister_id: CanisterId, balance: Cycles) -> SystemState {
+        SystemState::new_running_for_testing(
+            canister_id,
+            user_test_id(1).get(),
+            balance,
+            NumSeconds::from(100_000),
+        )
+    }
+
+    fn system_state(balance: Cycles) -> SystemState {
+        system_state_with_id(canister_test_id(0), balance)
+    }
+
+    /// Adds a call context with the given cycles to `system_state`.
+    fn new_call_context(system_state: &mut SystemState, cycles: Cycles) -> CallContextId {
+        system_state
+            .new_call_context(
+                CallOrigin::CanisterUpdate(
+                    canister_test_id(2),
+                    CallbackId::from(0),
+                    NO_DEADLINE,
+                    String::new(),
+                ),
+                cycles,
+                Time::from_nanos_since_unix_epoch(0),
+                RequestMetadata::default(),
+                None,
+            )
+            .unwrap()
+    }
+
+    fn assert_apply_changes(
+        system_state: SystemState,
+        modifications: SystemStateModifications,
+        expect_applied: bool,
+    ) {
+        assert_apply_changes_impl(system_state, modifications, false, expect_applied)
+    }
+
+    /// Applies `modifications` to `system_state` and asserts that they are
+    /// either applied with the expected balances, call-context withdrawals,
+    /// consumption metrics, requests and callbacks, or rejected by cycle
+    /// validation with the system state left untouched.
+    fn assert_apply_changes_impl(
+        mut system_state: SystemState,
+        modifications: SystemStateModifications,
+        is_composite_query: bool,
+        expect_applied: bool,
+    ) {
+        let initial_state = system_state.clone();
+        let num_requests = modifications.requests.len();
+        let reserved_cycles = modifications.reserved_cycles;
+        let call_context_balance_taken = modifications.call_context_balance_taken;
+        let consumed_cycles = modifications.consumed_cycles_by_use_case;
+        let expected_balance = match modifications.cycles_balance_change {
+            CyclesBalanceChange::Added(added) => initial_state.balance() + added,
+            CyclesBalanceChange::Removed(removed) => initial_state.balance() - removed,
+        };
+
+        let result = modifications.apply_changes(
+            Time::from_nanos_since_unix_epoch(0),
+            &mut system_state,
+            &NetworkTopology::default(),
+            subnet_test_id(1),
+            is_composite_query,
+            &ic_logger::replica_logger::no_op_logger(),
+        );
+
+        if expect_applied {
+            assert!(result.is_ok(), "{:?}", result.as_ref().err());
+            assert_eq!(system_state.balance(), expected_balance);
+            assert_eq!(
+                system_state.reserved_balance(),
+                initial_state.reserved_balance() + reserved_cycles
+            );
+            assert_eq!(
+                system_state.queues().output_queues_message_count(),
+                num_requests
+            );
+            let call_context_manager = system_state.call_context_manager().unwrap();
+            assert_eq!(call_context_manager.callbacks().len(), num_requests);
+            for (&context_id, initial_context) in initial_state
+                .call_context_manager()
+                .unwrap()
+                .call_contexts()
+                .iter()
+            {
+                let withdrawn = call_context_balance_taken
+                    .filter(|(id, _)| *id == context_id)
+                    .map_or(Cycles::zero(), |(_, amount)| amount);
+                assert_eq!(
+                    call_context_manager
+                        .call_context(context_id)
+                        .unwrap()
+                        .available_cycles(),
+                    initial_context.available_cycles() - withdrawn,
+                    "Unexpected balance for call context {context_id:?}"
+                );
+            }
+
+            let initial_metrics = initial_state.canister_metrics();
+            let metrics = system_state.canister_metrics();
+            let burned = consumed_cycles
+                .burned
+                .map_or(NominalCycles::zero(), |c| c.nominal());
+            let mut total_consumed = NominalCycles::zero();
+            for (use_case, amount) in [
+                (CyclesUseCase::BurnedCycles, burned),
+                (
+                    CyclesUseCase::Instructions,
+                    consumed_cycles
+                        .instructions
+                        .map_or(NominalCycles::zero(), |c| c.nominal()),
+                ),
+                (
+                    CyclesUseCase::RequestAndResponseTransmission,
+                    consumed_cycles
+                        .request_and_response_transmission
+                        .map_or(NominalCycles::zero(), |c| c.nominal()),
+                ),
+            ] {
+                total_consumed += amount;
+                assert_eq!(
+                    metrics
+                        .consumed_cycles_by_use_cases()
+                        .get(&use_case)
+                        .copied()
+                        .unwrap_or_default(),
+                    initial_metrics
+                        .consumed_cycles_by_use_cases()
+                        .get(&use_case)
+                        .copied()
+                        .unwrap_or_default()
+                        + amount,
+                    "Unexpected consumed cycles for {use_case:?}"
+                );
+                // Request prepayments enter the monotonic metrics only when settled.
+                let settled = if use_case == CyclesUseCase::BurnedCycles {
+                    amount
+                } else {
+                    NominalCycles::zero()
+                };
+                assert_eq!(
+                    metrics
+                        .consumed_cycles_by_use_cases_monotonic()
+                        .get(&use_case)
+                        .copied()
+                        .unwrap_or_default(),
+                    initial_metrics
+                        .consumed_cycles_by_use_cases_monotonic()
+                        .get(&use_case)
+                        .copied()
+                        .unwrap_or_default()
+                        + settled,
+                    "Unexpected monotonic consumed cycles for {use_case:?}"
+                );
+            }
+            assert_eq!(
+                metrics.consumed_cycles(),
+                initial_metrics.consumed_cycles() + total_consumed
+            );
+            assert_eq!(
+                metrics.consumed_cycles_monotonic(),
+                initial_metrics.consumed_cycles_monotonic() + burned
+            );
+        } else {
+            assert!(result.is_err());
+            assert_eq!(system_state, initial_state);
+        }
+    }
+
+    #[test]
+    fn valid_request_prepayments_are_accepted() {
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::removed(Cycles::new(40)),
+            requests: vec![
+                output_request()
+                    .prepayment_for_response_execution(prepayment(10))
+                    .prepayment_for_response_transmission(prepayment(20))
+                    .prepayment_for_call_transmission(prepayment(30))
+                    .build(),
+            ],
+            consumed_cycles_by_use_case: ConsumedCyclesDuringExecution {
+                instructions: Some(prepayment(10)),
+                request_and_response_transmission: Some(prepayment(30)),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(1_000)), modifications, true);
+    }
+
+    #[test]
+    fn valid_free_request_prepayments_are_accepted() {
+        // On the free cost schedule, the real parts are zero and only the
+        // nominal parts are tracked.
+        let modifications = SystemStateModifications {
+            requests: vec![
+                output_request()
+                    .prepayment_for_response_execution(free_prepayment(10))
+                    .prepayment_for_response_transmission(free_prepayment(20))
+                    .prepayment_for_call_transmission(free_prepayment(30))
+                    .build(),
+            ],
+            consumed_cycles_by_use_case: ConsumedCyclesDuringExecution {
+                instructions: Some(free_prepayment(10)),
+                request_and_response_transmission: Some(free_prepayment(30)),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(1_000)), modifications, true);
+    }
+
+    #[test]
+    fn mixed_cycle_changes_update_existing_balances_and_metrics() {
+        let mut system_state = system_state(Cycles::new(1_000));
+        system_state.consume_cycles(prepayment::<BurnedCycles>(5));
+        system_state.consume_cycles(prepayment::<Instructions>(7));
+        system_state.consume_cycles(prepayment::<RequestAndResponseTransmission>(11));
+        system_state.reserve_cycles(Cycles::new(5)).unwrap();
+        let call_context_id = new_call_context(&mut system_state, Cycles::new(200));
+        // An unrelated call context must retain its balance.
+        new_call_context(&mut system_state, Cycles::new(300));
+        let mut request = output_request()
+            .payment(Cycles::new(100))
+            .prepayment_for_response_execution(prepayment(10))
+            .prepayment_for_response_transmission(prepayment(20))
+            .prepayment_for_call_transmission(prepayment(30))
+            .build();
+        request.call_context_id = call_context_id;
+        let modifications = SystemStateModifications {
+            // Accept 100, send 100, consume 60, and reserve 40 cycles.
+            cycles_balance_change: CyclesBalanceChange::removed(Cycles::new(100)),
+            call_context_balance_taken: Some((call_context_id, Cycles::new(100))),
+            consumed_cycles_by_use_case: ConsumedCyclesDuringExecution {
+                burned: Some(prepayment(20)),
+                instructions: Some(prepayment(10)),
+                request_and_response_transmission: Some(prepayment(30)),
+            },
+            reserved_cycles: Cycles::new(40),
+            requests: vec![request],
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state, modifications, true);
+    }
+
+    #[test]
+    fn forged_request_prepayments_are_rejected() {
+        let modifications = SystemStateModifications {
+            // The sandbox claims that only 10 cycles were withdrawn, while
+            // storing a callback prepayment that would later refund 100.
+            cycles_balance_change: CyclesBalanceChange::removed(Cycles::new(10)),
+            requests: vec![
+                output_request()
+                    .prepayment_for_response_execution(prepayment(100))
+                    .build(),
+            ],
+            consumed_cycles_by_use_case: ConsumedCyclesDuringExecution {
+                instructions: Some(prepayment(10)),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(1_000)), modifications, false);
+    }
+
+    #[test]
+    fn forged_call_transmission_prepayments_are_rejected() {
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::removed(Cycles::new(10)),
+            requests: vec![
+                output_request()
+                    .prepayment_for_call_transmission(prepayment(100))
+                    .build(),
+            ],
+            consumed_cycles_by_use_case: ConsumedCyclesDuringExecution {
+                request_and_response_transmission: Some(prepayment(10)),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(1_000)), modifications, false);
+    }
+
+    #[test]
+    fn request_prepayments_below_consumed_cycles_are_rejected() {
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::removed(Cycles::new(100)),
+            requests: vec![
+                output_request()
+                    .prepayment_for_response_execution(prepayment(10))
+                    .build(),
+            ],
+            consumed_cycles_by_use_case: ConsumedCyclesDuringExecution {
+                instructions: Some(prepayment(100)),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(1_000)), modifications, false);
+    }
+
+    #[test]
+    fn forged_nominal_request_prepayments_are_rejected() {
+        // The real parts match (zero), but the nominal parts do not.
+        let modifications = SystemStateModifications {
+            requests: vec![
+                output_request()
+                    .prepayment_for_response_execution(free_prepayment(100))
+                    .build(),
+            ],
+            consumed_cycles_by_use_case: ConsumedCyclesDuringExecution {
+                instructions: Some(free_prepayment(10)),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(1_000)), modifications, false);
+    }
+
+    #[test]
+    fn response_transmission_prepayment_must_not_exceed_call_prepayment() {
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::removed(Cycles::new(30)),
+            requests: vec![
+                output_request()
+                    .prepayment_for_response_transmission(prepayment(31))
+                    .prepayment_for_call_transmission(prepayment(30))
+                    .build(),
+            ],
+            consumed_cycles_by_use_case: ConsumedCyclesDuringExecution {
+                request_and_response_transmission: Some(prepayment(30)),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(1_000)), modifications, false);
+    }
+
+    #[test]
+    fn nominal_response_transmission_prepayment_must_not_exceed_call_prepayment() {
+        let modifications = SystemStateModifications {
+            requests: vec![
+                output_request()
+                    .prepayment_for_response_transmission(free_prepayment(31))
+                    .prepayment_for_call_transmission(free_prepayment(30))
+                    .build(),
+            ],
+            consumed_cycles_by_use_case: ConsumedCyclesDuringExecution {
+                request_and_response_transmission: Some(free_prepayment(30)),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(1_000)), modifications, false);
+    }
+
+    #[test]
+    fn overflowing_request_prepayment_totals_are_rejected() {
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::removed(Cycles::new(u128::MAX)),
+            requests: vec![
+                output_request()
+                    .prepayment_for_response_execution(prepayment(u128::MAX))
+                    .build(),
+                output_request()
+                    .prepayment_for_response_execution(prepayment(1))
+                    .build(),
+            ],
+            consumed_cycles_by_use_case: ConsumedCyclesDuringExecution {
+                instructions: Some(prepayment(u128::MAX)),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(u128::MAX)), modifications, false);
+    }
+
+    #[test]
+    fn overflowing_nominal_request_prepayment_totals_are_rejected() {
+        let modifications = SystemStateModifications {
+            requests: vec![
+                output_request()
+                    .prepayment_for_response_execution(free_prepayment(u128::MAX))
+                    .build(),
+                output_request()
+                    .prepayment_for_response_execution(free_prepayment(1))
+                    .build(),
+            ],
+            consumed_cycles_by_use_case: ConsumedCyclesDuringExecution {
+                instructions: Some(free_prepayment(u128::MAX)),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(1_000)), modifications, false);
+    }
+
+    #[test]
+    fn composite_query_request_prepayments_are_not_validated() {
+        // Composite queries discard the cycle charges of their outgoing
+        // requests.
+        let modifications = SystemStateModifications {
+            requests: vec![
+                output_request()
+                    .prepayment_for_response_execution(prepayment(100))
+                    .build(),
+            ],
+            ..Default::default()
+        };
+
+        assert_apply_changes_impl(system_state(Cycles::new(1_000)), modifications, true, true);
+    }
+
+    #[test]
+    fn request_payment_above_replica_balance_is_rejected() {
+        let payment = Cycles::new(1_000);
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::removed(payment),
+            requests: vec![output_request().payment(payment).build()],
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(10)), modifications, false);
+    }
+
+    #[test]
+    fn request_payment_backed_by_accepted_cycles_is_accepted() {
+        let payment = Cycles::new(1_000);
+        let mut system_state = system_state(Cycles::new(10));
+        let call_context_id = new_call_context(&mut system_state, payment);
+        let modifications = SystemStateModifications {
+            call_context_balance_taken: Some((call_context_id, payment)),
+            requests: vec![output_request().payment(payment).build()],
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state, modifications, true);
+    }
+
+    #[test]
+    fn accepting_more_than_available_call_context_cycles_is_rejected() {
+        let mut system_state = system_state(Cycles::new(10));
+        let call_context_id = new_call_context(&mut system_state, Cycles::new(100));
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::added(Cycles::new(101)),
+            call_context_balance_taken: Some((call_context_id, Cycles::new(101))),
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state, modifications, false);
+    }
+
+    #[test]
+    fn accepting_cycles_from_unknown_call_context_is_rejected() {
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::added(Cycles::new(100)),
+            call_context_balance_taken: Some((CallContextId::from(42), Cycles::new(100))),
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(10)), modifications, false);
+    }
+
+    #[test]
+    fn balance_overflow_is_rejected() {
+        // The balance would temporarily overflow when the accepted cycles are
+        // added before the burned cycles are consumed.
+        let mut system_state = system_state(Cycles::new(u128::MAX));
+        let call_context_id = new_call_context(&mut system_state, Cycles::new(1));
+        let modifications = SystemStateModifications {
+            call_context_balance_taken: Some((call_context_id, Cycles::new(1))),
+            consumed_cycles_by_use_case: ConsumedCyclesDuringExecution {
+                burned: Some(prepayment(1)),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state, modifications, false);
+    }
+
+    #[test]
+    fn reservation_within_limit_is_accepted() {
+        let mut system_state = system_state(Cycles::new(1_000));
+        system_state.set_reserved_balance_limit(Cycles::new(10));
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::removed(Cycles::new(10)),
+            reserved_cycles: Cycles::new(10),
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state, modifications, true);
+    }
+
+    #[test]
+    fn reservation_above_limit_is_rejected() {
+        let mut system_state = system_state(Cycles::new(1_000));
+        system_state.set_reserved_balance_limit(Cycles::new(10));
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::removed(Cycles::new(11)),
+            reserved_cycles: Cycles::new(11),
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state, modifications, false);
+    }
+
+    #[test]
+    fn unbacked_balance_increase_is_rejected() {
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::added(Cycles::new(100)),
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(10)), modifications, false);
+    }
+
+    #[test]
+    fn overflowing_removed_cycles_are_rejected() {
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::removed(Cycles::new(u128::MAX)),
+            requests: vec![
+                output_request().payment(Cycles::new(u128::MAX)).build(),
+                output_request().payment(Cycles::new(1)).build(),
+            ],
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(u128::MAX)), modifications, false);
+    }
+
+    #[test]
+    fn consumed_cycles_above_balance_are_rejected() {
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::removed(Cycles::new(100)),
+            consumed_cycles_by_use_case: ConsumedCyclesDuringExecution {
+                burned: Some(prepayment(100)),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(10)), modifications, false);
+    }
+
+    #[test]
+    fn reserved_balance_overflow_is_rejected() {
+        let mut system_state = system_state(Cycles::new(u128::MAX));
+        system_state.set_reserved_balance_limit(Cycles::new(u128::MAX));
+        system_state.reserve_cycles(Cycles::new(u128::MAX)).unwrap();
+        system_state.add_cycles(Cycles::new(1));
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::removed(Cycles::new(1)),
+            reserved_cycles: Cycles::new(1),
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state, modifications, false);
+    }
+
+    #[test]
+    fn reservation_above_balance_is_rejected() {
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::removed(Cycles::new(100)),
+            reserved_cycles: Cycles::new(100),
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state(Cycles::new(10)), modifications, false);
+    }
+
+    #[test]
+    fn cycles_minting_canister_can_mint_cycles() {
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::added(Cycles::new(100)),
+            ..Default::default()
+        };
+
+        assert_apply_changes(
+            system_state_with_id(CYCLES_MINTING_CANISTER_ID, Cycles::new(10)),
+            modifications,
+            true,
+        );
+    }
+
+    #[test]
+    fn cycles_minting_canister_balance_overflow_is_rejected() {
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::added(Cycles::new(1)),
+            ..Default::default()
+        };
+
+        assert_apply_changes(
+            system_state_with_id(CYCLES_MINTING_CANISTER_ID, Cycles::new(u128::MAX)),
+            modifications,
+            false,
+        );
+    }
+
+    #[test]
+    fn cycles_minting_canister_reservation_above_limit_is_rejected() {
+        let mut system_state = system_state_with_id(CYCLES_MINTING_CANISTER_ID, Cycles::new(1_000));
+        system_state.set_reserved_balance_limit(Cycles::new(10));
+        let modifications = SystemStateModifications {
+            cycles_balance_change: CyclesBalanceChange::removed(Cycles::new(11)),
+            reserved_cycles: Cycles::new(11),
+            ..Default::default()
+        };
+
+        assert_apply_changes(system_state, modifications, false);
+    }
 
     #[test]
     fn test_apply_balance_changes() {

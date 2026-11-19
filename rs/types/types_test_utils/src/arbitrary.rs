@@ -144,6 +144,7 @@ prop_compose! {
             method_payload,
             metadata,
             deadline: if populate_deadline { deadline } else { NO_DEADLINE },
+            effective_canister_id: None,
         }
     }
 }

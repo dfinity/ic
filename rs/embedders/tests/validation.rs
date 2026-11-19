@@ -593,6 +593,34 @@ fn can_validate_too_many_exported_functions() {
 }
 
 #[test]
+fn can_validate_too_many_total_exports() {
+    // One global exported three times: a single global, but three exports. This
+    // is the shape that evades the function-export limit, so the total number of
+    // exports is bounded on its own.
+    let wasm = wat2wasm(
+        r#"(module
+                (global i32 (i32.const 0))
+                (export "a" (global 0))
+                (export "b" (global 0))
+                (export "c" (global 0)))"#,
+    )
+    .unwrap();
+    assert_eq!(
+        validate_wasm_binary(
+            &wasm,
+            &EmbeddersConfig {
+                max_number_exports: 2,
+                ..Default::default()
+            }
+        ),
+        Err(WasmValidationError::TooManyTotalExports {
+            defined: 3,
+            allowed: 2
+        })
+    );
+}
+
+#[test]
 fn validating_many_exports_is_fast() {
     const NUM_EXPORTS: usize = 499_999;
     const BUDGET: Duration = Duration::from_secs(10);

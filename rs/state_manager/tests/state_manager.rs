@@ -1509,6 +1509,33 @@ fn missing_manifest_is_computed_incrementally() {
 }
 
 #[test]
+fn wait_for_latest_checkpoint_waits_for_verification_and_manifest() {
+    state_manager_test(|_metrics, state_manager| {
+        // No checkpoint: returns right away.
+        state_manager.wait_for_latest_checkpoint();
+
+        let (_, tip) = state_manager.take_tip();
+        state_manager.commit_and_certify(tip, CertificationScope::Full, None);
+        state_manager.wait_for_latest_checkpoint();
+
+        let height = state_manager.latest_state_height();
+        assert!(
+            state_manager
+                .state_layout()
+                .checkpoint_verified(height)
+                .is_ok()
+        );
+        // Persisted, not just published.
+        let persisted = std::fs::read(state_manager.state_layout().states_metadata()).unwrap();
+        let persisted = <ic_protobuf::state::v1::StatesMetadata as prost::Message>::decode(
+            persisted.as_slice(),
+        )
+        .unwrap();
+        assert!(persisted.by_height[&height.get()].manifest.is_some());
+    });
+}
+
+#[test]
 fn validate_replicated_state_is_called() {
     fn validate_was_called(metrics: &MetricsRegistry) -> bool {
         let request_duration = fetch_histogram_vec_stats(

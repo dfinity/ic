@@ -75,6 +75,11 @@ jobs:
           sudo cp ./gh_cli/bin/gh /usr/local/bin/
           rm -rf gh_cli*
 
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.15"
+
       - name: Update mainnet canister versions file
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}

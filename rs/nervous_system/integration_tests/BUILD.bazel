@@ -23,13 +23,11 @@ BASE_DEPENDENCIES = [
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
     "//rs/registry/proto_data_provider",
-    "//rs/sns/cli",
     "//rs/sns/governance",
     "//rs/sns/governance/api",
     "//rs/sns/init",
     "//rs/sns/root",
     "//rs/sns/swap",
-    "//rs/test_utilities/load_wasm",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "@crate_index//:assert_matches",
@@ -64,7 +62,6 @@ BASE_DEPENDENCIES = [
         "//rs/test_utilities",
         "@crate_index//:maplit",
         "@crate_index//:num-traits",
-        "@crate_index//:rustc-hash",
         "@crate_index//:serde",
         "@crate_index//:wat",
     ],
@@ -343,7 +340,9 @@ rust_test(
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
     ],
-    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + [
+        "//rs/sns/cli",
+    ],
 )
 
 rust_test(
@@ -359,7 +358,9 @@ rust_test(
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
     ],
-    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + [
+        "//rs/sns/cli",
+    ],
 )
 
 rust_test(
@@ -447,6 +448,7 @@ rust_test(
         "@crate_index//:rust_decimal_macros",
     ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + [
+        "//rs/sns/cli",
         "//rs/sns/treasury_manager",
     ],
 )
