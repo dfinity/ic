@@ -342,8 +342,9 @@ mod tests {
             ((canister(2), canister(1)), 10),
             // Not broken: no requests sent since the baseline.
             ((canister(3), canister(12)), 7),
-            // Not broken: the receiver is not hosted on the subnet.
-            ((canister(2), canister(13)), 3),
+            // Not broken: the sender is not hosted on the subnet anymore, but the receiver's
+            // connection metrics still record it.
+            ((canister(13), canister(2)), 3),
             // Not broken: both canisters move to the destination subnet.
             ((canister(11), canister(12)), 1),
             // Broken: the counter is lower than the baseline, i.e. the entry was evicted and
