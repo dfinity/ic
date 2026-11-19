@@ -555,7 +555,7 @@ fn test_validate_self_describing_value_size() {
 }
 
 #[tokio::test]
-async fn test_to_self_describing_keeps_type_name_and_description_when_payload_is_large() {
+async fn test_to_self_describing_limits_value_but_keeps_type_name_and_description() {
     // Step 1: Prepare the world.
 
     // Registry interface (partial).
@@ -564,8 +564,17 @@ async fn test_to_self_describing_keeps_type_name_and_description_when_payload_is
             key_id : opt nat32;
         };
 
+        type Letter = variant {
+            A;
+        };
+
         type UpdateSubnetRequest = record {
+            // Cheap to decode, but results in large SelfDescribingValue.
             key_configs : vec KeyConfig;
+
+            // Expensive to decode, relative to size of resulting
+            // SelfDescribingValue.
+            letters : vec Letter;
         };
 
         service : {
@@ -580,10 +589,52 @@ async fn test_to_self_describing_keeps_type_name_and_description_when_payload_is
         key_id: Option<u32>,
     }
 
+    #[derive(candid::CandidType, Clone)]
+    enum Letter {
+        A,
+    }
+
     #[derive(candid::CandidType)]
     struct UpdateSubnetRequest {
         key_configs: Vec<KeyConfig>,
+        letters: Vec<Letter>,
     }
+
+    let cases = vec![
+        // Happy case: converting to SelfDescribingValue succeeds.
+        (
+            "No issues with converting `payload` to SelfDescribingValue",
+            UpdateSubnetRequest {
+                key_configs: vec![KeyConfig { key_id: Some(42) }; 2_000],
+                letters: vec![],
+            },
+            5_000..15_000, // expected payload len
+            Ok(()),        // expected SelfDescribingValue conversion result
+        ),
+        // Sad cases.
+        (
+            // Decoding is within budget, but the result is about 230 KB.
+            "Result of converting `payload` to SelfDescribingValue is too large",
+            UpdateSubnetRequest {
+                key_configs: vec![KeyConfig { key_id: Some(42) }; 12_000],
+                letters: vec![],
+            },
+            55_000..65_000,         // expected payload len
+            Err(vec!["too large"]), // expected SelfDescribingValue conversion result
+        ),
+        (
+            // Costs about 840_000 to decode, vs. a budget of about 600_000.
+            // Candid stops decoding before the size of the result can even be
+            // checked.
+            "Candid decoding `payload` exceeds budget",
+            UpdateSubnetRequest {
+                key_configs: vec![],
+                letters: vec![Letter::A; 40_000],
+            },
+            35_000..45_000,                       // expected payload len
+            Err(vec!["cost", "exceed", "limit"]), // expected SelfDescribingValue conversion result
+        ),
+    ];
 
     // Prepare `canister_metadata` response from the Management canister for
     // when Governance requests Registry's interface.
@@ -596,43 +647,76 @@ async fn test_to_self_describing_keeps_type_name_and_description_when_payload_is
         Encode!(&metadata_request).unwrap(),
     );
     let env = Arc::new(MockEnvironment::new(
-        vec![(
-            expected_metadata_call,
-            Ok(Encode!(&metadata_response).unwrap()),
-        )],
+        vec![
+            (
+                expected_metadata_call,
+                Ok(Encode!(&metadata_response).unwrap()),
+            );
+            // Each case requests it twice: once via
+            // convert_payload_to_self_describing_value, and once via
+            // to_self_describing.
+            2 * cases.len()
+        ],
         0,
     ));
 
-    // Step 2: Run the code under test.
+    for (label, request, expected_payload_len_range, expected_result) in cases {
+        // Step 2: Run the code under test.
 
-    // Step 2.1: Prepare argument.
-    let payload = Encode!(&UpdateSubnetRequest {
-        key_configs: vec![KeyConfig { key_id: Some(42) }; 12_000],
-    })
-    .unwrap();
-    assert!(
-        payload.len() > 55_000 && payload.len() < 65_000,
-        "{}",
-        payload.len()
-    );
-    let execute_nns_function = ValidExecuteNnsFunction {
-        nns_function: ValidNnsFunction::UpdateConfigOfSubnet,
-        payload,
-    };
-    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+        // Step 2.1: Prepare argument.
+        let payload = Encode!(&request).unwrap();
+        assert!(
+            expected_payload_len_range.contains(&payload.len()),
+            "{}: {}",
+            label,
+            payload.len()
+        );
+        let execute_nns_function = ValidExecuteNnsFunction {
+            nns_function: ValidNnsFunction::UpdateConfigOfSubnet,
+            payload,
+        };
+        let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function.clone());
 
-    // Step 2.2: Call `to_self_describing`.
-    let result = proposal_action.to_self_describing(env).await;
+        // Step 2.2: Convert the whole action to be self-describing.
+        let outer_result = proposal_action.to_self_describing(env.clone()).await;
 
-    // Step 3: Verify result(s).
+        // Step 2.3: Convert just payload to SelfDescribingValue. This is so we
+        // can see WHY things fail.
+        let inner_result = execute_nns_function
+            .convert_payload_to_self_describing_value(env.clone())
+            .await;
 
-    // Step 3.1: The fields that are supposed to be populated.
-    assert_eq!(result.type_name, "Update Subnet Config");
-    assert_eq!(
-        result.type_description,
-        ValidNnsFunction::UpdateConfigOfSubnet.type_description(),
-    );
+        // Step 3: Verify result(s).
 
-    // Step 3.2: The field that's supposed to be NOT populated.
-    assert_eq!(result.value, None);
+        // Step 3.1: The fields that are supposed to be populated in all cases.
+        assert_eq!(outer_result.type_name, "Update Subnet Config", "{}", label);
+        assert_eq!(
+            outer_result.type_description,
+            ValidNnsFunction::UpdateConfigOfSubnet.type_description(),
+            "{}",
+            label,
+        );
+
+        // Step 3.2: Whether value is populated, and if not, why.
+        match expected_result {
+            Ok(()) => {
+                // Assert both results are success.
+                let value = inner_result.unwrap();
+                assert_eq!(outer_result.value, Some(value), "{}", label);
+            }
+            Err(key_words) => {
+                let err = inner_result.unwrap_err();
+                for key_word in key_words {
+                    assert!(
+                        err.to_lowercase().contains(key_word),
+                        "{}: {} not in {}",
+                        label,
+                        key_word,
+                        err
+                    );
+                }
+                assert_eq!(outer_result.value, None, "{}", label);
+            }
+        }
+    }
 }

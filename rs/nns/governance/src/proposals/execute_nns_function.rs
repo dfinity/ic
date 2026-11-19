@@ -61,44 +61,53 @@ impl ValidExecuteNnsFunction {
         self.nns_function.topic()
     }
 
-    /// Converts the ExecuteNnsFunction to a self-describing value using the candid file fetched
-    /// from the management canister (as canister metadata).
+    /// Converts our payload to a SelfDescribingValue.
+    ///
+    /// Uses the Candid interface, which is fetched from the management canister
+    /// (assuming that the canister provides its Candid interface via the
+    /// standard `candid:service` canister metadata).
+    ///
+    /// Possible reason(s) for returning Err include:
+    /// - Unable to fetch the Candid interface.
+    /// - The result would be larger than MAX_SELF_DESCRIBING_VALUE_ENCODED_LEN_BYTES.
     async fn convert_payload_to_self_describing_value(
         &self,
         env: Arc<dyn Environment>,
     ) -> Result<SelfDescribingValue, String> {
-        #[allow(clippy::single_match)]
-        match &self.nns_function {
+        let self_describing_value = match &self.nns_function {
             ValidNnsFunction::BitcoinSetConfig => {
                 let request = get_request_for_bitcoin_set_config(&self.payload)?;
-                return Ok(SelfDescribingValue::from(request));
+                SelfDescribingValue::from(request)
             }
             ValidNnsFunction::SubnetRentalRequest => {
                 let subnet_rental_request =
                     decode_subnet_rental_request(&self.payload).map_err(|e| e.error_message)?;
-                return Ok(SelfDescribingValue::from(subnet_rental_request));
+                SelfDescribingValue::from(subnet_rental_request)
             }
             ValidNnsFunction::AddSnsWasm => {
                 let add_wasm_request =
                     decode_add_wasm_request(&self.payload).map_err(|e| e.error_message)?;
-                return Ok(SelfDescribingValue::from(add_wasm_request));
+                SelfDescribingValue::from(add_wasm_request)
             }
-            _ => {}
+            _ => {
+                // For most of the NNS functions, we don't need to know its
+                // schema statically, but we fetch it from the management
+                // canister and decode the payload in runtime.
+                let candid_source = self.get_candid_source(env).await?;
+                let (_, method_name) = self.nns_function.canister_and_function();
+                let self_describing_value = decode_candid_args_to_self_describing_value(
+                    &candid_source,
+                    method_name,
+                    &self.payload,
+                )?;
+
+                // Certain blobs (e.g. WASM and sometimes args) are hashed to
+                // avoid them being too large.
+                maybe_hash_large_blobs(self_describing_value, self.nns_function)
+            }
         };
 
-        // For most of the NNS functions, we don't need to know its schema statically, but we fetch
-        // it from the management canister and decode the payload in runtime.
-        let candid_source = self.get_candid_source(env).await?;
-        let (_, method_name) = self.nns_function.canister_and_function();
-        let self_describing_value = decode_candid_args_to_self_describing_value(
-            &candid_source,
-            method_name,
-            &self.payload,
-        )?;
-
-        // Certain blobs (e.g. WASM and sometimes args) are hashed to avoid them being too large.
-        let self_describing_value =
-            maybe_hash_large_blobs(self_describing_value, self.nns_function);
+        validate_self_describing_value_size(&self_describing_value)?;
 
         Ok(self_describing_value)
     }
@@ -123,14 +132,7 @@ impl ValidExecuteNnsFunction {
         &self,
         env: Arc<dyn Environment>,
     ) -> SelfDescribingProposalAction {
-        let value = self
-            .convert_payload_to_self_describing_value(env)
-            .await
-            // Enforce that value be not too large.
-            .and_then(|value| {
-                validate_self_describing_value_size(&value)?;
-                Ok(value)
-            });
+        let value = self.convert_payload_to_self_describing_value(env).await;
 
         // Convert value from Result to Option, and log if Err.
         let value = match value {
