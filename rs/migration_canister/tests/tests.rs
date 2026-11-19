@@ -2010,11 +2010,30 @@ async fn fill_subnet_memory(pic: &PocketIc, subnet_id: Principal, sender: Princi
 /// when it restores the original controllers.
 #[tokio::test]
 async fn memory_allocation_bumped_and_restored() {
+    /// The memory allocation of a canister before the migration.
+    #[derive(Clone, Copy)]
+    enum InitialMemoryAllocation {
+        /// No memory allocation, i.e., the memory allocation is bumped
+        /// from and restored to zero.
+        Unset,
+        /// A memory allocation way above the memory usage of the canister plus
+        /// the memory reserved for its canister history, i.e., the memory allocation
+        /// is not bumped at all.
+        Absolute(u64),
+        /// A memory allocation exceeding the memory usage of the canister by the given
+        /// amount, which is less than the memory reserved for its canister history, i.e.,
+        /// the memory allocation is bumped from and restored to a non-zero value.
+        AboveMemoryUsage(u64),
+    }
+    use InitialMemoryAllocation::*;
+
     // The migrated and replaced canister use distinct initial memory allocations so that
     // restoring the memory allocation of the wrong canister would be caught.
-    for (migrated_memory_allocation, replaced_memory_allocation) in
-        [(None, None), (Some(1 << 30), Some(2 << 30))]
-    {
+    for (migrated_memory_allocation, replaced_memory_allocation) in [
+        (Unset, Unset),
+        (Absolute(1 << 30), Absolute(2 << 30)),
+        (AboveMemoryUsage(1024), AboveMemoryUsage(2048)),
+    ] {
         let Setup {
             pic,
             migrated_canisters,
@@ -2031,15 +2050,25 @@ async fn memory_allocation_bumped_and_restored() {
             (migrated_canister, migrated_memory_allocation),
             (replaced_canister, replaced_memory_allocation),
         ] {
-            if let Some(initial_memory_allocation) = initial_memory_allocation {
-                set_memory_allocation(&pic, canister, sender, initial_memory_allocation)
+            let (memory_usage, _) = memory_usage_and_allocation(&pic, canister, mc).await;
+            let memory_allocation_before = match initial_memory_allocation {
+                Unset => 0,
+                Absolute(memory_allocation) => memory_allocation,
+                AboveMemoryUsage(excess) => {
+                    assert!(0 < excess && excess < MEMORY_RESERVED_FOR_CANISTER_HISTORY);
+                    memory_usage + excess
+                }
+            };
+            if memory_allocation_before != 0 {
+                set_memory_allocation(&pic, canister, sender, memory_allocation_before)
                     .await
                     .unwrap();
             }
-            let memory_allocation_before = initial_memory_allocation.unwrap_or(0);
-            let (memory_usage, memory_allocation) =
-                memory_usage_and_allocation(&pic, canister, mc).await;
-            assert_eq!(memory_allocation, memory_allocation_before);
+            // Setting the memory allocation does not change the memory usage.
+            assert_eq!(
+                memory_usage_and_allocation(&pic, canister, mc).await,
+                (memory_usage, memory_allocation_before)
+            );
             memory_before.push((canister, memory_usage, memory_allocation_before));
         }
 
@@ -2051,7 +2080,7 @@ async fn memory_allocation_bumped_and_restored() {
 
         // The memory allocation of both canisters is bumped to cover the canister history entries
         // recorded by the migration canister unless it is already high enough.
-        for (canister, memory_usage_before, memory_allocation_before) in memory_before {
+        for (canister, memory_usage_before, memory_allocation_before) in memory_before.clone() {
             let (_, memory_allocation) = memory_usage_and_allocation(&pic, canister, mc).await;
             let expected_memory_allocation = std::cmp::max(
                 memory_allocation_before,
@@ -2076,7 +2105,8 @@ async fn memory_allocation_bumped_and_restored() {
         // and thus its original memory allocation must be restored.
         let (_, memory_allocation) =
             memory_usage_and_allocation(&pic, migrated_canister, sender).await;
-        assert_eq!(memory_allocation, replaced_memory_allocation.unwrap_or(0));
+        let (_, _, replaced_memory_allocation_before) = memory_before[1];
+        assert_eq!(memory_allocation, replaced_memory_allocation_before);
 
         pic.drop().await;
     }
