@@ -1646,6 +1646,11 @@ async fn set_freezing_threshold_to_freeze_after(
 /// (and a freezing threshold such that they do not become frozen soon)
 /// and a memory allocation of 1 GiB.
 async fn setup_with_100t_cycles() -> (Setup, MigrateCanisterArgs) {
+    // `enough_cycles: false` creates the canisters with a small balance so that
+    // they can be topped up to exactly 100T cycles below. The `u128::MAX / 2` cycles
+    // that `enough_cycles: true` adds are too many for a canister to be close to
+    // freezing: the freezing threshold this would take does not fit into
+    // the `u64` number of seconds that a freezing threshold is limited to.
     let setup = setup(Settings {
         enough_cycles: false,
         ..Default::default()
@@ -1654,12 +1659,11 @@ async fn setup_with_100t_cycles() -> (Setup, MigrateCanisterArgs) {
     let sender = setup.migrated_canister_controllers[0];
     let migrated_canister = setup.migrated_canisters[0];
     let replaced_canister = setup.replaced_canisters[0];
+    const CYCLES: u128 = 100_000_000_000_000;
     for canister in [migrated_canister, replaced_canister] {
         let balance = setup.pic.cycle_balance(canister).await;
-        setup
-            .pic
-            .add_cycles(canister, 100_000_000_000_000 - balance)
-            .await;
+        setup.pic.add_cycles(canister, CYCLES - balance).await;
+        assert_eq!(setup.pic.cycle_balance(canister).await, CYCLES);
         // A memory allocation makes the idle burn rate substantial (so that a
         // freezing threshold derived from it is not absurdly high) and independent
         // of small changes in the canister's memory usage (e.g., due to canister history).
