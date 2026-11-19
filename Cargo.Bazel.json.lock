@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "e20796e66cc8c55a5ec6e907d30afe590a1d80731415b529b84d4f6b79d25f20",
+  "checksum": "152cb2248f672a4d882d0d948f309011775124f788d2098a8e65be88a8688b8e",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -435,7 +435,7 @@
             "target": "encoding_rs"
           },
           {
-            "id": "flate2 1.1.11",
+            "id": "flate2 1.1.5",
             "target": "flate2"
           },
           {
@@ -2640,7 +2640,7 @@
             "target": "alloy_sol_types"
           },
           {
-            "id": "itertools 0.13.0",
+            "id": "itertools 0.14.0",
             "target": "itertools"
           },
           {
@@ -7592,7 +7592,7 @@
             "target": "clang_sys"
           },
           {
-            "id": "itertools 0.13.0",
+            "id": "itertools 0.11.0",
             "target": "itertools"
           },
           {
@@ -12466,7 +12466,7 @@
             "target": "compression_core"
           },
           {
-            "id": "flate2 1.1.11",
+            "id": "flate2 1.1.5",
             "target": "flate2"
           },
           {
@@ -17501,7 +17501,7 @@
             "target": "evm_rpc_types"
           },
           {
-            "id": "flate2 1.1.11",
+            "id": "flate2 1.1.5",
             "target": "flate2"
           },
           {
@@ -21390,13 +21390,12 @@
       ],
       "version": "0.4.7"
     },
-    "flate2 1.1.11": {
+    "flate2 1.1.5": {
       "common_attrs": {
         "crate_features": [
           "any_impl",
           "default",
           "miniz_oxide",
-          "runtime_detection",
           "rust_backend"
         ],
         "deps": [
@@ -21405,7 +21404,7 @@
             "target": "crc32fast"
           },
           {
-            "id": "miniz_oxide 0.9.1",
+            "id": "miniz_oxide 0.8.9",
             "target": "miniz_oxide"
           }
         ],
@@ -21422,8 +21421,8 @@
       "package_url": "https://github.com/rust-lang/flate2-rs",
       "repository": {
         "Http": {
-          "sha256": "626d4928326b646e70f65ed36fc7cf9f206bdb68a0019ee7c6b4709da4e084c4",
-          "url": "https://static.crates.io/crates/flate2/1.1.11/download"
+          "sha256": "bfe33edd8e85a12a67454e37f8c75e730830d83e313556ab9ebf9ee7fbeb3bfb",
+          "url": "https://static.crates.io/crates/flate2/1.1.5/download"
         }
       },
       "targets": [
@@ -21434,7 +21433,7 @@
           }
         }
       ],
-      "version": "1.1.11"
+      "version": "1.1.5"
     },
     "fluent-uri 0.4.1": {
       "common_attrs": {
@@ -26095,7 +26094,7 @@
             "target": "clap"
           },
           {
-            "id": "flate2 1.1.11",
+            "id": "flate2 1.1.5",
             "target": "flate2"
           },
           {
@@ -28051,7 +28050,7 @@
             "target": "candid"
           },
           {
-            "id": "flate2 1.1.11",
+            "id": "flate2 1.1.5",
             "target": "flate2"
           },
           {
@@ -35609,10 +35608,9 @@
       ],
       "version": "0.2.1"
     },
-    "miniz_oxide 0.9.1": {
+    "miniz_oxide 0.8.9": {
       "common_attrs": {
         "crate_features": [
-          "default",
           "simd",
           "simd-adler32",
           "with-alloc"
@@ -35625,6 +35623,42 @@
           {
             "id": "simd-adler32 0.3.10",
             "target": "simd_adler32"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "miniz_oxide",
+      "license": "MIT OR Zlib OR Apache-2.0",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT",
+        "Zlib"
+      ],
+      "name": "miniz_oxide",
+      "package_url": "https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide",
+      "repository": {
+        "Http": {
+          "sha256": "1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316",
+          "url": "https://static.crates.io/crates/miniz_oxide/0.8.9/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "miniz_oxide",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.8.9"
+    },
+    "miniz_oxide 0.9.1": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "adler2 2.0.1",
+            "target": "adler2"
           }
         ],
         "edition": "2021"
@@ -38153,7 +38187,7 @@
         ],
         "deps": [
           {
-            "id": "flate2 1.1.11",
+            "id": "flate2 1.1.5",
             "target": "flate2"
           },
           {
@@ -65729,34 +65763,6 @@
       ],
       "version": "0.11.7"
     },
-    "zlib-rs 0.6.8": {
-      "common_attrs": {
-        "edition": "2021"
-      },
-      "library_target_name": "zlib_rs",
-      "license": "Zlib",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "Zlib"
-      ],
-      "name": "zlib-rs",
-      "package_url": "https://github.com/trifectatechfoundation/zlib-rs",
-      "repository": {
-        "Http": {
-          "sha256": "b268e58e7c693d7c271f93ffc4ba3b380412554231c85bf61ca7af91042a4112",
-          "url": "https://static.crates.io/crates/zlib-rs/0.6.8/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "zlib_rs",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.6.8"
-    },
     "zmij 1.0.23": {
       "build_script_attrs": {},
       "common_attrs": {
@@ -66119,7 +66125,7 @@
     "ethnum 1.5.3",
     "evm_rpc_client 0.4.0",
     "evm_rpc_types 3.1.1",
-    "flate2 1.1.11",
+    "flate2 1.1.5",
     "fqdn 0.5.2",
     "fs_extra 1.3.0",
     "futures 0.3.34",
