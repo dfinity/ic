@@ -17,6 +17,7 @@ use crate::{
 
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
+use ic_cdk::println;
 use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
 use ic_nns_common::types::CallCanisterRequest;
