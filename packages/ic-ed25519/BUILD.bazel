@@ -74,6 +74,7 @@ rust_test_suite(
     name = "integration_tests",
     srcs = glob(["tests/**/*.rs"]),
     compile_data = glob(["tests/data/*"]),
+    crate_features = ["rand"],
     deps = [
         # Keep sorted.
         ":ic-ed25519",
