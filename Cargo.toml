@@ -614,10 +614,10 @@ actix-web = { version = "4.9.0", default-features = false, features = [
 ] }
 actix-web-prom = "0.10.0"
 aide = { version = "^0.14.2", features = ["axum", "axum-json"] }
-alloy-consensus = { version = "1.8.3", features = ["k256", "serde"] }
-alloy-eips = { version = "1.8.3", features = ["k256", "serde"] }
+alloy-consensus = { version = "2.6.1", features = ["k256", "serde"] }
+alloy-eips = { version = "2.6.1", features = ["k256", "serde"] }
 alloy-primitives = { version = "1.6.0", features = ["k256", "serde"] }
-alloy-rpc-types-eth = "1.8.3"
+alloy-rpc-types-eth = "2.6.1"
 alloy-sol-types = "1.6.0"
 anyhow = "1.0.93"
 arbitrary = { version = "1.3.2", features = ["derive"] }
@@ -658,7 +658,7 @@ chrono = { version = "0.4.42", default-features = false, features = [
 ] }
 ciborium = "0.2.2"
 clap = { version = "4.5.20", features = ["derive", "string"] }
-colored = "^2.0.0"
+colored = "3.1.1"
 # Fork of `comparable` migrated to syn 2 (upstream still uses syn 1), so it no
 # longer forces a duplicate syn 1.0 into the dependency graph.
 comparable = { git = "https://github.com/dfinity/comparable", rev = "8338f595496454f9e770389e2edc0d96e137a4e9", features = [
@@ -689,7 +689,7 @@ ed25519-dalek = { version = "2.2.0", features = [
     "pem",
     "hazmat",
 ] }
-escargot = "0.5.7"
+escargot = "1.0.1"
 ethnum = { version = "1.5.3", features = ["serde"] }
 evm_rpc_client = "0.4.0"
 evm_rpc_types = "3.1.0"
@@ -761,7 +761,7 @@ ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
 ic_principal = { version = "0.1.5", default-features = false }
 idna = "1.0.2"
 indexmap = "2.10.0"
-indicatif = "^0.17.3"
+indicatif = "0.18.6"
 indoc = "2.0.7"
 inferno = "0.12.0"
 inotify = { version = "0.11.2", default-features = false, features = [
@@ -771,7 +771,7 @@ insta = "1.49.0"
 ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
 json5 = "^0.4.1"
-jsonrpc = "0.20.1"
+jsonrpc = "0.21.1"
 k256 = { version = "0.13.4", default-features = false, features = [
     "arithmetic",
     "ecdsa",
@@ -816,7 +816,7 @@ nix = { version = "0.32.0", features = [
 ] }
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
-object = "0.37.3"
+object = "0.41.0"
 opentelemetry = { version = "0.32.0", features = ["metrics", "trace"] }
 opentelemetry-otlp = { version = "0.32.0", default-features = false, features = [
     "grpc-tonic",
@@ -851,7 +851,7 @@ procfs = { version = "0.18.0", default-features = false }
 prometheus = { version = "0.14.0", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
 proptest = "=1.6.0"
-proptest-derive = "0.5.0"
+proptest-derive = "0.9.0"
 prost = "0.14.4"
 prost-build = "0.14.4"
 protobuf = "3.7.2"
@@ -885,7 +885,7 @@ reqwest = { version = "0.13", default-features = false, features = [
 rgb = "^0.8.37"
 rolling-file = "0.2.0"
 rsa = { version = "0.9.10", features = ["sha2", "getrandom"] }
-rstest = "0.19.0"
+rstest = { version = "0.28.0", default-features = false }
 rusqlite = "0.37.0"
 rust_decimal = { version = "^1.42", default-features = false, features = [
     "serde",
@@ -910,7 +910,7 @@ rusty-fork = "^0.3.0"
 schemars = { version = "0.8.21", features = ["derive"] }
 scoped_threadpool = "^0.1.9"
 scopeguard = "1.2.0"
-scraper = { version = "^0.24.0", default-features = false }
+scraper = { version = "0.29.0", default-features = false }
 secp256k1 = { version = "0.29", features = ["global-context", "rand", "std"] }
 semver = { version = "1.0.9", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
@@ -1000,7 +1000,7 @@ url = { version = "2.5.3", features = ["serde"] }
 uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
-walrus = "0.26.4"
+walrus = "0.28.0"
 wasm-encoder = { version = "0.254.0", features = ["wasmparser"] }
 wasm-smith = { version = "0.254.0", default-features = false, features = [
     "wasmparser",

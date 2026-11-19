@@ -102,7 +102,7 @@ crate.spec(
         "serde",
     ],
     package = "alloy-consensus",
-    version = "^1.8.3",
+    version = "^2.6.1",
 )
 crate.spec(
     features = [
@@ -110,7 +110,7 @@ crate.spec(
         "serde",
     ],
     package = "alloy-eips",
-    version = "^1.8.3",
+    version = "^2.6.1",
 )
 crate.spec(
     features = [
@@ -122,7 +122,7 @@ crate.spec(
 )
 crate.spec(
     package = "alloy-rpc-types-eth",
-    version = "^1.8.3",
+    version = "^2.6.1",
 )
 crate.spec(
     package = "alloy-sol-types",
@@ -337,7 +337,7 @@ crate.spec(
 )
 crate.spec(
     package = "colored",
-    version = "^2.0.0",
+    version = "^3.1.1",
 )
 crate.spec(
     features = [
@@ -421,7 +421,7 @@ crate.spec(
 )
 crate.spec(
     package = "dialoguer",
-    version = "^0.11.0",
+    version = "^0.12.0",
 )
 crate.spec(
     package = "directories-next",
@@ -451,7 +451,7 @@ crate.spec(
 crate.spec(
     features = ["print"],
     package = "escargot",
-    version = "^0.5.7",
+    version = "^1.0.1",
 )
 crate.spec(
     features = ["serde"],
@@ -808,7 +808,7 @@ crate.spec(
 )
 crate.spec(
     package = "indicatif",
-    version = "^0.17.3",
+    version = "^0.18.6",
 )
 crate.spec(
     package = "indoc",
@@ -844,7 +844,7 @@ crate.spec(
 )
 crate.spec(
     package = "jsonrpc",
-    version = "^0.20.1",
+    version = "^0.21.1",
 )
 crate.spec(
     package = "json5",
@@ -1020,7 +1020,7 @@ crate.spec(
 )
 crate.spec(
     package = "object",
-    version = "^0.37.3",
+    version = "^0.41.0",
 )
 crate.spec(
     features = [
@@ -1152,7 +1152,7 @@ crate.spec(
 )
 crate.spec(
     package = "proptest-derive",
-    version = "^0.5.0",
+    version = "^0.9.0",
 )
 crate.spec(
     package = "prost",
@@ -1300,8 +1300,9 @@ crate.spec(
     version = "^0.9.10",
 )
 crate.spec(
+    default_features = False,
     package = "rstest",
-    version = "^0.19.0",
+    version = "^0.28.0",
 )
 crate.spec(
     # vendored: build the bundled libusb instead of linking the system one
@@ -1382,7 +1383,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "scraper",
-    version = "^0.24.0",
+    version = "^0.29.0",
 )
 crate.spec(
     default_features = False,
@@ -1673,7 +1674,7 @@ crate.spec(
 )
 crate.spec(
     package = "tokio-tungstenite",
-    version = "^0.29",
+    version = "^0.30",
 )
 crate.spec(
     features = [
@@ -1799,7 +1800,7 @@ crate.spec(
 )
 crate.spec(
     package = "walrus",
-    version = "^0.26.4",
+    version = "^0.28.0",
 )
 crate.spec(
     features = [
