@@ -1153,7 +1153,7 @@ impl TryFrom<pb::IDkgArtifactIdData> for IDkgArtifactIdData {
         Ok(Self {
             height: Height::from(value.height),
             subnet_id: subnet_id_try_from_option(value.subnet_id, "IDkgArtifactIdData::subnet_id")?,
-            hash: CryptoHash::from(value.hash),
+            hash: CryptoHash::try_from(value.hash)?,
         })
     }
 }
@@ -1182,7 +1182,7 @@ impl TryFrom<pb::SigShareIdData> for SigShareIdData {
     fn try_from(value: pb::SigShareIdData) -> Result<Self, Self::Error> {
         Ok(Self {
             height: Height::from(value.height),
-            hash: CryptoHash::from(value.hash),
+            hash: CryptoHash::try_from(value.hash)?,
         })
     }
 }

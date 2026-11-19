@@ -420,9 +420,9 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
             proof: CanisterHttpResponseProof {
                 metadata: CanisterHttpResponseMetadata {
                     id,
-                    content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash::from(
+                    content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash::try_from(
                         payload.hash,
-                    )),
+                    )?),
                     content_size: payload.content_size,
                     is_reject: payload.is_reject,
                     replica_version: ReplicaVersion::try_from(payload.replica_version)
@@ -533,7 +533,7 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
             .metadata
             .ok_or(ProxyDecodeError::MissingField("share.metadata"))?;
         let id = CanisterHttpRequestId::new(metadata.id);
-        let content_hash = CryptoHashOf::new(CryptoHash::from(metadata.content_hash));
+        let content_hash = CryptoHashOf::new(CryptoHash::try_from(metadata.content_hash)?);
         let replica_version = ReplicaVersion::try_from(metadata.replica_version)
             .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?;
         let signature = share

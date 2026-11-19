@@ -28,6 +28,7 @@ use crate::signature::{
     ThresholdSignatureShare,
 };
 use ic_crypto_sha2::{DomainSeparationContext, Sha256};
+use ic_protobuf::proxy::ProxyDecodeError;
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -450,19 +451,17 @@ pub trait CryptoHashable: CryptoHashDomain + Hash {}
 impl<T> CryptoHashable for T where T: CryptoHashDomain + Hash {}
 
 /// A cryptographic hash, as returned by [`crypto_hash`].
-/// TODO: Turn the vector into a fixed-size array (`[u8; CryptoHash::LEN]`) once all production code
-/// indeed uses 32-byte vectors (i.e. once #12197 reaches mainnet)
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
-pub struct CryptoHash(#[serde(with = "serde_bytes")] Vec<u8>);
+pub struct CryptoHash(#[serde(with = "serde_bytes")] [u8; CryptoHash::LEN]);
 
 impl CryptoHash {
-    /// The length in bytes of the hashes returned by [`crypto_hash`], which every `CryptoHash`
-    /// is expected to have.
+    /// The length in bytes of a `CryptoHash`, which is the length of the hashes returned by
+    /// [`crypto_hash`].
     pub const LEN: usize = Sha256::DIGEST_LEN;
 
     /// Returns a fixed, arbitrary hash for tests.
-    pub fn for_test() -> Self {
-        Self(vec![
+    pub const fn for_test() -> Self {
+        Self([
             0x01, 0x32, 0x1a, 0x6d, 0x93, 0x20, 0x4d, 0x06, 0x01, 0x79, 0x46, 0x0f, 0x6c, 0x47,
             0xf4, 0xae, 0xff, 0x5a, 0x65, 0xea, 0xe4, 0x79, 0x75, 0x7d, 0x88, 0xd5, 0xdd, 0x2c,
             0xb1, 0xcf, 0xc1, 0xc6,
@@ -471,20 +470,28 @@ impl CryptoHash {
 
     /// Returns the bytes of the hash.
     pub fn into_vec(self) -> Vec<u8> {
-        self.0
+        self.0.to_vec()
     }
 }
 
 impl From<[u8; CryptoHash::LEN]> for CryptoHash {
     fn from(bytes: [u8; CryptoHash::LEN]) -> Self {
-        Self(bytes.to_vec())
+        Self(bytes)
     }
 }
 
-/// Wraps the given bytes as they are, whatever their length.
-impl From<Vec<u8>> for CryptoHash {
-    fn from(bytes: Vec<u8>) -> Self {
-        Self(bytes)
+impl TryFrom<Vec<u8>> for CryptoHash {
+    type Error = ProxyDecodeError;
+
+    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        let actual = bytes.len();
+        bytes
+            .try_into()
+            .map(Self)
+            .map_err(|_| ProxyDecodeError::InvalidDigestLength {
+                expected: Self::LEN,
+                actual,
+            })
     }
 }
 
@@ -496,7 +503,7 @@ impl AsRef<[u8]> for CryptoHash {
 
 impl fmt::Debug for CryptoHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "CryptoHash(0x{})", hex::encode(&self.0))
+        write!(f, "CryptoHash(0x{})", hex::encode(self.0))
     }
 }
 
@@ -526,10 +533,6 @@ pub fn crypto_hash<T: CryptoHashable>(data: &T) -> CryptoHashOf<T> {
 
 /// Convert a CryptoHashable into Randomness.
 pub fn randomness_from_crypto_hashable<T: CryptoHashable>(hashable: &T) -> Randomness {
-    let hash = crypto_hash(hashable);
-    let CryptoHash(hash_bytes) = hash.get();
-    let mut seed = [0_u8; 32];
-    let n = hash_bytes.len().min(32);
-    seed[0..n].copy_from_slice(&hash_bytes[0..n]);
-    Randomness::from(seed)
+    let CryptoHash(hash_bytes) = crypto_hash(hashable).get();
+    Randomness::from(hash_bytes)
 }

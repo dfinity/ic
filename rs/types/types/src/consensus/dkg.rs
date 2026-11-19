@@ -50,8 +50,8 @@ impl DkgMessageId {
     pub fn smallest_at_height(height: Height) -> Self {
         Self {
             height,
-            // The lexicographically-smallest possible hash is an empty vector
-            hash: CryptoHashOf::from(CryptoHash::from(vec![])),
+            // The lexicographically-smallest possible hash is the all-zero hash
+            hash: CryptoHashOf::from(CryptoHash::from([0; CryptoHash::LEN])),
         }
     }
 }
@@ -80,7 +80,7 @@ impl TryFrom<pb::DkgMessageId> for DkgMessageId {
     fn try_from(id: pb::DkgMessageId) -> Result<Self, Self::Error> {
         Ok(Self {
             height: Height::from(id.height),
-            hash: CryptoHash::from(id.hash.clone()).into(),
+            hash: CryptoHash::try_from(id.hash.clone())?.into(),
         })
     }
 }
@@ -896,12 +896,16 @@ mod tests {
 
     #[test]
     fn test_dkg_message_id_less_than_height() {
-        const TEST_HASHES: [&[u8]; 4] = [&[], &[0], &[42; 32], &[u8::MAX; 32]];
+        const TEST_HASHES: [[u8; CryptoHash::LEN]; 3] = [
+            [0; CryptoHash::LEN],
+            [42; CryptoHash::LEN],
+            [u8::MAX; CryptoHash::LEN],
+        ];
 
-        fn message_id(height: u64, hash: &[u8]) -> DkgMessageId {
+        fn message_id(height: u64, hash: [u8; CryptoHash::LEN]) -> DkgMessageId {
             DkgMessageId {
                 height: Height::from(height),
-                hash: CryptoHashOf::from(CryptoHash::from(hash.to_vec())),
+                hash: CryptoHashOf::from(CryptoHash::from(hash)),
             }
         }
 

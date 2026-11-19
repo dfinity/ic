@@ -1,5 +1,5 @@
 //! The file contains the synchronous interface used from P2P, to drive the StateSync protocol.  
-use ic_protobuf::p2p::v1 as p2p_pb;
+use ic_protobuf::{p2p::v1 as p2p_pb, proxy::ProxyDecodeError};
 use ic_types::{Height, crypto::CryptoHash};
 use phantom_newtype::Id;
 use thiserror::Error;
@@ -20,12 +20,14 @@ impl From<StateSyncArtifactId> for p2p_pb::StateSyncId {
     }
 }
 
-impl From<p2p_pb::StateSyncId> for StateSyncArtifactId {
-    fn from(id: p2p_pb::StateSyncId) -> Self {
-        Self {
+impl TryFrom<p2p_pb::StateSyncId> for StateSyncArtifactId {
+    type Error = ProxyDecodeError;
+
+    fn try_from(id: p2p_pb::StateSyncId) -> Result<Self, Self::Error> {
+        Ok(Self {
             height: Height::from(id.height),
-            hash: CryptoHash::from(id.hash),
-        }
+            hash: CryptoHash::try_from(id.hash)?,
+        })
     }
 }
 

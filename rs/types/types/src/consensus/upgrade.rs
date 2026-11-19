@@ -183,7 +183,7 @@ impl TryFrom<pb::UpgradeAuthorizationShareId> for UpgradeAuthorizationShareId {
 
     fn try_from(id: pb::UpgradeAuthorizationShareId) -> Result<Self, Self::Error> {
         Ok(Self {
-            hash: CryptoHash::from(id.hash).into(),
+            hash: CryptoHash::try_from(id.hash)?.into(),
             height: Height::from(id.height),
         })
     }

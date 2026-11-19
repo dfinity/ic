@@ -919,47 +919,6 @@ fn divergence_oversized_share_rejected() {
     });
 }
 
-#[test]
-fn divergence_share_with_content_hash_of_wrong_length_rejected() {
-    let subnet_size = 4;
-    test_config_with_http_feature(true, subnet_size, |mut payload_builder, _| {
-        inject_request_contexts(&mut payload_builder, fully_replicated_contexts([0]));
-        let (_, metadata) = test_response_and_metadata(0);
-        // Shares whose content hash is one byte longer than a SHA-256 digest, among an
-        // otherwise valid divergence of two equal halves.
-        let other_metadata = CanisterHttpResponseMetadata {
-            content_hash: CryptoHashOf::new(CryptoHash::from(vec![0xAB; 33])),
-            ..metadata.clone()
-        };
-        let payload = CanisterHttpPayload {
-            divergence_responses: vec![CanisterHttpResponseDivergence {
-                shares: (0..subnet_size / 2)
-                    .map(|node| metadata_to_share(node as u64, &metadata))
-                    .chain(
-                        (subnet_size / 2..subnet_size)
-                            .map(|node| metadata_to_share(node as u64, &other_metadata)),
-                    )
-                    .collect(),
-            }],
-            ..Default::default()
-        };
-
-        assert_matches!(
-            payload_builder.validate_payload(
-                Height::from(1),
-                &test_proposal_context(&default_validation_context()),
-                &payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES),
-                &[],
-            ),
-            Err(ValidationError::InvalidArtifact(
-                InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::InvalidContentHashLength { length: 33, .. },
-                ),
-            ))
-        );
-    });
-}
-
 /// Check that the divergence error message is constructed correctly and readable
 #[test]
 fn divergence_error_message() {

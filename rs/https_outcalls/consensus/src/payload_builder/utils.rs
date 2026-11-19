@@ -1,4 +1,3 @@
-use ic_crypto_sha2::Sha256;
 use ic_https_outcalls_pricing::fees::{
     flexible_initial_spent, min_flexible_consensus_cost, min_non_flexible_consensus_cost,
     non_flexible_initial_spent,
@@ -85,9 +84,8 @@ pub(crate) fn check_metadata_matches_content(
 }
 
 /// Enforces what a signed `receipt` may claim for the request `context`: a spend of at
-/// most [`CanisterHttpRequestContext::max_http_outcall_spend`], a content size of at most
-/// [`CanisterHttpRequestContext::max_http_outcall_content_size`], and a content hash as
-/// long as a SHA-256 digest.
+/// most [`CanisterHttpRequestContext::max_http_outcall_spend`] and a content size of at most
+/// [`CanisterHttpRequestContext::max_http_outcall_content_size`].
 pub(crate) fn check_receipt_bounds(
     receipt: &CanisterHttpResponseReceipt,
     context: &CanisterHttpRequestContext,
@@ -105,14 +103,6 @@ pub(crate) fn check_receipt_bounds(
             callback_id: receipt.id(),
             content_size,
             limit,
-        });
-    }
-
-    let length = receipt.content_hash().get_ref().as_ref().len();
-    if length != Sha256::DIGEST_LEN {
-        return Err(InvalidCanisterHttpPayloadReason::InvalidContentHashLength {
-            callback_id: receipt.id(),
-            length,
         });
     }
 
