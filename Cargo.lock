@@ -5828,15 +5828,6 @@ dependencies = [
 
 [[package]]
 name = "hashlink"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1"
-dependencies = [
- "hashbrown 0.15.5",
-]
-
-[[package]]
-name = "hashlink"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a596f1b20ed2cc5ecac41a164aaebc7258057060f06c0cf7a2ba3991ee7990fb"
@@ -6938,7 +6929,7 @@ dependencies = [
  "criterion",
  "flate2",
  "futures",
- "hashlink 0.12.2",
+ "hashlink",
  "hex",
  "http 1.5.0",
  "hyper-util",
@@ -17465,9 +17456,9 @@ dependencies = [
 
 [[package]]
 name = "libsqlite3-sys"
-version = "0.35.0"
+version = "0.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "133c182a6a2c87864fe97778797e46c7e999672690dc9fa3ee8e241aa4a9c13f"
+checksum = "b06e69070b7e12262b0cd90832f0a7396f142a2b330181255562decf9f0c6215"
 dependencies = [
  "cc",
  "pkg-config",
@@ -21464,6 +21455,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rsqlite-vfs"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "353b74f9810d5b085b6c42c9d86a5f0fdb795553235cdd48753b32e3809d18a7"
+dependencies = [
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "rstest"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -21537,16 +21537,17 @@ dependencies = [
 
 [[package]]
 name = "rusqlite"
-version = "0.37.0"
+version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "165ca6e57b20e1351573e3729b958bc62f0e48025386970b6e4d29e7a7e71f3f"
+checksum = "a4edff0039f148731aee2fd80f76dbfeb12d204ab3d1c544838d34e02151049b"
 dependencies = [
  "bitflags",
  "fallible-iterator",
  "fallible-streaming-iterator",
- "hashlink 0.10.0",
+ "hashlink",
  "libsqlite3-sys",
  "smallvec",
+ "sqlite-wasm-rs",
 ]
 
 [[package]]
@@ -23014,6 +23015,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sqlite-wasm-rs"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6cd504cecbfe7eef649988840f9a6cb768d11085efec138f8e99f160632d867"
+dependencies = [
+ "cc",
+ "rsqlite-vfs",
+]
+
+[[package]]
 name = "ssh2"
 version = "0.9.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -23887,9 +23898,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-rusqlite"
-version = "0.7.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "302563ae4a2127f3d2c105f4f2f0bd7cae3609371755600ebc148e0ccd8510d6"
+checksum = "cef2b2b09428079c22bf68cb48170c80b4f8c9c3ae1879aabfc22a94b5eaf2a1"
 dependencies = [
  "crossbeam-channel",
  "rusqlite",

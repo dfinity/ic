@@ -1317,10 +1317,11 @@ crate.spec(
 crate.spec(
     features = [
         "bundled",
+        "fallible_uint",
         "hooks",
     ],
     package = "rusqlite",
-    version = "^0.37.0",
+    version = "^0.42.0",
 )
 crate.spec(
     default_features = False,
@@ -1672,7 +1673,7 @@ crate.spec(
 )
 crate.spec(
     package = "tokio-rusqlite",
-    version = "^0.7",
+    version = "^0.9",
 )
 crate.spec(
     package = "tokio-tungstenite",

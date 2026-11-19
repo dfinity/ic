@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "c42fa4a454849c84ada459b706875e1f010a38e87095aed1305159e2e5b63629",
+  "checksum": "34b17c1755b921f736618d062497dd27c91c08c00e8fa6ce758794310a729b87",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18027,7 +18027,7 @@
             "target": "rusb"
           },
           {
-            "id": "rusqlite 0.37.0",
+            "id": "rusqlite 0.42.0",
             "target": "rusqlite"
           },
           {
@@ -18267,7 +18267,7 @@
             "target": "tokio_metrics"
           },
           {
-            "id": "tokio-rusqlite 0.7.0",
+            "id": "tokio-rusqlite 0.9.0",
             "target": "tokio_rusqlite"
           },
           {
@@ -23665,41 +23665,6 @@
         }
       ],
       "version": "0.17.1"
-    },
-    "hashlink 0.10.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "hashbrown 0.15.5",
-            "target": "hashbrown"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "hashlink",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "hashlink",
-      "package_url": "https://github.com/kyren/hashlink",
-      "repository": {
-        "Http": {
-          "sha256": "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1",
-          "url": "https://static.crates.io/crates/hashlink/0.10.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hashlink",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.10.0"
     },
     "hashlink 0.12.2": {
       "common_attrs": {
@@ -33122,7 +33087,7 @@
       ],
       "version": "0.19.0+11.8.1"
     },
-    "libsqlite3-sys 0.35.0": {
+    "libsqlite3-sys 0.40.0": {
       "build_script_attrs": {
         "deps": [
           {
@@ -33146,11 +33111,11 @@
           "bundled_bindings",
           "cc",
           "default",
-          "min_sqlite_version_3_14_0",
+          "min_sqlite_version_3_45_3",
           "pkg-config",
           "vcpkg"
         ],
-        "edition": "2021",
+        "edition": "2024",
         "extra_deps": [
           ":build_script_build"
         ]
@@ -33165,8 +33130,8 @@
       "package_url": "https://github.com/rusqlite/rusqlite",
       "repository": {
         "Http": {
-          "sha256": "133c182a6a2c87864fe97778797e46c7e999672690dc9fa3ee8e241aa4a9c13f",
-          "url": "https://static.crates.io/crates/libsqlite3-sys/0.35.0/download"
+          "sha256": "b06e69070b7e12262b0cd90832f0a7396f142a2b330181255562decf9f0c6215",
+          "url": "https://static.crates.io/crates/libsqlite3-sys/0.40.0/download"
         }
       },
       "targets": [
@@ -33183,7 +33148,7 @@
           }
         }
       ],
-      "version": "0.35.0"
+      "version": "0.40.0"
     },
     "libssh2-sys 0.3.4": {
       "build_script_attrs": {
@@ -46676,6 +46641,39 @@
       ],
       "version": "0.9.10"
     },
+    "rsqlite-vfs 0.2.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "rsqlite_vfs",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "rsqlite-vfs",
+      "package_url": "https://github.com/Spxg/sqlite-wasm-rs",
+      "repository": {
+        "Http": {
+          "sha256": "353b74f9810d5b085b6c42c9d86a5f0fdb795553235cdd48753b32e3809d18a7",
+          "url": "https://static.crates.io/crates/rsqlite-vfs/0.2.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rsqlite_vfs",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.2.0"
+    },
     "rstest 0.28.0": {
       "common_attrs": {
         "edition": "2021",
@@ -46935,40 +46933,82 @@
       ],
       "version": "0.9.4"
     },
-    "rusqlite 0.37.0": {
+    "rusqlite 0.42.0": {
       "common_attrs": {
         "crate_features": [
           "bundled",
+          "cache",
+          "default",
+          "fallible_uint",
+          "ffi-sqlite-wasm-rs",
+          "hashlink",
           "hooks",
-          "modern_sqlite"
+          "modern_sqlite",
+          "wal"
         ],
-        "deps": [
-          {
-            "id": "bitflags 2.13.2",
-            "target": "bitflags"
-          },
-          {
-            "id": "fallible-iterator 0.3.0",
-            "target": "fallible_iterator"
-          },
-          {
-            "id": "fallible-streaming-iterator 0.1.9",
-            "target": "fallible_streaming_iterator"
-          },
-          {
-            "id": "hashlink 0.10.0",
-            "target": "hashlink"
-          },
-          {
-            "id": "libsqlite3-sys 0.35.0",
-            "target": "libsqlite3_sys"
-          },
-          {
-            "id": "smallvec 1.16.6",
-            "target": "smallvec"
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.13.2",
+              "target": "bitflags"
+            },
+            {
+              "id": "fallible-iterator 0.3.0",
+              "target": "fallible_iterator"
+            },
+            {
+              "id": "fallible-streaming-iterator 0.1.9",
+              "target": "fallible_streaming_iterator"
+            },
+            {
+              "id": "hashlink 0.12.2",
+              "target": "hashlink"
+            },
+            {
+              "id": "smallvec 1.16.6",
+              "target": "smallvec"
+            }
+          ],
+          "selects": {
+            "aarch64-apple-darwin": [
+              {
+                "id": "libsqlite3-sys 0.40.0",
+                "target": "libsqlite3_sys"
+              }
+            ],
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "libsqlite3-sys 0.40.0",
+                "target": "libsqlite3_sys"
+              }
+            ],
+            "cfg(not(all(target_family = \"wasm\", target_os = \"unknown\")))": [
+              {
+                "id": "libsqlite3-sys 0.40.0",
+                "target": "libsqlite3_sys"
+              }
+            ],
+            "wasm32-unknown-unknown": [
+              {
+                "id": "sqlite-wasm-rs 0.6.3",
+                "target": "sqlite_wasm_rs"
+              }
+            ],
+            "x86_64-apple-darwin": [
+              {
+                "id": "libsqlite3-sys 0.40.0",
+                "target": "libsqlite3_sys"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "libsqlite3-sys 0.40.0",
+                "target": "libsqlite3_sys"
+              }
+            ]
           }
-        ],
-        "edition": "2021"
+        },
+        "edition": "2024"
       },
       "library_target_name": "rusqlite",
       "license": "MIT",
@@ -46980,8 +47020,8 @@
       "package_url": "https://github.com/rusqlite/rusqlite",
       "repository": {
         "Http": {
-          "sha256": "165ca6e57b20e1351573e3729b958bc62f0e48025386970b6e4d29e7a7e71f3f",
-          "url": "https://static.crates.io/crates/rusqlite/0.37.0/download"
+          "sha256": "a4edff0039f148731aee2fd80f76dbfeb12d204ab3d1c544838d34e02151049b",
+          "url": "https://static.crates.io/crates/rusqlite/0.42.0/download"
         }
       },
       "targets": [
@@ -46992,7 +47032,7 @@
           }
         }
       ],
-      "version": "0.37.0"
+      "version": "0.42.0"
     },
     "rust_decimal 1.43.0": {
       "build_script_attrs": {},
@@ -52725,6 +52765,58 @@
       ],
       "version": "0.7.3"
     },
+    "sqlite-wasm-rs 0.6.3": {
+      "build_script_attrs": {
+        "deps": [
+          {
+            "id": "cc 1.11.2",
+            "target": "cc"
+          }
+        ],
+        "links": "wsqlite3"
+      },
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "rsqlite-vfs 0.2.0",
+            "target": "rsqlite_vfs"
+          }
+        ],
+        "edition": "2021",
+        "extra_deps": [
+          ":build_script_build"
+        ]
+      },
+      "library_target_name": "sqlite_wasm_rs",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "sqlite-wasm-rs",
+      "package_url": "https://github.com/Spxg/sqlite-wasm-rs",
+      "repository": {
+        "Http": {
+          "sha256": "a6cd504cecbfe7eef649988840f9a6cb768d11085efec138f8e99f160632d867",
+          "url": "https://static.crates.io/crates/sqlite-wasm-rs/0.6.3/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "sqlite_wasm_rs",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "0.6.3"
+    },
     "ssh2 0.9.7": {
       "common_attrs": {
         "deps": [
@@ -56253,7 +56345,7 @@
       ],
       "version": "0.5.2"
     },
-    "tokio-rusqlite 0.7.0": {
+    "tokio-rusqlite 0.9.0": {
       "common_attrs": {
         "crate_features": [
           "default"
@@ -56264,7 +56356,7 @@
             "target": "crossbeam_channel"
           },
           {
-            "id": "rusqlite 0.37.0",
+            "id": "rusqlite 0.42.0",
             "target": "rusqlite"
           },
           {
@@ -56284,8 +56376,8 @@
       "package_url": "https://github.com/programatik29/tokio-rusqlite",
       "repository": {
         "Http": {
-          "sha256": "302563ae4a2127f3d2c105f4f2f0bd7cae3609371755600ebc148e0ccd8510d6",
-          "url": "https://static.crates.io/crates/tokio-rusqlite/0.7.0/download"
+          "sha256": "cef2b2b09428079c22bf68cb48170c80b4f8c9c3ae1879aabfc22a94b5eaf2a1",
+          "url": "https://static.crates.io/crates/tokio-rusqlite/0.9.0/download"
         }
       },
       "targets": [
@@ -56296,7 +56388,7 @@
           }
         }
       ],
-      "version": "0.7.0"
+      "version": "0.9.0"
     },
     "tokio-rustls 0.26.6": {
       "common_attrs": {
@@ -66101,7 +66193,7 @@
     "rsa 0.9.10",
     "rstest 0.28.0",
     "rusb 0.9.4",
-    "rusqlite 0.37.0",
+    "rusqlite 0.42.0",
     "rust_decimal 1.43.0",
     "rust_decimal_macros 1.40.0",
     "rustc-demangle 0.1.28",
@@ -66164,7 +66256,7 @@
     "tokio 1.54.1",
     "tokio-io-timeout 1.2.1",
     "tokio-metrics 0.5.2",
-    "tokio-rusqlite 0.7.0",
+    "tokio-rusqlite 0.9.0",
     "tokio-rustls 0.26.6",
     "tokio-serde 0.9.0",
     "tokio-socks 0.5.3",
