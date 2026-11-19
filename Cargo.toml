@@ -885,7 +885,7 @@ rgb = "^0.8.37"
 rolling-file = "0.2.0"
 rsa = { version = "0.9.10", features = ["sha2", "getrandom"] }
 rstest = { version = "0.28.0", default-features = false }
-rusqlite = "0.37.0"
+rusqlite = { version = "0.42.0", features = ["fallible_uint"] }
 rust_decimal = { version = "^1.42", default-features = false, features = [
     "serde",
 ] }
