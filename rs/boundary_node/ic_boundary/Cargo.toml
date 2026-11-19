@@ -19,7 +19,7 @@ axum-extra = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
-dashmap = "6.1.0"
+dashmap = "6.2.1"
 derive-new = { workspace = true }
 ethnum = { workspace = true }
 futures-util = { workspace = true }

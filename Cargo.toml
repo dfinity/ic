@@ -630,7 +630,7 @@ async-trait = "0.1.89"
 axum = { version = "0.8.4", features = ["ws"] }
 axum-extra = { version = "0.12", features = ["middleware", "typed-header"] }
 axum-otel-metrics = "0.14.1"
-axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
+axum-server = { version = "0.7.3", features = ["tls-rustls-no-provider"] }
 backon = { version = "1.6.0", default-features = false, features = ["std"] }
 base64 = { version = "0.22" }
 bech32 = "^0.9.0"
@@ -707,7 +707,7 @@ hmac = "^0.12"
 http = "1.5.0"
 http-body = "1.0.1"
 http-body-util = "0.1.5"
-humantime = "2.2"
+humantime = "2.4"
 hyper = { version = "1.6.0", features = ["full"] }
 hyper-rustls = { version = "0.27.5", default-features = false, features = [
     "http1",
@@ -732,13 +732,13 @@ ic-bn-lib = { version = "0.9", features = [
 ic-btc-interface = "0.4.0"
 ic-canister-runtime = "0.2.3"
 ic-canister-sig-creation = "1.3.1"
-ic-cbor = "3"
+ic-cbor = "3.0.3"
 ic-cdk = "0.20.2"
 ic-cdk-bitcoin-canister = "0.2.0"
 ic-cdk-management-canister = "0.1.1"
 ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3.0.3"
-ic-certification = "3"
+ic-certification = "3.0.3"
 ic-doge-interface = "0.3.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", tag = "v0.6.12", features = [
     "acme",
@@ -758,7 +758,7 @@ ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "experimental",
     "zeroize",
 ] }
-ic_principal = { version = "0.1.1", default-features = false }
+ic_principal = { version = "0.1.5", default-features = false }
 idna = "1.0.2"
 indexmap = "2.10.0"
 indicatif = "^0.17.3"
@@ -767,6 +767,7 @@ inferno = "0.12.0"
 inotify = { version = "0.11.2", default-features = false, features = [
     "stream",
 ] }
+insta = "1.49.0"
 ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
 json5 = "^0.4.1"
@@ -783,7 +784,7 @@ k256 = { version = "0.13.4", default-features = false, features = [
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
 libc = "0.2.158"
-libcryptsetup-rs = "0.15"
+libcryptsetup-rs = { version = "0.15", features = ["mutex"] }
 libfuzzer-sys = "0.4.7"
 libnss = "0.5.0"
 libsystemd = "0.7.2"
@@ -799,7 +800,7 @@ mockall = "0.15.0"
 mockito = { version = "1.6.1", default-features = false }
 more-asserts = "0.3.1"
 netdev = "0.46.3"
-nftables = "0.4"
+nftables = "0.4.1"
 nix = { version = "0.31.3", features = [
     "fs",
     "ioctl",
@@ -846,7 +847,7 @@ pprof = { git = "https://github.com/dfinity/pprof-rs", rev = "9159b45ecc3540d7fc
 predicates = { version = "3.1.2", default-features = false }
 pretty_assertions = "1.4.0"
 proc-macro2 = "1.0.89"
-procfs = { version = "^0.17", default-features = false }
+procfs = { version = "0.17.0", default-features = false }
 prometheus = { version = "0.14.0", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
 proptest = "=1.6.0"
@@ -883,7 +884,7 @@ reqwest = { version = "0.13", default-features = false, features = [
 ] }
 rgb = "^0.8.37"
 rolling-file = "0.2.0"
-rsa = { version = "0.9.6", features = ["sha2", "getrandom"] }
+rsa = { version = "0.9.10", features = ["sha2", "getrandom"] }
 rstest = "0.19.0"
 rusqlite = "0.37.0"
 rust_decimal = { version = "^1.42", default-features = false, features = [
@@ -895,6 +896,8 @@ rustix = { version = "1.1.4", default-features = false, features = [
     "event",
     "fs",
     "process",
+    "stdio",
+    "termios",
 ] }
 rustls = { version = "0.23.46", default-features = false, features = [
     "aws_lc_rs",
@@ -949,13 +952,11 @@ target-lexicon = "0.13.5"
 tempfile = "3.27"
 test-strategy = "0.4.0"
 textplots = "^0.8"
-# DO NOT upgrade to >=2.0.19 as it pulls in syn 3 whereas the rest of the
-# codebase uses syn 2.
-thiserror = "=2.0.18"
+thiserror = "2.0.21"
 threadpool = "1.8.1"
 tikv-jemalloc-ctl = { version = "0.7", features = ["stats"] }
 tikv-jemallocator = "0.7"
-time = { version = "0.3.36", features = ["formatting"] }
+time = { version = "0.3.47", features = ["formatting"] }
 tokio = { version = "1.54.1", features = ["full"] }
 tokio-io-timeout = "1.2.0"
 tokio-metrics = "0.4.9"
@@ -985,7 +986,7 @@ tracing-appender = "0.2.3"
 tracing-flame = "0.2.0"
 tracing-journald = "0.3"
 tracing-opentelemetry = "0.33.0"
-tracing-subscriber = { version = "0.3.19", features = [
+tracing-subscriber = { version = "0.3.20", features = [
     "env-filter",
     "fmt",
     "json",
