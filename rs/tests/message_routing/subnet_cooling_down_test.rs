@@ -79,9 +79,9 @@ Runbook::
    terms are expected to hold and are only logged; `VIOLATED_CONDITIONS` says
    why.
 8. Hand over to the subnet merging tool, which runs all of its steps one at a
-   time, in the order in which `StepType` declares them; the checks of steps
-   9, 11, 13, 16, 18 and 20 are made in between its steps, right after the
-   step each of them names. The following steps of the tool are executed:
+   time, in the order in which `StepType` declares them; the checks below are
+   made in between its steps, right after the step each of them names. The
+   following steps of the tool are executed:
    `CoolDownSourceSubnet`, which labels `S` as "cooling down", and
    `CheckRegistryForCoolingDownFlag`, which records the registry version `V`
    at which it reads the label back.
