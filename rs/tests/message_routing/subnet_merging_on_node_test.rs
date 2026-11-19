@@ -259,8 +259,8 @@ fn run_tool_on_node(
          --skip-prompts \
          --source-subnet-id {s_subnet_id} \
          --destination-subnet-id {d_subnet_id} \
-         --download-node-source {s_node_ip} \
-         --download-node-destination local \
+         --source-node {s_node_ip} \
+         --destination-node local \
          --merge-ready-timeout-secs {merge_ready_timeout} \
          --halt-timeout-secs {halt_timeout} \
          --registry-timeout-secs {registry_timeout} \
