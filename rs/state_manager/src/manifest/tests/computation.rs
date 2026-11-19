@@ -420,7 +420,10 @@ fn test_chunk_actions_follow_their_chunks_over_several_spans() {
     .expect("failed to compute manifest");
 
     // Reuse, compare and recompute in turn, except for a wrong hash to compare
-    // against on the first chunk of `a.bin`'s second span.
+    // against on the first chunk of `a.bin`'s second span. Reused chunks get a
+    // hash of their own, so that rereading and recomputing them would show.
+    let reused_hash = |index: usize| [(index % 255) as u8 + 1; 32];
+    let is_reused = |index: usize| index.is_multiple_of(3) && index != MANIFEST_SPAN_CHUNKS;
     let chunk_actions = manifest
         .chunk_table
         .iter()
@@ -428,12 +431,12 @@ fn test_chunk_actions_follow_their_chunks_over_several_spans() {
         .map(|(index, chunk_info)| {
             if index == MANIFEST_SPAN_CHUNKS {
                 ChunkAction::RecomputeAndCompare([0; 32])
+            } else if is_reused(index) {
+                ChunkAction::UseHash(reused_hash(index))
+            } else if index % 3 == 1 {
+                ChunkAction::RecomputeAndCompare(chunk_info.hash)
             } else {
-                match index % 3 {
-                    0 => ChunkAction::UseHash(chunk_info.hash),
-                    1 => ChunkAction::RecomputeAndCompare(chunk_info.hash),
-                    _ => ChunkAction::Recompute,
-                }
+                ChunkAction::Recompute
             }
         })
         .collect();
@@ -451,8 +454,33 @@ fn test_chunk_actions_follow_their_chunks_over_several_spans() {
         CURRENT_STATE_SYNC_VERSION,
     );
 
-    assert_eq!(file_table, manifest.file_table);
-    assert_eq!(chunk_table, manifest.chunk_table);
+    // Every chunk keeps its place, reused chunks with the hash they were given.
+    // File hashes cover those, so only the files' paths and sizes match.
+    assert_eq!(chunk_table.len(), manifest.chunk_table.len());
+    for (index, (actual, expected)) in chunk_table.iter().zip(&manifest.chunk_table).enumerate() {
+        let hash = if is_reused(index) {
+            reused_hash(index)
+        } else {
+            expected.hash
+        };
+        assert_eq!(
+            actual,
+            &ChunkInfo {
+                hash,
+                ..expected.clone()
+            }
+        );
+    }
+    let paths_and_sizes = |table: &[FileInfo]| -> Vec<_> {
+        table
+            .iter()
+            .map(|f| (f.relative_path.clone(), f.size_bytes))
+            .collect()
+    };
+    assert_eq!(
+        paths_and_sizes(&file_table),
+        paths_and_sizes(&manifest.file_table)
+    );
     assert_eq!(manifest_metrics.reused_chunk_hash_error_count.get(), 1);
 }
 
