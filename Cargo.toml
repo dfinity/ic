@@ -784,7 +784,7 @@ k256 = { version = "0.13.4", default-features = false, features = [
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
 libc = "0.2.158"
-libcryptsetup-rs = { version = "0.15", features = ["mutex"] }
+libcryptsetup-rs = { version = "0.16.1", features = ["mutex"] }
 libfuzzer-sys = "0.4.7"
 libnss = "0.5.0"
 libsystemd = "0.7.2"

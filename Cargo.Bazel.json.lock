@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "b1a06c7efb040121b676f0ae006473c268b86f0bd4fac6d2633f803deaec8f6a",
+  "checksum": "fe62e59609d130884c50d6a2e90c2073e8b22c14adf2bf7696ca94da68455499",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -17830,7 +17830,7 @@
             "target": "libc"
           },
           {
-            "id": "libcryptsetup-rs 0.15.1",
+            "id": "libcryptsetup-rs 0.16.1",
             "target": "libcryptsetup_rs"
           },
           {
@@ -32686,7 +32686,7 @@
       ],
       "version": "0.2.191"
     },
-    "libcryptsetup-rs 0.15.1": {
+    "libcryptsetup-rs 0.16.1": {
       "build_script_attrs": {
         "deps": [
           {
@@ -32717,7 +32717,7 @@
             "target": "libc"
           },
           {
-            "id": "libcryptsetup-rs-sys 0.6.1",
+            "id": "libcryptsetup-rs-sys 0.7.0",
             "target": "libcryptsetup_rs_sys"
           },
           {
@@ -32752,14 +32752,8 @@
       "package_url": "https://github.com/stratis-storage/libcryptsetup-rs",
       "repository": {
         "Http": {
-          "patch_args": [
-            "-p1"
-          ],
-          "patches": [
-            "@@//bazel:libcryptsetup-rs.patch"
-          ],
-          "sha256": "362fea7a92655943de241f1efef3348afbd22a34d7efa601e1d9cb8732c7e6b2",
-          "url": "https://static.crates.io/crates/libcryptsetup-rs/0.15.1/download"
+          "sha256": "1d35d55399665da6c50ed2962e0942a3a6bcada0efdb709ec71d204ec950e48a",
+          "url": "https://static.crates.io/crates/libcryptsetup-rs/0.16.1/download"
         }
       },
       "targets": [
@@ -32776,9 +32770,9 @@
           }
         }
       ],
-      "version": "0.15.1"
+      "version": "0.16.1"
     },
-    "libcryptsetup-rs-sys 0.6.1": {
+    "libcryptsetup-rs-sys 0.7.0": {
       "build_script_attrs": {
         "deps": [
           {
@@ -32818,8 +32812,8 @@
       "package_url": "https://github.com/stratis-storage/libcryptsetup-rs",
       "repository": {
         "Http": {
-          "sha256": "376e4a1f481c5f0b8354d370cfaf9f1322d56e628e2954c6b59c9729e6f4d5ee",
-          "url": "https://static.crates.io/crates/libcryptsetup-rs-sys/0.6.1/download"
+          "sha256": "2c86d52c28c902102488f8ddfb7f23abc01e7a58004b998f9c6d74c5f5aed1c0",
+          "url": "https://static.crates.io/crates/libcryptsetup-rs-sys/0.7.0/download"
         }
       },
       "targets": [
@@ -32836,7 +32830,7 @@
           }
         }
       ],
-      "version": "0.6.1"
+      "version": "0.7.0"
     },
     "libdbus-sys 0.2.7": {
       "build_script_attrs": {
@@ -66238,7 +66232,7 @@
     "lazy_static 1.5.1",
     "leb128 0.2.7",
     "libc 0.2.191",
-    "libcryptsetup-rs 0.15.1",
+    "libcryptsetup-rs 0.16.1",
     "libfuzzer-sys 0.4.7",
     "libnss 0.5.0",
     "libsystemd 0.7.2",

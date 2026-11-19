@@ -892,7 +892,7 @@ crate.spec(
         "mutex",
     ],
     package = "libcryptsetup-rs",
-    version = "0.15",
+    version = "0.16.1",
 )
 crate.spec(
     default_features = False,
@@ -1955,11 +1955,6 @@ crate.annotation(
         "@openssl//:gen_dir",
     ],
     crate = "libssh2-sys",
-)
-crate.annotation(
-    crate = "libcryptsetup-rs",
-    patch_args = ["-p1"],
-    patches = ["@@//bazel:libcryptsetup-rs.patch"],
 )
 crate.annotation(
     crate = "libz-sys",
