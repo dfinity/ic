@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "fe62e59609d130884c50d6a2e90c2073e8b22c14adf2bf7696ca94da68455499",
+  "checksum": "867d6f8e6e1c1e011f21fc7f887df5b334ebfb034ea7d75eee029e80e8ca151e",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -7512,104 +7512,6 @@
         }
       ],
       "version": "1.3.3"
-    },
-    "bindgen 0.69.5": {
-      "build_script_attrs": {
-        "link_deps": [
-          {
-            "id": "clang-sys 1.9.1",
-            "target": "clang_sys"
-          }
-        ]
-      },
-      "common_attrs": {
-        "crate_features": [
-          "runtime"
-        ],
-        "deps": [
-          {
-            "id": "bitflags 2.13.2",
-            "target": "bitflags"
-          },
-          {
-            "id": "cexpr 0.6.0",
-            "target": "cexpr"
-          },
-          {
-            "id": "clang-sys 1.9.1",
-            "target": "clang_sys"
-          },
-          {
-            "id": "itertools 0.12.1",
-            "target": "itertools"
-          },
-          {
-            "id": "lazy_static 1.5.1",
-            "target": "lazy_static"
-          },
-          {
-            "id": "lazycell 1.3.0",
-            "target": "lazycell"
-          },
-          {
-            "id": "proc-macro2 1.0.107",
-            "target": "proc_macro2"
-          },
-          {
-            "id": "quote 1.0.47",
-            "target": "quote"
-          },
-          {
-            "id": "regex 1.13.2",
-            "target": "regex"
-          },
-          {
-            "id": "rustc-hash 1.1.0",
-            "target": "rustc_hash"
-          },
-          {
-            "id": "shlex 1.3.0",
-            "target": "shlex"
-          },
-          {
-            "id": "syn 2.0.119",
-            "target": "syn"
-          }
-        ],
-        "edition": "2018",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "bindgen",
-      "license": "BSD-3-Clause",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "BSD-3-Clause"
-      ],
-      "name": "bindgen",
-      "package_url": "https://github.com/rust-lang/rust-bindgen",
-      "repository": {
-        "Http": {
-          "sha256": "271383c67ccabffb7381723dea0672a673f292304fcb45c01cc648c7a8d58088",
-          "url": "https://static.crates.io/crates/bindgen/0.69.5/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bindgen",
-            "crate_root": "lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "0.69.5"
     },
     "bindgen 0.72.1": {
       "build_script_attrs": {
@@ -18111,7 +18013,7 @@
             "target": "rlp"
           },
           {
-            "id": "rocksdb 0.22.0",
+            "id": "rocksdb 0.25.0",
             "target": "rocksdb"
           },
           {
@@ -32555,35 +32457,6 @@
       ],
       "version": "1.5.1"
     },
-    "lazycell 1.3.0": {
-      "common_attrs": {
-        "edition": "2015"
-      },
-      "library_target_name": "lazycell",
-      "license": "MIT/Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "lazycell",
-      "package_url": "https://github.com/indiv0/lazycell",
-      "repository": {
-        "Http": {
-          "sha256": "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55",
-          "url": "https://static.crates.io/crates/lazycell/1.3.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "lazycell",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "1.3.0"
-    },
     "leb128 0.2.7": {
       "common_attrs": {
         "edition": "2018"
@@ -33259,14 +33132,15 @@
       ],
       "version": "0.1.25"
     },
-    "librocksdb-sys 0.16.0+8.10.0": {
+    "librocksdb-sys 0.19.0+11.8.1": {
       "build_script_attrs": {
         "build_script_env": {
+          "CXXFLAGS": "-std=c++20",
           "NUM_JOBS": "8"
         },
         "deps": [
           {
-            "id": "bindgen 0.69.5",
+            "id": "bindgen 0.72.1",
             "target": "bindgen"
           },
           {
@@ -33274,15 +33148,15 @@
             "target": "cc"
           },
           {
-            "id": "glob 0.3.4",
-            "target": "glob"
+            "id": "rustflags 0.1.7",
+            "target": "rustflags"
           }
         ],
         "links": "rocksdb"
       },
       "common_attrs": {
         "crate_features": [
-          "default",
+          "bindgen-runtime",
           "static"
         ],
         "deps": [
@@ -33291,7 +33165,7 @@
             "target": "libc"
           }
         ],
-        "edition": "2018",
+        "edition": "2021",
         "extra_deps": [
           ":build_script_build"
         ]
@@ -33307,8 +33181,8 @@
       "package_url": "https://github.com/rust-rocksdb/rust-rocksdb",
       "repository": {
         "Http": {
-          "sha256": "ce3d60bc059831dc1c83903fb45c103f75db65c5a7bf22272764d9cc683e348c",
-          "url": "https://static.crates.io/crates/librocksdb-sys/0.16.0+8.10.0/download"
+          "sha256": "4f45e86edad8e88efe97dbf384b4e48e1ff0f111eabf154c7b09d7a1e5fb573c",
+          "url": "https://static.crates.io/crates/librocksdb-sys/0.19.0+11.8.1/download"
         }
       },
       "targets": [
@@ -33325,7 +33199,7 @@
           }
         }
       ],
-      "version": "0.16.0+8.10.0"
+      "version": "0.19.0+11.8.1"
     },
     "libsqlite3-sys 0.35.0": {
       "build_script_attrs": {
@@ -46748,19 +46622,22 @@
       ],
       "version": "0.6.1"
     },
-    "rocksdb 0.22.0": {
+    "rocksdb 0.25.0": {
       "common_attrs": {
+        "crate_features": [
+          "bindgen-runtime"
+        ],
         "deps": [
           {
             "id": "libc 0.2.191",
             "target": "libc"
           },
           {
-            "id": "librocksdb-sys 0.16.0+8.10.0",
+            "id": "librocksdb-sys 0.19.0+11.8.1",
             "target": "librocksdb_sys"
           }
         ],
-        "edition": "2018"
+        "edition": "2021"
       },
       "library_target_name": "rocksdb",
       "license": "Apache-2.0",
@@ -46772,8 +46649,8 @@
       "package_url": "https://github.com/rust-rocksdb/rust-rocksdb",
       "repository": {
         "Http": {
-          "sha256": "6bd13e55d6d7b8cd0ea569161127567cd587676c99f4472f779a0279aa60a7a7",
-          "url": "https://static.crates.io/crates/rocksdb/0.22.0/download"
+          "sha256": "d8d90add70d1d420ee487bce4a1449880a8d147451c6051b2ee5f8354553dcbf",
+          "url": "https://static.crates.io/crates/rocksdb/0.25.0/download"
         }
       },
       "targets": [
@@ -46784,7 +46661,7 @@
           }
         }
       ],
-      "version": "0.22.0"
+      "version": "0.25.0"
     },
     "rolling-file 0.2.0": {
       "common_attrs": {
@@ -47356,39 +47233,6 @@
       ],
       "version": "0.1.28"
     },
-    "rustc-hash 1.1.0": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "std"
-        ],
-        "edition": "2015"
-      },
-      "library_target_name": "rustc_hash",
-      "license": "Apache-2.0/MIT",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "rustc-hash",
-      "package_url": "https://github.com/rust-lang-nursery/rustc-hash",
-      "repository": {
-        "Http": {
-          "sha256": "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2",
-          "url": "https://static.crates.io/crates/rustc-hash/1.1.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rustc_hash",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "1.1.0"
-    },
     "rustc-hash 2.1.3": {
       "common_attrs": {
         "crate_features": [
@@ -47523,6 +47367,35 @@
         }
       ],
       "version": "0.4.1"
+    },
+    "rustflags 0.1.7": {
+      "common_attrs": {
+        "edition": "2021"
+      },
+      "library_target_name": "rustflags",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "rustflags",
+      "package_url": "https://github.com/dtolnay/rustflags",
+      "repository": {
+        "Http": {
+          "sha256": "a39e0e9135d7a7208ee80aa4e3e4b88f0f5ad7be92153ed70686c38a03db2e63",
+          "url": "https://static.crates.io/crates/rustflags/0.1.7/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustflags",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.7"
     },
     "rusticata-macros 4.1.0": {
       "common_attrs": {
@@ -66303,7 +66176,7 @@
     "rgb 0.8.53",
     "ripemd 0.2.0",
     "rlp 0.6.1",
-    "rocksdb 0.22.0",
+    "rocksdb 0.25.0",
     "rolling-file 0.2.0",
     "rsa 0.9.10",
     "rstest 0.28.0",
