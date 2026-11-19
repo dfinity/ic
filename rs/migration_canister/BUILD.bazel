@@ -68,7 +68,6 @@ rust_test(
         "//rs/config",
         "//rs/limits",
         "//rs/nns/constants",
-        "//rs/replicated_state",
         "//rs/rust_canisters/dfn_http_metrics",
         "//rs/types/base_types",
         "//rs/types/management_canister_types",

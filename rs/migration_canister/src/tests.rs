@@ -8,10 +8,10 @@ use candid::Principal;
 use candid_parser::utils::{CandidSource, service_equal};
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::MAX_ALLOWED_CONTROLLERS_COUNT;
+use ic_limits::MAX_CANISTER_HISTORY_CHANGES;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
 };
-use ic_replicated_state::canister_state::system_state::MAX_CANISTER_HISTORY_CHANGES;
 
 use crate::{
     Request, RequestState,

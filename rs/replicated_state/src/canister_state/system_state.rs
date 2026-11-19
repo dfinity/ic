@@ -24,6 +24,7 @@ pub use call_context_manager::{CallContext, CallContextAction, CallContextManage
 use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{HypervisorError, MessageMemoryUsage};
+use ic_limits::MAX_CANISTER_HISTORY_CHANGES;
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
@@ -66,9 +67,6 @@ lazy_static! {
     static ref DEFAULT_PRINCIPAL_ZERO_CONTROLLERS: PrincipalId =
         PrincipalId::from_str("zrl4w-cqaaa-nocon-troll-eraaa-d5qc").unwrap();
 }
-
-/// Maximum number of canister changes stored in the canister history.
-pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 20;
 
 /// A bundle of outgoing inter-canister `Request` and matching `Callback`.
 ///
