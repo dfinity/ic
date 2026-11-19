@@ -152,6 +152,9 @@ Runbook::
    `UploadStateToDestinationSubnet`, which uploads the merged state to `D`'s
    node, replacing the state directory holding the checkpoint it halted at, and
    starts its replica back up.
+22. After `UploadStateToDestinationSubnet`: check that the checkpoints directory
+   of `D`'s node holds exactly the merged checkpoint, and that the replica on
+   that node is running again and started from it.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -162,7 +165,7 @@ downloads from them pass validation, the merged state it assembles from them
 holds exactly the canisters of both, and the registry version the tool records
 routes the canister ID ranges of `S` to `D`; and the registry holds the
 recovery CUP contents of `D` at the merged state, with `D` halted; and the
-tool uploads the merged state to `D`'s node and restarts its replica.
+replica on `D`'s node runs on the merged state the tool uploaded to it.
 
 end::catalog[] */
 
@@ -193,9 +196,9 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
-    NnsInstallationBuilder, READY_WAIT_TIMEOUT, RETRY_BACKOFF, SubnetSnapshot, TopologySnapshot,
-    get_guestos_img_version,
+    HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+    NnsInstallationBuilder, READY_WAIT_TIMEOUT, RETRY_BACKOFF, SshSession, SubnetSnapshot,
+    TopologySnapshot, get_guestos_img_version,
 };
 use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::systest;
@@ -211,6 +214,7 @@ use slog::{Logger, info};
 use std::{
     collections::BTreeSet,
     net::IpAddr,
+    path::PathBuf,
     time::{Duration, Instant},
 };
 use strum::IntoEnumIterator;
@@ -279,6 +283,13 @@ const INDUCTION_BACKOFF: Duration = Duration::from_secs(1);
 /// the test environment.
 const MERGING_DIR: &str = "subnet_merging";
 
+/// The checkpoints directory of the replica on a node.
+const NODE_CHECKPOINTS_DIR: &str = "/var/lib/ic/data/ic_state/checkpoints";
+
+/// The height of the latest state the state manager of a replica holds, which
+/// it sets to the height of the checkpoint it starts from.
+const METRIC_MAX_RESIDENT_HEIGHT: &str = "state_manager_max_resident_height";
+
 /// The duration of a round that the timeouts counted in rounds assume. Every
 /// subnet is `Subnet::fast`, i.e. aims at rounds of a fraction of this; the
 /// rest is slack for slow testnets.
@@ -306,6 +317,10 @@ const MERGE_READY_TIMEOUT: Duration = Duration::from_millis(5 * 60 * 1000 + 400 
 /// `D`: the NNS subnet runs that DKG in its data blocks, i.e. within a few
 /// rounds of the proposal's execution.
 const REGISTRY_TIMEOUT: Duration = Duration::from_secs(120);
+/// Timeout for the replica on the node of `D` the merged state is uploaded to
+/// to start from the merged checkpoint (step 22). Starting from a checkpoint of
+/// the size of this scenario's takes seconds.
+const REPLICA_RESTART_TIMEOUT: Duration = Duration::from_secs(300);
 /// How long the merging tool waits between two evaluations of a condition it
 /// waits for. Longer than a driver retry because every evaluation scrapes the
 /// metrics of all subnets.
@@ -324,15 +339,16 @@ const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 
 /// Timeouts of the test itself, above the sum of the timeouts of its steps
-/// (dominated by `MERGE_READY_TIMEOUT` and `HALT_TIMEOUT`, about 1400s
-/// together), so that a stuck step fails with its own error. `HALT_TIMEOUT`
-/// is counted once although it applies to each of the two subnets: both are
-/// scheduled to halt before either is waited for, so the two waits overlap.
-/// The overall timeout additionally covers the setup (booting the IC and installing the NNS) and has to stay
-/// well below the 3600s of the `eternal` timeout of the Bazel target, which
-/// also covers what runs outside of the test driver's own timeouts.
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(1900);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(2500);
+/// (dominated by `MERGE_READY_TIMEOUT`, `HALT_TIMEOUT` and
+/// `REPLICA_RESTART_TIMEOUT`, about 1700s together), so that a stuck step fails
+/// with its own error. `HALT_TIMEOUT` is counted once although it applies to
+/// each of the two subnets: both are scheduled to halt before either is waited
+/// for, so the two waits overlap. The overall timeout additionally covers the
+/// setup (booting the IC and installing the NNS) and has to stay well below the
+/// 3600s of the `eternal` timeout of the Bazel target, which also covers what
+/// runs outside of the test driver's own timeouts.
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2200);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(2800);
 
 /// The conditions this scenario violates, i.e. the ones step 7 checks. This
 /// includes `CommonQuorum`, since the replicas do not satisfy the individual
@@ -657,7 +673,7 @@ async fn prepare<'a>(
     }
 }
 
-/// Steps 8 to 21: hand the scenario over to the subnet merging tool, and make
+/// Steps 8 to 22: hand the scenario over to the subnet merging tool, and make
 /// the checks of the steps in between its steps.
 ///
 /// Plain synchronous code, like `rs/tests/consensus/subnet_splitting_test.rs`:
@@ -774,6 +790,7 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
                     logger,
                     "Step 21 done: the merged state is uploaded to the node of subnet D"
                 );
+                runtime.block_on(check_merged_state_uploaded(env, context));
             }
         }
     }
@@ -969,28 +986,14 @@ fn check_recovery_cup_contents(env: &TestEnv, context: &Context<'_>) {
         std::thread::sleep(POLL_INTERVAL);
     };
 
-    let merged_checkpoints_dir = recovery_dir
-        .join("merged_working_dir")
-        .join("data")
-        .join(IC_STATE)
-        .join(CHECKPOINTS);
-    let merged_checkpoints = std::fs::read_dir(&merged_checkpoints_dir)
-        .unwrap_or_else(|e| panic!("failed to read {}: {e}", merged_checkpoints_dir.display()))
-        .map(|entry| entry.expect("failed to read a directory entry").path())
-        .collect::<Vec<_>>();
-    let [merged_checkpoint] = merged_checkpoints.as_slice() else {
-        panic!("expected a single merged checkpoint, got {merged_checkpoints:?}");
-    };
-    let name = merged_checkpoint.file_name().unwrap().to_string_lossy();
-    let merged_height = u64::from_str_radix(&name, 16)
-        .unwrap_or_else(|e| panic!("checkpoint {name} is not named by its height: {e}"));
+    let (merged_checkpoint, merged_height) = merged_checkpoint(env);
     assert_eq!(
         recovery_args.height, merged_height,
         "the recovery CUP of subnet D is not at the height of the merged checkpoint",
     );
 
     // Hash the checkpoint itself rather than trust the manifest the tool wrote.
-    let merged_state_hash = get_state_hash(merged_checkpoint).unwrap_or_else(|e| {
+    let merged_state_hash = get_state_hash(&merged_checkpoint).unwrap_or_else(|e| {
         panic!(
             "failed to compute the state hash of {}: {e}",
             merged_checkpoint.display()
@@ -1048,6 +1051,93 @@ fn check_recovery_cup_contents(env: &TestEnv, context: &Context<'_>) {
         logger,
         "Step 20 done: the recovery CUP contents of subnet D are at height {merged_height}, with \
          the state hash {merged_state_hash}, and D is halted"
+    );
+}
+
+/// The merged checkpoint the tool assembled, and its height.
+fn merged_checkpoint(env: &TestEnv) -> (PathBuf, u64) {
+    let merged_checkpoints_dir = env
+        .get_path(MERGING_DIR)
+        .join(RECOVERY_DIRECTORY_NAME)
+        .join("merged_working_dir")
+        .join("data")
+        .join(IC_STATE)
+        .join(CHECKPOINTS);
+    let merged_checkpoints = std::fs::read_dir(&merged_checkpoints_dir)
+        .unwrap_or_else(|e| panic!("failed to read {}: {e}", merged_checkpoints_dir.display()))
+        .map(|entry| entry.expect("failed to read a directory entry").path())
+        .collect::<Vec<_>>();
+    let [merged_checkpoint] = merged_checkpoints.as_slice() else {
+        panic!("expected a single merged checkpoint, got {merged_checkpoints:?}");
+    };
+    let name = merged_checkpoint.file_name().unwrap().to_string_lossy();
+    let merged_height = u64::from_str_radix(&name, 16)
+        .unwrap_or_else(|e| panic!("checkpoint {name} is not named by its height: {e}"));
+    (merged_checkpoint.clone(), merged_height)
+}
+
+/// Step 22: check that `UploadStateToDestinationSubnet` put the merged state in
+/// place on `D`'s node and that the replica on that node started from it:
+/// * the checkpoints directory of the node holds exactly the merged checkpoint,
+///   i.e. the checkpoint `D` halted at was replaced;
+/// * the replica reports `METRIC_MAX_RESIDENT_HEIGHT` at the height of the
+///   merged checkpoint. The state manager sets it to the height of the
+///   checkpoint it starts from, and no other node holds a checkpoint at that
+///   height, so the replica runs again and started from the uploaded one.
+async fn check_merged_state_uploaded(env: &TestEnv, context: &Context<'_>) {
+    let logger = &context.logger;
+    let node = merge_node_snapshot(&context.d_subnet);
+    let node_ip = node.get_ip_addr();
+    let (merged_checkpoint, merged_height) = merged_checkpoint(env);
+    let merged_checkpoint_name = merged_checkpoint
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    info!(
+        logger,
+        "Step 22: Checking that node {node_ip} of subnet D runs on the merged checkpoint \
+         {merged_checkpoint_name}"
+    );
+
+    let checkpoints = node
+        .block_on_bash_script(&format!("sudo ls {NODE_CHECKPOINTS_DIR}"))
+        .unwrap_or_else(|e| panic!("failed to list {NODE_CHECKPOINTS_DIR} on node {node_ip}: {e}"));
+    let checkpoints: Vec<&str> = checkpoints.split_whitespace().collect();
+    assert_eq!(
+        checkpoints,
+        [merged_checkpoint_name.as_str()],
+        "{NODE_CHECKPOINTS_DIR} on node {node_ip} does not hold exactly the merged checkpoint",
+    );
+
+    retry_with_msg_async!(
+        format!("node {node_ip} reporting {METRIC_MAX_RESIDENT_HEIGHT} {merged_height}"),
+        logger,
+        REPLICA_RESTART_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            let metrics = fetch_metrics(&[node_ip], &[METRIC_MAX_RESIDENT_HEIGHT]).await?;
+            let heights: Vec<f64> = metrics
+                .get(&node_ip)
+                .map(|metrics| {
+                    replica_values(metrics, METRIC_MAX_RESIDENT_HEIGHT, |_| true).collect()
+                })
+                .unwrap_or_default();
+            if heights != [merged_height as f64] {
+                bail!("node {node_ip} reports {METRIC_MAX_RESIDENT_HEIGHT} {heights:?}");
+            }
+            Ok(())
+        }
+    )
+    .await
+    .unwrap_or_else(|e| {
+        panic!("the replica on node {node_ip} did not start from the merged checkpoint: {e}")
+    });
+
+    info!(
+        logger,
+        "Step 22 done: node {node_ip} of subnet D holds only the merged checkpoint \
+         {merged_checkpoint_name} and its replica started from it"
     );
 }
 
@@ -1114,7 +1204,12 @@ fn canisters_in_checkpoint(checkpoint: &std::path::Path) -> BTreeSet<String> {
 /// CUP on and downloads the state of `subnet` from and, for the destination
 /// subnet, the one it uploads the merged state to.
 fn merge_node(subnet: &SubnetSnapshot) -> IpAddr {
-    subnet.nodes().next().unwrap().get_ip_addr()
+    merge_node_snapshot(subnet).get_ip_addr()
+}
+
+/// The node of `subnet` that `merge_node` returns the IP address of.
+fn merge_node_snapshot(subnet: &SubnetSnapshot) -> IcNodeSnapshot {
+    subnet.nodes().next().unwrap()
 }
 
 /// Step 13: check that `S` and `D` are halted, i.e. that every one of their
