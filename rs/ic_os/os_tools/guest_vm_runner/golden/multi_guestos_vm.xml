@@ -155,7 +155,7 @@
       <alias name='console1'/>
     </console>
     <vsock model='virtio'>
-      <cid address='19'/>
+      <cid address='18'/>
     </vsock>
     <input type='mouse' bus='ps2'>
       <alias name='input0'/>
