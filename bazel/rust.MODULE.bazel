@@ -77,7 +77,6 @@ crate.spec(
         "compress-brotli",
         "compress-gzip",
         "compress-zstd",
-        "http2",
         "unicode",
         "compat",
     ],
