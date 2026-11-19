@@ -57,6 +57,7 @@ pub enum ValidationError {
     ReplacedCanisterNotStopped(Reserved),
     ReplacedCanisterHasSnapshots(Reserved),
     MigratedCanisterInsufficientCycles(Reserved),
+    ReplacedCanisterInsufficientCycles(Reserved),
     CloudEngineSubnet { subnet: Principal },
     CallFailed { reason: String },
 }
@@ -1592,6 +1593,171 @@ async fn validation_fails_insufficient_cycles() {
     ));
 }
 
+/// Returns the freezing threshold (in cycles) of the given canister
+/// extended by 12 hours of its current idle cycles consumption.
+async fn freezing_threshold_cycles_in_12h(
+    pic: &PocketIc,
+    canister: Principal,
+    controller: Principal,
+) -> u128 {
+    const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
+    let status = pic
+        .canister_status(canister, Some(controller))
+        .await
+        .unwrap();
+    let freezing_threshold = u128::try_from(status.settings.freezing_threshold.0).unwrap();
+    let idle_cycles_burned_per_day = u128::try_from(status.idle_cycles_burned_per_day.0).unwrap();
+    idle_cycles_burned_per_day * (freezing_threshold + 12 * 60 * 60) / SECONDS_PER_DAY
+}
+
+/// Sets the freezing threshold of the given canister so that the canister
+/// becomes frozen (at its current idle burn rate) after roughly `duration`.
+async fn set_freezing_threshold_to_freeze_after(
+    pic: &PocketIc,
+    canister: Principal,
+    controller: Principal,
+    duration: Duration,
+) {
+    const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
+    let status = pic
+        .canister_status(canister, Some(controller))
+        .await
+        .unwrap();
+    let cycles = u128::try_from(status.cycles.0).unwrap();
+    let idle_cycles_burned_per_day = u128::try_from(status.idle_cycles_burned_per_day.0).unwrap();
+    assert!(idle_cycles_burned_per_day > 0);
+    // The canister is frozen once its balance drops below
+    // `idle_cycles_burned_per_day * freezing_threshold / SECONDS_PER_DAY`.
+    let freezing_threshold =
+        cycles * SECONDS_PER_DAY / idle_cycles_burned_per_day - duration.as_secs() as u128;
+    pic.update_canister_settings(
+        canister,
+        Some(controller),
+        CanisterSettings {
+            freezing_threshold: Some(freezing_threshold.into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+}
+
+/// Sets up a migration in which both canisters have sufficient cycles
+/// (and a freezing threshold such that they do not become frozen soon)
+/// and a memory allocation of 1 GiB.
+async fn setup_with_100t_cycles() -> (Setup, MigrateCanisterArgs) {
+    // `enough_cycles: false` creates the canisters with a small balance so that
+    // they can be topped up to exactly 100T cycles below. The `u128::MAX / 2` cycles
+    // that `enough_cycles: true` adds are too many for a canister to be close to
+    // freezing: the freezing threshold this would take does not fit into
+    // the `u64` number of seconds that a freezing threshold is limited to.
+    let setup = setup(Settings {
+        enough_cycles: false,
+        ..Default::default()
+    })
+    .await;
+    let sender = setup.migrated_canister_controllers[0];
+    let migrated_canister = setup.migrated_canisters[0];
+    let replaced_canister = setup.replaced_canisters[0];
+    const CYCLES: u128 = 100_000_000_000_000;
+    for canister in [migrated_canister, replaced_canister] {
+        let balance = setup.pic.cycle_balance(canister).await;
+        setup.pic.add_cycles(canister, CYCLES - balance).await;
+        assert_eq!(setup.pic.cycle_balance(canister).await, CYCLES);
+        // A memory allocation makes the idle burn rate substantial (so that a
+        // freezing threshold derived from it is not absurdly high) and independent
+        // of small changes in the canister's memory usage (e.g., due to canister history).
+        // It must be set before validation: the migration canister sets the memory
+        // allocation again when it makes itself the exclusive controller, based on
+        // the memory allocation at validation time.
+        set_memory_allocation(&setup.pic, canister, sender, 1 << 30)
+            .await
+            .unwrap();
+    }
+    let args = MigrateCanisterArgs {
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister,
+    };
+    (setup, args)
+}
+
+const FREEZING_SOON: Duration = Duration::from_secs(6 * 60 * 60);
+
+#[tokio::test]
+async fn validation_fails_migrated_canister_freezing_soon() {
+    let (setup, args) = setup_with_100t_cycles().await;
+    let sender = setup.migrated_canister_controllers[0];
+    // The migrated canister would not become frozen within 24 hours and it has
+    // more cycles than the migration costs, but it would not have cycles for
+    // 12 hours of runway after paying for the migration.
+    set_freezing_threshold_to_freeze_after(
+        &setup.pic,
+        args.migrated_canister_id,
+        sender,
+        Duration::from_secs(24 * 60 * 60),
+    )
+    .await;
+    assert!(matches!(
+        migrate_canister(&setup.pic, sender, &args).await,
+        Err(ValidationError::MigratedCanisterInsufficientCycles(
+            Reserved
+        ))
+    ));
+}
+
+#[tokio::test]
+async fn validation_fails_replaced_canister_freezing_soon() {
+    let (setup, args) = setup_with_100t_cycles().await;
+    let sender = setup.migrated_canister_controllers[0];
+    set_freezing_threshold_to_freeze_after(
+        &setup.pic,
+        args.replaced_canister_id,
+        sender,
+        FREEZING_SOON,
+    )
+    .await;
+    assert!(matches!(
+        migrate_canister(&setup.pic, sender, &args).await,
+        Err(ValidationError::ReplacedCanisterInsufficientCycles(
+            Reserved
+        ))
+    ));
+}
+
+#[tokio::test]
+async fn after_validation_freezing_soon() {
+    for (which, expected_reason) in [
+        (
+            "migrated",
+            "Migrated canister does not have sufficient cycles for the migration",
+        ),
+        (
+            "replaced",
+            "Replaced canister does not have sufficient cycles to not become frozen",
+        ),
+    ] {
+        let (setup, args) = setup_with_100t_cycles().await;
+        let sender = setup.migrated_canister_controllers[0];
+        migrate_canister(&setup.pic, sender, &args).await.unwrap();
+        // The original controllers can still change the canister settings
+        // until the migration canister becomes their exclusive controller.
+        let canister = if which == "migrated" {
+            args.migrated_canister_id
+        } else {
+            args.replaced_canister_id
+        };
+        set_freezing_threshold_to_freeze_after(&setup.pic, canister, sender, FREEZING_SOON).await;
+        for _ in 0..4 {
+            advance(&setup.pic).await;
+        }
+        let status = get_status(&setup.pic, sender, &args).await;
+        let MigrationStatus::Failed { ref reason, .. } = status.clone().unwrap() else {
+            panic!("Unexpected status: {:?}", status.unwrap())
+        };
+        assert!(reason.contains(expected_reason), "{reason}");
+    }
+}
+
 #[tokio::test]
 async fn status_correct() {
     let Setup {
@@ -1806,8 +1972,10 @@ async fn after_validation_insufficient_cycles() {
     let replaced_canister = replaced_canisters[0];
     // Top up just enough to pass validation, keeping the surplus minimal so that
     // the reinstall below burns enough to drop below the required amount.
+    let required_cycles = 10_000_000_000_000
+        + freezing_threshold_cycles_in_12h(&pic, migrated_canister, sender).await;
     let balance = pic.cycle_balance(migrated_canister).await;
-    pic.add_cycles(migrated_canister, 10_000_000_000_000 - balance)
+    pic.add_cycles(migrated_canister, required_cycles - balance)
         .await;
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister,

@@ -12,8 +12,8 @@ use candid::{Principal, Reserved};
 use ic_cdk::api::canister_self;
 
 use crate::{
-    CYCLES_COST_PER_MIGRATION, MEMORY_RESERVED_FOR_CANISTER_HISTORY, ManagedMemoryAllocation,
-    Request, ValidationError,
+    CYCLES_COST_PER_MIGRATION, MEMORY_RESERVED_FOR_CANISTER_HISTORY, MIN_DURATION_UNTIL_FROZEN,
+    ManagedMemoryAllocation, Request, ValidationError,
     canister_state::CanisterGuard,
     canister_state::requests::list_by,
     external_interfaces::{
@@ -158,9 +158,22 @@ pub async fn validate_request(
         "Call to management canister `list_canister_snapshots` failed. Try again later.",
     )?;
 
-    // 11. Does the migrated canister have sufficient cycles for the migration?
-    if migrated_canister_status.cycles < CYCLES_COST_PER_MIGRATION {
+    // 11. Does the migrated canister have sufficient cycles for the migration
+    // and to not become frozen afterwards in the near future?
+    if migrated_canister_status.cycles
+        < migrated_canister_status
+            .required_cycles(CYCLES_COST_PER_MIGRATION, MIN_DURATION_UNTIL_FROZEN)
+    {
         return Err(ValidationError::MigratedCanisterInsufficientCycles(
+            Reserved,
+        ));
+    }
+    // 12. Does the replaced canister have sufficient cycles to not become frozen
+    // in the near future?
+    if replaced_canister_status.cycles
+        < replaced_canister_status.required_cycles(0, MIN_DURATION_UNTIL_FROZEN)
+    {
+        return Err(ValidationError::ReplacedCanisterInsufficientCycles(
             Reserved,
         ));
     }
