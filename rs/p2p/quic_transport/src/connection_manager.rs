@@ -276,23 +276,21 @@ impl ConnectionManager {
         self.node_id < *dst
     }
 
+    /// Whether both `peer` and this node are in the current topology.
+    fn both_in_topology(&self, peer: &NodeId) -> bool {
+        self.topology.is_member(peer) && self.topology.is_member(&self.node_id)
+    }
+
     /// Conditions under which the node can start outbound connecting attempt
     /// - the node is a designated dialer
-    /// - peer is in the subnet
-    /// - this node is part of the subnet (can happen when a node is removed from the subnet)
+    /// - peer and this node are in the subnet (this node may have been removed from the subnet)
     /// - there is no connect attempted
     /// - there is no established connection
     fn can_i_dial_to(&self, dst: &NodeId) -> bool {
         let dialer = self.am_i_dialer(dst);
-        let peer_in_subnet = self.topology.is_member(dst);
-        let node_in_subnet = self.topology.is_member(&self.node_id);
         let no_active_connection_attempt = !self.outbound_connecting.contains(dst);
         let no_active_connection = !self.active_connections.contains(dst);
-        no_active_connection_attempt
-            && no_active_connection
-            && dialer
-            && node_in_subnet
-            && peer_in_subnet
+        no_active_connection_attempt && no_active_connection && dialer && self.both_in_topology(dst)
     }
 
     pub async fn run(mut self, cancellation: CancellationToken) {
@@ -439,11 +437,8 @@ impl ConnectionManager {
         // Also remove peer connections that have closed connections.
         let peer_map = self.peer_map.read().unwrap();
         peer_map.iter().for_each(|(peer_id, conn_handle)| {
-            let peer_left_topology = !self.topology.is_member(peer_id);
-            let node_left_topology = !self.topology.is_member(&self.node_id);
             // If peer is not member anymore or this node not part of subnet close connection.
-            let should_close_connection = peer_left_topology || node_left_topology;
-            if should_close_connection {
+            if !self.both_in_topology(peer_id) {
                 conn_handle
                     .conn()
                     .close(VarInt::from_u32(0), b"node not part of subnet anymore");
@@ -511,6 +506,21 @@ impl ConnectionManager {
     /// connection will be retried. `peer` is `Some` if this node was
     /// the dialer. I.e lower node id.
     fn handle_established_connection(&mut self, connection: Connection, peer_id: NodeId) {
+        // The topology may have changed while the handshake was in progress.
+        if !self.both_in_topology(&peer_id) {
+            self.metrics
+                .connection_results_total
+                .with_label_values(&[CONNECTION_RESULT_FAILED_LABEL])
+                .inc();
+            info!(
+                self.log,
+                "Closing connection to {:?}, this node or the peer is not in the topology.",
+                peer_id
+            );
+            connection.close(VarInt::from_u32(0), b"node not part of subnet anymore");
+            return;
+        }
+
         self.metrics
             .connection_results_total
             .with_label_values(&[CONNECTION_RESULT_SUCCESS_LABEL])
