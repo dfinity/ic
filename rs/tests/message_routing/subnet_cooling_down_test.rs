@@ -1,8 +1,8 @@
 /* tag::catalog[]
 Title:: Draining and halting a subnet that is "cooling down", downloading,
 validating and merging the states of the subnets to merge, rerouting the
-canister ID ranges of the subnet, and proposing the recovery CUP of the subnet
-it is merged into, with the subnet merging tool.
+canister ID ranges of the subnet, proposing the recovery CUP of the subnet it is
+merged into and uploading the merged state to it, with the subnet merging tool.
 
 Goal:: Verify that a subnet holding what a subnet merge has to drain violates
 the individual terms of the "merge readiness" condition, i.e. that the
@@ -13,8 +13,9 @@ subnet rejects ingress messages and query calls, the tool eventually finds the
 condition to hold, and it then halts the subnet and the subnet it is told to
 merge it into at their next CUP, downloads and validates the state each halted
 at, assembles the merged state from them, has the canister ID ranges of the
-subnet rerouted to the subnet it is merged into, and proposes the recovery CUP
-of that subnet at the merged state. The cooling down subnet also holds calls
+subnet rerouted to the subnet it is merged into, proposes the recovery CUP of
+that subnet at the merged state, and uploads the merged state to a node of that
+subnet. The cooling down subnet also holds calls
 waiting for responses that never arrive: they are not drained, but make it
 possible to assert that a subnet merge populates the ingress history properly.
 
@@ -147,6 +148,10 @@ Runbook::
 
    Recovering a subnet that was instructed to halt at its next CUP replaces
    that instruction with a plain halt, so also check that `D` is halted.
+21. The following step of the tool is executed:
+   `UploadStateToDestinationSubnet`, which uploads the merged state to `D`'s
+   node, replacing the state directory holding the checkpoint it halted at, and
+   starts its replica back up.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -156,7 +161,8 @@ query calls and becomes "merge ready", and the loops of `UDS` and `UOS` of step
 downloads from them pass validation, the merged state it assembles from them
 holds exactly the canisters of both, and the registry version the tool records
 routes the canister ID ranges of `S` to `D`; and the registry holds the
-recovery CUP contents of `D` at the merged state, with `D` halted.
+recovery CUP contents of `D` at the merged state, with `D` halted; and the
+tool uploads the merged state to `D`'s node and restarts its replica.
 
 end::catalog[] */
 
@@ -651,7 +657,7 @@ async fn prepare<'a>(
     }
 }
 
-/// Steps 8 to 20: hand the scenario over to the subnet merging tool, and make
+/// Steps 8 to 21: hand the scenario over to the subnet merging tool, and make
 /// the checks of the steps in between its steps.
 ///
 /// Plain synchronous code, like `rs/tests/consensus/subnet_splitting_test.rs`:
@@ -680,8 +686,8 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     let merging_args = SubnetMergingArgs {
         source_subnet_id: context.s_subnet.subnet_id,
         destination_subnet_id: context.d_subnet.subnet_id,
-        download_node_source: Some(DataLocation::Remote(download_node(&context.s_subnet))),
-        download_node_destination: Some(DataLocation::Remote(download_node(&context.d_subnet))),
+        source_node: Some(DataLocation::Remote(merge_node(&context.s_subnet))),
+        destination_node: Some(DataLocation::Remote(merge_node(&context.d_subnet))),
         merge_ready_timeout_secs: MERGE_READY_TIMEOUT.as_secs(),
         halt_timeout_secs: HALT_TIMEOUT.as_secs(),
         registry_timeout_secs: REGISTRY_TIMEOUT.as_secs(),
@@ -763,6 +769,12 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
                 );
                 check_recovery_cup_contents(env, context);
             }
+            StepType::UploadStateToDestinationSubnet => {
+                info!(
+                    logger,
+                    "Step 21 done: the merged state is uploaded to the node of subnet D"
+                );
+            }
         }
     }
     assert_eq!(
@@ -774,8 +786,8 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     info!(
         logger,
         "Subnet S has been drained and halted, the states of S and D downloaded, validated and \
-         merged, the canister ID ranges of S rerouted to D, and the recovery CUP of D proposed, \
-         by the subnet merging tool"
+         merged, the canister ID ranges of S rerouted to D, the recovery CUP of D proposed and \
+         the merged state uploaded to D, by the subnet merging tool"
     );
 }
 
@@ -1098,9 +1110,10 @@ fn canisters_in_checkpoint(checkpoint: &std::path::Path) -> BTreeSet<String> {
         .collect()
 }
 
-/// The node of `subnet` the tool waits for the halting CUP on, i.e. the one the
-/// state of `subnet` would be downloaded from.
-fn download_node(subnet: &SubnetSnapshot) -> IpAddr {
+/// The node of `subnet` the tool works with: the one it waits for the halting
+/// CUP on and downloads the state of `subnet` from and, for the destination
+/// subnet, the one it uploads the merged state to.
+fn merge_node(subnet: &SubnetSnapshot) -> IpAddr {
     subnet.nodes().next().unwrap().get_ip_addr()
 }
 
@@ -1120,7 +1133,7 @@ async fn check_subnets_halted(context: &Context<'_>) {
         let subnet_id = subnet.subnet_id;
         // The tool has checked that the download node serves the CUP the subnet
         // halts at, and no CUP follows that one.
-        let download_node = download_node(subnet);
+        let download_node = merge_node(subnet);
         let halting_height = get_node_metrics(logger, &download_node)
             .await
             .unwrap_or_else(|| panic!("failed to get the metrics of node {download_node}"))
