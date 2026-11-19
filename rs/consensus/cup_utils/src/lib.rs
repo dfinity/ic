@@ -773,7 +773,7 @@ mod tests {
     #[rstest]
     #[case::genesis(
         Some(CupType::Genesis(GenesisArgs {})),
-        Some((Height::from(0), UNIX_EPOCH, CryptoHashOfState::nonexistent().get())),
+        Some((Height::from(0), UNIX_EPOCH, CryptoHashOfState::nonexistent())),
     )]
     #[case::recovery(
         Some(CupType::Recovery(RecoveryArgs {
@@ -784,7 +784,7 @@ mod tests {
         Some((
             Height::from(54321),
             Time::from_nanos_since_unix_epoch(1),
-            CryptoHash(vec![1; 32]),
+            CryptoHashOfState::from(CryptoHash(vec![1; 32])),
         )),
     )]
     #[case::subnet_splitting(Some(CupType::SubnetSplitting(SubnetSplittingArgs {
@@ -793,7 +793,7 @@ mod tests {
     #[case::missing(None, None)]
     fn test_make_registry_cup(
         #[case] cup_type: Option<CupType>,
-        #[case] expected: Option<(Height, Time, CryptoHash)>,
+        #[case] expected: Option<(Height, Time, CryptoHashOfState)>,
     ) {
         let subnet_id = subnet_test_id(0);
         let registry_client =
@@ -814,7 +814,7 @@ mod tests {
         };
 
         let block = cup.content.block.get_value();
-        assert_eq!(cup.content.state_hash.get_ref(), &state_hash);
+        assert_eq!(cup.content.state_hash, state_hash);
         assert_eq!(block.height, height);
         assert_eq!(block.context.certified_height, height);
         assert_eq!(block.context.time, time);
