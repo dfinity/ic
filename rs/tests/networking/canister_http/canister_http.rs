@@ -7,8 +7,8 @@ use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnet
 pub use ic_https_outcalls_pricing::MAX_RESPONSE_TIME;
 use ic_https_outcalls_pricing::fees::{consensus_fee, gossip_usage_fee};
 use ic_management_canister_types_private::{
-    CanisterHttpResponsePayload, HttpMethod, PRICING_VERSION_PAY_AS_YOU_GO, Payload,
-    TransformContext, TransformFunc,
+    BoundedHttpHeaders, CanisterHttpResponsePayload, HttpMethod, PRICING_VERSION_PAY_AS_YOU_GO,
+    Payload, TransformContext, TransformFunc,
 };
 use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_registry_subnet_features::SubnetFeatures;
@@ -909,7 +909,7 @@ impl DeliveredResponse {
         let content = NumBytes::from(
             CanisterHttpResponsePayload {
                 status: 200,
-                headers: vec![],
+                headers: BoundedHttpHeaders::new(vec![]),
                 body: body.to_vec(),
             }
             .encode()
@@ -933,6 +933,7 @@ impl DeliveredResponse {
             .map(|p| {
                 let headers: u64 = p
                     .headers
+                    .get()
                     .iter()
                     .map(|h| (h.name.len() + h.value.len()) as u64)
                     .sum();

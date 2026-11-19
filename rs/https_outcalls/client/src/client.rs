@@ -1,5 +1,5 @@
 use crate::metrics::Metrics;
-use candid::Encode;
+use candid::{Decode, Encode};
 use ic_error_types::{RejectCode, UserError};
 use ic_https_outcalls_pricing::{
     AdapterLimits, BudgetTracker, MAX_RESPONSE_TIME, NetworkUsage, PricingError, PricingFactory,
@@ -14,7 +14,9 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
 use ic_logger::{ReplicaLogger, info, warn};
-use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
+use ic_management_canister_types_private::{
+    BoundedHttpHeaders, CanisterHttpResponsePayload, TransformArgs, decoder_config,
+};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     CanisterId, CountBytes, NumBytes, NumInstructions,
@@ -22,7 +24,8 @@ use ic_types::{
         CanisterHttpHeader, CanisterHttpMethod, CanisterHttpPaymentReceipt, CanisterHttpReject,
         CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
         CanisterHttpResponseContent, MAX_CANISTER_HTTP_RESPONSE_BYTES,
-        MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, Transform, validate_http_headers_and_body,
+        MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, Replication, Transform,
+        validate_http_headers_and_body,
     },
     ingress::WasmResult,
     messages::{Query, QuerySource},
@@ -184,6 +187,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             // the final (post-transform) response to.
             let max_response_size_bytes = request_max_response_bytes
                 .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get());
+            let is_flexible = matches!(request_replication, Replication::Flexible { .. });
 
             let mut payload = async {
                 // Execute the HTTP request and get the adapter response.
@@ -254,6 +258,19 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                                 reject_code: RejectCode::SysFatal,
                                 message: format!(
                                     "Transformed http response exceeds limit: {max_response_size_bytes}"
+                                ),
+                            });
+                        }
+
+                        // A flexible outcall's responses have to be valid `http_request_result`s.
+                        if is_flexible
+                            && let Ok(data) = &transform_result
+                            && let Err(err) = Decode!([decoder_config()]; data, CanisterHttpResponsePayload)
+                        {
+                            return Err(CanisterHttpReject {
+                                reject_code: RejectCode::SysFatal,
+                                message: format!(
+                                    "Transformed http response is not a valid http_request_result: {err}"
                                 ),
                             });
                         }
@@ -486,22 +503,26 @@ fn validate_response(
         headers,
         content: body,
     } = response;
-    let canister_http_payload =
-        CanisterHttpResponsePayload {
-            status: status as u128,
-            headers: headers
+    let canister_http_payload = CanisterHttpResponsePayload {
+        status: status as u128,
+        headers: BoundedHttpHeaders::new(
+            headers
                 .into_iter()
                 .map(|HttpHeader { name, value }| {
                     ic_management_canister_types_private::HttpHeader { name, value }
                 })
                 .collect(),
-            body,
-        };
-    validate_http_headers_and_body(&canister_http_payload.headers, &canister_http_payload.body)
-        .map_err(|e| CanisterHttpReject {
-            reject_code: RejectCode::SysFatal,
-            message: UserError::from(e).description().to_string(),
-        })?;
+        ),
+        body,
+    };
+    validate_http_headers_and_body(
+        canister_http_payload.headers.get(),
+        &canister_http_payload.body,
+    )
+    .map_err(|e| CanisterHttpReject {
+        reject_code: RejectCode::SysFatal,
+        message: UserError::from(e).description().to_string(),
+    })?;
     Ok(canister_http_payload)
 }
 
@@ -944,12 +965,14 @@ mod tests {
                 Encode!(
                     &ic_management_canister_types_private::CanisterHttpResponsePayload {
                         status,
-                        headers: headers
-                            .into_iter()
-                            .map(|HttpHeader { name, value }| {
-                                ic_management_canister_types_private::HttpHeader { name, value }
-                            })
-                            .collect(),
+                        headers: BoundedHttpHeaders::new(
+                            headers
+                                .into_iter()
+                                .map(|HttpHeader { name, value }| {
+                                    ic_management_canister_types_private::HttpHeader { name, value }
+                                })
+                                .collect()
+                        ),
                         body,
                     }
                 )
@@ -1342,6 +1365,71 @@ mod tests {
         }
     }
 
+    /// A flexible outcall rejects transformed output that is not an
+    /// `http_request_result`, while a non-flexible one returns it as it is.
+    #[tokio::test]
+    async fn test_client_rejects_invalid_flexible_transform_output() {
+        for flexible in [false, true] {
+            let response = HttpsOutcallResponse {
+                status: 200,
+                headers: Vec::new(),
+                content: Vec::new(),
+            };
+            let mock_grpc_channel =
+                setup_adapter_mock(Ok(create_result_from_response(response))).await;
+            let (svc, mut handle) = setup_system_query_mock();
+            tokio::spawn(async move {
+                let (_, rsp) = handle.next_request().await.unwrap();
+                rsp.send_response(Ok((
+                    Ok(WasmResult::Reply(b"not candid".to_vec())),
+                    current_time(),
+                )));
+            });
+
+            let mut client = CanisterHttpAdapterClientImpl::new(
+                tokio::runtime::Handle::current(),
+                mock_grpc_channel,
+                svc,
+                100,
+                MetricsRegistry::default(),
+                no_op_logger(),
+            );
+
+            let mut request = build_mock_canister_http_request(420, Some("transform".to_string()));
+            if flexible {
+                request.context.replication = Replication::Flexible {
+                    committee: std::collections::BTreeSet::new(),
+                    min_responses: 1,
+                    max_responses: 1,
+                };
+            }
+            assert_eq!(client.send(request), Ok(()));
+            let content = loop {
+                match client.try_receive() {
+                    Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
+                    Ok((response, _payment_receipt)) => break response.content,
+                }
+            };
+
+            match content {
+                CanisterHttpResponseContent::Success(data) if !flexible => {
+                    assert_eq!(data, b"not candid")
+                }
+                CanisterHttpResponseContent::Reject(reject) if flexible => {
+                    assert_eq!(reject.reject_code, RejectCode::SysFatal);
+                    assert!(
+                        reject.message.starts_with(
+                            "Transformed http response is not a valid http_request_result"
+                        ),
+                        "{}",
+                        reject.message
+                    );
+                }
+                content => panic!("flexible: {flexible}, unexpected content: {content:?}"),
+            }
+        }
+    }
+
     /// Test case where adapter encounters an INVALID_ARGUMENT  error in executing the http request.
     /// This should be reported as a fatal error.
     #[tokio::test]
@@ -1428,13 +1516,18 @@ mod tests {
                     Encode!(
                         &ic_management_canister_types_private::CanisterHttpResponsePayload {
                             status: 200_u128,
-                            headers: adapter_h
-                                .clone()
-                                .into_iter()
-                                .map(|HttpHeader { name, value }| {
-                                    ic_management_canister_types_private::HttpHeader { name, value }
-                                })
-                                .collect(),
+                            headers: BoundedHttpHeaders::new(
+                                adapter_h
+                                    .clone()
+                                    .into_iter()
+                                    .map(|HttpHeader { name, value }| {
+                                        ic_management_canister_types_private::HttpHeader {
+                                            name,
+                                            value,
+                                        }
+                                    })
+                                    .collect()
+                            ),
                             body: adapter_b.clone(),
                         }
                     )

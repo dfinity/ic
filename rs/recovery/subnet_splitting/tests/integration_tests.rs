@@ -1,7 +1,9 @@
 use std::{fs::read_to_string, io::Write, str::FromStr};
 
 use candid::Encode;
-use ic_management_canister_types_private::{CanisterHttpResponsePayload, HttpMethod};
+use ic_management_canister_types_private::{
+    BoundedHttpHeaders, CanisterHttpResponsePayload, HttpMethod,
+};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_machine_tests::{StateMachine, two_subnets_simple};
 use ic_subnet_splitting::post_split_estimations::PostSplitEstimations;
@@ -220,36 +222,36 @@ fn load_metrics_e2e_test() {
             states_sizes_bytes
                 .source
                 .min(states_sizes_bytes.destination),
-            2444301,
+            2588742,
             0.1
         );
         assert_near!(
             states_sizes_bytes
                 .source
                 .max(states_sizes_bytes.destination),
-            6466034,
+            6368233,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .min(instructions_executed.destination),
-            143711830,
+            144130832,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .max(instructions_executed.destination),
-            144824377,
+            144605505,
             0.1
         );
         assert_eq_oriented!(canisters_installed, 15, 5);
-        assert_eq_oriented!(ingress_messages_executed, 26, 13);
-        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 6, 4);
-        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 19, 9);
-        assert_eq_oriented!(http_outcalls_executed, 9, 1);
-        assert_eq_oriented!(heartbeats_and_global_timers_executed, 312, 382);
+        assert_eq_oriented!(ingress_messages_executed, 25, 14);
+        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 5, 5);
+        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 20, 8);
+        assert_eq_oriented!(http_outcalls_executed, 10, 0);
+        assert_eq_oriented!(heartbeats_and_global_timers_executed, 315, 379);
         let canisters_with_broken_local_connections =
             broken_connections.map(|connections| connections.len() as u64);
         assert_eq_oriented!(canisters_with_broken_local_connections, 1, 1);
@@ -352,7 +354,7 @@ fn set_up(
         state_machine.execute_round();
         state_machine.handle_http_call("unused", |_| CanisterHttpResponsePayload {
             status: 200,
-            headers: vec![],
+            headers: BoundedHttpHeaders::new(vec![]),
             body: vec![],
         });
         state_machine

@@ -4,6 +4,7 @@
 //! and eventually make it into consensus.
 use crate::metrics::CanisterHttpPoolManagerMetrics;
 use crate::payload_builder::utils::{check_metadata_matches_content, check_receipt_bounds};
+use candid::Decode;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
@@ -16,6 +17,7 @@ use ic_interfaces_adapter_client::*;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::*;
+use ic_management_canister_types_private::{CanisterHttpResponsePayload, decoder_config};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
@@ -500,6 +502,18 @@ impl CanisterHttpPoolManagerImpl {
                                         format!("{err:?}"),
                                     ));
                                 }
+
+                                if let Replication::Flexible { .. } = context.replication
+                                    && let CanisterHttpResponseContent::Success(content) =
+                                        &response.content
+                                    && let Err(err) =
+                                        Decode!([decoder_config()]; content, CanisterHttpResponsePayload)
+                                {
+                                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                                        share.clone(),
+                                        format!("Response is not a valid http_request_result: {err}"),
+                                    ));
+                                }
                             }
                             // The request has already been answered, so the response is of no
                             // use to anyone and is not gossiped along with the share.
@@ -623,6 +637,7 @@ impl<T: CanisterHttpPool> PoolMutationsProducer<T> for CanisterHttpPoolManagerIm
 pub mod test {
     use super::*;
     use assert_matches::assert_matches;
+    use candid::Encode;
     use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_consensus_utils::crypto::SignVerify;
@@ -631,6 +646,7 @@ pub mod test {
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_interfaces_state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types_private::BoundedHttpHeaders;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
@@ -717,6 +733,29 @@ pub mod test {
         CanisterHttpResponse {
             id: CallbackId::from(id),
             content: CanisterHttpResponseContent::Success(Vec::new()),
+        }
+    }
+
+    /// The content of a successful flexible response: an `http_request_result`
+    /// of `size` bytes.
+    fn flexible_content(size: usize) -> Vec<u8> {
+        let encode = |body_len| {
+            Encode!(&CanisterHttpResponsePayload {
+                status: 200,
+                headers: BoundedHttpHeaders::new(vec![]),
+                body: vec![0; body_len],
+            })
+            .unwrap()
+        };
+        let content = encode(size - (encode(size).len() - size));
+        assert_eq!(content.len(), size);
+        content
+    }
+
+    fn flexible_canister_http_response(id: u64) -> CanisterHttpResponse {
+        CanisterHttpResponse {
+            id: CallbackId::from(id),
+            content: CanisterHttpResponseContent::Success(flexible_content(100)),
         }
     }
 
@@ -3036,7 +3075,7 @@ pub mod test {
                     ));
 
                 // 3. MALICIOUS ARTIFACT: Create a share that is signed by the `wrong_signer_id`.
-                let response = empty_canister_http_response(callback_id.get());
+                let response = flexible_canister_http_response(callback_id.get());
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: callback_id,
@@ -3321,6 +3360,58 @@ pub mod test {
                         if reason.starts_with("InvalidMetadata")
                     );
                 }
+
+                // TEST 6: Flexible artifact's response is not an `http_request_result` -- should
+                // be invalid. One that is gets validated.
+                for (response, valid) in [
+                    (empty_canister_http_response(callback_id.get()), false),
+                    (flexible_canister_http_response(callback_id.get()), true),
+                ] {
+                    let mut canister_http_pool =
+                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                    let receipt = CanisterHttpResponseReceipt {
+                        metadata: CanisterHttpResponseMetadata {
+                            id: callback_id,
+                            content_hash: crypto_hash(&response),
+                            content_size: response.content.count_bytes() as u32,
+                            is_reject: false,
+                            replica_version: replica_config.replica_version().clone(),
+                        },
+                        payment_receipt: CanisterHttpPaymentReceipt::default(),
+                    };
+                    let signature = crypto
+                        .sign(&receipt, committee_member, RegistryVersion::from(1))
+                        .unwrap();
+
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: CanisterHttpResponseArtifact {
+                            share: Signed {
+                                content: receipt,
+                                signature,
+                            },
+                            response: Some(response),
+                        },
+                        peer_id: committee_member,
+                        timestamp: UNIX_EPOCH,
+                    });
+
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
+
+                    if valid {
+                        assert_matches!(
+                            changes.as_slice(),
+                            [CanisterHttpChangeAction::MoveToValidated(..)]
+                        );
+                    } else {
+                        assert_matches!(
+                            changes.as_slice(),
+                            [CanisterHttpChangeAction::HandleInvalid(_, reason)]
+                            if reason.starts_with("Response is not a valid http_request_result")
+                        );
+                    }
+                }
             })
         });
     }
@@ -3449,11 +3540,9 @@ pub mod test {
 
                     let response = CanisterHttpResponse {
                         id: callback_id,
-                        content: CanisterHttpResponseContent::Success(vec![
-                            0;
-                            MAX_CANISTER_HTTP_RESPONSE_BYTES
-                                as usize
-                        ]),
+                        content: CanisterHttpResponseContent::Success(flexible_content(
+                            MAX_CANISTER_HTTP_RESPONSE_BYTES as usize,
+                        )),
                     };
 
                     let response_metadata = CanisterHttpResponseReceipt {
@@ -4029,7 +4118,7 @@ pub mod test {
 
                     let mut canister_http_pool =
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-                    let response = empty_canister_http_response(callback_id.get());
+                    let response = flexible_canister_http_response(callback_id.get());
                     let receipt_share = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: callback_id,

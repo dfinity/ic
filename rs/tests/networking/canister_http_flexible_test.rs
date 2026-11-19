@@ -363,6 +363,7 @@ fn run_flexible_test_on<M, A>(
 fn header_value<'a>(payload: &'a CanisterHttpResponsePayload, name: &str) -> Option<&'a str> {
     payload
         .headers
+        .get()
         .iter()
         .find(|header| header.name.eq_ignore_ascii_case(name))
         .map(|header| header.value.as_str())
@@ -431,7 +432,7 @@ fn expect_all_bodies_contain(payloads: &[CanisterHttpResponsePayload], needle: &
 /// transform).
 fn expect_all_headers_empty(payloads: &[CanisterHttpResponsePayload]) -> Result<()> {
     for payload in payloads {
-        if !payload.headers.is_empty() {
+        if !payload.headers.get().is_empty() {
             bail!("expected no headers, got {:?}", payload.headers);
         }
     }
