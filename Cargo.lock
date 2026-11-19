@@ -757,7 +757,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -768,7 +768,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1798,7 +1798,7 @@ dependencies = [
  "bitflags",
  "cexpr",
  "clang-sys",
- "itertools 0.11.0",
+ "itertools 0.13.0",
  "log",
  "prettyplease 0.2.37",
  "proc-macro2",
@@ -3036,7 +3036,7 @@ dependencies = [
  "ipnet",
  "macaddr",
  "network",
- "nix 0.31.4",
+ "nix 0.32.0",
  "regex",
  "reqwest",
  "serde",
@@ -3631,7 +3631,7 @@ dependencies = [
  "mio",
  "parking_lot",
  "rustix 0.38.44",
- "signal-hook",
+ "signal-hook 0.3.18",
  "signal-hook-mio",
  "winapi",
 ]
@@ -3649,7 +3649,7 @@ dependencies = [
  "mio",
  "parking_lot",
  "rustix 1.1.6",
- "signal-hook",
+ "signal-hook 0.3.18",
  "signal-hook-mio",
  "winapi",
 ]
@@ -4426,7 +4426,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.3",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4813,7 +4813,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e35d6e78f4cebb90e51d543db8fe41528851d6deeef6ef21ebd4bfdc1e784776"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5569,7 +5569,7 @@ dependencies = [
  "ic_os_logging",
  "itertools 0.12.1",
  "libcryptsetup-rs",
- "nix 0.31.4",
+ "nix 0.32.0",
  "parking_lot",
  "prometheus",
  "rand 0.8.8",
@@ -5654,7 +5654,7 @@ dependencies = [
  "tokio-util",
  "tonic",
  "tower",
- "tower-http 0.6.11",
+ "tower-http 0.7.1",
  "vsock_lib",
  "x509-parser 0.18.1",
 ]
@@ -5724,7 +5724,7 @@ dependencies = [
  "libsystemd",
  "macaddr",
  "mockall",
- "nix 0.31.4",
+ "nix 0.32.0",
  "prometheus",
  "regex",
  "sev_host",
@@ -5749,7 +5749,7 @@ dependencies = [
  "ic_os_logging",
  "indoc",
  "network",
- "nix 0.31.4",
+ "nix 0.32.0",
  "serde_json",
  "tracing",
  "utils",
@@ -5868,6 +5868,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1"
 dependencies = [
  "hashbrown 0.15.5",
+]
+
+[[package]]
+name = "hashlink"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a596f1b20ed2cc5ecac41a164aaebc7258057060f06c0cf7a2ba3991ee7990fb"
+dependencies = [
+ "hashbrown 0.17.1",
 ]
 
 [[package]]
@@ -6603,7 +6612,7 @@ dependencies = [
  "ic-types",
  "lmdb-rkv",
  "lmdb-rkv-sys",
- "nix 0.31.4",
+ "nix 0.32.0",
  "prometheus",
  "prost",
  "rand 0.8.8",
@@ -6850,7 +6859,7 @@ dependencies = [
  "mockall",
  "moka",
  "nftables",
- "nix 0.31.4",
+ "nix 0.32.0",
  "rand 0.8.8",
  "rate-limits-api",
  "ratelimit",
@@ -6873,7 +6882,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "tower",
- "tower-http 0.6.11",
+ "tower-http 0.7.1",
  "tower_governor",
  "tracing",
  "tracing-serde",
@@ -6964,7 +6973,7 @@ dependencies = [
  "criterion",
  "flate2",
  "futures",
- "hashlink",
+ "hashlink 0.12.2",
  "hex",
  "http 1.5.0",
  "hyper-util",
@@ -7266,7 +7275,7 @@ dependencies = [
  "libc",
  "memory_tracker",
  "mockall",
- "nix 0.31.4",
+ "nix 0.32.0",
  "num-traits",
  "object 0.37.3",
  "prometheus",
@@ -9501,7 +9510,7 @@ dependencies = [
  "maplit",
  "memory_tracker",
  "more-asserts",
- "nix 0.31.4",
+ "nix 0.32.0",
  "num-traits",
  "pretty_assertions",
  "prometheus",
@@ -9912,7 +9921,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-util",
  "tower",
- "tower-http 0.6.11",
+ "tower-http 0.7.1",
  "tower-test",
  "tracing-flame",
  "tracing-subscriber",
@@ -10336,7 +10345,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-rusqlite",
- "tower-http 0.6.11",
+ "tower-http 0.7.1",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -11246,7 +11255,7 @@ dependencies = [
  "ic-logger",
  "libc",
  "parking_lot",
- "procfs",
+ "procfs 0.18.0",
  "prometheus",
  "tokio-metrics",
 ]
@@ -12853,7 +12862,7 @@ dependencies = [
  "quinn",
  "rstest",
  "rustls",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "static_assertions",
  "thiserror 2.0.21",
  "tokio",
@@ -13441,7 +13450,7 @@ dependencies = [
  "ic-types",
  "ic-xnet-payload-builder",
  "libc",
- "nix 0.31.4",
+ "nix 0.32.0",
  "pprof",
  "predicates",
  "prometheus",
@@ -13493,7 +13502,7 @@ dependencies = [
  "ic-state-sync-manager",
  "ic-types",
  "tokio",
- "tower-http 0.6.11",
+ "tower-http 0.7.1",
 ]
 
 [[package]]
@@ -13593,7 +13602,7 @@ dependencies = [
  "libc",
  "maplit",
  "more-asserts",
- "nix 0.31.4",
+ "nix 0.32.0",
  "phantom_newtype",
  "prometheus",
  "proptest",
@@ -13725,7 +13734,7 @@ dependencies = [
  "ic-rosetta-api",
  "ic-types",
  "icp-ledger",
- "nix 0.31.4",
+ "nix 0.32.0",
  "rand 0.8.8",
  "reqwest",
  "rosetta-core",
@@ -14627,7 +14636,7 @@ dependencies = [
  "ic-validate-eq",
  "ic-wasm-types",
  "maplit",
- "nix 0.31.4",
+ "nix 0.32.0",
  "parking_lot",
  "prometheus",
  "proptest",
@@ -14800,7 +14809,7 @@ dependencies = [
  "ic-test-utilities-privileges",
  "lazy_static",
  "libc",
- "nix 0.31.4",
+ "nix 0.32.0",
  "phantom_newtype",
  "prost",
  "rand 0.8.8",
@@ -14889,7 +14898,7 @@ dependencies = [
  "libc",
  "macaddr",
  "network",
- "nix 0.31.4",
+ "nix 0.32.0",
  "on_wire",
  "phantom_newtype",
  "rand 0.8.8",
@@ -15012,11 +15021,11 @@ dependencies = [
  "ic-types-cycles",
  "ic-universal-canister",
  "lazy_static",
- "nix 0.31.4",
+ "nix 0.32.0",
  "rusty-fork",
  "serde",
  "serde_cbor",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "tempfile",
  "wasmprinter",
  "wat",
@@ -15298,7 +15307,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic_consensus_system_test_utils",
- "nix 0.31.4",
+ "nix 0.32.0",
  "rand 0.8.8",
  "registry-canister",
  "reqwest",
@@ -15575,7 +15584,7 @@ version = "0.9.0"
 dependencies = [
  "ic-heap-bytes",
  "ic-types",
- "lru",
+ "lru 0.19.0",
  "proptest",
 ]
 
@@ -15583,7 +15592,7 @@ dependencies = [
 name = "ic-utils-mem-lru"
 version = "0.9.0"
 dependencies = [
- "lru",
+ "lru 0.19.0",
 ]
 
 [[package]]
@@ -15861,7 +15870,7 @@ dependencies = [
  "ic-xnet-uri",
  "maplit",
  "mockall",
- "nix 0.31.4",
+ "nix 0.32.0",
  "prometheus",
  "proptest",
  "rand 0.8.8",
@@ -16203,7 +16212,7 @@ dependencies = [
  "devicemapper",
  "gpt",
  "loopdev-3",
- "nix 0.31.4",
+ "nix 0.32.0",
  "partition_tools",
  "rand 0.8.8",
  "sys-mount",
@@ -16692,9 +16701,9 @@ dependencies = [
  "crossterm 0.29.0",
  "libsystemd",
  "netdev",
- "nix 0.31.4",
+ "nix 0.32.0",
  "rustix 1.1.6",
- "signal-hook",
+ "signal-hook 0.4.6",
 ]
 
 [[package]]
@@ -16830,7 +16839,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -17736,6 +17745,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "lru"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a9f71e3591c7ec44d3e563e87bf14ddc2bada8519dca046e5b0e560cd004e2d"
+
+[[package]]
 name = "lru-cache"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17947,7 +17962,7 @@ dependencies = [
  "ic-types",
  "libc",
  "memmap2",
- "nix 0.31.4",
+ "nix 0.32.0",
  "phantom_newtype",
  "proptest",
  "rayon",
@@ -18084,7 +18099,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower",
- "tower-http 0.6.11",
+ "tower-http 0.7.1",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -18299,9 +18314,9 @@ dependencies = [
 
 [[package]]
 name = "netdev"
-version = "0.46.3"
+version = "0.47.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3c52c2584961c68f5a6e3356797344061f818c93b8acc9cd6d7e284795e563e"
+checksum = "98a4d13f8061600697d721c5fd45262aba533a7d4a7670e7c64fd02d68e4a9fb"
 dependencies = [
  "block2",
  "dispatch2",
@@ -18508,6 +18523,7 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+ "memoffset",
 ]
 
 [[package]]
@@ -18668,7 +18684,7 @@ dependencies = [
  "libc",
  "libnss",
  "macaddr",
- "nix 0.31.4",
+ "nix 0.32.0",
  "paste",
  "serde",
  "serde_json",
@@ -18680,7 +18696,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -19221,7 +19237,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "mockall",
- "nix 0.31.4",
+ "nix 0.32.0",
  "pem 3.0.6",
  "pocket-ic",
  "prometheus",
@@ -19916,7 +19932,7 @@ dependencies = [
  "icrc-ledger-types",
  "itertools 0.12.1",
  "libc",
- "nix 0.31.4",
+ "nix 0.32.0",
  "pocket-ic",
  "prometheus",
  "rcgen 0.13.2",
@@ -19934,7 +19950,7 @@ dependencies = [
  "tokio-util",
  "tonic",
  "tower",
- "tower-http 0.6.11",
+ "tower-http 0.7.1",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -20241,8 +20257,19 @@ checksum = "cc5b72d8145275d844d4b5f6d4e1eef00c8cd889edb6035c21675d1bb1f45c9f"
 dependencies = [
  "bitflags",
  "hex",
- "procfs-core",
+ "procfs-core 0.17.0",
  "rustix 0.38.44",
+]
+
+[[package]]
+name = "procfs"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25485360a54d6861439d60facef26de713b1e126bf015ec8f98239467a2b82f7"
+dependencies = [
+ "bitflags",
+ "procfs-core 0.18.0",
+ "rustix 1.1.6",
 ]
 
 [[package]]
@@ -20250,6 +20277,16 @@ name = "procfs-core"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "239df02d8349b06fc07398a3a1697b06418223b1c7725085e801e7c0fc6a12ec"
+dependencies = [
+ "bitflags",
+ "hex",
+]
+
+[[package]]
+name = "procfs-core"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6401bf7b6af22f78b563665d15a22e9aef27775b79b149a66ca022468a4e405"
 dependencies = [
  "bitflags",
  "hex",
@@ -20267,7 +20304,7 @@ dependencies = [
  "libc",
  "memchr",
  "parking_lot",
- "procfs",
+ "procfs 0.17.0",
  "protobuf",
  "thiserror 2.0.21",
 ]
@@ -20557,7 +20594,7 @@ dependencies = [
  "once_cell",
  "socket2 0.6.5",
  "tracing",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -20722,7 +20759,7 @@ dependencies = [
  "indoc",
  "instability",
  "itertools 0.13.0",
- "lru",
+ "lru 0.12.5",
  "paste",
  "strum 0.26.3",
  "unicode-segmentation",
@@ -21549,7 +21586,7 @@ dependencies = [
  "bitflags",
  "fallible-iterator",
  "fallible-streaming-iterator",
- "hashlink",
+ "hashlink 0.10.0",
  "libsqlite3-sys",
  "smallvec",
 ]
@@ -21674,7 +21711,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -21769,7 +21806,7 @@ dependencies = [
  "security-framework 3.7.0",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -22653,6 +22690,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-hook"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49f7447afd772ca79ad17ae0a3972a6b0df0cb4b80990fd82707593e9e012a74"
+dependencies = [
+ "libc",
+ "signal-hook-registry",
+]
+
+[[package]]
 name = "signal-hook-mio"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22660,7 +22707,7 @@ checksum = "b75a19a7a740b25bc7944bdee6172368f988763b744e3d4dfe753f6b4ece40cc"
 dependencies = [
  "libc",
  "mio",
- "signal-hook",
+ "signal-hook 0.3.18",
 ]
 
 [[package]]
@@ -22960,22 +23007,12 @@ dependencies = [
 
 [[package]]
 name = "socket2"
-version = "0.5.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e22376abed350d73dd1cd119b57ffccad95b4e585a7cda43e286245ce23c0678"
-dependencies = [
- "libc",
- "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "socket2"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -23062,7 +23099,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "psm",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -23520,7 +23557,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.6",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -23551,7 +23588,7 @@ version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8c27177b12a6399ffc08b98f76f7c9a1f4fe9fc967c784c5a071fa8d93cf7e1"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -23871,9 +23908,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-metrics"
-version = "0.4.9"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e0410015c6db7b67b9c9ab2a3af4d74a942d637ff248d0d055073750deac6f9"
+checksum = "01f967a7d11cf59ebeb361546fcc207763de7a885db18176e7042dfc28665f1c"
 dependencies = [
  "futures-util",
  "pin-project-lite",
@@ -24145,9 +24182,7 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
- "tracing",
  "url",
- "uuid",
 ]
 
 [[package]]
@@ -24162,13 +24197,16 @@ dependencies = [
  "futures-core",
  "http 1.5.0",
  "http-body",
+ "http-body-util",
  "percent-encoding",
  "pin-project-lite",
  "tokio",
  "tokio-util",
+ "tower",
  "tower-layer",
  "tower-service",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -24709,7 +24747,7 @@ dependencies = [
  "clap",
  "ic-http-utils",
  "mockall",
- "procfs",
+ "procfs 0.18.0",
  "rusb",
  "serde",
  "serde_json",
@@ -25272,7 +25310,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

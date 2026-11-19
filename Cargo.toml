@@ -791,7 +791,7 @@ libsystemd = "0.7.2"
 lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
 lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
 loopdev-3 = "0.5"
-lru = { version = "0.12", default-features = false }
+lru = { version = "0.19", default-features = false }
 macaddr = "1.0"
 maplit = "^1.0.2"
 memmap2 = "0.9.5"
@@ -799,9 +799,9 @@ minicbor = { version = "0.22.0", features = ["alloc", "derive"] }
 mockall = "0.15.0"
 mockito = { version = "1.6.1", default-features = false }
 more-asserts = "0.3.1"
-netdev = "0.46.3"
+netdev = "0.47.0"
 nftables = "0.4.1"
-nix = { version = "0.31.3", features = [
+nix = { version = "0.32.0", features = [
     "fs",
     "ioctl",
     "mman",
@@ -847,7 +847,7 @@ pprof = { git = "https://github.com/dfinity/pprof-rs", rev = "9159b45ecc3540d7fc
 predicates = { version = "3.1.2", default-features = false }
 pretty_assertions = "1.4.0"
 proc-macro2 = "1.0.89"
-procfs = { version = "0.17.0", default-features = false }
+procfs = { version = "0.18.0", default-features = false }
 prometheus = { version = "0.14.0", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
 proptest = "=1.6.0"
@@ -926,7 +926,7 @@ sev = { version = "7.1", default-features = false, features = [
 ] }
 sha2 = "0.10.9"
 sha3 = "0.10.8"
-signal-hook = "0.3.6"
+signal-hook = "0.4.6"
 signature = "2.2.0"
 simple_asn1 = "0.6.2"
 slog = { version = "2.7.0", features = [
@@ -939,7 +939,7 @@ slog-envlogger = "^2.2.0"
 slog-scope = "4.4.0"
 slog-term = "2.9.1"
 slotmap = "1.0.7"
-socket2 = { version = "0.5.10", features = ["all"] }
+socket2 = { version = "0.6.5", features = ["all"] }
 ssh2 = "0.9.4"
 static_assertions = "1.1.0"
 strum = { version = "0.26.3", features = ["derive"] }
@@ -959,7 +959,7 @@ tikv-jemallocator = "0.7"
 time = { version = "0.3.47", features = ["formatting"] }
 tokio = { version = "1.54.1", features = ["full"] }
 tokio-io-timeout = "1.2.0"
-tokio-metrics = "0.4.9"
+tokio-metrics = "0.5.2"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
     "aws-lc-rs",
 ] }
@@ -969,7 +969,7 @@ tonic = "0.14.5"
 tonic-prost = "0.14.5"
 tonic-prost-build = "0.14.5"
 tower = { version = "0.5.3", features = ["full"] }
-tower-http = { version = "0.6.4", features = [
+tower-http = { version = "0.7.1", features = [
     "add-extension",
     "cors",
     "limit",

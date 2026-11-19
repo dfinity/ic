@@ -564,7 +564,7 @@ crate.spec(
 )
 crate.spec(
     package = "hashlink",
-    version = "^0.10.0",
+    version = "^0.12.2",
 )
 crate.spec(
     features = [
@@ -929,7 +929,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "lru",
-    version = "^0.12",
+    version = "^0.19",
 )
 crate.spec(
     package = "macaddr",
@@ -978,7 +978,7 @@ crate.spec(
 )
 crate.spec(
     package = "netdev",
-    version = "0.46.3",
+    version = "^0.47.0",
 )
 crate.spec(
     package = "nftables",
@@ -999,7 +999,7 @@ crate.spec(
         "zerocopy",  # used by ic-sys for fcntl::copy_file_range
     ],
     package = "nix",
-    version = "^0.31.3",
+    version = "^0.32.0",
 )
 crate.spec(
     package = "num-bigint",
@@ -1133,7 +1133,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "procfs",
-    version = "^0.17.0",
+    version = "^0.18.0",
 )
 crate.spec(
     features = [
@@ -1467,7 +1467,7 @@ crate.spec(
         "iterator",
     ],
     package = "signal-hook",
-    version = "^0.3.6",
+    version = "^0.4.6",
 )
 crate.spec(
     package = "signature",
@@ -1525,7 +1525,7 @@ crate.spec(
         "all",
     ],
     package = "socket2",
-    version = "^0.5.10",
+    version = "^0.6.5",
 )
 crate.spec(
     features = [
@@ -1569,7 +1569,7 @@ crate.spec(
 )
 crate.spec(
     package = "syscalls",
-    version = "^0.6.18",
+    version = "^0.8.1",
 )
 crate.spec(
     package = "sys-mount",
@@ -1643,7 +1643,7 @@ crate.spec(
 )
 crate.spec(
     package = "tokio-metrics",
-    version = "^0.4.9",
+    version = "^0.5.2",
 )
 crate.spec(
     default_features = False,
@@ -1716,7 +1716,7 @@ crate.spec(
         "tracing",
     ],
     package = "tower-http",
-    version = "^0.6.4",
+    version = "^0.7.1",
 )
 crate.spec(
     package = "tower_governor",
