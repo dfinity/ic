@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "e68a5a63030e8f6a1a6973907b5105ce9a334e6b374c770d79997473b9f015fc",
+  "checksum": "c42fa4a454849c84ada459b706875e1f010a38e87095aed1305159e2e5b63629",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -390,8 +390,7 @@
           "compress-brotli",
           "compress-gzip",
           "compress-zstd",
-          "default",
-          "http2"
+          "default"
         ],
         "deps": [
           {
@@ -445,10 +444,6 @@
           {
             "id": "futures-core 0.3.34",
             "target": "futures_core"
-          },
-          {
-            "id": "h2 0.3.27",
-            "target": "h2"
           },
           {
             "id": "http 0.2.12",
@@ -847,7 +842,6 @@
           "compress-brotli",
           "compress-gzip",
           "compress-zstd",
-          "http2",
           "macros",
           "unicode"
         ],
@@ -23223,80 +23217,6 @@
         }
       ],
       "version": "0.13.0"
-    },
-    "h2 0.3.27": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "bytes 1.12.2",
-            "target": "bytes"
-          },
-          {
-            "id": "fnv 1.0.7",
-            "target": "fnv"
-          },
-          {
-            "id": "futures-core 0.3.34",
-            "target": "futures_core"
-          },
-          {
-            "id": "futures-sink 0.3.34",
-            "target": "futures_sink"
-          },
-          {
-            "id": "futures-util 0.3.34",
-            "target": "futures_util"
-          },
-          {
-            "id": "http 0.2.12",
-            "target": "http"
-          },
-          {
-            "id": "indexmap 2.14.2",
-            "target": "indexmap"
-          },
-          {
-            "id": "slab 0.4.12",
-            "target": "slab"
-          },
-          {
-            "id": "tokio 1.54.1",
-            "target": "tokio"
-          },
-          {
-            "id": "tokio-util 0.7.20",
-            "target": "tokio_util"
-          },
-          {
-            "id": "tracing 0.1.44",
-            "target": "tracing"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "h2",
-      "license": "MIT",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "MIT"
-      ],
-      "name": "h2",
-      "package_url": "https://github.com/hyperium/h2",
-      "repository": {
-        "Http": {
-          "sha256": "0beca50380b1fc32983fc1cb4587bfa4bb9e78fc259aad4a0032d2080309222d",
-          "url": "https://static.crates.io/crates/h2/0.3.27/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "h2",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.3.27"
     },
     "h2 0.4.20": {
       "common_attrs": {
