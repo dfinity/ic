@@ -575,7 +575,7 @@ impl SubnetMerging {
             upload_method: self.node_location(TargetSubnet::Destination)?,
             work_dir: self.layout.merged_work_dir(),
             data_src: self.layout.merged_ic_state_dir(),
-            require_confirmation: !self.recovery_args.skip_prompts,
+            require_confirmation: self.recovery.ssh_confirmation,
             key_file: self.recovery.admin_key_file.clone(),
             check_ic_replay_height: false,
         })
