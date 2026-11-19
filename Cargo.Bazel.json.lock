@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "f9fc03386dff5483d246248479df9067bdd2be6b902dd455a2e479d0cb92dcf5",
+  "checksum": "ea27a94441ca9a5a5e46af14cd498ee2e14e228a1db6e61e33e11c00e803ce2c",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4839,7 +4839,7 @@
       ],
       "version": "4.0.0"
     },
-    "askama 0.15.6": {
+    "askama 0.16.1": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -4871,7 +4871,7 @@
         "edition": "2024",
         "proc_macro_deps": [
           {
-            "id": "askama_macros 0.15.6",
+            "id": "askama_macros 0.16.1",
             "target": "askama_macros"
           }
         ]
@@ -4887,8 +4887,8 @@
       "package_url": "https://github.com/askama-rs/askama",
       "repository": {
         "Http": {
-          "sha256": "9b8246bcbf8eb97abef10c2d92166449680d41d55c0fc6978a91dec2e3619608",
-          "url": "https://static.crates.io/crates/askama/0.15.6/download"
+          "sha256": "6024d73179f43f15ccd2b881bfea6fee7f3a46ec53f33b52210dea749ebebaa4",
+          "url": "https://static.crates.io/crates/askama/0.16.1/download"
         }
       },
       "targets": [
@@ -4899,9 +4899,9 @@
           }
         }
       ],
-      "version": "0.15.6"
+      "version": "0.16.1"
     },
-    "askama_derive 0.15.6": {
+    "askama_derive 0.16.1": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -4915,12 +4915,16 @@
         "deps": [
           {
             "alias": "parser",
-            "id": "askama_parser 0.15.6",
+            "id": "askama_parser 0.16.1",
             "target": "askama_parser"
           },
           {
             "id": "basic-toml 0.1.10",
             "target": "basic_toml"
+          },
+          {
+            "id": "glob 0.3.4",
+            "target": "glob"
           },
           {
             "id": "memchr 2.8.3",
@@ -4943,7 +4947,7 @@
             "target": "serde"
           },
           {
-            "id": "syn 2.0.119",
+            "id": "syn 3.0.10",
             "target": "syn"
           }
         ],
@@ -4966,14 +4970,8 @@
       "package_url": "https://github.com/askama-rs/askama",
       "repository": {
         "Http": {
-          "patch_args": [
-            "-p2"
-          ],
-          "patches": [
-            "@@//bazel:askama.patch"
-          ],
-          "sha256": "2f9670bc84a28bb3da91821ef74226949ab63f1265aff7c751634f1dd0e6f97c",
-          "url": "https://static.crates.io/crates/askama_derive/0.15.6/download"
+          "sha256": "071ee5ebf2138e3ad180e0aacf6940c2cab5e6d8333741d9925c7bee2b153f39",
+          "url": "https://static.crates.io/crates/askama_derive/0.16.1/download"
         }
       },
       "targets": [
@@ -4984,9 +4982,9 @@
           }
         }
       ],
-      "version": "0.15.6"
+      "version": "0.16.1"
     },
-    "askama_macros 0.15.6": {
+    "askama_macros 0.16.1": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -4997,7 +4995,7 @@
         ],
         "deps": [
           {
-            "id": "askama_derive 0.15.6",
+            "id": "askama_derive 0.16.1",
             "target": "askama_derive"
           }
         ],
@@ -5014,8 +5012,8 @@
       "package_url": "https://github.com/askama-rs/askama",
       "repository": {
         "Http": {
-          "sha256": "f0756b45480437dded0565dfc568af62ccce146fb6cfe902e808ba86e445f44f",
-          "url": "https://static.crates.io/crates/askama_macros/0.15.6/download"
+          "sha256": "643e1c7cbb6aec1d920332fe51a7c0d8219e273dcb8602db03f5263e4d16487b",
+          "url": "https://static.crates.io/crates/askama_macros/0.16.1/download"
         }
       },
       "targets": [
@@ -5026,9 +5024,9 @@
           }
         }
       ],
-      "version": "0.15.6"
+      "version": "0.16.1"
     },
-    "askama_parser 0.15.6": {
+    "askama_parser 0.16.1": {
       "common_attrs": {
         "crate_features": [
           "config"
@@ -5070,8 +5068,8 @@
       "package_url": "https://github.com/askama-rs/askama",
       "repository": {
         "Http": {
-          "sha256": "5d0af3691ba3af77949c0b5a3925444b85cb58a0184cc7fec16c68ba2e7be868",
-          "url": "https://static.crates.io/crates/askama_parser/0.15.6/download"
+          "sha256": "2c5ae75772275d268b03ab8bdccdd12117b6169ee23256942b34e46c9f476583",
+          "url": "https://static.crates.io/crates/askama_parser/0.16.1/download"
         }
       },
       "targets": [
@@ -5082,7 +5080,7 @@
           }
         }
       ],
-      "version": "0.15.6"
+      "version": "0.16.1"
     },
     "asn1-rs 0.6.2": {
       "common_attrs": {
@@ -17311,7 +17309,7 @@
             "target": "argon2"
           },
           {
-            "id": "askama 0.15.6",
+            "id": "askama 0.16.1",
             "target": "askama"
           },
           {
@@ -66263,7 +66261,7 @@
     "arbitrary 1.5.0",
     "arc-swap 1.9.5",
     "argon2 0.4.1",
-    "askama 0.15.6",
+    "askama 0.16.1",
     "assert_cmd 2.0.16",
     "assert_matches 1.5.0",
     "async-stream 0.3.6",
