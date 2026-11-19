@@ -64,7 +64,7 @@ pub(crate) fn get_propose_recovery_cup_command(
     state_hash: String,
     time: SystemTime,
 ) -> IcAdmin {
-    let mut ic_admin = admin_helper.get_propose_to_update_recovery_cup_command(
+    admin_helper.get_propose_to_update_recovery_cup_command(
         destination_subnet_id,
         height,
         state_hash,
@@ -72,18 +72,12 @@ pub(crate) fn get_propose_recovery_cup_command(
         /*chain_key_config=*/ None,
         /*replacement_nodes=*/ &[],
         /*registry_params=*/ None,
+        Some(format!(
+            "Recover subnet {destination_subnet_id} at the state merged from it and subnet \
+             {source_subnet_id}, which is merged into it",
+        )),
         time,
-    );
-    let summary = ic_admin
-        .iter()
-        .position(|argument| argument == &format!("--{SUMMARY_ARG}"))
-        .expect("a recovery CUP proposal has a summary");
-    ic_admin[summary + 1] = quote(format!(
-        "Recover subnet {destination_subnet_id} at the state merged from it and subnet \
-         {source_subnet_id}, which is merged into it",
-    ));
-
-    ic_admin
+    )
 }
 
 #[cfg(test)]
