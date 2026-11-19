@@ -98,9 +98,9 @@ struct EstimateArgs {
     load_samples_path: PathBuf,
 
     /// Path to a CSV file containing an older sample of load metrics on the source subnet.
-    /// We will look at the difference between metrics at
-    /// [`EstimateArgs::load_samples_path`] and [`EstimateArgs::load_samples_baseline_path`] to
-    /// estimate the load which occurred in the time frame between the two samples were collected.
+    /// We will look at the difference between metrics at --load-samples-path and
+    /// --load-samples-baseline-path to estimate the load which occurred in the time frame between
+    /// the two samples were collected.
     #[clap(long)]
     load_samples_baseline_path: PathBuf,
 
@@ -110,7 +110,7 @@ struct EstimateArgs {
     communication_samples_path: PathBuf,
 
     /// Path to a CSV file containing an older sample of subnet-local communication metrics on the
-    /// source subnet. Used in the same way as [`EstimateArgs::load_samples_baseline_path`].
+    /// source subnet. Used in the same way as --load-samples-baseline-path.
     #[clap(long)]
     communication_samples_baseline_path: PathBuf,
 
