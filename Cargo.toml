@@ -719,9 +719,9 @@ hyper-rustls = { version = "0.27.5", default-features = false, features = [
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
 ic-canister-log = "^0.2.0"
-ic-certified-map = "^0.3.1"
+ic-certified-map = "0.4.1"
 ic-metrics-encoder = "^1.1.1"
-ic0 = "1.0.0"
+ic0 = "1.2.0"
 ic-agent = { version = "0.49.1", features = ["pem"] }
 ic-bn-lib = { version = "0.9", features = [
     "acme-alpn",
@@ -733,7 +733,7 @@ ic-btc-interface = "0.4.0"
 ic-canister-runtime = "0.2.3"
 ic-canister-sig-creation = "1.3.1"
 ic-cbor = "3.0.3"
-ic-cdk = "0.20.2"
+ic-cdk = "0.20.3"
 ic-cdk-bitcoin-canister = "0.2.0"
 ic-cdk-management-canister = "0.1.1"
 ic-cdk-timers = "1.0.0"
@@ -749,7 +749,7 @@ ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.49.1" }
 ic-utils = { version = "0.49.1", features = ["raw"] }
-ic-vetkeys = "0.7.0"
+ic-vetkeys = "0.9.0"
 ic-xrc-types = "1.2.0"
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",
