@@ -541,7 +541,9 @@ fn test_test_spawning_proc_gets_stopped() {
     for channel in ["StdOut", "StdErr"] {
         assert!(
             err_str.contains(&format!("(spawning_process|{channel}): Drain complete."))
-                || err_str.contains(&format!("(spawning_process|{channel}): Channel has closed.")),
+                || err_str.contains(&format!(
+                    "(spawning_process|{channel}): Channel has closed."
+                )),
             "{err_str}"
         );
         assert!(
