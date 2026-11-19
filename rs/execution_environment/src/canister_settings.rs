@@ -208,6 +208,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
 
         let environment_variables = match input.environment_variables {
             Some(env_vars) => {
+                let env_vars = env_vars.into_vec();
                 let original_length = env_vars.len();
                 let environment_variables = env_vars
                     .into_iter()

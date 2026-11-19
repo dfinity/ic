@@ -4137,12 +4137,12 @@ impl ExecutionEnvironment {
             Ic00Method::InstallChunkedCode => {
                 let args = InstallChunkedCodeArgs::decode(payload)?;
                 let max_chunks = config.embedders_config.wasm_max_size.get() / CHUNK_SIZE;
-                if args.chunk_hashes_list.len() as u64 > max_chunks {
+                if args.chunk_hashes_list.get().len() as u64 > max_chunks {
                     return Err(UserError::new(
                         ErrorCode::CanisterContractViolation,
                         format!(
                             "InstallChunkedCode Error: chunk_hashes_list length {} exceeds the maximum of {} chunks",
-                            args.chunk_hashes_list.len(),
+                            args.chunk_hashes_list.get().len(),
                             max_chunks,
                         ),
                     ));

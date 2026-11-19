@@ -10,7 +10,7 @@ use std::time::Duration;
 use candid::{CandidType, Deserialize};
 use ic_management_canister_types_private::{
     BoundedHttpHeaders, FlexibleCanisterHttpRequestArgs, HttpHeader, HttpMethod, Payload,
-    TransformContext,
+    ReplicationCounts, TransformContext,
 };
 
 /// The reject code that this canister reports back to its callers.
@@ -64,8 +64,51 @@ pub struct RemoteHttpStressRequest {
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct FlexibleRemoteHttpRequest {
-    pub request: FlexibleCanisterHttpRequestArgs,
+    pub request: UnvalidatedFlexibleCanisterHttpRequestArgs,
     pub cycles: u64,
+}
+
+/// We create a custom type instead of reusing [`FlexibleCanisterHttpRequestArgs`]
+/// as we don't want the URL and the body to be bounded when this canister
+/// decodes them. This allows us to test that the management canister rejects
+/// a URL or body exceeding the limit.
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
+pub struct UnvalidatedFlexibleCanisterHttpRequestArgs {
+    pub url: String,
+    pub max_response_bytes: Option<u64>,
+    pub headers: BoundedHttpHeaders,
+    pub body: Option<Vec<u8>>,
+    pub method: HttpMethod,
+    pub transform: Option<TransformContext>,
+    pub replication: Option<ReplicationCounts>,
+}
+
+impl From<FlexibleCanisterHttpRequestArgs> for UnvalidatedFlexibleCanisterHttpRequestArgs {
+    fn from(args: FlexibleCanisterHttpRequestArgs) -> Self {
+        Self {
+            url: args.url,
+            max_response_bytes: args.max_response_bytes,
+            headers: args.headers,
+            body: args.body,
+            method: args.method,
+            transform: args.transform,
+            replication: args.replication,
+        }
+    }
+}
+
+impl From<UnvalidatedFlexibleCanisterHttpRequestArgs> for FlexibleCanisterHttpRequestArgs {
+    fn from(args: UnvalidatedFlexibleCanisterHttpRequestArgs) -> Self {
+        Self {
+            url: args.url,
+            max_response_bytes: args.max_response_bytes,
+            headers: args.headers,
+            body: args.body,
+            method: args.method,
+            transform: args.transform,
+            replication: args.replication,
+        }
+    }
 }
 
 /// We create a custom type instead of reusing [`ic_management_canister_types_private::CanisterHttpRequestArgs`]

@@ -1,3 +1,4 @@
+use crate::bounded_bytes::{deserialize_bounded_option_blob, deserialize_bounded_text};
 use crate::{BoundedVec, DataSize, Payload};
 use candid::{CandidType, Deserialize};
 use ic_base_types::PrincipalId;
@@ -55,6 +56,17 @@ const HTTP_HEADERS_TOTAL_MAX_SIZE: usize = 48 * KIB;
 /// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
 const HTTP_HEADERS_ELEMENT_MAX_SIZE: usize = 16 * KIB; // name + value = 8KiB + 8KiB
 
+/// Maximum length of the URL in the request.
+///
+/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+pub const HTTP_URL_MAX_SIZE: usize = 8192;
+
+/// Maximum size of the body in the request. The headers count towards the same
+/// limit, so a request with a body of this size is only valid without headers.
+///
+/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+pub const HTTP_BODY_MAX_SIZE: usize = 2_000_000;
+
 /// The numeric representation for the Legacy pricing version.
 pub const PRICING_VERSION_LEGACY: u32 = 1;
 /// The numeric representation for the Pay-As-You-Go pricing version.
@@ -104,10 +116,11 @@ pub type BoundedHttpHeaders = BoundedVec<
 /// ```
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterHttpRequestArgs {
+    #[serde(deserialize_with = "deserialize_bounded_text::<_, HTTP_URL_MAX_SIZE>")]
     pub url: String,
     pub max_response_bytes: Option<u64>,
     pub headers: BoundedHttpHeaders,
-    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    #[serde(deserialize_with = "deserialize_bounded_option_blob::<_, HTTP_BODY_MAX_SIZE>")]
     pub body: Option<Vec<u8>>,
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,
@@ -148,10 +161,11 @@ impl CanisterHttpRequestArgs {
 /// ```s
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct FlexibleCanisterHttpRequestArgs {
+    #[serde(deserialize_with = "deserialize_bounded_text::<_, HTTP_URL_MAX_SIZE>")]
     pub url: String,
     pub max_response_bytes: Option<u64>,
     pub headers: BoundedHttpHeaders,
-    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    #[serde(deserialize_with = "deserialize_bounded_option_blob::<_, HTTP_BODY_MAX_SIZE>")]
     pub body: Option<Vec<u8>>,
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,
@@ -343,6 +357,100 @@ impl Payload<'_> for HttpHeader {}
 impl DataSize for HttpHeader {
     fn data_size(&self) -> usize {
         self.name.data_size() + self.value.data_size()
+    }
+}
+
+#[cfg(test)]
+fn http_request_payloads(url: String, body: Option<Vec<u8>>) -> [Vec<u8>; 2] {
+    [
+        CanisterHttpRequestArgs {
+            url: url.clone(),
+            max_response_bytes: None,
+            headers: BoundedHttpHeaders::new(vec![]),
+            body: body.clone(),
+            method: HttpMethod::POST,
+            transform: None,
+            is_replicated: None,
+            pricing_version: None,
+        }
+        .encode(),
+        FlexibleCanisterHttpRequestArgs {
+            url,
+            max_response_bytes: None,
+            headers: BoundedHttpHeaders::new(vec![]),
+            body,
+            method: HttpMethod::POST,
+            transform: None,
+            replication: None,
+        }
+        .encode(),
+    ]
+}
+
+#[cfg(test)]
+type UrlAndBody = (String, Option<Vec<u8>>);
+
+#[cfg(test)]
+fn decode_http_request_url_and_body(
+    payloads: [Vec<u8>; 2],
+) -> [Result<UrlAndBody, ic_error_types::UserError>; 2] {
+    let [payload, flexible_payload] = payloads;
+    [
+        CanisterHttpRequestArgs::decode(&payload).map(|args| (args.url, args.body)),
+        FlexibleCanisterHttpRequestArgs::decode(&flexible_payload)
+            .map(|args| (args.url, args.body)),
+    ]
+}
+
+#[test]
+fn test_http_url_and_body_within_max_size() {
+    for (url, body) in [
+        (String::new(), None),
+        (String::new(), Some(vec![])),
+        (
+            "u".repeat(HTTP_URL_MAX_SIZE),
+            Some(vec![1; HTTP_BODY_MAX_SIZE]),
+        ),
+    ] {
+        let payloads = http_request_payloads(url.clone(), body.clone());
+        for result in decode_http_request_url_and_body(payloads) {
+            assert_eq!(result.unwrap(), (url.clone(), body.clone()));
+        }
+    }
+}
+
+#[test]
+fn test_http_url_and_body_exceeding_max_size() {
+    use ic_error_types::ErrorCode;
+
+    for (url_size, body_size, expected) in [
+        (
+            HTTP_URL_MAX_SIZE + 1,
+            0,
+            format!(
+                "The text length {} exceeds maximum allowed {HTTP_URL_MAX_SIZE}",
+                HTTP_URL_MAX_SIZE + 1
+            ),
+        ),
+        (
+            0,
+            HTTP_BODY_MAX_SIZE + 1,
+            format!(
+                "The blob length {} exceeds maximum allowed {HTTP_BODY_MAX_SIZE}",
+                HTTP_BODY_MAX_SIZE + 1
+            ),
+        ),
+    ] {
+        let payloads = http_request_payloads("u".repeat(url_size), Some(vec![1; body_size]));
+        for result in decode_http_request_url_and_body(payloads) {
+            let error = result.unwrap_err();
+            assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
+            assert!(
+                error.description().contains(&expected),
+                "Actual: {}",
+                error.description()
+            );
+        }
     }
 }
 
