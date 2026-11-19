@@ -1867,7 +1867,7 @@ crate.spec(
         "rsa_sig",
     ],
     package = "wycheproof",
-    version = "^0.6",
+    version = "^0.7",
 )
 crate.spec(
     features = [

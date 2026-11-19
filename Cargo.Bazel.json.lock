@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "867d6f8e6e1c1e011f21fc7f887df5b334ebfb034ea7d75eee029e80e8ca151e",
+  "checksum": "9dbe59ac2d37bb215d9fe489153075816ade408ed0a4b1dd8407638ae0f3f89a",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18429,7 +18429,7 @@
             "target": "wirm"
           },
           {
-            "id": "wycheproof 0.6.0",
+            "id": "wycheproof 0.7.0",
             "target": "wycheproof"
           },
           {
@@ -64694,7 +64694,7 @@
       ],
       "version": "0.6.4"
     },
-    "wycheproof 0.6.0": {
+    "wycheproof 0.7.0": {
       "common_attrs": {
         "crate_features": [
           "ecdsa",
@@ -64717,7 +64717,13 @@
             "target": "serde_json"
           }
         ],
-        "edition": "2021"
+        "edition": "2021",
+        "proc_macro_deps": [
+          {
+            "id": "serde_derive 1.0.229",
+            "target": "serde_derive"
+          }
+        ]
       },
       "library_target_name": "wycheproof",
       "license": "Apache-2.0",
@@ -64729,8 +64735,8 @@
       "package_url": "https://github.com/randombit/wycheproof-rs",
       "repository": {
         "Http": {
-          "sha256": "efb3be19abfb206c6adcbdf2007b09b0e8ca1f6530db40c03b42ce8ed4719894",
-          "url": "https://static.crates.io/crates/wycheproof/0.6.0/download"
+          "sha256": "ffb6c33340cdfc5bebaa43b6debf9570812bb30465e42495188740ca8bf1e001",
+          "url": "https://static.crates.io/crates/wycheproof/0.7.0/download"
         }
       },
       "targets": [
@@ -64741,7 +64747,7 @@
           }
         }
       ],
-      "version": "0.6.0"
+      "version": "0.7.0"
     },
     "wyz 0.5.1": {
       "common_attrs": {
@@ -66283,7 +66289,7 @@
     "wat 1.254.2",
     "webpki-roots 1.0.12",
     "wirm 4.0.4",
-    "wycheproof 0.6.0",
+    "wycheproof 0.7.0",
     "x509-cert 0.2.5",
     "x509-parser 0.18.1",
     "zeroize 1.9.2",
