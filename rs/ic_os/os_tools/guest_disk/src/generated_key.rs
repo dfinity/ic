@@ -1,5 +1,5 @@
 use crate::crypt::{LuksHeaderLocation, activate_luks2_device, format_luks2_device};
-use crate::{DiskEncryption, Partition, activate_flags};
+use crate::{DiskEncryption, Partition, activate_flags, encryption_sector_size};
 use anyhow::{Context, Result};
 use ic_sys::fs::{Clobber, write_atomically_using_tmp_file};
 use prometheus::Registry;
@@ -41,12 +41,17 @@ impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
         Ok(())
     }
 
-    fn format(&mut self, device_path: &Path, _partition: Partition) -> Result<()> {
+    fn format(&mut self, device_path: &Path, partition: Partition) -> Result<()> {
         let key = self
             .generate_or_read_key()
             .context("Failed to generate or read the disk encryption key")?;
-        format_luks2_device(device_path, &LuksHeaderLocation::Attached, &key)
-            .context("Failed to format crypt device")?;
+        format_luks2_device(
+            device_path,
+            &LuksHeaderLocation::Attached,
+            &key,
+            encryption_sector_size(partition),
+        )
+        .context("Failed to format crypt device")?;
 
         Ok(())
     }

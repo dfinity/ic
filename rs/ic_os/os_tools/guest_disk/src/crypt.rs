@@ -4,7 +4,8 @@ use itertools::Either::Right;
 use libcryptsetup_rs::consts::flags::{CryptActivate, CryptPbkdf, CryptVolumeKey};
 use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
 use libcryptsetup_rs::{
-    CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, CryptTokenInfo, TokenInput,
+    CryptDevice, CryptInit, CryptParamsLuks2, CryptParamsLuks2Ref, CryptSettingsHandle,
+    CryptTokenInfo, TokenInput,
 };
 use prometheus::Registry;
 use serde::{Deserialize, Serialize};
@@ -214,13 +215,15 @@ fn apply_default_settings(crypt_device: &mut CryptDevice) -> Result<()> {
     Ok(())
 }
 
-/// Formats the given cryptographic device with LUKS2 and initializes it with the provided
-/// encryption key in the first keyslot.
+/// Formats the given cryptographic device with LUKS2, encrypting in sectors of `sector_size` bytes
+/// (0 leaves the size to libcryptsetup), and initializes it with the provided encryption key in
+/// the first keyslot.
 /// WARNING: Leads to data loss on the device!
 pub fn format_luks2_device(
     device_path: &Path,
     header_location: &LuksHeaderLocation,
     passphrase: &[u8],
+    sector_size: u32,
 ) -> Result<CryptDevice> {
     if let LuksHeaderLocation::Detached(header_path) = header_location {
         File::create(header_path)
@@ -239,6 +242,19 @@ pub fn format_luks2_device(
         device_path.display()
     );
     apply_default_settings(&mut crypt_device)?;
+    let params = CryptParamsLuks2 {
+        pbkdf: None,
+        integrity: None,
+        integrity_params: None,
+        data_alignment: 0,
+        data_device: None,
+        sector_size,
+        label: None,
+        subsystem: None,
+    };
+    let mut params: CryptParamsLuks2Ref = (&params)
+        .try_into()
+        .context("Failed to convert LUKS2 parameters")?;
     crypt_device
         .context_handle()
         .format::<CryptParamsLuks2Ref>(
@@ -246,7 +262,7 @@ pub fn format_luks2_device(
             (CIPHER, CIPHER_MODE),
             None,
             Right(VOLUME_KEY_BYTES),
-            None,
+            Some(&mut params),
         )
         .context("Failed to call format")?;
     crypt_device
