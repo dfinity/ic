@@ -23546,15 +23546,17 @@ checksum = "8c447be3a2abfa84b2d91680c56600bd6b2873866de27b36ec911be705e291da"
 
 [[package]]
 name = "tarpc"
-version = "0.37.0"
-source = "git+https://github.com/dfinity/tarpc?rev=cddf1c64011d00f36016146e8447bef99531030c#cddf1c64011d00f36016146e8447bef99531030c"
+version = "0.38.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e074d21429aa2864540a8452209323841116b3a5ac1ee7b29b2bbe38c12655b"
 dependencies = [
  "fnv",
  "futures",
  "humantime",
  "opentelemetry",
+ "opentelemetry-semantic-conventions",
  "pin-project",
- "rand 0.9.5",
+ "rand 0.10.4",
  "serde",
  "static_assertions",
  "tarpc-plugins",
@@ -23568,12 +23570,13 @@ dependencies = [
 
 [[package]]
 name = "tarpc-plugins"
-version = "0.14.1"
-source = "git+https://github.com/dfinity/tarpc?rev=cddf1c64011d00f36016146e8447bef99531030c#cddf1c64011d00f36016146e8447bef99531030c"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57c1932595af3b23fc8635cc23c28c54fb658622e261ad7f8f026da70e69f350"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]

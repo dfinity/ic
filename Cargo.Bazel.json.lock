@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "5928da3501ff68ca9f45065d817847f840dbdb7bb92d402077a2afad4b878811",
+  "checksum": "f9fc03386dff5483d246248479df9067bdd2be6b902dd455a2e479d0cb92dcf5",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18320,7 +18320,7 @@
             "target": "target_lexicon"
           },
           {
-            "id": "tarpc 0.37.0",
+            "id": "tarpc 0.38.0",
             "target": "tarpc"
           },
           {
@@ -55237,7 +55237,7 @@
       ],
       "version": "0.13.6"
     },
-    "tarpc 0.37.0": {
+    "tarpc 0.38.0": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -55270,11 +55270,15 @@
             "target": "opentelemetry"
           },
           {
+            "id": "opentelemetry-semantic-conventions 0.32.1",
+            "target": "opentelemetry_semantic_conventions"
+          },
+          {
             "id": "pin-project 1.1.13",
             "target": "pin_project"
           },
           {
-            "id": "rand 0.9.5",
+            "id": "rand 0.10.4",
             "target": "rand"
           },
           {
@@ -55313,7 +55317,7 @@
         "edition": "2024",
         "proc_macro_deps": [
           {
-            "id": "tarpc-plugins 0.14.1",
+            "id": "tarpc-plugins 0.15.0",
             "target": "tarpc_plugins"
           }
         ]
@@ -55327,12 +55331,9 @@
       "name": "tarpc",
       "package_url": "https://github.com/google/tarpc",
       "repository": {
-        "Git": {
-          "commitish": {
-            "Rev": "cddf1c64011d00f36016146e8447bef99531030c"
-          },
-          "remote": "https://github.com/dfinity/tarpc",
-          "strip_prefix": "tarpc"
+        "Http": {
+          "sha256": "4e074d21429aa2864540a8452209323841116b3a5ac1ee7b29b2bbe38c12655b",
+          "url": "https://static.crates.io/crates/tarpc/0.38.0/download"
         }
       },
       "targets": [
@@ -55343,9 +55344,9 @@
           }
         }
       ],
-      "version": "0.37.0"
+      "version": "0.38.0"
     },
-    "tarpc-plugins 0.14.1": {
+    "tarpc-plugins 0.15.0": {
       "common_attrs": {
         "crate_features": [
           "serde1"
@@ -55360,7 +55361,7 @@
             "target": "quote"
           },
           {
-            "id": "syn 2.0.119",
+            "id": "syn 3.0.10",
             "target": "syn"
           }
         ],
@@ -55375,12 +55376,9 @@
       "name": "tarpc-plugins",
       "package_url": "https://github.com/google/tarpc",
       "repository": {
-        "Git": {
-          "commitish": {
-            "Rev": "cddf1c64011d00f36016146e8447bef99531030c"
-          },
-          "remote": "https://github.com/dfinity/tarpc",
-          "strip_prefix": "plugins"
+        "Http": {
+          "sha256": "57c1932595af3b23fc8635cc23c28c54fb658622e261ad7f8f026da70e69f350",
+          "url": "https://static.crates.io/crates/tarpc-plugins/0.15.0/download"
         }
       },
       "targets": [
@@ -55391,7 +55389,7 @@
           }
         }
       ],
-      "version": "0.14.1"
+      "version": "0.15.0"
     },
     "tempfile 3.27.0": {
       "common_attrs": {
@@ -66523,7 +66521,7 @@
     "syscalls 0.8.1",
     "tar 0.4.46",
     "target-lexicon 0.13.6",
-    "tarpc 0.37.0",
+    "tarpc 0.38.0",
     "tempfile 3.27.0",
     "test-strategy 0.4.5",
     "textplots 0.8.7",
