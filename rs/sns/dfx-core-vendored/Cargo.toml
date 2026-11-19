@@ -12,7 +12,7 @@ documentation.workspace = true
 aes-gcm = { version = "0.10.3", features = ["std"] }
 argon2 = { version = "0.4", features = ["std"] }
 candid = { workspace = true }
-dialoguer = { version = "0.11.0" }
+dialoguer = { version = "0.12.0" }
 directories-next = { version = "2.0.0" }
 hex = { workspace = true }
 ic-agent = { workspace = true }

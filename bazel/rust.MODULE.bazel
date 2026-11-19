@@ -102,7 +102,7 @@ crate.spec(
         "serde",
     ],
     package = "alloy-consensus",
-    version = "^1.8.3",
+    version = "^2.6.1",
 )
 crate.spec(
     features = [
@@ -110,7 +110,7 @@ crate.spec(
         "serde",
     ],
     package = "alloy-eips",
-    version = "^1.8.3",
+    version = "^2.6.1",
 )
 crate.spec(
     features = [
@@ -122,7 +122,7 @@ crate.spec(
 )
 crate.spec(
     package = "alloy-rpc-types-eth",
-    version = "^1.8.3",
+    version = "^2.6.1",
 )
 crate.spec(
     package = "alloy-sol-types",
@@ -159,7 +159,7 @@ crate.spec(
         "serde_json",
     ],
     package = "askama",
-    version = "0.15",
+    version = "^0.16.1",
 )
 crate.spec(
     package = "assert_cmd",
@@ -211,7 +211,7 @@ crate.spec(
 )
 crate.spec(
     package = "base64",
-    version = "^0.22",
+    version = "^0.23.1",
 )
 crate.spec(
     package = "bech32",
@@ -230,7 +230,7 @@ crate.spec(
 )
 crate.spec(
     package = "bit-vec",
-    version = "^0.6.3",
+    version = "^0.10.2",
 )
 crate.spec(
     features = [
@@ -337,7 +337,7 @@ crate.spec(
 )
 crate.spec(
     package = "colored",
-    version = "^2.0.0",
+    version = "^3.1.1",
 )
 crate.spec(
     features = [
@@ -421,7 +421,7 @@ crate.spec(
 )
 crate.spec(
     package = "dialoguer",
-    version = "^0.11.0",
+    version = "^0.12.0",
 )
 crate.spec(
     package = "directories-next",
@@ -451,7 +451,7 @@ crate.spec(
 crate.spec(
     features = ["print"],
     package = "escargot",
-    version = "^0.5.7",
+    version = "^1.0.1",
 )
 crate.spec(
     features = ["serde"],
@@ -564,7 +564,7 @@ crate.spec(
 )
 crate.spec(
     package = "hashlink",
-    version = "^0.10.0",
+    version = "^0.12.2",
 )
 crate.spec(
     features = [
@@ -808,7 +808,7 @@ crate.spec(
 )
 crate.spec(
     package = "indicatif",
-    version = "^0.17.3",
+    version = "^0.18.6",
 )
 crate.spec(
     package = "indoc",
@@ -844,7 +844,7 @@ crate.spec(
 )
 crate.spec(
     package = "jsonrpc",
-    version = "^0.20.1",
+    version = "^0.21.1",
 )
 crate.spec(
     package = "json5",
@@ -929,7 +929,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "lru",
-    version = "^0.12",
+    version = "^0.19",
 )
 crate.spec(
     package = "macaddr",
@@ -978,7 +978,7 @@ crate.spec(
 )
 crate.spec(
     package = "netdev",
-    version = "0.46.3",
+    version = "^0.47.0",
 )
 crate.spec(
     package = "nftables",
@@ -999,7 +999,7 @@ crate.spec(
         "zerocopy",  # used by ic-sys for fcntl::copy_file_range
     ],
     package = "nix",
-    version = "^0.31.3",
+    version = "^0.32.0",
 )
 crate.spec(
     package = "num-bigint",
@@ -1020,7 +1020,7 @@ crate.spec(
 )
 crate.spec(
     package = "object",
-    version = "^0.37.3",
+    version = "^0.41.0",
 )
 crate.spec(
     features = [
@@ -1088,7 +1088,7 @@ crate.spec(
     default_features = False,
     features = ["std"],
     package = "pem",
-    version = "^3",
+    version = "^4.0.0",
 )
 crate.spec(
     package = "pin-project-lite",
@@ -1133,7 +1133,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "procfs",
-    version = "^0.17.0",
+    version = "^0.18.0",
 )
 crate.spec(
     features = [
@@ -1152,7 +1152,7 @@ crate.spec(
 )
 crate.spec(
     package = "proptest-derive",
-    version = "^0.5.0",
+    version = "^0.9.0",
 )
 crate.spec(
     package = "prost",
@@ -1276,11 +1276,11 @@ crate.spec(
 )
 crate.spec(
     package = "ripemd",
-    version = "^0.1.1",
+    version = "^0.2.0",
 )
 crate.spec(
     package = "rlp",
-    version = "^0.5.2",
+    version = "^0.6.1",
 )
 crate.spec(
     default_features = False,
@@ -1300,8 +1300,9 @@ crate.spec(
     version = "^0.9.10",
 )
 crate.spec(
+    default_features = False,
     package = "rstest",
-    version = "^0.19.0",
+    version = "^0.28.0",
 )
 crate.spec(
     # vendored: build the bundled libusb instead of linking the system one
@@ -1382,7 +1383,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "scraper",
-    version = "^0.24.0",
+    version = "^0.29.0",
 )
 crate.spec(
     default_features = False,
@@ -1467,7 +1468,7 @@ crate.spec(
         "iterator",
     ],
     package = "signal-hook",
-    version = "^0.3.6",
+    version = "^0.4.6",
 )
 crate.spec(
     package = "signature",
@@ -1525,7 +1526,7 @@ crate.spec(
         "all",
     ],
     package = "socket2",
-    version = "^0.5.10",
+    version = "^0.6.5",
 )
 crate.spec(
     features = [
@@ -1569,7 +1570,7 @@ crate.spec(
 )
 crate.spec(
     package = "syscalls",
-    version = "^0.6.18",
+    version = "^0.8.1",
 )
 crate.spec(
     package = "sys-mount",
@@ -1587,10 +1588,8 @@ crate.spec(
     features = [
         "full",
     ],
-    # Pinned to a fork because the published `tarpc` uses syn 3, while the rest of this repo (still) uses syn 2.
-    git = "https://github.com/dfinity/tarpc",
     package = "tarpc",
-    rev = "cddf1c64011d00f36016146e8447bef99531030c",
+    version = "^0.38.0",
 )
 crate.spec(
     package = "tempfile",
@@ -1643,7 +1642,7 @@ crate.spec(
 )
 crate.spec(
     package = "tokio-metrics",
-    version = "^0.4.9",
+    version = "^0.5.2",
 )
 crate.spec(
     default_features = False,
@@ -1675,7 +1674,7 @@ crate.spec(
 )
 crate.spec(
     package = "tokio-tungstenite",
-    version = "^0.29",
+    version = "^0.30",
 )
 crate.spec(
     features = [
@@ -1716,7 +1715,7 @@ crate.spec(
         "tracing",
     ],
     package = "tower-http",
-    version = "^0.6.4",
+    version = "^0.7.1",
 )
 crate.spec(
     package = "tower_governor",
@@ -1801,7 +1800,7 @@ crate.spec(
 )
 crate.spec(
     package = "walrus",
-    version = "^0.26.4",
+    version = "^0.28.0",
 )
 crate.spec(
     features = [
@@ -1888,7 +1887,7 @@ crate.spec(
 )
 crate.spec(
     package = "zstd",
-    version = "^0.13.3",
+    version = "^0.14.4",
 )
 
 # Crate annotations
@@ -1950,11 +1949,6 @@ crate.annotation(
         "OPENSSL_STATIC": "1",
     },
     crate = "openssl-sys",
-)
-crate.annotation(
-    crate = "askama_derive",
-    patch_args = ["-p2"],
-    patches = ["@@//bazel:askama.patch"],
 )
 crate.annotation(
     build_script_data = [

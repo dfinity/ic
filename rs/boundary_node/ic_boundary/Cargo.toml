@@ -89,4 +89,4 @@ x509-parser = { workspace = true }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 indoc = { workspace = true }
 tempfile = { workspace = true }
-tokio-tungstenite = "0.29"
+tokio-tungstenite = "0.30"
