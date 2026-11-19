@@ -827,7 +827,7 @@ pub mod test {
                     let response_metadata = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: CallbackId::from(1),
-                            content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                            content_hash: CryptoHashOf::new(CryptoHash::for_test()),
                             content_size: 0,
                             is_reject: false,
                             replica_version: replica_config.replica_version().clone(),
@@ -923,7 +923,7 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_hash: CryptoHashOf::new(CryptoHash::for_test()),
                         content_size: 0,
                         is_reject: false,
                         replica_version: replica_config.replica_version().clone(),
@@ -1037,7 +1037,7 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_hash: CryptoHashOf::new(CryptoHash::for_test()),
                         content_size: 0,
                         is_reject: false,
                         replica_version: ReplicaVersion::from_str("outdated_version").unwrap(),
@@ -1144,7 +1144,7 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_hash: CryptoHashOf::new(CryptoHash::for_test()),
                         content_size: 0,
                         is_reject: false,
                         replica_version: replica_config.replica_version().clone(),
@@ -2436,7 +2436,7 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(7),
-                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_hash: CryptoHashOf::new(CryptoHash::for_test()),
                         content_size: 0,
                         is_reject: false,
                         replica_version: replica_config.replica_version().clone(),
@@ -2846,7 +2846,7 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(7),
-                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_hash: CryptoHashOf::new(CryptoHash::for_test()),
                         content_size: 0,
                         is_reject: false,
                         replica_version: replica_config.replica_version().clone(),
@@ -3726,7 +3726,7 @@ pub mod test {
                 let receipt_share = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_hash: CryptoHashOf::new(CryptoHash::for_test()),
                         content_size: 0,
                         is_reject: false,
                         replica_version: replica_config.replica_version().clone(),

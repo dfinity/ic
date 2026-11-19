@@ -528,12 +528,12 @@ mod tests {
         CupTypePb::Recovery(subnet_pb::RecoveryArgs {
             height: 54321,
             time: 1_000,
-            state_hash: vec![1, 2, 3],
+            state_hash: vec![1; 32],
         }),
         CupType::Recovery {
             height: Height::new(54321),
             time: Time::from_nanos_since_unix_epoch(1_000),
-            state_hash: CryptoHashOfState::from(CryptoHash(vec![1, 2, 3])),
+            state_hash: CryptoHashOfState::from(CryptoHash(vec![1; 32])),
         },
     )]
     #[case::subnet_splitting(

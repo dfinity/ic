@@ -983,7 +983,7 @@ mod tests {
         PastPayload {
             height: Height::from(height),
             time: UNIX_EPOCH + Duration::from_nanos(10 * height),
-            block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+            block_hash: CryptoHashOf::from(CryptoHash::for_test()),
             payload,
         }
     }

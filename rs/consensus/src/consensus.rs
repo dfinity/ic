@@ -656,7 +656,7 @@ mod tests {
         state_manager
             .get_mut()
             .expect_get_state_hash_at()
-            .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+            .return_const(Ok(CryptoHashOfState::from(CryptoHash::for_test())));
 
         let metrics_registry = MetricsRegistry::new();
 

@@ -81,7 +81,7 @@ mod tests {
     fn test_certification_valid() {
         let registry_version = RegistryVersion::from(1);
         let subnet_id = subnet_test_id(555);
-        let hash = CryptoHashOfPartialState::from(CryptoHash(vec![88, 99, 00]));
+        let hash = CryptoHashOfPartialState::from(CryptoHash(vec![88; 32]));
         let certification = fake_cert(Height::from(2), fake_dkg_id(0), hash);
 
         let crypto = CryptoReturningOk::default();

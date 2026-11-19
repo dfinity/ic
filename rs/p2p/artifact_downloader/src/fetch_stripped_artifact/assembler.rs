@@ -2185,7 +2185,7 @@ mod tests {
     async fn assemble_accepts_unstripped_finalization() {
         let message = ConsensusMessage::Finalization(Finalization::fake(FinalizationContent::new(
             Height::new(100),
-            CryptoHashOf::from(CryptoHash(vec![])),
+            CryptoHashOf::from(CryptoHash::for_test()),
             test_replica_version(),
         )));
         let stripped = message.clone().strip();

@@ -797,13 +797,13 @@ mod tests {
         IDkgArtifactIdData {
             height: i.source_height(),
             subnet_id: *i.source_subnet(),
-            hash: CryptoHash(vec![]),
+            hash: CryptoHash::for_test(),
         }
     }
 
     fn get_fake_share_id_data(i: &RequestId) -> SigShareIdData {
         SigShareIdData {
-            hash: CryptoHash(vec![]),
+            hash: CryptoHash::for_test(),
             height: i.height,
         }
     }

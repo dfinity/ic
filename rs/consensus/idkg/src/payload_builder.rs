@@ -1476,7 +1476,7 @@ mod tests {
                 idkg: Some(summary.clone()),
             });
             let b = Block::new(
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 Payload::new(ic_types::crypto::crypto_hash, pl),
                 Height::from(123),
                 Rank(456),

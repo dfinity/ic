@@ -73,9 +73,9 @@ impl Fake for Certification {
             height: Height::new(0),
             height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
-                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                    vec![],
-                ))),
+                content: CertificationContent::new(CryptoHashOfPartialState::from(
+                    CryptoHash::for_test(),
+                )),
                 signature: ThresholdSignature::fake(),
             },
         }
@@ -399,7 +399,7 @@ mod tests {
     #[test]
     fn test_fake_block_is_binary_compatible() {
         let block = Block::new(
-            CryptoHashOf::from(CryptoHash(Vec::new())),
+            CryptoHashOf::from(CryptoHash::for_test()),
             Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Data(DataPayload::new_empty(Height::from(1))),
@@ -423,7 +423,7 @@ mod tests {
     fn test_fake_block() {
         use std::convert::TryFrom;
         let block = Block::new(
-            CryptoHashOf::from(CryptoHash(Vec::new())),
+            CryptoHashOf::from(CryptoHash::for_test()),
             Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Data(DataPayload::new_empty(Height::from(1))),

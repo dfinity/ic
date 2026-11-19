@@ -1241,7 +1241,7 @@ mod tests {
     fn make_cup_with_summary(height: Height, summary_payload: SummaryPayload) -> CatchUpPackage {
         let replica_version = ReplicaVersion::from_str("replica_version_for_cup").unwrap();
         let block = Block::new(
-            CryptoHashOf::from(CryptoHash(Vec::new())),
+            CryptoHashOf::from(CryptoHash::for_test()),
             Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(summary_payload),
@@ -1262,11 +1262,11 @@ mod tests {
                 ic_types::crypto::crypto_hash,
                 RandomBeacon::fake(RandomBeaconContent::new(
                     height,
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
+                    CryptoHashOf::from(CryptoHash::for_test()),
                     replica_version,
                 )),
             ),
-            CryptoHashOf::from(CryptoHash(Vec::new())),
+            CryptoHashOf::from(CryptoHash::for_test()),
             None,
         ))
     }

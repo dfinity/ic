@@ -482,11 +482,11 @@ mod tests {
 
             let height_500_id = DkgMessageId {
                 height: Height::from(500),
-                hash: CryptoHash(vec![0]).into(),
+                hash: CryptoHash(vec![0; 32]).into(),
             };
             let height_1000_id = DkgMessageId {
                 height: Height::from(1000),
-                hash: CryptoHash(vec![1]).into(),
+                hash: CryptoHash(vec![1; 32]).into(),
             };
             assert_eq!(bouncer(&height_500_id), BouncerValue::Wants);
             assert_eq!(bouncer(&height_1000_id), BouncerValue::MaybeWantsLater);

@@ -269,6 +269,55 @@ impl HasHeight for BlockMetadata {
     }
 }
 
+/// An object whose hash production code fills in where the object does not exist.
+pub trait NonexistentHash: private::CryptoHashOfSeal {
+    /// Returns a hash that stands for the hash of an object of this type that does not exist.
+    ///
+    /// This hash was chosen arbitrarily to be all zeros. The probability that an actual object
+    /// hashes to it is negligible, so it cannot be confused with the hash of an actual object.
+    ///
+    /// This is not meant for tests (see [`CryptoHash::for_test`]): production code uses it where
+    /// there is a gap in the blockchain, i.e. where a block, a random beacon or a state does not
+    /// extend a previous one, like during a genesis, recovery, or splitting.
+    fn nonexistent() -> CryptoHashOf<Self::T> {
+        CryptoHashOf::new(CryptoHash(vec![0; CryptoHash::LEN]))
+    }
+}
+
+impl<H: private::CryptoHashOfSeal> NonexistentHash for H {}
+
+mod private {
+    use super::*;
+
+    /// The combinations of the public trait above and the two traits below within this private
+    /// module allows to:
+    ///   - Call `nonexistent` directly on a `CryptoHashOf<T>`, even though the latter is a foreign
+    ///     type
+    ///   - Have the trait's implementation of `nonexistent` be inlined and have no code be able to
+    ///     override it
+    ///   - Control which types can actually have a nonexistent hash, by implementing
+    ///     `NonexistentHashSeal` for them below
+
+    pub trait CryptoHashOfSeal {
+        type T;
+    }
+
+    impl<T: NonexistentHashSeal> CryptoHashOfSeal for CryptoHashOf<T> {
+        type T = T;
+    }
+
+    trait NonexistentHashSeal {}
+
+    /// Genesis/recovery/splitting blocks have no parent
+    impl NonexistentHashSeal for Block {}
+
+    /// Genesis/recovery/splitting random beacons have no parent
+    impl NonexistentHashSeal for RandomBeacon {}
+
+    /// Genesis CUPs have no state hash
+    impl NonexistentHashSeal for CanonicalStateTag {}
+}
+
 /// Rank is used to indicate the priority of a block maker, where 0 indicates
 /// the highest priority.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]

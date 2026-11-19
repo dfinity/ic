@@ -570,7 +570,7 @@ fn system_metadata_split() {
     let mut system_metadata = SystemMetadata::new(SUBNET_A, SubnetType::VerifiedApplication);
     system_metadata.ingress_history = ingress_history;
     system_metadata.streams = streams.into();
-    system_metadata.prev_state_hash = Some(CryptoHash(vec![1, 2, 3]).into());
+    system_metadata.prev_state_hash = Some(CryptoHash(vec![1; 32]).into());
     system_metadata.batch_time = current_time();
     system_metadata.subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(2197),
@@ -628,7 +628,7 @@ fn system_metadata_split_with_batch_time() {
     const SUBNET_B: SubnetId = SUBNET_1;
 
     let mut system_metadata = SystemMetadata::new(SUBNET_A, SubnetType::Application);
-    system_metadata.prev_state_hash = Some(CryptoHash(vec![1, 2, 3]).into());
+    system_metadata.prev_state_hash = Some(CryptoHash(vec![1; 32]).into());
     system_metadata.batch_time = current_time();
     system_metadata.subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(2197),
@@ -742,7 +742,7 @@ fn system_metadata_online_split() {
         }])
         .unwrap();
     system_metadata.last_generated_canister_id = Some(CANISTER_2);
-    system_metadata.prev_state_hash = Some(CryptoHash(vec![1, 2, 3]).into());
+    system_metadata.prev_state_hash = Some(CryptoHash(vec![1; 32]).into());
     system_metadata.batch_time = current_time();
     system_metadata.modify_network_topology(|network_topology| {
         network_topology.routing_table = Arc::new(routing_table);

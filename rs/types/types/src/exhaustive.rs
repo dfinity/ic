@@ -592,12 +592,12 @@ impl ExhaustiveSet for CryptoHash {
         let mut random = vec![0; 32];
         rng.fill_bytes(&mut random);
 
-        // The empty hash stands in for hashes that don't exist: genesis, recovery and post-split
+        // The all-zero hash stands in for hashes that don't exist: genesis, recovery and post-split
         // CUPs use it as the parent of their summary block and of their random beacon, and genesis
         // CUPs also as their state hash.
-        let empty = vec![];
+        let zero = vec![0; 32];
 
-        vec![Self(random), Self(empty)]
+        vec![Self(random), Self(zero)]
     }
 }
 

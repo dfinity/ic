@@ -103,7 +103,7 @@ fn fake_random_beacon(height: u64) -> RandomBeacon {
     Signed {
         content: RandomBeaconContent::new(
             Height::from(height),
-            CryptoHashOf::new(CryptoHash(vec![])),
+            CryptoHashOf::new(CryptoHash::for_test()),
             // The random beacon is used as a randomness source, so changing the replica version
             // can affect the output.
             ReplicaVersion::from_str("0.9.0").unwrap(),

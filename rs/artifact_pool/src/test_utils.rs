@@ -525,9 +525,9 @@ fn equivocation_proof_ops(
             version: block.content.get_value().version.clone(),
             height: Height::new(height),
             subnet_id: subnet_test_id(0),
-            hash1: CryptoHashOf::new(CryptoHash(vec![height as u8])),
+            hash1: CryptoHashOf::new(CryptoHash(vec![height as u8; 32])),
             signature1: BasicSigOf::new(ic_types::crypto::BasicSig(vec![])),
-            hash2: CryptoHashOf::new(CryptoHash(vec![1, height as u8])),
+            hash2: CryptoHashOf::new(CryptoHash(vec![(height as u8).wrapping_add(1); 32])),
             signature2: BasicSigOf::new(ic_types::crypto::BasicSig(vec![])),
         };
         let msg = ConsensusMessage::EquivocationProof(equivocation_proof);

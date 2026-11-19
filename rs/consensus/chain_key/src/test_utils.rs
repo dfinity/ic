@@ -74,7 +74,7 @@ pub(super) fn as_past_payload(payload: &[u8]) -> PastPayload<'_> {
     PastPayload {
         height: Height::from(0),
         time: UNIX_EPOCH,
-        block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+        block_hash: CryptoHashOf::from(CryptoHash::for_test()),
         payload,
     }
 }

@@ -230,7 +230,7 @@ fn multiple_payload_test() {
                 let past_payloads = vec![PastPayload {
                     height: Height::from(0),
                     time: UNIX_EPOCH,
-                    block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+                    block_hash: CryptoHashOf::from(CryptoHash::for_test()),
                     payload: &past_payload,
                 }];
 
@@ -679,7 +679,7 @@ fn duplicate_validation() {
         let past_payloads = vec![PastPayload {
             height: Height::new(1),
             time: UNIX_EPOCH,
-            block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+            block_hash: CryptoHashOf::from(CryptoHash::for_test()),
             payload: &payload,
         }];
 
@@ -3000,7 +3000,7 @@ fn flexible_invalid_already_delivered_callback_id() {
         let past_payloads = vec![PastPayload {
             height: Height::new(1),
             time: UNIX_EPOCH,
-            block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+            block_hash: CryptoHashOf::from(CryptoHash::for_test()),
             payload: &past_payload_bytes,
         }];
 
@@ -8888,7 +8888,7 @@ fn async_receipt_is_not_repeated_after_a_past_payload_reported_it() {
     let past_payloads = vec![PastPayload {
         height: Height::new(1),
         time: UNIX_EPOCH,
-        block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+        block_hash: CryptoHashOf::from(CryptoHash::for_test()),
         payload: &past,
     }];
 
@@ -9243,7 +9243,7 @@ fn validate_payload_fails_for_an_async_receipt_repeated_from_a_past_payload() {
     let past_payloads = vec![PastPayload {
         height: Height::new(1),
         time: UNIX_EPOCH,
-        block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+        block_hash: CryptoHashOf::from(CryptoHash::for_test()),
         payload: &past,
     }];
 

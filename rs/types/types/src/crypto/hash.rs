@@ -18,16 +18,19 @@ use crate::consensus::{
         VetKdKeyShare,
     },
 };
+use crate::crypto::Signed;
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgDealingSupport, IDkgTranscript, SignedIDkgDealing,
 };
-use crate::crypto::{CryptoHash, CryptoHashOf, Signed};
 use crate::messages::{HttpCanisterUpdate, MessageId, SignedRequestBytes};
 use crate::signature::{
     BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
     ThresholdSignatureShare,
 };
 use ic_crypto_sha2::{DomainSeparationContext, Sha256};
+use phantom_newtype::Id;
+use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::hash::Hash;
 
 pub(crate) mod domain_separator;
@@ -445,6 +448,34 @@ pub struct CryptoHashableTestDummy(pub Vec<u8>);
 /// A cryptographically hashable type.
 pub trait CryptoHashable: CryptoHashDomain + Hash {}
 impl<T> CryptoHashable for T where T: CryptoHashDomain + Hash {}
+
+/// A cryptographic hash, as returned by [`crypto_hash`].
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
+pub struct CryptoHash(#[serde(with = "serde_bytes")] pub Vec<u8>);
+
+impl CryptoHash {
+    /// The length in bytes of the hashes returned by [`crypto_hash`], which every `CryptoHash`
+    /// is expected to have.
+    pub const LEN: usize = Sha256::DIGEST_LEN;
+
+    /// Returns a fixed, arbitrary hash for tests.
+    pub fn for_test() -> Self {
+        Self(vec![
+            0x01, 0x32, 0x1a, 0x6d, 0x93, 0x20, 0x4d, 0x06, 0x01, 0x79, 0x46, 0x0f, 0x6c, 0x47,
+            0xf4, 0xae, 0xff, 0x5a, 0x65, 0xea, 0xe4, 0x79, 0x75, 0x7d, 0x88, 0xd5, 0xdd, 0x2c,
+            0xb1, 0xcf, 0xc1, 0xc6,
+        ])
+    }
+}
+
+impl fmt::Debug for CryptoHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "CryptoHash(0x{})", hex::encode(&self.0))
+    }
+}
+
+/// A cryptographic hash for content of type `T`
+pub type CryptoHashOf<T> = Id<T, CryptoHash>;
 
 /// Creates a (typed) domain-separated cryptographic hash.
 ///

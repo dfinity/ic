@@ -50,8 +50,8 @@ impl DkgMessageId {
     pub fn smallest_at_height(height: Height) -> Self {
         Self {
             height,
-            // The lexicographically-smallest possible hash is an empty vector
-            hash: CryptoHashOf::from(CryptoHash(vec![])),
+            // The lexicographically-smallest hash of length `CryptoHash::LEN`, which every hash has
+            hash: CryptoHashOf::from(CryptoHash(vec![0; CryptoHash::LEN])),
         }
     }
 }
@@ -896,9 +896,13 @@ mod tests {
 
     #[test]
     fn test_dkg_message_id_less_than_height() {
-        const TEST_HASHES: [&[u8]; 4] = [&[], &[0], &[42; 32], &[u8::MAX; 32]];
+        const TEST_HASHES: [[u8; CryptoHash::LEN]; 3] = [
+            [0; CryptoHash::LEN],
+            [42; CryptoHash::LEN],
+            [u8::MAX; CryptoHash::LEN],
+        ];
 
-        fn message_id(height: u64, hash: &[u8]) -> DkgMessageId {
+        fn message_id(height: u64, hash: [u8; CryptoHash::LEN]) -> DkgMessageId {
             DkgMessageId {
                 height: Height::from(height),
                 hash: CryptoHashOf::from(CryptoHash(hash.to_vec())),
