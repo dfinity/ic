@@ -156,6 +156,83 @@ Below is an example of adding a new third-party crate.
 
 2.  Repin the crates with `./bin/bazel-pin.sh`
 
+## MODULE.bazel.lock
+
+`MODULE.bazel.lock` records what Bazel derives from `MODULE.bazel`:
+
+- the hashes of the registry files of all modules in the dependency graph;
+- the results of the module extensions that Bazel can't reproduce from their inputs alone;
+- the data that extensions like pip and go_sdk fetch from the network ("facts").
+
+Bazel generates it, so never edit it by hand.
+
+### Updating it
+
+Bazel updates the file whenever it runs, but a build updates only the parts it evaluates. After you change
+`MODULE.bazel`, an included `bazel/*.MODULE.bazel`, a module override patch, `.bazelversion` or
+`requirements.txt`, update all of it and commit it with your change:
+
+```sh
+bazel mod deps >/dev/null
+```
+
+`bazel mod deps` fails while `Cargo.Bazel.*.lock` is outdated, so repin first if your change needs it.
+
+### What CI does
+
+- **Pull requests from a branch in this repository.** When the pull request changes one of those files, the
+  Bazel Lockfile job of CI PR Only regenerates the lockfile and commits any difference as "Automatically
+  updated MODULE.bazel.lock".
+- **Pull requests from a fork.** The job fails instead. Commit the `MODULE.bazel.lock` from its
+  `bazel-lockfile` artifact: `gh run download <run-id> --repo dfinity/ic --name bazel-lockfile`.
+- **The merge queue and every push.** The Bazel Lockfile job of CI Main fails when the file isn't what Bazel
+  generates; on pull requests it checks the merge with master. If it fails while CI PR Only's job passed,
+  master changed the lockfile: merge master into your branch.
+
+### Merge conflicts
+
+Pull requests that change `MODULE.bazel` in parallel often conflict in `MODULE.bazel.lock`, and GitHub
+doesn't run CI on a conflicted pull request. Bumping related `bazel_dep`s in one pull request avoids most
+conflicts. To resolve one, take master's file and regenerate it:
+
+```sh
+git merge origin/master   # resolve any other conflicts as usual
+git checkout origin/master -- MODULE.bazel.lock
+bazel mod deps >/dev/null
+git add MODULE.bazel.lock
+git commit --no-edit
+```
+
+Alternatively, push the merge with master's file and let CI regenerate it, at the cost of one more CI run.
+
+### Platforms
+
+CI generates the file on amd64-linux. Today every module extension records the same result on every
+platform. On pull requests and in the merge queue, the Bazel Test arm64-linux and arm64-darwin jobs of CI
+Main fail when Bazel rewrites the file there. On other runs, like pushes to master, they only report it. If
+this happens because a module extension now records a result per platform, that platform needs a job in
+`.github/workflows/bazel-lockfile.yml`. On an Intel Mac, discard local changes to the file.
+
+### Options that change the lockfile
+
+Options that change what module extensions see go on `common` lines in `bazel/conf/.bazelrc.build`, which
+the CI jobs read. Examples are `--registry`, `--override_module`, or a `--repo_env` that an extension reads.
+Never put them in `bazel/conf/.bazelrc.internal` or `user.bazelrc`, which the CI jobs don't read.
+
+### Release branches
+
+Nothing updates the file on `rc--*` and `hotfix-*` branches. After cherry-picking a change to one of its
+inputs there, run `bazel mod deps` and commit the result.
+
+### Checksum mismatches
+
+BCR changes some of its registry files, like `bazel_registry.json`. When it does, Bazel fails with a checksum
+mismatch for that file's URL, and every build fails until a fix is merged. To fix it:
+
+1. Delete the URL's entry from `registryFileHashes` in `MODULE.bazel.lock`.
+2. Run `bazel mod deps >/dev/null`.
+3. Get the change merged quickly.
+
 ## Example BUILD.Bazel File
 
 [rs/crypto/sha/BUILD.bazel](https://github.com/dfinity/ic/blob/master/rs/crypto/sha/BUILD.bazel)
@@ -376,6 +453,11 @@ Run `./bin/bazel-pin.sh` from the root of the repo to recalculate
 
 You may run it inside of `./ci/container/container-run.sh` if you don’t
 have `bazel` commands installed locally.
+
+### How to update `MODULE.bazel.lock`?
+
+Run `bazel mod deps >/dev/null` from the root of the repo and commit
+`MODULE.bazel.lock`, see [MODULE.bazel.lock](#modulebazellock).
 
 ### rustfmt
 

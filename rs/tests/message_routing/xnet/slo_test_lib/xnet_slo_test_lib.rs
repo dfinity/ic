@@ -33,10 +33,11 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet, VmResourceOver
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder, SubnetSnapshot,
 };
 use ic_system_test_driver::util::{block_on, runtime_from_url};
-use slog::info;
+use ic_types::messages::ReplicaHealthStatus;
+use slog::{info, warn};
 use std::fmt::Display;
 use std::time::Duration;
 use std::vec;
@@ -474,9 +475,15 @@ pub fn check_success(
 /// test is already set up and ignores all `config` parameters related to the
 /// IC topology (e.g., `nodes_per_subnet`).
 ///
+/// The canisters of a subnet with more than one node are torn down via its most
+/// up-to-date node (see `most_up_to_date_runtime()`), which need not be the node
+/// of the given runtime. That node is taken from the topology of `env` and called
+/// with the identity that `runtime_from_url()` uses, so the given runtimes must
+/// use that identity too.
 ///
 /// # Panics
 /// - If the nodes provided in `nodes` are incompatible with `config`.
+/// - If `env` holds no topology.
 /// - On test failure.
 pub async fn test_async_impl(
     env: TestEnv,
@@ -491,7 +498,7 @@ pub async fn test_async_impl(
 
     // Step 1: Install Xnet canisters on each subnet.
     // Step 2: Start all canisters (via update `start` call).
-    let canisters = deploy_and_start(env, &endpoints_runtimes, &config, logger).await;
+    let canisters = deploy_and_start(env.clone(), &endpoints_runtimes, &config, logger).await;
 
     // Step 3: Wait for canisters to exchange messages.
     info!(
@@ -500,6 +507,26 @@ pub async fn test_async_impl(
         config.runtime.as_secs()
     );
     tokio::time::sleep(Duration::from_secs(config.runtime.as_secs())).await;
+
+    // Tear down via the most up-to-date node of each subnet: a node that has fallen
+    // behind its subnet answers late or with an error, and drops update calls.
+    info!(
+        logger,
+        "Tearing down the canisters via the most up-to-date healthy node of their subnet where \
+         one is found, and via the node they were installed through otherwise..."
+    );
+    let teardown_runtimes = most_up_to_date_runtimes(&env, &canisters, logger).await;
+    let canisters = canisters
+        .iter()
+        .zip(&teardown_runtimes)
+        .map(|(subnet_canisters, runtime)| match runtime {
+            Some(runtime) => subnet_canisters
+                .iter()
+                .map(|canister| Canister::new(runtime, canister.canister_id()))
+                .collect(),
+            None => subnet_canisters.clone(),
+        })
+        .collect::<Vec<Vec<_>>>();
 
     // Step 4: Stop all canisters (via update `stop` call).
     // Step 5: Collect metrics from all canisters (via query `metrics` call).
@@ -513,6 +540,110 @@ pub async fn test_async_impl(
         check_success(aggregated_metrics, &config, logger),
         "Test failed."
     );
+}
+
+/// Returns, for the canisters of each subnet in `canisters`, a runtime for the
+/// most up-to-date node of the subnet hosting them (see
+/// `most_up_to_date_runtime()`), or `None` if no subnet of the topology hosts them.
+async fn most_up_to_date_runtimes(
+    env: &TestEnv,
+    canisters: &[Vec<Canister<'_>>],
+    logger: &slog::Logger,
+) -> Vec<Option<Runtime>> {
+    let subnets = env
+        .topology_snapshot()
+        .subnets()
+        .map(|subnet| (subnet.subnet_canister_ranges(), subnet))
+        .collect::<Vec<_>>();
+    let subnets = &subnets;
+    let runtimes = canisters
+        .iter()
+        .enumerate()
+        .map(|(subnet_idx, subnet_canisters)| async move {
+            let canister_id = subnet_canisters.first()?.canister_id();
+            let Some((_, subnet)) = subnets
+                .iter()
+                .find(|(ranges, _)| ranges.iter().any(|range| range.contains(&canister_id)))
+            else {
+                warn!(
+                    logger,
+                    "Found no subnet hosting canister {} (subnet_idx={})", canister_id, subnet_idx
+                );
+                return None;
+            };
+            most_up_to_date_runtime(subnet_idx, subnet, logger).await
+        });
+    join_all(runtimes).await
+}
+
+/// Returns a runtime for the healthy node of `subnet` with the highest certified
+/// height.
+///
+/// Returns `None` if `subnet` has a single node, which leaves nothing to choose
+/// from, or no healthy node.
+///
+/// `subnet_idx`, the index of `subnet` in the test, identifies it in the log
+/// messages.
+async fn most_up_to_date_runtime(
+    subnet_idx: usize,
+    subnet: &SubnetSnapshot,
+    logger: &slog::Logger,
+) -> Option<Runtime> {
+    let nodes = subnet.nodes().collect::<Vec<_>>();
+    if nodes.len() < 2 {
+        return None;
+    }
+
+    // The health status and certified height that each node reports, or why its
+    // status request failed.
+    let statuses = join_all(nodes.iter().map(|node| async move {
+        node.status_async()
+            .await
+            .map(|status| (status.replica_health_status, status.certified_height))
+            .map_err(|err| format!("{err:#}"))
+    }))
+    .await;
+    let statuses = nodes
+        .iter()
+        .map(|node| node.node_id)
+        .zip(statuses)
+        .collect::<Vec<_>>();
+
+    // Only a healthy node answers queries and `read_state` requests.
+    let most_up_to_date = nodes
+        .iter()
+        .zip(&statuses)
+        .filter_map(|(node, (_, status))| match status {
+            Ok((Some(ReplicaHealthStatus::Healthy), Some(certified_height))) => {
+                Some((node, *certified_height))
+            }
+            _ => None,
+        })
+        .max_by_key(|(_, certified_height)| *certified_height);
+    let Some((node, _)) = most_up_to_date else {
+        warn!(
+            logger,
+            "Subnet {} (subnet_idx={}) has no healthy node; health status and certified height \
+             of its nodes: {:?}",
+            subnet.subnet_id,
+            subnet_idx,
+            statuses
+        );
+        return None;
+    };
+    info!(
+        logger,
+        "Node {} is the most up-to-date healthy node of subnet {} (subnet_idx={}); health \
+         status and certified height of its nodes: {:?}",
+        node.node_id,
+        subnet.subnet_id,
+        subnet_idx,
+        statuses
+    );
+    Some(runtime_from_url(
+        node.get_public_url(),
+        node.effective_canister_id(),
+    ))
 }
 
 pub async fn stop_all_canister(canisters: &[Vec<Canister<'_>>]) {

@@ -1,11 +1,11 @@
 ---
 name: check-bazel-files
-description: Use after editing any Bazel file — BUILD.bazel, MODULE.bazel (including bazel/rust.MODULE.bazel), or a .bzl file — to validate the change without paying for a full build, and to auto-format it.
+description: Use after editing any Bazel file — BUILD.bazel, MODULE.bazel (including bazel/rust.MODULE.bazel), or a .bzl file — to validate the change without paying for a full build, to update MODULE.bazel.lock, and to auto-format it.
 ---
 
 # Checking Bazel file changes
 
-Two fast checks after editing `BUILD.bazel`, `MODULE.bazel`, or `.bzl` files,
+Three fast steps after editing `BUILD.bazel`, `MODULE.bazel`, or `.bzl` files,
 run from the repository root (`cd "$(git rev-parse --show-toplevel)"`):
 
 ## 1. Validate with `--nobuild`
@@ -23,7 +23,21 @@ macro used repo-wide) can break packages far from the file you touched.
 
 Fix any errors it reports.
 
-## 2. Format with buildifier
+## 2. Update MODULE.bazel.lock
+
+```sh
+bazel mod deps >/dev/null
+```
+
+Run this after you change `MODULE.bazel`, an included `bazel/*.MODULE.bazel`, a module override patch,
+`.bazelversion` or `requirements.txt`. It evaluates every module extension and updates all of
+`MODULE.bazel.lock`; the `--nobuild` above only updates the parts it evaluates.
+
+- Commit the file with the change, and never edit it by hand.
+- Repin first if the change needs it (see Notes): this fails while `Cargo.Bazel.*.lock` is outdated.
+- See "MODULE.bazel.lock" in `bazel/README.md`, for example on merge conflicts.
+
+## 3. Format with buildifier
 
 ```sh
 bazel run //:buildifier

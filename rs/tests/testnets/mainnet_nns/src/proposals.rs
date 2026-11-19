@@ -36,19 +36,19 @@ use std::sync::OnceLock;
 use url::Url;
 
 /*
-* This modules duplicates some often-used functions that normally submit proposals with a test
-* neuron (like `TEST_NEURON_1_ID`), but instead uses a different neuron ID, which is stored in the
-* test environment. If you run the `setup` function that sets up a testnet with NNS mainnet state,
-* a neuron will be created that controls all stake. To make a proposal using that neuron, it is
-* sufficient to call `ProposalWithMainnetState::[name_of_the_proposal]` instead of
-* `[name_of_the_proposal]`.
-*
-* IMPORTANT: Before making any proposal with this module, you MUST call
-* `ProposalWithMainnetState::read_dictator_neuron_identity_from_env(&env)` once in your `test`
-* function (not in `setup`, as those functions run in different processes). This is necessary, so
-* that the neuron identity is initialized from the test environment and used in subsequent
-* proposals.
-*/
+ * This modules duplicates some often-used functions that normally submit proposals with a test
+ * neuron (like `TEST_NEURON_1_ID`), but instead uses a different neuron ID, which is stored in the
+ * test environment. If you run the `setup` function that sets up a testnet with NNS mainnet state,
+ * a neuron will be created that controls all stake. To make a proposal using that neuron, it is
+ * sufficient to call `ProposalWithMainnetState::[name_of_the_proposal]` instead of
+ * `[name_of_the_proposal]`.
+ *
+ * IMPORTANT: Before making any proposal with this module, you MUST call
+ * `ProposalWithMainnetState::read_dictator_neuron_identity_from_env(&env)` once in your `test`
+ * function (not in `setup`, as those functions run in different processes). This is necessary, so
+ * that the neuron identity is initialized from the test environment and used in subsequent
+ * proposals.
+ */
 
 /// Test neuron ID and secret key of its controller encoded in PEM format.
 pub(crate) static RECOVERED_NNS_DICTATOR_NEURON_IDENTITY: OnceLock<(NeuronId, String)> =

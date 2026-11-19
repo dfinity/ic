@@ -34,6 +34,9 @@ use ic_types::{
 use prometheus::{Histogram, IntCounter, IntGauge};
 use std::{cell::RefCell, collections::BTreeSet, sync::Arc, time::Instant};
 
+/// How many heights above the finalized height certification artifacts are fetched.
+const LOOK_AHEAD: u64 = 10;
+
 struct CertifierMetrics {
     shares_created: IntCounter,
     certifications_aggregated: IntCounter,
@@ -78,27 +81,33 @@ impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for C
     // The priority function requires just the height of the artifact to decide if
     // it should be fetched or not: if we already have a full certification at
     // that height or this height is below the CUP height, we're not interested in
-    // any new artifacts at that height. If it is above the CUP height and we do not
-    // have a full certification at that height, we're interested in all artifacts.
+    // any new artifacts at that height. If it is more than `LOOK_AHEAD` heights above
+    // the finalized height, we may want them later. Otherwise, we're interested in all
+    // artifacts at that height.
     fn new_bouncer(&self, certification_pool: &Pool) -> Bouncer<CertificationMessageId> {
         let _timer = self.metrics.update_duration.start_timer();
 
         let certified_heights = certification_pool.certified_heights();
         let cup_height = self.consensus_pool_cache.catch_up_package().height();
+        let max_height =
+            self.consensus_pool_cache.finalized_block().height() + Height::from(LOOK_AHEAD);
         Box::new(move |id| {
             let height = id.height;
             // We drop all artifacts below the CUP height or those for which we have a full
             // certification already.
             if height < cup_height || certified_heights.contains(&height) {
                 BouncerValue::Unwanted
+            } else if height > max_height {
+                BouncerValue::MaybeWantsLater
             } else {
                 BouncerValue::Wants
             }
         })
     }
 
+    // Like consensus, so that deferred artifacts are fetched soon after they're wanted.
     fn refresh_period(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(3)
+        std::time::Duration::from_secs(1)
     }
 }
 
@@ -913,11 +922,14 @@ mod tests {
                 cert_pool.apply(change_set);
 
                 let bouncer = bouncer_factory.new_bouncer(&cert_pool);
+                let max_height = pool.get_cache().finalized_block().height().get() + LOOK_AHEAD;
                 for (height, prio) in &[
                     (1, BouncerValue::Unwanted),
                     (2, BouncerValue::Wants),
                     (3, BouncerValue::Unwanted),
                     (4, BouncerValue::Wants),
+                    (max_height, BouncerValue::Wants),
+                    (max_height + 1, BouncerValue::MaybeWantsLater),
                 ] {
                     assert_eq!(
                         bouncer(&CertificationMessageId {

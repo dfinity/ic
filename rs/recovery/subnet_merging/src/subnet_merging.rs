@@ -1,10 +1,13 @@
 use crate::{
-    admin_helper::get_propose_to_cool_down_subnet_command,
+    admin_helper::{get_propose_to_cool_down_subnet_command, get_propose_to_merge_subnets_command},
     layout::Layout,
     steps::{
-        CheckCoolingDownStep, CheckMergeReadinessStep, DownloadStateStep,
-        StopReplicaAtHaltingCheckpointStep, ValidateCupStep, WaitForHaltingCupStep,
+        CheckCoolingDownStep, CheckMergeReadinessStep, CheckRoutingTableStep,
+        ComputeExpectedMergedManifestStep, DownloadStateStep, MergeStatesStep,
+        ProposeRecoveryCupStep, StopReplicaAtHaltingCheckpointStep, ValidateCupStep,
+        WaitForHaltingCupStep,
     },
+    utils::ensure_default_initial_dkg_subnet_is_not_merged,
 };
 
 use clap::Parser;
@@ -85,6 +88,21 @@ pub enum StepType {
     /// Validate the state downloaded from the destination subnet against the
     /// CUP it halted at.
     ValidateDestinationSubnetCup,
+    /// Compute the manifest the merged state is expected to have from the
+    /// manifests of the two downloaded states.
+    ComputeExpectedMergedManifest,
+    /// Assemble the merged state from the two downloaded states, and check its
+    /// manifest against the expected one.
+    MergeStates,
+    /// Submit a proposal to route the canister ID ranges of the source subnet
+    /// to the destination subnet.
+    MergeSubnets,
+    /// Wait until the registry routes no canister ID range to the source subnet
+    /// anymore, and record the registry version at which this was read.
+    CheckRegistryForRoutingTableEntry,
+    /// Submit a proposal for a recovery CUP of the destination subnet at the
+    /// merged state.
+    ProposeCupForDestinationSubnet,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -132,9 +150,9 @@ pub struct SubnetMergingArgs {
     #[clap(long, default_value = "1800")]
     pub halt_timeout_secs: u64,
 
-    /// How long to wait, in seconds, for the proposal labeling the source
-    /// subnet as "cooling down" to be adopted, executed and visible in the
-    /// registry.
+    /// How long to wait, in seconds, for the proposals labeling the source
+    /// subnet as "cooling down" and merging it into the destination subnet to
+    /// be adopted, executed and visible in the registry.
     #[clap(long, default_value = "3600")]
     pub registry_timeout_secs: u64,
 
@@ -284,8 +302,10 @@ impl SubnetMerging {
     ///    CUP it is halted at by the tool (which sets `halt_at_cup_height`, but
     ///    never `is_halted`);
     /// 5) The destination subnet is not cooling down;
-    /// 6) Both have the same subnet type, cycles cost schedule, subnet admins
-    ///    and SEV setting.
+    /// 6) Both have the same subnet type, cycles cost schedule, subnet admins,
+    ///    SEV setting and replica version;
+    /// 7) Neither is the default initial DKG subnet, which runs the DKG for the
+    ///    recovery of the destination subnet.
     fn check_subnets_preconditions(
         recovery: &Recovery,
         source_subnet_id: SubnetId,
@@ -306,6 +326,12 @@ impl SubnetMerging {
             &source,
             destination_subnet_id,
             &destination,
+        )?;
+
+        ensure_default_initial_dkg_subnet_is_not_merged(
+            &recovery.registry_helper,
+            source_subnet_id,
+            destination_subnet_id,
         )
     }
 
@@ -325,6 +351,7 @@ impl SubnetMerging {
             canister_cycles_cost_schedule: _,
             subnet_admins: _,
             features: _, // Only `sev_enabled`.
+            replica_version_id: _,
             cooling_down: _,
             // Checked for each subnet on its own, by
             // `get_and_pre_validate_subnet_record`.
@@ -332,7 +359,9 @@ impl SubnetMerging {
             chain_key_config: _,
             // Set by the tool itself to halt both subnets.
             halt_at_cup_height: _,
-            // Capacity, left to the merge step.
+            // Capacity, not checked yet: a follow-up is to load the merged
+            // state into a `StateMachine` with the destination subnet's
+            // settings and check that the merged state is fine there.
             max_number_of_canisters: _,
             resource_limits: _,
             // Settings of each subnet on its own: the merged subnet keeps those
@@ -341,7 +370,6 @@ impl SubnetMerging {
             max_ingress_bytes_per_message: _,
             unit_delay_millis: _,
             initial_notary_delay_millis: _,
-            replica_version_id: _,
             recalled_replica_version_ids: _,
             dkg_interval_length: _,
             dkg_dealings_per_block: _,
@@ -411,6 +439,17 @@ impl SubnetMerging {
         let (source_sev, destination_sev) = (sev_enabled(source), sev_enabled(destination));
         if source_sev != destination_sev {
             return mismatch("SEV setting (sev_enabled)", &source_sev, &destination_sev);
+        }
+        // The merged state combines checkpoints written by the replicas of both
+        // subnets and is loaded by the replica of the destination subnet, so
+        // both subnets must run the same replica version (which, in
+        // particular, writes the same state sync version).
+        if source.replica_version_id != destination.replica_version_id {
+            return mismatch(
+                "replica version",
+                &source.replica_version_id,
+                &destination.replica_version_id,
+            );
         }
 
         Ok(())
@@ -649,7 +688,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                     ));
                 }
             }
-            StepType::ValidateSourceSubnetCup | StepType::ValidateDestinationSubnetCup => {}
+            StepType::ValidateSourceSubnetCup
+            | StepType::ValidateDestinationSubnetCup
+            | StepType::ComputeExpectedMergedManifest
+            | StepType::MergeStates
+            | StepType::MergeSubnets
+            | StepType::CheckRegistryForRoutingTableEntry
+            | StepType::ProposeCupForDestinationSubnet => {}
         }
     }
 
@@ -717,6 +762,52 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             StepType::ValidateDestinationSubnetCup => {
                 self.validate_cup_step(TargetSubnet::Destination).into()
             }
+
+            StepType::ComputeExpectedMergedManifest => ComputeExpectedMergedManifestStep {
+                source_subnet_id: self.params.source_subnet_id,
+                destination_subnet_id: self.params.destination_subnet_id,
+                layout: self.layout.clone(),
+            }
+            .into(),
+
+            StepType::MergeStates => MergeStatesStep {
+                source_subnet_id: self.params.source_subnet_id,
+                destination_subnet_id: self.params.destination_subnet_id,
+                layout: self.layout.clone(),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
+
+            StepType::MergeSubnets => AdminStep {
+                logger: self.recovery.logger.clone(),
+                ic_admin_cmd: get_propose_to_merge_subnets_command(
+                    &self.recovery.admin_helper,
+                    self.params.source_subnet_id,
+                    self.params.destination_subnet_id,
+                ),
+            }
+            .into(),
+
+            StepType::CheckRegistryForRoutingTableEntry => CheckRoutingTableStep {
+                source_subnet_id: self.params.source_subnet_id,
+                destination_subnet_id: self.params.destination_subnet_id,
+                registry_helper: self.recovery.registry_helper.clone(),
+                layout: self.layout.clone(),
+                timeout: Duration::from_secs(self.params.registry_timeout_secs),
+                poll_interval: Duration::from_secs(self.params.poll_interval_secs),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
+
+            StepType::ProposeCupForDestinationSubnet => ProposeRecoveryCupStep {
+                source_subnet_id: self.params.source_subnet_id,
+                destination_subnet_id: self.params.destination_subnet_id,
+                admin_helper: self.recovery.admin_helper.clone(),
+                registry_helper: self.recovery.registry_helper.clone(),
+                layout: self.layout.clone(),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
         };
 
         Ok(step)
@@ -843,6 +934,38 @@ mod tests {
             err.contains("WaitForHaltingCupOnDestinationSubnet"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn subnets_must_run_the_same_replica_version() {
+        let source_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
+        let destination_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
+        let record = |replica_version_id: &str| SubnetRecord {
+            replica_version_id: replica_version_id.to_string(),
+            ..Default::default()
+        };
+
+        assert!(
+            SubnetMerging::ensure_compatible_subnet_records(
+                source_subnet_id,
+                &record("version_a"),
+                destination_subnet_id,
+                &record("version_a"),
+            )
+            .is_ok()
+        );
+
+        let err = SubnetMerging::ensure_compatible_subnet_records(
+            source_subnet_id,
+            &record("version_a"),
+            destination_subnet_id,
+            &record("version_b"),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("replica version"), "{err}");
+        assert!(err.contains("version_a"), "{err}");
+        assert!(err.contains("version_b"), "{err}");
     }
 
     #[test]

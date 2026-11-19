@@ -94,21 +94,21 @@ impl HonestDealerDlogLookupTable {
 }
 
 /*
-* To minimize the memory stored in the BSGS table, instead of storing
-* elements of Gt directly (576 bytes) we first hash them using
-* SHA-224.  This reduces the memory consumption by approximately a
-* factor of 20, and is quite fast to compute especially as production
-* node machines all have SHA-NI support.
-*
-* Rust's HashMap usually hashes using SipHash with a random seed.
-* This prevents against denial of service attacks caused by malicious
-* keys. Here we instead use a very simple hash which is safe because
-* we know that all of our keys were generated via a cryptographic hash
-* already. This also disables the randomization step. This is safe
-* because we only ever hash the serialization of elements of Gt g*i,
-* where i is a smallish integer that depends on various NIDKG
-* parameters.
-*/
+ * To minimize the memory stored in the BSGS table, instead of storing
+ * elements of Gt directly (576 bytes) we first hash them using
+ * SHA-224.  This reduces the memory consumption by approximately a
+ * factor of 20, and is quite fast to compute especially as production
+ * node machines all have SHA-NI support.
+ *
+ * Rust's HashMap usually hashes using SipHash with a random seed.
+ * This prevents against denial of service attacks caused by malicious
+ * keys. Here we instead use a very simple hash which is safe because
+ * we know that all of our keys were generated via a cryptographic hash
+ * already. This also disables the randomization step. This is safe
+ * because we only ever hash the serialization of elements of Gt g*i,
+ * where i is a smallish integer that depends on various NIDKG
+ * parameters.
+ */
 
 struct ShiftXorHasher {
     state: u64,

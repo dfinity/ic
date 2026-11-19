@@ -268,6 +268,29 @@ read_files_pattern(iptables_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
 manage_files_pattern(ic_orchestrator_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
 
 ###############################################################################
+# Node configuration in /run/config
+
+type ic_config_var_run_t;
+files_type(ic_config_var_run_t)
+
+require { type init_t, initrc_t; }
+filetrans_pattern(init_t, var_run_t, ic_config_var_run_t, dir, "config")
+filetrans_pattern(initrc_t, var_run_t, ic_config_var_run_t, dir, "config")
+manage_dirs_pattern(init_t, ic_config_var_run_t, ic_config_var_run_t)
+manage_files_pattern(init_t, ic_config_var_run_t, ic_config_var_run_t)
+manage_dirs_pattern(initrc_t, ic_config_var_run_t, ic_config_var_run_t)
+manage_files_pattern(initrc_t, ic_config_var_run_t, ic_config_var_run_t)
+
+# Orchestrator and replica read this configuration
+read_files_pattern(ic_orchestrator_t, ic_config_var_run_t, ic_config_var_run_t)
+read_files_pattern(ic_replica_t, ic_config_var_run_t, ic_config_var_run_t)
+
+# The nss_icos module needs to be able to read this configuration
+require { type iptables_t; }
+search_dirs_pattern(iptables_t, var_run_t, ic_config_var_run_t)
+read_files_pattern(iptables_t, ic_config_var_run_t, ic_config_var_run_t)
+
+###############################################################################
 # Canister sandbox
 
 role system_r types ic_canister_sandbox_t;

@@ -18,7 +18,6 @@ system_test_nns(
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/tecdsa/utils",
-        "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/cycles",
         "//rs/types/management_canister_types",

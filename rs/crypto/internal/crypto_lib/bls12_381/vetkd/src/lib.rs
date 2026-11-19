@@ -180,11 +180,7 @@ fn check_validity(
         (msg, &verification_key_prepared),
     ]);
 
-    if !c3_c2_msg.is_identity() {
-        return false;
-    }
-
-    true
+    c3_c2_msg.is_identity()
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

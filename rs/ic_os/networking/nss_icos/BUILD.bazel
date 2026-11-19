@@ -12,9 +12,14 @@ rust_shared_library(
     ],
     deps = [
         # Keep sorted.
+        "//rs/ic_os/config/types:config_types",
+        "//rs/ic_os/networking/deterministic_ips",
         "@crate_index//:lazy_static",
         "@crate_index//:libc",
         "@crate_index//:libnss",
+        "@crate_index//:macaddr",
         "@crate_index//:nix",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
     ],
 )

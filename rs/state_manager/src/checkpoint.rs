@@ -124,6 +124,7 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
         maybe_parallel_map(
             &mut thread_pool,
             checkpoint_layout.all_existing_pagemaps()?.into_iter(),
+            1,
             |pm| validate(pm),
         )
         .into_iter()
@@ -132,6 +133,7 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
         maybe_parallel_map(
             &mut thread_pool,
             checkpoint_layout.all_existing_wasm_files()?.into_iter(),
+            1,
             |wasm_file| try_mmap_wasm_file(wasm_file),
         )
         .into_iter()
@@ -510,7 +512,7 @@ impl CheckpointLoader {
                 .or_default()
                 .push(snapshot_id);
         }
-        let results = maybe_parallel_map(thread_pool, canister_ids.iter(), |canister_id| {
+        let results = maybe_parallel_map(thread_pool, canister_ids.iter(), 1, |canister_id| {
             load_canister_state_from_checkpoint(
                 &self.checkpoint_layout,
                 canister_id,
@@ -563,7 +565,7 @@ impl CheckpointLoader {
                 .or_default()
                 .push(snapshot_id);
         }
-        maybe_parallel_map(thread_pool, ref_canister_ids.iter(), |canister_id| {
+        maybe_parallel_map(thread_pool, ref_canister_ids.iter(), 1, |canister_id| {
             load_canister_state_from_checkpoint(
                 &self.checkpoint_layout,
                 canister_id,

@@ -15,7 +15,6 @@ use ic_interfaces::{
     time_source::SysTimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, info};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
@@ -24,7 +23,7 @@ use ic_pprof::Pprof;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replica_setup_ic_network::setup_consensus_and_p2p;
-use ic_replicated_state::{ReplicatedState, metrics::ReplicatedStateInvariants};
+use ic_replicated_state::metrics::ReplicatedStateInvariants;
 use ic_state_manager::{StateManagerImpl, state_sync::StateSync};
 use ic_tracing::ReloadHandles;
 use ic_types::{
@@ -73,8 +72,8 @@ pub fn construct_ic_stack(
     catch_up_package: Option<pb::CatchUpPackage>,
     tracing_handle: ReloadHandles,
 ) -> std::io::Result<(
-    // TODO: remove next three return values since they are used only in tests
-    Arc<dyn StateReader<State = ReplicatedState>>,
+    Arc<StateManagerImpl>,
+    // TODO: remove next two return values since they are used only in tests
     QueryExecutionService,
     Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,

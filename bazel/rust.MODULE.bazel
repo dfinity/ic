@@ -2,7 +2,7 @@
 # Run `./bin/bazel-pin.sh` from the top-level directory of the working tree after changing this file
 # to regenerate Cargo Bazel lockfiles.
 
-bazel_dep(name = "rules_rust", version = "0.74.0")
+bazel_dep(name = "rules_rust", version = "0.75.0")
 single_version_override(
     module_name = "rules_rust",
     patch_strip = 1,
@@ -12,7 +12,44 @@ single_version_override(
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    versions = ["1.99.1"],
+    # rules_rust has no checksums for Rust 1.100.0 (see its rust/private/known_shas.bzl),
+    # so it downloads any 1.100.0 archive missing from this dict without verifying it.
+    # The dict covers the 1.100.0 archives that our builds fetch on the supported hosts:
+    # * rustc, cargo, clippy, llvm-tools and rust-analyzer for the hosts:
+    #   aarch64-apple-darwin, aarch64-unknown-linux-gnu and x86_64-unknown-linux-gnu,
+    # * rust-std for the five `supported_platform_triples` of `crate.from_specs` below:
+    #   the hosts, wasm32-unknown-unknown, and x86_64-apple-darwin, which
+    #   aarch64-apple-darwin cross-compiles to (//:macos-intel),
+    # * rust-src.
+    # A new host needs its rustc, cargo, clippy, llvm-tools, rust-analyzer and rust-std
+    # archives, a new target its rust-std. The checksums are the `xz_hash`es from
+    # https://static.rust-lang.org/dist/channel-rust-1.100.0.toml. When changing
+    # `versions`, update the dict, or delete it if rules_rust has the checksums for the
+    # new version.
+    sha256s = {
+        "cargo-1.100.0-aarch64-apple-darwin.tar.xz": "7e18265d2d2cda8dec6cac4d0faa3bbafe927b401e5185350abc7d669f9adafb",
+        "cargo-1.100.0-aarch64-unknown-linux-gnu.tar.xz": "d07ee80eb6ba3c5845c554ac88086e1ff5d63f83d99c3c09cb32504cbedd6844",
+        "cargo-1.100.0-x86_64-unknown-linux-gnu.tar.xz": "7e29ce07d7c6e92d1826870575ba27d57fff6cb3e754aa57d99099cb88fab35d",
+        "clippy-1.100.0-aarch64-apple-darwin.tar.xz": "fb57f639b5b9bcf1262df1ff81bcfc9e44338fbc729b0d5aad531b96493d6391",
+        "clippy-1.100.0-aarch64-unknown-linux-gnu.tar.xz": "941f71acaf2a181d66776b3b889b72d64a90cc405b8f6c41a4b5ac8cd99a36b1",
+        "clippy-1.100.0-x86_64-unknown-linux-gnu.tar.xz": "0d18df3bff6c852ef8243727fed075ecb33dbf93b8ab8c138c2f45e3f270102a",
+        "llvm-tools-1.100.0-aarch64-apple-darwin.tar.xz": "855138deaa04b955a7dadef55e7d583c5bbefd9fb7db6879aac126c4e4c2e526",
+        "llvm-tools-1.100.0-aarch64-unknown-linux-gnu.tar.xz": "929514c642010b884575525fce876d3fb9b9eeec76cd825b79b3b917a7088fc6",
+        "llvm-tools-1.100.0-x86_64-unknown-linux-gnu.tar.xz": "2c84cada1aef73339b1a2d101a35cd78d71072c8f6a3921bf1abb852c3f42ad3",
+        "rust-analyzer-1.100.0-aarch64-apple-darwin.tar.xz": "b011b03fd0f5bfa66f36fc4a56ed9f068b9c783b17293e993df1afb8bad5298f",
+        "rust-analyzer-1.100.0-aarch64-unknown-linux-gnu.tar.xz": "f9f6284ccf8df19bd30acfe50a6b9b3844b893cb426ec1345b8c03402ae51958",
+        "rust-analyzer-1.100.0-x86_64-unknown-linux-gnu.tar.xz": "eecc8bc9a73c8b543c3cbf634200cc96887dc466acac56d61861b17d8b1a5674",
+        "rust-src-1.100.0.tar.xz": "107afa7819b500c573b21a160b08f1a20bc2dfd99550717e1ffbbdb09da7ec6e",
+        "rust-std-1.100.0-aarch64-apple-darwin.tar.xz": "9345645b6f56eea28bf8cc2c0f628a61d507a688f91c1bec5ae6bfad216a16c7",
+        "rust-std-1.100.0-aarch64-unknown-linux-gnu.tar.xz": "c73f62fbe5d837f9807ed9e0076575dd8d3475c79af2b30e3570d328e6713f8f",
+        "rust-std-1.100.0-wasm32-unknown-unknown.tar.xz": "19b7954d650fc0d22767eceb76b8e03d07ce0d6a9f4234f33c32a17ee8d6d7b9",
+        "rust-std-1.100.0-x86_64-apple-darwin.tar.xz": "1cc179e8e58af18b6fcfc095065a75fb6ed9afb9e33dc7fd596551cf755efe9f",
+        "rust-std-1.100.0-x86_64-unknown-linux-gnu.tar.xz": "4591b6486594ded52ecd6135db95bf9355bbd3ca7a380888b141528bbcf9a5d4",
+        "rustc-1.100.0-aarch64-apple-darwin.tar.xz": "3fcd7f1709f62dda58bf4db2dcfd630a451e750aadaaa551a21cc4a627a37b4c",
+        "rustc-1.100.0-aarch64-unknown-linux-gnu.tar.xz": "fcbfa5b8a0cb28f0c4edfb6dda6910ee910993db31f05258613f5cd5b851263a",
+        "rustc-1.100.0-x86_64-unknown-linux-gnu.tar.xz": "f1d0b1dec81dab6f523cd098507763487b0d4bd7fd2c87582f154128719be03b",
+    },
+    versions = ["1.100.0"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
@@ -52,14 +89,6 @@ crate.spec(
     version = "0.10.0",
 )
 crate.spec(
-    default_features = False,
-    features = [
-        "idna",
-    ],
-    package = "addr",
-    version = "^0.15.6",
-)
-crate.spec(
     features = [
         "axum",
         "axum-json",
@@ -73,7 +102,7 @@ crate.spec(
         "serde",
     ],
     package = "alloy-consensus",
-    version = "^1.8.3",
+    version = "^2.6.1",
 )
 crate.spec(
     features = [
@@ -81,7 +110,7 @@ crate.spec(
         "serde",
     ],
     package = "alloy-eips",
-    version = "^1.8.3",
+    version = "^2.6.1",
 )
 crate.spec(
     features = [
@@ -93,7 +122,7 @@ crate.spec(
 )
 crate.spec(
     package = "alloy-rpc-types-eth",
-    version = "^1.8.3",
+    version = "^2.6.1",
 )
 crate.spec(
     package = "alloy-sol-types",
@@ -130,7 +159,7 @@ crate.spec(
         "serde_json",
     ],
     package = "askama",
-    version = "0.15",
+    version = "^0.16.1",
 )
 crate.spec(
     package = "assert_cmd",
@@ -176,14 +205,13 @@ crate.spec(
     default_features = False,
     features = [
         "std",
-        "std-blocking-sleep",
     ],
     package = "backon",
     version = "^1.6.0",
 )
 crate.spec(
     package = "base64",
-    version = "^0.22",
+    version = "^0.23.1",
 )
 crate.spec(
     package = "bech32",
@@ -194,12 +222,6 @@ crate.spec(
     version = "^1.3.3",
 )
 crate.spec(
-    default_features = False,
-    features = ["runtime"],
-    package = "bindgen",
-    version = "^0.65.1",
-)
-crate.spec(
     features = [
         "secp256k1",
     ],
@@ -208,7 +230,7 @@ crate.spec(
 )
 crate.spec(
     package = "bit-vec",
-    version = "^0.6.3",
+    version = "^0.10.2",
 )
 crate.spec(
     features = [
@@ -273,15 +295,11 @@ crate.spec(
 )
 crate.spec(
     package = "cc",
-    version = "=1.2.48",
+    version = "1.11",
 )
 crate.spec(
     package = "cfg-if",
     version = "^1.0.0",
-)
-crate.spec(
-    package = "chacha20poly1305",
-    version = "^0.10.0",
 )
 crate.spec(
     default_features = False,
@@ -303,14 +321,10 @@ crate.spec(
     git = "https://github.com/chronotope/chrono.git",
     package = "chrono",
     package_alias = "chrono_canisters",
-    tag = "v0.4.41",
+    tag = "v0.4.44",
 )
 crate.spec(
     package = "ciborium",
-    version = "^0.2.2",
-)
-crate.spec(
-    package = "cidr",
     version = "^0.2.2",
 )
 crate.spec(
@@ -323,7 +337,7 @@ crate.spec(
 )
 crate.spec(
     package = "colored",
-    version = "^2.0.0",
+    version = "^3.1.1",
 )
 crate.spec(
     features = [
@@ -332,10 +346,6 @@ crate.spec(
     git = "https://github.com/dfinity/comparable",
     package = "comparable",
     rev = COMPARABLE_REV,
-)
-crate.spec(
-    package = "console",
-    version = "^0.11",
 )
 crate.spec(
     package = "configparser",
@@ -388,7 +398,7 @@ crate.spec(
 )
 crate.spec(
     package = "dashmap",
-    version = "^5.3.4",
+    version = "^6.2.1",
 )
 crate.spec(
     default_features = False,
@@ -411,7 +421,7 @@ crate.spec(
 )
 crate.spec(
     package = "dialoguer",
-    version = "^0.11.0",
+    version = "^0.12.0",
 )
 crate.spec(
     package = "directories-next",
@@ -434,15 +444,6 @@ crate.spec(
     package = "educe",
     version = "^0.5",
 )
-
-# Not used directly; spec'd only to constrain the version resolved for `educe`'s
-# transitive `enum-ordinalize` -> `enum-ordinalize-derive` chain.
-# DO NOT upgrade to >=4.4.2 as it pulls in syn 3 whereas the rest of the
-# codebase uses syn 2.
-crate.spec(
-    package = "enum-ordinalize-derive",
-    version = "=4.4.1",
-)
 crate.spec(
     package = "erased-serde",
     version = "^0.3.11",
@@ -450,7 +451,7 @@ crate.spec(
 crate.spec(
     features = ["print"],
     package = "escargot",
-    version = "^0.5.7",
+    version = "^1.0.1",
 )
 crate.spec(
     features = ["serde"],
@@ -466,20 +467,8 @@ crate.spec(
     version = "^3.1.0",
 )
 crate.spec(
-    default_features = False,
-    features = [
-        "std",
-    ],
-    package = "ff",
-    version = "^0.12.0",
-)
-crate.spec(
     package = "flate2",
     version = "^1.0.31",
-)
-crate.spec(
-    package = "form_urlencoded",
-    version = "^1.0.0",
 )
 crate.spec(
     package = "fqdn",
@@ -536,13 +525,13 @@ rust_library(
     crate_name = "getrandom",
     crate_root = "src/lib.rs",
     deps = [
-        "@crate_index__cfg-if-1.0.0//:cfg_if",
+        "@crate_index//:cfg-if",
     ] + select({
-        "@rules_rust//rust/platform:aarch64-apple-darwin": ["@crate_index__libc-0.2.186//:libc"],
-        "@rules_rust//rust/platform:aarch64-unknown-linux-gnu": ["@crate_index__libc-0.2.186//:libc"],
+        "@rules_rust//rust/platform:aarch64-apple-darwin": ["@crate_index//:libc"],
+        "@rules_rust//rust/platform:aarch64-unknown-linux-gnu": ["@crate_index//:libc"],
         "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
-        "@rules_rust//rust/platform:x86_64-apple-darwin": ["@crate_index__libc-0.2.186//:libc"],
-        "@rules_rust//rust/platform:x86_64-unknown-linux-gnu": ["@crate_index__libc-0.2.186//:libc"],
+        "@rules_rust//rust/platform:x86_64-apple-darwin": ["@crate_index//:libc"],
+        "@rules_rust//rust/platform:x86_64-unknown-linux-gnu": ["@crate_index//:libc"],
         "//conditions:default": [],
     }),
     edition = "2018",
@@ -557,12 +546,12 @@ rust_library(
         "@rules_rust//rust/platform:x86_64-unknown-linux-gnu": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
-    version = "0.2.10",
+    version = "0.2.17",
     visibility = ["//visibility:public"],
 )
 """,
     crate = "getrandom",
-    override_target_lib = "@@rules_rust++crate+crate_index__getrandom-0.2.10//:getrandom_no_wasm_bindgen",
+    override_target_lib = "@@rules_rust++crate+crate_index__getrandom-0.2.17//:getrandom_no_wasm_bindgen",
     version = "^0.2",
 )
 crate.spec(
@@ -575,7 +564,7 @@ crate.spec(
 )
 crate.spec(
     package = "hashlink",
-    version = "^0.10.0",
+    version = "^0.12.2",
 )
 crate.spec(
     features = [
@@ -623,7 +612,7 @@ crate.spec(
 )
 crate.spec(
     package = "humantime",
-    version = "^2.2.0",
+    version = "^2.4.0",
 )
 crate.spec(
     features = ["full"],
@@ -654,7 +643,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic0",
-    version = "^1.0.0",
+    version = "^1.2.0",
 )
 crate.spec(
     features = [
@@ -686,9 +675,8 @@ crate.spec(
     version = "^0.2.3",
 )
 crate.spec(
-    git = "https://github.com/dfinity/ic-canister-sig-creation.git",
     package = "ic-canister-sig-creation",
-    rev = "c790e58434be9bf30e656b418c14f7862353a476",
+    version = "^1.3.1",
 )
 crate.spec(
     package = "ic-cbor",
@@ -696,15 +684,11 @@ crate.spec(
 )
 crate.spec(
     package = "ic-cdk",
-    version = "^0.20.2",
+    version = "^0.20.3",
 )
 crate.spec(
     package = "ic-cdk-bitcoin-canister",
     version = "^0.2.0",
-)
-crate.spec(
-    package = "ic-cdk-executor",
-    version = "^2.0.0",
 )
 crate.spec(
     package = "ic-cdk-management-canister",
@@ -716,7 +700,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-certified-map",
-    version = "^0.3.1",
+    version = "^0.4.1",
 )
 crate.spec(
     package = "ic-certification",
@@ -799,7 +783,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-vetkeys",
-    version = "^0.7.0",
+    version = "^0.9.0",
 )
 crate.spec(
     default_features = False,
@@ -808,8 +792,6 @@ crate.spec(
         "exe",
     ],
     package = "ic-wasm",
-    # 0.11.1 relaxed the `thiserror` requirement to "2"; anything older forces
-    # thiserror >=2.0.19, which pulls in syn 3. See the `thiserror` spec below.
     version = "^0.11.1",
 )
 crate.spec(
@@ -822,11 +804,11 @@ crate.spec(
 )
 crate.spec(
     package = "indexmap",
-    version = "^2.2.6",
+    version = "^2.10.0",
 )
 crate.spec(
     package = "indicatif",
-    version = "^0.17.3",
+    version = "^0.18.6",
 )
 crate.spec(
     package = "indoc",
@@ -844,7 +826,7 @@ crate.spec(
 )
 crate.spec(
     package = "insta",
-    version = "^1.31.0",
+    version = "^1.49.0",
 )
 crate.spec(
     features = ["serde"],
@@ -862,7 +844,7 @@ crate.spec(
 )
 crate.spec(
     package = "jsonrpc",
-    version = "^0.20.1",
+    version = "^0.21.1",
 )
 crate.spec(
     package = "json5",
@@ -910,7 +892,7 @@ crate.spec(
         "mutex",
     ],
     package = "libcryptsetup-rs",
-    version = "0.15",
+    version = "0.16.1",
 )
 crate.spec(
     default_features = False,
@@ -947,7 +929,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "lru",
-    version = "^0.12",
+    version = "^0.19",
 )
 crate.spec(
     package = "macaddr",
@@ -996,7 +978,7 @@ crate.spec(
 )
 crate.spec(
     package = "netdev",
-    version = "0.46.3",
+    version = "^0.47.0",
 )
 crate.spec(
     package = "nftables",
@@ -1017,7 +999,7 @@ crate.spec(
         "zerocopy",  # used by ic-sys for fcntl::copy_file_range
     ],
     package = "nix",
-    version = "^0.31.3",
+    version = "^0.32.0",
 )
 crate.spec(
     package = "num-bigint",
@@ -1038,7 +1020,7 @@ crate.spec(
 )
 crate.spec(
     package = "object",
-    version = "^0.37.3",
+    version = "^0.41.0",
 )
 crate.spec(
     features = [
@@ -1096,7 +1078,7 @@ crate.spec(
 )
 crate.spec(
     package = "parking_lot",
-    version = "^0.12.1",
+    version = "^0.12.3",
 )
 crate.spec(
     package = "paste",
@@ -1106,7 +1088,7 @@ crate.spec(
     default_features = False,
     features = ["std"],
     package = "pem",
-    version = "^3",
+    version = "^4.0.0",
 )
 crate.spec(
     package = "pin-project-lite",
@@ -1119,10 +1101,6 @@ crate.spec(
 crate.spec(
     package = "pkcs8",
     version = "^0.10.2",
-)
-crate.spec(
-    package = "pkg-config",
-    version = "^0.3",
 )
 crate.spec(
     default_features = False,
@@ -1155,7 +1133,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "procfs",
-    version = "^0.17.0",
+    version = "^0.18.0",
 )
 crate.spec(
     features = [
@@ -1174,7 +1152,7 @@ crate.spec(
 )
 crate.spec(
     package = "proptest-derive",
-    version = "^0.5.0",
+    version = "^0.9.0",
 )
 crate.spec(
     package = "prost",
@@ -1297,24 +1275,20 @@ crate.spec(
     version = "0.6",
 )
 crate.spec(
-    features = [
-        "std",
-    ],
-    package = "ring",
-    version = "^0.17.7",
-)
-crate.spec(
     package = "ripemd",
-    version = "^0.1.1",
+    version = "^0.2.0",
 )
 crate.spec(
     package = "rlp",
-    version = "^0.5.2",
+    version = "^0.6.1",
 )
 crate.spec(
     default_features = False,
+    features = [
+        "bindgen-runtime",
+    ],
     package = "rocksdb",
-    version = "^0.22.0",
+    version = "^0.25.0",
 )
 crate.spec(
     package = "rolling-file",
@@ -1329,8 +1303,9 @@ crate.spec(
     version = "^0.9.10",
 )
 crate.spec(
+    default_features = False,
     package = "rstest",
-    version = "^0.19.0",
+    version = "^0.28.0",
 )
 crate.spec(
     # vendored: build the bundled libusb instead of linking the system one
@@ -1363,14 +1338,13 @@ crate.spec(
     version = "^0.1.16",
 )
 crate.spec(
-    package = "rustc-hash",
-    version = "^1.1.0",
-)
-crate.spec(
     default_features = False,
     features = [
         "event",
+        "fs",
         "process",
+        "stdio",
+        "termios",
     ],
     package = "rustix",
     version = "1.1.4",
@@ -1391,10 +1365,6 @@ crate.spec(
     version = "^2.1.2",
 )
 crate.spec(
-    package = "rustversion",
-    version = "^1.0",
-)
-crate.spec(
     package = "rusty-fork",
     version = "^0.3.0",
 )
@@ -1411,12 +1381,12 @@ crate.spec(
 )
 crate.spec(
     package = "scopeguard",
-    version = "^1.1.0",
+    version = "^1.2.0",
 )
 crate.spec(
     default_features = False,
     package = "scraper",
-    version = "^0.24.0",
+    version = "^0.29.0",
 )
 crate.spec(
     default_features = False,
@@ -1501,7 +1471,7 @@ crate.spec(
         "iterator",
     ],
     package = "signal-hook",
-    version = "^0.3.6",
+    version = "^0.4.6",
 )
 crate.spec(
     package = "signature",
@@ -1559,7 +1529,7 @@ crate.spec(
         "all",
     ],
     package = "socket2",
-    version = "^0.5.10",
+    version = "^0.6.5",
 )
 crate.spec(
     features = [
@@ -1570,7 +1540,7 @@ crate.spec(
 )
 crate.spec(
     package = "ssh2",
-    version = "0.9.4",
+    version = "0.9.7",
 )
 crate.spec(
     package = "static_assertions",
@@ -1603,19 +1573,15 @@ crate.spec(
 )
 crate.spec(
     package = "syscalls",
-    version = "^0.6.18",
+    version = "^0.8.1",
 )
 crate.spec(
     package = "sys-mount",
     version = "3.0",
 )
 crate.spec(
-    package = "tabled",
-    version = "^0.20.0",
-)
-crate.spec(
     package = "tar",
-    version = "^0.4.38",
+    version = "^0.4.39",
 )
 crate.spec(
     package = "target-lexicon",
@@ -1625,10 +1591,8 @@ crate.spec(
     features = [
         "full",
     ],
-    # Pinned to a fork because the published `tarpc` uses syn 3, while the rest of this repo (still) uses syn 2.
-    git = "https://github.com/dfinity/tarpc",
     package = "tarpc",
-    rev = "cddf1c64011d00f36016146e8447bef99531030c",
+    version = "^0.38.0",
 )
 crate.spec(
     package = "tempfile",
@@ -1646,12 +1610,9 @@ crate.spec(
     package = "tui-textarea",
     version = "^0.7",
 )
-
-# DO NOT upgrade to >=2.0.19 as it pulls in syn 3 whereas the rest of the
-# codebase uses syn 2.
 crate.spec(
     package = "thiserror",
-    version = "=2.0.18",
+    version = "^2.0.21",
 )
 crate.spec(
     package = "threadpool",
@@ -1667,6 +1628,9 @@ crate.spec(
     version = "^0.7",
 )
 crate.spec(
+    features = [
+        "formatting",
+    ],
     package = "time",
     version = "^0.3.47",
 )
@@ -1681,7 +1645,7 @@ crate.spec(
 )
 crate.spec(
     package = "tokio-metrics",
-    version = "^0.4.9",
+    version = "^0.5.2",
 )
 crate.spec(
     default_features = False,
@@ -1713,7 +1677,7 @@ crate.spec(
 )
 crate.spec(
     package = "tokio-tungstenite",
-    version = "^0.29",
+    version = "^0.30",
 )
 crate.spec(
     features = [
@@ -1723,10 +1687,6 @@ crate.spec(
     ],
     package = "tokio-util",
     version = "^0.7.20",
-)
-crate.spec(
-    package = "toml",
-    version = "^0.5.9",
 )
 crate.spec(
     package = "tonic",
@@ -1758,7 +1718,7 @@ crate.spec(
         "tracing",
     ],
     package = "tower-http",
-    version = "^0.6.4",
+    version = "^0.7.1",
 )
 crate.spec(
     package = "tower_governor",
@@ -1790,10 +1750,6 @@ crate.spec(
 )
 crate.spec(
     package = "tracing-serde",
-    version = "^0.2",
-)
-crate.spec(
-    package = "tracing-slog",
     version = "^0.2",
 )
 crate.spec(
@@ -1843,11 +1799,11 @@ crate.spec(
 )
 crate.spec(
     package = "walkdir",
-    version = "^2.3.1",
+    version = "^2.3.3",
 )
 crate.spec(
     package = "walrus",
-    version = "^0.26.4",
+    version = "^0.28.0",
 )
 crate.spec(
     features = [
@@ -1934,7 +1890,7 @@ crate.spec(
 )
 crate.spec(
     package = "zstd",
-    version = "^0.13.3",
+    version = "^0.14.4",
 )
 
 # Crate annotations
@@ -1998,23 +1954,10 @@ crate.annotation(
     crate = "openssl-sys",
 )
 crate.annotation(
-    crate = "askama_derive",
-    patch_args = ["-p2"],
-    patches = ["@@//bazel:askama.patch"],
-)
-crate.annotation(
     build_script_data = [
         "@openssl//:gen_dir",
     ],
     crate = "libssh2-sys",
-    # Patch for determinism issues
-    patch_args = ["-p1"],
-    patches = ["@@//bazel:libssh2-sys.patch"],
-)
-crate.annotation(
-    crate = "libcryptsetup-rs",
-    patch_args = ["-p1"],
-    patches = ["@@//bazel:libcryptsetup-rs.patch"],
 )
 crate.annotation(
     crate = "libz-sys",
@@ -2141,6 +2084,11 @@ crate.annotation(
         #
         # See IDX-2406.
         "NUM_JOBS": "8",
+        # RocksDB needs C++20. librocksdb-sys passes -std=c++20, but cc-rs
+        # puts CXXFLAGS after it, and on macOS those come from the Xcode
+        # toolchain, which adds -std=c++17. rules_rust appends this value to
+        # the toolchain's CXXFLAGS, so it is the last -std and wins.
+        "CXXFLAGS": "-std=c++20",
     },
     crate = "librocksdb-sys",
 )
@@ -2170,6 +2118,7 @@ crate.from_specs(
     name = "crate_index",
     cargo_lockfile = "//:Cargo.Bazel.toml.lock",
     lockfile = "//:Cargo.Bazel.json.lock",
+    # A triple added here also needs its rust-std checksum in `rust.toolchain`'s `sha256s` above.
     supported_platform_triples =
         [
             "aarch64-apple-darwin",
