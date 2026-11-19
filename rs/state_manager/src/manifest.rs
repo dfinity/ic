@@ -29,7 +29,6 @@ use ic_state_layout::{
     BIN_FILE, CANISTER_FILE, CheckpointLayout, OVERLAY, QUEUES_FILE, ReadOnly, SNAPSHOT_FILE,
     STATE_SYNC_CHECKPOINT_MARKER, UNVERIFIED_CHECKPOINT_MARKER, WASM_FILE,
 };
-use ic_sys::mmap::ScopedMmap;
 use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash, state_sync::StateSyncVersion};
 use ic_utils::thread::parallel_map;
 use rand::{Rng, SeedableRng};
@@ -38,13 +37,22 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::OsStr;
 use std::fmt;
 use std::ops::Range;
+use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::Arc;
 
 /// When computing a manifest, we recompute the hash of every
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and
 /// have a hash computed earlier by this replica process.
 const REHASH_EVERY_NTH_CHUNK: u64 = 10;
+
+/// Chunks of a file are hashed in spans of up to this many consecutive chunks
+/// (256 MiB at the default chunk size), one task per span reading them in order
+/// through one file descriptor, so that the kernel's read-ahead keeps up.
+/// Threads reading interleaved chunks of the same file look random to the
+/// kernel: they get 4 KiB pages, no read-ahead, and contend on the file's page
+/// cache lock.
+const MANIFEST_SPAN_CHUNKS: usize = 256;
 
 /// During the downloading phase of state sync, We group certain files together
 /// which have filenames ending with `FILE_TO_GROUP`.
@@ -397,85 +405,33 @@ fn build_chunk_table_parallel(
         })
         .collect();
 
-    // We cache the files that are currently being hashed to avoid opening them
-    // individually for each chunk. The values in the cache are weak references,
-    // so the last thread that has a strong reference will release the value
-    // and close the corresponding file.
-    // This way we keep the number of files opened at the same time
-    // low (it doesn't exceed the number of the threads).
-    let file_cache: Arc<Mutex<HashMap<u32, Weak<ScopedMmap>>>> =
-        Arc::new(Mutex::new(HashMap::new()));
+    let mut chunks: Vec<ChunkToHash> = chunk_table
+        .iter_mut()
+        .zip(&chunk_actions)
+        .enumerate()
+        .map(|(index, (info, action))| ChunkToHash {
+            index,
+            info,
+            action,
+        })
+        .collect();
+    // Spans are queued round-robin across files (every file's first span, then
+    // every file's second span, and so on), so that concurrent tasks rarely read
+    // the same file. Sorting them by offset does that, as every file's n-th span
+    // starts at the same offset.
+    let mut spans = Vec::new();
+    for file_chunks in chunks.chunk_by_mut(|a, b| a.info.file_index == b.info.file_index) {
+        spans.extend(file_chunks.chunks_mut(MANIFEST_SPAN_CHUNKS));
+    }
+    spans.sort_by_key(|span| (span[0].info.offset, span[0].index));
 
     // Compute real chunk hashes in parallel.
     // NB. We must populate hashes of all the chunks in a file before we compute
     // file hashes.
     thread_pool.scoped(|scope| {
-        for (chunk_idx, chunk_info) in chunk_table.iter_mut().enumerate() {
-            let chunk_action = chunk_actions[chunk_idx].clone();
-            let file_path = root.join(&file_table[chunk_info.file_index as usize].relative_path);
-            let file_size = file_table[chunk_info.file_index as usize].size_bytes;
-            let file_cache = Arc::clone(&file_cache);
-            scope.execute(move || {
-                let recompute_chunk_hash = || {
-                    let mmap: Arc<ScopedMmap> = if file_size > max_chunk_size as u64 {
-                        // We only use the file cache if there is more than one chunk in the file,
-                        // otherwise the synchronization cost is unnecessary.
-                        let mut cache = file_cache.lock().unwrap();
-                        match cache.get(&chunk_info.file_index).and_then(Weak::upgrade) {
-                            Some(mmap) => mmap,
-                            None => {
-                                let mmap = Arc::new(
-                                    ScopedMmap::from_path(&file_path)
-                                        .unwrap_or_else(|e| fatal!(log, "failed to mmap file {}: {}", file_path.display(), e)),
-                                );
-                                cache.insert(chunk_info.file_index, Arc::downgrade(&mmap));
-                                mmap
-                            }
-                        }
-                    } else {
-                        Arc::new(
-                            ScopedMmap::from_path(&file_path)
-                                .unwrap_or_else(|e| fatal!(log, "failed to mmap file {}: {}", file_path.display(), e))
-                        )
-                    };
-                    let data = mmap.as_slice();
-
-                    let mut hasher = chunk_hasher();
-                    let chunk_start = chunk_info.offset as usize;
-                    let chunk_end = chunk_start + chunk_info.size_bytes as usize;
-                    hasher.write(&data[chunk_start..chunk_end]);
-                    hasher.finish()
-                };
-
-                chunk_info.hash = match chunk_action {
-                    ChunkAction::Recompute => {
-                        metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_HASHED]).inc_by(chunk_info.size_bytes as u64);
-                        recompute_chunk_hash()
-                    },
-                    ChunkAction::RecomputeAndCompare(precomputed_hash) => {
-                        metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_HASHED_AND_COMPARED]).inc_by(chunk_info.size_bytes as u64);
-
-                        let recomputed_hash = recompute_chunk_hash();
-                        if recomputed_hash != precomputed_hash {
-                            metrics.reused_chunk_hash_error_count.inc();
-                            error!(
-                                log,
-                                "{}: Hash mismatch in chunk with index {} in file {}, recomputed hash {:?}, reused hash {:?}",
-                                CRITICAL_ERROR_REUSED_CHUNK_HASH,
-                                chunk_idx,
-                                file_path.display(),
-                                chunk_info.hash,
-                                precomputed_hash
-                            );
-                        }
-                        recomputed_hash
-                    }
-                    ChunkAction::UseHash(precomputed_hash) => {
-                        metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_REUSED]).inc_by(chunk_info.size_bytes as u64);
-                        precomputed_hash
-                    },
-                };
-            });
+        for span in spans {
+            let file_path = root.join(&file_table[span[0].info.file_index as usize].relative_path);
+            scope.execute(move || hash_span(metrics, log, &file_path, span));
         }
     });
 
@@ -491,6 +447,82 @@ fn build_chunk_table_parallel(
     }
 
     (file_table, chunk_table)
+}
+
+/// A chunk to hash: its index in the chunk table, its entry there, and what to
+/// do with it.
+struct ChunkToHash<'a> {
+    index: usize,
+    info: &'a mut ChunkInfo,
+    action: &'a ChunkAction,
+}
+
+/// Sets the hashes of `span`, consecutive chunks of the file at `file_path`, as
+/// their actions say. Opens the file once, for the first chunk it reads, and
+/// reads the chunks to hash in order.
+fn hash_span(
+    metrics: &ManifestMetrics,
+    log: &ReplicaLogger,
+    file_path: &Path,
+    span: &mut [ChunkToHash],
+) {
+    let mut file = None;
+    let mut buf = Vec::new();
+    for chunk in span {
+        let (offset, size_bytes) = (chunk.info.offset, chunk.info.size_bytes);
+        let mut recompute_chunk_hash = || {
+            let file = file.get_or_insert_with(|| {
+                std::fs::File::open(file_path).unwrap_or_else(|e| {
+                    fatal!(log, "failed to open file {}: {}", file_path.display(), e)
+                })
+            });
+            buf.resize(size_bytes as usize, 0);
+            file.read_exact_at(&mut buf, offset).unwrap_or_else(|e| {
+                fatal!(log, "failed to read file {}: {}", file_path.display(), e)
+            });
+            let mut hasher = chunk_hasher();
+            hasher.write(&buf);
+            hasher.finish()
+        };
+
+        chunk.info.hash = match chunk.action {
+            ChunkAction::Recompute => {
+                metrics
+                    .chunk_bytes
+                    .with_label_values(&[LABEL_VALUE_HASHED])
+                    .inc_by(size_bytes as u64);
+                recompute_chunk_hash()
+            }
+            ChunkAction::RecomputeAndCompare(precomputed_hash) => {
+                metrics
+                    .chunk_bytes
+                    .with_label_values(&[LABEL_VALUE_HASHED_AND_COMPARED])
+                    .inc_by(size_bytes as u64);
+
+                let recomputed_hash = recompute_chunk_hash();
+                if recomputed_hash != *precomputed_hash {
+                    metrics.reused_chunk_hash_error_count.inc();
+                    error!(
+                        log,
+                        "{}: Hash mismatch in chunk with index {} in file {}, recomputed hash {:?}, reused hash {:?}",
+                        CRITICAL_ERROR_REUSED_CHUNK_HASH,
+                        chunk.index,
+                        file_path.display(),
+                        recomputed_hash,
+                        precomputed_hash
+                    );
+                }
+                recomputed_hash
+            }
+            ChunkAction::UseHash(precomputed_hash) => {
+                metrics
+                    .chunk_bytes
+                    .with_label_values(&[LABEL_VALUE_REUSED])
+                    .inc_by(size_bytes as u64);
+                *precomputed_hash
+            }
+        };
+    }
 }
 
 /// Build a chunk table from the file table.
@@ -594,7 +626,8 @@ fn build_chunk_table_sequential(
             });
         };
 
-        let mmap = ScopedMmap::from_path(root.join(&relative_path)).expect("failed to open file");
+        let mmap = ic_sys::mmap::ScopedMmap::from_path(root.join(&relative_path))
+            .expect("failed to open file");
         let data = mmap.as_slice();
         compute_file_chunk_hashes(data);
     }
