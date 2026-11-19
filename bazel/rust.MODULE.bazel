@@ -1537,7 +1537,7 @@ crate.spec(
 )
 crate.spec(
     package = "ssh2",
-    version = "0.9.4",
+    version = "0.9.7",
 )
 crate.spec(
     package = "static_assertions",
@@ -1955,9 +1955,6 @@ crate.annotation(
         "@openssl//:gen_dir",
     ],
     crate = "libssh2-sys",
-    # Patch for determinism issues
-    patch_args = ["-p1"],
-    patches = ["@@//bazel:libssh2-sys.patch"],
 )
 crate.annotation(
     crate = "libcryptsetup-rs",

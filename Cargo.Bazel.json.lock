@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "80a0903587ba21610ccb1b02e55c37a4a20b7b3ff18efb9a819f8d22c9c7c896",
+  "checksum": "b1a06c7efb040121b676f0ae006473c268b86f0bd4fac6d2633f803deaec8f6a",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -8635,38 +8635,6 @@
         }
       ],
       "version": "0.19.5"
-    },
-    "bitflags 1.3.2": {
-      "common_attrs": {
-        "crate_features": [
-          "default"
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "bitflags",
-      "license": "MIT/Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "bitflags",
-      "package_url": "https://github.com/bitflags/bitflags",
-      "repository": {
-        "Http": {
-          "sha256": "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a",
-          "url": "https://static.crates.io/crates/bitflags/1.3.2/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitflags",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "1.3.2"
     },
     "bitflags 2.13.2": {
       "common_attrs": {
@@ -18319,7 +18287,7 @@
             "target": "socks5_impl"
           },
           {
-            "id": "ssh2 0.9.4",
+            "id": "ssh2 0.9.7",
             "target": "ssh2"
           },
           {
@@ -30243,40 +30211,6 @@
       ],
       "version": "0.3.14"
     },
-    "instant 0.1.13": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "cfg-if 1.0.5",
-            "target": "cfg_if"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "instant",
-      "license": "BSD-3-Clause",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "BSD-3-Clause"
-      ],
-      "name": "instant",
-      "package_url": "https://github.com/sebcrozet/instant",
-      "repository": {
-        "Http": {
-          "sha256": "e0242819d153cba4b4b05a5a8f2a7e9bbf97b6055b2a002b395c96b5ff3c0222",
-          "url": "https://static.crates.io/crates/instant/0.1.13/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "instant",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.1.13"
-    },
     "instant-acme 0.8.5": {
       "common_attrs": {
         "crate_features": [
@@ -33462,7 +33396,7 @@
       ],
       "version": "0.35.0"
     },
-    "libssh2-sys 0.3.0": {
+    "libssh2-sys 0.3.4": {
       "build_script_attrs": {
         "data": [
           "@openssl//:gen_dir"
@@ -33476,6 +33410,10 @@
             {
               "id": "pkg-config 0.3.34",
               "target": "pkg_config"
+            },
+            {
+              "id": "semver 1.0.28",
+              "target": "semver"
             }
           ],
           "selects": {
@@ -33532,7 +33470,8 @@
         ]
       },
       "library_target_name": "libssh2_sys",
-      "license": "MIT/Apache-2.0",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -33541,14 +33480,8 @@
       "package_url": "https://github.com/alexcrichton/ssh2-rs",
       "repository": {
         "Http": {
-          "patch_args": [
-            "-p1"
-          ],
-          "patches": [
-            "@@//bazel:libssh2-sys.patch"
-          ],
-          "sha256": "2dc8a030b787e2119a731f1951d6a773e2280c660f8ec4b0f5e1505a386e71ee",
-          "url": "https://static.crates.io/crates/libssh2-sys/0.3.0/download"
+          "sha256": "fce5a0b125f6aeac93b304b35f7f1e9f054aad29ddac57091928e41df3ccd233",
+          "url": "https://static.crates.io/crates/libssh2-sys/0.3.4/download"
         }
       },
       "targets": [
@@ -33565,7 +33498,7 @@
           }
         }
       ],
-      "version": "0.3.0"
+      "version": "0.3.4"
     },
     "libsystemd 0.7.2": {
       "common_attrs": {
@@ -39584,52 +39517,6 @@
       ],
       "version": "2.2.1"
     },
-    "parking_lot 0.11.2": {
-      "common_attrs": {
-        "crate_features": [
-          "default"
-        ],
-        "deps": [
-          {
-            "id": "instant 0.1.13",
-            "target": "instant"
-          },
-          {
-            "id": "lock_api 0.4.14",
-            "target": "lock_api"
-          },
-          {
-            "id": "parking_lot_core 0.8.6",
-            "target": "parking_lot_core"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "parking_lot",
-      "license": "Apache-2.0/MIT",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "parking_lot",
-      "package_url": "https://github.com/Amanieu/parking_lot",
-      "repository": {
-        "Http": {
-          "sha256": "7d17b78036a60663b797adeaee46f5c9dfebb86948d1255007a1d6be0271ff99",
-          "url": "https://static.crates.io/crates/parking_lot/0.11.2/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "parking_lot",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.11.2"
-    },
     "parking_lot 0.12.5": {
       "common_attrs": {
         "crate_features": [
@@ -39671,81 +39558,6 @@
         }
       ],
       "version": "0.12.5"
-    },
-    "parking_lot_core 0.8.6": {
-      "build_script_attrs": {},
-      "common_attrs": {
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 1.0.5",
-              "target": "cfg_if"
-            },
-            {
-              "id": "instant 0.1.13",
-              "target": "instant"
-            },
-            {
-              "id": "smallvec 1.16.6",
-              "target": "smallvec"
-            }
-          ],
-          "selects": {
-            "cfg(target_os = \"redox\")": [
-              {
-                "id": "redox_syscall 0.2.16",
-                "target": "syscall"
-              }
-            ],
-            "cfg(unix)": [
-              {
-                "id": "libc 0.2.191",
-                "target": "libc"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2018",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "parking_lot_core",
-      "license": "Apache-2.0/MIT",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "parking_lot_core",
-      "package_url": "https://github.com/Amanieu/parking_lot",
-      "repository": {
-        "Http": {
-          "sha256": "60a2cfe6f0ad2bfc16aefa463b497d5c7a5ecd44a23efa72aa342d90177356dc",
-          "url": "https://static.crates.io/crates/parking_lot_core/0.8.6/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "parking_lot_core",
-            "crate_root": "src/lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "0.8.6"
     },
     "parking_lot_core 0.9.12": {
       "build_script_attrs": {},
@@ -45448,40 +45260,6 @@
         }
       ],
       "version": "0.14.10"
-    },
-    "redox_syscall 0.2.16": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "bitflags 1.3.2",
-            "target": "bitflags"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "syscall",
-      "license": "MIT",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "MIT"
-      ],
-      "name": "redox_syscall",
-      "package_url": "https://gitlab.redox-os.org/redox-os/syscall",
-      "repository": {
-        "Http": {
-          "sha256": "fb5a58c1855b4b6819d59012155603f0b22ad30cad752600aadfcb695265519a",
-          "url": "https://static.crates.io/crates/redox_syscall/0.2.16/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "syscall",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.2.16"
     },
     "redox_syscall 0.5.18": {
       "common_attrs": {
@@ -53194,11 +52972,11 @@
       ],
       "version": "0.7.3"
     },
-    "ssh2 0.9.4": {
+    "ssh2 0.9.7": {
       "common_attrs": {
         "deps": [
           {
-            "id": "bitflags 1.3.2",
+            "id": "bitflags 2.13.2",
             "target": "bitflags"
           },
           {
@@ -53206,29 +52984,29 @@
             "target": "libc"
           },
           {
-            "id": "libssh2-sys 0.3.0",
+            "id": "libssh2-sys 0.3.4",
             "target": "libssh2_sys"
           },
           {
-            "id": "parking_lot 0.11.2",
+            "id": "parking_lot 0.12.5",
             "target": "parking_lot"
           }
         ],
         "edition": "2015"
       },
       "library_target_name": "ssh2",
-      "license": "MIT/Apache-2.0",
+      "license": "MIT OR Apache-2.0",
       "license_file": "LICENSE-APACHE",
       "license_ids": [
         "Apache-2.0",
         "MIT"
       ],
       "name": "ssh2",
-      "package_url": "https://github.com/alexcrichton/ssh2-rs",
+      "package_url": "https://github.com/rust-lang/ssh2-rs",
       "repository": {
         "Http": {
-          "sha256": "e7fe461910559f6d5604c3731d00d2aafc4a83d1665922e280f42f9a168d5455",
-          "url": "https://static.crates.io/crates/ssh2/0.9.4/download"
+          "sha256": "c85be00ec7fc67b19b590c6eb3cfb03c9ab663923fa8bdd18b7e1ba3a414a210",
+          "url": "https://static.crates.io/crates/ssh2/0.9.7/download"
         }
       },
       "targets": [
@@ -53239,7 +53017,7 @@
           }
         }
       ],
-      "version": "0.9.4"
+      "version": "0.9.7"
     },
     "stable_deref_trait 1.2.1": {
       "common_attrs": {
@@ -66576,7 +66354,7 @@
     "slotmap 1.1.1",
     "socket2 0.6.5",
     "socks5-impl 0.6.2",
-    "ssh2 0.9.4",
+    "ssh2 0.9.7",
     "static_assertions 1.1.0",
     "strum 0.26.3",
     "strum_macros 0.26.4",

@@ -940,7 +940,7 @@ slog-scope = "4.4.0"
 slog-term = "2.9.1"
 slotmap = "1.0.7"
 socket2 = { version = "0.6.5", features = ["all"] }
-ssh2 = "0.9.4"
+ssh2 = "0.9.7"
 static_assertions = "1.1.0"
 strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
