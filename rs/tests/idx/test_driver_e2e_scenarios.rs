@@ -257,7 +257,7 @@ fn spawning_process(_env: TestEnv) {
 
 // Like `spawning_process`, but the loop runs in the background of a shell that exits right away,
 // so it leaves the process tree of the test while it keeps the test's stdout and stderr open. It
-// dies of SIGPIPE once the driver stops reading them.
+// dies of SIGPIPE on its first write to stdout after the driver stopped reading it.
 fn spawning_escaped_process(_env: TestEnv) {
     let _ = std::process::Command::new("sh")
         .arg("-c")

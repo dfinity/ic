@@ -572,16 +572,20 @@ fn test_test_spawning_escaped_proc_gets_stopped() {
     let err_str = String::from_utf8_lossy(&result.stderr);
     // The loop that prints 'escapedchild' every second left the process tree of the test, so it
     // isn't killed with the test and keeps the test's stdout and stderr open. The driver gives
-    // up on reading them shortly after the kill instead of waiting for the loop.
+    // up on reading stdout shortly after the kill instead of waiting for the loop. The loop then
+    // dies of SIGPIPE on its next write to stdout, which closes stderr too, so the driver may
+    // read stderr to the end before it gives up on it.
     assert!(err_str.contains("escapedchild"), "{err_str}");
-    for channel in ["StdOut", "StdErr"] {
-        assert!(
-            err_str.contains(&format!(
-                "(spawning_escaped_process|{channel}): Drain timed out."
-            )),
-            "{err_str}"
-        );
-    }
+    assert!(
+        err_str.contains("(spawning_escaped_process|StdOut): Drain timed out."),
+        "{err_str}"
+    );
+    assert!(
+        ["Drain timed out.", "Drain complete.", "Channel has closed."]
+            .iter()
+            .any(|end| err_str.contains(&format!("(spawning_escaped_process|StdErr): {end}"))),
+        "{err_str}"
+    );
     assert!(!err_str.contains("did not finish within"), "{err_str}");
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(&summary, 2, 1, 0);
