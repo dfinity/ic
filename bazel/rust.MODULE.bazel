@@ -1294,11 +1294,22 @@ crate.spec(
     version = "^0.2.0",
 )
 crate.spec(
+    default_features = False,
+    features = [
+        "encoding",
+        "pkcs1v15",
+    ],
+    package = "rsa",
+    version = "^0.10.0",
+)
+crate.spec(
+    # Only for //rs/ic_os/sev/attestation/testing; see its Cargo.toml.
     features = [
         "sha2",
         "getrandom",
     ],
     package = "rsa",
+    package_alias = "rsa_0_9",
     version = "^0.9.10",
 )
 crate.spec(

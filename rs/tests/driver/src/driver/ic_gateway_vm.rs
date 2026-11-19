@@ -2,7 +2,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use http::{Method, StatusCode};
 use rcgen::{CertificateParams, KeyPair};
 use reqwest::{Client, Request};
-use rsa::{RsaPrivateKey, pkcs1::DecodeRsaPrivateKey, pkcs8::EncodePrivateKey};
+use rsa::{PrivateKey, pkcs1::DecodeRsaPrivateKey, pkcs8::EncodePrivateKey};
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use std::{
@@ -97,7 +97,7 @@ pub(crate) fn dev_root_ca() -> Result<DevRootCa> {
     // backend, so it does not matter if that ever changes; relying on the feature
     // would turn an unrelated dependency edit into a runtime failure in every
     // local gateway test.
-    let key_pkcs8_pem = RsaPrivateKey::from_pkcs1_pem(&key_pkcs1_pem)
+    let key_pkcs8_pem = PrivateKey::from_pkcs1_pem(&key_pkcs1_pem)
         .context("parsing the dev root CA key as PKCS#1")?
         .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
         .context("re-encoding the dev root CA key as PKCS#8")?;
