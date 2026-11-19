@@ -52,7 +52,7 @@ jobs:
           set -euo pipefail
           out="$RUNNER_TEMP/cargo-deny.txt"
           status=0
-          "$RUNNER_TEMP/cargo-deny/cargo-deny" --color never --all-features --locked \
+          "$RUNNER_TEMP/cargo-deny/cargo-deny" --manifest-path does-not-exist/Cargo.toml --color never --all-features --locked \
             check --hide-inclusion-graph --show-stats advisories >"$out" 2>&1 || status=$?
           cat "$out"
           if [[ $status -eq 0 ]]; then
@@ -107,7 +107,7 @@ jobs:
           status=0
           # Fails on vulnerabilities and unmaintained crates; unsound and yanked crates are only listed.
           "$RUNNER_TEMP/cargo-audit/cargo-audit" audit --color never --deny unmaintained \
-            --file Cargo.Bazel.toml.lock >"$out" 2>&1 || status=$?
+            --file does-not-exist.lock >"$out" 2>&1 || status=$?
           cat "$out"
           if [[ $status -eq 0 ]]; then
             result="passed"
