@@ -1859,9 +1859,7 @@ async fn after_validation_memory_usage_grew() {
         };
         migrate_canister(&pic, sender, &args).await.unwrap();
         // Validation succeeded. Now we break migration by interfering: installing a minimal
-        // Wasm module increases the memory usage of the canister (by way less than the memory
-        // reserved for the canister history entries recorded by the migration canister so that
-        // the migration canister still becomes the exclusive controller of that canister).
+        // Wasm module increases the memory usage of the canister.
         let canister = if interfere_with_migrated_canister {
             migrated_canister
         } else {
@@ -2006,6 +2004,7 @@ async fn fill_subnet_memory(pic: &PocketIc, subnet_id: Principal, sender: Princi
 }
 
 /// The migration canister bumps the memory allocation of the migrated and replaced canisters
+/// (unless it is already higher, in which case it is left unchanged)
 /// when it makes itself their exclusive controller and restores the original memory allocation
 /// when it restores the original controllers.
 #[tokio::test]
@@ -2079,7 +2078,8 @@ async fn memory_allocation_bumped_and_restored() {
         bring_to_state(&pic, sender, &args, MigrationState::ControllersChanged).await;
 
         // The memory allocation of both canisters is bumped to cover the canister history entries
-        // recorded by the migration canister unless it is already high enough.
+        // recorded by the migration canister unless it is already higher, in which case
+        // it is left unchanged.
         for (canister, memory_usage_before, memory_allocation_before) in memory_before.clone() {
             let (_, memory_allocation) = memory_usage_and_allocation(&pic, canister, mc).await;
             let expected_memory_allocation = std::cmp::max(

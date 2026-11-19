@@ -49,7 +49,8 @@ const CYCLES_COST_PER_MIGRATION: u64 = 10_000_000_000_000;
 /// controllers of a successful or failed request can keep failing while the subnet stays full.
 ///
 /// To prevent this, the migration canister bumps the memory allocation of the migrated and
-/// replaced canisters to their memory usage plus this amount when making itself their exclusive
+/// replaced canisters to their memory usage plus this amount (unless their memory allocation is
+/// already higher, in which case it is left unchanged) when making itself their exclusive
 /// controller and restores the original memory allocation when restoring the original
 /// controllers. As long as the reservation covers the canister's memory usage including the
 /// restoration's history entry, restoring the allocation needs no additional subnet memory.
@@ -126,7 +127,7 @@ pub struct ManagedMemoryAllocation {
     /// The memory allocation to be set for the canister while the migration canister
     /// is its exclusive controller: the memory usage of the canister at validation time
     /// plus `MEMORY_RESERVED_FOR_CANISTER_HISTORY` (or `original` if that one is already higher,
-    /// in which case setting it is a no-op).
+    /// in which case the memory allocation is left unchanged).
     pub reserved: u64,
     /// The memory usage of the canister at validation time excluding its canister history.
     /// It must not have grown once the migration canister is the exclusive controller
@@ -286,9 +287,9 @@ pub enum RequestState {
     Accepted { request: Request },
 
     /// Called mgmt `update_settings` to make us the only controller and, in the same call,
-    /// to bump the memory allocation of the migrated and replaced canisters so that recording
-    /// canister history entries for them cannot fail
-    /// (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`).
+    /// to bump the memory allocation of the migrated and replaced canisters (unless it is
+    /// already higher, in which case it is left unchanged) so that recording canister history
+    /// entries for them cannot fail (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`).
     ///
     /// Certain checks are not informative before this state because the original controller
     /// could still interfere until this state.
