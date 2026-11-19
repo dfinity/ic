@@ -11,12 +11,16 @@ anyhow = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-management-canister-types = { workspace = true }
+ic-protobuf = { path = "../../protobuf" }
 ic-recovery = { path = "../../recovery" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-subnet-merging = { path = "../../recovery/subnet_merging" }
+ic-subnet-tools = { path = "../../recovery/subnet_tools" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
@@ -25,7 +29,9 @@ itertools = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rejoin-test-lib = { path = "./rejoin_test_lib" }
+serde_json = { workspace = true }
 slog = { workspace = true }
+strum = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 xnet-test = { path = "../../rust_canisters/xnet_test" }

@@ -11,10 +11,26 @@ register_toolchains("@rules_buf_toolchains//:all")
 
 # General Bazel helpers
 bazel_dep(name = "bazel_skylib", version = "1.9.2")
-bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
+bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 bazel_dep(name = "rules_shell", version = "0.10.0")
 
-bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
+# Keep aspect_bazel_lib from registering toolchains for the toolchain types it
+# only aliases from bazel_lib and tar.bzl, so that these types resolve to the
+# toolchains of the module that defines them; see the patch header for details.
+# Bazel would also apply this MODULE.bazel patch to the older versions that
+# other modules ask for, so the override pins the version the patch is made for
+# (keep it in line with the bazel_dep above). The pin also overrides newer
+# versions that other modules ask for, without a warning. So when upgrading a
+# module that depends on aspect_bazel_lib, check which version it asks for,
+# e.g. with `bazel mod explain aspect_bazel_lib --verbose`.
+single_version_override(
+    module_name = "aspect_bazel_lib",
+    patch_strip = 1,
+    patches = ["//bazel:aspect_bazel_lib_aliased_toolchains.patch"],
+    version = "2.22.5",
+)
+
+bazel_dep(name = "buildifier_prebuilt", version = "10.2.0", dev_dependency = True)
 
 # CC dependencies (for C libs like miracl-core, etc)
 bazel_dep(name = "rules_cc", version = "0.2.28")
@@ -34,32 +50,30 @@ single_version_override(
 )
 
 # configure/make dependencies
-bazel_dep(name = "rules_foreign_cc", version = "0.15.2")
+bazel_dep(name = "rules_foreign_cc", version = "0.17.0")
 
+# Use the container's make and pkg-config instead of the ones rules_foreign_cc
+# builds by default from the make and pkgconf modules. The make and pkg-config
+# that older rules_foreign_cc releases bootstrapped weren't reproducible, see
+# https://github.com/bazel-contrib/rules_foreign_cc/issues/1313.
+# TODO: check whether the module-built ones are, and if so drop these.
 register_toolchains(
     "@rules_foreign_cc//toolchains:preinstalled_pkgconfig_toolchain",
     "@rules_foreign_cc//toolchains:preinstalled_make_toolchain",
 )
 
-# Use a patch to work around determinism issues in make & pkgconfig toolchains
-# https://github.com/bazel-contrib/rules_foreign_cc/issues/1313
-# Also we use HEAD to have the latest version of the dependencies (Meson in
-# particular, which needs a recent rules_foreign_cc to work with hermetic
-# toolchains)
-archive_override(
+# Empty the non-reproducible build logs of rules_foreign_cc builds, see the
+# patch header and https://github.com/bazel-contrib/rules_foreign_cc/issues/1313.
+single_version_override(
     module_name = "rules_foreign_cc",
     patch_strip = 1,
     patches = ["//bazel:rules_foreign_cc.patch"],
-    sha256 = "7f05eb9cc4b1c600c643e69221c88203244ccadc75ae28c4ade960f0f0742f26",
-    strip_prefix = "rules_foreign_cc-f68b351c4691e747f889dc5e4c2cac3cd3b66ea2",
-    type = "tar.gz",
-    urls = ["https://codeload.github.com/bazel-contrib/rules_foreign_cc/tar.gz/f68b351c4691e747f889dc5e4c2cac3cd3b66ea2"],
 )
 
 # Misc tools
 
 bazel_dep(name = "pigz", version = "2.8.bcr.3")  # (parallel) gzip
-bazel_dep(name = "zstd", version = "1.5.7.bcr.1")  # zstd can change format across versions
+bazel_dep(name = "zstd", version = "1.5.7.bcr.3")  # zstd can change format across versions
 
 # QEMU, for the local system test backend. We only use the prebuilt (hermetic)
 # qemu binaries; calling qemu is handled by the system test driver.
@@ -81,7 +95,9 @@ include("//bazel:rust.MODULE.bazel")
 
 bazel_dep(name = "rules_python", version = "2.5.1")
 
-python_version = "3.12"
+# The CI jobs that install requirements.txt or run ci/src code outside Bazel set up the same Python version with
+# actions/setup-python (see .github/workflows).
+python_version = "3.15"
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(python_version = python_version)
@@ -91,6 +107,16 @@ pip.parse(
     hub_name = "python_deps",
     python_version = python_version,
     requirements_lock = "//:requirements.txt",
+)
+
+# simple-parsing fails to import on Python 3.15, see the patch header for details. pip.override applies to this
+# exact wheel only, so requirements.in pins simple-parsing to this release: when bumping it, update the file name
+# (and the patch) or drop the override. //toolchains/sysimage:build_container_base_image_help_test fails when
+# simple-parsing doesn't import.
+pip.override(
+    file = "simple_parsing-0.1.7-py3-none-any.whl",
+    patch_strip = 1,
+    patches = ["//bazel:simple_parsing_missing_type.patch"],
 )
 use_repo(pip, "python_deps")
 
@@ -103,49 +129,44 @@ rules_python_config = use_extension("@rules_python//python/extensions:config.bzl
 rules_python_config.explicit_init_py(default = True)
 
 # Protobuf dependencies
-# toolchains_protoc must be declared before protobuf so its toolchain registration wins
-bazel_dep(name = "toolchains_protoc", version = "0.6.1")
 
-# Pin protoc to the prebuilt binary toolchains_protoc provides (v33.0, its
-# latest) and pin the `protobuf` module to the matching 33.0 below. protobuf 33+
-# enforces (via ProtocAuthenticityCheck) that protoc and the protobuf module
-# share the same version, so they are kept in lockstep.
-# https://registry.bazel.build/modules/toolchains_protoc
-protoc = use_extension("@toolchains_protoc//protoc:extensions.bzl", "protoc")
-protoc.toolchain(version = "v33.0")
-use_repo(
-    protoc,
-    "toolchains_protoc_hub",
-    "toolchains_protoc_hub.linux_aarch_64",
-    "toolchains_protoc_hub.linux_x86_64",
-    "toolchains_protoc_hub.osx_aarch_64",
-    "toolchains_protoc_hub.osx_x86_64",
-)
-
-register_toolchains("@toolchains_protoc_hub//:all")
-
+# The proto toolchain and //bazel:protoc use the protoc that this module
+# downloads prebuilt from its GitHub release (the default of
+# @protobuf//bazel/flags:prefer_prebuilt_protoc), see bazel/protoc.bzl.
+#
+# //ci/githubstats runs the Python code that py_proto_library generates with
+# this module's protoc on the `protobuf` package from requirements.txt. The
+# generated modules refuse to load on a runtime older than the version they were
+# generated for, so keep that package at least at this release's Python version
+# (7.36.2 for 36.2).
 bazel_dep(
     name = "protobuf",
-    version = "33.0",
+    version = "36.2",
 )
 
-# Bazel 9's builtin modules (rules_cc/rules_go/rules_python/...) pull in
-# protobuf 33.4, but toolchains_protoc only ships a prebuilt protoc up to v33.0.
-# Pin protobuf to 33.0 so it matches the prebuilt protoc and satisfies
-# protobuf's ProtocAuthenticityCheck (33.0 and 33.4 are the same release line).
+# Keep `bazel mod` commands working with rules_rust: see the patch header. The
+# patch only applies to this version, so the override pins it. The pin silently
+# beats higher protobuf versions that other modules require: when upgrading
+# Bazel or modules, check the "was <version>" notes of
+#   bazel mod all_paths protobuf --verbose --include_builtin
+# for each module's request. --include_builtin adds Bazel's own (bazel_tools),
+# and `bazel mod explain` would leave out some, such as rules_android's. Drop
+# the override together with the patch.
 single_version_override(
     module_name = "protobuf",
-    version = "33.0",
+    patch_strip = 1,
+    patches = ["//bazel:protobuf_crate_dev_dependency.patch"],
+    version = "36.2",
 )
 
 # protobuf linter
-bazel_dep(name = "rules_buf", version = "0.5.2")
+bazel_dep(name = "rules_buf", version = "0.6.1")
 
 # Go dependencies
 
-# 0.62.0 matches what the resolved dependency graph selects (pulled in via
-# the llvm module); keep the declaration in line with the resolution.
-bazel_dep(name = "rules_go", version = "0.62.0")
+# The llvm module requires rules_go 0.62.0 or later. Keep this declaration at
+# or above that, so that it is the version the resolved dependency graph selects.
+bazel_dep(name = "rules_go", version = "0.65.0")
 bazel_dep(name = "gazelle", version = "0.54.0")
 
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
@@ -177,7 +198,7 @@ use_repo(
 #   2nd PR: add it below
 
 bazel_dep(name = "rules_pkg", version = "1.3.0")
-bazel_dep(name = "rules_oci", version = "2.0.0")
+bazel_dep(name = "rules_oci", version = "2.3.5")
 
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 
@@ -316,18 +337,74 @@ use_repo(oci, "alpine_openssl", "alpine_openssl_linux_amd64")
 
 # Ubuntu snapshots
 
-bazel_dep(name = "rules_distroless", version = "0.8.0")
+bazel_dep(name = "rules_distroless", version = "0.9.4")
 
 apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
 
-# Packageset based on an Ubuntu resolute snapshot, see manifest file
-# for details
-# To update, comment out the `lock` field below and run:
-#   bazel run @resolute//:lock
+# Package set based on an Ubuntu resolute snapshot, used by the system-test
+# runtime image (see //rs/tests:ubuntu_test_runtime_image_src). The `apt`
+# extension resolves the packages below against the snapshot's package indices,
+# so the result depends on both the snapshot timestamp in `uris` and the
+# rules_distroless version (its resolver). MODULE.bazel.lock records the
+# result, so Bazel evaluates the extension again only when one of its inputs
+# changes, like these tags or the rules_distroless version.
+# To update the packages, bump the timestamp in both `apt.sources_list` calls
+# and run `bazel mod deps` (see "MODULE.bazel.lock" in bazel/README.md). When
+# bumping the timestamp or rules_distroless, review the `apt` extension's entry
+# in the diff of MODULE.bazel.lock: it lists each resolved package with its URL,
+# sha256 and `depends_on` list.
+apt.sources_list(
+    architectures = ["amd64"],
+    components = [
+        "main",
+        "universe",
+    ],
+    suites = ["resolute"],
+    types = ["deb"],
+    uris = ["https://snapshot.ubuntu.com/ubuntu/20260422T000000Z"],
+)
+apt.sources_list(
+    architectures = ["amd64"],
+    components = ["main"],
+    suites = [
+        "resolute-security",
+        "resolute-updates",
+    ],
+    types = ["deb"],
+    uris = ["https://snapshot.ubuntu.com/ubuntu/20260422T000000Z"],
+)
+
+# `@resolute//<package>/<arch>` targets are only generated for the packages
+# listed here, not for their dependencies. Unlike apt, rules_distroless prefers
+# a package that `Provides:` a listed name over a real package of that name,
+# and the target gets the provider's name: `coreutils` resolves to
+# `coreutils-from-uutils` and `libvirt0` to `libvirt0-hwe`.
 apt.install(
-    name = "resolute",
-    lock = "//bazel:resolute.lock.json",
-    manifest = "//bazel:resolute.yaml",
+    dependency_set = "resolute",
+    packages = [
+        "apt",
+        "bash",
+        "ca-certificates",
+        "coreutils",  # for chmod
+        "dmsetup",
+        "dosfstools",
+        "dpkg",  # for apt list --installed
+        "e2fsprogs",  # for mkfs.ext4 used in ICOS device tests
+        "gawk",  # for build-bootstrap-config-image
+        "gzip",  # for tar-ing up ic regsitry store in systests
+        "libcryptsetup-dev",
+        "libssl3t64",
+        "libunwind8",
+        "libvirt0",  # so colocated test binaries linking libvirt.so.0 can load (see rs/tests/driver/src/driver/local_backend.rs)
+        "mtools",
+        "openssh-client",  # used to SSH into image
+        "perl",
+        "rsync",
+        "tar",
+        "udev",  # for device-mapper tests
+        "xz-utils",
+        "zstd",
+    ],
 )
 use_repo(apt, "resolute")
 

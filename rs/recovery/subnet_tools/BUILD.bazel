@@ -24,7 +24,10 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_subnet_tools",
     version = "0.1.0",
-    visibility = ["//rs/recovery:__subpackages__"],
+    visibility = [
+        "//rs/recovery:__subpackages__",
+        "//rs/tests/message_routing:__pkg__",
+    ],
     deps = DEPENDENCIES,
 )
 

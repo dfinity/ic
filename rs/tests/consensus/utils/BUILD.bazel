@@ -11,7 +11,6 @@ rust_library(
         # Keep sorted.
         "//rs/canister_client",
         "//rs/config",
-        "//rs/http_utils",
         "//rs/limits",
         "//rs/nervous_system/common",
         "//rs/nervous_system/common/test_keys",

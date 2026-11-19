@@ -1,35 +1,31 @@
 # A .bazelrc needing build configuration. Without this configuration, the
 # build will most likely fail.
 
-# Until the lockfile format has settled, don't use a
-# lockfile for MODULE.bazel
-common --lockfile_mode=off
+# MODULE.bazel.lock is committed. Bazel keeps it in line with MODULE.bazel in its
+# default --lockfile_mode=update, see "MODULE.bazel.lock" in bazel/README.md.
+# Options that change what module extensions see, like --repo_env below, go on
+# `common` lines in this file: `bazel mod` reads no other lines, and the CI jobs
+# that generate and check MODULE.bazel.lock read no other rc file of this
+# repository.
 
 # If the download via the Remote Asset API on the bazel-remote cache failed, try it again locally.
 common --experimental_remote_downloader_local_fallback
 common --experimental_remote_downloader_propagate_credentials
 
-# Use prebuilt protoc binary via toolchain resolution instead of compiling from C++ source.
-# See https://github.com/protocolbuffers/protobuf/issues/19558
-# (Removing this still builds, but reverts to compiling protoc/libprotoc from source.)
-common --incompatible_enable_proto_toolchain_resolution
-
-# protobuf 33's upb bootstrap tools (protoc-gen-upb*, protoc_minimal, ...) use
-# __start_/__stop_ linker-array sections (e.g. linkarr_upb_AllExts). lld (used
-# by the hermetic toolchain on Linux) garbage-collects these under its default
-# --start-stop-gc together with opt-mode --gc-sections, which either breaks
-# the link with "undefined symbol: __start_linkarr_upb_AllExts" or silently
-# empties upb's extension registry. -z nostart-stop-gc disables only that:
-# sections referenced via __start_/__stop_ symbols are kept, while ordinary
-# --gc-sections stays in effect. Scoped to the exec config (these are
-# build-time `[for tool]` targets) and to Linux via
-# --enable_platform_specific_config (the macOS linker rejects this flag).
-common --enable_platform_specific_config
-build:linux --host_linkopt=-Wl,-z,nostart-stop-gc
+# rules_android, which protobuf depends on through rules_kotlin, registers
+# Android SDK toolchains from its @androidsdk repository, so Bazel fetches that
+# repository whenever it resolves toolchains (build, test, run, cquery, ...).
+# Its repository rule uses the Android SDK that ANDROID_HOME points to, and
+# fails if that SDK has no platforms or its newest build-tools are older than
+# 35.0.0. With ANDROID_HOME empty it generates a stub instead, which is all we
+# need: nothing here builds Android code.
+common --repo_env=ANDROID_HOME=
 
 # Pin the glibc version the hermetic toolchain targets to 2.31 (see
 # //:linux-glibc-2.31). Both the target and the exec platform are pinned so
-# host tools and target binaries agree on the glibc floor.
+# host tools and target binaries agree on the glibc floor. Scoped to Linux via
+# --enable_platform_specific_config.
+common --enable_platform_specific_config
 build:linux --host_platform=//:linux-glibc-2.31
 build:linux --platforms=//:linux-glibc-2.31
 
@@ -48,8 +44,9 @@ build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
 # Don't generate empty __init__.py files in the runfiles of other modules' Python executables (rules_pkg's
-# build_tar, rules_foreign_cc's meson, @bazel_tools' sha256 and proguard_allowlister) either: explicit_init_py
-# in MODULE.bazel only covers this module's targets. rules_python opts out its own targets in its MODULE.bazel.
+# build_tar, the meson module's meson that rules_foreign_cc runs, @bazel_tools' sha256 and
+# proguard_allowlister) either: explicit_init_py in MODULE.bazel only covers this module's targets.
+# rules_python opts out its own targets in its MODULE.bazel.
 # rules_python's MODULE.bazel aliases this flag to its
 # @rules_python//python/config_settings:incompatible_default_to_explicit_init_py.
 build --incompatible_default_to_explicit_init_py

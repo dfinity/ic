@@ -104,7 +104,8 @@ RUN systemctl disable \
     apt-daily-upgrade.service \
     apt-daily-upgrade.timer \
     motd-news.service \
-    motd-news.timer
+    motd-news.timer \
+    nginx.service
 
 # ------ HOSTOS WORK ---------------------------------------------
 
@@ -184,6 +185,9 @@ RUN addgroup node_exporter && \
 # stored in /etc/node_exporter.
 RUN adduser --system --disabled-password --home /var/lib/metrics-proxy --group --no-create-home metrics-proxy && \
     usermod -a -G node_exporter metrics-proxy
+
+# User for the nginx upgrade-proxy service.
+RUN adduser --system --disabled-password --home /var/lib/ic/upgrade-proxy --group --no-create-home upgrade-proxy
 
 # ------ INSTALL SCRIPTS -----------------------------------------
 

@@ -89,3 +89,74 @@ fn writes_after_merge_survive_reload_with_different_halting_heights() {
         }
     }
 }
+
+/// Writes the manifest of a checkpoint holding a single file with `contents`
+/// to `manifest_path`.
+fn write_manifest(tmp: &Path, name: &str, contents: &str, manifest_path: &Path) {
+    let checkpoint = tmp.join(name);
+    std::fs::create_dir(&checkpoint).unwrap();
+    std::fs::write(checkpoint.join("file.bin"), contents).unwrap();
+    state_tool_helper::compute_manifest(&checkpoint, manifest_path).unwrap();
+}
+
+#[test]
+fn merged_state_hash_is_the_root_hash_of_the_expected_manifest() {
+    let tmp = tempfile::tempdir().unwrap();
+    let layout = Layout::for_test(tmp.path().join("recovery"));
+    std::fs::create_dir(tmp.path().join("recovery")).unwrap();
+    let manifest = layout.merged_state_manifest_file();
+    let expected_manifest = layout.expected_merged_state_manifest_file();
+
+    // No merged state yet.
+    assert!(merged_state_hash(&layout).is_err());
+
+    write_manifest(tmp.path(), "merged", "merged", &manifest);
+    // No expected manifest to check the merged state against.
+    assert!(merged_state_hash(&layout).is_err());
+
+    write_manifest(tmp.path(), "expected", "merged", &expected_manifest);
+    let state_hash = merged_state_hash(&layout).unwrap();
+    assert_eq!(
+        state_hash,
+        state_tool_helper::verify_manifest(&manifest).unwrap()
+    );
+
+    write_manifest(tmp.path(), "other", "other", &expected_manifest);
+    let expected_state_hash = state_tool_helper::verify_manifest(&expected_manifest).unwrap();
+    assert_ne!(state_hash, expected_state_hash);
+    let err = merged_state_hash(&layout).unwrap_err().to_string();
+    assert!(err.contains(&state_hash), "{err}");
+    assert!(err.contains(&expected_state_hash), "{err}");
+}
+
+#[test]
+fn recovery_cup_time_must_be_past_both_halting_times() {
+    let subnet_id = |id| SubnetId::from(ic_base_types::PrincipalId::new_subnet_test_id(id));
+    let (source, destination) = (subnet_id(1), subnet_id(2));
+    let time = |nanos| UNIX_EPOCH + Duration::from_nanos(nanos);
+    let halting_times = |source_nanos, destination_nanos| {
+        [
+            (source, Time::from_nanos_since_unix_epoch(source_nanos)),
+            (
+                destination,
+                Time::from_nanos_since_unix_epoch(destination_nanos),
+            ),
+        ]
+    };
+
+    assert!(check_time_is_past_halting_times(time(101), &halting_times(100, 50)).is_ok());
+    assert!(check_time_is_past_halting_times(time(101), &halting_times(50, 100)).is_ok());
+
+    // Not past the halting time of one of the two subnets, whichever it is.
+    for (halting_times, behind) in [
+        (halting_times(100, 50), source),
+        (halting_times(50, 100), destination),
+        (halting_times(101, 50), source),
+        (halting_times(50, 101), destination),
+    ] {
+        let err = check_time_is_past_halting_times(time(100), &halting_times)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains(&format!("subnet {behind} halted at")), "{err}");
+    }
+}

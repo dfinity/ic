@@ -2,33 +2,33 @@ benches:
   bench_endpoints:
     total:
       calls: 1
-      instructions: 14080682018
+      instructions: 13730827061
       heap_increase: 62
       stable_memory_increase: 256
     scopes:
       icrc1_transfer:
         calls: 1
-        instructions: 3021096598
-        heap_increase: 24
+        instructions: 3048961242
+        heap_increase: 23
         stable_memory_increase: 0
       icrc2_approve:
         calls: 1
-        instructions: 4368514342
+        instructions: 4171318563
         heap_increase: 23
         stable_memory_increase: 128
       icrc2_transfer_from:
         calls: 1
-        instructions: 6647415101
+        instructions: 6467535167
         heap_increase: 2
         stable_memory_increase: 128
       query_blocks:
         calls: 1
-        instructions: 36745377
-        heap_increase: 13
+        instructions: 36091744
+        heap_increase: 14
         stable_memory_increase: 0
       query_encoded_blocks:
         calls: 1
-        instructions: 6906200
+        instructions: 6915946
         heap_increase: 0
         stable_memory_increase: 0
 version: 0.6.0
