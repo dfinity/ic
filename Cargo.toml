@@ -784,7 +784,7 @@ k256 = { version = "0.13.4", default-features = false, features = [
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
 libc = "0.2.158"
-libcryptsetup-rs = { version = "0.15", features = ["mutex"] }
+libcryptsetup-rs = { version = "0.16.1", features = ["mutex"] }
 libfuzzer-sys = "0.4.7"
 libnss = "0.5.0"
 libsystemd = "0.7.2"
@@ -940,7 +940,7 @@ slog-scope = "4.4.0"
 slog-term = "2.9.1"
 slotmap = "1.0.7"
 socket2 = { version = "0.6.5", features = ["all"] }
-ssh2 = "0.9.4"
+ssh2 = "0.9.7"
 static_assertions = "1.1.0"
 strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"

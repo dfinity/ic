@@ -7,7 +7,7 @@ name = "ic-canister-sandbox-backend-lib"
 version.workspace = true
 
 [build-dependencies]
-cc = "~1.2"
+cc = "1.11"
 
 [dependencies]
 bincode = { workspace = true }

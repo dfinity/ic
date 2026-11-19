@@ -295,7 +295,7 @@ crate.spec(
 )
 crate.spec(
     package = "cc",
-    version = "~1.2",
+    version = "1.11",
 )
 crate.spec(
     package = "cfg-if",
@@ -892,7 +892,7 @@ crate.spec(
         "mutex",
     ],
     package = "libcryptsetup-rs",
-    version = "0.15",
+    version = "0.16.1",
 )
 crate.spec(
     default_features = False,
@@ -1284,8 +1284,11 @@ crate.spec(
 )
 crate.spec(
     default_features = False,
+    features = [
+        "bindgen-runtime",
+    ],
     package = "rocksdb",
-    version = "^0.22.0",
+    version = "^0.25.0",
 )
 crate.spec(
     package = "rolling-file",
@@ -1537,7 +1540,7 @@ crate.spec(
 )
 crate.spec(
     package = "ssh2",
-    version = "0.9.4",
+    version = "0.9.7",
 )
 crate.spec(
     package = "static_assertions",
@@ -1955,14 +1958,6 @@ crate.annotation(
         "@openssl//:gen_dir",
     ],
     crate = "libssh2-sys",
-    # Patch for determinism issues
-    patch_args = ["-p1"],
-    patches = ["@@//bazel:libssh2-sys.patch"],
-)
-crate.annotation(
-    crate = "libcryptsetup-rs",
-    patch_args = ["-p1"],
-    patches = ["@@//bazel:libcryptsetup-rs.patch"],
 )
 crate.annotation(
     crate = "libz-sys",
@@ -2089,6 +2084,11 @@ crate.annotation(
         #
         # See IDX-2406.
         "NUM_JOBS": "8",
+        # RocksDB needs C++20. librocksdb-sys passes -std=c++20, but cc-rs
+        # puts CXXFLAGS after it, and on macOS those come from the Xcode
+        # toolchain, which adds -std=c++17. rules_rust appends this value to
+        # the toolchain's CXXFLAGS, so it is the last -std and wins.
+        "CXXFLAGS": "-std=c++20",
     },
     crate = "librocksdb-sys",
 )
