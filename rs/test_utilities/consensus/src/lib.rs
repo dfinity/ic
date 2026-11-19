@@ -231,7 +231,7 @@ pub fn make_genesis(summary: DkgSummary) -> CatchUpPackage {
         .clone();
     let replica_version = test_replica_version();
     let block = Block::new(
-        Id::from(CryptoHash(Vec::new())),
+        Id::from(CryptoHash::for_test()),
         Payload::new(
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
@@ -251,7 +251,7 @@ pub fn make_genesis(summary: DkgSummary) -> CatchUpPackage {
     let random_beacon = Signed {
         content: RandomBeaconContent::new(
             height,
-            Id::from(CryptoHash(Vec::new())),
+            Id::from(CryptoHash::for_test()),
             replica_version,
         ),
         signature: ThresholdSignature {
@@ -263,7 +263,7 @@ pub fn make_genesis(summary: DkgSummary) -> CatchUpPackage {
         content: CatchUpContent::new(
             HashedBlock::new(crypto_hash, block),
             HashedRandomBeacon::new(crypto_hash, random_beacon),
-            Id::from(CryptoHash(Vec::new())),
+            Id::from(CryptoHash::for_test()),
             None,
         ),
         signature: ThresholdSignature {

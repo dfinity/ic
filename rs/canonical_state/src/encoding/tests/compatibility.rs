@@ -1454,7 +1454,7 @@ fn canonical_encoding_anonymous_refund() {
 /// ```no_run
 /// SystemMetadata {
 ///     own_subnet_id: new(subnet_test_id(13)),
-///     prev_state_hash: Some(CryptoHashOfPartialState::new(CryptoHash(vec![15]))),
+///     prev_state_hash: Some(CryptoHashOfPartialState::new(CryptoHash(vec![15; 32]))),
 ///     ..Default::default()
 /// }
 /// ```
@@ -1466,18 +1466,18 @@ fn canonical_encoding_anonymous_refund() {
 ///    00    # field_index(SystemMetadata::id_counter)
 ///    00    # unsigned(0)
 ///    01    # field_index(SystemMetadata::prev_state_hash)
-///    81    # array(1)
-///       0F # unsigned(15)
+///    98 20 # array(32)
+///       0F # unsigned(15), 32 times
 /// ```
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]
 fn canonical_encoding_system_metadata() {
     for certification_version in all_supported_versions() {
         let mut metadata = SystemMetadata::new(subnet_test_id(13), SubnetType::Application);
-        metadata.prev_state_hash = Some(CryptoHashOfPartialState::new(CryptoHash(vec![15])));
+        metadata.prev_state_hash = Some(CryptoHashOfPartialState::new(CryptoHash(vec![15; 32])));
 
         assert_eq!(
-            "A1 01 81 0F",
+            format!("A1 01 98 20{}", " 0F".repeat(32)),
             as_hex(&encode_metadata(&metadata, certification_version))
         );
     }

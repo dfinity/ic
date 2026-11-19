@@ -85,7 +85,7 @@ fn consensus_produces_expected_batches() {
             .return_const(Height::from(0));
         state_manager
             .expect_get_state_hash_at()
-            .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![]))));
+            .return_const(Ok(CryptoHashOfState::from(CryptoHash::for_test())));
         state_manager
             .expect_get_state_at()
             .return_const(Ok(Labeled::new(

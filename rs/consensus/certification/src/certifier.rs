@@ -935,7 +935,7 @@ mod tests {
                         bouncer(&CertificationMessageId {
                             height: Height::from(*height),
                             hash: CertificationMessageHash::Certification(CryptoHashOf::from(
-                                CryptoHash(Vec::new())
+                                CryptoHash::for_test()
                             )),
                         },),
                         *prio
@@ -1273,12 +1273,12 @@ mod tests {
                     &[
                         StateHashMetadata {
                             height: Height::from(1),
-                            hash: CryptoHashOfPartialState::from(CryptoHash(vec![0])),
+                            hash: CryptoHashOfPartialState::from(CryptoHash(vec![0; 32])),
                             height_witness: Witness::new_for_testing_with_height(),
                         },
                         StateHashMetadata {
                             height: Height::from(2),
-                            hash: CryptoHashOfPartialState::from(CryptoHash(vec![1, 2])),
+                            hash: CryptoHashOfPartialState::from(CryptoHash(vec![1; 32])),
                             height_witness: Witness::new_for_testing_with_height(),
                         },
                     ],
@@ -1287,7 +1287,7 @@ mod tests {
                 if let CertificationMessage::CertificationShare(share) = &shares[0] {
                     assert_eq!(
                         share.signed.content.hash,
-                        CryptoHashOfPartialState::from(CryptoHash(vec![0]))
+                        CryptoHashOfPartialState::from(CryptoHash(vec![0; 32]))
                     );
                 } else {
                     panic!("unexpected content")
@@ -1296,7 +1296,7 @@ mod tests {
                 if let CertificationMessage::CertificationShare(share) = &shares[1] {
                     assert_eq!(
                         share.signed.content.hash,
-                        CryptoHashOfPartialState::from(CryptoHash(vec![1, 2]))
+                        CryptoHashOfPartialState::from(CryptoHash(vec![1; 32]))
                     );
                 } else {
                     panic!("unexpected content")
@@ -1383,7 +1383,7 @@ mod tests {
     fn test_invalidate_certificate_with_incorrect_state() {
         let height = Height::from(5);
         let test = |certifier: &CertifierImpl, cert: &mut Certification| {
-            let fake_hash = CryptoHashOfPartialState::from(CryptoHash(vec![88, 99, 00]));
+            let fake_hash = CryptoHashOfPartialState::from(CryptoHash(vec![88; 32]));
             cert.signed.content.hash = fake_hash.clone();
 
             let height_witness_hash = gen_content(height).hash;
@@ -1707,7 +1707,7 @@ mod tests {
                         .into_iter()
                         .map(|h| StateHashMetadata {
                             height: Height::from(h),
-                            hash: CryptoHashOfPartialState::from(CryptoHash(Vec::new())),
+                            hash: CryptoHashOfPartialState::from(CryptoHash::for_test()),
                             height_witness: Witness::new_for_testing_with_height(),
                         })
                         .collect::<Vec<_>>()
@@ -1855,7 +1855,7 @@ mod tests {
                             &cert_pool,
                             &[StateHashMetadata {
                                 height: test_height,
-                                hash: CryptoHashOfPartialState::from(CryptoHash(vec![1, 2, 3])),
+                                hash: CryptoHashOfPartialState::from(CryptoHash(vec![1; 32])),
                                 height_witness: Witness::new_for_testing_with_height(),
                             }],
                         );

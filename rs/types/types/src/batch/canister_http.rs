@@ -869,7 +869,8 @@ mod tests {
                 metadata: CanisterHttpResponseMetadata {
                     id: CanisterHttpRequestId::new(2),
                     content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(vec![
-                        4, 5, 6, 7,
+                        4;
+                        32
                     ])),
                     content_size: 42,
                     is_reject: false,

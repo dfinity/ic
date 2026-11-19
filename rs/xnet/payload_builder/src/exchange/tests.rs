@@ -152,9 +152,9 @@ impl AdvertHandlerFixture {
             height: CERTIFIED_HEIGHT,
             height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
-                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                    vec![],
-                ))),
+                content: CertificationContent::new(CryptoHashOfPartialState::from(
+                    CryptoHash::for_test(),
+                )),
                 signature: ThresholdSignature::fake(),
             },
         });

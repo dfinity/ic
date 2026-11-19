@@ -446,7 +446,7 @@ mod tests {
 
             // Insert a few CUP shares
             let new_cup_share = |node_id: NodeId| -> CatchUpPackageShare {
-                let state_hash = CryptoHashOf::from(CryptoHash(Vec::new()));
+                let state_hash = CryptoHashOf::from(CryptoHash::for_test());
                 CatchUpPackageShare {
                     content: (&CatchUpContent::new(
                         HashedBlock::new(
@@ -500,7 +500,7 @@ mod tests {
                 const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
                 const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
                 const INTERVAL_LENGTH: Height = Height::new(9);
-                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1; 32]));
 
                 let Dependencies {
                     mut pool,

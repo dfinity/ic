@@ -977,7 +977,7 @@ mod tests {
                         summary.content.get_value().clone(),
                     ),
                     HashedRandomBeacon::new(ic_types::crypto::crypto_hash, summary_beacon.clone()),
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
+                    CryptoHashOf::from(CryptoHash::for_test()),
                     None,
                 ),
                 signature: ThresholdSignature {
@@ -1126,7 +1126,7 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash::for_test())));
             let certified_height = Height::from(1);
             state_manager
                 .get_mut()

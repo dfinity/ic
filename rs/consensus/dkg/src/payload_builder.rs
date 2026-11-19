@@ -1056,7 +1056,7 @@ mod tests {
     fn make_summary_block(dkg_summary: DkgSummary, registry_version: RegistryVersion) -> Block {
         Block {
             version: test_replica_version(),
-            parent: CryptoHashOf::from(CryptoHash(vec![])),
+            parent: CryptoHashOf::from(CryptoHash::for_test()),
             payload: Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload {

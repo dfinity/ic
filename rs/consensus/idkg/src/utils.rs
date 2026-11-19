@@ -898,7 +898,7 @@ mod tests {
 
     fn make_block(idkg_payload: Option<IDkgPayload>, height: Height) -> Block {
         Block::new(
-            CryptoHashOf::from(ic_types::crypto::CryptoHash(Vec::new())),
+            CryptoHashOf::from(ic_types::crypto::CryptoHash::for_test()),
             Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload {

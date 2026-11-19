@@ -330,11 +330,11 @@ fn test_single_advert_between_two_nodes() {
         let received_advert_n2_a1 = Arc::new(AtomicBool::new(false));
         let state_sync_id_1 = StateSyncArtifactId {
             height: Height::from(1),
-            hash: CryptoHash(vec![]),
+            hash: CryptoHash::for_test(),
         };
         let state_sync_id_2 = StateSyncArtifactId {
             height: Height::from(2),
-            hash: CryptoHash(vec![]),
+            hash: CryptoHash::for_test(),
         };
         let state_sync_id_2_clone = state_sync_id_2.clone();
         let state_sync_id_1_clone = state_sync_id_1.clone();
@@ -443,11 +443,11 @@ fn test_multiple_advert_between_two_nodes() {
         let received_advert_n2_a2 = Arc::new(AtomicBool::new(false));
         let state_sync_id_1 = StateSyncArtifactId {
             height: Height::from(1),
-            hash: CryptoHash(vec![]),
+            hash: CryptoHash::for_test(),
         };
         let state_sync_id_2 = StateSyncArtifactId {
             height: Height::from(2),
-            hash: CryptoHash(vec![]),
+            hash: CryptoHash::for_test(),
         };
         let state_sync_id_2_clone = state_sync_id_2.clone();
         let state_sync_id_1_clone = state_sync_id_1.clone();
@@ -642,7 +642,7 @@ fn test_state_sync_abortion() {
                 vec![
                     StateSyncArtifactId {
                         height: Height::from(1),
-                        hash: CryptoHash(vec![]),
+                        hash: CryptoHash::for_test(),
                     };
                     10
                 ]
@@ -700,7 +700,7 @@ fn test_state_sync_abortion() {
             .return_once(|| {
                 vec![StateSyncArtifactId {
                     height: Height::from(1),
-                    hash: CryptoHash(vec![]),
+                    hash: CryptoHash::for_test(),
                 }]
             });
         s1.get_mut()
@@ -748,7 +748,7 @@ fn test_state_sync_abortion() {
             .return_once(|| {
                 vec![StateSyncArtifactId {
                     height: Height::from(1),
-                    hash: CryptoHash(vec![]),
+                    hash: CryptoHash::for_test(),
                 }]
             });
         s2.get_mut().expect_available_states().return_const(vec![]);

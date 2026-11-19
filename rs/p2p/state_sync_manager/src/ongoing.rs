@@ -448,7 +448,7 @@ mod tests {
                 Arc::new(Mutex::new(Box::new(c))),
                 StateSyncArtifactId {
                     height: Height::from(1),
-                    hash: CryptoHash(vec![]),
+                    hash: CryptoHash::for_test(),
                 },
                 Arc::new(t),
             );
@@ -485,7 +485,7 @@ mod tests {
                 Arc::new(Mutex::new(Box::new(c))),
                 StateSyncArtifactId {
                     height: Height::from(1),
-                    hash: CryptoHash(vec![]),
+                    hash: CryptoHash::for_test(),
                 },
                 Arc::new(t),
             );
@@ -524,7 +524,7 @@ mod tests {
                 Arc::new(Mutex::new(Box::new(c))),
                 StateSyncArtifactId {
                     height: Height::from(1),
-                    hash: CryptoHash(vec![]),
+                    hash: CryptoHash::for_test(),
                 },
                 Arc::new(t),
             );

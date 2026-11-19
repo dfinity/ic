@@ -703,7 +703,9 @@ pub fn encode_certified_stream_slice(slice: StreamSlice) -> CertifiedStreamSlice
                 },
                 signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
             },
-            content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
+            content: CertificationContent::new(CryptoHashOfPartialState::from(
+                CryptoHash::for_test(),
+            )),
         },
     }
 }

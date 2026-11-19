@@ -825,7 +825,7 @@ pub(crate) mod tests {
         dkg.registry_version = summary_registry_version;
 
         let block = Block::new(
-            CryptoHashOf::from(CryptoHash(vec![])),
+            CryptoHashOf::from(CryptoHash::for_test()),
             Payload::new(
                 crypto_hash,
                 BlockPayload::Summary(SummaryPayload { dkg, idkg: None }),
@@ -843,13 +843,13 @@ pub(crate) mod tests {
         let random_beacon = RandomBeacon::fake(RandomBeaconContent {
             version: replica_version,
             height,
-            parent: CryptoHashOf::from(CryptoHash(vec![])),
+            parent: CryptoHashOf::from(CryptoHash::for_test()),
         });
 
         let cup = fake_catch_up_package(CatchUpContent::new(
             HashedBlock::new(crypto_hash, block),
             HashedRandomBeacon::new(crypto_hash, random_beacon),
-            CryptoHashOf::from(CryptoHash(vec![])),
+            CryptoHashOf::from(CryptoHash::for_test()),
             /*oldest_registry_version_in_use_by_replicated_state=*/ None,
         ));
 
@@ -1153,7 +1153,7 @@ pub(crate) mod tests {
         );
 
         let block = Block::new(
-            CryptoHashOf::from(CryptoHash(Vec::new())),
+            CryptoHashOf::from(CryptoHash::for_test()),
             Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload { dkg, idkg: None }),
@@ -1174,11 +1174,11 @@ pub(crate) mod tests {
                 ic_types::crypto::crypto_hash,
                 RandomBeacon::fake(RandomBeaconContent::new(
                     height,
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
+                    CryptoHashOf::from(CryptoHash::for_test()),
                     test_replica_version(),
                 )),
             ),
-            CryptoHashOf::from(CryptoHash(Vec::new())),
+            CryptoHashOf::from(CryptoHash::for_test()),
             None,
         );
 

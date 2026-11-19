@@ -105,9 +105,11 @@ impl State {
         let mut hasher = DefaultHasher::new();
         state.height.hash(&mut hasher);
         state.chunks.hash(&mut hasher);
+        let mut hash = vec![0; CryptoHash::LEN];
+        hash[..8].copy_from_slice(&hasher.finish().to_be_bytes());
         StateSyncArtifactId {
             height: state.height,
-            hash: CryptoHash(hasher.finish().to_be_bytes().to_vec()),
+            hash: CryptoHash(hash),
         }
     }
 

@@ -1126,7 +1126,7 @@ mod tests {
                     let support = IDkgDealingSupport {
                         transcript_id: dummy_idkg_transcript_id_for_tests(100),
                         dealer_id: NODE_2,
-                        dealing_hash: CryptoHashOf::new(CryptoHash(vec![1])),
+                        dealing_hash: CryptoHashOf::new(CryptoHash(vec![1; 32])),
                         sig_share: BasicSignature::fake(NODE_2),
                     };
                     let msg = IDkgMessage::DealingSupport(support);

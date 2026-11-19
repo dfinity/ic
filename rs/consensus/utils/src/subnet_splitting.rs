@@ -644,7 +644,7 @@ mod tests {
         summary.dkg.subnet_splitting_status = subnet_splitting_status;
         Block {
             version: test_replica_version(),
-            parent: CryptoHashOf::from(CryptoHash(vec![])),
+            parent: CryptoHashOf::from(CryptoHash::for_test()),
             payload: Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(summary),

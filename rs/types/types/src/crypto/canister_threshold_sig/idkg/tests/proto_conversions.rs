@@ -214,7 +214,7 @@ fn dummy_dealing_support<R: Rng + CryptoRng>(rng: &mut R) -> IDkgDealingSupport 
     IDkgDealingSupport {
         transcript_id,
         dealer_id,
-        dealing_hash: Id::from(CryptoHash(random_bytes(0..100, rng))),
+        dealing_hash: Id::from(CryptoHash(rng.r#gen::<[u8; 32]>().to_vec())),
         sig_share,
     }
 }

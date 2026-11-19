@@ -32,12 +32,12 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload, CatchUpContent, CatchUpPackageShare, CatchUpShareContent, HasHeight,
-        HashedBlock, HashedRandomBeacon, Payload, RandomBeacon, RandomBeaconContent, Rank,
-        SummaryPayload, catchup::CatchUpPackageType,
+        HashedBlock, HashedRandomBeacon, NonexistentHash, Payload, RandomBeacon,
+        RandomBeaconContent, Rank, SummaryPayload, catchup::CatchUpPackageType,
     },
     crypto::{
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
-        crypto_hash, threshold_sig::ni_dkg::NiDkgTag,
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHashOf, Signed, crypto_hash,
+        threshold_sig::ni_dkg::NiDkgTag,
     },
     replica_config::ReplicaConfig,
     signature::ThresholdSignature,
@@ -449,7 +449,7 @@ pub(crate) fn create_post_split_summary_block(
     Ok(Block {
         version: splitting_summary_block.version.clone(),
         // Fake parent
-        parent: CryptoHashOf::from(CryptoHash(vec![])),
+        parent: CryptoHashOf::<Block>::nonexistent(),
         payload: Payload::new(
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
@@ -484,7 +484,7 @@ pub(crate) fn create_post_split_random_beacon(cup_block: &Block) -> Result<Rando
         content: RandomBeaconContent {
             version: cup_block.version.clone(),
             height: cup_block.height(),
-            parent: CryptoHashOf::from(CryptoHash(vec![])),
+            parent: CryptoHashOf::<RandomBeacon>::nonexistent(),
         },
         signature: ThresholdSignature {
             signer: transcript.dkg_id.clone(),
@@ -572,7 +572,7 @@ mod tests {
             deps.state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1; 32]))));
 
             let message_routing = Arc::new(FakeMessageRouting::new());
 
@@ -840,7 +840,7 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1; 32]))));
 
             state_manager
                 .get_mut()
@@ -932,7 +932,7 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash::for_test())));
 
             let fetch_height = Arc::new(RwLock::new(Height::from(0)));
             let fetch_height_cl = fetch_height.clone();
@@ -1026,7 +1026,7 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1; 32]))));
 
             state_manager
                 .get_mut()
@@ -1116,7 +1116,7 @@ mod tests {
                 );
                 registry.reload();
 
-                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1; 32]));
                 state_manager
                     .get_mut()
                     .expect_get_state_hash_at()
@@ -1315,7 +1315,7 @@ mod tests {
                     })
                     .build();
 
-                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1; 32]));
                 state_manager
                     .get_mut()
                     .expect_get_state_hash_at()
