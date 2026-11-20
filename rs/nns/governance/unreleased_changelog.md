@@ -9,6 +9,16 @@ on the process that this file is part of, see
 
 ## Added
 
+* A ManageNeuron proposal can now have the `MakeProposal` command again, but
+  only to make another (small) ManageNeuron proposal. This allows a group of
+  neurons (A, B, C) to manage many neurons (E1, ..., En) through one
+  intermediate neuron D: each Ei follows D on the NeuronManagement topic, and D
+  follows A, B, and C. Then, A, B, and C can make D propose (and vote for) a
+  ManageNeuron proposal for any Ei. Changing the members of the group only
+  requires changing the followees of D. The nested proposal must be a
+  ManageNeuron proposal whose command is not `MakeProposal` (i.e. at most one
+  level of nesting), and its summary can be at most 2,000 bytes.
+
 ## Changed
 
 * Limit decoded `payload` of `ExecuteNnsFunction` proposals. If the result is
