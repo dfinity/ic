@@ -3119,6 +3119,46 @@ async fn test_nested_manage_neuron_proposal() {
     }
 }
 
+#[test]
+fn test_members_can_read_neurons_managed_by_intermediate_neuron() {
+    // Step 1: Prepare the world.
+    let gov = new_governance_for_nested_manage_neuron();
+    let list_full_neuron_ids = |caller: PrincipalId| {
+        gov.list_neurons(
+            &ListNeurons {
+                neuron_ids: vec![4, 5, 6, 7],
+                ..Default::default()
+            },
+            caller,
+        )
+        .full_neurons
+        .into_iter()
+        .map(|neuron| neuron.id.unwrap().id)
+        .collect::<BTreeSet<u64>>()
+    };
+
+    // Step 2 & 3: Run the code under test, and verify results.
+
+    // Member neuron 1 manages neurons 4 and 7 directly, and neurons 5 and 6 through neuron 4.
+    assert_eq!(list_full_neuron_ids(principal(1)), btreeset! {4, 5, 6, 7});
+    assert!(
+        gov.get_full_neuron(&NeuronId { id: 5 }, &principal(1))
+            .is_ok()
+    );
+    // Member neuron 2 does not manage neuron 7.
+    assert_eq!(list_full_neuron_ids(principal(2)), btreeset! {4, 5, 6});
+    // The intermediate neuron 4 manages neurons 5 and 6 directly (and is readable by its own
+    // controller).
+    assert_eq!(list_full_neuron_ids(principal(4)), btreeset! {4, 5, 6});
+    // Neuron 5 does not manage anything (but is readable by its own controller).
+    assert_eq!(list_full_neuron_ids(principal(5)), btreeset! {5});
+    assert_matches!(
+        gov.get_full_neuron(&NeuronId { id: 6 }, &principal(5)),
+        Err(GovernanceError { error_type, .. })
+        if error_type == ErrorType::NotAuthorized as i32
+    );
+}
+
 #[tokio::test]
 async fn test_invalid_nested_manage_neuron_proposals() {
     // Step 1: Prepare the world.
