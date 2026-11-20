@@ -109,3 +109,6 @@ pub const MAX_MESSAGE_SIZE_BYTES: usize = 128 * 1024 * 1024;
 /// The maximum number of pre-signatures that may be paired with signature requests,
 /// per key ID.
 pub const MAX_PAIRED_PRE_SIGNATURES: usize = 100;
+
+/// Maximum number of canister changes stored in the canister history.
+pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 20;

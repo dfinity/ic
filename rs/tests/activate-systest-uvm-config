@@ -1,2 +1,5 @@
 #!/usr/bin/env bash
-find /config -name *.tar -exec docker load -i {} \;
+# Intentionally does nothing. The colocated test-driver UVM runs this at boot,
+# concurrently with colocate_test.rs loading /config/ubuntu_test_runtime.tar
+# over SSH, and concurrent `docker load`s of the same image can fail with
+# "AlreadyExists" in Docker's containerd image store.

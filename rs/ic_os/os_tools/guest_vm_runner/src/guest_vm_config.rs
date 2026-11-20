@@ -163,7 +163,7 @@ pub fn generate_vm_config(
 
     let vsock_cid = match guest_vm_slot {
         VmSlot::Plain => None,
-        VmSlot::Multi(v) => Some(v.get() as u32 + VIR_VSOCK_GUEST_CID_MIN),
+        VmSlot::Multi(v) => Some(VIR_VSOCK_GUEST_CID_MIN + v.get() as u32 - 1),
     };
 
     GuestOSTemplateProps {

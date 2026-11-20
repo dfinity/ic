@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Fixed
 - Bound the Candid decoding of canister method arguments in `construction/parse` and `construction/submit`, and run the construction endpoints that parse or build transactions on the blocking thread pool.
+- Limit the number of requests times ingress expiries in `construction/payloads` and `construction/combine` to 2,880, i.e. 4 requests over a 24h ingress window, and the size of each canister update to 4 KiB, and reject repeated canister updates. `construction/combine` also limits the size of signatures and public keys and requires strictly increasing ingress expiries ([#12082](https://github.com/dfinity/ic/pull/12082)).
 
 ## [2.1.10] - 2026-07-01
 ### Changed

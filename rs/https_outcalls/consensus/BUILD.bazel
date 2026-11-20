@@ -19,6 +19,7 @@ rust_library(
         # Keep sorted.
         "//packages/ic-error-types",
         "//rs/consensus/utils",
+        "//rs/crypto/sha2",
         "//rs/https_outcalls/pricing",
         "//rs/https_outcalls/socks_proxy",
         "//rs/interfaces",

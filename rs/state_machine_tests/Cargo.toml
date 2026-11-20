@@ -44,6 +44,7 @@ ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }
+ic-nns-delegation-reader = { path = "../http_endpoints/nns_delegation_reader" }
 ic-protobuf = { path = "../protobuf" }
 ic-query-stats = { path = "../query_stats" }
 ic-registry-client-fake = { path = "../registry/fake" }

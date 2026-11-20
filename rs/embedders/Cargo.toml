@@ -65,7 +65,7 @@ ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-universal-canister = { path = "../universal_canister/lib" }
-insta = "1.8.0"
+insta = { workspace = true }
 lazy_static = { workspace = true }
 maplit = { workspace = true }
 more-asserts = { workspace = true }

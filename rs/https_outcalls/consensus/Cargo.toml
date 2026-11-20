@@ -10,6 +10,7 @@ documentation.workspace = true
 candid = { workspace = true }
 hex = { workspace = true }
 ic-consensus-utils = { path = "../../consensus/utils" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-https-outcalls-pricing = { path = "../pricing" }
 ic-https-outcalls-socks-proxy = { path = "../socks_proxy" }

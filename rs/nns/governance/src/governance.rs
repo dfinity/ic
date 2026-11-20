@@ -184,7 +184,9 @@ pub use tla::{
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
-const PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
+//
+// `MAX_SELF_DESCRIBING_VALUE_ENCODED_LEN_BYTES` uses this to set its value.
+pub(crate) const PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70_000;
 
 // When wait for quiet is used, a proposal does not need to reach absolute
 // majority to be accepted. However there is a minimum amount of votes needed
@@ -5179,16 +5181,7 @@ impl Governance {
 
         let self_describing_action =
             if cfg!(target_arch = "wasm32") && !cfg!(feature = "canbench-rs") {
-                match action.to_self_describing(self.env.clone()).await {
-                    Ok(self_describing_action) => Some(self_describing_action),
-                    Err(e) => {
-                        println!(
-                            "{}Failed to get self_describing_action for proposal: {:?}",
-                            LOG_PREFIX, e
-                        );
-                        None
-                    }
-                }
+                Some(action.to_self_describing(self.env.clone()).await)
             } else {
                 None
             };

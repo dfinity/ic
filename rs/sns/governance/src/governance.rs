@@ -1865,6 +1865,8 @@ impl Governance {
             })
             .collect();
         let now = self.env.now();
+        // Each filter returns `false` early, the last one too, so that they all read the same.
+        #[allow(clippy::needless_bool)]
         let filter_all = |data: &ProposalData| -> bool {
             let action = data.action;
             // Filter out proposals by action.

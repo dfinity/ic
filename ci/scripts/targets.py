@@ -55,6 +55,7 @@ ALL_TARGETS_BLOBS = [
     ".github/*",
     "*.bazel",
     "*.bzl",
+    "MODULE.bazel.lock",
     "bazel/*",
     "ci/container/TAG",
     "ci/container/ic-build.digest",

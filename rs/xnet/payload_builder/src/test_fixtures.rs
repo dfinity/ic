@@ -4,7 +4,12 @@ use super::*;
 use crate::exchange::GenRangeFn;
 use ic_base_types::PrincipalId;
 use ic_canonical_state::CURRENT_CERTIFICATION_VERSION;
+use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
+use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
+use ic_crypto_tree_hash::Witness;
 use ic_interfaces_state_manager::CertificationScope;
+use ic_protobuf::messaging::xnet::v1;
+use ic_protobuf::proxy::ProtoProxy;
 use ic_protobuf::registry::{
     node::v1::{ConnectionEndpoint, NodeRecord},
     subnet::v1::SubnetListRecord,
@@ -245,11 +250,7 @@ pub(crate) fn make_certified_stream_slice_with_msg_limit(
 }
 
 /// Creates an advert for `LOCAL_SUBNET` out of the given stream: a header-only
-/// `CertifiedStreamSlice`, with empty witness and certification.
-///
-/// Unlike `make_certified_stream_slice`, which goes through `FakeStateManager`
-/// and its test-only CBOR encoding, this uses the canonical encoding and can be
-/// handed directly to `decode_slice_header()`.
+/// certified slice (see `make_certified_slice_for()`).
 pub(crate) fn make_advert(stream: &Stream) -> CertifiedStreamSlice {
     make_advert_for(REMOTE_SUBNET, LOCAL_SUBNET, stream)
 }
@@ -260,25 +261,42 @@ pub(crate) fn make_advert_for(
     dst: SubnetId,
     stream: &Stream,
 ) -> CertifiedStreamSlice {
-    // `src`'s state, holding the advertised stream to `dst`.
+    let begin = stream.messages_begin();
+    make_certified_slice_for(src, dst, stream, begin, begin)
+}
+
+/// Creates a slice of `src`'s stream to `dst`, holding the messages in
+/// `[from, to)`, with a witness over them and a fake certification.
+///
+/// Unlike `make_certified_stream_slice`, which goes through `FakeStateManager`
+/// and its test-only CBOR encoding, this uses the canonical encoding and a
+/// valid witness, so it can be decoded with `decode_slice_header()` and pooled.
+pub(crate) fn make_certified_slice_for(
+    src: SubnetId,
+    dst: SubnetId,
+    stream: &Stream,
+    from: StreamIndex,
+    to: StreamIndex,
+) -> CertifiedStreamSlice {
+    // `src`'s state, holding `stream` to `dst`.
     let mut state = ReplicatedState::new(src, SubnetType::Application);
     state.with_streams(btreemap![dst => stream.clone()]);
     state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
 
-    let begin = stream.messages_begin();
-    let (tree, _) = stream_encoding::encode_stream_slice(
-        &state,
-        CERTIFIED_HEIGHT,
-        dst,
-        begin,
-        begin,
+    let (tree, _) =
+        stream_encoding::encode_stream_slice(&state, CERTIFIED_HEIGHT, dst, from, to, None, false);
+    let hash_tree = hash_lazy_tree(
+        &replicated_state_as_lazy_tree(&state, CERTIFIED_HEIGHT),
         None,
-        false,
-    );
+    )
+    .unwrap();
+    let witness = hash_tree
+        .witness::<Witness>(&stream_encoding::stream_slice_partial_tree(dst, from, to))
+        .unwrap();
 
     CertifiedStreamSlice {
         payload: stream_encoding::encode_tree(tree),
-        merkle_proof: vec![],
+        merkle_proof: v1::Witness::proxy_encode(witness),
         certification: Signed {
             content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
             signature: ThresholdSignature::fake(),

@@ -604,6 +604,10 @@ fn compute_bouncer(
             }
         }
         IDkgMessageId::Complaint(_, data) => {
+            if data.get_ref().subnet_id != subnet_id {
+                return BouncerValue::Wants;
+            }
+
             if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
                 BouncerValue::Wants
             } else {
@@ -611,6 +615,10 @@ fn compute_bouncer(
             }
         }
         IDkgMessageId::Opening(_, data) => {
+            if data.get_ref().subnet_id != subnet_id {
+                return BouncerValue::Wants;
+            }
+
             if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
                 BouncerValue::Wants
             } else {
@@ -803,6 +811,7 @@ mod tests {
     // Tests the bouncer computation for dealings/support.
     #[test]
     fn test_idkg_priority_fn_dealing_support() {
+        // Despite a large transcript height, XNet dealings/support should always be fetched
         let xnet_transcript_id = IDkgTranscriptId::new(SUBNET_1, 1, Height::from(1000));
         let local_subnet_id = SUBNET_2;
         let transcript_id_fetch_1 = IDkgTranscriptId::new(local_subnet_id, 1, Height::from(80));
@@ -967,6 +976,8 @@ mod tests {
     // Tests the priority computation for complaints/openings.
     #[test]
     fn test_idkg_priority_fn_complaint_opening() {
+        // Despite a large transcript height, XNet complaints/openings should always be fetched
+        let xnet_transcript_id = IDkgTranscriptId::new(SUBNET_1, 1, Height::from(1000));
         let local_subnet_id = SUBNET_2;
         let transcript_id_fetch_1 = IDkgTranscriptId::new(local_subnet_id, 1, Height::from(80));
         let transcript_id_fetch_2 = IDkgTranscriptId::new(local_subnet_id, 3, Height::from(102));
@@ -980,6 +991,13 @@ mod tests {
 
         let tests = vec![
             // Complaints
+            (
+                IDkgMessageId::Complaint(
+                    complaint_prefix(&xnet_transcript_id, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(xnet_transcript_id).into(),
+                ),
+                BouncerValue::Wants,
+            ),
             (
                 IDkgMessageId::Complaint(
                     complaint_prefix(&transcript_id_fetch_1, &NODE_1, &NODE_2),
@@ -1009,6 +1027,13 @@ mod tests {
                 BouncerValue::Wants,
             ),
             // Openings
+            (
+                IDkgMessageId::Opening(
+                    opening_prefix(&xnet_transcript_id, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(xnet_transcript_id).into(),
+                ),
+                BouncerValue::Wants,
+            ),
             (
                 IDkgMessageId::Opening(
                     opening_prefix(&transcript_id_fetch_1, &NODE_1, &NODE_2),
