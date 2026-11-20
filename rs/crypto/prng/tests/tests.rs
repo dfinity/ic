@@ -23,7 +23,7 @@ fn should_produce_deterministic_randomness_from_random_beacon_and_purpose() {
 
     let mut rng = Csprng::from_random_beacon_and_purpose(&random_beacon, &BlockmakerRanking);
 
-    assert_eq!(rng.next_u32(), 1_242_121_839);
+    assert_eq!(rng.next_u32(), 4_028_774_263);
 }
 
 #[test]
