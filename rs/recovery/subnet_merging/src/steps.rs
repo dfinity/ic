@@ -14,11 +14,15 @@ use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery,
     admin_helper::AdminHelper,
+    command_helper::confirm_exec_cmd,
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::remove_dir,
+    file_sync_helper::{create_dir, remove_dir},
     registry_helper::RegistryHelper,
-    steps::{AdminStep, CMD_STOP_REPLICA, CopyLocalIcStateStep, DownloadIcDataStep, Step},
-    util::{CheckpointHeight, DataLocation, ExecutionMode, block_on},
+    steps::{
+        AdminStep, CMD_STOP_REPLICA, CopyLocalIcStateStep, DownloadIcDataStep, Step,
+        UploadStateAndRestartStep,
+    },
+    util::{CheckpointHeight, DataLocation, ExecutionMode, SshUser, block_on},
 };
 use ic_state_layout::{CheckpointStatus, StateLayout};
 use ic_subnet_tools::{
@@ -37,6 +41,7 @@ use url::Url;
 use std::{
     net::{IpAddr, Ipv6Addr},
     path::{Path, PathBuf},
+    process::Command,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -827,5 +832,82 @@ impl Step for ProposeRecoveryCupStep {
         let step = self.admin_step(time)?;
         info!(self.logger, "{}", step.descr());
         step.exec()
+    }
+}
+
+/// Replaces the state of the node of the destination subnet, whose replica was
+/// stopped before its state was downloaded, with the merged state, and starts
+/// the replica back up on it.
+///
+/// If the tool runs on that node, a copy of the merged state is moved into
+/// place rather than the merged state itself. The files of the merged
+/// checkpoint are hard links to the files of the downloaded checkpoints, which
+/// stay in the tool's directory, and owners are per file, not per link. When
+/// the tool's directory is in `/var/lib/ic/data`, the restart's
+/// `setup-permissions` would then give the shared files to `ic-replica` and,
+/// along with the tool's directory, to `admin`, and the replica can't start
+/// from files it doesn't own. An upload over SSH writes new files on the node.
+pub(crate) struct UploadMergedStateStep {
+    pub(crate) node: DataLocation,
+    pub(crate) layout: Layout,
+    pub(crate) require_confirmation: bool,
+    pub(crate) key_file: Option<PathBuf>,
+    pub(crate) logger: Logger,
+}
+
+impl UploadMergedStateStep {
+    fn upload_step(&self) -> UploadStateAndRestartStep {
+        let data_src = match self.node {
+            DataLocation::Local => self.layout.merged_ic_state_copy_dir(),
+            DataLocation::Remote(_) => self.layout.merged_ic_state_dir(),
+        };
+        UploadStateAndRestartStep {
+            logger: self.logger.clone(),
+            ssh_user: SshUser::Admin,
+            upload_method: self.node,
+            work_dir: self.layout.merged_work_dir(),
+            data_src,
+            require_confirmation: self.require_confirmation,
+            key_file: self.key_file.clone(),
+            check_ic_replay_height: false,
+        }
+    }
+
+    /// Copies the merged state to `Layout::merged_ic_state_copy_dir`, replacing
+    /// any copy left by an earlier run of this step. `cp` without `-a` gives
+    /// each link its own file, so the copy shares no files with anything else.
+    fn copy_merged_state(&self) -> RecoveryResult<()> {
+        let copy = self.layout.merged_ic_state_copy_dir();
+        remove_dir(&copy)?;
+        create_dir(copy.parent().expect("the copy is in a directory"))?;
+        let mut cp = Command::new("cp");
+        cp.arg("-r")
+            .arg(self.layout.merged_ic_state_dir())
+            .arg(&copy);
+        confirm_exec_cmd(&mut cp, self.require_confirmation.then_some(&self.logger))?;
+        Ok(())
+    }
+}
+
+impl Step for UploadMergedStateStep {
+    fn descr(&self) -> String {
+        let upload = self.upload_step().descr();
+        match self.node {
+            DataLocation::Local => format!(
+                "Copy the merged state {} to {}, so that it shares no files with the downloaded \
+                 states. {upload}",
+                self.layout.merged_ic_state_dir().display(),
+                self.layout.merged_ic_state_copy_dir().display(),
+            ),
+            DataLocation::Remote(_) => upload,
+        }
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        if let DataLocation::Local = self.node {
+            info!(self.logger, "Copying the merged state...");
+            self.copy_merged_state()?;
+        }
+        self.upload_step().exec()
     }
 }

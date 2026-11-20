@@ -68,6 +68,8 @@ struct RecordedRegistryVersion {
 /// |  |   |-- data/
 /// |  |   |   |-- ic_state/checkpoints/
 /// |  |   |   |   |-- ${recovery_height}/
+/// |  |   |-- upload/
+/// |  |   |   |-- ic_state/         (a copy of the merged state)
 pub(crate) struct Layout {
     root: PathBuf,
 }
@@ -170,6 +172,13 @@ impl Layout {
     /// destination subnet.
     pub(crate) fn merged_ic_state_dir(&self) -> PathBuf {
         self.merged_work_dir().join(DATA).join(IC_STATE)
+    }
+
+    /// A copy of the merged state, which the tool moves into place when it runs
+    /// on the node of the destination subnet: unlike the merged state itself,
+    /// the copy shares no files with the downloaded states.
+    pub(crate) fn merged_ic_state_copy_dir(&self) -> PathBuf {
+        self.merged_work_dir().join("upload").join(IC_STATE)
     }
 
     pub(crate) fn merged_checkpoints_dir(&self) -> PathBuf {
