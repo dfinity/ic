@@ -277,8 +277,9 @@ impl IdKey {
 
     fn hash(&self) -> Result<CryptoHash, String> {
         let bytes = &self.0[HASH_OFFSET..];
-        <[u8; CryptoHash::LEN]>::try_from(bytes)
-            .map(CryptoHash::from)
+        bytes
+            .try_into()
+            .map(CryptoHash)
             .map_err(|_| format!("Invalid hash length {} in IdKey", bytes.len()))
     }
 

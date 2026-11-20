@@ -1411,9 +1411,7 @@ mod tests {
 
             // a height witness consisting only of the (correct) root hash,
             // i.e., pruned too aggressively
-            cert.height_witness = Witness::new_for_testing(Digest(
-                height_witness_hash.get_ref().as_ref().try_into().unwrap(),
-            ));
+            cert.height_witness = Witness::new_for_testing(Digest(height_witness_hash.get().0));
 
             assert_eq!(
                 certifier.validate_certification(cert),

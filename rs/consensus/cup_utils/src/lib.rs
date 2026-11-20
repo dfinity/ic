@@ -197,7 +197,7 @@ pub fn make_registry_cup_from_cup_contents(
     logger: &ReplicaLogger,
 ) -> Option<CatchUpPackage> {
     let (cup_height, time, state_hash) = match CupType::try_from(&cup_contents) {
-        Ok(CupType::Genesis) => (Height::new(0), UNIX_EPOCH, CryptoHashOfState::nonexistent()),
+        Ok(CupType::Genesis) => (Height::new(0), UNIX_EPOCH, CryptoHashOfState::NONEXISTENT),
         Ok(CupType::Recovery {
             height,
             time,
@@ -296,7 +296,7 @@ pub fn make_registry_cup_from_cup_contents(
         .unwrap_or(registry_version);
     let block = Block {
         version: replica_version.clone(),
-        parent: CryptoHashOf::<Block>::nonexistent(),
+        parent: CryptoHashOf::<Block>::NONEXISTENT,
         payload: Payload::new(
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
@@ -316,7 +316,7 @@ pub fn make_registry_cup_from_cup_contents(
         content: RandomBeaconContent {
             version: replica_version,
             height: cup_height,
-            parent: CryptoHashOf::<RandomBeacon>::nonexistent(),
+            parent: CryptoHashOf::<RandomBeacon>::NONEXISTENT,
         },
         signature: ThresholdSignature {
             signer: low_dkg_id,
@@ -773,7 +773,7 @@ mod tests {
     #[rstest]
     #[case::genesis(
         Some(CupType::Genesis(GenesisArgs {})),
-        Some((Height::from(0), UNIX_EPOCH, CryptoHashOfState::nonexistent())),
+        Some((Height::from(0), UNIX_EPOCH, CryptoHashOfState::NONEXISTENT)),
     )]
     #[case::recovery(
         Some(CupType::Recovery(RecoveryArgs {
