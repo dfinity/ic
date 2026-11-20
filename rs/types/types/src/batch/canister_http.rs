@@ -930,7 +930,7 @@ mod tests {
             proof: CanisterHttpResponseProof {
                 metadata: CanisterHttpResponseMetadata {
                     id,
-                    content_hash: CryptoHashOf::new(CryptoHash(vec![0; 32])),
+                    content_hash: CryptoHashOf::new(CryptoHash::from([0; CryptoHash::LEN])),
                     content_size: 3,
                     is_reject: false,
                     replica_version: ReplicaVersion::try_from("test_replica_version").unwrap(),

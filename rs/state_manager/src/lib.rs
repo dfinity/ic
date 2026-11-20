@@ -4472,7 +4472,8 @@ fn maliciously_alter_certified_hash(
             "[MALICIOUS] Corrupting root hash of certification in stream slice from {}",
             remote_subnet
         );
-        certification.content.hash = CryptoHashOfPartialState::from(CryptoHash(vec![0; 32]));
+        certification.content.hash =
+            CryptoHashOfPartialState::from(CryptoHash::from([0; CryptoHash::LEN]));
     }
     certification
 }
@@ -4615,7 +4616,7 @@ fn maliciously_return_wrong_hash(
             height.get();
             malicious_behavior => MaliciousBehaviorLogEntry { malicious_behavior: MaliciousBehavior::CorruptOwnStateAtHeights as i32}
         );
-        CryptoHashOfState::from(CryptoHash(vec![0_u8; 32]))
+        CryptoHashOfState::from(CryptoHash::from([0; CryptoHash::LEN]))
     } else {
         CryptoHashOfState::from(CryptoHash(
             crate::manifest::manifest_hash(manifest).to_vec(),
