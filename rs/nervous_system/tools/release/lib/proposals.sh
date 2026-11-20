@@ -544,7 +544,10 @@ generate_forum_post_proposals_section() {
     # (This includes heading and link to the proposal in Dashboard.)
     local PROPOSAL_ID PROPOSAL_FILE
     while read -r PROPOSAL_ID PROPOSAL_FILE; do
-        echo "### $(extract_canister_name_from_proposal "$PROPOSAL_FILE")"
+        local CANISTER_NAME
+        CANISTER_NAME=$(extract_canister_name_from_proposal "$PROPOSAL_FILE") || return 1
+
+        echo "### ${CANISTER_NAME}"
         echo
         echo "[Proposal $PROPOSAL_ID](https://dashboard.internetcomputer.org/proposal/$PROPOSAL_ID)"
         echo
