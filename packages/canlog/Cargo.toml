@@ -14,10 +14,12 @@ documentation = "https://docs.rs/canlog"
 candid = { workspace = true }
 canlog_derive = { version = "=0.1.0", path = "../canlog_derive", optional = true }
 ic-canister-log = { workspace = true }
-ic0 = { workspace = true }
 regex-lite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+ic0 = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
