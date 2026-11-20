@@ -590,10 +590,9 @@ impl ExhaustiveSet for BitcoinAdapterResponse {
 impl ExhaustiveSet for CryptoHash {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         // Besides random hashes, artifacts contain the empty hash, which stands in for hashes
-        // that don't exist, e.g. the parents of the block and the random beacon of a genesis CUP,
-        // and its state hash.
-        let hash_length = 32;
-        let mut random = vec![0; hash_length];
+        // that don't exist, e.g. the parents of the block and the random beacon of a
+        // genesis/recovery/post-split CUPs, and the state hash of genesis CUPs.
+        let mut random = vec![0; 32];
         rng.fill_bytes(&mut random);
         vec![Self(random), Self(vec![])]
     }
