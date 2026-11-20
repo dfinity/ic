@@ -182,7 +182,7 @@ type SuspendedReason = variant {
     ValueTooSmall;
     // The UTXO is considered to be tainted.
     Quarantined;
-    // The Dogecoin check of this UTXO returned an error.
+    // Not used by the ckDOGE minter.
     Unchecked;
 };
 

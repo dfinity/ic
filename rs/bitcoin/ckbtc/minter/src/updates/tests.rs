@@ -9,8 +9,8 @@ mod update_balance {
         audit, eventlog::EventType, mutate_state, read_state,
     };
     use crate::test_fixtures::{
-        BTC_CHECKER_CANISTER_ID, DAY, MINTER_CANISTER_ID, NOW, bitcoin_address, ecdsa_public_key,
-        get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
+        BTC_CHECKER_CANISTER_ID, DAY, HOUR, MINTER_CANISTER_ID, NOW, bitcoin_address,
+        ecdsa_public_key, get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
         mock::{MockCanisterRuntime, mock_increasing_time},
         quarantined_utxo, utxo,
     };
@@ -414,6 +414,45 @@ mod update_balance {
     }
 
     #[tokio::test]
+    async fn should_suspend_new_utxo_when_check_fails() {
+        init_state_with_ecdsa_public_key();
+        let account = ledger_account();
+        let utxo = utxo();
+        let events_before: Vec<_> = events().map(|event| event.payload).collect();
+
+        let mut runtime = MockCanisterRuntime::new();
+        use_ckbtc_event_logger(&mut runtime);
+        mock_constant_time(&mut runtime, NOW, 20);
+        mock_derive_user_address(&mut runtime, account);
+        mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
+        expect_check_transaction_returning(&mut runtime, utxo.clone(), checker_error_response());
+
+        let result = update_balance(
+            UpdateBalanceArgs {
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
+            },
+            &runtime,
+        )
+        .await;
+
+        assert_matches!(
+            result,
+            Err(UpdateBalanceError::GenericError { error_code, .. })
+                if error_code == ErrorCode::KytError as u64
+        );
+        assert_has_new_events(
+            &events_before,
+            &[EventType::SuspendedUtxo {
+                utxo: utxo.clone(),
+                account,
+                reason: SuspendedReason::Unchecked,
+            }],
+        );
+        assert_eq!(suspended_utxo(&utxo), Some(SuspendedReason::Unchecked));
+    }
+
+    #[tokio::test]
     async fn should_mint_remaining_utxos_when_one_check_fails() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
@@ -506,7 +545,7 @@ mod update_balance {
                 suspended_utxos: Some(vec![SuspendedUtxo {
                     utxo: unchecked_utxo.clone(),
                     reason: SuspendedReason::Unchecked,
-                    earliest_retry: NOW.checked_add(DAY).unwrap().as_nanos_since_unix_epoch(),
+                    earliest_retry: NOW.checked_add(HOUR).unwrap().as_nanos_since_unix_epoch(),
                 }]),
             })
         );
@@ -515,7 +554,7 @@ mod update_balance {
         // After the retry delay, the UTXO is checked again and minted if the check succeeds.
         runtime.checkpoint();
         use_ckbtc_event_logger(&mut runtime);
-        let later = NOW.checked_add(DAY).unwrap();
+        let later = NOW.checked_add(HOUR).unwrap();
         mock_constant_time(&mut runtime, later, 20);
         mock_derive_user_address(&mut runtime, account);
         mock_get_utxos_for_account(
@@ -1170,6 +1209,7 @@ mod update_balance {
     async fn test_suspended_utxo_last_time_checked_timestamp(utxo: Utxo, reason: SuspendedReason) {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
+        let last_time_checked = NOW.checked_sub(reason.retry_delay()).unwrap();
         let mut runtime = MockCanisterRuntime::new();
         use_ckbtc_event_logger(&mut runtime);
         mock_constant_time(
@@ -1180,29 +1220,17 @@ mod update_balance {
 
         match &reason {
             SuspendedReason::ValueTooSmall => mutate_state(|s| {
-                audit::ignore_utxo(
-                    s,
-                    utxo.clone(),
-                    account,
-                    NOW.checked_sub(DAY).unwrap(),
-                    &runtime,
-                )
+                audit::ignore_utxo(s, utxo.clone(), account, last_time_checked, &runtime)
             }),
             SuspendedReason::Quarantined => mutate_state(|s| {
-                audit::quarantine_utxo(
-                    s,
-                    utxo.clone(),
-                    account,
-                    NOW.checked_sub(DAY).unwrap(),
-                    &runtime,
-                );
+                audit::quarantine_utxo(s, utxo.clone(), account, last_time_checked, &runtime);
             }),
             SuspendedReason::Unchecked => mutate_state(|s| {
                 audit::suspend_unchecked_utxo(
                     s,
                     utxo.clone(),
                     account,
-                    NOW.checked_sub(DAY).unwrap(),
+                    last_time_checked,
                     &runtime,
                 );
             }),
@@ -1291,7 +1319,10 @@ mod update_balance {
                 suspended_utxos: Some(vec![SuspendedUtxo {
                     utxo: utxo.clone(),
                     reason,
-                    earliest_retry: NOW.checked_add(DAY).unwrap().as_nanos_since_unix_epoch(),
+                    earliest_retry: NOW
+                        .checked_add(reason.retry_delay())
+                        .unwrap()
+                        .as_nanos_since_unix_epoch(),
                 }]),
             })
         );
