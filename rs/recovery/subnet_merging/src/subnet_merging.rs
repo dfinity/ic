@@ -4,8 +4,8 @@ use crate::{
     steps::{
         CheckCoolingDownStep, CheckMergeReadinessStep, CheckRoutingTableStep,
         ComputeExpectedMergedManifestStep, DownloadStateStep, MergeStatesStep,
-        ProposeRecoveryCupStep, StopReplicaAtHaltingCheckpointStep, ValidateCupStep,
-        WaitForHaltingCupStep,
+        ProposeRecoveryCupStep, StopReplicaAtHaltingCheckpointStep, UploadMergedStateStep,
+        ValidateCupStep, WaitForHaltingCupStep,
     },
     utils::ensure_default_initial_dkg_subnet_is_not_merged,
 };
@@ -21,7 +21,7 @@ use ic_recovery::{
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
     ssh_helper::SshHelper,
-    steps::{AdminStep, Step, UploadStateAndRestartStep},
+    steps::{AdminStep, Step},
     util::{DataLocation, ExecutionMode, SshUser},
 };
 use ic_registry_subnet_type::SubnetType;
@@ -561,23 +561,13 @@ impl SubnetMerging {
         }
     }
 
-    fn upload_state_and_restart_step(&self) -> RecoveryResult<impl Step + use<>> {
-        // The replica of the destination subnet has been stopped before its
-        // state was downloaded, so this step replaces its state directory and
-        // starts it back up on the merged state.
-        //
-        // If the tool runs on the node, the merged state is moved into place
-        // rather than copied, so running this step again takes running
-        // `MergeStates` again first.
-        Ok(UploadStateAndRestartStep {
-            logger: self.recovery.logger.clone(),
-            ssh_user: SshUser::Admin,
-            upload_method: self.node_location(TargetSubnet::Destination)?,
-            work_dir: self.layout.merged_work_dir(),
-            data_src: self.layout.merged_ic_state_dir(),
+    fn upload_merged_state_step(&self) -> RecoveryResult<impl Step + use<>> {
+        Ok(UploadMergedStateStep {
+            node: self.node_location(TargetSubnet::Destination)?,
+            layout: self.layout.clone(),
             require_confirmation: self.recovery.ssh_confirmation,
             key_file: self.recovery.admin_key_file.clone(),
-            check_ic_replay_height: false,
+            logger: self.recovery.logger.clone(),
         })
     }
 
@@ -827,9 +817,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 logger: self.recovery.logger.clone(),
             }
             .into(),
-            StepType::UploadStateToDestinationSubnet => {
-                self.upload_state_and_restart_step()?.into()
-            }
+            StepType::UploadStateToDestinationSubnet => self.upload_merged_state_step()?.into(),
         };
 
         Ok(step)
