@@ -341,6 +341,7 @@ impl LedgerSuiteConfig {
             retrieve_blocks_from_ledger_interval_seconds: None,
             min_retrieve_blocks_from_ledger_interval_seconds: None,
             max_retrieve_blocks_from_ledger_interval_seconds: None,
+            allowed_poke_callers: None,
         });
         let args = Encode!(&index_upgrade_arg).unwrap();
         stop_and_upgrade_canister_as_controller(

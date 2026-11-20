@@ -31,6 +31,12 @@ struct ArchiveInfo {
 
 thread_local! {
     static BLOCKS: RefCell<BlockStorage> = const { RefCell::new(BTreeMap::new()) };
+    #[cfg(feature = "controllable")]
+    static HOLD_RESPONSES: RefCell<bool> = const { RefCell::new(false) };
+    #[cfg(feature = "controllable")]
+    static RESPONSES_TO_RELEASE: RefCell<u64> = const { RefCell::new(0) };
+    #[cfg(feature = "controllable")]
+    static BLOCK_REQUESTS: RefCell<u64> = const { RefCell::new(0) };
     static ICRC3_ENABLED: RefCell<bool> = const { RefCell::new(true) };
     static ARCHIVES: RefCell<Vec<ArchiveInfo>> = const { RefCell::new(vec![]) };
 }
@@ -201,8 +207,8 @@ fn icrc10_supported_standards() -> Vec<StandardRecord> {
 }
 
 /// Get blocks from the ledger (ICRC-3 compatible)
-#[candid_method(query)]
-#[query]
+#[cfg_attr(not(feature = "controllable"), candid_method(query))]
+#[cfg_attr(not(feature = "controllable"), query)]
 pub fn icrc3_get_blocks(requests: Vec<GetBlocksRequest>) -> GetBlocksResult {
     let total_blocks = next_block_id();
     BLOCKS.with(|blocks| {
@@ -256,8 +262,8 @@ pub fn icrc3_get_blocks(requests: Vec<GetBlocksRequest>) -> GetBlocksResult {
     })
 }
 
-#[candid_method(query)]
-#[query]
+#[cfg_attr(not(feature = "controllable"), candid_method(query))]
+#[cfg_attr(not(feature = "controllable"), query)]
 pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
     let chain_length = next_block_id();
     BLOCKS.with(|blocks| {
@@ -304,6 +310,74 @@ pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
             certificate: None,
         }
     })
+}
+
+// Only the controllable test variant replaces the two query exports with updates.
+// The self-call gate keeps a real response in flight while tests advance time.
+#[cfg(feature = "controllable")]
+async fn before_block_response() {
+    BLOCK_REQUESTS.with(|count| *count.borrow_mut() += 1);
+    loop {
+        let released = RESPONSES_TO_RELEASE.with(|count| {
+            let mut count = count.borrow_mut();
+            if *count == 0 {
+                false
+            } else {
+                *count -= 1;
+                true
+            }
+        });
+        if released || !HOLD_RESPONSES.with(|hold| *hold.borrow()) {
+            return;
+        }
+        Call::unbounded_wait(ic_cdk::api::canister_self(), "block_response_gate")
+            .await
+            .unwrap();
+    }
+}
+
+#[cfg(feature = "controllable")]
+#[update(name = "icrc3_get_blocks")]
+async fn replicated_icrc3_get_blocks(requests: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    let response = icrc3_get_blocks(requests);
+    before_block_response().await;
+    response
+}
+
+#[cfg(feature = "controllable")]
+#[update(name = "get_blocks")]
+async fn replicated_get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
+    let response = get_blocks(request);
+    before_block_response().await;
+    response
+}
+
+#[cfg(feature = "controllable")]
+#[update]
+fn block_response_gate() {}
+
+#[cfg(feature = "controllable")]
+#[update]
+fn hold_block_responses(hold: bool) {
+    HOLD_RESPONSES.with(|value| *value.borrow_mut() = hold);
+}
+
+#[cfg(feature = "controllable")]
+#[update]
+fn release_block_response() {
+    RESPONSES_TO_RELEASE.with(|count| *count.borrow_mut() += 1);
+}
+
+#[cfg(feature = "controllable")]
+#[query]
+fn block_request_count() -> u64 {
+    BLOCK_REQUESTS.with(|count| *count.borrow())
+}
+
+#[cfg(feature = "controllable")]
+#[update]
+fn send_poke(index: Principal) {
+    Call::unbounded_wait(index, "poke").oneway().unwrap();
 }
 
 struct BlocksResponse {
@@ -373,7 +447,11 @@ fn check_candid_interface() {
     let new_interface = __export_service();
 
     let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    let old_interface = manifest_dir.join("icrc3_test_ledger.did");
+    let old_interface = manifest_dir.join(if cfg!(feature = "controllable") {
+        "icrc3_test_ledger_controllable.did"
+    } else {
+        "icrc3_test_ledger.did"
+    });
     service_equal(
         CandidSource::Text(&new_interface),
         CandidSource::File(old_interface.as_path()),
