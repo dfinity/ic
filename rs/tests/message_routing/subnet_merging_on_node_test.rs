@@ -287,9 +287,9 @@ fn run_tool_on_node(
 }
 
 /// Step 3: check that the tool assembled the merged state in its directory on
-/// `d_node`, as a single checkpoint holding (at least) `canisters`, and that
-/// the registry holds recovery CUP contents of `D` at the height of that
-/// checkpoint.
+/// `d_node`, as a single checkpoint holding exactly `canisters`, the only
+/// canisters on `S` and `D`, and that the registry holds recovery CUP contents
+/// of `D` at the height of that checkpoint.
 fn check_merged_state_proposed(
     env: &TestEnv,
     d_node: &IcNodeSnapshot,
@@ -324,10 +324,10 @@ fn check_merged_state_proposed(
     ));
     let in_checkpoint: BTreeSet<String> =
         in_checkpoint.split_whitespace().map(String::from).collect();
-    assert!(
-        in_checkpoint.is_superset(canisters),
-        "merged checkpoint {checkpoint} on node {node_ip} holds the canisters \
-         {in_checkpoint:?}, not all of {canisters:?}",
+    assert_eq!(
+        in_checkpoint, *canisters,
+        "merged checkpoint {checkpoint} on node {node_ip} does not hold exactly the canisters \
+         of S and D",
     );
 
     // The registry only holds the recovery CUP contents once the DKG for `D`
