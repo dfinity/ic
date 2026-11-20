@@ -146,7 +146,7 @@ impl IngressSelector for IngressManager {
 
         for artifact in artifacts {
             let pool_obj = canister_queues
-                .entry(artifact.msg.signed_ingress.canister_id())
+                .entry(artifact.msg.signed_ingress().canister_id())
                 .or_default();
             pool_obj.msgs.push(artifact);
         }
@@ -192,7 +192,7 @@ impl IngressSelector for IngressManager {
                     let ingress = &msg.msg;
                     let result = self.validate_ingress(
                         IngressMessageId::from(ingress),
-                        &ingress.signed_ingress,
+                        ingress.signed_ingress(),
                         // The same pool object is considered again on every attempt
                         // to build a payload until it is included in a block or
                         // expires, so its effective canister ID is cached on it.
@@ -220,7 +220,7 @@ impl IngressSelector for IngressManager {
                         }
                     };
 
-                    let size_estimates = self.message_size_estimates(&ingress.signed_ingress);
+                    let size_estimates = self.message_size_estimates(ingress.signed_ingress());
 
                     // Break criterion #1: global byte limit
                     if accumulated_wire_size + size_estimates.wire > wire_byte_limit {
@@ -295,7 +295,7 @@ impl IngressSelector for IngressManager {
             let payload = IngressPayload::from_iter(messages_in_payload.iter().map(|ingress| {
                 (
                     IngressMessageId::from(*ingress),
-                    ingress.signed_ingress.clone(),
+                    ingress.signed_ingress().clone(),
                 )
             }));
 

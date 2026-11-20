@@ -15,7 +15,7 @@ use std::sync::OnceLock;
 #[derive(Clone)]
 pub struct IngressPoolObject {
     /// The received ingress message
-    pub signed_ingress: SignedIngress,
+    signed_ingress: SignedIngress,
 
     /// The MessageId of the RawIngress message
     pub message_id: MessageId,
@@ -53,6 +53,14 @@ impl IngressPoolObject {
         }
     }
 
+    /// Returns the signed ingress message wrapped by this pool object.
+    ///
+    /// The message is immutable because the cached effective canister ID is
+    /// derived from its contents.
+    pub fn signed_ingress(&self) -> &SignedIngress {
+        &self.signed_ingress
+    }
+
     /// Returns the effective canister ID of the ingress message, as determined by
     /// [`extract_effective_canister_id`]. It is computed on the first call (decoding
     /// the method payload of management canister messages) and cached afterwards,
@@ -73,7 +81,7 @@ impl CountBytes for IngressPoolObject {
 
 impl From<&IngressPoolObject> for IngressMessageId {
     fn from(obj: &IngressPoolObject) -> IngressMessageId {
-        IngressMessageId::new(obj.signed_ingress.expiry_time(), obj.message_id.clone())
+        IngressMessageId::new(obj.signed_ingress().expiry_time(), obj.message_id.clone())
     }
 }
 
