@@ -1022,11 +1022,11 @@ mod tests {
             assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
 
             // Now make the state manager return a hash which differs from the mocked hash
-            // in our fixtures (empty one).
+            // in our fixtures ([`CryptoHash::for_test`]).
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash::for_test())));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash::from([100; 32]))));
 
             state_manager
                 .get_mut()
