@@ -240,25 +240,6 @@ impl CertificationPoolImpl {
             .count
             .set(self.validated.certification_shares().size() as i64);
     }
-
-    #[cfg(test)]
-    fn all_heights_with_artifacts(&self) -> Vec<Height> {
-        use ic_types::consensus::HasHeight;
-
-        let mut heights: Vec<Height> = self
-            .unvalidated
-            .values()
-            .map(|msg| msg.height())
-            .chain(self.validated_shares().map(|share| share.height))
-            .chain(
-                self.validated_certifications()
-                    .map(|certification| certification.height),
-            )
-            .collect();
-        heights.sort_unstable();
-        heights.dedup();
-        heights
-    }
 }
 
 impl MutablePool<CertificationMessage> for CertificationPoolImpl {
@@ -520,6 +501,26 @@ mod tests {
         },
         signature::*,
     };
+
+    impl CertificationPoolImpl {
+        fn all_heights_with_artifacts(&self) -> Vec<Height> {
+            use ic_types::consensus::HasHeight;
+
+            let mut heights: Vec<Height> = self
+                .unvalidated
+                .values()
+                .map(|msg| msg.height())
+                .chain(self.validated_shares().map(|share| share.height))
+                .chain(
+                    self.validated_certifications()
+                        .map(|certification| certification.height),
+                )
+                .collect();
+            heights.sort_unstable();
+            heights.dedup();
+            heights
+        }
+    }
 
     fn gen_content() -> CertificationContent {
         CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(Vec::new())))
