@@ -753,22 +753,33 @@ impl NeuronStore {
             return true;
         }
 
-        manager_ids.iter().any(|manager_id| {
-            self.with_neuron_sections(
-                manager_id,
-                NeuronSections {
-                    followees: true,
-                    ..NeuronSections::NONE
-                },
-                |manager| {
-                    manager
-                        .neuron_managers()
-                        .iter()
-                        .any(is_contained_in_candidates)
-                },
-            )
-            .unwrap_or(false)
-        })
+        manager_ids
+            .iter()
+            .any(|manager_id| self.is_directly_managed_by_any_of(manager_id, candidate_manager_ids))
+    }
+
+    /// Returns whether neuron `neuron_id` follows any of `candidate_manager_ids` on the
+    /// NeuronManagement topic, i.e. whether it is directly managed by any of them. Returns false
+    /// if the neuron is not found. This loads (the followees of) the neuron.
+    pub fn is_directly_managed_by_any_of(
+        &self,
+        neuron_id: &NeuronId,
+        candidate_manager_ids: &BTreeSet<NeuronId>,
+    ) -> bool {
+        self.with_neuron_sections(
+            neuron_id,
+            NeuronSections {
+                followees: true,
+                ..NeuronSections::NONE
+            },
+            |neuron| {
+                neuron
+                    .neuron_managers()
+                    .iter()
+                    .any(|manager_id| candidate_manager_ids.contains(manager_id))
+            },
+        )
+        .unwrap_or(false)
     }
 
     /// Execute a function with a mutable reference to a neuron, returning the result of the function,

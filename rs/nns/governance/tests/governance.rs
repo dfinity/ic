@@ -3221,12 +3221,6 @@ async fn test_invalid_nested_manage_neuron_proposals() {
             ErrorType::InvalidCommand,
             "Too many followees",
         ),
-        (
-            "intermediate neuron does not manage the target",
-            new_follow_manage_neuron_proposal(7),
-            ErrorType::PreconditionFailed,
-            "not among the followees",
-        ),
     ];
 
     for (label, nested_proposal, expected_error_type, expected_message_fragment) in test_cases {
@@ -3262,6 +3256,59 @@ async fn test_invalid_nested_manage_neuron_proposals() {
     )
     .await
     .unwrap();
+}
+
+/// Whether the intermediate neuron manages the target of the nested proposal is not checked when
+/// the enclosing proposal is made (that would disclose the target's followees to an unauthorized
+/// caller), but when the intermediate neuron makes the nested proposal.
+#[tokio::test]
+async fn test_nested_manage_neuron_proposal_for_neuron_not_managed_by_intermediate_neuron() {
+    // Step 1: Prepare the world. Neuron 7 is managed by neuron 1, not by the intermediate
+    // neuron 4.
+    let mut gov = new_governance_for_nested_manage_neuron();
+
+    // Step 2: Run the code under test.
+    let outer_proposal_id = gov
+        .make_proposal(
+            &NeuronId { id: 1 },
+            &principal(1),
+            &new_nested_manage_neuron_proposal(new_follow_manage_neuron_proposal(7)),
+        )
+        .await
+        .unwrap();
+    fake::register_vote_assert_success(
+        &mut gov,
+        principal(2),
+        NeuronId { id: 2 },
+        outer_proposal_id,
+        Vote::Yes,
+    );
+
+    // Step 3: Verify results. The enclosing proposal was adopted, but failed to execute, and no
+    // nested proposal was made.
+    let outer_proposal = gov.get_proposal_data(outer_proposal_id).unwrap();
+    assert_eq!(outer_proposal.status(), ProposalStatus::Failed);
+    let failure_reason = outer_proposal.failure_reason.as_ref().unwrap();
+    assert!(
+        failure_reason
+            .error_message
+            .contains("Proposer not among the followees"),
+        "{failure_reason:?}"
+    );
+    assert_eq!(
+        gov.get_proposal_data(ProposalId {
+            id: outer_proposal_id.id + 1
+        }),
+        None
+    );
+    assert_eq!(
+        gov.neuron_store
+            .with_neuron(&NeuronId { id: 7 }, |neuron| {
+                neuron.followees.get(&(Topic::Governance as i32)).cloned()
+            })
+            .expect("Neuron not found."),
+        None
+    );
 }
 
 #[tokio::test]

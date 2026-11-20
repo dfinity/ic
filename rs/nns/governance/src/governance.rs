@@ -144,7 +144,7 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::{
     borrow::Cow,
-    cell::{Cell, OnceCell, RefCell},
+    cell::{Cell, RefCell},
     cmp::{Ordering, max},
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::{TryFrom, TryInto},
@@ -3536,14 +3536,16 @@ impl Governance {
     ///
     /// A ManageNeuron proposal is visible if the targeted neuron is managed by
     /// one of 'caller_neurons', directly or indirectly (see
-    /// NeuronStore::is_managed_by_any_of). For the indirect case, the neurons
-    /// directly managed by 'caller_neurons' are computed (once) and cached in
-    /// 'neuron_ids_managed_by_caller_neurons'.
+    /// NeuronStore::is_managed_by_any_of). For the indirect case, each manager
+    /// of the targeted neuron (at most MAX_FOLLOWEES_PER_TOPIC) is checked by
+    /// loading its followees. Since many proposals typically target neurons
+    /// with the same managers, the result per manager is cached in
+    /// 'is_manager_managed_by_caller_neurons' (for the duration of one call).
     fn proposal_is_visible_to_neurons(
         &self,
         info: &ProposalData,
         caller_neurons: &BTreeSet<NeuronId>,
-        neuron_ids_managed_by_caller_neurons: &OnceCell<BTreeSet<NeuronId>>,
+        is_manager_managed_by_caller_neurons: &RefCell<HashMap<NeuronId, bool>>,
     ) -> bool {
         // Is 'info' a manage neuron proposal?
         if let Some(ref managed_id) = info.proposal.as_ref().and_then(|x| x.managed_neuron()) {
@@ -3564,17 +3566,23 @@ impl Governance {
                 // Otherwise, the caller is permitted to list this proposal if
                 // one of the managers is in turn managed by one of the
                 // caller's neurons.
-                let neuron_ids_managed_by_caller_neurons = neuron_ids_managed_by_caller_neurons
-                    .get_or_init(|| {
-                        let caller_neurons =
-                            caller_neurons.iter().copied().collect::<Vec<NeuronId>>();
-                        self.get_managed_neuron_ids_for(caller_neurons)
-                            .into_iter()
-                            .collect::<BTreeSet<NeuronId>>()
-                    });
-                mgr_ids
-                    .iter()
-                    .any(|x| neuron_ids_managed_by_caller_neurons.contains(x))
+                mgr_ids.iter().any(|manager_id| {
+                    let cached_result = is_manager_managed_by_caller_neurons
+                        .borrow()
+                        .get(manager_id)
+                        .copied();
+                    if let Some(is_managed) = cached_result {
+                        return is_managed;
+                    }
+
+                    let is_managed = self
+                        .neuron_store
+                        .is_directly_managed_by_any_of(manager_id, caller_neurons);
+                    let _previous_result = is_manager_managed_by_caller_neurons
+                        .borrow_mut()
+                        .insert(*manager_id, is_managed);
+                    is_managed
+                })
             } else {
                 // This proposal is 'managed', but we cannot find out
                 // by whom - don't show.
@@ -3633,7 +3641,7 @@ impl Governance {
             req.include_reward_status.iter().cloned().collect();
         let include_status: HashSet<i32> = req.include_status.iter().cloned().collect();
         let caller_neurons = self.get_neuron_ids_by_principal(caller);
-        let neuron_ids_managed_by_caller_neurons = OnceCell::new();
+        let is_manager_managed_by_caller_neurons = RefCell::new(HashMap::new());
         let return_self_describing_action = req.return_self_describing_action.unwrap_or(false);
         let now = self.env.now();
         let proposal_matches_request = |data: &ProposalData| -> bool {
@@ -3662,7 +3670,7 @@ impl Governance {
                 || self.proposal_is_visible_to_neurons(
                     data,
                     &caller_neurons,
-                    &neuron_ids_managed_by_caller_neurons,
+                    &is_manager_managed_by_caller_neurons,
                 )
         };
         let limit = if req.limit == 0 || req.limit > MAX_LIST_PROPOSAL_RESULTS {
@@ -4677,7 +4685,7 @@ impl Governance {
             // A general proposal can be large (e.g. it can contain a WASM), so only small
             // ManageNeuron proposals can be made through a ManageNeuron proposal.
             Command::MakeProposal(nested_proposal) => {
-                self.validate_nested_make_proposal(&managed_id, nested_proposal)?;
+                self.validate_nested_make_proposal(nested_proposal)?;
             }
             // DisburseMaturity contains a subaccount which can be unbounded without checking. This
             // command is not implemented yet, and before we implement it we should also validate
@@ -4773,13 +4781,16 @@ impl Governance {
     ///     3. Its summary must be at most NESTED_PROPOSAL_SUMMARY_BYTES_MAX bytes.
     ///     4. It must not have a self describing action (that is filled in by Governance).
     ///
-    /// In addition, the nested proposal must be valid on its own, and `proposer` (the neuron
-    /// managed by the enclosing proposal) must be allowed to make it, i.e. `proposer` must be
-    /// a followee of the neuron targeted by the nested proposal on the NeuronManagement topic.
-    /// The latter is checked again when the nested proposal is actually made.
+    /// In addition, the nested proposal must be valid on its own.
+    ///
+    /// Whether the intermediate neuron is allowed to make the nested proposal (i.e. whether it is
+    /// a followee of the targeted neuron on the NeuronManagement topic) is deliberately NOT
+    /// checked here: this validation happens before the caller is authorized, so the result
+    /// would disclose (private) followees of the targeted neuron to anyone. Instead, it is
+    /// checked (after authorization) when the intermediate neuron actually makes the nested
+    /// proposal, i.e. when the enclosing proposal is executed.
     fn validate_nested_make_proposal(
         &self,
-        proposer: &NeuronIdOrSubaccount,
         nested_proposal: &Proposal,
     ) -> Result<(), GovernanceError> {
         let invalid_proposal_error = |message: String| {
@@ -4820,34 +4831,6 @@ impl Governance {
         // proposal. This does not recurse further, because the nested command is not
         // MakeProposal.
         self.validate_proposal(nested_proposal)?;
-
-        let proposer_id =
-            self.with_neuron_by_neuron_id_or_subaccount(proposer, |neuron| neuron.id())?;
-        let Some(nested_managed_id) = nested_manage_neuron.get_neuron_id_or_subaccount()? else {
-            return Err(invalid_proposal_error(
-                "The proposal made through a ManageNeuron proposal must include a neuron to \
-                 manage."
-                    .to_string(),
-            ));
-        };
-        let (nested_managed_neuron_id, nested_managers) = self
-            .with_neuron_by_neuron_id_or_subaccount(&nested_managed_id, |neuron| {
-                (neuron.id(), neuron.neuron_managers())
-            })?;
-        if !nested_managers.contains(&proposer_id) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                format!(
-                    "Neuron {} cannot make a ManageNeuron proposal for neuron {}, because it is \
-                     not among the followees of neuron {} on the NeuronManagement topic \
-                     (followees: {:?}).",
-                    proposer_id.id,
-                    nested_managed_neuron_id.id,
-                    nested_managed_neuron_id.id,
-                    nested_managers.iter().map(|id| id.id).collect::<Vec<u64>>(),
-                ),
-            ));
-        }
 
         Ok(())
     }
