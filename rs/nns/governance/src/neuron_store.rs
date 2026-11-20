@@ -682,7 +682,8 @@ impl NeuronStore {
     }
 
     /// Returns the full neuron if the given principal is authorized - either it can vote for the
-    /// given neuron or any of its neuron managers.
+    /// given neuron, or it can (directly or indirectly) make ManageNeuron proposals for it (see
+    /// `can_principal_manage_neuron_via_proposals`).
     pub fn get_full_neuron(
         &self,
         neuron_id: NeuronId,
@@ -703,7 +704,7 @@ impl NeuronStore {
             return Ok(neuron_clone);
         }
 
-        if self.can_principal_vote_on_proposals_that_target_neuron(principal_id, &neuron_clone) {
+        if self.can_principal_manage_neuron_via_proposals(principal_id, &neuron_clone) {
             Ok(neuron_clone)
         } else {
             Err(NeuronStoreError::not_authorized_to_get_full_neuron(
@@ -713,27 +714,61 @@ impl NeuronStore {
         }
     }
 
-    fn is_authorized_to_vote(&self, principal_id: PrincipalId, neuron_id: NeuronId) -> bool {
-        self.with_neuron_sections(
-            &neuron_id,
-            NeuronSections {
-                hot_keys: true,
-                ..NeuronSections::NONE
-            },
-            |neuron| neuron.is_authorized_to_vote(&principal_id),
-        )
-        .unwrap_or(false)
-    }
-
-    pub fn can_principal_vote_on_proposals_that_target_neuron(
+    /// Returns whether `principal_id` can, directly or indirectly, make ManageNeuron proposals
+    /// for `neuron`. See `is_managed_by_any_of` for what "indirectly" means.
+    pub fn can_principal_manage_neuron_via_proposals(
         &self,
         principal_id: PrincipalId,
         neuron: &Neuron,
     ) -> bool {
-        neuron
-            .neuron_managers()
-            .into_iter()
-            .any(|manager_neuron_id| self.is_authorized_to_vote(principal_id, manager_neuron_id))
+        let principal_neuron_ids = self.get_neuron_ids_readable_by_caller(principal_id);
+        self.is_managed_by_any_of(&neuron.neuron_managers(), &principal_neuron_ids)
+    }
+
+    /// Returns whether a neuron whose managers are `manager_ids` is managed, directly or
+    /// indirectly, by any of the neurons in `candidate_manager_ids`.
+    ///
+    /// A neuron N is directly managed by neuron M if N follows M on the NeuronManagement topic
+    /// (i.e. M is in `manager_ids`), because then M can make, and vote on, ManageNeuron proposals
+    /// for N. N is indirectly managed by neuron L if some M in `manager_ids` is in turn directly
+    /// managed by L, because then L can make a ManageNeuron proposal for M whose command is
+    /// MakeProposal, which makes M propose to manage N. Since proposals can be nested only once,
+    /// there are no further levels.
+    ///
+    /// `candidate_manager_ids` is typically the set of neurons that a principal is the controller
+    /// or a hotkey of. This loads (the followees of) at most one neuron per element of
+    /// `manager_ids`.
+    pub fn is_managed_by_any_of(
+        &self,
+        manager_ids: &[NeuronId],
+        candidate_manager_ids: &BTreeSet<NeuronId>,
+    ) -> bool {
+        if candidate_manager_ids.is_empty() {
+            return false;
+        }
+
+        let is_contained_in_candidates =
+            |neuron_id: &NeuronId| candidate_manager_ids.contains(neuron_id);
+        if manager_ids.iter().any(is_contained_in_candidates) {
+            return true;
+        }
+
+        manager_ids.iter().any(|manager_id| {
+            self.with_neuron_sections(
+                manager_id,
+                NeuronSections {
+                    followees: true,
+                    ..NeuronSections::NONE
+                },
+                |manager| {
+                    manager
+                        .neuron_managers()
+                        .iter()
+                        .any(is_contained_in_candidates)
+                },
+            )
+            .unwrap_or(false)
+        })
     }
 
     /// Execute a function with a mutable reference to a neuron, returning the result of the function,

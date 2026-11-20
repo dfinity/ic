@@ -203,6 +203,46 @@ fn test_command_follow_to_self_describing() {
 }
 
 #[test]
+fn test_command_make_proposal_to_self_describing() {
+    let nested_proposal = Proposal {
+        title: Some("Make neuron 5 vote".to_string()),
+        summary: "Vote yes on proposal 42.".to_string(),
+        url: "https://forum.dfinity.org".to_string(),
+        action: Some(Action::ManageNeuron(Box::new(ManageNeuron {
+            id: None,
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 5 })),
+            command: Some(Command::RegisterVote(RegisterVote {
+                proposal: Some(ProposalId { id: 42 }),
+                vote: Vote::Yes as i32,
+            })),
+        }))),
+        self_describing_action: None,
+    };
+
+    assert_command_self_describing_value_is(
+        Command::MakeProposal(Box::new(nested_proposal)),
+        SelfDescribingValue::Map(hashmap! {
+            "MakeProposal".to_string() => SelfDescribingValue::Map(hashmap! {
+                "title".to_string() => SelfDescribingValue::from("Make neuron 5 vote"),
+                "summary".to_string() => SelfDescribingValue::from("Vote yes on proposal 42."),
+                "url".to_string() => SelfDescribingValue::from("https://forum.dfinity.org"),
+                "action".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "ManageNeuron".to_string() => SelfDescribingValue::Map(hashmap! {
+                        "neuron_id".to_string() => SelfDescribingValue::from(5_u64),
+                        "command".to_string() => SelfDescribingValue::Map(hashmap! {
+                            "RegisterVote".to_string() => SelfDescribingValue::Map(hashmap! {
+                                "proposal".to_string() => SelfDescribingValue::from(42_u64),
+                                "vote".to_string() => SelfDescribingValue::from("Yes"),
+                            }),
+                        }),
+                    }),
+                }),
+            }),
+        }),
+    );
+}
+
+#[test]
 fn test_command_register_vote_to_self_describing() {
     assert_command_self_describing_value_is(
         Command::RegisterVote(RegisterVote {

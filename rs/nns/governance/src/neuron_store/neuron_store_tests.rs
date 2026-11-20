@@ -856,6 +856,63 @@ fn test_get_full_neuron() {
 }
 
 #[test]
+fn test_get_full_neuron_of_indirectly_managed_neuron() {
+    // Step 1: Prepare the world. The principal controls neuron 1, which manages neuron 2, which
+    // manages neuron 3, which manages neuron 4. Thus, the principal can make ManageNeuron
+    // proposals for neuron 2 directly, and for neuron 3 indirectly (via a ManageNeuron proposal for
+    // neuron 2 with a MakeProposal command), but not for neuron 4 (that would need two levels of
+    // nesting).
+    let principal_id = PrincipalId::new_user_test_id(42);
+    let new_neuron_managed_by = |id: u64, manager_id: NeuronId| {
+        simple_neuron_builder(id)
+            .with_followees(hashmap! {
+                Topic::NeuronManagement as i32 => Followees {
+                    followees: vec![manager_id],
+                }
+            })
+            .build()
+    };
+    let neuron_controlled = simple_neuron_builder(1)
+        .with_controller(principal_id)
+        .build();
+    let neuron_managed = new_neuron_managed_by(2, neuron_controlled.id());
+    let neuron_managed_indirectly = new_neuron_managed_by(3, neuron_managed.id());
+    let neuron_managed_too_indirectly = new_neuron_managed_by(4, neuron_managed_indirectly.id());
+    let neuron_store = NeuronStore::new(btreemap! {
+        1 => neuron_controlled.clone(),
+        2 => neuron_managed.clone(),
+        3 => neuron_managed_indirectly.clone(),
+        4 => neuron_managed_too_indirectly.clone(),
+    });
+
+    // Step 2 & 3: Run the code under test, and verify results.
+    assert_eq!(
+        neuron_store.get_full_neuron(neuron_managed.id(), principal_id),
+        Ok(neuron_managed)
+    );
+    assert_eq!(
+        neuron_store.get_full_neuron(neuron_managed_indirectly.id(), principal_id),
+        Ok(neuron_managed_indirectly)
+    );
+    assert_eq!(
+        neuron_store.get_full_neuron(neuron_managed_too_indirectly.id(), principal_id),
+        Err(NeuronStoreError::NotAuthorizedToGetFullNeuron {
+            neuron_id: neuron_managed_too_indirectly.id(),
+            principal_id,
+        })
+    );
+    // An unrelated principal cannot read any of them.
+    let other_principal_id = PrincipalId::new_user_test_id(43);
+    assert_eq!(
+        neuron_store.get_full_neuron(NeuronId { id: 3 }, other_principal_id),
+        Err(NeuronStoreError::NotAuthorizedToGetFullNeuron {
+            neuron_id: NeuronId { id: 3 },
+            principal_id: other_principal_id,
+        })
+    );
+}
+
+#[test]
 fn test_approve_genesis_kyc() {
     let principal_1 = PrincipalId::new_self_authenticating(b"SID1");
     let principal_2 = PrincipalId::new_self_authenticating(b"SID2");
