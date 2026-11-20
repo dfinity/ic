@@ -596,14 +596,16 @@ fn hash_span(
 /// the page cache: a manifest reads each chunk it hashes once, hundreds of GB
 /// per checkpoint on a large subnet, which through the page cache would evict
 /// the pages execution uses. Opens the file buffered if the file system doesn't
-/// support `O_DIRECT`.
+/// support `O_DIRECT`, or the OS has none (only Linux does).
 fn open_for_hashing(path: &Path) -> std::io::Result<File> {
-    use std::os::unix::fs::OpenOptionsExt;
-    match std::fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(nix::libc::O_DIRECT)
-        .open(path)
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(target_os = "linux")]
     {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(nix::libc::O_DIRECT);
+    }
+    match options.open(path) {
         Err(e) if e.raw_os_error() == Some(nix::libc::EINVAL) => File::open(path),
         result => result,
     }
