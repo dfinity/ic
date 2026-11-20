@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "34b17c1755b921f736618d062497dd27c91c08c00e8fa6ce758794310a729b87",
+  "checksum": "9c881d78a67d4ef33b2b2197f1cf2129af963f608389df2c657b82f400e27995",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -7151,6 +7151,35 @@
       ],
       "version": "0.2.0"
     },
+    "base16ct 1.0.0": {
+      "common_attrs": {
+        "edition": "2024"
+      },
+      "library_target_name": "base16ct",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "base16ct",
+      "package_url": "https://github.com/RustCrypto/formats",
+      "repository": {
+        "Http": {
+          "sha256": "fd307490d624467aa6f74b0eabb77633d1f758a7b25f12bceb0b22e08d9726f6",
+          "url": "https://static.crates.io/crates/base16ct/1.0.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "base16ct",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.0.0"
+    },
     "base58ck 0.1.101": {
       "common_attrs": {
         "crate_features": [
@@ -8682,10 +8711,17 @@
     },
     "block-buffer 0.12.1": {
       "common_attrs": {
+        "crate_features": [
+          "zeroize"
+        ],
         "deps": [
           {
             "id": "hybrid-array 0.4.15",
             "target": "hybrid_array"
+          },
+          {
+            "id": "zeroize 1.9.2",
+            "target": "zeroize"
           }
         ],
         "edition": "2024"
@@ -11968,6 +12004,35 @@
       ],
       "version": "0.1.58"
     },
+    "cmov 0.5.4": {
+      "common_attrs": {
+        "edition": "2024"
+      },
+      "library_target_name": "cmov",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "cmov",
+      "package_url": "https://github.com/RustCrypto/utils",
+      "repository": {
+        "Http": {
+          "sha256": "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a",
+          "url": "https://static.crates.io/crates/cmov/0.5.4/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "cmov",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.5.4"
+    },
     "cobs 0.3.0": {
       "common_attrs": {
         "deps": [
@@ -12708,6 +12773,9 @@
     },
     "const-oid 0.10.3": {
       "common_attrs": {
+        "crate_features": [
+          "db"
+        ],
         "edition": "2024"
       },
       "library_target_name": "const_oid",
@@ -13113,6 +13181,35 @@
         }
       ],
       "version": "0.5.1"
+    },
+    "cpubits 0.1.1": {
+      "common_attrs": {
+        "edition": "2024"
+      },
+      "library_target_name": "cpubits",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "cpubits",
+      "package_url": "https://github.com/RustCrypto/utils",
+      "repository": {
+        "Http": {
+          "sha256": "15b85f9c39137c3a891689859392b1bd49812121d0d61c9caf00d46ed5ce06ae",
+          "url": "https://static.crates.io/crates/cpubits/0.1.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "cpubits",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.1"
     },
     "cpufeatures 0.2.17": {
       "common_attrs": {
@@ -14742,6 +14839,62 @@
       ],
       "version": "0.5.5"
     },
+    "crypto-bigint 0.7.11": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "rand_core",
+          "zeroize"
+        ],
+        "deps": [
+          {
+            "id": "cpubits 0.1.1",
+            "target": "cpubits"
+          },
+          {
+            "id": "ctutils 0.4.8",
+            "target": "ctutils"
+          },
+          {
+            "id": "num-traits 0.2.19",
+            "target": "num_traits"
+          },
+          {
+            "id": "rand_core 0.10.1",
+            "target": "rand_core"
+          },
+          {
+            "id": "zeroize 1.9.2",
+            "target": "zeroize"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "crypto_bigint",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "crypto-bigint",
+      "package_url": "https://github.com/RustCrypto/crypto-bigint",
+      "repository": {
+        "Http": {
+          "sha256": "914c195c4d7fbc5ed7f88d14cbf85914d5c664967658d43404b263913a477e82",
+          "url": "https://static.crates.io/crates/crypto-bigint/0.7.11/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "crypto_bigint",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.7.11"
+    },
     "crypto-common 0.1.7": {
       "common_attrs": {
         "crate_features": [
@@ -14792,10 +14945,17 @@
     },
     "crypto-common 0.2.2": {
       "common_attrs": {
+        "crate_features": [
+          "rand_core"
+        ],
         "deps": [
           {
             "id": "hybrid-array 0.4.15",
             "target": "hybrid_array"
+          },
+          {
+            "id": "rand_core 0.10.1",
+            "target": "rand_core"
           }
         ],
         "edition": "2024"
@@ -14824,6 +14984,45 @@
         }
       ],
       "version": "0.2.2"
+    },
+    "crypto-primes 0.7.2": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "crypto-bigint 0.7.11",
+            "target": "crypto_bigint"
+          },
+          {
+            "id": "rand_core 0.10.1",
+            "target": "rand_core"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "crypto_primes",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "crypto-primes",
+      "package_url": "https://github.com/entropyxyz/crypto-primes",
+      "repository": {
+        "Http": {
+          "sha256": "3633a51a39c69ebbaa4feaa694bd83d241e4093901c84a0963b19d9bb3f0cf8f",
+          "url": "https://static.crates.io/crates/crypto-primes/0.7.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "crypto_primes",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.7.2"
     },
     "cssparser 0.38.0": {
       "common_attrs": {
@@ -15094,6 +15293,41 @@
         }
       ],
       "version": "3.5.3"
+    },
+    "ctutils 0.4.8": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "cmov 0.5.4",
+            "target": "cmov"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "ctutils",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "ctutils",
+      "package_url": "https://github.com/RustCrypto/utils",
+      "repository": {
+        "Http": {
+          "sha256": "261af4dc7a06ea8a527a8717d8cbba3417530d6ea14e1edb3de6b67806be474f",
+          "url": "https://static.crates.io/crates/ctutils/0.4.8/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ctutils",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.4.8"
     },
     "curve25519-dalek 4.1.3": {
       "build_script_attrs": {
@@ -16121,6 +16355,68 @@
       ],
       "version": "0.7.10"
     },
+    "der 0.8.3": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "derive",
+          "flagset",
+          "oid",
+          "pem",
+          "std",
+          "zeroize"
+        ],
+        "deps": [
+          {
+            "id": "const-oid 0.10.3",
+            "target": "const_oid"
+          },
+          {
+            "id": "flagset 0.4.7",
+            "target": "flagset"
+          },
+          {
+            "id": "pem-rfc7468 1.0.0",
+            "target": "pem_rfc7468"
+          },
+          {
+            "id": "zeroize 1.9.2",
+            "target": "zeroize"
+          }
+        ],
+        "edition": "2024",
+        "proc_macro_deps": [
+          {
+            "id": "der_derive 0.8.0",
+            "target": "der_derive"
+          }
+        ]
+      },
+      "library_target_name": "der",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "der",
+      "package_url": "https://github.com/RustCrypto/formats",
+      "repository": {
+        "Http": {
+          "sha256": "6a996a108feb8b427a6e12fcf6af4aa83409b79d72c15337d7741368131ee004",
+          "url": "https://static.crates.io/crates/der/0.8.3/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "der",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.8.3"
+    },
     "der-parser 10.0.0": {
       "common_attrs": {
         "crate_features": [
@@ -16289,6 +16585,49 @@
         }
       ],
       "version": "0.7.3"
+    },
+    "der_derive 0.8.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "proc-macro2 1.0.107",
+            "target": "proc_macro2"
+          },
+          {
+            "id": "quote 1.0.47",
+            "target": "quote"
+          },
+          {
+            "id": "syn 2.0.119",
+            "target": "syn"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "der_derive",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "der_derive",
+      "package_url": "https://github.com/RustCrypto/formats",
+      "repository": {
+        "Http": {
+          "sha256": "59600e2c2d636fde9b65e99cc6445ac770c63d3628195ff39932b8d6d7409903",
+          "url": "https://static.crates.io/crates/der_derive/0.8.0/download"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "der_derive",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.8.0"
     },
     "deranged 0.5.9": {
       "common_attrs": {
@@ -17075,7 +17414,9 @@
           "alloc",
           "block-api",
           "default",
-          "oid"
+          "mac",
+          "oid",
+          "zeroize"
         ],
         "deps": [
           {
@@ -17090,6 +17431,14 @@
             "alias": "common",
             "id": "crypto-common 0.2.2",
             "target": "crypto_common"
+          },
+          {
+            "id": "ctutils 0.4.8",
+            "target": "ctutils"
+          },
+          {
+            "id": "zeroize 1.9.2",
+            "target": "zeroize"
           }
         ],
         "edition": "2024"
@@ -17873,10 +18222,6 @@
             "target": "ping"
           },
           {
-            "id": "pkcs8 0.10.2",
-            "target": "pkcs8"
-          },
-          {
             "id": "pprof 0.15.0",
             "target": "pprof"
           },
@@ -18015,7 +18360,7 @@
             "target": "rolling_file"
           },
           {
-            "id": "rsa 0.9.10",
+            "id": "rsa 0.10.0",
             "target": "rsa"
           },
           {
@@ -18135,7 +18480,7 @@
             "target": "signal_hook"
           },
           {
-            "id": "signature 2.2.0",
+            "id": "signature 3.0.0",
             "target": "signature"
           },
           {
@@ -18427,7 +18772,7 @@
             "target": "wycheproof"
           },
           {
-            "id": "x509-cert 0.2.5",
+            "id": "x509-cert 0.3.0",
             "target": "x509_cert"
           },
           {
@@ -24562,6 +24907,44 @@
         }
       ],
       "version": "0.12.1"
+    },
+    "hmac 0.13.0": {
+      "common_attrs": {
+        "crate_features": [
+          "zeroize"
+        ],
+        "deps": [
+          {
+            "id": "digest 0.11.3",
+            "target": "digest"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "hmac",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "hmac",
+      "package_url": "https://github.com/RustCrypto/MACs",
+      "repository": {
+        "Http": {
+          "sha256": "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f",
+          "url": "https://static.crates.io/crates/hmac/0.13.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hmac",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.13.0"
     },
     "hostname 0.4.2": {
       "common_attrs": {
@@ -39733,6 +40116,44 @@
       ],
       "version": "0.7.0"
     },
+    "pem-rfc7468 1.0.0": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc"
+        ],
+        "deps": [
+          {
+            "id": "base64ct 1.8.3",
+            "target": "base64ct"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "pem_rfc7468",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "pem-rfc7468",
+      "package_url": "https://github.com/RustCrypto/formats",
+      "repository": {
+        "Http": {
+          "sha256": "a6305423e0e7738146434843d1694d621cce767262b2a86910beab705e4493d9",
+          "url": "https://static.crates.io/crates/pem-rfc7468/1.0.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pem_rfc7468",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.0.0"
+    },
     "per-thread-mutex 0.1.4": {
       "common_attrs": {
         "deps": [
@@ -40739,6 +41160,50 @@
       ],
       "version": "0.7.5"
     },
+    "pkcs1 0.8.0": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "pem",
+          "zeroize"
+        ],
+        "deps": [
+          {
+            "id": "der 0.8.3",
+            "target": "der"
+          },
+          {
+            "id": "spki 0.8.1",
+            "target": "spki"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "pkcs1",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "pkcs1",
+      "package_url": "https://github.com/RustCrypto/formats",
+      "repository": {
+        "Http": {
+          "sha256": "6250dd7321adbe93d12b750aee0ced159fd13e77f625edcdf1cb6f83cd99f650",
+          "url": "https://static.crates.io/crates/pkcs1/0.8.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pkcs1",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.8.0"
+    },
     "pkcs11 0.5.0": {
       "common_attrs": {
         "deps": [
@@ -40820,6 +41285,49 @@
         }
       ],
       "version": "0.10.2"
+    },
+    "pkcs8 0.11.0": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "pem"
+        ],
+        "deps": [
+          {
+            "id": "der 0.8.3",
+            "target": "der"
+          },
+          {
+            "id": "spki 0.8.1",
+            "target": "spki"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "pkcs8",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "pkcs8",
+      "package_url": "https://github.com/RustCrypto/formats",
+      "repository": {
+        "Http": {
+          "sha256": "451913da69c775a56034ea8d9003d27ee8948e12443eae7c038ba100a4f21cb7",
+          "url": "https://static.crates.io/crates/pkcs8/0.11.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pkcs8",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.11.0"
     },
     "pkg-config 0.3.34": {
       "common_attrs": {
@@ -46549,13 +47057,98 @@
       ],
       "version": "0.2.0"
     },
+    "rsa 0.10.0": {
+      "common_attrs": {
+        "crate_features": [
+          "encoding",
+          "pkcs1v15"
+        ],
+        "deps": [
+          {
+            "id": "const-oid 0.10.3",
+            "target": "const_oid"
+          },
+          {
+            "id": "crypto-bigint 0.7.11",
+            "target": "crypto_bigint"
+          },
+          {
+            "id": "crypto-common 0.2.2",
+            "target": "crypto_common"
+          },
+          {
+            "id": "crypto-primes 0.7.2",
+            "target": "crypto_primes"
+          },
+          {
+            "id": "digest 0.11.3",
+            "target": "digest"
+          },
+          {
+            "id": "hmac 0.13.0",
+            "target": "hmac"
+          },
+          {
+            "id": "pkcs1 0.8.0",
+            "target": "pkcs1"
+          },
+          {
+            "id": "pkcs8 0.11.0",
+            "target": "pkcs8"
+          },
+          {
+            "id": "rand_core 0.10.1",
+            "target": "rand_core"
+          },
+          {
+            "id": "sha2 0.11.1",
+            "target": "sha2"
+          },
+          {
+            "id": "signature 3.0.0",
+            "target": "signature"
+          },
+          {
+            "id": "spki 0.8.1",
+            "target": "spki"
+          },
+          {
+            "id": "zeroize 1.9.2",
+            "target": "zeroize"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "rsa",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "rsa",
+      "package_url": "https://github.com/RustCrypto/RSA",
+      "repository": {
+        "Http": {
+          "sha256": "23e77fd77e0dea28b3011fd62d15445b7de7959333b0276d930e03be0f755699",
+          "url": "https://static.crates.io/crates/rsa/0.10.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rsa",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.10.0"
+    },
     "rsa 0.9.10": {
       "common_attrs": {
         "crate_features": [
           "default",
-          "getrandom",
           "pem",
-          "sha2",
           "std",
           "u64_digit"
         ],
@@ -46592,10 +47185,6 @@
           {
             "id": "rand_core 0.6.4",
             "target": "rand_core"
-          },
-          {
-            "id": "sha2 0.10.9",
-            "target": "sha2"
           },
           {
             "id": "signature 2.2.0",
@@ -50563,6 +51152,45 @@
       ],
       "version": "0.2.0"
     },
+    "serdect 0.4.3": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "base16ct 1.0.0",
+            "target": "base16ct"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "serdect",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "serdect",
+      "package_url": "https://github.com/RustCrypto/formats",
+      "repository": {
+        "Http": {
+          "sha256": "66cf8fedced2fcf12406bcb34223dffb92eaf34908ede12fed414c82b7f00b3e",
+          "url": "https://static.crates.io/crates/serdect/0.4.3/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "serdect",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.4.3"
+    },
     "servo_arc 0.5.0": {
       "common_attrs": {
         "crate_features": [
@@ -50823,7 +51451,6 @@
       "common_attrs": {
         "crate_features": [
           "default",
-          "oid",
           "std"
         ],
         "deps": {
@@ -50882,7 +51509,8 @@
         "crate_features": [
           "alloc",
           "default",
-          "oid"
+          "oid",
+          "zeroize"
         ],
         "deps": {
           "common": [
@@ -51537,6 +52165,50 @@
         }
       ],
       "version": "2.2.0"
+    },
+    "signature 3.0.0": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "digest",
+          "rand_core"
+        ],
+        "deps": [
+          {
+            "id": "digest 0.11.3",
+            "target": "digest"
+          },
+          {
+            "id": "rand_core 0.10.1",
+            "target": "rand_core"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "signature",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "signature",
+      "package_url": "https://github.com/RustCrypto/traits",
+      "repository": {
+        "Http": {
+          "sha256": "28d567dcbaf0049cb8ac2608a76cd95ff9e4412e1899d389ee400918ca7537f5",
+          "url": "https://static.crates.io/crates/signature/3.0.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "signature",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "3.0.0"
     },
     "simd-adler32 0.3.10": {
       "common_attrs": {
@@ -52764,6 +53436,46 @@
         }
       ],
       "version": "0.7.3"
+    },
+    "spki 0.8.1": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "pem",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "der 0.8.3",
+            "target": "der"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "spki",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "spki",
+      "package_url": "https://github.com/RustCrypto/formats",
+      "repository": {
+        "Http": {
+          "sha256": "7ef958a98b9d5da290cfc78946e9f3e61e1e62a18db0d92cac0b83cc161491a9",
+          "url": "https://static.crates.io/crates/spki/0.8.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "spki",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.8.1"
     },
     "sqlite-wasm-rs 0.6.3": {
       "build_script_attrs": {
@@ -64764,12 +65476,8 @@
     "x509-cert 0.2.5": {
       "common_attrs": {
         "crate_features": [
-          "builder",
           "default",
-          "hazmat",
           "pem",
-          "sha1",
-          "signature",
           "std"
         ],
         "deps": [
@@ -64780,14 +65488,6 @@
           {
             "id": "der 0.7.10",
             "target": "der"
-          },
-          {
-            "id": "sha1 0.10.7",
-            "target": "sha1"
-          },
-          {
-            "id": "signature 2.2.0",
-            "target": "signature"
           },
           {
             "id": "spki 0.7.3",
@@ -64820,6 +65520,64 @@
         }
       ],
       "version": "0.2.5"
+    },
+    "x509-cert 0.3.0": {
+      "common_attrs": {
+        "crate_features": [
+          "builder",
+          "default",
+          "pem",
+          "signature",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "const-oid 0.10.3",
+            "target": "const_oid"
+          },
+          {
+            "id": "der 0.8.3",
+            "target": "der"
+          },
+          {
+            "id": "sha1 0.11.0",
+            "target": "sha1"
+          },
+          {
+            "id": "signature 3.0.0",
+            "target": "signature"
+          },
+          {
+            "id": "spki 0.8.1",
+            "target": "spki"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "x509_cert",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "x509-cert",
+      "package_url": "https://github.com/RustCrypto/formats",
+      "repository": {
+        "Http": {
+          "sha256": "105ef4642d9cb137ef83d623d0e4bf08b8adf69e9918ca904a174adb6d3d038b",
+          "url": "https://static.crates.io/crates/x509-cert/0.3.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "x509_cert",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.3.0"
     },
     "x509-parser 0.16.0": {
       "common_attrs": {
@@ -66154,7 +66912,6 @@
     "pem 4.0.0",
     "pin-project-lite 0.2.17",
     "ping 0.5.0",
-    "pkcs8 0.10.2",
     "pprof 0.15.0",
     "predicates 3.1.4",
     "pretty_assertions 1.4.1",
@@ -66190,7 +66947,7 @@
     "rlp 0.6.1",
     "rocksdb 0.25.0",
     "rolling-file 0.2.0",
-    "rsa 0.9.10",
+    "rsa 0.10.0",
     "rstest 0.28.0",
     "rusb 0.9.4",
     "rusqlite 0.42.0",
@@ -66221,7 +66978,7 @@
     "sha2 0.10.9",
     "sha3 0.10.9",
     "signal-hook 0.4.6",
-    "signature 2.2.0",
+    "signature 3.0.0",
     "simple_asn1 0.6.4",
     "simple_moving_average 1.0.2",
     "slog 2.8.2",
@@ -66296,7 +67053,7 @@
     "webpki-roots 1.0.12",
     "wirm 4.0.4",
     "wycheproof 0.7.0",
-    "x509-cert 0.2.5",
+    "x509-cert 0.3.0",
     "x509-parser 0.18.1",
     "zeroize 1.9.2",
     "zstd 0.14.4"
