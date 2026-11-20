@@ -17,7 +17,7 @@ mod update_balance {
     use crate::updates::get_btc_address::account_to_p2wpkh_address_from_state;
     use crate::updates::update_balance;
     use crate::updates::update_balance::{
-        SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
+        ErrorCode, SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     };
     use crate::{CanisterRuntime, GetUtxosResponse, Timestamp, state};
     use assert_matches::assert_matches;
@@ -456,14 +456,11 @@ mod update_balance {
 
         assert_eq!(
             result,
-            Ok(vec![
-                UtxoStatus::Unchecked(unchecked_utxo.clone()),
-                UtxoStatus::Minted {
-                    block_index: 1,
-                    minted_amount,
-                    utxo: clean_utxo.clone(),
-                },
-            ])
+            Ok(vec![UtxoStatus::Minted {
+                block_index: 1,
+                minted_amount,
+                utxo: clean_utxo.clone(),
+            }])
         );
         assert_has_new_events(
             &events_before,
@@ -599,14 +596,11 @@ mod update_balance {
 
         assert_eq!(
             result,
-            Ok(vec![
-                UtxoStatus::Unchecked(unchecked_utxo.clone()),
-                UtxoStatus::Minted {
-                    block_index: 1,
-                    minted_amount,
-                    utxo: clean_utxo.clone(),
-                },
-            ])
+            Ok(vec![UtxoStatus::Minted {
+                block_index: 1,
+                minted_amount,
+                utxo: clean_utxo.clone(),
+            }])
         );
         assert_has_new_events(
             &events_before,
@@ -1265,14 +1259,19 @@ mod update_balance {
 
         let result = update_balance(update_balance_args.clone(), &runtime).await;
 
-        assert_eq!(
-            result,
-            Ok(vec![match &reason {
-                SuspendedReason::ValueTooSmall => UtxoStatus::ValueTooSmall(utxo.clone()),
-                SuspendedReason::Quarantined => UtxoStatus::Tainted(utxo.clone()),
-                SuspendedReason::Unchecked => UtxoStatus::Unchecked(utxo.clone()),
-            }])
-        );
+        match &reason {
+            SuspendedReason::ValueTooSmall => {
+                assert_eq!(result, Ok(vec![UtxoStatus::ValueTooSmall(utxo.clone())]))
+            }
+            SuspendedReason::Quarantined => {
+                assert_eq!(result, Ok(vec![UtxoStatus::Tainted(utxo.clone())]))
+            }
+            SuspendedReason::Unchecked => assert_matches!(
+                result,
+                Err(UpdateBalanceError::GenericError { error_code, .. })
+                    if error_code == ErrorCode::KytError as u64
+            ),
+        }
         assert_has_no_new_events(&events_before);
 
         runtime.checkpoint();

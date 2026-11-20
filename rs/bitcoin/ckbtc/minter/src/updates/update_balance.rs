@@ -50,9 +50,6 @@ pub enum UtxoStatus {
     /// The deposited UTXO passed the Bitcoin check, but the minter failed to mint ckBTC on the ledger.
     /// The caller should retry the [update_balance] call.
     Checked(Utxo),
-    /// The Bitcoin check of the deposited UTXO could not be completed.
-    /// The UTXO will be checked again in a later [update_balance] call.
-    Unchecked(Utxo),
     /// The minter accepted the UTXO and minted ckBTC tokens on the ledger.
     Minted {
         /// The MINT transaction index on the ledger.
@@ -275,7 +272,10 @@ pub async fn update_balance<R: CanisterRuntime>(
     let (deposit_btc_min_amount, check_fee) =
         read_state(|s| (s.deposit_btc_min_amount, s.check_fee));
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
-    let mut retriable_check_errors: Vec<UpdateBalanceError> = vec![];
+    // Errors of the Bitcoin checks that could not be completed. The UTXOs concerned are not
+    // reported in the result: they are checked again in a later call, either right away if the
+    // error is retriable, or after the retry delay (the UTXO is then reported as suspended).
+    let mut check_errors: Vec<UpdateBalanceError> = vec![];
 
     for utxo in processable_utxos {
         let ignored_reason = if utxo.value < deposit_btc_min_amount {
@@ -311,8 +311,7 @@ pub async fn update_balance<R: CanisterRuntime>(
                     "Failed to check UTXO {} for account {caller_account}: {error:?}",
                     DisplayOutpoint(&utxo.outpoint),
                 );
-                retriable_check_errors.push(error);
-                utxo_statuses.push(UtxoStatus::Unchecked(utxo));
+                check_errors.push(error);
                 continue;
             }
             Err(CheckUtxoError::Irrecoverable(error)) => {
@@ -322,15 +321,12 @@ pub async fn update_balance<R: CanisterRuntime>(
                     DisplayOutpoint(&utxo.outpoint),
                 );
                 mutate_state(|s| {
-                    state::audit::suspend_unchecked_utxo(
-                        s,
-                        utxo.clone(),
-                        caller_account,
-                        now,
-                        runtime,
-                    )
+                    state::audit::suspend_unchecked_utxo(s, utxo, caller_account, now, runtime)
                 });
-                utxo_statuses.push(UtxoStatus::Unchecked(utxo));
+                check_errors.push(UpdateBalanceError::GenericError {
+                    error_code: ErrorCode::KytError as u64,
+                    error_message: format!("Bitcoin checker error: {error:?}"),
+                });
                 continue;
             }
         };
@@ -412,10 +408,10 @@ pub async fn update_balance<R: CanisterRuntime>(
         scopeguard::ScopeGuard::into_inner(guard);
     }
 
-    // Preserve the previous behavior of returning an error when no UTXO could be
-    // processed because the Bitcoin check was temporarily unavailable.
-    if !retriable_check_errors.is_empty() && retriable_check_errors.len() == utxo_statuses.len() {
-        return Err(retriable_check_errors.swap_remove(0));
+    // Preserve the previous behavior of returning the error of the Bitcoin check when no
+    // UTXO could be processed.
+    if utxo_statuses.is_empty() && !check_errors.is_empty() {
+        return Err(check_errors.swap_remove(0));
     }
 
     schedule_now(TaskType::ProcessLogic, runtime);
