@@ -118,12 +118,10 @@ pub enum WasmValidationError {
     },
     /// Module contains too many imports.
     TooManyImports {
-        defined: usize,
         allowed: usize,
     },
     /// The name custom section names too many functions.
     TooManyNameSectionEntries {
-        defined: usize,
         allowed: usize,
     },
     /// Module contains too many custom sections.
@@ -251,15 +249,13 @@ impl std::fmt::Display for WasmValidationError {
                 "Wasm module defined {defined} \
                     functions which exceeds the maximum number allowed {allowed}.",
             ),
-            Self::TooManyImports { defined, allowed } => write!(
+            Self::TooManyImports { allowed } => write!(
                 f,
-                "Wasm module has {defined} \
-                    imports which exceeds the maximum number allowed {allowed}.",
+                "Wasm module has more imports than the maximum number allowed {allowed}.",
             ),
-            Self::TooManyNameSectionEntries { defined, allowed } => write!(
+            Self::TooManyNameSectionEntries { allowed } => write!(
                 f,
-                "The name section names {defined} \
-                    functions which exceeds the maximum number allowed {allowed}.",
+                "The name section names more functions than the maximum number allowed {allowed}.",
             ),
             Self::TooManyCustomSections { defined, allowed } => write!(
                 f,

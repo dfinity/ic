@@ -631,7 +631,6 @@ fn reject_too_many_imports() {
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Err(WasmValidationError::TooManyImports {
-            defined: num_imports,
             allowed: MAX_NUMBER_IMPORTS,
         })
     );
@@ -653,7 +652,6 @@ fn reject_too_many_name_section_entries() {
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Err(WasmValidationError::TooManyNameSectionEntries {
-            defined: num_entries,
             allowed: MAX_FUNCTIONS,
         })
     );

@@ -1881,7 +1881,6 @@ fn check_custom_sections_and_code_size(
                                 name_section_entries.saturating_add(map.count() as usize);
                             if name_section_entries > MAX_FUNCTIONS {
                                 return Err(WasmValidationError::TooManyNameSectionEntries {
-                                    defined: name_section_entries,
                                     allowed: MAX_FUNCTIONS,
                                 });
                             }
@@ -1894,7 +1893,6 @@ fn check_custom_sections_and_code_size(
                 let num_imports = reader.count() as usize;
                 if num_imports > MAX_NUMBER_IMPORTS {
                     return Err(WasmValidationError::TooManyImports {
-                        defined: num_imports,
                         allowed: MAX_NUMBER_IMPORTS,
                     });
                 }
