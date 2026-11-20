@@ -1434,7 +1434,7 @@ mod tests {
         // These shares should be included in the new pool.
         let share5 = make_share(5, 5, 1);
         let share6 = make_share(6, 6, 1);
-        let share6_2 = make_share(6, 6, 2);
+        let share6_2 = make_share(6, 7, 2);
 
         pool1.validated.insert(cert4);
         pool1.validated.insert(share3);
