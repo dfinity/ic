@@ -16,7 +16,10 @@ use ic_cketh_minter::endpoints::{
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::memo::{BurnMemo, MintMemo};
 use ic_cketh_minter::numeric::BlockNumber;
-use ic_cketh_minter::{PROCESS_REIMBURSEMENT, SCRAPING_ETH_LOGS_INTERVAL};
+use ic_cketh_minter::{
+    PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL, PROCESS_REIMBURSEMENT,
+    SCRAPING_ETH_LOGS_INTERVAL,
+};
 use ic_cketh_test_utils::flow::{
     DepositCkEthParams, DepositCkEthWithSubaccountParams, DepositParams, ProcessWithdrawalParams,
     double_and_increment_base_fee_per_gas,
@@ -42,6 +45,7 @@ use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
 use num_traits::cast::ToPrimitive;
 use serde_json::json;
+use std::convert::identity;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -183,6 +187,40 @@ fn should_deposit_and_withdraw() {
             },
         ]);
     }
+}
+
+#[test]
+fn should_process_withdrawal_as_soon_as_accepted() {
+    let cketh = CkEthSetup::default();
+    let caller: Principal = cketh.caller.into();
+    let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
+    let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
+
+    let cketh = cketh
+        .deposit(DepositParams::default())
+        .expect_mint()
+        .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
+        .expect_ok(1)
+        .call_minter_withdraw_eth(caller, withdrawal_amount, destination)
+        .expect_withdrawal_request_accepted();
+    let accepted_at = cketh.setup.env.get_time();
+
+    let cketh = cketh
+        .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
+        .expect_finalized_status(TxFinalizedStatus::Success {
+            transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+            effective_transaction_fee: Some((GAS_USED * EFFECTIVE_GAS_PRICE).into()),
+        });
+
+    // The request was processed by the run scheduled when it was accepted: neither the periodic
+    // run nor a retry was due in the meantime.
+    let elapsed = Duration::from_nanos(
+        cketh.env.get_time().as_nanos_since_unix_epoch() - accepted_at.as_nanos_since_unix_epoch(),
+    );
+    assert!(
+        elapsed < PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
+        "BUG: withdrawal took {elapsed:?} to be processed"
+    );
 }
 
 #[test]
@@ -454,6 +492,51 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
             )
         })
         .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending);
+}
+
+#[test]
+fn should_process_withdrawal_on_next_periodic_run_when_first_attempt_fails() {
+    let cketh = CkEthSetup::default();
+    let caller: Principal = cketh.caller.into();
+    let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
+
+    cketh
+        .deposit(DepositParams::default())
+        .expect_mint()
+        .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
+        .expect_ok(1)
+        .call_minter_withdraw_eth(
+            caller,
+            withdrawal_amount,
+            DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        )
+        .expect_withdrawal_request_accepted()
+        .start_processing_withdrawals()
+        .retrieve_fee_history(move |mock| {
+            mock.modify_response(
+                JsonRpcProvider::Provider1,
+                &mut |response: &mut alloy_rpc_types_eth::FeeHistory| {
+                    response.oldest_block = 0x17740742_u64
+                },
+            )
+            .modify_response(
+                JsonRpcProvider::Provider2,
+                &mut |response: &mut alloy_rpc_types_eth::FeeHistory| {
+                    response.oldest_block = 0x17740743_u64
+                },
+            )
+            .modify_response(
+                JsonRpcProvider::Provider3,
+                &mut |response: &mut alloy_rpc_types_eth::FeeHistory| {
+                    response.oldest_block = 0x17740744_u64
+                },
+            )
+        })
+        .wait_for_next_periodic_run()
+        .retrieve_fee_history(identity)
+        .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending)
+        .retrieve_latest_transaction_count(identity)
+        .expect_status(RetrieveEthStatus::TxCreated);
 }
 
 #[test]
