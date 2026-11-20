@@ -180,7 +180,7 @@ pub use tla::{
     CLAIM_NEURON_DESC, DISBURSE_MATURITY_DESC, DISBURSE_NEURON_DESC, DISBURSE_TO_NEURON_DESC,
     InstrumentationState, MERGE_NEURONS_DESC, REFRESH_NEURON_DESC, SPAWN_NEURON_DESC,
     SPAWN_NEURONS_DESC, SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY,
-    TLA_TRACES_MUTEX, ToTla, tla_update_method,
+    TLA_TRACES_MUTEX, ToTla, tla_function, tla_update_method,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -1137,6 +1137,20 @@ pub fn governance_minting_account() -> AccountIdentifier {
 
 pub fn neuron_subaccount(subaccount: Subaccount) -> AccountIdentifier {
     AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount))
+}
+
+/// Reads the balance of a neuron's ledger account, for use by callers that do
+/// not hold the neuron's lock.
+///
+/// This is equivalent to calling `ledger.account_balance` directly. It is a
+/// separate function so that the TLA instrumentation can tell this ledger call
+/// apart from ledger calls made while holding the neuron's lock.
+#[cfg_attr(feature = "tla", tla_function)]
+async fn read_neuron_account_balance_without_lock(
+    ledger: &dyn IcpLedger,
+    account: AccountIdentifier,
+) -> Result<Tokens, NervousSystemError> {
+    ledger.account_balance(account).await
 }
 
 #[derive(Debug)]
@@ -5912,6 +5926,14 @@ impl Governance {
     }
 
     /// Refreshes the stake of a given neuron by checking it's account.
+    ///
+    /// Anyone may refresh any neuron. Updating the stake requires the neuron's
+    /// lock, and while the lock is held, the neuron's controller cannot
+    /// disburse, split, configure, etc. the neuron. Therefore, the lock is only
+    /// taken when there is something to update: the ledger balance is first
+    /// read without the lock, and if it already equals the cached stake, this
+    /// returns without taking the lock. Reading without the lock is safe,
+    /// because nothing is written based on that read.
     #[cfg_attr(feature = "tla", tla_update_method(REFRESH_NEURON_DESC.clone(), tla_snapshotter!()))]
     async fn refresh_neuron(
         &mut self,
@@ -5920,6 +5942,18 @@ impl Governance {
         claim_or_refresh: &ClaimOrRefresh,
     ) -> Result<NeuronId, GovernanceError> {
         let account = neuron_subaccount(subaccount);
+
+        tla_log_label!("RefreshNeuron_Unlocked");
+        tla_log_locals! { neuron_id: nid.id };
+        let unlocked_balance =
+            read_neuron_account_balance_without_lock(&*self.ledger, account).await?;
+        self.try_validate_refresh_balance(unlocked_balance)?;
+        let cached_neuron_stake_e8s =
+            self.with_neuron(&nid, |neuron| neuron.cached_neuron_stake_e8s)?;
+        if unlocked_balance.get_e8s() == cached_neuron_stake_e8s {
+            return Ok(nid);
+        }
+
         // We need to lock the neuron to make sure it doesn't undergo
         // concurrent changes while we're checking the balance and
         // refreshing the stake.
@@ -5937,18 +5971,7 @@ impl Governance {
         // Get the balance of the neuron from the ledger canister.
         tla_log_locals! { neuron_id: nid.id };
         let balance = self.ledger.account_balance(account).await?;
-        let min_stake = self.economics().neuron_minimum_stake_e8s;
-        if balance.get_e8s() < min_stake {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InsufficientFunds,
-                format!(
-                    "Account does not have enough funds to refresh a neuron. \
-                     Please make sure that account has at least {:?} e8s (was {:?} e8s)",
-                    min_stake,
-                    balance.get_e8s()
-                ),
-            ));
-        }
+        self.try_validate_refresh_balance(balance)?;
         self.with_neuron_mut(&nid, |neuron| {
             match neuron.cached_neuron_stake_e8s.cmp(&balance.get_e8s()) {
                 Ordering::Greater => {
@@ -5975,6 +5998,26 @@ impl Governance {
         })?;
 
         Ok(nid)
+    }
+
+    /// Returns an error if `balance` (of a neuron's account) is below the
+    /// minimum stake, in which case `refresh_neuron` must not update the
+    /// neuron.
+    fn try_validate_refresh_balance(&self, balance: Tokens) -> Result<(), GovernanceError> {
+        let min_stake = self.economics().neuron_minimum_stake_e8s;
+        if balance.get_e8s() >= min_stake {
+            return Ok(());
+        }
+
+        Err(GovernanceError::new_with_message(
+            ErrorType::InsufficientFunds,
+            format!(
+                "Account does not have enough funds to refresh a neuron. \
+                 Please make sure that account has at least {:?} e8s (was {:?} e8s)",
+                min_stake,
+                balance.get_e8s()
+            ),
+        ))
     }
 
     /// Claim a new neuron, unless the account doesn't have enough to stake a

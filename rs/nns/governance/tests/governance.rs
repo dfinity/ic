@@ -70,7 +70,10 @@ use ic_nns_governance::{
         Tally, Topic, UpdateNodeProvider, Visibility, Vote, VotingPowerEconomics,
         WaitForQuietState,
         add_or_remove_node_provider::Change,
-        governance::GovernanceCachedMetrics,
+        governance::{
+            GovernanceCachedMetrics, NeuronInFlightCommand,
+            neuron_in_flight_command::Command as InFlightCommand,
+        },
         governance_error::ErrorType::{
             self, InsufficientFunds, NotAuthorized, NotFound, ResourceExhausted,
         },
@@ -5026,6 +5029,124 @@ fn test_refresh_neuron_by_subaccount_by_proxy() {
     let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
     let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
     refresh_neuron_by_id_or_subaccount(owner, caller, RefreshBy::Subaccount);
+}
+
+/// Refreshes a neuron while another command (a disburse) holds the neuron's
+/// lock. If `is_balance_changed`, funds are first added to the neuron's
+/// account, so that the refresh has something to update.
+///
+/// Returns the response to the refresh, the neuron's cached stake afterwards,
+/// the in-flight command recorded for the neuron afterwards, and the neuron's
+/// cached stake before the refresh.
+fn refresh_neuron_while_locked_by_disburse(
+    is_balance_changed: bool,
+) -> (CommandResponse, u64, Option<NeuronInFlightCommand>, u64) {
+    let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let stranger = *TEST_NEURON_2_OWNER_PRINCIPAL;
+    let stake = Tokens::from_tokens(10_u64).unwrap();
+    let (mut driver, mut gov, nid, subaccount) = governance_with_staked_neuron(
+        INITIAL_NEURON_DISSOLVE_DELAY,
+        stake.get_e8s(),
+        0, // block height
+        owner,
+        1234, // nonce
+    );
+    if is_balance_changed {
+        driver.add_funds_to_account(
+            AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount)),
+            stake.get_e8s(),
+        );
+    }
+    let disburse_in_flight = NeuronInFlightCommand {
+        timestamp: 42,
+        command: Some(InFlightCommand::Disburse(Disburse {
+            amount: None,
+            to_account: None,
+        })),
+    };
+    gov.heap_data
+        .in_flight_commands
+        .insert(nid.id, disburse_in_flight);
+
+    let manage_neuron_response = gov
+        .manage_neuron(
+            &stranger,
+            &ManageNeuron {
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(nid)),
+                id: None,
+                command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                    by: Some(By::NeuronIdOrSubaccount(Empty {})),
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap();
+
+    let cached_neuron_stake_e8s = gov
+        .neuron_store
+        .with_neuron(&nid, |neuron| neuron.cached_neuron_stake_e8s)
+        .unwrap();
+    let in_flight_command = gov.heap_data.in_flight_commands.get(&nid.id).cloned();
+    (
+        manage_neuron_response.command.unwrap(),
+        cached_neuron_stake_e8s,
+        in_flight_command,
+        stake.get_e8s(),
+    )
+}
+
+/// Tests that refreshing a neuron whose ledger balance equals its cached stake
+/// does not need the neuron's lock. Otherwise, anyone could block the
+/// neuron's controller from using the neuron by refreshing it repeatedly.
+#[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
+fn test_refresh_unchanged_neuron_succeeds_while_neuron_is_locked() {
+    // Step 1 and 2: Prepare the world, and refresh the neuron.
+    let (response, cached_neuron_stake_e8s, in_flight_command, original_stake_e8s) =
+        refresh_neuron_while_locked_by_disburse(false /* is_balance_changed */);
+
+    // Step 3: Verify results.
+
+    // Step 3.1: The refresh succeeded, and changed nothing.
+    let refreshed_neuron_id = match response {
+        CommandResponse::ClaimOrRefresh(response) => response.refreshed_neuron_id,
+        other => panic!("Expected the refresh to succeed, but got {other:?}"),
+    };
+    assert!(refreshed_neuron_id.is_some());
+    assert_eq!(cached_neuron_stake_e8s, original_stake_e8s);
+
+    // Step 3.2: The disburse still holds the lock.
+    let in_flight_command = in_flight_command.expect("The neuron should still be locked.");
+    assert_eq!(in_flight_command.timestamp, 42);
+}
+
+/// Tests that refreshing a neuron whose ledger balance differs from its cached
+/// stake still needs the neuron's lock, and does not touch the neuron while
+/// another command holds the lock.
+#[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
+fn test_refresh_changed_neuron_fails_while_neuron_is_locked() {
+    // Step 1 and 2: Prepare the world, and refresh the neuron.
+    let (response, cached_neuron_stake_e8s, in_flight_command, original_stake_e8s) =
+        refresh_neuron_while_locked_by_disburse(true /* is_balance_changed */);
+
+    // Step 3: Verify results.
+
+    // Step 3.1: The refresh failed, because the neuron is locked.
+    let error = match response {
+        CommandResponse::Error(error) => error,
+        other => panic!("Expected the refresh to fail, but got {other:?}"),
+    };
+    assert_eq!(
+        ErrorType::try_from(error.error_type),
+        Ok(ErrorType::LedgerUpdateOngoing),
+        "{error:?}"
+    );
+    assert_eq!(cached_neuron_stake_e8s, original_stake_e8s);
+
+    // Step 3.2: The disburse still holds the lock.
+    let in_flight_command = in_flight_command.expect("The neuron should still be locked.");
+    assert_eq!(in_flight_command.timestamp, 42);
 }
 
 #[test]

@@ -51,11 +51,32 @@ process ( Refresh_Neuron \in Refresh_Neuron_Process_Ids )
             \* Not so useful for model checking, but needed to follow the code traces.
             goto Done;
         } or {
-        with(nid \in DOMAIN(neuron) \ locks) {
+        \* The balance is first queried without taking the lock, so the neuron may
+        \* be locked by another process.
+        with(nid \in DOMAIN(neuron)) {
             neuron_id := nid;
-            locks := locks \union {neuron_id};
             governance_to_ledger := Append(governance_to_ledger, request(self, account_balance(neuron[nid].account)));
         };
+        };
+    RefreshNeuron_Unlocked_WaitForBalanceQuery:
+        \* Only if the balance meets the minimum stake and differs from the cached stake, does
+        \* the process try to take the lock and query the balance again. If the neuron is
+        \* already locked, or no longer exists (another process may have removed it while
+        \* it was locked), the Rust code returns an error.
+        with(answer \in { resp \in ledger_to_governance : resp.caller = self };
+             b = VariantGetOrElse("BalanceQueryOk", answer.response, 0)) {
+            ledger_to_governance := ledger_to_governance \ {answer};
+            if(answer.response /= Variant("Fail", UNIT)
+               /\ b >= MIN_STAKE
+               /\ neuron_id \in DOMAIN(neuron)
+               /\ b /= neuron[neuron_id].cached_stake
+               /\ neuron_id \notin locks) {
+                locks := locks \union {neuron_id};
+                governance_to_ledger := Append(governance_to_ledger, request(self, account_balance(neuron[neuron_id].account)));
+            } else {
+                refresh_neuron_reset_local_vars();
+                goto Done;
+            };
         };
     WaitForBalanceQuery:
         \* Note that the "with" construct implicitly awaits until the set of values to draw from is non-empty
@@ -75,7 +96,7 @@ process ( Refresh_Neuron \in Refresh_Neuron_Process_Ids )
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "e3951dde" /\ chksum(tla) = "d922bb3e")
+\* BEGIN TRANSLATION (chksum(pcal) = "97e07a6c" /\ chksum(tla) = "e44ee046")
 VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
           ledger_to_governance, spawning_neurons, neuron_id
 
@@ -97,14 +118,34 @@ Init == (* Global variables *)
 
 RefreshNeuron1(self) == /\ pc[self] = "RefreshNeuron1"
                         /\ \/ /\ pc' = [pc EXCEPT ![self] = "Done"]
-                              /\ UNCHANGED <<locks, governance_to_ledger, neuron_id>>
-                           \/ /\ \E nid \in DOMAIN(neuron) \ locks:
+                              /\ UNCHANGED <<governance_to_ledger, neuron_id>>
+                           \/ /\ \E nid \in DOMAIN(neuron):
                                    /\ neuron_id' = [neuron_id EXCEPT ![self] = nid]
-                                   /\ locks' = (locks \union {neuron_id'[self]})
                                    /\ governance_to_ledger' = Append(governance_to_ledger, request(self, account_balance(neuron[nid].account)))
-                              /\ pc' = [pc EXCEPT ![self] = "WaitForBalanceQuery"]
-                        /\ UNCHANGED << neuron, neuron_id_by_account,
+                              /\ pc' = [pc EXCEPT ![self] = "RefreshNeuron_Unlocked_WaitForBalanceQuery"]
+                        /\ UNCHANGED << neuron, neuron_id_by_account, locks,
                                         ledger_to_governance, spawning_neurons >>
+
+RefreshNeuron_Unlocked_WaitForBalanceQuery(self) == /\ pc[self] = "RefreshNeuron_Unlocked_WaitForBalanceQuery"
+                                                    /\ \E answer \in { resp \in ledger_to_governance : resp.caller = self }:
+                                                         LET b == VariantGetOrElse("BalanceQueryOk", answer.response, 0) IN
+                                                           /\ ledger_to_governance' = ledger_to_governance \ {answer}
+                                                           /\ IF answer.response /= Variant("Fail", UNIT)
+                                                                 /\ b >= MIN_STAKE
+                                                                 /\ neuron_id[self] \in DOMAIN(neuron)
+                                                                 /\ b /= neuron[neuron_id[self]].cached_stake
+                                                                 /\ neuron_id[self] \notin locks
+                                                                 THEN /\ locks' = (locks \union {neuron_id[self]})
+                                                                      /\ governance_to_ledger' = Append(governance_to_ledger, request(self, account_balance(neuron[neuron_id[self]].account)))
+                                                                      /\ pc' = [pc EXCEPT ![self] = "WaitForBalanceQuery"]
+                                                                      /\ UNCHANGED neuron_id
+                                                                 ELSE /\ neuron_id' = [neuron_id EXCEPT ![self] = 0]
+                                                                      /\ pc' = [pc EXCEPT ![self] = "Done"]
+                                                                      /\ UNCHANGED << locks,
+                                                                                      governance_to_ledger >>
+                                                    /\ UNCHANGED << neuron,
+                                                                    neuron_id_by_account,
+                                                                    spawning_neurons >>
 
 WaitForBalanceQuery(self) == /\ pc[self] = "WaitForBalanceQuery"
                              /\ \E answer \in { resp \in ledger_to_governance : resp.caller = self }:
@@ -124,7 +165,9 @@ WaitForBalanceQuery(self) == /\ pc[self] = "WaitForBalanceQuery"
                                              governance_to_ledger,
                                              spawning_neurons >>
 
-Refresh_Neuron(self) == RefreshNeuron1(self) \/ WaitForBalanceQuery(self)
+Refresh_Neuron(self) == RefreshNeuron1(self)
+                           \/ RefreshNeuron_Unlocked_WaitForBalanceQuery(self)
+                           \/ WaitForBalanceQuery(self)
 
 (* Allow infinite stuttering to prevent deadlock on termination. *)
 Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
