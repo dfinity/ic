@@ -29,7 +29,8 @@ pub struct IngressPoolObject {
     byte_size: usize,
 
     /// The result of [`extract_effective_canister_id`] for the ingress message,
-    /// computed on first use by [`IngressPoolObject::effective_canister_id`].
+    /// computed on first use by the method
+    /// [`IngressPoolObject::effective_canister_id`].
     effective_canister_id: OnceLock<Result<Option<CanisterId>, InvalidManagementMessage>>,
 }
 
