@@ -7,7 +7,7 @@ use crate::manifest::{
     filter_out_zero_chunks,
     hash::{ManifestHash, chunk_hasher},
     hash_plan, manifest_hash, manifest_hash_v1, manifest_hash_v2, meta_manifest_hash,
-    open_for_hashing, read_chunk, validate_chunk, validate_manifest,
+    observe_file_sizes, open_for_hashing, read_chunk, validate_chunk, validate_manifest,
     validate_manifest_internal_consistency, validate_meta_manifest, validate_sub_manifest,
 };
 use crate::state_sync::types::{
@@ -18,7 +18,9 @@ use crate::state_sync::types::{
 use ic_crypto_sha2::Sha256;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_state_layout::{CANISTER_FILE, CheckpointLayout, UNVERIFIED_CHECKPOINT_MARKER};
+use ic_state_layout::{
+    BIN_FILE, CANISTER_FILE, CheckpointLayout, OVERLAY, UNVERIFIED_CHECKPOINT_MARKER,
+};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash};
@@ -1270,28 +1272,57 @@ fn aligned_buffer_is_aligned_and_never_shrinks() {
 #[test]
 fn read_chunk_reads_whole_and_partial_chunks() {
     let dir = tmpdir("read_chunk");
-    let path = dir.path().join("file");
-    let data: Vec<u8> = (0..3 * 4096 + 123).map(|i| (i % 251) as u8).collect();
-    fs::write(&path, &data).unwrap();
-    let file = open_for_hashing(&path).unwrap();
-    let mut buffer = AlignedBuffer::with_capacity(8192);
+    // A protobuf is opened buffered, anything else with `O_DIRECT`.
+    for name in ["file", CANISTER_FILE] {
+        let path = dir.path().join(name);
+        let data: Vec<u8> = (0..3 * 4096 + 123).map(|i| (i % 251) as u8).collect();
+        fs::write(&path, &data).unwrap();
+        let file = open_for_hashing(&path).unwrap();
+        let mut buffer = AlignedBuffer::with_capacity(8192);
 
-    assert_eq!(
-        read_chunk(&file, &mut buffer, 0, 8192).unwrap(),
-        &data[..8192]
-    );
-    // The last chunk, ending before the end of its last block.
-    assert_eq!(
-        read_chunk(&file, &mut buffer, 8192, 4096 + 123).unwrap(),
-        &data[8192..]
-    );
-    // The file ends before the chunk does.
-    assert_eq!(
-        read_chunk(&file, &mut buffer, 8192, 8192)
-            .unwrap_err()
-            .kind(),
-        std::io::ErrorKind::UnexpectedEof
-    );
+        assert_eq!(
+            read_chunk(&file, &mut buffer, 0, 8192).unwrap(),
+            &data[..8192]
+        );
+        // The last chunk, ending before the end of its last block.
+        assert_eq!(
+            read_chunk(&file, &mut buffer, 8192, 4096 + 123).unwrap(),
+            &data[8192..]
+        );
+        // The file ends before the chunk does.
+        assert_eq!(
+            read_chunk(&file, &mut buffer, 8192, 8192)
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::UnexpectedEof
+        );
+    }
+}
+
+#[test]
+fn observe_file_sizes_by_file_type() {
+    let metrics_registry = MetricsRegistry::new();
+    let metrics = ManifestMetrics::new(&metrics_registry);
+    let file_table = [
+        "canister_states/00000000000000010101/canister.pbuf",
+        "canister_states/00000000000000010101/vmemory_0.bin",
+        "canister_states/00000000000000010101/0000000000000064_0000_vmemory_0.overlay",
+        "system_metadata.pbuf",
+    ]
+    .map(|path| FileInfo {
+        relative_path: path.into(),
+        size_bytes: 1,
+        hash: [0; 32],
+    })
+    .to_vec();
+    let manifest = Manifest::new(CURRENT_STATE_SYNC_VERSION, file_table, vec![]);
+
+    observe_file_sizes(&manifest, &manifest, &metrics);
+
+    for file_type in [CANISTER_FILE, BIN_FILE, OVERLAY, "other"] {
+        let histogram = metrics.file_size_bytes.with_label_values(&[file_type]);
+        assert_eq!(histogram.get_sample_count(), 1, "{file_type}");
+    }
 }
 
 #[test]

@@ -249,7 +249,8 @@ pub struct BaseManifestInfo {
     pub(crate) base_checkpoint: CheckpointLayout<ReadOnly>,
 }
 
-/// File types for which we collect size metrics.
+/// File types for which we collect size metrics: whole file names (e.g.
+/// `CANISTER_FILE`) or extensions (e.g. `OVERLAY`).
 /// Files that don't match any of these types will be categorized as "other" as a fallback.
 /// This helps evaluate whether the current file grouping selection and threshold is optimal.
 pub(crate) const FILE_TYPES_TO_OBSERVE_SIZE: &[&str] = &[
@@ -275,9 +276,10 @@ pub(crate) fn observe_file_sizes(
         .collect();
 
     for file_info in new_manifest.file_table.iter() {
+        let path = &file_info.relative_path;
         let file_type = FILE_TYPES_TO_OBSERVE_SIZE
             .iter()
-            .find(|&&file_type| file_info.relative_path.ends_with(file_type))
+            .find(|&&t| [path.file_name(), path.extension()].contains(&Some(OsStr::new(t))))
             .unwrap_or(&"other");
 
         metrics
@@ -413,8 +415,8 @@ impl AlignedBuffer {
 /// Computes file_table and chunk_table of a manifest using a parallel algorithm.
 /// All the parallel work is spawned in the specified thread pool.
 ///
-/// Panics if `max_chunk_size` isn't a multiple of `DIRECT_IO_ALIGN`: chunks
-/// are read with `O_DIRECT` (see `read_chunk`).
+/// Panics if `max_chunk_size` isn't a multiple of `DIRECT_IO_ALIGN`: most
+/// chunks are read with `O_DIRECT` (see `read_chunk`).
 fn build_chunk_table_parallel(
     thread_pool: &mut scoped_threadpool::Pool,
     metrics: &ManifestMetrics,
@@ -595,9 +597,17 @@ fn hash_span(
 /// Opens the file at `path` for reading its chunks with `O_DIRECT`, bypassing
 /// the page cache: a manifest reads each chunk it hashes once, hundreds of GB
 /// per checkpoint on a large subnet, which through the page cache would evict
-/// the pages execution uses. Opens the file buffered if the file system doesn't
-/// support `O_DIRECT`, or the OS has none (only Linux does).
+/// the pages execution uses.
+///
+/// Opens protobufs buffered, though: nearly all were just written through the
+/// page cache, by the checkpoint being hashed, so they're still cached, and
+/// `O_DIRECT` would instead write back those still dirty, then read them all
+/// from disk. Also opens the file buffered if the file system doesn't support
+/// `O_DIRECT`, or the OS has none (only Linux does).
 fn open_for_hashing(path: &Path) -> std::io::Result<File> {
+    if path.extension() == Some(OsStr::new("pbuf")) {
+        return File::open(path);
+    }
     let mut options = std::fs::OpenOptions::new();
     options.read(true);
     #[cfg(target_os = "linux")]
