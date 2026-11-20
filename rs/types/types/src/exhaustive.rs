@@ -592,9 +592,9 @@ impl ExhaustiveSet for CryptoHash {
         // Besides random hashes, artifacts contain the all-zero hash, which stands in for hashes
         // that don't exist, e.g. the parents of the block and the random beacon of a
         // genesis/recovery/post-split CUPs, and the state hash of genesis CUPs.
-        let mut random = vec![0; 32];
+        let mut random = [0; CryptoHash::LEN];
         rng.fill_bytes(&mut random);
-        vec![Self(random), Self(vec![0; 32])]
+        vec![Self::from(random), Self::from([0; CryptoHash::LEN])]
     }
 }
 

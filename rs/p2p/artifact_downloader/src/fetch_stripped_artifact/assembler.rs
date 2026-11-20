@@ -1607,7 +1607,7 @@ mod tests {
         proto
             .stripped_canister_http_responses
             .push(pb::StrippedCanisterHttpResponse {
-                content_hash: ic_types::crypto::crypto_hash(&response).get().0,
+                content_hash: ic_types::crypto::crypto_hash(&response).get().into_vec(),
             });
         assert_eq!(proto.stripped_canister_http_responses.len(), 2);
         let stripped = StrippedBlockProposal::try_from(proto).unwrap();

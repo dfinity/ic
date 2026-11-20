@@ -122,7 +122,7 @@ mod tests {
         if certification_version >= V24 {
             let height = vec![edge("height"), leb_num(height)];
             let prev_state_hash = if let Some(hash) = prev_state_hash {
-                vec![edge("prev_state_hash"), E::VisitBlob(hash.get().0)]
+                vec![edge("prev_state_hash"), E::VisitBlob(hash.get().into_vec())]
             } else {
                 vec![]
             };
@@ -140,7 +140,9 @@ mod tests {
                 edge("metadata"),
                 E::VisitBlob(encode_metadata(SystemMetadataV23 {
                     deprecated_id_counter: None,
-                    prev_state_hash: prev_state_hash.as_ref().map(|hash| hash.clone().get().0),
+                    prev_state_hash: prev_state_hash
+                        .as_ref()
+                        .map(|hash| hash.clone().get().into_vec()),
                 })),
             ])
         }

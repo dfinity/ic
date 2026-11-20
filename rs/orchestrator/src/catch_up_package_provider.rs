@@ -525,7 +525,7 @@ impl CatchUpPackageProvider {
             cup.content.registry_version(),
             cup.content.height(),
             cup.is_signed(),
-            hex::encode(&cup.content.state_hash.as_ref().0),
+            hex::encode(cup.content.state_hash.get_ref()),
             cup.content
                 .block
                 .get_value()

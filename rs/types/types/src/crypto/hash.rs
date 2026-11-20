@@ -453,7 +453,7 @@ impl<T> CryptoHashable for T where T: CryptoHashDomain + Hash {}
 /// TODO: Turn the vector into a fixed-size array (`[u8; CryptoHash::LEN]`) once all production code
 /// indeed uses 32-byte vectors (i.e. once #12197 reaches mainnet)
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
-pub struct CryptoHash(#[serde(with = "serde_bytes")] pub Vec<u8>);
+pub struct CryptoHash(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl CryptoHash {
     /// The length in bytes of the hashes returned by [`crypto_hash`], which every `CryptoHash`
@@ -468,11 +468,29 @@ impl CryptoHash {
             0xb1, 0xcf, 0xc1, 0xc6,
         ])
     }
+
+    /// Returns the bytes of the hash.
+    pub fn into_vec(self) -> Vec<u8> {
+        self.0
+    }
 }
 
 impl From<[u8; CryptoHash::LEN]> for CryptoHash {
     fn from(bytes: [u8; CryptoHash::LEN]) -> Self {
         Self(bytes.to_vec())
+    }
+}
+
+/// Wraps the given bytes as they are, whatever their length.
+impl From<Vec<u8>> for CryptoHash {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+}
+
+impl AsRef<[u8]> for CryptoHash {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
     }
 }
 
@@ -503,7 +521,7 @@ pub type CryptoHashOf<T> = Id<T, CryptoHash>;
 pub fn crypto_hash<T: CryptoHashable>(data: &T) -> CryptoHashOf<T> {
     let mut hash = Sha256::new_with_context(&DomainSeparationContext::new(data.domain()));
     data.hash(&mut hash);
-    CryptoHashOf::new(CryptoHash(hash.finish().to_vec()))
+    CryptoHashOf::new(CryptoHash::from(hash.finish()))
 }
 
 /// Convert a CryptoHashable into Randomness.

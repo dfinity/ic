@@ -1741,7 +1741,7 @@ fn divergence_response_into_reject(
     response
         .shares
         .into_iter()
-        .map(|share| share.content.metadata.content_hash.get().0)
+        .map(|share| share.content.metadata.content_hash)
         .for_each(|hash| {
             hash_counts
                 .entry(hash)
@@ -1758,7 +1758,7 @@ fn divergence_response_into_reject(
     let hash_counts = hash_counts
         .iter()
         .rev()
-        .map(|(hash, count)| format!("[{}: {}]", hex::encode(hash), count))
+        .map(|(hash, count)| format!("[{}: {}]", hex::encode(hash.get_ref()), count))
         .collect::<Vec<_>>();
 
     Some(ConsensusResponse::new(

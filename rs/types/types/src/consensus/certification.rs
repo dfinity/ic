@@ -145,8 +145,10 @@ impl From<&CertificationMessageHash> for pb::CertificationMessageHash {
     fn from(value: &CertificationMessageHash) -> Self {
         use pb::certification_message_hash::Kind;
         let kind = match value.clone() {
-            CertificationMessageHash::Certification(x) => Kind::Certification(x.get().0),
-            CertificationMessageHash::CertificationShare(x) => Kind::CertificationShare(x.get().0),
+            CertificationMessageHash::Certification(x) => Kind::Certification(x.get().into_vec()),
+            CertificationMessageHash::CertificationShare(x) => {
+                Kind::CertificationShare(x.get().into_vec())
+            }
         };
         Self { kind: Some(kind) }
     }
@@ -162,10 +164,10 @@ impl TryFrom<pb::CertificationMessageHash> for CertificationMessageHash {
 
         Ok(match kind {
             Kind::Certification(x) => {
-                CertificationMessageHash::Certification(CryptoHashOf::new(CryptoHash(x)))
+                CertificationMessageHash::Certification(CryptoHashOf::new(CryptoHash::from(x)))
             }
             Kind::CertificationShare(x) => {
-                CertificationMessageHash::CertificationShare(CryptoHashOf::new(CryptoHash(x)))
+                CertificationMessageHash::CertificationShare(CryptoHashOf::new(CryptoHash::from(x)))
             }
         })
     }
@@ -188,13 +190,13 @@ impl CertificationContent {
 
 impl CountBytes for CertificationContent {
     fn count_bytes(&self) -> usize {
-        self.hash.get_ref().0.len()
+        self.hash.get_ref().as_ref().len()
     }
 }
 
 impl SignedBytesWithoutDomainSeparator for CertificationContent {
     fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
-        bytes.extend_from_slice(&self.hash.get_ref().0);
+        bytes.extend_from_slice(self.hash.get_ref().as_ref());
     }
 }
 

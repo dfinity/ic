@@ -351,7 +351,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
             prev_state_hash: item
                 .prev_state_hash
                 .clone()
-                .map(|prev_hash| prev_hash.get().0),
+                .map(|prev_hash| prev_hash.get().into_vec()),
             batch_time_nanos: item.batch_time.as_nanos_since_unix_epoch(),
             streams: item
                 .streams
@@ -603,7 +603,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             subnet_merged: false,
             canister_allocation_ranges,
             last_generated_canister_id,
-            prev_state_hash: item.prev_state_hash.map(|b| CryptoHash(b).into()),
+            prev_state_hash: item.prev_state_hash.map(|b| CryptoHash::from(b).into()),
             batch_time,
             // Ingress history is persisted separately. We rely on `load_checkpoint()` to
             // properly set this value.

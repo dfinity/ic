@@ -284,7 +284,7 @@ fn build_fully_replicated(
     // Build a metadata group with a different content hash; signers are taken
     // from a disjoint range so signer sets don't overlap.
     let divergent_metadata = CanisterHttpResponseMetadata {
-        content_hash: CryptoHashOf::new(CryptoHash(divergent_hash.to_vec())),
+        content_hash: CryptoHashOf::new(CryptoHash::from(divergent_hash)),
         ..metadata
     };
     let divergent_shares: Vec<_> = (num_main_shares..num_main_shares + num_divergent_shares)
@@ -510,7 +510,7 @@ fn prop_random_metadata() -> impl Strategy<Value = CanisterHttpResponseMetadata>
     any::<(u64, [u8; 32], u32, bool)>().prop_map(|(id, hash, content_size, is_reject)| {
         CanisterHttpResponseMetadata {
             id: CallbackId::new(id),
-            content_hash: CryptoHashOf::new(CryptoHash(hash.to_vec())),
+            content_hash: CryptoHashOf::new(CryptoHash::from(hash)),
             content_size,
             is_reject,
             replica_version: test_replica_version(),
@@ -525,7 +525,7 @@ fn prop_random_metadata() -> impl Strategy<Value = CanisterHttpResponseMetadata>
 fn prop_divergence(subnet_size: usize) -> impl Strategy<Value = Vec<CanisterHttpResponseShare>> {
     (1..subnet_size, prop_random_metadata(), any::<[u8; 32]>()).prop_map(
         |(num_nodes, mut metadata, new_hash)| {
-            metadata.content_hash = CryptoHashOf::new(CryptoHash(new_hash.to_vec()));
+            metadata.content_hash = CryptoHashOf::new(CryptoHash::from(new_hash));
             (1..=num_nodes)
                 .map(|node_id| metadata_to_share(node_id as u64, &metadata))
                 .collect()

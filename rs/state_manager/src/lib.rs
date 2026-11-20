@@ -1037,7 +1037,7 @@ struct CertificationMetadata {
 }
 
 fn crypto_hash_of_partial_state(d: &Digest) -> CryptoHashOfPartialState {
-    CryptoHashOfPartialState::from(CryptoHash(d.0.to_vec()))
+    CryptoHashOfPartialState::from(CryptoHash::from(d.0))
 }
 
 #[derive(Clone)]
@@ -2988,7 +2988,7 @@ fn initial_state(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> Labele
 }
 
 fn crypto_hash_of_tree(t: &HashTree) -> CryptoHash {
-    CryptoHash(t.root_hash().0.to_vec())
+    CryptoHash::from(t.root_hash().0)
 }
 
 fn state_height_witness(
@@ -4396,7 +4396,7 @@ impl CertifiedStreamStore for StateManagerImpl {
                 log,
             );
 
-            let hash_matches = digest.as_bytes() == certification.content.hash.get_ref().0;
+            let hash_matches = digest.as_bytes() == certification.content.hash.get_ref().as_ref();
             let verification_status =
                 verifier.validate(remote_subnet, certification, registry_version);
             let signature_verifies = verification_status.is_ok();
@@ -4618,9 +4618,7 @@ fn maliciously_return_wrong_hash(
         );
         CryptoHashOfState::from(CryptoHash::from([0; CryptoHash::LEN]))
     } else {
-        CryptoHashOfState::from(CryptoHash(
-            crate::manifest::manifest_hash(manifest).to_vec(),
-        ))
+        CryptoHashOfState::from(CryptoHash::from(crate::manifest::manifest_hash(manifest)))
     }
 }
 

@@ -50,7 +50,7 @@ impl TryFrom<pb::StrippedIngressMessage> for SignedIngressId {
     fn try_from(value: pb::StrippedIngressMessage) -> Result<Self, Self::Error> {
         let ingress_message_id =
             try_from_option_field(value.stripped, "StrippedIngressMessage::stripped")?;
-        let ingress_bytes_hash = CryptoHashOf::from(CryptoHash(value.ingress_bytes_hash));
+        let ingress_bytes_hash = CryptoHashOf::from(CryptoHash::from(value.ingress_bytes_hash));
 
         Ok(SignedIngressId {
             ingress_message_id,

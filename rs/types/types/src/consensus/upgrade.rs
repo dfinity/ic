@@ -172,7 +172,7 @@ impl TryFrom<pb::UpgradeAuthorizationShare> for UpgradeAuthorizationShare {
 impl From<UpgradeAuthorizationShareId> for pb::UpgradeAuthorizationShareId {
     fn from(id: UpgradeAuthorizationShareId) -> Self {
         Self {
-            hash: id.hash.get().0,
+            hash: id.hash.get().into_vec(),
             height: id.height.get(),
         }
     }
@@ -183,7 +183,7 @@ impl TryFrom<pb::UpgradeAuthorizationShareId> for UpgradeAuthorizationShareId {
 
     fn try_from(id: pb::UpgradeAuthorizationShareId) -> Result<Self, Self::Error> {
         Ok(Self {
-            hash: CryptoHash(id.hash).into(),
+            hash: CryptoHash::from(id.hash).into(),
             height: Height::from(id.height),
         })
     }

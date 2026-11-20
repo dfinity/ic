@@ -81,9 +81,8 @@ impl Default for FakeStateManager {
 impl FakeStateManager {
     pub fn new() -> Self {
         let height = Height::new(0);
-        let fake_hash = CryptoHashOf::from(CryptoHash(
-            Sha256::hash(&height.get().to_le_bytes()).to_vec(),
-        ));
+        let fake_hash =
+            CryptoHashOf::from(CryptoHash::from(Sha256::hash(&height.get().to_le_bytes())));
         let state = initial_state().take();
         let (height_witness, partial_hash) =
             Self::state_height_witness_and_partial_hash(&state, height);
@@ -128,7 +127,7 @@ impl FakeStateManager {
         let hash_tree = hash_lazy_tree(&lazy_tree, None).unwrap();
         let height_witness = compute_state_height_witness(&lazy_tree, &hash_tree);
         let partial_hash =
-            CryptoHashOfPartialState::from(CryptoHash(hash_tree.root_hash().0.to_vec()));
+            CryptoHashOfPartialState::from(CryptoHash::from(hash_tree.root_hash().0));
 
         (height_witness, partial_hash)
     }
@@ -285,9 +284,8 @@ impl StateManager for FakeStateManager {
             *h = h.increment();
             *h
         };
-        let fake_hash = CryptoHashOf::from(CryptoHash(
-            Sha256::hash(&height.get().to_le_bytes()).to_vec(),
-        ));
+        let fake_hash =
+            CryptoHashOf::from(CryptoHash::from(Sha256::hash(&height.get().to_le_bytes())));
         let (height_witness, partial_hash) =
             Self::state_height_witness_and_partial_hash(&state, height);
         self.states.write().unwrap().push(Snapshot {

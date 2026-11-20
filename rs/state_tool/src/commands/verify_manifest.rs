@@ -124,7 +124,7 @@ pub fn verify_manifest(file: File) -> Result<StateHash, String> {
     let manifest = Manifest::new(version, file_table, chunk_table);
     validate_manifest(
         &manifest,
-        &CryptoHashOfState::from(CryptoHash(root_hash.to_vec())),
+        &CryptoHashOfState::from(CryptoHash::from(root_hash)),
     )
     .map_err(|err| format!("Failed to validate the manifest: {err}"))?;
 

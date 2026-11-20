@@ -69,7 +69,7 @@ impl From<DkgMessageId> for pb::DkgMessageId {
     fn from(id: DkgMessageId) -> Self {
         Self {
             height: id.height.get(),
-            hash: id.hash.clone().get().0,
+            hash: id.hash.clone().get().into_vec(),
         }
     }
 }
@@ -80,7 +80,7 @@ impl TryFrom<pb::DkgMessageId> for DkgMessageId {
     fn try_from(id: pb::DkgMessageId) -> Result<Self, Self::Error> {
         Ok(Self {
             height: Height::from(id.height),
-            hash: CryptoHash(id.hash.clone()).into(),
+            hash: CryptoHash::from(id.hash.clone()).into(),
         })
     }
 }
@@ -905,7 +905,7 @@ mod tests {
         fn message_id(height: u64, hash: [u8; CryptoHash::LEN]) -> DkgMessageId {
             DkgMessageId {
                 height: Height::from(height),
-                hash: CryptoHashOf::from(CryptoHash(hash.to_vec())),
+                hash: CryptoHashOf::from(CryptoHash::from(hash)),
             }
         }
 

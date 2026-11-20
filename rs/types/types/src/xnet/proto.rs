@@ -28,14 +28,14 @@ impl From<ReplicaVersionParseError> for ProxyDecodeError {
 impl From<CertificationContent> for pb::CertificationContent {
     fn from(value: CertificationContent) -> Self {
         Self {
-            hash: value.hash.get().0,
+            hash: value.hash.get().into_vec(),
         }
     }
 }
 impl From<pb::CertificationContent> for CertificationContent {
     fn from(value: pb::CertificationContent) -> Self {
         CertificationContent {
-            hash: CryptoHashOfPartialState::new(CryptoHash(value.hash)),
+            hash: CryptoHashOfPartialState::new(CryptoHash::from(value.hash)),
         }
     }
 }

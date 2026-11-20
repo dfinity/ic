@@ -357,7 +357,7 @@ impl CertificateBuilder {
         let witness_gen = b.witness_generator().unwrap();
         let hash_tree_digest = witness_gen.hash_tree().digest();
         let mixed_tree = witness_gen.mixed_hash_tree(tree).unwrap();
-        let root_hash = CryptoHashOfPartialState::from(CryptoHash(hash_tree_digest.to_vec()));
+        let root_hash = CryptoHashOfPartialState::from(CryptoHash::from(hash_tree_digest.0));
 
         let sig = if let Some(override_sig) = &self.override_sig {
             CombinedThresholdSigOf::from(override_sig.clone())

@@ -1334,7 +1334,7 @@ impl CountBytes for CanisterHttpResponseMetadata {
             replica_version,
         } = self;
         size_of_val(id)
-            + content_hash.get_ref().0.len()
+            + content_hash.get_ref().as_ref().len()
             + size_of_val(content_size)
             + size_of_val(is_reject)
             + replica_version.as_ref().len()

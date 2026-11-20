@@ -231,7 +231,7 @@ fn test(env: TestEnv) {
             .time
             .as_nanos_since_unix_epoch()
             + 1000,
-        state_hash: cup.content.state_hash.get().0,
+        state_hash: cup.content.state_hash.get().into_vec(),
         replacement_nodes: None,
         registry_store_uri: None,
         chain_key_config: None,

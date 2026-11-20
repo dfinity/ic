@@ -108,7 +108,7 @@ pub(crate) fn check_receipt_bounds(
         });
     }
 
-    let length = receipt.content_hash().get_ref().0.len();
+    let length = receipt.content_hash().get_ref().as_ref().len();
     if length != Sha256::DIGEST_LEN {
         return Err(InvalidCanisterHttpPayloadReason::InvalidContentHashLength {
             callback_id: receipt.id(),
