@@ -114,10 +114,10 @@ prop_compose! {
     pub fn arbitrary_rsa_public_key()(
         random_bytes in proptest::array::uniform32(any::<u8>())
     ) -> CspPublicKey {
-        use ::rsa::{RsaPrivateKey, RsaPublicKey, pkcs8::EncodePublicKey};
+        use ::rsa::{PrivateKey, PublicKey, pkcs8::EncodePublicKey};
         let rng = &mut ChaCha20Rng::from_seed(random_bytes);
-        let priv_key = RsaPrivateKey::new(rng, 2048).expect("failed to generate a key");
-        let pub_key = RsaPublicKey::from(&priv_key);
+        let priv_key = PrivateKey::new(&mut RandCore10(rng), 2048).expect("failed to generate a key");
+        let pub_key = PublicKey::from(&priv_key);
         CspPublicKey::RsaSha256(
             IcRsaPublicKey::from_der_spki(
                 pub_key.to_public_key_der().expect("failed to convert to DER").as_ref()
@@ -125,6 +125,28 @@ prop_compose! {
         )
     }
 }
+
+/// Makes a rand 0.8 RNG usable as the rand_core 0.10 RNG that `rsa` takes.
+struct RandCore10<'a, R>(&'a mut R);
+
+impl<R: rand::RngCore> ::rsa::rand_core::TryRng for RandCore10<'_, R> {
+    type Error = std::convert::Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        Ok(self.0.next_u32())
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        Ok(self.0.next_u64())
+    }
+
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
+        self.0.fill_bytes(dst);
+        Ok(())
+    }
+}
+
+impl<R: rand::RngCore + rand::CryptoRng> ::rsa::rand_core::TryCryptoRng for RandCore10<'_, R> {}
 
 prop_compose! {
     pub fn arbitrary_multi_bls12381_combined_signature()(

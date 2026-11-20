@@ -15,7 +15,7 @@ enum CosePublicKey {
 }
 
 /// The maximum length of a CBOR-encoded COSE key. The largest supported key
-/// (RSA-8192) is ~1.1 KiB.
+/// (RSA-4096) is ~0.5 KiB.
 pub const MAX_COSE_PUBLIC_KEY_LEN: usize = 4096;
 
 // see https://tools.ietf.org/html/rfc8152 section 8.1

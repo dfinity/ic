@@ -85,6 +85,20 @@ pub fn ensure_file_extension(file: &Path, ext: &str) -> io::Result<()> {
     ))
 }
 
+/// Parses a PEM document with type label `PUBLIC KEY` whose payload is exactly one DER-encoded
+/// X.509 SubjectPublicKeyInfo, which is decoded like `PemOrDer::Der` input.
+///
+/// Not `DecodePem::from_pem`: der's streaming `PemReader` does not reject unconsumed data at the
+/// end of a nested SEQUENCE, so it accepts malformed keys that `from_der` rejects.
+// TODO: use `DecodePem::from_pem` once we upgrade to a der that fixes
+// https://github.com/RustCrypto/formats/issues/2554.
+fn spki_from_pem(pem: &[u8]) -> der::Result<spki::SubjectPublicKeyInfoOwned> {
+    use der::{Decode, pem::PemLabel};
+    let (label, der_bytes) = der::pem::decode_vec(pem)?;
+    spki::SubjectPublicKeyInfoOwned::validate_pem_label(label)?;
+    spki::SubjectPublicKeyInfoOwned::from_der(&der_bytes)
+}
+
 //Runs in self-signed mode, with options extract from CliArgs
 fn run_self_signed(fname: Option<PathBuf>, pod: Option<PemOrDer>) -> io::Result<()> {
     let mut buffer: Vec<u8> = Vec::new();
@@ -149,15 +163,12 @@ fn run_self_signed(fname: Option<PathBuf>, pod: Option<PemOrDer>) -> io::Result<
                 )
             })?
         }
-        PemOrDer::Pem => {
-            use x509_cert::der::DecodePem;
-            spki::SubjectPublicKeyInfoOwned::from_pem(&buffer).map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("input is not a PEM-encoded X.509 SubjectPublicKeyInfo (SPKI): {e}.",),
-                )
-            })?
-        }
+        PemOrDer::Pem => spki_from_pem(&buffer).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("input is not a PEM-encoded X.509 SubjectPublicKeyInfo (SPKI): {e}.",),
+            )
+        })?,
     };
     use der::Encode;
     let pkey_der = pkey_spki.to_der().map_err(|e| {

@@ -117,7 +117,7 @@ enum GenericIdentityInner<'a> {
     Ed25519(ic_ed25519::PrivateKey),
     Canister(CanisterSigner<'a>),
     WebAuthnEcdsaSecp256r1(ic_secp256r1::PrivateKey),
-    WebAuthnRsaPkcs1(rsa::RsaPrivateKey),
+    WebAuthnRsaPkcs1(rsa::PrivateKey),
     WebAuthnEd25519(ic_ed25519::PrivateKey),
 }
 
@@ -158,8 +158,9 @@ impl<'a> GenericIdentity<'a> {
                 (GenericIdentityInner::WebAuthnEcdsaSecp256r1(sk), pk)
             }
             GenericIdentityType::WebAuthnRsaPkcs1 => {
-                let sk = rsa::RsaPrivateKey::new(rng, 2048).expect("RSA keygen failed");
-                let pk = webauthn_cose_wrap_rsa_pkcs1_key(&rsa::RsaPublicKey::from(&sk));
+                let sk =
+                    rsa::PrivateKey::new(&mut RandCore10(rng), 2048).expect("RSA keygen failed");
+                let pk = webauthn_cose_wrap_rsa_pkcs1_key(&rsa::PublicKey::from(&sk));
                 (GenericIdentityInner::WebAuthnRsaPkcs1(sk), pk)
             }
             GenericIdentityType::WebAuthnEd25519 => {
@@ -2570,11 +2571,8 @@ fn wrap_cose_key_in_der_spki(cose: &serde_cbor::Value) -> Vec<u8> {
     subject_public_key_info_der(webauthn_key_oid, &pk_cose).unwrap()
 }
 
-fn webauthn_cose_wrap_rsa_pkcs1_key(pk: &rsa::RsaPublicKey) -> Vec<u8> {
+fn webauthn_cose_wrap_rsa_pkcs1_key(pk: &rsa::PublicKey) -> Vec<u8> {
     use rsa::traits::PublicKeyParts;
-
-    let n = pk.n();
-    let e = pk.e();
 
     let mut map = std::collections::BTreeMap::new();
 
@@ -2602,8 +2600,8 @@ fn webauthn_cose_wrap_rsa_pkcs1_key(pk: &rsa::RsaPublicKey) -> Vec<u8> {
 
     map.insert(COSE_PARAM_KTY, COSE_PARAM_KTY_RSA);
     map.insert(COSE_PARAM_ALG, COSE_PARAM_ALG_RS256);
-    map.insert(COSE_PARAM_RSA_E, Value::Bytes(e.to_bytes_be()));
-    map.insert(COSE_PARAM_RSA_N, Value::Bytes(n.to_bytes_be()));
+    map.insert(COSE_PARAM_RSA_E, Value::Bytes(pk.e_bytes().into_vec()));
+    map.insert(COSE_PARAM_RSA_N, Value::Bytes(pk.n_bytes().into_vec()));
 
     wrap_cose_key_in_der_spki(&Value::Map(map))
 }
@@ -2719,7 +2717,7 @@ fn webauthn_sign_ecdsa_secp256r1(sk: &ic_secp256r1::PrivateKey, msg: &[u8]) -> V
     webauthn_sign_message(msg, sign_fn)
 }
 
-fn webauthn_sign_rsa_pkcs1(sk: &rsa::RsaPrivateKey, msg: &[u8]) -> Vec<u8> {
+fn webauthn_sign_rsa_pkcs1(sk: &rsa::PrivateKey, msg: &[u8]) -> Vec<u8> {
     let sign_fn = |to_sign: &[u8]| -> Vec<u8> {
         let signing_key = rsa::pkcs1v15::SigningKey::<rsa::sha2::Sha256>::new(sk.clone());
         use rsa::signature::{SignatureEncoding, Signer};
@@ -2727,6 +2725,28 @@ fn webauthn_sign_rsa_pkcs1(sk: &rsa::RsaPrivateKey, msg: &[u8]) -> Vec<u8> {
     };
     webauthn_sign_message(msg, sign_fn)
 }
+
+/// Makes a rand 0.8 RNG usable as the rand_core 0.10 RNG that `rsa` takes.
+struct RandCore10<'a, R>(&'a mut R);
+
+impl<R: rand::RngCore> rsa::rand_core::TryRng for RandCore10<'_, R> {
+    type Error = std::convert::Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        Ok(self.0.next_u32())
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        Ok(self.0.next_u64())
+    }
+
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
+        self.0.fill_bytes(dst);
+        Ok(())
+    }
+}
+
+impl<R: rand::RngCore + CryptoRng> rsa::rand_core::TryCryptoRng for RandCore10<'_, R> {}
 
 fn webauthn_sign_ed25519(sk: &ic_ed25519::PrivateKey, msg: &[u8]) -> Vec<u8> {
     // WebAuthn EdDSA signatures are the raw 64-byte R || s encoding from
