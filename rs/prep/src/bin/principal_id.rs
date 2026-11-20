@@ -90,8 +90,8 @@ pub fn ensure_file_extension(file: &Path, ext: &str) -> io::Result<()> {
 ///
 /// Not `DecodePem::from_pem`: der's streaming `PemReader` does not reject unconsumed data at the
 /// end of a nested SEQUENCE, so it accepts malformed keys that `from_der` rejects.
-// TODO: use `DecodePem::from_pem` once der's `PemReader::read_nested` rejects unconsumed data the
-// way `SliceReader::read_nested` does; it doesn't in der 0.8.3.
+// TODO: use `DecodePem::from_pem` once we upgrade to a der that fixes
+// https://github.com/RustCrypto/formats/issues/2554.
 fn spki_from_pem(pem: &[u8]) -> der::Result<spki::SubjectPublicKeyInfoOwned> {
     use der::{Decode, pem::PemLabel};
     let (label, der_bytes) = der::pem::decode_vec(pem)?;
