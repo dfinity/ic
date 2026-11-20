@@ -11,7 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `icrc21::lib::validate_consent_message_arg_size` and `icrc21::lib::decode_consent_message_arg`, for checking and decoding the `arg` of an ICRC-21 consent message request.
 
 ### Changed
+- In ICRC-21 `GenericDisplayMessage` consent messages, the memo is shown as text only if it is printable ASCII without backticks, and as hex otherwise. Before, any valid UTF-8 memo was shown as text, so a memo containing backticks or line breaks could add Markdown to the consent message. `FieldsDisplayMessage` consent messages still show any valid UTF-8 memo as text.
 - `build_icrc21_consent_info` decodes the `arg` of the consent message request with a Candid skipping quota of 10,000, the same quota the `ic_cdk` endpoint macros apply to the endpoints being described.
+
+### Fixed
+- ICRC-21 consent messages for `icrc2_approve` show the approval expiration correctly for UTC offsets beyond ±9:06. An offset outside the range supported by the `time` crate is reported as an invalid UTC offset.
 
 ## 0.2.0
 
