@@ -590,3 +590,129 @@ mod utxo_set {
 
     }
 }
+
+mod consolidate_utxos_request {
+    use crate::state::eventlog::{CkBtcEventLogger, CkBtcMinterEvent, EventLogger, EventType};
+    use crate::state::invariants::CheckInvariantsImpl;
+    use crate::state::{
+        ChangeOutput, CkBtcMinterState, ConsolidateUtxosRequest, SubmittedBtcTransaction,
+        SubmittedWithdrawalRequests,
+    };
+    use crate::test_fixtures::{NOW, init_args, minter_address, utxo};
+    use crate::tx::FeeRate;
+
+    const BLOCK_INDEX: u64 = 42;
+
+    fn request() -> ConsolidateUtxosRequest {
+        ConsolidateUtxosRequest {
+            amount: 100_000,
+            address: minter_address(),
+            block_index: BLOCK_INDEX,
+            received_at: NOW.as_nanos_since_unix_epoch(),
+        }
+    }
+
+    fn submitted_transaction() -> SubmittedBtcTransaction {
+        SubmittedBtcTransaction {
+            requests: SubmittedWithdrawalRequests::ToConsolidate { request: request() },
+            txid: utxo().outpoint.txid,
+            used_utxos: vec![utxo()],
+            change_output: Some(ChangeOutput {
+                vout: 1,
+                value: 50_000,
+            }),
+            submitted_at: NOW.as_nanos_since_unix_epoch(),
+            effective_fee_per_vbyte: Some(FeeRate::from_millis_per_byte(1_500)),
+            withdrawal_fee: None,
+            signed_tx: Some(vec![0_u8; 32]),
+        }
+    }
+
+    #[test]
+    fn should_clear_latch_when_rolling_back_unsubmitted_consolidation() {
+        let mut state = latched_state();
+
+        state.push_from_in_flight_to_pending_requests(SubmittedWithdrawalRequests::ToConsolidate {
+            request: request(),
+        });
+
+        assert_eq!(state.current_consolidate_utxos_request, None);
+    }
+
+    fn latched_state() -> CkBtcMinterState {
+        let mut state = CkBtcMinterState::from(init_args());
+        state.push_consolidate_utxos_request(request());
+        state
+    }
+
+    #[test]
+    fn should_keep_latch_while_submitted_transaction_can_still_be_finalized() {
+        let mut state = latched_state();
+        state.submitted_transactions.push(submitted_transaction());
+
+        state.clear_dangling_consolidate_utxos_request();
+
+        assert_eq!(state.current_consolidate_utxos_request, Some(request()));
+    }
+
+    #[test]
+    fn should_keep_latch_while_stuck_transaction_can_still_be_finalized() {
+        let mut state = latched_state();
+        state.stuck_transactions.push(submitted_transaction());
+
+        state.clear_dangling_consolidate_utxos_request();
+
+        assert_eq!(state.current_consolidate_utxos_request, Some(request()));
+    }
+
+    fn replay(events: Vec<EventType>) -> CkBtcMinterState {
+        CkBtcEventLogger
+            .replay::<CheckInvariantsImpl>(events.into_iter().map(|payload| CkBtcMinterEvent {
+                timestamp: Some(NOW.as_nanos_since_unix_epoch()),
+                payload,
+            }))
+            .expect("failed to replay events")
+    }
+
+    /// A routine upgrade must un-wedge a minter orphaned by an older version.
+    #[test]
+    fn should_drop_orphaned_request_when_replaying_events() {
+        let state = replay(vec![
+            EventType::Init(init_args()),
+            EventType::CreatedConsolidateUtxosRequest(request()),
+        ]);
+
+        assert_eq!(state.current_consolidate_utxos_request, None);
+    }
+
+    /// Must not trip the assertion in `push_consolidate_utxos_request`.
+    #[test]
+    fn should_replay_new_request_on_top_of_orphaned_one() {
+        let later = ConsolidateUtxosRequest {
+            block_index: BLOCK_INDEX + 1,
+            ..request()
+        };
+
+        let state = replay(vec![
+            EventType::Init(init_args()),
+            // Orphaned: never followed by a sent transaction.
+            EventType::CreatedConsolidateUtxosRequest(request()),
+            EventType::CreatedConsolidateUtxosRequest(later.clone()),
+            EventType::SentBtcTransaction {
+                request_block_indices: vec![later.block_index],
+                txid: utxo().outpoint.txid,
+                utxos: vec![utxo()],
+                change_output: Some(ChangeOutput {
+                    vout: 1,
+                    value: 50_000,
+                }),
+                submitted_at: NOW.as_nanos_since_unix_epoch(),
+                effective_fee_per_vbyte: Some(1_500),
+                withdrawal_fee: None,
+                signed_tx: Some(vec![0_u8; 32]),
+            },
+        ]);
+
+        assert_eq!(state.current_consolidate_utxos_request, Some(later));
+    }
+}
