@@ -214,6 +214,7 @@ fn consensus_produces_expected_batches() {
         );
         let idkg = ic_consensus_idkg::IDkgImpl::new(
             replica_config.node_id,
+            replica_config.subnet_id,
             consensus_pool.read().unwrap().get_block_cache(),
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,

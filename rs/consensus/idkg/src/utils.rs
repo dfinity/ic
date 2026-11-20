@@ -28,7 +28,7 @@ use ic_types::{
     },
     crypto::canister_threshold_sig::{
         MasterPublicKey,
-        idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
+        idkg::{IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, InitialIDkgDealings},
     },
     registry::RegistryClientError,
 };
@@ -49,6 +49,17 @@ impl Display for InvalidChainCacheError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
+}
+
+/// Returns true if the transcript was created on this subnet above the given height. A transcript
+/// created on another subnet (e.g. a key transcript reshared to this subnet via xnet) carries a
+/// height of that subnet, which cannot be compared with ours, so this is false for it.
+pub(crate) fn is_local_and_above(
+    transcript_id: &IDkgTranscriptId,
+    own_subnet_id: SubnetId,
+    height: Height,
+) -> bool {
+    transcript_id.source_subnet() == &own_subnet_id && transcript_id.source_height() > height
 }
 
 pub(super) struct IDkgBlockReaderImpl {
@@ -112,19 +123,6 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             .as_idkg()
             .map_or(Box::new(std::iter::empty()), |idkg_payload| {
                 Box::new(idkg_payload.iter_xnet_transcripts_source_subnet())
-            })
-    }
-
-    fn target_subnet_xnet_transcripts(
-        &self,
-    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
-        self.chain
-            .tip()
-            .payload
-            .as_ref()
-            .as_idkg()
-            .map_or(Box::new(std::iter::empty()), |idkg_payload| {
-                Box::new(idkg_payload.iter_xnet_transcripts_target_subnet())
             })
     }
 

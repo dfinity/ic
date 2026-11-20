@@ -656,12 +656,6 @@ pub trait IDkgBlockReader: Send + Sync {
         &self,
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
 
-    /// Returns the transcript params for the xnet key creation in progress, on the target
-    /// subnet side. One entry is returned per key_id being bootstrapped.
-    fn target_subnet_xnet_transcripts(
-        &self,
-    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
-
     /// Looks up and clones the transcript for the given transcript ref.
     fn transcript(
         &self,

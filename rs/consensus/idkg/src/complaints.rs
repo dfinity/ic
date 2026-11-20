@@ -2,7 +2,7 @@
 use crate::{
     IDkgSchedule,
     metrics::{IDkgComplaintMetrics, timed_call},
-    utils::IDkgBlockReaderImpl,
+    utils::{IDkgBlockReaderImpl, is_local_and_above},
 };
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
@@ -15,7 +15,7 @@ use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height, NodeId, RegistryVersion,
+    Height, NodeId, RegistryVersion, SubnetId,
     artifact::IDkgMessageId,
     consensus::idkg::{
         IDkgBlockReader, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent,
@@ -79,6 +79,7 @@ impl From<&SignedIDkgOpening> for OpeningKey {
 
 pub(crate) struct IDkgComplaintHandlerImpl {
     node_id: NodeId,
+    subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -89,6 +90,7 @@ pub(crate) struct IDkgComplaintHandlerImpl {
 impl IDkgComplaintHandlerImpl {
     pub(crate) fn new(
         node_id: NodeId,
+        subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -97,6 +99,7 @@ impl IDkgComplaintHandlerImpl {
     ) -> Self {
         Self {
             node_id,
+            subnet_id,
             consensus_block_cache,
             crypto,
             state_reader,
@@ -131,6 +134,7 @@ impl IDkgComplaintHandlerImpl {
 
             match Action::action(
                 block_reader,
+                self.subnet_id,
                 active_transcripts,
                 &requested_transcripts,
                 &complaint.idkg_complaint.transcript_id,
@@ -221,6 +225,7 @@ impl IDkgComplaintHandlerImpl {
 
             match Action::action(
                 block_reader,
+                self.subnet_id,
                 active_transcripts,
                 &requested_transcripts,
                 &opening.idkg_opening.transcript_id,
@@ -282,7 +287,6 @@ impl IDkgComplaintHandlerImpl {
                 let complaint = signed_complaint.get();
                 self.should_purge(
                     &complaint.idkg_complaint.transcript_id,
-                    complaint.idkg_complaint.transcript_id.source_height(),
                     current_height,
                     &active_transcripts,
                 )
@@ -299,7 +303,6 @@ impl IDkgComplaintHandlerImpl {
                 let complaint = signed_complaint.get();
                 self.should_purge(
                     &complaint.idkg_complaint.transcript_id,
-                    complaint.idkg_complaint.transcript_id.source_height(),
                     current_height,
                     &active_transcripts,
                 )
@@ -316,7 +319,6 @@ impl IDkgComplaintHandlerImpl {
                 let opening = signed_opening.get();
                 self.should_purge(
                     &opening.idkg_opening.transcript_id,
-                    opening.idkg_opening.transcript_id.source_height(),
                     current_height,
                     &active_transcripts,
                 )
@@ -333,7 +335,6 @@ impl IDkgComplaintHandlerImpl {
                 let opening = signed_opening.get();
                 self.should_purge(
                     &opening.idkg_opening.transcript_id,
-                    opening.idkg_opening.transcript_id.source_height(),
                     current_height,
                     &active_transcripts,
                 )
@@ -669,15 +670,16 @@ impl IDkgComplaintHandlerImpl {
         openings
     }
 
-    /// Checks if the artifact should be purged
+    /// Checks if the artifacts for the given transcript should be purged: they are kept while the
+    /// transcript is active, or if it is from a node ahead of us.
     fn should_purge(
         &self,
         transcript_id: &IDkgTranscriptId,
-        requested_height: Height,
         current_height: Height,
         active_transcripts: &BTreeSet<IDkgTranscriptId>,
     ) -> bool {
-        requested_height <= current_height && !active_transcripts.contains(transcript_id)
+        !is_local_and_above(transcript_id, self.subnet_id, current_height)
+            && !active_transcripts.contains(transcript_id)
     }
 
     /// Resolves the active ref -> transcripts
@@ -987,19 +989,16 @@ impl<'a> Action<'a> {
     #[allow(clippy::self_named_constructors)]
     fn action(
         block_reader: &'a dyn IDkgBlockReader,
+        own_subnet_id: SubnetId,
         active_transcripts: &'a BTreeMap<IDkgTranscriptId, &IDkgTranscript>,
         requested_transcripts: &'a BTreeSet<IDkgTranscriptId>,
         msg_transcript_id: &IDkgTranscriptId,
     ) -> Action<'a> {
-        // Messages for active transcripts are processed regardless of their height:
-        // the height of a transcript created on another subnet (e.g. a key transcript
-        // reshared to this subnet via xnet) is a height of that subnet, so it cannot be
-        // compared with our tip.
         if let Some(transcript) = active_transcripts.get(msg_transcript_id) {
             return Action::Process(transcript);
         }
 
-        if msg_transcript_id.source_height() > block_reader.tip_height() {
+        if is_local_and_above(msg_transcript_id, own_subnet_id, block_reader.tip_height()) {
             // Message is from a node ahead of us, keep it to be
             // processed later
             return Action::Defer;
@@ -1054,9 +1053,14 @@ mod tests {
         let ref_2 = TranscriptRef::new(Height::new(20), id_2);
         let block_reader =
             TestIDkgBlockReader::for_complainer_test(&key_id, Height::new(100), vec![ref_1, ref_2]);
-        // A transcript created on another subnet (e.g. a key transcript reshared via
-        // xnet), whose source height is a height of that subnet, far above our tip.
-        let xnet_id = IDkgTranscriptId::new(subnet_test_id(1), 6, Height::from(1_000_000));
+        // Transcripts created on another subnet (e.g. key transcripts reshared via xnet),
+        // whose source heights are heights of that subnet, far above our tip.
+        let (xnet_id, xnet_id_requested, xnet_id_unknown) = (
+            xnet_transcript_id(6),
+            xnet_transcript_id(7),
+            xnet_transcript_id(8),
+        );
+        let subnet_id = own_subnet_id();
         let mut active = BTreeMap::new();
         let t1 = create_transcript(&key_id, id_1, &[NODE_1]);
         let t2 = create_transcript(&key_id, id_2, &[NODE_2]);
@@ -1066,42 +1070,63 @@ mod tests {
         active.insert(xnet_id, &xnet_transcript);
         let mut requested = BTreeSet::new();
         requested.insert(id_5);
+        requested.insert(xnet_id_requested);
 
         // Message from a node ahead of us
         assert_eq!(
-            Action::action(&block_reader, &active, &requested, &id_ahead),
+            Action::action(&block_reader, subnet_id, &active, &requested, &id_ahead),
             Action::Defer
         );
 
         // Messages for transcripts not currently active
         assert_eq!(
-            Action::action(&block_reader, &active, &requested, &id_3),
+            Action::action(&block_reader, subnet_id, &active, &requested, &id_3),
             Action::Drop
         );
         assert_eq!(
-            Action::action(&block_reader, &active, &requested, &id_4),
+            Action::action(&block_reader, subnet_id, &active, &requested, &id_4),
+            Action::Drop
+        );
+        assert_eq!(
+            Action::action(
+                &block_reader,
+                subnet_id,
+                &active,
+                &requested,
+                &xnet_id_unknown
+            ),
             Action::Drop
         );
 
         // Messages for transcripts not currently active but requested
         assert_eq!(
-            Action::action(&block_reader, &active, &requested, &id_5),
+            Action::action(&block_reader, subnet_id, &active, &requested, &id_5),
+            Action::Defer
+        );
+        assert_eq!(
+            Action::action(
+                &block_reader,
+                subnet_id,
+                &active,
+                &requested,
+                &xnet_id_requested
+            ),
             Action::Defer
         );
 
         // Messages for transcripts currently active
         assert_matches!(
-            Action::action(&block_reader, &active, &requested, &id_1),
+            Action::action(&block_reader, subnet_id, &active, &requested, &id_1),
             Action::Process(t) if t.transcript_id == id_1
         );
         assert_matches!(
-            Action::action(&block_reader, &active, &requested, &id_2),
+            Action::action(&block_reader, subnet_id, &active, &requested, &id_2),
             Action::Process(t) if t.transcript_id == id_2
         );
 
         // Messages for transcripts currently active that were created on another subnet
         assert_matches!(
-            Action::action(&block_reader, &active, &requested, &xnet_id),
+            Action::action(&block_reader, subnet_id, &active, &requested, &xnet_id),
             Action::Process(t) if t.transcript_id == xnet_id
         );
     }
@@ -1394,9 +1419,12 @@ mod tests {
                     &active_transcripts,
                 );
 
-                assert_eq!(change_set.len(), 2);
+                // No transcript is active, so the complaints for id_3 and id_4 are dropped like
+                // any complaint for an inactive transcript that is not requested
+                assert_eq!(change_set.len(), 3);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_3));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
             })
         });
     }
@@ -1829,10 +1857,13 @@ mod tests {
                     &block_reader,
                     &active_transcripts,
                 );
-                assert_eq!(change_set.len(), 3);
+                // No transcript is active, so the openings for id_3, id_4 and id_5 are dropped
+                // like any opening for an inactive transcript that is not requested
+                assert_eq!(change_set.len(), 4);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_3));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_5));
             })
         });
     }
@@ -1958,6 +1989,8 @@ mod tests {
                     create_transcript_id_with_height(2, Height::from(30)),
                     create_transcript_id_with_height(3, Height::from(200)),
                 );
+                // Transcripts created on another subnet, whose source heights are above ours
+                let (xnet_id_4, xnet_id_5) = (xnet_transcript_id(4), xnet_transcript_id(5));
 
                 // Complaint 1: height <= current_height, active transcripts (not purged)
                 let complaint = create_complaint(id_1, NODE_2, NODE_3);
@@ -1984,11 +2017,31 @@ mod tests {
                     timestamp: UNIX_EPOCH,
                 });
 
-                // Only id_1 is active
+                // Complaint 4: created on another subnet, active transcripts (not purged)
+                let complaint = create_complaint(xnet_id_4, NODE_2, NODE_3);
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Complaint(complaint),
+                    peer_id: NODE_3,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                // Complaint 5: created on another subnet, non-active transcripts (purged)
+                let complaint = create_complaint(xnet_id_5, NODE_2, NODE_3);
+                let msg_id_5 = complaint.message_id();
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Complaint(complaint),
+                    peer_id: NODE_3,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                // Only id_1 and xnet_id_4 are active
                 let block_reader = TestIDkgBlockReader::for_complainer_test(
                     &key_id,
                     Height::new(100),
-                    vec![TranscriptRef::new(Height::new(10), id_1)],
+                    vec![
+                        TranscriptRef::new(Height::new(10), id_1),
+                        TranscriptRef::new(Height::new(10), xnet_id_4),
+                    ],
                 );
                 let snapshot = fake_state_with_signature_requests(Height::from(0), []);
                 let active_transcripts =
@@ -1998,8 +2051,9 @@ mod tests {
                     &block_reader,
                     &active_transcripts,
                 );
-                assert_eq!(change_set.len(), 1);
+                assert_eq!(change_set.len(), 2);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_5));
             })
         })
     }
@@ -2073,6 +2127,8 @@ mod tests {
                     create_transcript_id_with_height(2, Height::from(30)),
                     create_transcript_id_with_height(3, Height::from(200)),
                 );
+                // Transcripts created on another subnet, whose source heights are above ours
+                let (xnet_id_4, xnet_id_5) = (xnet_transcript_id(4), xnet_transcript_id(5));
 
                 // Opening 1: height <= current_height, active transcripts (not purged)
                 let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
@@ -2099,11 +2155,31 @@ mod tests {
                     timestamp: UNIX_EPOCH,
                 });
 
-                // Only id_1 is active
+                // Opening 4: created on another subnet, active transcripts (not purged)
+                let opening = create_opening(xnet_id_4, NODE_2, NODE_3, NODE_4);
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Opening(opening),
+                    peer_id: NODE_4,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                // Opening 5: created on another subnet, non-active transcripts (purged)
+                let opening = create_opening(xnet_id_5, NODE_2, NODE_3, NODE_4);
+                let msg_id_5 = opening.message_id();
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Opening(opening),
+                    peer_id: NODE_4,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                // Only id_1 and xnet_id_4 are active
                 let block_reader = TestIDkgBlockReader::for_complainer_test(
                     &key_id,
                     Height::new(100),
-                    vec![TranscriptRef::new(Height::new(10), id_1)],
+                    vec![
+                        TranscriptRef::new(Height::new(10), id_1),
+                        TranscriptRef::new(Height::new(10), xnet_id_4),
+                    ],
                 );
                 let snapshot = fake_state_with_signature_requests(Height::from(0), []);
                 let active_transcripts =
@@ -2113,8 +2189,9 @@ mod tests {
                     &block_reader,
                     &active_transcripts,
                 );
-                assert_eq!(change_set.len(), 1);
+                assert_eq!(change_set.len(), 2);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_5));
             })
         })
     }

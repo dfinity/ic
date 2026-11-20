@@ -269,6 +269,7 @@ impl IDkgImpl {
     /// Builds a new IDKG component
     pub fn new(
         node_id: NodeId,
+        subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -279,6 +280,7 @@ impl IDkgImpl {
         let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         let pre_signer = Box::new(IDkgPreSignerImpl::new(
             node_id,
+            subnet_id,
             consensus_block_cache.clone(),
             crypto.clone(),
             thread_pool.clone(),
@@ -295,6 +297,7 @@ impl IDkgImpl {
         ));
         let complaint_handler = Box::new(IDkgComplaintHandlerImpl::new(
             node_id,
+            subnet_id,
             consensus_block_cache.clone(),
             crypto.clone(),
             state_reader.clone(),

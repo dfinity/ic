@@ -654,6 +654,7 @@ fn start_consensus(
         abortable_broadcast_channels.idkg,
         ic_consensus_idkg::IDkgImpl::new(
             node_id,
+            subnet_id,
             consensus_pool.read().unwrap().get_block_cache(),
             Arc::clone(&consensus_crypto),
             Arc::clone(&state_reader),

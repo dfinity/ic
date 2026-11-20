@@ -49,12 +49,28 @@ use ic_types::{
     },
     signature::*,
 };
+use ic_types_test_utils::ids::subnet_test_id;
 use rand::{CryptoRng, Rng};
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
     sync::{Arc, Mutex},
 };
+
+/// Returns the subnet of the IDKG components built by these test utilities. It is the subnet of
+/// the transcript ids returned by [`create_transcript_id`] and [`create_transcript_id_with_height`].
+pub(crate) fn own_subnet_id() -> SubnetId {
+    *create_transcript_id(0).source_subnet()
+}
+
+/// Returns the id of a transcript created on another subnet than [`own_subnet_id`], e.g. a key
+/// transcript reshared to it via xnet. Its source height is a height of that other subnet, far
+/// above the heights used in these tests.
+pub(crate) fn xnet_transcript_id(id: u64) -> IDkgTranscriptId {
+    let transcript_id = IDkgTranscriptId::new(subnet_test_id(1), id, Height::from(1_000_000));
+    assert_ne!(*transcript_id.source_subnet(), own_subnet_id());
+    transcript_id
+}
 
 #[derive(Clone)]
 pub(crate) struct TestTranscriptParams {
@@ -106,7 +122,6 @@ pub(crate) struct TestIDkgBlockReader {
     height: Height,
     requested_transcripts: Vec<IDkgTranscriptParamsRef>,
     source_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
-    target_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
     idkg_payloads: BTreeMap<Height, IDkgPayload>,
     fail_to_resolve: bool,
@@ -166,14 +181,6 @@ impl TestIDkgBlockReader {
         self
     }
 
-    pub(crate) fn with_target_subnet_xnet_transcripts(
-        mut self,
-        refs: Vec<IDkgTranscriptParamsRef>,
-    ) -> Self {
-        self.target_subnet_xnet_transcripts = refs;
-        self
-    }
-
     pub(crate) fn with_fail_to_resolve(mut self) -> Self {
         self.fail_to_resolve = true;
         self
@@ -211,12 +218,6 @@ impl IDkgBlockReader for TestIDkgBlockReader {
         &self,
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
         Box::new(self.source_subnet_xnet_transcripts.iter())
-    }
-
-    fn target_subnet_xnet_transcripts(
-        &self,
-    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
-        Box::new(self.target_subnet_xnet_transcripts.iter())
     }
 
     fn transcript_as_ref(
@@ -403,6 +404,7 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto_and_threads(
     // need to make sure subnet matches the transcript
     let pre_signer = IDkgPreSignerImpl::new(
         NODE_1,
+        own_subnet_id(),
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
         build_thread_pool(threads),
@@ -425,6 +427,7 @@ pub(crate) fn create_pre_signer_dependencies_and_pool(
 
     let pre_signer = IDkgPreSignerImpl::new(
         NODE_1,
+        own_subnet_id(),
         pool.get_block_cache(),
         crypto,
         build_thread_pool(MAX_IDKG_THREADS),
@@ -550,6 +553,7 @@ pub(crate) fn create_complaint_dependencies_with_crypto_and_node_id(
 
     let complaint_handler = IDkgComplaintHandlerImpl::new(
         node_id,
+        own_subnet_id(),
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
         state_manager,
@@ -586,6 +590,7 @@ pub(crate) fn create_complaint_dependencies_and_pool(
 
     let complaint_handler = IDkgComplaintHandlerImpl::new(
         NODE_1,
+        own_subnet_id(),
         pool.get_block_cache(),
         crypto,
         state_manager,

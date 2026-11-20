@@ -184,6 +184,7 @@ impl<'a> ConsensusRunner<'a> {
         );
         let idkg = ic_consensus_idkg::IDkgImpl::new(
             deps.replica_config.node_id,
+            deps.replica_config.subnet_id,
             deps.consensus_pool.read().unwrap().get_block_cache(),
             consensus_crypto,
             deps.state_manager.clone(),

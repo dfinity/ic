@@ -251,21 +251,6 @@ impl IDkgPayload {
         self.ongoing_xnet_reshares.values().map(AsRef::as_ref)
     }
 
-    /// Return an iterator of the ongoing xnet reshare transcripts on the target side.
-    pub fn iter_xnet_transcripts_target_subnet(
-        &self,
-    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> {
-        self.key_transcripts.values().filter_map(|key_transcript| {
-            if let KeyTranscriptCreation::XnetReshareOfUnmaskedParams((_, params)) =
-                &key_transcript.next_in_creation
-            {
-                Some(params.as_ref())
-            } else {
-                None
-            }
-        })
-    }
-
     /// Return an iterator of all ids of pre-signatures for the given key in the payload.
     pub fn iter_pre_signature_ids(
         &self,
