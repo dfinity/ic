@@ -51,7 +51,7 @@ impl DkgMessageId {
         Self {
             height,
             // The lexicographically-smallest hash of length `CryptoHash::LEN`, which every hash has
-            hash: CryptoHashOf::from(CryptoHash(vec![0; CryptoHash::LEN])),
+            hash: CryptoHashOf::from(CryptoHash::from([0; CryptoHash::LEN])),
         }
     }
 }

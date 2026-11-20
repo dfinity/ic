@@ -280,7 +280,7 @@ pub trait NonexistentHash: private::CryptoHashOfSeal {
     /// there is a gap in the blockchain, i.e. where a block, a random beacon or a state does not
     /// extend a previous one, like during a genesis, recovery, or splitting.
     fn nonexistent() -> CryptoHashOf<Self::T> {
-        CryptoHashOf::new(CryptoHash(vec![0; CryptoHash::LEN]))
+        CryptoHashOf::new(CryptoHash::from([0; CryptoHash::LEN]))
     }
 }
 
