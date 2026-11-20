@@ -246,8 +246,9 @@ fn run_tool_on_node(
         .next()
         .unwrap()
         .get_public_url();
-    // The tool logs to stderr, which is merged into stdout so that a full
-    // stderr pipe cannot block the tool while the output is read.
+    // The tool logs to stderr. It is redirected to stdout because the output is
+    // read stdout first, stderr only after stdout's end: a full stderr would
+    // block the tool, which would then never close stdout.
     let command = format!(
         "IC_ADMIN_PATH={IC_ADMIN_REMOTE_PATH} timeout {tool_timeout} {TOOL_PATH} merge \
          --nns-url {nns_url} \
