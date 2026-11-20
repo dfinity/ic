@@ -4,7 +4,8 @@
 #[cfg(test)]
 mod tests;
 
-use bitcoin::Address;
+use bitcoin::{Address, Network};
+use std::{collections::BTreeSet, str::FromStr, sync::LazyLock};
 
 /// BTC is not accepted from nor sent to addresses on this list.
 /// NOTE: Keep it sorted!
@@ -387,7 +388,6 @@ pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[
     "3QnWE5GVfQu3wVav91RuFkqip4Ti4NWqAY",
     "3QrukkUiBrn23rFUKUgasNd1wYWNk7WdSV",
     "3Qw9Fn19gCnga9LfHfpM99aGzuqxBNjR2i",
-    // "TUCsTq7TofTCJRRoHk6RvhMoS2mJLm5Yzq", reason: legacy address base58 prefix: invalid legacy address prefix in decoded base58 data 65
     "bc1q05aktddf9ce4p7hh3stgsf253m4vweu7nkhtmw",
     "bc1q202ajnhxgg9d9jjczmg0g4usp6haqldyy2eakl",
     "bc1q237mvl0heyw0r38wd3xz8h5mar96rrwpams8pp",
@@ -529,8 +529,28 @@ pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[
     "bc1qzqqdvukupr0qr5uckn2zjn40mkflnxu8fuuqdp",
 ];
 
-pub fn is_blocked(address: &Address) -> bool {
+/// The addresses of `BTC_ADDRESS_BLOCKLIST`, parsed once so that checking an address
+/// does not require converting it into a string.
+static BTC_ADDRESS_BLOCKSET: LazyLock<BTreeSet<Address>> = LazyLock::new(|| {
     BTC_ADDRESS_BLOCKLIST
-        .binary_search(&address.to_string().as_ref())
-        .is_ok()
+        .iter()
+        .map(|address| {
+            Address::from_str(address)
+                .and_then(|parsed| parsed.require_network(Network::Bitcoin))
+                .unwrap_or_else(|e| panic!("BUG: invalid blocked address '{address}': {e}"))
+        })
+        .collect()
+});
+
+/// Parses the blocklist unless it has already been parsed.
+///
+/// Call this in an update context, such as `init` and `post_upgrade`, so that the parsed
+/// blocklist is kept. Otherwise every query that checks an address parses it again, since
+/// queries discard their changes to the heap.
+pub fn init() {
+    LazyLock::force(&BTC_ADDRESS_BLOCKSET);
+}
+
+pub fn is_blocked(address: &Address) -> bool {
+    BTC_ADDRESS_BLOCKSET.contains(address)
 }
