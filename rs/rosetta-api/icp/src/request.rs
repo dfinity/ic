@@ -252,7 +252,7 @@ impl TryFrom<&models::Request> for Request {
                     &payload.update_content().arg.0,
                 )
                 .map_err(|e| {
-                    ApiError::invalid_request(format!("Could not parse manage_neuron: {e}"))
+                    ApiError::invalid_request(format!("Could not parse manage_neuron: {e:#}"))
                 })
             }
             .map(|m| m.command)

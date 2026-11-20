@@ -168,7 +168,7 @@ fn stake(
 ) -> Result<(), ApiError> {
     let _: ClaimOrRefreshNeuronFromAccount = convert::decode_canister_method_arg(arg.0.as_ref())
         .map_err(|e| {
-            ApiError::internal_error(format!("Could not decode Create Stake argument: {e:?}"))
+            ApiError::internal_error(format!("Could not decode Create Stake argument: {e:#}"))
         })?;
     requests.push(Request::Stake(Stake {
         account: from,
@@ -186,7 +186,7 @@ fn change_auto_stake_maturity(
     let manage: ManageNeuronRequest =
         convert::decode_canister_method_arg(arg.0.as_ref()).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not decode Change Auto Stake Maturity argument: {e:?}"
+                "Could not decode Change Auto Stake Maturity argument: {e:#}"
             ))
         })?;
     let requested_setting_for_auto_stake_maturity = match manage.command {
@@ -218,7 +218,7 @@ fn set_dissolve_timestamp(
     let manage: ManageNeuronRequest =
         convert::decode_canister_method_arg(arg.0.as_ref()).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not decode Set Dissolve Timestamp argument: {e:?}"
+                "Could not decode Set Dissolve Timestamp argument: {e:#}"
             ))
         })?;
     let timestamp = Seconds(match manage.command {
@@ -249,7 +249,7 @@ fn start_dissolve(
 ) -> Result<(), ApiError> {
     let manage: ManageNeuronRequest =
         convert::decode_canister_method_arg(arg.0.as_ref()).map_err(|e| {
-            ApiError::internal_error(format!("Could not decode Start Dissolve argument: {e:?}"))
+            ApiError::internal_error(format!("Could not decode Start Dissolve argument: {e:#}"))
         })?;
     if !matches!(
         manage.command,
@@ -281,7 +281,7 @@ fn stop_dissolve(
 ) -> Result<(), ApiError> {
     let manage: ManageNeuronRequest =
         convert::decode_canister_method_arg(arg.0.as_ref()).map_err(|e| {
-            ApiError::internal_error(format!("Could not decode Stop Dissolve argument: {e:?}"))
+            ApiError::internal_error(format!("Could not decode Stop Dissolve argument: {e:#}"))
         })?;
     if !matches!(
         manage.command,
@@ -313,7 +313,7 @@ fn disburse(
 ) -> Result<(), ApiError> {
     let manage: ManageNeuronRequest =
         convert::decode_canister_method_arg(arg.0.as_ref()).map_err(|e| {
-            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
+            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:#}"))
         })?;
     if let ManageNeuronRequest {
         command:
@@ -352,7 +352,7 @@ fn disburse_maturity(
 ) -> Result<(), ApiError> {
     let manage: ManageNeuronRequest =
         convert::decode_canister_method_arg(arg.0.as_ref()).map_err(|e| {
-            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
+            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:#}"))
         })?;
     if let ManageNeuronRequest {
         command:
@@ -389,7 +389,7 @@ fn add_hotkey(
 ) -> Result<(), ApiError> {
     let manage: ManageNeuronRequest =
         convert::decode_canister_method_arg(arg.0.as_ref()).map_err(|e| {
-            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
+            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:#}"))
         })?;
     if let Some(ManageNeuronCommandRequest::Configure(manage_neuron::Configure {
         operation:
@@ -420,7 +420,7 @@ fn remove_hotkey(
 ) -> Result<(), ApiError> {
     let manage: ManageNeuronRequest =
         convert::decode_canister_method_arg(arg.0.as_ref()).map_err(|e| {
-            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
+            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:#}"))
         })?;
     if let Some(ManageNeuronCommandRequest::Configure(manage_neuron::Configure {
         operation:
@@ -451,7 +451,7 @@ fn spawn(
 ) -> Result<(), ApiError> {
     let manage: ManageNeuronRequest =
         convert::decode_canister_method_arg(arg.0.as_ref()).map_err(|e| {
-            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
+            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:#}"))
         })?;
     if let Some(ManageNeuronCommandRequest::Spawn(manage_neuron::Spawn {
         new_controller,
@@ -488,7 +488,7 @@ fn register_vote(
 ) -> Result<(), ApiError> {
     let manage: ManageNeuronRequest =
         convert::decode_canister_method_arg(arg.0.as_ref()).map_err(|e| {
-            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
+            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:#}"))
         })?;
     if let Some(ManageNeuronCommandRequest::RegisterVote(manage_neuron::RegisterVote {
         proposal,
@@ -518,7 +518,7 @@ fn stake_maturity(
 ) -> Result<(), ApiError> {
     let manage: ManageNeuronRequest =
         convert::decode_canister_method_arg(arg.0.as_ref()).map_err(|e| {
-            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
+            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:#}"))
         })?;
     if let Some(ManageNeuronCommandRequest::StakeMaturity(manage_neuron::StakeMaturity {
         percentage_to_stake,
@@ -547,7 +547,7 @@ fn neuron_info(
 ) -> Result<(), ApiError> {
     let _: NeuronIdOrSubaccount =
         convert::decode_canister_method_arg(arg.0.as_ref()).map_err(|e| {
-            ApiError::internal_error(format!("Could not decode neuron info argument: {e:?}"))
+            ApiError::internal_error(format!("Could not decode neuron info argument: {e:#}"))
         })?;
 
     match controller.map(convert::principal_id_from_public_key_or_principal) {
@@ -596,7 +596,7 @@ fn follow(
 ) -> Result<(), ApiError> {
     let manage: ManageNeuronRequest =
         convert::decode_canister_method_arg(arg.0.as_ref()).map_err(|e| {
-            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
+            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:#}"))
         })?;
     if let Some(ManageNeuronCommandRequest::Follow(manage_neuron::Follow { topic, followees })) =
         manage.command
@@ -642,7 +642,7 @@ fn refresh_voting_power(
 ) -> Result<(), ApiError> {
     let manage: ManageNeuronRequest =
         convert::decode_canister_method_arg(arg.0.as_ref()).map_err(|e| {
-            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
+            ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:#}"))
         })?;
     if let Some(ManageNeuronCommandRequest::RefreshVotingPower(
         manage_neuron::RefreshVotingPower {},
@@ -920,10 +920,10 @@ mod tests {
                 "{name}: unexpected parse error: {err:?}"
             );
 
-            // The submit path reports the Candid decoding state but not the cause of the error.
             let err = submitted_set_dissolve_timestamp(args).unwrap_err();
             assert!(
-                format!("{err:?}").contains("Could not parse manage_neuron"),
+                format!("{err:?}").contains("Could not parse manage_neuron")
+                    && format!("{err:?}").contains("Decoding cost exceeds the limit"),
                 "{name}: unexpected submit error: {err:?}"
             );
         }

@@ -517,7 +517,10 @@ fn canister_method_arg_decoder_config() -> candid::DecoderConfig {
     let mut config = candid::DecoderConfig::new();
     config
         .set_skipping_quota(CANISTER_METHOD_ARG_SKIPPING_QUOTA)
-        .set_decoding_quota(CANISTER_METHOD_ARG_DECODING_QUOTA);
+        .set_decoding_quota(CANISTER_METHOD_ARG_DECODING_QUOTA)
+        // Otherwise the outermost context of an error dumps the decoder state, including the
+        // whole argument in hex, rather than saying what went wrong.
+        .set_full_error_message(false);
     config
 }
 
