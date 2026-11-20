@@ -504,8 +504,6 @@ mod tests {
 
     impl CertificationPoolImpl {
         fn all_heights_with_artifacts(&self) -> Vec<Height> {
-            use ic_types::consensus::HasHeight;
-
             let mut heights: Vec<Height> = self
                 .unvalidated
                 .values()
