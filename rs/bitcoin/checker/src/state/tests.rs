@@ -55,7 +55,7 @@ fn test_fetch_status() {
     let tx = Transaction::consensus_decode(&mut bytes.to_vec().as_slice()).unwrap();
     let txid_1 = Txid::from(*(tx.compute_txid().as_ref() as &[u8; 32]));
     let from_tx = |tx: &bitcoin::Transaction| {
-        TransactionCheckData::from_transaction(&BtcNetwork::Mainnet, tx.clone()).unwrap()
+        TransactionCheckData::from_transaction(&BtcNetwork::Mainnet, tx.clone())
     };
     set_fetch_status(
         txid_1,
@@ -69,10 +69,30 @@ fn test_fetch_status() {
         Some(FetchTxStatus::Fetched(_))
     ));
     let address = Address::from_script(&tx.output[0].script_pubkey, Network::Bitcoin).unwrap();
-    set_fetched_address(txid_1, 0, address.clone());
+    let spent_output_addresses = |txid, vout| {
+        with_fetch_status(txid, |status| match status {
+            Some(FetchTxStatus::Fetched(fetched)) => Some(
+                fetched
+                    .tx
+                    .spent_output_addresses(vout)
+                    .map(<[Address]>::to_vec),
+            ),
+            _ => None,
+        })
+    };
+    assert_eq!(
+        spent_output_addresses(txid_1, 0),
+        Some(Ok(vec![address.clone()]))
+    );
+    assert_eq!(
+        spent_output_addresses(txid_1, 2),
+        Some(Err(SpentOutputError::MissingOutput))
+    );
+    assert_eq!(spent_output_addresses(txid_0, 0), None);
+    set_fetched_addresses(txid_1, 0, vec![address.clone()]);
     match get_fetch_status(txid_1) {
         Some(FetchTxStatus::Fetched(fetched)) => {
-            assert_eq!(fetched.input_addresses[0], Some(address))
+            assert_eq!(fetched.input_addresses[0], Some(vec![address]))
         }
         _ => {
             panic!("txid {txid_1} is not found")
@@ -153,6 +173,304 @@ fn cache_should_have_same_size() {
     cache.set_status_with(txid_0, Status::Status2, 2);
     assert_eq!(cache.status.len(), 1);
     assert_eq!(cache.created.len(), 1);
+}
+
+mod output_addresses {
+    use crate::state::{output_addresses, script_num};
+    use bitcoin::{
+        Address, Network, PublicKey, ScriptBuf, opcodes::all::*, script::Builder,
+        script::Instruction, script::PushBytesBuf,
+    };
+    use ic_btc_checker::blocklist;
+    use std::str::FromStr;
+
+    // The public key of the private key 1, i.e. the generator point G.
+    const COMPRESSED_PUBLIC_KEY: &str =
+        "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+    const UNCOMPRESSED_PUBLIC_KEY: &str = "0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8";
+    // The same key in hybrid encoding, as used in Bitcoin Core's `script_tests.json`
+    // ("P2PK with hybrid pubkey but no STRICTENC").
+    const HYBRID_PUBLIC_KEY: &str = "0679be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8";
+    const PUBLIC_KEY_ADDRESSES: [&str; 4] = [
+        "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH",
+        "1EHNa6Q4Jz2uvNExL497mE43ikXhwF6kZm",
+        "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+        "3JvL6Ymt8MVWiCNHC7oWU6nLeHNJKLZGLN",
+    ];
+    // The public key of the private key 2.
+    const OTHER_PUBLIC_KEY: &str =
+        "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5";
+    const OTHER_PUBLIC_KEY_ADDRESSES: [&str; 4] = [
+        "1cMh228HTCiwS8ZsaakH8A8wze1JR5ZsP",
+        "1LagHJk2FyCV2VzrNHVqg3gYG4TSYwDV4m",
+        "bc1qq6hag67dl53wl99vzg42z8eyzfz2xlkvxechjp",
+        "3FWHHE3RVgyv5vYmMrcoRdA25uugWvQbso",
+    ];
+    // Encoded like a compressed public key, but not a point on the curve.
+    const INVALID_PUBLIC_KEY: [u8; 33] = [
+        0x02, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff,
+    ];
+    // The generator point in the SEC1 compact encoding, which is not a valid public key encoding
+    // in Bitcoin.
+    const COMPACT_PUBLIC_KEY: &str =
+        "0579be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+    // The hybrid encoding of the generator point with the prefix for an odd y-coordinate,
+    // although its y-coordinate is even.
+    const HYBRID_PUBLIC_KEY_WITH_WRONG_PARITY: &str = "0779be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8";
+
+    // The hybrid encoding of the public key of the private key n - 1, i.e. -G, whose
+    // y-coordinate is odd.
+    const ODD_HYBRID_PUBLIC_KEY: &str = "0779be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798b7c52588d95c3b9aa25b0403f1eef75702e84bb7597aabe663b82f6f04ef2777";
+    const ODD_HYBRID_PUBLIC_KEY_ADDRESSES: [&str; 4] = [
+        "1GrLCmVQXoyJXaPJQdqssNqwxvha1eUo2E",
+        "1JPbzbsAx1HyaDQoLMapWGoqf9pD5uha5m",
+        "bc1q4h0ycu78h88wzldxc7e79vhw5xsde0n8jk4wl5",
+        "38Kw57SDszoUEikRwJNBpypPSdpbAhToeD",
+    ];
+
+    fn key(hex: &str) -> PushBytesBuf {
+        PushBytesBuf::try_from(hex::decode(hex).unwrap()).unwrap()
+    }
+
+    fn addresses(addresses: &[&str]) -> Vec<Address> {
+        addresses
+            .iter()
+            .map(|address| Address::from_str(address).unwrap().assume_checked())
+            .collect()
+    }
+
+    fn p2pk(key: PushBytesBuf) -> ScriptBuf {
+        Builder::new()
+            .push_slice(key)
+            .push_opcode(OP_CHECKSIG)
+            .into_script()
+    }
+
+    fn multisig(m: i64, keys: &[PushBytesBuf], n: i64) -> ScriptBuf {
+        let mut builder = Builder::new().push_int(m);
+        for key in keys {
+            builder = builder.push_slice(key);
+        }
+        builder
+            .push_int(n)
+            .push_opcode(OP_CHECKMULTISIG)
+            .into_script()
+    }
+
+    #[test]
+    fn should_return_standard_address() {
+        let expected = addresses(&["bc1q6xmv92ujqs2szzlpz4hhtn8dfzvpev72zv8zv7"]);
+
+        assert_eq!(
+            output_addresses(&expected[0].script_pubkey(), Network::Bitcoin),
+            Some(expected)
+        );
+    }
+
+    #[test]
+    fn should_return_all_addresses_of_p2pk_key_in_any_encoding() {
+        for public_key in [
+            COMPRESSED_PUBLIC_KEY,
+            UNCOMPRESSED_PUBLIC_KEY,
+            HYBRID_PUBLIC_KEY,
+        ] {
+            let script = p2pk(key(public_key));
+            assert!(script.is_p2pk());
+            assert!(Address::from_script(&script, Network::Bitcoin).is_err());
+
+            assert_eq!(
+                output_addresses(&script, Network::Bitcoin),
+                Some(addresses(&PUBLIC_KEY_ADDRESSES)),
+                "{public_key}"
+            );
+        }
+        // The P2PKH addresses match the ones derived by the `bitcoin` crate.
+        for public_key in [COMPRESSED_PUBLIC_KEY, UNCOMPRESSED_PUBLIC_KEY] {
+            let address =
+                Address::p2pkh(PublicKey::from_str(public_key).unwrap(), Network::Bitcoin);
+            assert!(PUBLIC_KEY_ADDRESSES.contains(&address.to_string().as_str()));
+        }
+    }
+
+    #[test]
+    fn should_return_addresses_of_hybrid_key_with_odd_y_coordinate() {
+        assert_eq!(
+            output_addresses(&p2pk(key(ODD_HYBRID_PUBLIC_KEY)), Network::Bitcoin),
+            Some(addresses(&ODD_HYBRID_PUBLIC_KEY_ADDRESSES))
+        );
+    }
+
+    #[test]
+    fn should_return_addresses_of_all_keys_of_bare_multisig() {
+        let script = multisig(
+            1,
+            &[
+                key(COMPRESSED_PUBLIC_KEY),
+                PushBytesBuf::from(INVALID_PUBLIC_KEY),
+                key(COMPACT_PUBLIC_KEY),
+                key(HYBRID_PUBLIC_KEY_WITH_WRONG_PARITY),
+                key(OTHER_PUBLIC_KEY),
+                key(UNCOMPRESSED_PUBLIC_KEY),
+            ],
+            6,
+        );
+        assert!(script.is_multisig());
+
+        assert_eq!(
+            output_addresses(&script, Network::Bitcoin),
+            Some(addresses(
+                &[PUBLIC_KEY_ADDRESSES, OTHER_PUBLIC_KEY_ADDRESSES].concat()
+            ))
+        );
+    }
+
+    #[test]
+    fn should_support_bare_multisig_with_up_to_20_keys() {
+        for n in [16, 17, 20] {
+            let mut keys = vec![key(OTHER_PUBLIC_KEY); n - 1];
+            keys.push(key(COMPRESSED_PUBLIC_KEY));
+            let script = multisig(n as i64, &keys, n as i64);
+
+            assert_eq!(
+                output_addresses(&script, Network::Bitcoin),
+                Some(addresses(
+                    &[OTHER_PUBLIC_KEY_ADDRESSES, PUBLIC_KEY_ADDRESSES].concat()
+                )),
+                "{n}"
+            );
+        }
+    }
+
+    #[test]
+    fn should_return_no_address_for_p2pk_output_with_invalid_public_key() {
+        // The compact encoding is a valid SEC1 encoding, but not a valid public key in Bitcoin.
+        assert!(
+            ic_secp256k1::PublicKey::deserialize_sec1(&hex::decode(COMPACT_PUBLIC_KEY).unwrap())
+                .is_ok()
+        );
+        for public_key in [
+            PushBytesBuf::from(INVALID_PUBLIC_KEY),
+            key(COMPACT_PUBLIC_KEY),
+            key(HYBRID_PUBLIC_KEY_WITH_WRONG_PARITY),
+        ] {
+            assert_eq!(
+                output_addresses(&p2pk(public_key), Network::Bitcoin),
+                Some(vec![])
+            );
+        }
+    }
+
+    #[test]
+    fn should_not_support_other_scripts() {
+        let blocked_p2pkh = addresses(&[blocklist::BTC_ADDRESS_BLOCKLIST[0]])[0].script_pubkey();
+        assert!(blocked_p2pkh.is_p2pkh());
+        let p2pkh_with_op_nop = Builder::from(blocked_p2pkh.to_bytes())
+            .push_opcode(OP_NOP)
+            .into_script();
+        let p2pk_with_op_nop = Builder::from(p2pk(key(COMPRESSED_PUBLIC_KEY)).to_bytes())
+            .push_opcode(OP_NOP)
+            .into_script();
+        let public_key_with_op_drop = Builder::new()
+            .push_slice(key(COMPRESSED_PUBLIC_KEY))
+            .push_opcode(OP_DROP)
+            .push_opcode(OP_PUSHNUM_1)
+            .into_script();
+        let multisig_with_op_nop = Builder::new()
+            .push_opcode(OP_PUSHNUM_1)
+            .push_slice([0x02])
+            .push_opcode(OP_NOP)
+            .push_opcode(OP_CHECKMULTISIG)
+            .into_script();
+        let multisig_with_op_drop = Builder::new()
+            .push_opcode(OP_PUSHNUM_1)
+            .push_opcode(OP_PUSHBYTES_0)
+            .push_opcode(OP_DROP)
+            .push_opcode(OP_CHECKMULTISIG)
+            .into_script();
+        let multisig_with_opcode_as_key = Builder::new()
+            .push_opcode(OP_PUSHNUM_1)
+            .push_opcode(OP_PUSHNUM_2)
+            .push_opcode(OP_PUSHNUM_1)
+            .push_opcode(OP_CHECKMULTISIG)
+            .into_script();
+        let mut multisig_with_257_keys = Builder::new().push_opcode(OP_PUSHNUM_1);
+        for _ in 0..257 {
+            multisig_with_257_keys = multisig_with_257_keys.push_slice(key(COMPRESSED_PUBLIC_KEY));
+        }
+        let multisig_with_257_keys = multisig_with_257_keys
+            .push_opcode(OP_PUSHNUM_1)
+            .push_opcode(OP_CHECKMULTISIG)
+            .into_script();
+        let keys = vec![key(COMPRESSED_PUBLIC_KEY); 2];
+        let p2pk_with_op_checksigverify = Builder::new()
+            .push_slice(key(COMPRESSED_PUBLIC_KEY))
+            .push_opcode(OP_CHECKSIGVERIFY)
+            .into_script();
+        let p2pk_with_push_before_key = Builder::new()
+            .push_slice(key(COMPRESSED_PUBLIC_KEY))
+            .push_slice(key(COMPRESSED_PUBLIC_KEY))
+            .push_opcode(OP_CHECKSIG)
+            .into_script();
+        let multisig_with_op_checkmultisigverify = Builder::new()
+            .push_opcode(OP_PUSHNUM_1)
+            .push_slice(key(COMPRESSED_PUBLIC_KEY))
+            .push_opcode(OP_PUSHNUM_1)
+            .push_opcode(OP_CHECKMULTISIGVERIFY)
+            .into_script();
+        let multisig_with_op_nop_after_op_checkmultisig =
+            Builder::from(multisig(1, &keys, 2).to_bytes())
+                .push_opcode(OP_NOP)
+                .into_script();
+        let op_return = ScriptBuf::new_op_return([0xaa; 32]);
+        let anyone_can_spend = Builder::new().push_opcode(OP_PUSHNUM_1).into_script();
+
+        for script in [
+            p2pkh_with_op_nop,
+            p2pk_with_op_nop,
+            public_key_with_op_drop,
+            multisig_with_op_nop,
+            multisig_with_op_drop,
+            multisig_with_opcode_as_key,
+            multisig_with_257_keys,
+            p2pk_with_op_checksigverify,
+            p2pk_with_push_before_key,
+            multisig_with_op_checkmultisigverify,
+            multisig_with_op_nop_after_op_checkmultisig,
+            multisig(1, &keys, 3),
+            multisig(3, &keys, 2),
+            multisig(0, &keys, 2),
+            multisig(1, &vec![key(COMPRESSED_PUBLIC_KEY); 21], 21),
+            op_return,
+            anyone_can_spend,
+        ] {
+            assert_eq!(
+                output_addresses(&script, Network::Bitcoin),
+                None,
+                "{script}"
+            );
+        }
+    }
+
+    #[test]
+    fn should_decode_script_numbers() {
+        let push = |bytes: &[u8]| {
+            script_num(&Instruction::PushBytes(
+                PushBytesBuf::try_from(bytes.to_vec()).unwrap().as_ref(),
+            ))
+        };
+        assert_eq!(push(&[]), Some(0));
+        assert_eq!(push(&[0x11]), Some(17));
+        assert_eq!(push(&[0x14, 0x00]), Some(20));
+        assert_eq!(push(&[0x81]), Some(-1));
+        assert_eq!(push(&[0x00, 0x01]), Some(256));
+        assert_eq!(push(&[0x01, 0x00, 0x00, 0x00, 0x00]), None);
+        assert_eq!(script_num(&Instruction::Op(OP_PUSHNUM_1)), Some(1));
+        assert_eq!(script_num(&Instruction::Op(OP_PUSHNUM_16)), Some(16));
+        assert_eq!(script_num(&Instruction::Op(OP_PUSHNUM_NEG1)), Some(-1));
+        assert_eq!(script_num(&Instruction::Op(OP_NOP)), None);
+    }
 }
 
 mod schema_upgrades {
