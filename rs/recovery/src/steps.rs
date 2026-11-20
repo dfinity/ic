@@ -1390,7 +1390,7 @@ mod tests {
         // Add two different certifications for height 1 to both pools,
         // only one of them should be kept after the merge.
         let cert1 = make_certification(1, 1);
-        let cert1_2 = make_certification(1, 4);
+        let cert1_2 = make_certification(1, 2);
         pool1.validated.insert(cert1);
         pool2.validated.insert(cert1_2);
 
@@ -1408,7 +1408,7 @@ mod tests {
 
         // Add a share at height 3 to one pool. It should not be added to the
         // merged pool as it is lower than the highest full certification (4).
-        let share3 = make_share(3, 1, 1);
+        let share3 = make_share(3, 8, 1);
         pool1.validated.insert(share3);
 
         step.exec().expect("Failed to execute step.");
