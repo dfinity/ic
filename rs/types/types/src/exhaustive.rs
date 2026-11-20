@@ -589,15 +589,15 @@ impl ExhaustiveSet for BitcoinAdapterResponse {
 
 impl ExhaustiveSet for CryptoHash {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let mut random = vec![0; 32];
+        let mut random = [0; CryptoHash::LEN];
         rng.fill_bytes(&mut random);
 
         // The all-zero hash stands in for hashes that don't exist: genesis, recovery and post-split
         // CUPs use it as the parent of their summary block and of their random beacon, and genesis
         // CUPs also as their state hash.
-        let zero = vec![0; 32];
+        let zero = [0; CryptoHash::LEN];
 
-        vec![Self(random), Self(zero)]
+        vec![Self::from(random), Self::from(zero)]
     }
 }
 

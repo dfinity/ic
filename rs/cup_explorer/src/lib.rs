@@ -177,7 +177,7 @@ pub async fn explore(
     };
 
     let block = cup.content.block.get_value();
-    let hash = hex::encode(&cup.content.state_hash.get_ref().0[..]);
+    let hash = hex::encode(cup.content.state_hash.get_ref());
     let time = block.context.time.as_nanos_since_unix_epoch();
     println!();
     println!("Latest state:");
@@ -230,7 +230,7 @@ pub fn verify(
     println!(
         "{:>20}: {}",
         "HASH",
-        hex::encode(&cup.content.state_hash.get_ref().0[..])
+        hex::encode(cup.content.state_hash.get_ref())
     );
     println!("{:>20}: {}", "REGISTRY VERSION", dkg_version);
 
@@ -271,11 +271,7 @@ pub fn verify(
                     println!("Found Recovery proposal at version {version}:");
                     println!("{:>20}: {}", "TIME", time.as_nanos_since_unix_epoch());
                     println!("{:>20}: {}", "HEIGHT", height);
-                    println!(
-                        "{:>20}: {}",
-                        "HASH",
-                        hex::encode(&state_hash.get_ref().0[..])
-                    );
+                    println!("{:>20}: {}", "HASH", hex::encode(state_hash.get_ref()));
                     println!("Ensuring recovery time is greater than CUP time...");
                     assert!(time > block.context.time);
                     println!("Success!");

@@ -15,7 +15,7 @@ impl From<StateSyncArtifactId> for p2p_pb::StateSyncId {
     fn from(id: StateSyncArtifactId) -> Self {
         Self {
             height: id.height.get(),
-            hash: id.hash.0,
+            hash: id.hash.into_vec(),
         }
     }
 }
@@ -24,7 +24,7 @@ impl From<p2p_pb::StateSyncId> for StateSyncArtifactId {
     fn from(id: p2p_pb::StateSyncId) -> Self {
         Self {
             height: Height::from(id.height),
-            hash: CryptoHash(id.hash),
+            hash: CryptoHash::from(id.hash),
         }
     }
 }

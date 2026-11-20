@@ -4935,9 +4935,10 @@ pub mod test {
             let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
             // Insert two different proofs for the same height and signer
             pool.insert_unvalidated(proof.clone());
-            let mut hash = proof.hash1.clone().get();
-            hash.0[0] = !hash.0[0];
-            proof.hash2 = CryptoHashOf::new(hash);
+            let mut bytes: [u8; CryptoHash::LEN] =
+                proof.hash1.get_ref().as_ref().try_into().unwrap();
+            bytes[0] = !bytes[0];
+            proof.hash2 = CryptoHashOf::new(CryptoHash::from(bytes));
             pool.insert_unvalidated(proof.clone());
 
             // We should validate only a single equivocation proof, the other

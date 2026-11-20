@@ -522,7 +522,7 @@ fn verify_certificate_signature(
     key: &ThresholdSigPublicKey,
     use_signature_cache: bool,
 ) -> Result<(), CertificateValidationError> {
-    let digest = CryptoHashOfPartialState::from(CryptoHash(certificate.tree.digest().to_vec()));
+    let digest = CryptoHashOfPartialState::from(CryptoHash::from(certificate.tree.digest().0));
     let content = CertificationContent::new(digest.clone());
     let sig = CombinedThresholdSigOf::new(CombinedThresholdSig(certificate.signature.to_vec()));
     let threshold_sig_verification_fn = if use_signature_cache {

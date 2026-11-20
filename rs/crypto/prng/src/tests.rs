@@ -40,7 +40,7 @@ fn should_incorporate_crypto_hash_domain_when_generating_randomness_for_random_b
     for purpose in RandomnessPurpose::iter() {
         // Replicate the implementation: hash the random beacon, create a seed, derive for purpose
         let hash = ic_types::crypto::crypto_hash(&rb);
-        let seed = ic_crypto_internal_seed::Seed::from_bytes(&hash.get().0);
+        let seed = ic_crypto_internal_seed::Seed::from_bytes(hash.get_ref().as_ref());
         let seed_for_purpose = seed.derive(&purpose.domain_separator());
         let mut csprng = Csprng::from_seed(seed_for_purpose);
 

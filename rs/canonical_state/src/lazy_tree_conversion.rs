@@ -635,7 +635,7 @@ impl<'a> LazyFork<'a> for MetadataFork<'a> {
                 .metadata
                 .prev_state_hash
                 .as_ref()
-                .map(|hash| Blob(hash.as_ref().0.as_slice(), None)),
+                .map(|hash| Blob(hash.get_ref().as_ref(), None)),
             _ => None,
         }
     }

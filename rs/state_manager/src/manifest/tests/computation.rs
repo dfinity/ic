@@ -650,7 +650,7 @@ fn simple_manifest_passes_validation() {
             Ok(()),
             validate_manifest(
                 &manifest,
-                &CryptoHashOfState::from(CryptoHash(expected_hash.to_vec()))
+                &CryptoHashOfState::from(CryptoHash::from(expected_hash))
             )
         );
     }
@@ -666,7 +666,7 @@ fn meta_manifest_passes_validation() {
             Ok(()),
             validate_meta_manifest(
                 &meta_manifest,
-                &CryptoHashOfState::from(CryptoHash(meta_manifest_hash(&meta_manifest).to_vec()))
+                &CryptoHashOfState::from(CryptoHash::from(meta_manifest_hash(&meta_manifest)))
             )
         );
     }
@@ -682,7 +682,7 @@ fn bad_root_hash_detected_for_meta_manifest() {
         assert_eq!(
             validate_meta_manifest(&meta_manifest, &bogus_hash),
             Err(ManifestValidationError::InvalidRootHash {
-                expected_hash: bogus_hash.get_ref().0.clone(),
+                expected_hash: bogus_hash.get_ref().as_ref().to_vec(),
                 actual_hash: meta_manifest_hash(&meta_manifest).to_vec(),
             })
         );
@@ -699,7 +699,7 @@ fn bad_root_hash_detected() {
         assert_eq!(
             validate_manifest(&manifest, &bogus_hash),
             Err(ManifestValidationError::InvalidRootHash {
-                expected_hash: bogus_hash.get_ref().0.clone(),
+                expected_hash: bogus_hash.get_ref().as_ref().to_vec(),
                 actual_hash: manifest_hash.to_vec(),
             })
         );
@@ -717,7 +717,7 @@ fn bad_file_hash_detected() {
             file_table,
             manifest.chunk_table.to_owned(),
         );
-        let root_hash = CryptoHashOfState::from(CryptoHash(manifest_hash.to_vec()));
+        let root_hash = CryptoHashOfState::from(CryptoHash::from(manifest_hash));
 
         assert_eq!(
             validate_manifest_internal_consistency(&manifest),
@@ -793,7 +793,7 @@ fn orphan_chunk_detected() {
             manifest.file_table.to_owned(),
             chunk_table,
         );
-        let root_hash = CryptoHashOfState::from(CryptoHash(manifest_hash.to_vec()));
+        let root_hash = CryptoHashOfState::from(CryptoHash::from(manifest_hash));
 
         match validate_manifest_internal_consistency(&manifest) {
             Err(ManifestValidationError::InconsistentManifest { .. }) => (),

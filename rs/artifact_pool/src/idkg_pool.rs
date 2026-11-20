@@ -786,7 +786,7 @@ mod tests {
                 support.transcript_id,
                 support.dealer_id,
                 support.sig_share.signer,
-                support.dealing_hash.as_ref().0[0],
+                support.dealing_hash.get_ref().as_ref()[0],
             )
         };
 
@@ -902,7 +902,7 @@ mod tests {
                 support.transcript_id,
                 support.dealer_id,
                 support.sig_share.signer,
-                support.dealing_hash.as_ref().0[0],
+                support.dealing_hash.get_ref().as_ref()[0],
             )
         };
 

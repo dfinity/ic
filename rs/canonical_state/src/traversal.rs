@@ -109,7 +109,7 @@ mod tests {
     ) -> Option<Vec<crate::test_visitors::TraceEntry>> {
         let height = vec![edge("height"), leb_num(height)];
         let prev_state_hash = if let Some(hash) = prev_state_hash {
-            vec![edge("prev_state_hash"), E::VisitBlob(hash.get().0)]
+            vec![edge("prev_state_hash"), E::VisitBlob(hash.get().into_vec())]
         } else {
             vec![]
         };

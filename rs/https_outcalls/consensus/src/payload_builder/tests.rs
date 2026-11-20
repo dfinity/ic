@@ -928,7 +928,7 @@ fn divergence_share_with_content_hash_of_wrong_length_rejected() {
         // Shares whose content hash is one byte longer than a SHA-256 digest, among an
         // otherwise valid divergence of two equal halves.
         let other_metadata = CanisterHttpResponseMetadata {
-            content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 33])),
+            content_hash: CryptoHashOf::new(CryptoHash::from(vec![0xAB; 33])),
             ..metadata.clone()
         };
         let payload = CanisterHttpPayload {
@@ -972,7 +972,7 @@ fn divergence_error_message() {
             let mut new_hash = [0; 32];
             rng.fill(&mut new_hash);
 
-            sample.content_hash = CryptoHashOf::from(CryptoHash(new_hash.to_vec()));
+            sample.content_hash = CryptoHashOf::from(CryptoHash::from(new_hash));
 
             Signed {
                 content: CanisterHttpResponseReceipt {

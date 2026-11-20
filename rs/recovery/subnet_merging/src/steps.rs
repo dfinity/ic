@@ -192,7 +192,7 @@ impl Step for WaitForHaltingCupStep {
             self.subnet_id,
             cup.height(),
             cup.content.registry_version(),
-            hex::encode(&cup.content.state_hash.get_ref().0),
+            hex::encode(cup.content.state_hash.get_ref()),
         );
 
         self.layout.write_halting_cup(self.subnet_id, &proto)

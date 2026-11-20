@@ -1,4 +1,5 @@
 use assert_matches::assert_matches;
+use hex::FromHex;
 use ic_base_types::SnapshotId;
 use ic_canonical_state::CURRENT_CERTIFICATION_VERSION;
 use ic_canonical_state::encoding::encode_subnet_canister_ranges;
@@ -9069,9 +9070,17 @@ fn stream_store_decode_with_modified_hash_fails(
         true,
         /* modification between encoding and decoding  */
         |_state_manager, mut slice| {
-            let mut hash = slice.certification.content.hash.get();
-            *hash.0.first_mut().unwrap() = hash.0.first().unwrap().overflowing_add(1).0;
-            slice.certification.content.hash = CryptoHashOfPartialState::from(hash);
+            let mut bytes: [u8; CryptoHash::LEN] = slice
+                .certification
+                .content
+                .hash
+                .get_ref()
+                .as_ref()
+                .try_into()
+                .unwrap();
+            bytes[0] = bytes[0].wrapping_add(1);
+            slice.certification.content.hash =
+                CryptoHashOfPartialState::from(CryptoHash::from(bytes));
 
             slice
         },
@@ -9712,9 +9721,11 @@ fn commit_and_certify_optimization_conditions() {
         // `CertificationScope::Full` => optimization does not trigger
         sm.deliver_state_certification(fake_certification_for_height_with_hash(
             Height::new(2),
-            CryptoHash(
-                hex::decode("6cfc30b7160f24c186e0d891f7ca3dfbd566b2ed08922ddd62ccc84db49032aa")
-                    .unwrap(),
+            CryptoHash::from(
+                <[u8; 32]>::from_hex(
+                    "6cfc30b7160f24c186e0d891f7ca3dfbd566b2ed08922ddd62ccc84db49032aa",
+                )
+                .unwrap(),
             ),
         ));
         let state = sm.take_tip().1;
@@ -9739,9 +9750,11 @@ fn commit_and_certify_optimization_conditions() {
         let height = 10;
         sm.deliver_state_certification(fake_certification_for_height_with_hash(
             Height::new(height),
-            CryptoHash(
-                hex::decode("d90d05f3d971482d2ccdc594de723d786afaed32737b19e42f85a1ebe8e21a21")
-                    .unwrap(),
+            CryptoHash::from(
+                <[u8; 32]>::from_hex(
+                    "d90d05f3d971482d2ccdc594de723d786afaed32737b19e42f85a1ebe8e21a21",
+                )
+                .unwrap(),
             ),
         ));
         let state = sm.take_tip().1;
@@ -9769,9 +9782,11 @@ fn commit_and_certify_optimization_conditions() {
         assert_eq!(sm.fast_forward_height(), height);
         sm.deliver_state_certification(fake_certification_for_height_with_hash(
             Height::new(height),
-            CryptoHash(
-                hex::decode("bc6503abbc56b62766950627397808b87b0c3ca16312bd89d34208f01720d5e5")
-                    .unwrap(),
+            CryptoHash::from(
+                <[u8; 32]>::from_hex(
+                    "bc6503abbc56b62766950627397808b87b0c3ca16312bd89d34208f01720d5e5",
+                )
+                .unwrap(),
             ),
         ));
         let state = sm.take_tip().1;
@@ -10041,9 +10056,11 @@ fn remove_inmemory_states_below_prunes_certification() {
         // consensus delivers certification for the next height
         let cert_height = Height::new(1);
         // the state hash was derived from the panic message
-        let state_hash = CryptoHash(
-            hex::decode("4e2d174de5daaeb4622d8f5e426ee09274f7ec4fb01d62fb9a3d36ae50961353")
-                .unwrap(),
+        let state_hash = CryptoHash::from(
+            <[u8; 32]>::from_hex(
+                "4e2d174de5daaeb4622d8f5e426ee09274f7ec4fb01d62fb9a3d36ae50961353",
+            )
+            .unwrap(),
         );
         let certification = fake_certification_for_height_with_hash(cert_height, state_hash);
         sm.deliver_state_certification(certification);
@@ -10076,9 +10093,11 @@ fn remove_inmemory_states_below_prunes_certification() {
         // also move `latest_certified_height`, because that is protected from pruning.
         sm.deliver_state_certification(fake_certification_for_height_with_hash(
             Height::new(2),
-            CryptoHash(
-                hex::decode("cea29292fecbadde1cd534ce411b829ba9d8db4971794f827eddda5c5dbfcee4")
-                    .unwrap(),
+            CryptoHash::from(
+                <[u8; 32]>::from_hex(
+                    "cea29292fecbadde1cd534ce411b829ba9d8db4971794f827eddda5c5dbfcee4",
+                )
+                .unwrap(),
             ),
         ));
 
@@ -10217,7 +10236,7 @@ fn valid_witness_in_list_state_hashes_to_certify() {
 
         let state_hashes = sm.list_state_hashes_to_certify();
         assert_eq!(state_hashes.len(), 1);
-        let expected_digest = state_hashes[0].hash.clone().get().0;
+        let expected_digest = state_hashes[0].hash.clone().get().into_vec();
         let witness = state_hashes[0].height_witness.clone();
 
         let labeled_tree = materialize(&state_height_as_tree(&height), None);
@@ -10260,9 +10279,11 @@ fn list_state_heights_to_certify() {
 
         // deliver a certification for the tip height (optimization did not trigger)
         // the state hash was derived from the panic message
-        let state_hash = CryptoHash(
-            hex::decode("4e2d174de5daaeb4622d8f5e426ee09274f7ec4fb01d62fb9a3d36ae50961353")
-                .unwrap(),
+        let state_hash = CryptoHash::from(
+            <[u8; 32]>::from_hex(
+                "4e2d174de5daaeb4622d8f5e426ee09274f7ec4fb01d62fb9a3d36ae50961353",
+            )
+            .unwrap(),
         );
         let certification = fake_certification_for_height_with_hash(no_opt_height, state_hash);
         sm.deliver_state_certification(certification);
@@ -10288,9 +10309,11 @@ fn commit_and_certify_reuses_certification() {
         // consensus delivers certification for the next height
         let no_opt_height = Height::new(1);
         // the state hash was derived from the panic message
-        let state_hash = CryptoHash(
-            hex::decode("4e2d174de5daaeb4622d8f5e426ee09274f7ec4fb01d62fb9a3d36ae50961353")
-                .unwrap(),
+        let state_hash = CryptoHash::from(
+            <[u8; 32]>::from_hex(
+                "4e2d174de5daaeb4622d8f5e426ee09274f7ec4fb01d62fb9a3d36ae50961353",
+            )
+            .unwrap(),
         );
         let certification = fake_certification_for_height_with_hash(no_opt_height, state_hash);
         sm.deliver_state_certification(certification);
@@ -10372,9 +10395,11 @@ fn certification_not_pruned() {
         // consensus delivers a certification so the optimization triggers
         sm.deliver_state_certification(fake_certification_for_height_with_hash(
             Height::new(1),
-            CryptoHash(
-                hex::decode("38e2d3769adae3b19e69c586c7bb20cd63d0e070a3bc59e6b8d17c31983b6556")
-                    .unwrap(),
+            CryptoHash::from(
+                <[u8; 32]>::from_hex(
+                    "38e2d3769adae3b19e69c586c7bb20cd63d0e070a3bc59e6b8d17c31983b6556",
+                )
+                .unwrap(),
             ),
         ));
 
@@ -10386,9 +10411,11 @@ fn certification_not_pruned() {
         let state = sm.take_tip().1;
         let mut new_state = state.clone();
         new_state.metadata.prev_state_hash = Some(
-            CryptoHash(
-                hex::decode("38e2d3769adae3b19e69c586c7bb20cd63d0e070a3bc59e6b8d17c31983b6556")
-                    .unwrap(),
+            CryptoHash::from(
+                <[u8; 32]>::from_hex(
+                    "38e2d3769adae3b19e69c586c7bb20cd63d0e070a3bc59e6b8d17c31983b6556",
+                )
+                .unwrap(),
             )
             .into(),
         );
@@ -10445,9 +10472,11 @@ fn remove_states_below_protects_tip_height_with_optimization() {
         sm.update_fast_forward_height(Height::new(10));
         sm.deliver_state_certification(fake_certification_for_height_with_hash(
             Height::new(2),
-            CryptoHash(
-                hex::decode("cea29292fecbadde1cd534ce411b829ba9d8db4971794f827eddda5c5dbfcee4")
-                    .unwrap(),
+            CryptoHash::from(
+                <[u8; 32]>::from_hex(
+                    "cea29292fecbadde1cd534ce411b829ba9d8db4971794f827eddda5c5dbfcee4",
+                )
+                .unwrap(),
             ),
         ));
 

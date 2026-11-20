@@ -191,7 +191,7 @@ impl OrchestratorDashboard {
             Some(cup) => {
                 let height = cup.height().to_string();
                 let signed = cup.is_signed();
-                let hash = cup.content.state_hash.get().0;
+                let hash = cup.content.state_hash.get_ref();
 
                 let timestamp = cup.content.block.get_value().context.time;
                 let timestamp_str = timestamp_to_string(timestamp);

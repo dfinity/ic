@@ -2131,7 +2131,7 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: callback_id,
-                        content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 33])),
+                        content_hash: CryptoHashOf::new(CryptoHash::from(vec![0xAB; 33])),
                         content_size: 0,
                         is_reject: false,
                         replica_version: replica_config.replica_version().clone(),

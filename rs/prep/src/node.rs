@@ -236,7 +236,7 @@ impl InitializedNode {
 
         loop {
             match state_manager.get_state_hash_at(Height::new(1)) {
-                Ok(state_hash) => break state_hash.get().0,
+                Ok(state_hash) => break state_hash.get().into_vec(),
                 Err(StateHashError::Transient(_)) => (),
                 Err(StateHashError::Permanent(err)) => {
                     panic!("Failed to generate initial state {err:?}")
