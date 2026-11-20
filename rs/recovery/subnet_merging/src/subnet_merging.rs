@@ -26,7 +26,8 @@ use ic_recovery::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_tools::{
-    admin_helper::get_halt_subnet_at_cup_height_command, utils::print_url_and_ask_for_confirmation,
+    admin_helper::{get_halt_subnet_at_cup_height_command, get_unhalt_subnet_command},
+    utils::print_url_and_ask_for_confirmation,
 };
 use serde::{Deserialize, Serialize};
 use slog::{Logger, warn};
@@ -504,6 +505,20 @@ impl SubnetMerging {
         Ok(subnet_record)
     }
 
+    /// Unhalting the destination subnet only clears its `is_halted` flag. The
+    /// merge installs no SSH keys, so there are none to clear, and any SSH keys
+    /// or recalled replica versions the destination subnet had before the merge
+    /// are kept.
+    fn unhalt_destination_subnet_step(&self) -> AdminStep {
+        AdminStep {
+            logger: self.recovery.logger.clone(),
+            ic_admin_cmd: get_unhalt_subnet_command(
+                &self.recovery.admin_helper,
+                self.params.destination_subnet_id,
+            ),
+        }
+    }
+
     fn halt_subnet_at_cup_height_step(&self, target_subnet: TargetSubnet) -> AdminStep {
         AdminStep {
             logger: self.recovery.logger.clone(),
@@ -859,10 +874,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             }
             StepType::WaitForCupOnDestinationSubnet => self.wait_for_recovery_cup_step()?.into(),
 
-            StepType::UnhaltDestinationSubnet => self
-                .recovery
-                .bring_subnet_back_online_after_repairs(self.params.destination_subnet_id)
-                .into(),
+            StepType::UnhaltDestinationSubnet => self.unhalt_destination_subnet_step().into(),
         };
 
         Ok(step)
