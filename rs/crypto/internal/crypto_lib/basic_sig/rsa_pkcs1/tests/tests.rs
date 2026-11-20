@@ -69,6 +69,123 @@ fn should_reject_rsa_pubkey_with_rsassa_pss_algorithm() {
 }
 
 #[test]
+fn should_reject_malformed_encodings_of_a_valid_rsa_pubkey() {
+    fn tlv(tag: u8, contents: &[u8]) -> Vec<u8> {
+        let len = match contents.len() {
+            len @ 0..0x80 => vec![len as u8],
+            len @ 0x80..0x100 => vec![0x81, len as u8],
+            len => [&[0x82][..], &(len as u16).to_be_bytes()].concat(),
+        };
+        [&[tag][..], &len, contents].concat()
+    }
+    fn seq(fields: &[&[u8]]) -> Vec<u8> {
+        tlv(0x30, &fields.concat())
+    }
+    fn bit_string(unused_bits: u8, contents: &[u8]) -> Vec<u8> {
+        tlv(0x03, &[&[unused_bits][..], contents].concat())
+    }
+    fn spki(algorithm: &[u8], rsa_public_key: &[u8]) -> Vec<u8> {
+        seq(&[algorithm, &bit_string(0, rsa_public_key)])
+    }
+
+    // The key of should_be_able_to_verify_rsa_signature, rebuilt from its fields
+    let valid = hex::decode("30820122300D06092A864886F70D01010105000382010F003082010A0282010100A7078A1A8FDE64C537AE5CA8D4B3A9139D68050CF76E45E77DBE47CECEB162F7095ADB6260998775203AA42A444F865DEB995C2B70B548ECEE01695DEB069ED18744C12FD24AEACDA4B2B7A5E97E7167CAF7D4B8904CE20CA9A8928978CA957FF2D9FCAE0859618B0AD74C164FAF5AB1DE7D7228A89BD3F8B497CEF9E45E1203CC40EE252140157C331A584F3916E569A8C39573D542A3577FB12332EBD3C9F421C9EF8A23D5ACF6BA439F7C3D6B73BA4E56B9B8EFBC42A2E5E734B99FDF7AB046813E43C65C926793919A7AE54F71AAF57C6876001A0558BC847D7555B1AE71F56A70272D786BE69A23A21A56C426371BD9882D40E7ECA6B7DA5D8169B7030F0203010001").unwrap();
+    let n = &valid[33..289];
+    let modulus = tlv(0x02, &[&[0][..], n].concat());
+    let exponent = tlv(0x02, &[1, 0, 1]);
+    let rsa_public_key = seq(&[&modulus, &exponent]);
+    let rsa_encryption = tlv(0x06, &[0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 1, 1, 1]);
+    let null = tlv(0x05, &[]);
+    let algorithm = seq(&[&rsa_encryption, &null]);
+    assert_eq!(spki(&algorithm, &rsa_public_key), valid);
+    assert!(RsaPublicKey::from_der_spki(&valid).is_ok());
+
+    let sha256_with_rsa_encryption = tlv(0x06, &[0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 1, 1, 11]);
+    let malformed = [
+        ("trailing data", [&valid[..], &null].concat()),
+        (
+            "a length with a leading zero byte",
+            [&[0x30, 0x83, 0x00][..], &valid[2..]].concat(),
+        ),
+        (
+            "an indefinite length",
+            [&[0x30, 0x80][..], &valid[4..], &[0, 0]].concat(),
+        ),
+        (
+            "an extra field in SubjectPublicKeyInfo",
+            seq(&[&algorithm, &bit_string(0, &rsa_public_key), &null]),
+        ),
+        (
+            "an extra field in AlgorithmIdentifier",
+            spki(&seq(&[&rsa_encryption, &null, &null]), &rsa_public_key),
+        ),
+        (
+            "no algorithm parameters",
+            spki(&seq(&[&rsa_encryption]), &rsa_public_key),
+        ),
+        (
+            "algorithm parameters other than NULL",
+            spki(&seq(&[&rsa_encryption, &seq(&[])]), &rsa_public_key),
+        ),
+        (
+            "a NULL with a long-form length",
+            spki(
+                &seq(&[&rsa_encryption, &[0x05, 0x81, 0x00]]),
+                &rsa_public_key,
+            ),
+        ),
+        (
+            "the algorithm sha256WithRSAEncryption",
+            spki(&seq(&[&sha256_with_rsa_encryption, &null]), &rsa_public_key),
+        ),
+        (
+            "unused bits in the BIT STRING",
+            seq(&[&algorithm, &bit_string(1, &rsa_public_key)]),
+        ),
+        (
+            "a constructed BIT STRING",
+            seq(&[&algorithm, &tlv(0x23, &bit_string(0, &rsa_public_key))]),
+        ),
+        (
+            "data after RSAPublicKey in the BIT STRING",
+            spki(&algorithm, &[&rsa_public_key[..], &null].concat()),
+        ),
+        (
+            "an extra field in RSAPublicKey",
+            spki(&algorithm, &seq(&[&modulus, &exponent, &exponent])),
+        ),
+        (
+            "a modulus with a redundant leading zero",
+            spki(
+                &algorithm,
+                &seq(&[&tlv(0x02, &[&[0, 0][..], n].concat()), &exponent]),
+            ),
+        ),
+        (
+            "a negative modulus",
+            spki(&algorithm, &seq(&[&tlv(0x02, n), &exponent])),
+        ),
+        (
+            "an exponent with a redundant leading zero",
+            spki(&algorithm, &seq(&[&modulus, &tlv(0x02, &[0, 1, 0, 1])])),
+        ),
+        ("no SubjectPublicKeyInfo", rsa_public_key.clone()),
+    ];
+    for (defect, der) in malformed {
+        assert!(
+            RsaPublicKey::from_der_spki(&der).is_err(),
+            "accepted a key with {defect}"
+        );
+    }
+    for len in 0..valid.len() {
+        assert!(
+            RsaPublicKey::from_der_spki(&valid[..len]).is_err(),
+            "accepted the first {len} bytes of the key"
+        );
+    }
+}
+
+#[test]
 fn should_accept_rsa_moduli_of_2048_to_4096_bits() {
     // 2^bits - 1, an odd modulus of exactly `bits` bits
     fn modulus_of_bits(bits: usize) -> Vec<u8> {
