@@ -85,6 +85,13 @@ pub fn is_blocked(address: &Address) -> bool {
     def currency_symbol(self):
         return "XBT"
 
+    def canonicalize(self, address):
+        # Bech32 addresses may be written in all uppercase. Use the lowercase form, so that
+        # the address is recognized as a Bitcoin address and deduplicated.
+        if address.isupper() and address.startswith("BC1"):
+            return address.lower()
+        return address
+
     def sort(self, addresses):
         return sorted(addresses)
 
@@ -123,6 +130,9 @@ pub const SAMPLE_BLOCKED_ADDRESS: Address = ETH_ADDRESS_BLOCKLIST[0];
     def currency_symbol(self):
         return "ETH"
 
+    def canonicalize(self, address):
+        return address
+
     def sort(self, addresses):
         return sorted(addresses, key=lambda x: int(x[2:], 16))
 
@@ -144,7 +154,7 @@ def extract_addresses(handler, xml_file_path):
         # Read the address, if any.
         if id_dict[PREFIX + "idType"] == DIGITAL_CURRENCY_TYPE_PREFIX + handler.currency_symbol():
             address = id_dict[PREFIX + "idNumber"]
-            addresses.append(address)
+            addresses.append(handler.canonicalize(address))
 
     # Remove duplicates.
     addresses = list(set(addresses))
