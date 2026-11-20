@@ -9070,17 +9070,9 @@ fn stream_store_decode_with_modified_hash_fails(
         true,
         /* modification between encoding and decoding  */
         |_state_manager, mut slice| {
-            let mut bytes: [u8; CryptoHash::LEN] = slice
-                .certification
-                .content
-                .hash
-                .get_ref()
-                .as_ref()
-                .try_into()
-                .unwrap();
-            bytes[0] = bytes[0].wrapping_add(1);
-            slice.certification.content.hash =
-                CryptoHashOfPartialState::from(CryptoHash::from(bytes));
+            let mut hash = slice.certification.content.hash.get();
+            hash.0[0] = hash.0[0].wrapping_add(1);
+            slice.certification.content.hash = CryptoHashOfPartialState::from(hash);
 
             slice
         },
@@ -10236,11 +10228,11 @@ fn valid_witness_in_list_state_hashes_to_certify() {
 
         let state_hashes = sm.list_state_hashes_to_certify();
         assert_eq!(state_hashes.len(), 1);
-        let expected_digest = state_hashes[0].hash.clone().get().into_vec();
+        let expected_digest = state_hashes[0].hash.get_ref().0;
         let witness = state_hashes[0].height_witness.clone();
 
         let labeled_tree = materialize(&state_height_as_tree(&height), None);
-        let actual_digest = recompute_digest(&labeled_tree, &witness).unwrap().to_vec();
+        let actual_digest = recompute_digest(&labeled_tree, &witness).unwrap().0;
         assert_eq!(actual_digest, expected_digest);
     });
 }

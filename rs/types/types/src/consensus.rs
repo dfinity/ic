@@ -271,7 +271,7 @@ impl HasHeight for BlockMetadata {
 
 /// An object whose hash production code fills in where the object does not exist.
 pub trait NonexistentHash: private::CryptoHashOfSeal {
-    /// Returns a hash that stands for the hash of an object of this type that does not exist.
+    /// A hash that stands for the hash of an object of this type that does not exist.
     ///
     /// This hash was chosen arbitrarily to be all zeros. The probability that an actual object
     /// hashes to it is negligible, so it cannot be confused with the hash of an actual object.
@@ -279,9 +279,7 @@ pub trait NonexistentHash: private::CryptoHashOfSeal {
     /// This is not meant for tests (see [`CryptoHash::for_test`]): production code uses it where
     /// there is a gap in the blockchain, i.e. where a block, a random beacon or a state does not
     /// extend a previous one, like during a genesis, recovery, or splitting.
-    fn nonexistent() -> CryptoHashOf<Self::T> {
-        CryptoHashOf::new(CryptoHash::from([0; CryptoHash::LEN]))
-    }
+    const NONEXISTENT: CryptoHashOf<Self::T> = CryptoHashOf::new(CryptoHash([0; CryptoHash::LEN]));
 }
 
 impl<H: private::CryptoHashOfSeal> NonexistentHash for H {}
@@ -291,9 +289,9 @@ mod private {
 
     // The combinations of the public trait above and the two traits below within this private
     // module allows to:
-    //   - Call `nonexistent` directly on a `CryptoHashOf<T>`, even though the latter is a foreign
+    //   - Use `NONEXISTENT` directly on a `CryptoHashOf<T>`, even though the latter is a foreign
     //     type
-    //   - Have the trait's implementation of `nonexistent` be inlined and have no code be able to
+    //   - Have the trait's definition of `NONEXISTENT` be the only one and have no code be able to
     //     override it
     //   - Control which types can actually have a nonexistent hash, by implementing
     //     `NonexistentHashSeal` for them below

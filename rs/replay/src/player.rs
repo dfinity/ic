@@ -1903,7 +1903,7 @@ mod tests {
 
         let hashes = get_share_certified_hashes(Height::from(1), f, &pool, &malicious);
         assert_eq!(hashes.len(), 1);
-        assert_eq!(hashes[0].get_ref(), &CryptoHash::from([1; 32]));
+        assert_eq!(hashes[0].get_ref().0, [1; 32]);
         assert!(!is_manual_share_investigation_required(
             &pool,
             &malicious,
@@ -1935,7 +1935,7 @@ mod tests {
         assert!(
             hashes
                 .into_iter()
-                .map(|h| h.get().into_vec())
+                .map(|h| h.get().0)
                 .all(|h| h == [1; 32] || h == [2; 32])
         );
         assert!(is_manual_share_investigation_required(

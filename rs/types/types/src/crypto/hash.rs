@@ -452,7 +452,7 @@ impl<T> CryptoHashable for T where T: CryptoHashDomain + Hash {}
 
 /// A cryptographic hash, as returned by [`crypto_hash`].
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
-pub struct CryptoHash(#[serde(with = "serde_bytes")] [u8; CryptoHash::LEN]);
+pub struct CryptoHash(#[serde(with = "serde_bytes")] pub [u8; CryptoHash::LEN]);
 
 impl CryptoHash {
     /// The length in bytes of a `CryptoHash`, which is the length of the hashes returned by
