@@ -46,16 +46,19 @@ impl<T: Eq> HeightIndex<T> {
             .flat_map(|(height, values)| values.into_iter().map(move |value| (height, value)))
     }
 
-    /// Removes `value` from `height`.
-    pub fn remove(&mut self, height: &Height, value: &T) {
+    /// Removes `value` from `height`. Returns `true` if `value` was present.
+    pub fn remove(&mut self, height: &Height, value: &T) -> bool {
         let Some(bucket) = self.buckets.get_mut(height) else {
-            return;
+            return false;
         };
 
+        let len = bucket.len();
         bucket.retain(|x| x != value);
+        let removed = bucket.len() != len;
         if bucket.is_empty() {
             self.buckets.remove(height);
         }
+        removed
     }
 
     pub fn lookup(&self, height: Height) -> impl Iterator<Item = &T> {
@@ -153,7 +156,7 @@ impl Indexes {
         };
     }
 
-    pub fn remove(&mut self, height: &Height, cm_hash: &ConsensusMessageHash) {
+    pub fn remove(&mut self, height: &Height, cm_hash: &ConsensusMessageHash) -> bool {
         match cm_hash {
             ConsensusMessageHash::RandomBeacon(hash) => self.random_beacon.remove(height, hash),
             ConsensusMessageHash::Finalization(hash) => self.finalization.remove(height, hash),
@@ -181,7 +184,7 @@ impl Indexes {
             ConsensusMessageHash::EquivocationProof(hash) => {
                 self.equivocation_proof.remove(height, hash)
             }
-        };
+        }
     }
 }
 
@@ -446,8 +449,10 @@ mod tests {
             index.insert(height, i);
         }
 
-        index.remove(&height, &0);
-        index.remove(&height, &100);
+        assert!(index.remove(&height, &0));
+        // Absent values, or values at another height, are not removed.
+        assert!(!index.remove(&height, &100));
+        assert!(!index.remove(&Height::from(1), &1));
         assert_eq!(
             index.lookup(height).copied().collect::<Vec<i32>>(),
             (1..max).collect::<Vec<i32>>()

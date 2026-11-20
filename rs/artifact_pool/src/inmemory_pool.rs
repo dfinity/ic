@@ -40,11 +40,11 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
     fn remove(&mut self, msg_id: &ConsensusMessageId) -> Option<T> {
         let ConsensusMessageId { hash, height } = msg_id;
 
-        let artifact = self.artifacts.remove(hash.digest());
-        if artifact.is_some() {
-            self.indexes.remove(height, hash);
+        if self.indexes.remove(height, hash) {
+            self.artifacts.remove(hash.digest())
+        } else {
+            None
         }
-        artifact
     }
 
     /// Purge artifacts below the given [`Height`].
@@ -416,6 +416,30 @@ pub mod test {
         // The first copy is kept.
         let hash = first.msg.get_cm_hash();
         assert_eq!(pool.get_by_hash(hash.digest()), Some(&first));
+    }
+
+    #[test]
+    fn test_remove_at_wrong_height_is_ignored() {
+        let mut pool = InMemoryPoolSection::new();
+        let height = Height::from(5);
+        let artifact = make_artifact(fake_random_beacon(height));
+        pool.insert(artifact.clone());
+
+        let wrong_height_id = ConsensusMessageId {
+            hash: artifact.msg.get_cm_hash(),
+            height: height.increment(),
+        };
+        assert_eq!(pool.remove(&wrong_height_id), None);
+        assert_eq!(pool.artifacts.len(), 1);
+        assert_eq!(pool.indexes.random_beacon.size(), 1);
+
+        let id = ConsensusMessageId {
+            hash: artifact.msg.get_cm_hash(),
+            height,
+        };
+        assert_eq!(pool.remove(&id), Some(artifact));
+        assert!(pool.artifacts.is_empty());
+        assert_eq!(pool.indexes.random_beacon.size(), 0);
     }
 
     #[test]

@@ -265,16 +265,16 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
     fn remove(&mut self, id: &CertificationMessageId) {
         let CertificationMessageId { hash, height } = id;
 
-        let artifact = self.unvalidated.remove(hash.digest());
-        if artifact.is_some() {
-            match hash {
-                CertificationMessageHash::Certification(cert_hash) => {
-                    self.unvalidated_cert_index.remove(height, cert_hash);
-                }
-                CertificationMessageHash::CertificationShare(share_hash) => {
-                    self.unvalidated_share_index.remove(height, share_hash);
-                }
+        let removed = match hash {
+            CertificationMessageHash::Certification(cert_hash) => {
+                self.unvalidated_cert_index.remove(height, cert_hash)
             }
+            CertificationMessageHash::CertificationShare(share_hash) => {
+                self.unvalidated_share_index.remove(height, share_hash)
+            }
+        };
+        if removed {
+            self.unvalidated.remove(hash.digest());
         }
     }
 
@@ -666,6 +666,17 @@ mod tests {
 
             pool.remove(&msg_to_id(&absent_share));
             pool.remove(&msg_to_id(&absent_cert));
+
+            assert_eq!(pool.unvalidated.len(), 2);
+            assert_eq!(pool.unvalidated_share_index.size(), 1);
+            assert_eq!(pool.unvalidated_cert_index.size(), 1);
+
+            // So is removing ids of artifacts in the pool, but at the wrong height.
+            for msg in [&share, &cert] {
+                let mut wrong_height_id = msg_to_id(msg);
+                wrong_height_id.height = height.increment();
+                pool.remove(&wrong_height_id);
+            }
 
             assert_eq!(pool.unvalidated.len(), 2);
             assert_eq!(pool.unvalidated_share_index.size(), 1);
