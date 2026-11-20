@@ -10,18 +10,6 @@ use rosetta_core::{request_types::*, response_types::*};
 use std::sync::Arc;
 use std::time::SystemTime;
 
-/// Runs CPU-bound construction work on tokio's blocking thread pool, so that a slow request
-/// cannot occupy the async worker threads that serve the other endpoints and sync blocks.
-async fn run_blocking<T, F>(f: F) -> Result<T, Error>
-where
-    F: FnOnce() -> Result<T, Error> + Send + 'static,
-    T: Send + 'static,
-{
-    tokio::task::spawn_blocking(f)
-        .await
-        .map_err(|err| Error::request_processing_error(&err))?
-}
-
 pub async fn construction_derive(
     State(state): State<Arc<MultiTokenAppState>>,
     Json(request): Json<ConstructionDeriveRequest>,
@@ -84,9 +72,9 @@ pub async fn construction_hash(
 ) -> Result<Json<ConstructionHashResponse>> {
     get_state_from_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&err))?;
-    Ok(Json(
-        run_blocking(move || services::construction_hash(request.signed_transaction)).await?,
-    ))
+    Ok(Json(services::construction_hash(
+        request.signed_transaction,
+    )?))
 }
 
 pub async fn construction_combine(
@@ -95,12 +83,10 @@ pub async fn construction_combine(
 ) -> Result<Json<ConstructionCombineResponse>> {
     get_state_from_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&err))?;
-    Ok(Json(
-        run_blocking(move || {
-            services::construction_combine(request.unsigned_transaction, request.signatures)
-        })
-        .await?,
-    ))
+    Ok(Json(services::construction_combine(
+        request.unsigned_transaction,
+        request.signatures,
+    )?))
 }
 
 pub async fn construction_payloads(
@@ -109,24 +95,17 @@ pub async fn construction_payloads(
 ) -> Result<Json<ConstructionPayloadsResponse>> {
     let state = get_state_from_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&err))?;
-    let metadata = request
-        .metadata
-        .as_ref()
-        .map(|m| ConstructionPayloadsRequestMetadata::try_from(m.clone()))
-        .transpose()?;
-    let ledger_id = state.icrc1_agent.ledger_canister_id;
-    Ok(Json(
-        run_blocking(move || {
-            services::construction_payloads(
-                request.operations,
-                metadata,
-                &ledger_id,
-                request.public_keys.unwrap_or_else(Vec::new),
-                SystemTime::now(),
-            )
-        })
-        .await?,
-    ))
+    Ok(Json(services::construction_payloads(
+        request.operations,
+        request
+            .metadata
+            .as_ref()
+            .map(|m| ConstructionPayloadsRequestMetadata::try_from(m.clone()))
+            .transpose()?,
+        &state.icrc1_agent.ledger_canister_id,
+        request.public_keys.unwrap_or_else(Vec::new),
+        SystemTime::now(),
+    )?))
 }
 
 pub async fn construction_parse(
@@ -135,11 +114,9 @@ pub async fn construction_parse(
 ) -> Result<Json<ConstructionParseResponse>> {
     let state = get_state_from_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&err))?;
-    let currency = state.metadata.clone().into();
-    Ok(Json(
-        run_blocking(move || {
-            services::construction_parse(request.transaction, request.signed, currency)
-        })
-        .await?,
-    ))
+    Ok(Json(services::construction_parse(
+        request.transaction,
+        request.signed,
+        state.metadata.clone().into(),
+    )?))
 }
