@@ -20,7 +20,11 @@ use crate::{
 };
 use ic_interfaces::execution_environment::StableMemoryApi;
 use ic_sys::PAGE_SIZE;
-use wirm::{DataType, ir::types::Instructions, wasmparser::{BlockType, MemArgTarget}};
+use wirm::{
+    DataType,
+    ir::types::Instructions,
+    wasmparser::{BlockType, MemArgTarget},
+};
 
 use ic_types::NumBytes;
 
@@ -439,7 +443,6 @@ pub(super) fn replacement_functions(
                                 // inserted directly after the stable memory.
                                 target: MemArgTarget::Memory(stable_memory_index + 1),
                                 ordering: None,
-
                             },
                         },
                         I32Const { value: 2 }, // READ_BIT
