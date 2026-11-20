@@ -1870,7 +1870,11 @@ pub(crate) mod tests {
                         &make_catch_up_package_contents_key(SOURCE_SUBNET_ID),
                         SPLIT_REGISTRY_VERSION + RegistryVersion::from(1),
                         Some(CatchUpPackageContents {
-                            cup_type: Some(CupType::Recovery(RecoveryArgs::default())),
+                            cup_type: Some(CupType::Recovery(RecoveryArgs {
+                                height: 0,
+                                time: 0,
+                                state_hash: CryptoHash::for_test().into_vec(),
+                            })),
                             ..Default::default()
                         }),
                     )
