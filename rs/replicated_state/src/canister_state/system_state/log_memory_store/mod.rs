@@ -74,6 +74,8 @@ pub struct LogMemoryStore {
     persistent_next_idx: u64,
 
     /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
+    /// Empty after loading from a checkpoint, until the first read or
+    /// `fill_caches`.
     #[validate_eq(Ignore)]
     header_cache: OnceLock<Option<Header>>,
 
@@ -83,9 +85,9 @@ pub struct LogMemoryStore {
     ///
     /// Every mutation sets it, in a cell of its own. A store loaded from a
     /// checkpoint starts with an empty cell, filled by the first call to
-    /// `first_timestamp`, so that loading reads nothing from the ring buffer
-    /// (validating a checkpoint loads every canister only to compare and drop
-    /// it). Clones share the cell until mutated, so a value filled in one
+    /// `first_timestamp` or `fill_caches`, so that loading reads nothing from the
+    /// ring buffer (validating a checkpoint loads every canister only to compare
+    /// and drop it). Clones share the cell until mutated, so a value filled in one
     /// (e.g. when observing the metrics of a committed state) is there for all.
     #[validate_eq(Ignore)]
     first_timestamp_cache: Arc<OnceLock<Option<u64>>>,
@@ -150,7 +152,7 @@ impl LogMemoryStore {
             ring_buffer.clear();
             self.save_ring_buffer(ring_buffer);
         } else {
-            self.header_cache = OnceLock::new();
+            self.header_cache = OnceLock::from(None);
             self.first_timestamp_cache = Arc::new(OnceLock::from(None));
             debug_assert!(self.stats_ok());
         }
@@ -173,7 +175,7 @@ impl LogMemoryStore {
         // Must come before clearing the page map and header cache, since next_idx() reads from them.
         self.persistent_next_idx = self.next_idx();
         self.maybe_page_map = None;
-        self.header_cache = OnceLock::new();
+        self.header_cache = OnceLock::from(None);
         self.first_timestamp_cache = Arc::new(OnceLock::from(None));
         debug_assert!(self.stats_ok());
     }
@@ -209,6 +211,16 @@ impl LogMemoryStore {
         self.first_timestamp_cache
             .get()
             .is_none_or(|cached| *cached == actual_first_ts)
+    }
+
+    /// Reads the ring buffer's header and the oldest record's timestamp into
+    /// their caches, unless already there, so that later reads (e.g. of
+    /// `memory_usage`) find them. Loading from a checkpoint reads neither, and
+    /// a caller about to need them can fill them ahead of time, e.g. in
+    /// parallel.
+    pub fn fill_caches(&self) {
+        self.get_header();
+        self.first_timestamp();
     }
 
     /// Returns the ring buffer header.

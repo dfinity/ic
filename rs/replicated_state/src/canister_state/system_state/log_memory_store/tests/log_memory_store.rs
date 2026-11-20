@@ -963,6 +963,20 @@ fn test_first_timestamp_filled_on_first_use_after_loading() {
 }
 
 #[test]
+fn test_fill_caches_reads_the_header_and_first_timestamp() {
+    let loaded = loaded_store_with_one_record(1_000_000_000);
+    assert_eq!(loaded.header_cache.get(), None);
+    assert_eq!(loaded.first_timestamp_cache.get(), None);
+
+    loaded.fill_caches();
+    assert!(matches!(loaded.header_cache.get(), Some(Some(_))));
+    assert_eq!(
+        loaded.first_timestamp_cache.get(),
+        Some(&Some(1_000_000_000))
+    );
+}
+
+#[test]
 fn test_mutating_a_clone_leaves_the_first_timestamp_of_the_others() {
     let loaded = loaded_store_with_one_record(1_000_000_000);
     let mut clone = loaded.clone();
