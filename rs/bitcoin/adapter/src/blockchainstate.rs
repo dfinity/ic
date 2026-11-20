@@ -234,7 +234,9 @@ where
         let start_time = std::time::Instant::now();
         let block_hash = block.block_hash();
 
-        if block.compute_merkle_root().is_some() && !block.check_merkle_root() {
+        // A block without transactions has no merkle root and `check_merkle_root` returns
+        // `false`, so such blocks are rejected here as well.
+        if !block.check_merkle_root() {
             return Err(AddBlockError::InvalidMerkleRoot(block_hash));
         }
 
@@ -408,7 +410,9 @@ mod test {
 
     use super::*;
     use crate::common::test_common::TestState;
-    use ic_btc_adapter_test_utils::{block_1, block_2, generate_header, generate_headers};
+    use ic_btc_adapter_test_utils::{
+        block_1, block_2, block_from_header, generate_header, generate_headers,
+    };
     use std::collections::HashSet;
 
     fn run_in_memory<R>(network: Network, test_fn: impl Fn(BlockchainState<Network>) -> R) -> R {
@@ -720,6 +724,46 @@ mod test {
         run_with_cache_dir(Network::Bitcoin, test_adding_blocks_to_the_cache).await
     }
 
+    /// Tests that `BlockchainState::add_block(...)` rejects a block whose transactions have been
+    /// stripped, and that such a block is not added to the cache.
+    async fn test_adding_block_without_transactions_is_rejected(state: BlockchainState<Network>) {
+        let complete_block = block_1();
+        let mut stripped_block = complete_block.clone();
+        stripped_block.txdata.clear();
+        // The block hash only depends on the header, so it is unchanged.
+        let block_hash = stripped_block.block_hash();
+        assert_eq!(block_hash, complete_block.block_hash());
+
+        let result = state.add_block(stripped_block).await;
+        assert!(
+            matches!(result, Err(AddBlockError::InvalidMerkleRoot(stop_hash)) if stop_hash == block_hash),
+        );
+        assert!(state.get_block(&block_hash).is_none());
+
+        // The complete block can still be added afterwards.
+        let result = state.add_block(complete_block).await;
+        assert!(matches!(result, Ok(())));
+        assert!(state.get_block(&block_hash).is_some());
+    }
+
+    #[tokio::test]
+    async fn test_adding_block_without_transactions_is_rejected_in_memory() {
+        run_in_memory(
+            Network::Bitcoin,
+            test_adding_block_without_transactions_is_rejected,
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_adding_block_without_transactions_is_rejected_on_disk() {
+        run_with_cache_dir(
+            Network::Bitcoin,
+            test_adding_block_without_transactions_is_rejected,
+        )
+        .await
+    }
+
     /// Tests the functionality of `BlockchainState::prune_blocks(...)` to ensure
     /// blocks are removed from the cache.
     async fn test_pruning_blocks_from_the_cache(state: BlockchainState<Network>) {
@@ -856,20 +900,8 @@ mod test {
         // h1 - h2  - h3  - h4
         let h3 = generate_header(h2.block_hash(), h2.time, 0);
         let h4 = generate_header(h3.block_hash(), h3.time, 0);
-        state
-            .add_block(Block {
-                header: h3,
-                txdata: Vec::new(),
-            })
-            .await
-            .unwrap();
-        state
-            .add_block(Block {
-                header: h4,
-                txdata: Vec::new(),
-            })
-            .await
-            .unwrap();
+        state.add_block(block_from_header(h3)).await.unwrap();
+        state.add_block(block_from_header(h4)).await.unwrap();
         assert_eq!(state.get_active_chain_tip().header, h4);
     }
 
