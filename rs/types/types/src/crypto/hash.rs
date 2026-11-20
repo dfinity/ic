@@ -450,6 +450,8 @@ pub trait CryptoHashable: CryptoHashDomain + Hash {}
 impl<T> CryptoHashable for T where T: CryptoHashDomain + Hash {}
 
 /// A cryptographic hash, as returned by [`crypto_hash`].
+/// TODO: Turn the vector into a fixed-size array (`[u8; CryptoHash::LEN]`) once all production code
+/// indeed uses 32-byte vectors (i.e. once #12197 reaches mainnet)
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
 pub struct CryptoHash(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
