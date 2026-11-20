@@ -404,6 +404,25 @@ mod output_addresses {
             .push_opcode(OP_CHECKMULTISIG)
             .into_script();
         let keys = vec![key(COMPRESSED_PUBLIC_KEY); 2];
+        let p2pk_with_op_checksigverify = Builder::new()
+            .push_slice(key(COMPRESSED_PUBLIC_KEY))
+            .push_opcode(OP_CHECKSIGVERIFY)
+            .into_script();
+        let p2pk_with_push_before_key = Builder::new()
+            .push_slice(key(COMPRESSED_PUBLIC_KEY))
+            .push_slice(key(COMPRESSED_PUBLIC_KEY))
+            .push_opcode(OP_CHECKSIG)
+            .into_script();
+        let multisig_with_op_checkmultisigverify = Builder::new()
+            .push_opcode(OP_PUSHNUM_1)
+            .push_slice(key(COMPRESSED_PUBLIC_KEY))
+            .push_opcode(OP_PUSHNUM_1)
+            .push_opcode(OP_CHECKMULTISIGVERIFY)
+            .into_script();
+        let multisig_with_op_nop_after_op_checkmultisig =
+            Builder::from(multisig(1, &keys, 2).to_bytes())
+                .push_opcode(OP_NOP)
+                .into_script();
         let op_return = ScriptBuf::new_op_return([0xaa; 32]);
         let anyone_can_spend = Builder::new().push_opcode(OP_PUSHNUM_1).into_script();
 
@@ -415,6 +434,10 @@ mod output_addresses {
             multisig_with_op_drop,
             multisig_with_opcode_as_key,
             multisig_with_257_keys,
+            p2pk_with_op_checksigverify,
+            p2pk_with_push_before_key,
+            multisig_with_op_checkmultisigverify,
+            multisig_with_op_nop_after_op_checkmultisig,
             multisig(1, &keys, 3),
             multisig(3, &keys, 2),
             multisig(0, &keys, 2),
