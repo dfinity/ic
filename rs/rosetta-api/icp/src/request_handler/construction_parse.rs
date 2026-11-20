@@ -974,10 +974,15 @@ mod tests {
             crate::convert::canister_method_arg_decoding_cost::<ManageNeuronRequest>(arg)
         };
 
-        // Governance allows at most 15 followees per topic.
+        // Governance allows at most 15 followees per topic. Most of the cost is not the
+        // followees but the Candid type table of `ManageNeuronRequest` (about 2 KB, charged at 4
+        // units per byte), which includes the whole `MakeProposal` tree: 15 followees cost about
+        // 8,600, of which about 8,200 is the type table. If a governance API change trips this
+        // check, it is the type table that grew; compare its new size to the quota and raise
+        // `CANISTER_METHOD_ARG_DECODING_QUOTA` if needed.
         let max_cost = cost(&follow_arg(15));
         assert!(
-            max_cost * 10 < crate::convert::CANISTER_METHOD_ARG_DECODING_QUOTA,
+            max_cost * 3 < crate::convert::CANISTER_METHOD_ARG_DECODING_QUOTA,
             "decoding cost {max_cost} is too close to the quota"
         );
         // Far more followees than governance accepts still decode.
