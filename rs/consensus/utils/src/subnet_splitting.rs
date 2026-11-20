@@ -321,7 +321,7 @@ mod tests {
             CupType::Recovery(RecoveryArgs {
                 height: 1_000,
                 time: 1,
-                state_hash: vec![],
+                state_hash: CryptoHash::for_test().into_vec(),
             }),
         )]
         cup_type: CupType,
@@ -522,7 +522,7 @@ mod tests {
             CupType::Recovery(RecoveryArgs {
                 height: 1_000,
                 time: 1,
-                state_hash: vec![],
+                state_hash: CryptoHash::for_test().into_vec(),
             }),
             CupType::SubnetSplitting(
                 ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
@@ -579,7 +579,7 @@ mod tests {
             CupType::Recovery(RecoveryArgs {
                 height: 1_000,
                 time: 1,
-                state_hash: vec![],
+                state_hash: CryptoHash::for_test().into_vec(),
             }),
             CupType::SubnetSplitting(
                 ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
