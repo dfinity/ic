@@ -66,9 +66,9 @@ fn simple_file_table_and_chunk_table(version: StateSyncVersion) -> (Vec<FileInfo
     assert!(version >= StateSyncVersion::V1);
 
     let chunk_0 = &[0_u8; 1000];
-    let chunk_1 = &[1_u8; 1024];
-    let chunk_2 = &[1_u8; 1024];
-    let chunk_3 = &[2_u8; 1024];
+    let chunk_1 = &[1_u8; 4096];
+    let chunk_2 = &[1_u8; 4096];
+    let chunk_3 = &[2_u8; 4096];
     let chunk_4 = &[2_u8; 26];
     let chunk_0_hash = hash_concat!(14_u8, b"ic-state-chunk", chunk_0);
     let chunk_1_hash = hash_concat!(14_u8, b"ic-state-chunk", chunk_1);
@@ -89,12 +89,12 @@ fn simple_file_table_and_chunk_table(version: StateSyncVersion) -> (Vec<FileInfo
         },
         FileInfo {
             relative_path: "subdir/memory".into(),
-            size_bytes: 2048,
+            size_bytes: 8192,
             hash: file_1_hash,
         },
         FileInfo {
             relative_path: "subdir/metadata".into(),
-            size_bytes: 1050,
+            size_bytes: 4122,
             hash: file_2_hash,
         },
         FileInfo {
@@ -113,26 +113,26 @@ fn simple_file_table_and_chunk_table(version: StateSyncVersion) -> (Vec<FileInfo
         },
         ChunkInfo {
             file_index: 1,
-            size_bytes: 1024,
+            size_bytes: 4096,
             offset: 0,
             hash: chunk_1_hash,
         },
         ChunkInfo {
             file_index: 1,
-            size_bytes: 1024,
-            offset: 1024,
+            size_bytes: 4096,
+            offset: 4096,
             hash: chunk_2_hash,
         },
         ChunkInfo {
             file_index: 2,
-            size_bytes: 1024,
+            size_bytes: 4096,
             offset: 0,
             hash: chunk_3_hash,
         },
         ChunkInfo {
             file_index: 2,
             size_bytes: 26,
-            offset: 1024,
+            offset: 4096,
             hash: chunk_4_hash,
         },
     ];
@@ -185,10 +185,10 @@ fn simple_manifest_v1() -> ([u8; 32], Manifest) {
         1000_u64,
         &file_table[0].hash[..],
         "subdir/memory",
-        2048_u64,
+        8192_u64,
         &file_table[1].hash[..],
         "subdir/metadata",
-        1050_u64,
+        4122_u64,
         &file_table[2].hash[..],
         "subdir/queue",
         0_u64,
@@ -202,23 +202,23 @@ fn simple_manifest_v1() -> ([u8; 32], Manifest) {
         &chunk_table[0].hash[..],
         // chunk 1
         1_u32,
-        1024_u32,
+        4096_u32,
         0_u64,
         &chunk_table[1].hash[..],
         // chunk 2
         1_u32,
-        1024_u32,
-        1024_u64,
+        4096_u32,
+        4096_u64,
         &chunk_table[2].hash[..],
         // chunk 3
         2_u32,
-        1024_u32,
+        4096_u32,
         0_u64,
         &chunk_table[3].hash[..],
         // chunk 4
         2_u32,
         26_u32,
-        1024_u64,
+        4096_u64,
         &chunk_table[4].hash[..]
     );
 
@@ -284,9 +284,9 @@ fn test_simple_manifest_computation() {
 
     let subdir = root.join("subdir");
     fs::create_dir_all(&subdir).expect("failed to create dir 'subdir'");
-    fs::write(subdir.join("memory"), vec![1_u8; 2048]).expect("failed to create file 'memory'");
+    fs::write(subdir.join("memory"), vec![1_u8; 8192]).expect("failed to create file 'memory'");
     fs::write(subdir.join("queue"), vec![0_u8; 0]).expect("failed to create file 'queue'");
-    fs::write(subdir.join("metadata"), vec![2_u8; 1050]).expect("failed to create file 'queue'");
+    fs::write(subdir.join("metadata"), vec![2_u8; 4122]).expect("failed to create file 'queue'");
 
     let test_computation_with_num_threads = |num_threads: u32| {
         let mut thread_pool = scoped_threadpool::Pool::new(num_threads);
@@ -296,7 +296,7 @@ fn test_simple_manifest_computation() {
             &no_op_logger(),
             StateSyncVersion::V1,
             &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
-            1024,
+            4096,
             None,
             RehashManifest::No,
         )
@@ -314,7 +314,7 @@ fn test_simple_manifest_computation() {
                 &no_op_logger(),
                 version,
                 &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
-                1024,
+                4096,
                 None,
                 RehashManifest::No,
             )
@@ -333,8 +333,8 @@ fn test_simple_manifest_computation() {
 }
 
 /// Chunk size for the tests of files over several spans: a span
-/// (`MANIFEST_SPAN_CHUNKS` chunks) is then 128 KiB.
-const SPAN_TEST_CHUNK_SIZE: u32 = 512;
+/// (`MANIFEST_SPAN_CHUNKS` chunks) is then 1 MiB.
+const SPAN_TEST_CHUNK_SIZE: u32 = 4096;
 
 /// Writes `a.bin`, `b.bin` and `c.bin` under `root`, of 3, 2 and 1 spans of
 /// `SPAN_TEST_CHUNK_SIZE` chunks, the first two ending in a partial chunk, and
@@ -497,9 +497,9 @@ fn test_manifest_computation_skips_marker_file() {
 
     let subdir = root.join("subdir");
     fs::create_dir_all(&subdir).expect("failed to create dir 'subdir'");
-    fs::write(subdir.join("memory"), vec![1_u8; 2048]).expect("failed to create file 'memory'");
+    fs::write(subdir.join("memory"), vec![1_u8; 8192]).expect("failed to create file 'memory'");
     fs::write(subdir.join("queue"), vec![0_u8; 0]).expect("failed to create file 'queue'");
-    fs::write(subdir.join("metadata"), vec![2_u8; 1050]).expect("failed to create file 'queue'");
+    fs::write(subdir.join("metadata"), vec![2_u8; 4122]).expect("failed to create file 'queue'");
 
     let mut thread_pool = scoped_threadpool::Pool::new(1);
 
@@ -509,7 +509,7 @@ fn test_manifest_computation_skips_marker_file() {
         &no_op_logger(),
         StateSyncVersion::V1,
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
-        1024,
+        4096,
         None,
         RehashManifest::No,
     )
@@ -523,7 +523,7 @@ fn test_manifest_computation_skips_marker_file() {
         &no_op_logger(),
         StateSyncVersion::V1,
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
-        1024,
+        4096,
         None,
         RehashManifest::No,
     )
@@ -822,34 +822,34 @@ fn test_diff_manifest_v1() {
     );
 
     // the chunk_2 from the file_1 changes.
-    let chunk_1_hash = hash_concat!(14_u8, b"ic-state-chunk", vec![1_u8; 1024].as_slice());
-    let chunk_2_hash = hash_concat!(14_u8, b"ic-state-chunk", vec![255_u8; 1024].as_slice());
+    let chunk_1_hash = hash_concat!(14_u8, b"ic-state-chunk", vec![1_u8; 4096].as_slice());
+    let chunk_2_hash = hash_concat!(14_u8, b"ic-state-chunk", vec![255_u8; 4096].as_slice());
     let file_1_hash = hash_concat!(
         13_u8,
         b"ic-state-file",
         2_u32,
         1_u32,
-        1024_u32,
+        4096_u32,
         0_u64,
         &chunk_1_hash[..],
         1_u32,
-        1024_u32,
-        1024_u64,
+        4096_u32,
+        4096_u64,
         &chunk_2_hash[..]
     );
 
     let mut file_table = manifest_new.file_table.to_owned();
     file_table[1] = FileInfo {
         relative_path: "subdir/memory".into(),
-        size_bytes: 2048,
+        size_bytes: 8192,
         hash: file_1_hash,
     };
 
     let mut chunk_table = manifest_new.chunk_table.to_owned();
     chunk_table[2] = ChunkInfo {
         file_index: 1,
-        size_bytes: 1024,
-        offset: 1024,
+        size_bytes: 4096,
+        offset: 4096,
         hash: chunk_2_hash,
     };
 
@@ -1490,7 +1490,7 @@ fn test_file_index_independent_file_hash() {
             &no_op_logger(),
             version,
             &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
-            1024,
+            4096,
             None,
             RehashManifest::No,
         )
