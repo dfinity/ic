@@ -3101,6 +3101,8 @@ fn wasm64_import_system_api_functions() {
 
       (import "ic0" "is_controller"
         (func $ic0_is_controller (param i64) (param i64) (result i32)))
+      (import "ic0" "is_subnet_admin"
+        (func $ic0_is_subnet_admin (param i64) (param i64) (result i32)))
 
       (import "ic0" "subnet_self_size"
         (func $ic0_subnet_self_size (result i64)))
@@ -3149,6 +3151,7 @@ fn wasm64_import_system_api_functions() {
             (call $ic0_certified_data_set (i64.const 0) (i64.const 5))
             (call $ic0_data_certificate_copy (i64.const 4096) (i64.const 0) (call $ic0_data_certificate_size))
             (drop (call $ic0_is_controller (i64.const 0) (i64.const 5)))
+            (drop (call $ic0_is_subnet_admin (i64.const 0) (i64.const 5)))
 
           )
 
