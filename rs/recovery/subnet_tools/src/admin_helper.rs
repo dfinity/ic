@@ -50,6 +50,25 @@ pub fn get_halt_subnet_at_cup_height_command(
     ic_admin
 }
 
+/// Propose to unhalt the subnet, i.e. to set its `is_halted` flag to `false`.
+///
+/// Leaves every other field of the subnet record unchanged, unlike
+/// `propose-to-bring-subnet-back-online-after-repairs`, which also clears the
+/// subnet's SSH keys and recalled replica versions.
+pub fn get_unhalt_subnet_command(admin_helper: &AdminHelper, subnet_id: SubnetId) -> IcAdmin {
+    let mut ic_admin = admin_helper.get_ic_admin_cmd_base();
+
+    ic_admin
+        .add_positional_argument("propose-to-update-subnet")
+        .add_argument(SUBNET_ARG, subnet_id)
+        .add_argument(SUMMARY_ARG, quote(format!("Unhalt subnet {subnet_id}")))
+        .add_argument("is-halted", false);
+
+    admin_helper.add_proposer_args(&mut ic_admin);
+
+    ic_admin
+}
+
 /// Propose additions or updates to `canister_migrations`.
 ///
 /// Step 1 of canister migration.
@@ -169,6 +188,24 @@ mod tests {
             --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe at cup height and optionally update ssh readonly access\" \
             --halt-at-cup-height true \
             --ssh-readonly-access \"fake ssh key\" \
+            --test-neuron-proposer"
+        );
+    }
+
+    #[test]
+    fn get_unhalt_subnet_command_test() {
+        let result =
+            get_unhalt_subnet_command(&fake_admin_helper(), subnet_id_from_str(FAKE_SUBNET_ID_1))
+                .join(" ");
+
+        assert_eq!(
+            result,
+            "/fake/ic/admin/dir/ic-admin \
+            --nns-url \"https://fake_nns_url.com:8080/\" \
+            propose-to-update-subnet \
+            --subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
+            --summary \"Unhalt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe\" \
+            --is-halted false \
             --test-neuron-proposer"
         );
     }
