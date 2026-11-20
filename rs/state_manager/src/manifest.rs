@@ -36,10 +36,11 @@ use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::OsStr;
 use std::fmt;
+use std::fs::File;
 use std::ops::Range;
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// When computing a manifest, we recompute the hash of every
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and
@@ -47,11 +48,11 @@ use std::sync::Arc;
 const REHASH_EVERY_NTH_CHUNK: u64 = 10;
 
 /// Chunks of a file are hashed in spans of up to this many consecutive chunks
-/// (256 MiB at the default chunk size), one task per span reading them in order
-/// through one file descriptor, so that the kernel's read-ahead keeps up.
-/// Threads reading interleaved chunks of the same file look random to the
-/// kernel: they get 4 KiB pages, no read-ahead, and contend on the file's page
-/// cache lock.
+/// (256 MiB at the default chunk size): the units of work the threads take,
+/// each read in order through one file descriptor, so that large files are
+/// split across threads while being opened once per span. Where the file system
+/// doesn't support `O_DIRECT` (see `open_for_hashing`), reading in order also
+/// keeps the kernel's read-ahead going.
 const MANIFEST_SPAN_CHUNKS: usize = 256;
 
 /// During the downloading phase of state sync, We group certain files together
@@ -363,8 +364,57 @@ fn uses_chunk_size(manifest: &Manifest, max_chunk_size: u32) -> bool {
     })
 }
 
+/// Alignment of the buffers, offsets and lengths of `O_DIRECT` reads: at least
+/// the logical block size of the disk the state is on.
+const DIRECT_IO_ALIGN: usize = 4096;
+
+// The chunks of the manifests computed in production can be read with
+// `O_DIRECT` (see `build_chunk_table_parallel`).
+const _: () = assert!((DEFAULT_CHUNK_SIZE as usize).is_multiple_of(DIRECT_IO_ALIGN));
+
+/// A `DIRECT_IO_ALIGN`-aligned block of an `AlignedBuffer`.
+#[derive(Clone, Copy)]
+#[repr(C, align(4096))]
+struct AlignedBlock([u8; DIRECT_IO_ALIGN]);
+
+/// A `DIRECT_IO_ALIGN`-aligned buffer for `O_DIRECT` reads. It grows to the
+/// largest size asked for and never shrinks.
+struct AlignedBuffer(Vec<AlignedBlock>);
+
+impl AlignedBuffer {
+    /// Returns a buffer of `len` bytes rounded up to `DIRECT_IO_ALIGN`, so that
+    /// `get` up to that length does not reallocate.
+    fn with_capacity(len: usize) -> Self {
+        Self(vec![
+            AlignedBlock([0; DIRECT_IO_ALIGN]);
+            len.div_ceil(DIRECT_IO_ALIGN)
+        ])
+    }
+
+    /// Returns the buffer's first `len` bytes rounded up to `DIRECT_IO_ALIGN`,
+    /// growing it if smaller.
+    fn get(&mut self, len: usize) -> &mut [u8] {
+        let blocks = len.div_ceil(DIRECT_IO_ALIGN);
+        if self.0.len() < blocks {
+            self.0.resize(blocks, AlignedBlock([0; DIRECT_IO_ALIGN]));
+        }
+        // SAFETY: `AlignedBlock` is a byte array without padding, so the first
+        // `blocks` blocks are `blocks * DIRECT_IO_ALIGN` initialized bytes,
+        // borrowed mutably for the slice's lifetime.
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                self.0.as_mut_ptr().cast::<u8>(),
+                blocks * DIRECT_IO_ALIGN,
+            )
+        }
+    }
+}
+
 /// Computes file_table and chunk_table of a manifest using a parallel algorithm.
 /// All the parallel work is spawned in the specified thread pool.
+///
+/// Panics if `max_chunk_size` isn't a multiple of `DIRECT_IO_ALIGN`: chunks
+/// are read with `O_DIRECT` (see `read_chunk`).
 fn build_chunk_table_parallel(
     thread_pool: &mut scoped_threadpool::Pool,
     metrics: &ManifestMetrics,
@@ -375,6 +425,10 @@ fn build_chunk_table_parallel(
     chunk_actions: Vec<ChunkAction>,
     version: StateSyncVersion,
 ) -> (Vec<FileInfo>, Vec<ChunkInfo>) {
+    assert!(
+        (max_chunk_size as usize).is_multiple_of(DIRECT_IO_ALIGN),
+        "chunk size {max_chunk_size} isn't a multiple of {DIRECT_IO_ALIGN}"
+    );
     // Build a chunk table and file table filled with blank hashes.
     let mut chunk_table: Vec<ChunkInfo> = {
         let mut chunks = Vec::with_capacity(chunk_actions.len());
@@ -425,13 +479,27 @@ fn build_chunk_table_parallel(
     }
     spans.sort_by_key(|span| (span[0].info.offset, span[0].index));
 
-    // Compute real chunk hashes in parallel.
+    // Compute real chunk hashes in parallel: a task per thread, each taking the
+    // next span until none are left, and reading chunks into a buffer of its own.
     // NB. We must populate hashes of all the chunks in a file before we compute
     // file hashes.
+    let tasks = thread_pool.thread_count();
+    let spans = Mutex::new(spans.into_iter());
+    let file_table_ref = &file_table;
     thread_pool.scoped(|scope| {
-        for span in spans {
-            let file_path = root.join(&file_table[span[0].info.file_index as usize].relative_path);
-            scope.execute(move || hash_span(metrics, log, &file_path, span));
+        for _ in 0..tasks {
+            let spans = &spans;
+            scope.execute(move || {
+                let mut buffer = AlignedBuffer::with_capacity(max_chunk_size as usize);
+                loop {
+                    // Not in a `while let`, which would hold the lock while hashing.
+                    let next = spans.lock().unwrap().next();
+                    let Some(span) = next else { break };
+                    let file_path =
+                        root.join(&file_table_ref[span[0].info.file_index as usize].relative_path);
+                    hash_span(metrics, log, &file_path, span, &mut buffer);
+                }
+            });
         }
     });
 
@@ -458,30 +526,29 @@ struct ChunkToHash<'a> {
 }
 
 /// Sets the hashes of `span`, consecutive chunks of the file at `file_path`, as
-/// their actions say. Opens the file once, for the first chunk it reads, and
-/// reads the chunks to hash in order.
+/// their actions say. Opens the file once (see `open_for_hashing`), for the
+/// first chunk it reads, and reads the chunks to hash in order, into `buffer`.
 fn hash_span(
     metrics: &ManifestMetrics,
     log: &ReplicaLogger,
     file_path: &Path,
     span: &mut [ChunkToHash],
+    buffer: &mut AlignedBuffer,
 ) {
     let mut file = None;
-    let mut buf = Vec::new();
     for chunk in span {
         let (offset, size_bytes) = (chunk.info.offset, chunk.info.size_bytes);
         let mut recompute_chunk_hash = || {
             let file = file.get_or_insert_with(|| {
-                std::fs::File::open(file_path).unwrap_or_else(|e| {
+                open_for_hashing(file_path).unwrap_or_else(|e| {
                     fatal!(log, "failed to open file {}: {}", file_path.display(), e)
                 })
             });
-            buf.resize(size_bytes as usize, 0);
-            file.read_exact_at(&mut buf, offset).unwrap_or_else(|e| {
+            let bytes = read_chunk(file, buffer, offset, size_bytes as usize).unwrap_or_else(|e| {
                 fatal!(log, "failed to read file {}: {}", file_path.display(), e)
             });
             let mut hasher = chunk_hasher();
-            hasher.write(&buf);
+            hasher.write(bytes);
             hasher.finish()
         };
 
@@ -523,6 +590,49 @@ fn hash_span(
             }
         };
     }
+}
+
+/// Opens the file at `path` for reading its chunks with `O_DIRECT`, bypassing
+/// the page cache: a manifest reads each chunk it hashes once, hundreds of GB
+/// per checkpoint on a large subnet, which through the page cache would evict
+/// the pages execution uses. Opens the file buffered if the file system doesn't
+/// support `O_DIRECT`.
+fn open_for_hashing(path: &Path) -> std::io::Result<File> {
+    use std::os::unix::fs::OpenOptionsExt;
+    match std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(nix::libc::O_DIRECT)
+        .open(path)
+    {
+        Err(e) if e.raw_os_error() == Some(nix::libc::EINVAL) => File::open(path),
+        result => result,
+    }
+}
+
+/// Reads the `len` bytes at `offset` of `file`, opened by `open_for_hashing`,
+/// into `buffer` and returns them. `O_DIRECT` reads whole blocks, at offsets
+/// that are multiples of `DIRECT_IO_ALIGN`, as chunk offsets are: this reads
+/// `len` rounded up to `DIRECT_IO_ALIGN` and ignores the bytes past `len`; at
+/// the end of the file, the read returns just the bytes up to it.
+///
+/// Returns `Err` if the file ends before `offset + len`, or a read fails.
+fn read_chunk<'a>(
+    file: &File,
+    buffer: &'a mut AlignedBuffer,
+    offset: u64,
+    len: usize,
+) -> std::io::Result<&'a [u8]> {
+    let buf = buffer.get(len);
+    let mut got = 0;
+    while got < len {
+        match file.read_at(&mut buf[got..], offset + got as u64) {
+            Ok(0) => return Err(std::io::ErrorKind::UnexpectedEof.into()),
+            Ok(n) => got += n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(&buf[..len])
 }
 
 /// Build a chunk table from the file table.
@@ -903,6 +1013,9 @@ pub enum RehashManifest {
 }
 
 /// Computes manifest for the checkpoint located at `checkpoint_root_path`.
+///
+/// Panics if `max_chunk_size` isn't a multiple of `DIRECT_IO_ALIGN` (see
+/// `build_chunk_table_parallel`).
 pub fn compute_manifest(
     thread_pool: &mut scoped_threadpool::Pool,
     metrics: &ManifestMetrics,
