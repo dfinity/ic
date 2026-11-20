@@ -28,16 +28,13 @@ pub struct IngressPoolObject {
     /// Byte size of the ingress message.
     byte_size: usize,
 
-    /// The effective canister ID of the ingress message, see
-    /// [`IngressPoolObject::effective_canister_id`]. Determining it means decoding
-    /// the method payload, so this is done on first use and the outcome is kept
-    /// for as long as the message stays in the pool.
+    /// The result of [`extract_effective_canister_id`] for the ingress message,
+    /// computed on first use by [`IngressPoolObject::effective_canister_id`].
     effective_canister_id: OnceLock<Result<Option<CanisterId>, InvalidManagementMessage>>,
 }
 
 /// The effective canister ID of an ingress message addressed to the management
-/// canister cannot be determined: the method does not exist, cannot be called via
-/// ingress messages, or its payload cannot be decoded.
+/// canister cannot be determined.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct InvalidManagementMessage;
 
@@ -56,13 +53,9 @@ impl IngressPoolObject {
     }
 
     /// Returns the effective canister ID of the ingress message, as determined by
-    /// [`extract_effective_canister_id`], i.e. `Ok(None)` for messages without an
-    /// effective canister ID.
-    ///
-    /// The method payload is decoded at most once per pool object, no matter how
-    /// often this is called. This holds for payloads that fail to decode as well:
-    /// such messages stay in the pool until they expire, so they would otherwise be
-    /// decoded again every time the ingress selector considers them.
+    /// [`extract_effective_canister_id`]. It is computed on the first call (decoding
+    /// the method payload of management canister messages) and cached afterwards,
+    /// including if it cannot be determined.
     pub fn effective_canister_id(&self) -> Result<Option<CanisterId>, InvalidManagementMessage> {
         *self.effective_canister_id.get_or_init(|| {
             extract_effective_canister_id(self.signed_ingress.content())

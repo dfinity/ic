@@ -526,8 +526,7 @@ impl IngressManager {
     /// Validates a single ingress message.
     ///
     /// `effective_canister_id` yields the effective canister ID of `signed_ingress`
-    /// (or an error if it cannot be determined). It is only called if the message
-    /// passes the checks preceding the cycles check.
+    /// (or an error if it cannot be determined).
     #[allow(clippy::too_many_arguments)]
     fn validate_ingress<E>(
         &self,
@@ -2443,6 +2442,8 @@ pub(crate) mod tests {
                     .method_name("canister_status")
                     .expiry_time(expiry)
                     .build();
+                // Inserts the messages into the unvalidated pool and moves them to the
+                // validated pool.
                 insert_unvalidated_ingress_with_timestamp(
                     vec![
                         canister_msg.clone(),
