@@ -1,3 +1,4 @@
+use crate::retention_policy::RetentionRule;
 use clap::Parser;
 use ic_types::{PrincipalId, SubnetId};
 use std::path::PathBuf;
@@ -43,4 +44,56 @@ pub enum SubCommand {
         /// The ID of the target subnet
         subnet_id: ClapSubnetId,
     },
+    /// Print which cold stored states of a subnet a retention policy would delete, without
+    /// deleting anything
+    SimulateRetentionPolicy {
+        /// The ID of the target subnet
+        subnet_id: ClapSubnetId,
+        /// A rule of the retention policy to simulate: keep one state every PERIOD_DAYS days,
+        /// until they are older than TIME_TO_LIVE_DAYS days. Can be repeated.
+        #[clap(
+            long = "rule",
+            value_name = "PERIOD_DAYS:TIME_TO_LIVE_DAYS",
+            required = true
+        )]
+        rules: Vec<RetentionRule>,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_simulate_retention_policy_test() {
+        let args = BackupArgs::try_parse_from([
+            "ic-backup",
+            "--config-file",
+            "config.json",
+            "simulate-retention-policy",
+            "gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe",
+            "--rule",
+            "1:30",
+            "--rule",
+            "16:182",
+        ])
+        .unwrap();
+
+        let Some(SubCommand::SimulateRetentionPolicy { rules, .. }) = args.subcmd else {
+            panic!("Expected the simulate-retention-policy subcommand");
+        };
+        assert_eq!(
+            rules,
+            vec![
+                RetentionRule {
+                    period_days: 1,
+                    time_to_live_days: 30,
+                },
+                RetentionRule {
+                    period_days: 16,
+                    time_to_live_days: 182,
+                },
+            ]
+        );
+    }
 }
