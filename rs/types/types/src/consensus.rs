@@ -289,14 +289,14 @@ impl<H: private::CryptoHashOfSeal> NonexistentHash for H {}
 mod private {
     use super::*;
 
-    /// The combinations of the public trait above and the two traits below within this private
-    /// module allows to:
-    ///   - Call `nonexistent` directly on a `CryptoHashOf<T>`, even though the latter is a foreign
-    ///     type
-    ///   - Have the trait's implementation of `nonexistent` be inlined and have no code be able to
-    ///     override it
-    ///   - Control which types can actually have a nonexistent hash, by implementing
-    ///     `NonexistentHashSeal` for them below
+    // The combinations of the public trait above and the two traits below within this private
+    // module allows to:
+    //   - Call `nonexistent` directly on a `CryptoHashOf<T>`, even though the latter is a foreign
+    //     type
+    //   - Have the trait's implementation of `nonexistent` be inlined and have no code be able to
+    //     override it
+    //   - Control which types can actually have a nonexistent hash, by implementing
+    //     `NonexistentHashSeal` for them below
 
     pub trait CryptoHashOfSeal {
         type T;
