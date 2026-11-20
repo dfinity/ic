@@ -255,6 +255,7 @@ use std::{
     collections::BTreeSet,
     net::IpAddr,
     path::PathBuf,
+    sync::Mutex,
     time::{Duration, Instant},
 };
 use strum::IntoEnumIterator;
@@ -1863,10 +1864,7 @@ async fn verify_after_merge(context: &Context) {
         info!(logger, "Step 26: broke {name}'s endless loop");
     }
 
-    for (name, agent, canister_id, request_id) in &context.pending_ingress_messages {
-        await_ingress_message_replied(agent, *canister_id, request_id, name, logger).await;
-        info!(logger, "Step 26: {name}'s ingress message completed");
-    }
+    await_ingress_messages_replied(&context.pending_ingress_messages, logger).await;
     // `U14` now replies to `U13`'s best effort call, whose deadline passed
     // before the merge, closing the call context the merge carried over. A
     // canister only stops once it has no open call context, so `U14` stopping
@@ -1925,36 +1923,57 @@ async fn check_best_effort_call_timed_out(context: &Context) {
     );
 }
 
-/// Waits until the ingress message `request_id` sent to `canister_id` is
-/// replied, i.e. until the update call it carries completed successfully.
-async fn await_ingress_message_replied(
-    agent: &Agent,
-    canister_id: Principal,
-    request_id: &RequestId,
-    name: &str,
+/// Step 26: waits until every one of `messages` is replied, i.e. until the
+/// update call each carries completed successfully.
+///
+/// The ingress history only keeps the status of a replied message for
+/// `MAX_INGRESS_TTL` after the reply, which is shorter than
+/// `INGRESS_COMPLETION_TIMEOUT`. Hence every round polls each message that has
+/// not been seen replied yet, rather than waiting for the messages one after
+/// the other: a message replied while the test still waited for another one
+/// could otherwise be pruned before the test polls it.
+async fn await_ingress_messages_replied(
+    messages: &[(&'static str, Agent, Principal, RequestId)],
     logger: &Logger,
 ) {
+    let replied_names = Mutex::new(BTreeSet::<&'static str>::new());
     retry_with_msg_async!(
-        format!("waiting for {name}'s ingress message to complete"),
+        "waiting for the pending ingress messages to complete",
         logger,
         INGRESS_COMPLETION_TIMEOUT,
         RETRY_BACKOFF,
         || async {
-            let (status, _) = agent
-                .request_status_raw(request_id, canister_id)
-                .await
-                .map_err(|e| anyhow!("failed to read the status of {name}'s message: {e}"))?;
-            match status {
-                RequestStatusResponse::Replied(_) => Ok(()),
-                RequestStatusResponse::Rejected(reject) => {
-                    panic!("{name}'s ingress message was rejected: {reject:?}")
+            let mut pending_names = Vec::<&'static str>::new();
+            for (name, agent, canister_id, request_id) in messages {
+                if replied_names.lock().unwrap().contains(name) {
+                    continue;
                 }
-                other => bail!("{name}'s ingress message is {other:?}"),
+                let (status, _) = agent
+                    .request_status_raw(request_id, *canister_id)
+                    .await
+                    .map_err(|e| anyhow!("failed to read the status of {name}'s message: {e}"))?;
+                match status {
+                    RequestStatusResponse::Replied(_) => {
+                        replied_names.lock().unwrap().insert(name);
+                        info!(logger, "Step 26: {name}'s ingress message completed");
+                    }
+                    RequestStatusResponse::Rejected(reject) => {
+                        panic!("{name}'s ingress message was rejected: {reject:?}")
+                    }
+                    other => {
+                        info!(logger, "{name}'s ingress message is {other:?}");
+                        pending_names.push(name);
+                    }
+                }
             }
+            if !pending_names.is_empty() {
+                bail!("the ingress messages of {pending_names:?} have not completed yet");
+            }
+            Ok(())
         }
     )
     .await
-    .unwrap_or_else(|e| panic!("{name}'s ingress message did not complete: {e}"));
+    .unwrap_or_else(|e| panic!("not every pending ingress message completed: {e}"));
 }
 
 /// Starts an endless loop of calls from `canister` to `peer` (on another
