@@ -97,7 +97,8 @@ pub async fn handle_construction_submit(
 }
 
 /// Decodes ledger method arguments taken from a client-supplied envelope under a skipping quota,
-/// so that the decoding work is bounded regardless of the lengths declared in the type table.
+/// so that the work spent on skipped values is bounded whatever vector lengths they declare. The
+/// decoded values only contain byte vectors, so the size limit already bounds them.
 fn decode_canister_method_args<T>(candid_bytes: &[u8]) -> Result<T, candid::Error>
 where
     T: CandidType + DeserializeOwned,
