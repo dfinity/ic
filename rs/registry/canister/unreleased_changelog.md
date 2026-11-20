@@ -15,6 +15,10 @@ on the process that this file is part of, see
 
 ## Removed
 
+* The `migrate_node_operator_directly` endpoint, which let a node provider move all nodes of one
+  of its node operators to another node operator within the same data center without NNS
+  involvement. Node operator changes again go through `UpdateNodeOperatorConfig` proposals.
+
 * The deprecated `height`, `time` and `state_hash` fields of `CatchUpPackageContents`. Where
   applicable, their equivalents are now found in `cup_type`: a `CupType::Recovery` record carries
   them in its `RecoveryArgs`, and the height of a `CupType::Genesis` CUP is always 0.

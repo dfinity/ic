@@ -555,11 +555,6 @@ type UpdateStandardEngineReplicaVersionPayload = record {
   deployment_progress : float64;
 };
 
-type MigrateNodeOperatorPayload = record {
-  new_node_operator_id : opt principal;
-  old_node_operator_id : opt principal;
-};
-
 type SwapNodeInSubnetDirectlyPayload = record {
   new_node_id : opt principal;
   old_node_id : opt principal;
@@ -653,7 +648,6 @@ service : {
   get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (GetSubnetForCanisterResponse) query;
   merge_subnets : (MergeSubnetsPayload) -> ();
   migrate_canisters: (MigrateCanistersPayload) -> (MigrateCanistersResponse);
-  migrate_node_operator_directly : (MigrateNodeOperatorPayload) -> ();
   prepare_canister_migration : (PrepareCanisterMigrationPayload) -> ();
   recover_subnet : (RecoverSubnetPayload) -> ();
   remove_api_boundary_nodes : (RemoveApiBoundaryNodesPayload) -> ();

@@ -1269,10 +1269,7 @@ pub mod nns {
             serialize_get_value_request,
         };
         use prost::Message;
-        use registry_canister::mutations::{
-            do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
-            do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
-        };
+        use registry_canister::mutations::do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload;
 
         use super::*;
 
@@ -1289,23 +1286,6 @@ pub mod nns {
                     PocketIcCallError::PocketIc(reject) => reject,
                     err => {
                         panic!("Unexpected error when performing swap in subnet directly: {err:?}")
-                    }
-                })
-        }
-
-        pub async fn migrate_node_operator_directly(
-            pocket_ic: &PocketIc,
-            payload: MigrateNodeOperatorPayload,
-            sender: PrincipalId,
-        ) -> Result<(), RejectResponse> {
-            let agent = PocketIcAgent::new(pocket_ic, sender);
-
-            ic_nervous_system_agent::nns::registry::migrate_node_operator_directly(&agent, payload)
-                .await
-                .map_err(|err| match err {
-                    PocketIcCallError::PocketIc(reject) => reject,
-                    err => {
-                        panic!("Unexpected error when performing migrate node operator directly: {err:?}")
                     }
                 })
         }

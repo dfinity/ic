@@ -12,7 +12,6 @@ pub mod do_delete_subnet;
 pub mod do_deploy_guestos_to_all_subnet_nodes;
 pub mod do_deploy_guestos_to_all_unassigned_nodes;
 pub mod do_migrate_canisters;
-pub mod do_migrate_node_operator_directly;
 pub mod do_recover_subnet;
 pub mod do_remove_api_boundary_nodes;
 pub mod do_remove_node_operators;
