@@ -208,6 +208,26 @@ fn should_accept_rsa_moduli_of_2048_to_4096_bits() {
 }
 
 #[test]
+fn should_accept_rsa_public_exponents_from_3_to_2_pow_33_minus_1() {
+    // The modulus of should_be_able_to_parse_rsa_pubkey_from_components
+    let n = hex::decode("f214c6550cae299ad12538decc70726089538b4236af396399345c7bb7d92e53f4b5dbc9cffd57509fa91e9feba0d7838487a008853fb8ea96970daee66b5119a38fd7796773930bac05b837031f7f89b5bfd92d2ebde5c5eb0665460bf9477a82e7ca6d86c41a4f74c058890f4e5acbc448bf39dd008e914fbbad2c0eee4aa69adf17d923416400635c1420ba008855ca38dcd48c8373d7a80cc2e1745caa2864f7b28cbef5480a595ab1ee156b32017269595816e6cc4f4ad614fccbb013a9cee17c365f8caa23474d5b97f0f096802b73f042af076c88ff037cd0fc706d2392393a56ed58b4e5dbec844bfb91fb9601c64df10f7349b28950344611904205").unwrap();
+
+    for e in [3_u64, 65537, (1 << 32) + 1, (1 << 33) - 1] {
+        let result = RsaPublicKey::from_components(&e.to_be_bytes(), &n);
+        assert!(result.is_ok(), "exponent {e} rejected: {result:?}");
+    }
+    // Odd exponents outside the range, one of them longer than 64 bits
+    for e in [
+        vec![1],
+        ((1_u64 << 33) + 1).to_be_bytes().to_vec(),
+        vec![1, 0, 0, 0, 0, 0, 0, 0, 1],
+    ] {
+        let result = RsaPublicKey::from_components(&e, &n);
+        assert!(result.is_err(), "exponent 0x{} accepted", hex::encode(&e));
+    }
+}
+
+#[test]
 fn should_be_able_to_verify_rsa_signature() {
     let der = hex::decode("30820122300D06092A864886F70D01010105000382010F003082010A0282010100A7078A1A8FDE64C537AE5CA8D4B3A9139D68050CF76E45E77DBE47CECEB162F7095ADB6260998775203AA42A444F865DEB995C2B70B548ECEE01695DEB069ED18744C12FD24AEACDA4B2B7A5E97E7167CAF7D4B8904CE20CA9A8928978CA957FF2D9FCAE0859618B0AD74C164FAF5AB1DE7D7228A89BD3F8B497CEF9E45E1203CC40EE252140157C331A584F3916E569A8C39573D542A3577FB12332EBD3C9F421C9EF8A23D5ACF6BA439F7C3D6B73BA4E56B9B8EFBC42A2E5E734B99FDF7AB046813E43C65C926793919A7AE54F71AAF57C6876001A0558BC847D7555B1AE71F56A70272D786BE69A23A21A56C426371BD9882D40E7ECA6B7DA5D8169B7030F0203010001").unwrap();
     let key = RsaPublicKey::from_der_spki(&der).unwrap();
