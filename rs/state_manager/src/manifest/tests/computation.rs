@@ -675,7 +675,7 @@ fn meta_manifest_passes_validation() {
 #[test]
 fn bad_root_hash_detected_for_meta_manifest() {
     for version in versions_from(StateSyncVersion::V2) {
-        let bogus_hash = CryptoHashOfState::from(CryptoHash(vec![1_u8; 32]));
+        let bogus_hash = CryptoHashOfState::from(CryptoHash::from([1_u8; 32]));
         let (file_table, chunk_table) = simple_file_table_and_chunk_table(version);
         let manifest = Manifest::new(version, file_table, chunk_table);
         let meta_manifest = build_meta_manifest(&manifest);
@@ -691,7 +691,7 @@ fn bad_root_hash_detected_for_meta_manifest() {
 
 #[test]
 fn bad_root_hash_detected() {
-    let bogus_hash = CryptoHashOfState::from(CryptoHash(vec![1_u8; 32]));
+    let bogus_hash = CryptoHashOfState::from(CryptoHash::from([1_u8; 32]));
     for (manifest_hash, manifest) in simple_manifest_all_supported_versions() {
         // Manifest is internally consistent
         assert_eq!(Ok(()), validate_manifest_internal_consistency(&manifest));

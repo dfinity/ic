@@ -181,7 +181,7 @@ fn run_proptest(
                     .map(|(height, payload)| PastPayload {
                         height: Height::new(height as u64 + 1),
                         time: UNIX_EPOCH,
-                        block_hash: CryptoHashOf::new(CryptoHash([0; 32].to_vec())),
+                        block_hash: CryptoHashOf::new(CryptoHash::from([0; 32])),
                         payload,
                     })
                     .collect::<Vec<_>>();

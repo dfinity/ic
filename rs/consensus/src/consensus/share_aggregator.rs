@@ -500,7 +500,7 @@ mod tests {
                 const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
                 const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
                 const INTERVAL_LENGTH: Height = Height::new(9);
-                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1; 32]));
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash::for_test());
 
                 let Dependencies {
                     mut pool,

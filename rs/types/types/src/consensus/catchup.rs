@@ -533,7 +533,7 @@ mod tests {
         CupType::Recovery {
             height: Height::new(54321),
             time: Time::from_nanos_since_unix_epoch(1_000),
-            state_hash: CryptoHashOfState::from(CryptoHash(vec![1; 32])),
+            state_hash: CryptoHashOfState::from(CryptoHash::from([1; 32])),
         },
     )]
     #[case::subnet_splitting(

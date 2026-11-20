@@ -1295,7 +1295,7 @@ mod tests {
             height: Height::from(height),
             height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
-                content: CertificationContent::new(CryptoHash(vec![hash; 32]).into()),
+                content: CertificationContent::new(CryptoHash::from([hash; 32]).into()),
                 signature: ThresholdSignature::fake(),
             },
         })
@@ -1306,7 +1306,7 @@ mod tests {
             height: Height::from(height),
             height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
-                content: CertificationContent::new(CryptoHash(vec![hash; 32]).into()),
+                content: CertificationContent::new(CryptoHash::from([hash; 32]).into()),
                 signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
             },
         })

@@ -40,7 +40,7 @@ fn check_cup_integrity_from_protobuf() {
     let mut cup = make_genesis(summary);
     let value = cup.content.block.get_value().clone();
     // Corrupt the hash value.
-    cup.content.block = Hashed::recompose(CryptoHashOf::new(CryptoHash(vec![1; 32])), value);
+    cup.content.block = Hashed::recompose(CryptoHashOf::new(CryptoHash::from([1; 32])), value);
 
     let protobuf = pb::CatchUpPackage::from(cup);
     let result = CatchUpPackage::try_from(&protobuf);

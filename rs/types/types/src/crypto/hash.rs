@@ -468,6 +468,12 @@ impl CryptoHash {
     }
 }
 
+impl From<[u8; CryptoHash::LEN]> for CryptoHash {
+    fn from(bytes: [u8; CryptoHash::LEN]) -> Self {
+        Self(bytes.to_vec())
+    }
+}
+
 impl fmt::Debug for CryptoHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "CryptoHash(0x{})", hex::encode(&self.0))

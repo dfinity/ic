@@ -1318,7 +1318,7 @@ pub mod test {
 
                     let mut bad_share = share.clone();
                     bad_share.content.metadata.content_hash =
-                        CryptoHashOf::new(CryptoHash(vec![0xAB; 32]));
+                        CryptoHashOf::new(CryptoHash::from([0xAB; 32]));
 
                     let artifact_with_mismatched_hash = CanisterHttpResponseArtifact {
                         share: bad_share,
@@ -2037,7 +2037,7 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: callback_id,
-                        content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
+                        content_hash: CryptoHashOf::new(CryptoHash::from([0xAB; 32])),
                         content_size: limit as u32 + 1,
                         is_reject: false,
                         replica_version: replica_config.replica_version().clone(),
@@ -3245,7 +3245,7 @@ pub mod test {
 
                     let mut bad_share = share.clone();
                     bad_share.content.metadata.content_hash =
-                        CryptoHashOf::new(CryptoHash(vec![0xAB; 32]));
+                        CryptoHashOf::new(CryptoHash::from([0xAB; 32]));
 
                     canister_http_pool.insert(UnvalidatedArtifact {
                         message: CanisterHttpResponseArtifact {
@@ -3839,7 +3839,7 @@ pub mod test {
                 let receipt_share = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
+                        content_hash: CryptoHashOf::new(CryptoHash::from([0xAB; 32])),
                         content_size: 0,
                         is_reject: false,
                         replica_version: replica_config.replica_version().clone(),
@@ -4212,7 +4212,7 @@ pub mod test {
                     let receipt_share = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: callback_id,
-                            content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
+                            content_hash: CryptoHashOf::new(CryptoHash::from([0xAB; 32])),
                             content_size: 0,
                             is_reject: false,
                             replica_version: test_replica_version(),

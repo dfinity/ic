@@ -334,7 +334,7 @@ mod tests {
                 network_topology.set_routing_table(routing_table);
             });
             state.metadata.prev_state_hash =
-                Some(CryptoHashOfPartialState::new(CryptoHash(vec![3; 32])));
+                Some(CryptoHashOfPartialState::new(CryptoHash::from([3; 32])));
 
             state.metadata.certification_version = certification_version;
 

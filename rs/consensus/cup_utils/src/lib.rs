@@ -784,7 +784,7 @@ mod tests {
         Some((
             Height::from(54321),
             Time::from_nanos_since_unix_epoch(1),
-            CryptoHashOfState::from(CryptoHash(vec![1; 32])),
+            CryptoHashOfState::from(CryptoHash::from([1; 32])),
         )),
     )]
     #[case::subnet_splitting(Some(CupType::SubnetSplitting(SubnetSplittingArgs {
