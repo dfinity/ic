@@ -1098,10 +1098,6 @@ crate.spec(
     version = "^0.5.0",
 )
 crate.spec(
-    package = "pkcs8",
-    version = "^0.10.2",
-)
-crate.spec(
     default_features = False,
     features = [
         "criterion",
@@ -1303,16 +1299,6 @@ crate.spec(
     version = "^0.10.0",
 )
 crate.spec(
-    # Only for //rs/ic_os/sev/attestation/testing; see its Cargo.toml.
-    features = [
-        "sha2",
-        "getrandom",
-    ],
-    package = "rsa",
-    package_alias = "rsa_0_9",
-    version = "^0.9.10",
-)
-crate.spec(
     default_features = False,
     package = "rstest",
     version = "^0.28.0",
@@ -1486,7 +1472,7 @@ crate.spec(
 )
 crate.spec(
     package = "signature",
-    version = "^2.2.0",
+    version = "^3.0.0",
 )
 crate.spec(
     package = "simple_asn1",
@@ -1883,10 +1869,9 @@ crate.spec(
 crate.spec(
     features = [
         "builder",
-        "hazmat",
     ],
     package = "x509-cert",
-    version = "^0.2.5",
+    version = "^0.3.0",
 )
 crate.spec(
     package = "x509-parser",

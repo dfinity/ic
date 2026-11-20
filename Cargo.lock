@@ -1485,13 +1485,11 @@ name = "attestation_testing"
 version = "0.0.0"
 dependencies = [
  "attestation",
- "der 0.7.10",
  "p384",
  "rand 0.8.8",
- "rsa 0.9.10",
+ "rsa 0.10.0",
  "sev",
- "sha2 0.10.9",
- "x509-cert",
+ "x509-cert 0.3.0",
 ]
 
 [[package]]
@@ -4121,7 +4119,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7c1832837b905bbfb5101e07cc24c8deddf52f93225eee6ead5f4d63d53ddcb"
 dependencies = [
  "const-oid 0.9.6",
- "der_derive",
+ "der_derive 0.7.3",
  "flagset",
  "pem-rfc7468 0.7.0",
  "zeroize",
@@ -4134,6 +4132,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a996a108feb8b427a6e12fcf6af4aa83409b79d72c15337d7741368131ee004"
 dependencies = [
  "const-oid 0.10.3",
+ "der_derive 0.8.0",
+ "flagset",
  "pem-rfc7468 1.0.0",
  "zeroize",
 ]
@@ -4171,6 +4171,17 @@ name = "der_derive"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8034092389675178f570469e6c3b0465d3d30b4505c294a6550db47f3c17ad18"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "der_derive"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59600e2c2d636fde9b65e99cc6445ac770c63d3628195ff39932b8d6d7409903"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9150,14 +9161,13 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-secp256r1",
  "ic-types",
- "pkcs8 0.10.2",
  "rand 0.8.8",
  "rustls",
- "signature 2.2.0",
+ "signature 3.0.0",
  "time",
  "tokio",
  "tokio-rustls",
- "x509-cert",
+ "x509-cert 0.3.0",
 ]
 
 [[package]]
@@ -12776,7 +12786,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "url",
- "x509-cert",
+ "x509-cert 0.3.0",
 ]
 
 [[package]]
@@ -21547,7 +21557,6 @@ dependencies = [
  "pkcs1 0.7.5",
  "pkcs8 0.10.2",
  "rand_core 0.6.4",
- "sha2 0.10.9",
  "signature 2.2.0",
  "spki 0.7.3",
  "subtle",
@@ -22588,7 +22597,7 @@ dependencies = [
  "sha2 0.10.9",
  "static_assertions",
  "uuid",
- "x509-cert",
+ "x509-cert 0.2.5",
 ]
 
 [[package]]
@@ -25865,9 +25874,21 @@ checksum = "1301e935010a701ae5f8655edc0ad17c44bad3ac5ce8c39185f75453b720ae94"
 dependencies = [
  "const-oid 0.9.6",
  "der 0.7.10",
- "sha1 0.10.7",
- "signature 2.2.0",
  "spki 0.7.3",
+ "tls_codec",
+]
+
+[[package]]
+name = "x509-cert"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "105ef4642d9cb137ef83d623d0e4bf08b8adf69e9918ca904a174adb6d3d038b"
+dependencies = [
+ "const-oid 0.10.3",
+ "der 0.8.3",
+ "sha1 0.11.0",
+ "signature 3.0.0",
+ "spki 0.8.1",
  "tls_codec",
 ]
 

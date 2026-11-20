@@ -4,12 +4,8 @@ edition.workspace = true
 
 [dependencies]
 attestation = { path = "../../attestation" }
-der = { workspace = true }
 p384 = { workspace = true }
 rand = { workspace = true }
-# TODO: use the workspace rsa once this crate moves to x509-cert 0.3; the
-# certificate builder of x509-cert 0.2 takes rsa 0.9 keys.
-rsa = { version = "0.9.10", features = ["sha2", "getrandom"] }
+rsa = { workspace = true }
 sev = { workspace = true }
-sha2 = { workspace = true }
 x509-cert = { workspace = true }

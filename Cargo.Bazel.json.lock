@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "68f1a84180be4f9b65ddb769dd28f5f609636377112f4c9241ba862ef1f79fbf",
+  "checksum": "9c881d78a67d4ef33b2b2197f1cf2129af963f608389df2c657b82f400e27995",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -12773,6 +12773,9 @@
     },
     "const-oid 0.10.3": {
       "common_attrs": {
+        "crate_features": [
+          "db"
+        ],
         "edition": "2024"
       },
       "library_target_name": "const_oid",
@@ -16356,14 +16359,21 @@
       "common_attrs": {
         "crate_features": [
           "alloc",
+          "derive",
+          "flagset",
           "oid",
           "pem",
+          "std",
           "zeroize"
         ],
         "deps": [
           {
             "id": "const-oid 0.10.3",
             "target": "const_oid"
+          },
+          {
+            "id": "flagset 0.4.7",
+            "target": "flagset"
           },
           {
             "id": "pem-rfc7468 1.0.0",
@@ -16374,7 +16384,13 @@
             "target": "zeroize"
           }
         ],
-        "edition": "2024"
+        "edition": "2024",
+        "proc_macro_deps": [
+          {
+            "id": "der_derive 0.8.0",
+            "target": "der_derive"
+          }
+        ]
       },
       "library_target_name": "der",
       "license": "Apache-2.0 OR MIT",
@@ -16569,6 +16585,49 @@
         }
       ],
       "version": "0.7.3"
+    },
+    "der_derive 0.8.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "proc-macro2 1.0.107",
+            "target": "proc_macro2"
+          },
+          {
+            "id": "quote 1.0.47",
+            "target": "quote"
+          },
+          {
+            "id": "syn 2.0.119",
+            "target": "syn"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "der_derive",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "der_derive",
+      "package_url": "https://github.com/RustCrypto/formats",
+      "repository": {
+        "Http": {
+          "sha256": "59600e2c2d636fde9b65e99cc6445ac770c63d3628195ff39932b8d6d7409903",
+          "url": "https://static.crates.io/crates/der_derive/0.8.0/download"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "der_derive",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.8.0"
     },
     "deranged 0.5.9": {
       "common_attrs": {
@@ -18163,10 +18222,6 @@
             "target": "ping"
           },
           {
-            "id": "pkcs8 0.10.2",
-            "target": "pkcs8"
-          },
-          {
             "id": "pprof 0.15.0",
             "target": "pprof"
           },
@@ -18305,11 +18360,6 @@
             "target": "rolling_file"
           },
           {
-            "alias": "rsa_0_9",
-            "id": "rsa 0.9.10",
-            "target": "rsa"
-          },
-          {
             "id": "rsa 0.10.0",
             "target": "rsa"
           },
@@ -18430,7 +18480,7 @@
             "target": "signal_hook"
           },
           {
-            "id": "signature 2.2.0",
+            "id": "signature 3.0.0",
             "target": "signature"
           },
           {
@@ -18722,7 +18772,7 @@
             "target": "wycheproof"
           },
           {
-            "id": "x509-cert 0.2.5",
+            "id": "x509-cert 0.3.0",
             "target": "x509_cert"
           },
           {
@@ -47098,9 +47148,7 @@
       "common_attrs": {
         "crate_features": [
           "default",
-          "getrandom",
           "pem",
-          "sha2",
           "std",
           "u64_digit"
         ],
@@ -47137,10 +47185,6 @@
           {
             "id": "rand_core 0.6.4",
             "target": "rand_core"
-          },
-          {
-            "id": "sha2 0.10.9",
-            "target": "sha2"
           },
           {
             "id": "signature 2.2.0",
@@ -51407,7 +51451,6 @@
       "common_attrs": {
         "crate_features": [
           "default",
-          "oid",
           "std"
         ],
         "deps": {
@@ -53398,7 +53441,8 @@
       "common_attrs": {
         "crate_features": [
           "alloc",
-          "pem"
+          "pem",
+          "std"
         ],
         "deps": [
           {
@@ -65432,12 +65476,8 @@
     "x509-cert 0.2.5": {
       "common_attrs": {
         "crate_features": [
-          "builder",
           "default",
-          "hazmat",
           "pem",
-          "sha1",
-          "signature",
           "std"
         ],
         "deps": [
@@ -65448,14 +65488,6 @@
           {
             "id": "der 0.7.10",
             "target": "der"
-          },
-          {
-            "id": "sha1 0.10.7",
-            "target": "sha1"
-          },
-          {
-            "id": "signature 2.2.0",
-            "target": "signature"
           },
           {
             "id": "spki 0.7.3",
@@ -65488,6 +65520,64 @@
         }
       ],
       "version": "0.2.5"
+    },
+    "x509-cert 0.3.0": {
+      "common_attrs": {
+        "crate_features": [
+          "builder",
+          "default",
+          "pem",
+          "signature",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "const-oid 0.10.3",
+            "target": "const_oid"
+          },
+          {
+            "id": "der 0.8.3",
+            "target": "der"
+          },
+          {
+            "id": "sha1 0.11.0",
+            "target": "sha1"
+          },
+          {
+            "id": "signature 3.0.0",
+            "target": "signature"
+          },
+          {
+            "id": "spki 0.8.1",
+            "target": "spki"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "x509_cert",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "x509-cert",
+      "package_url": "https://github.com/RustCrypto/formats",
+      "repository": {
+        "Http": {
+          "sha256": "105ef4642d9cb137ef83d623d0e4bf08b8adf69e9918ca904a174adb6d3d038b",
+          "url": "https://static.crates.io/crates/x509-cert/0.3.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "x509_cert",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.3.0"
     },
     "x509-parser 0.16.0": {
       "common_attrs": {
@@ -66822,7 +66912,6 @@
     "pem 4.0.0",
     "pin-project-lite 0.2.17",
     "ping 0.5.0",
-    "pkcs8 0.10.2",
     "pprof 0.15.0",
     "predicates 3.1.4",
     "pretty_assertions 1.4.1",
@@ -66858,7 +66947,6 @@
     "rlp 0.6.1",
     "rocksdb 0.25.0",
     "rolling-file 0.2.0",
-    "rsa 0.9.10",
     "rsa 0.10.0",
     "rstest 0.28.0",
     "rusb 0.9.4",
@@ -66890,7 +66978,7 @@
     "sha2 0.10.9",
     "sha3 0.10.9",
     "signal-hook 0.4.6",
-    "signature 2.2.0",
+    "signature 3.0.0",
     "simple_asn1 0.6.4",
     "simple_moving_average 1.0.2",
     "slog 2.8.2",
@@ -66965,7 +67053,7 @@
     "webpki-roots 1.0.12",
     "wirm 4.0.4",
     "wycheproof 0.7.0",
-    "x509-cert 0.2.5",
+    "x509-cert 0.3.0",
     "x509-parser 0.18.1",
     "zeroize 1.9.2",
     "zstd 0.14.4"
