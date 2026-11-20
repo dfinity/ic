@@ -563,7 +563,7 @@ mod tests {
             Some(CupType::Recovery(RecoveryArgs {
                 height: 54321,
                 time: 1,
-                state_hash: vec![1, 2, 3, 4, 5],
+                state_hash: CryptoHash::for_test().into_vec(),
             })),
         )
     }
