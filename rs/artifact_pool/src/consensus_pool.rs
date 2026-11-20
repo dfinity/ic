@@ -1787,12 +1787,12 @@ mod tests {
             ));
             let notarization = Notarization::fake(NotarizationContent::new(
                 Height::from(2),
-                CryptoHashOf::from(CryptoHash(vec![1; 32])),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             ));
             let finalization = Finalization::fake(FinalizationContent::new(
                 Height::from(3),
-                CryptoHashOf::from(CryptoHash(vec![1; 32])),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             ));
 
@@ -2174,7 +2174,7 @@ mod tests {
             ));
             let notarization = Notarization::fake(NotarizationContent::new(
                 Height::from(3),
-                CryptoHashOf::from(CryptoHash(vec![1; 32])),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             ));
             let block = Block::new(

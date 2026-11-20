@@ -394,13 +394,13 @@ prop_compose! {
     /// Returns an arbitrary [`SystemMetadata`] (with only the fields relevant to
     /// its canonical representation filled).
     pub fn arb_system_metadata()(
-        prev_state_hash in prop::collection::vec(any::<u8>(), 32)
+        prev_state_hash in any::<[u8; 32]>()
     ) -> SystemMetadata {
         let mut metadata = SystemMetadata::new(
             PrincipalId::new_subnet_test_id(1).into(),
             ic_registry_subnet_type::SubnetType::Application
         );
-        metadata.prev_state_hash = Some(CryptoHashOfPartialState::new(CryptoHash(prev_state_hash)));
+        metadata.prev_state_hash = Some(CryptoHashOfPartialState::new(CryptoHash::from(prev_state_hash)));
         metadata
     }
 }

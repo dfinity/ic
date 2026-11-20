@@ -2392,7 +2392,7 @@ pub mod test {
 
             // The state manager is mocked and the `StateHash` is completely arbitrary. It
             // must just be the same as in the `CatchUpPackageShare`.
-            let state_hash = CryptoHashOfState::from(CryptoHash(vec![1_u8; 32]));
+            let state_hash = CryptoHashOfState::from(CryptoHash::from([1_u8; 32]));
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
@@ -2527,7 +2527,7 @@ pub mod test {
 
             // The state manager is mocked and the `StateHash` is completely arbitrary. It
             // must just be the same as in the `CatchUpPackageShare`.
-            let state_hash = CryptoHashOfState::from(CryptoHash(vec![1_u8; 32]));
+            let state_hash = CryptoHashOfState::from(CryptoHash::from([1_u8; 32]));
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
@@ -5615,7 +5615,7 @@ pub mod test {
                 );
                 registry.reload();
 
-                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1; 32]));
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash::for_test());
                 state_manager
                     .get_mut()
                     .expect_get_state_hash_at()
@@ -5674,7 +5674,8 @@ pub mod test {
 
                 match &malform_share {
                     Some(MalformShare::StateHash) => {
-                        share.content.state_hash = CryptoHashOfState::from(CryptoHash(vec![3; 32]));
+                        share.content.state_hash =
+                            CryptoHashOfState::from(CryptoHash::from([3; 32]));
                     }
                     Some(MalformShare::RandomBeacon) => {
                         let mut invalid_beacon = share.content.random_beacon.into_inner();

@@ -1848,7 +1848,7 @@ mod tests {
             height: Height::from(height),
             height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
-                content: CertificationContent::new(CryptoHash(vec![hash; 32]).into()),
+                content: CertificationContent::new(CryptoHash::from([hash; 32]).into()),
                 signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
             },
         })
@@ -1908,14 +1908,14 @@ mod tests {
             &pool,
             &malicious,
             Height::from(1),
-            CryptoHash(vec![1; 32]).into(),
+            CryptoHash::from([1; 32]).into(),
             f
         ));
         assert!(is_manual_share_investigation_required(
             &pool,
             &malicious,
             Height::from(1),
-            CryptoHash(vec![2; 32]).into(),
+            CryptoHash::from([2; 32]).into(),
             f
         ));
 
@@ -1924,7 +1924,7 @@ mod tests {
             &pool,
             &malicious,
             Height::from(2),
-            CryptoHash(vec![1; 32]).into(),
+            CryptoHash::from([1; 32]).into(),
             f
         ));
         assert!(hashes.is_empty());
@@ -1942,21 +1942,21 @@ mod tests {
             &pool,
             &malicious,
             Height::from(3),
-            CryptoHash(vec![1; 32]).into(),
+            CryptoHash::from([1; 32]).into(),
             f
         ));
         assert!(is_manual_share_investigation_required(
             &pool,
             &malicious,
             Height::from(3),
-            CryptoHash(vec![2; 32]).into(),
+            CryptoHash::from([2; 32]).into(),
             f
         ));
         assert!(is_manual_share_investigation_required(
             &pool,
             &malicious,
             Height::from(3),
-            CryptoHash(vec![3; 32]).into(),
+            CryptoHash::from([3; 32]).into(),
             f
         ));
     }
@@ -2034,7 +2034,7 @@ mod tests {
     }
 
     fn fake_state_hash() -> CryptoHashOfState {
-        CryptoHashOfState::from(CryptoHash(vec![1; 32]))
+        CryptoHashOfState::from(CryptoHash::for_test())
     }
 
     // This test is maybe a bit of a mockery. Realistic testing is hard...

@@ -868,10 +868,7 @@ mod tests {
             content: CanisterHttpResponseReceipt {
                 metadata: CanisterHttpResponseMetadata {
                     id: CanisterHttpRequestId::new(2),
-                    content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(vec![
-                        4;
-                        32
-                    ])),
+                    content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash::for_test()),
                     content_size: 42,
                     is_reject: false,
                     replica_version: ReplicaVersion::try_from("test_replica_version").unwrap(),

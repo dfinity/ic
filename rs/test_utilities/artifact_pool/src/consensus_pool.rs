@@ -337,9 +337,9 @@ impl TestConsensusPool {
             version: self.replica_version.clone(),
             height,
             subnet_id: self.subnet_id,
-            hash1: CryptoHashOf::new(CryptoHash(vec![1; 32])),
+            hash1: CryptoHashOf::new(CryptoHash::from([1; 32])),
             signature1: BasicSigOf::new(BasicSig(vec![])),
-            hash2: CryptoHashOf::new(CryptoHash(vec![4; 32])),
+            hash2: CryptoHashOf::new(CryptoHash::from([4; 32])),
             signature2: BasicSigOf::new(BasicSig(vec![])),
         }
     }

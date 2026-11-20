@@ -2722,7 +2722,7 @@ fn state_sync_get_populates_file_group_cache_of_matched_height() {
 fn state_sync_priority_fn_respects_states_to_fetch() {
     state_manager_test_with_state_sync(|_metrics, state_manager, state_sync| {
         fn hash(n: u8) -> CryptoHashOfState {
-            CryptoHashOfState::from(CryptoHash(vec![n; 32]))
+            CryptoHashOfState::from(CryptoHash::from([n; 32]))
         }
 
         let (_height, state) = state_manager.take_tip();
@@ -2913,7 +2913,7 @@ fn test_start_and_cancel_state_sync() {
             // the dst state manager won't fetch the state with a mismatched hash.
             let malicious_id = StateSyncArtifactId {
                 height: Height(2),
-                hash: CryptoHash(vec![0; 32]),
+                hash: CryptoHash::from([0; 32]),
             };
             assert!(
                 dst_state_sync
@@ -9676,7 +9676,7 @@ fn flush_unflushed_delta_count(metrics: &MetricsRegistry) -> u64 {
 }
 
 fn fake_certification_for_height(height: Height) -> Certification {
-    fake_certification_for_height_with_hash(height, CryptoHash(vec![42; 32]))
+    fake_certification_for_height_with_hash(height, CryptoHash::from([42; 32]))
 }
 
 fn fake_certification_for_height_with_hash(height: Height, hash: CryptoHash) -> Certification {

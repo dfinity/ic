@@ -1069,7 +1069,7 @@ mod tests {
         CanisterHttpResponseReceipt {
             metadata: CanisterHttpResponseMetadata {
                 id: CallbackId::from(1),
-                content_hash: CryptoHashOf::new(CryptoHash(vec![0; Sha256::DIGEST_LEN])),
+                content_hash: CryptoHashOf::new(CryptoHash::from([0; Sha256::DIGEST_LEN])),
                 content_size: 0,
                 is_reject: false,
                 replica_version: test_replica_version(),

@@ -525,7 +525,7 @@ mod tests {
         fn new(height: u64, hash: u8) -> Self {
             Self {
                 height: Height::from(height),
-                hash: CryptoHash(vec![hash; 32]),
+                hash: CryptoHash::from([hash; 32]),
             }
         }
     }

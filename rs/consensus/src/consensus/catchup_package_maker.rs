@@ -572,7 +572,7 @@ mod tests {
             deps.state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1; 32]))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash::for_test())));
 
             let message_routing = Arc::new(FakeMessageRouting::new());
 
@@ -840,7 +840,7 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1; 32]))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash::for_test())));
 
             state_manager
                 .get_mut()
@@ -1026,7 +1026,7 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1; 32]))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash::for_test())));
 
             state_manager
                 .get_mut()
@@ -1116,7 +1116,7 @@ mod tests {
                 );
                 registry.reload();
 
-                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1; 32]));
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash::for_test());
                 state_manager
                     .get_mut()
                     .expect_get_state_hash_at()
@@ -1315,7 +1315,7 @@ mod tests {
                     })
                     .build();
 
-                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1; 32]));
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash::for_test());
                 state_manager
                     .get_mut()
                     .expect_get_state_hash_at()

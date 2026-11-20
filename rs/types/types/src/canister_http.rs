@@ -1549,7 +1549,7 @@ mod tests {
             CanisterHttpResponseReceipt {
                 metadata: CanisterHttpResponseMetadata {
                     id: CallbackId::new(1),
-                    content_hash: CryptoHashOf::new(CryptoHash(vec![0; 32])),
+                    content_hash: CryptoHashOf::new(CryptoHash::from([0; 32])),
                     content_size: 0,
                     is_reject: false,
                     replica_version: ReplicaVersion::from_str("foobar_version").unwrap(),
