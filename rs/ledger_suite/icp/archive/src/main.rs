@@ -175,8 +175,8 @@ fn set_last_upgrade_timestamp(timestamp: u64) {
     LAST_UPGRADE_TIMESTAMP.with(|t| *t.borrow_mut() = timestamp)
 }
 
-/// Candid skipping quota for decoding endpoint arguments. This is the quota that the `ic_cdk`
-/// endpoint macros apply, which the hand-written endpoints below do not use.
+/// Candid skipping quota for decoding endpoint arguments, the same as the `ic_cdk` endpoint macros
+/// apply. The endpoints below are exported by hand, so they apply it themselves.
 const ARG_SKIPPING_QUOTA: usize = 10_000;
 
 /// Decodes the argument of the current message as a single value of type `T`, under
