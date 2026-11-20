@@ -327,7 +327,7 @@ impl<T: HasCFInfos> PersistentHeightIndexedPool<T> {
 
     /// Returns the key to use for looking up the given consensus message
     fn lookup_key<K: HasHeight + HasHash>(&self, msg_id: &K) -> Option<Vec<u8>> {
-        let key = make_key(msg_id.height().get(), &msg_id.hash().0);
+        let key = make_key(msg_id.height().get(), msg_id.hash().as_ref());
         let watermark = make_min_key(self.watermark.read().unwrap().get());
         if key < watermark {
             // Skip read if key is below watermark
@@ -388,7 +388,7 @@ impl InitializablePoolSection for PersistentHeightIndexedPool<ConsensusMessage> 
         let cup = CatchUpPackage::try_from(&cup_with_proto).expect("deserializing CUP failed");
         let height = cup.height();
         let info = &CATCH_UP_PACKAGE_CF_INFO;
-        let key = make_key(height.get(), &cup.get_cm_hash().digest().0);
+        let key = make_key(height.get(), cup.get_cm_hash().digest().as_ref());
         let cf_handle = check_not_none_uw!(self.db.cf_handle(info.name));
         let artifact = ValidatedArtifact {
             msg: cup_with_proto,
@@ -413,7 +413,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
             match op {
                 PoolSectionOp::Insert(mut artifact) => {
                     let (info, height) = info_and_height_for_msg(&artifact.msg);
-                    let key = make_key(height.get(), &artifact.msg.get_cm_hash().digest().0);
+                    let key = make_key(height.get(), artifact.msg.get_cm_hash().digest().as_ref());
                     let cf_handle = check_not_none_uw!(self.db.cf_handle(info.name));
                     // Serialize payload separately. Payload is indexed by the same key
                     // as BlockProposal.
@@ -448,7 +448,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                 PoolSectionOp::Remove(msg_id) => {
                     let info = info_for_msg_id(&msg_id);
                     let height = msg_id.height.get();
-                    let key = make_key(height, &msg_id.hash.digest().0);
+                    let key = make_key(height, msg_id.hash.digest().as_ref());
                     let cf_handle = check_not_none_uw!(self.db.cf_handle(info.name));
                     match msg_id.hash {
                         ConsensusMessageHash::BlockProposal(_) => {
@@ -486,7 +486,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
 fn store_block_payload(db: &DB, batch: &mut WriteBatch, proposal: &BlockProposal) {
     let height = proposal.height();
     let hash = proposal.as_ref().payload.get_hash();
-    let uid = &hash.get_ref().0;
+    let uid: &[u8] = hash.get_ref().as_ref();
     let payload_key = make_key(height.get(), uid);
     let payload = proposal.as_ref().payload.as_ref();
     let cf_handle_payload = check_not_none_uw!(db.cf_handle(BLOCK_PAYLOAD_CF_INFO.name));
@@ -503,7 +503,7 @@ fn store_block_payload(db: &DB, batch: &mut WriteBatch, proposal: &BlockProposal
 fn remove_block_payload(db: &DB, batch: &mut WriteBatch, bytes: &[u8]) {
     let artifact: ValidatedConsensusArtifact = check_ok_uw!(deserialize(bytes));
     let proposal = check_not_none_uw!(BlockProposal::assert(&artifact.msg));
-    let uid = &proposal.as_ref().payload.get_hash().get_ref().0;
+    let uid: &[u8] = proposal.as_ref().payload.get_hash().get_ref().as_ref();
     let payload_key = make_key(proposal.height().get(), uid);
     let cf_handle_payload = check_not_none_uw!(db.cf_handle(BLOCK_PAYLOAD_CF_INFO.name));
     batch.delete_cf(cf_handle_payload, payload_key);
@@ -540,7 +540,7 @@ fn deserialize_consensus_artifact(
         ConsensusMessage::BlockProposal(mut proposal) => {
             let block = proposal.content.as_mut();
             let hash = block.payload.get_hash();
-            let uid = &hash.get_ref().0;
+            let uid: &[u8] = hash.get_ref().as_ref();
             let key = make_key(block.height().get(), uid);
             block.payload = Payload::new_with(
                 hash.clone(),
@@ -1055,7 +1055,7 @@ impl PersistentHeightIndexedPool<CertificationMessage> {
         let info = T::info();
         let key = make_key(
             value.height().get(),
-            &ic_types::crypto::crypto_hash(value).get().0,
+            ic_types::crypto::crypto_hash(value).get_ref().as_ref(),
         );
         let cf_handle = check_not_none_uw!(self.db.cf_handle(info.name));
         check_ok!(
@@ -1211,10 +1211,10 @@ mod tests {
             .into_inner();
         let msg = ConsensusMessage::RandomBeacon(genesis_beacon);
         let hash = msg.get_cm_hash().digest().clone();
-        let rb_encoded_key = make_key(height.get(), &hash.0);
+        let rb_encoded_key = make_key(height.get(), hash.as_ref());
         let (rb_height, rb_hash) = decompose_key(&rb_encoded_key);
         assert_eq!(rb_height, 10, "height does not match");
-        assert_eq!(&hash.0, &rb_hash, "Hash does not match");
+        assert_eq!(hash.into_vec(), rb_hash, "Hash does not match");
     }
 
     fn make_logger() -> ReplicaLogger {
