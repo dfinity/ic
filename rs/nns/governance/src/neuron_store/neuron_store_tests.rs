@@ -861,8 +861,9 @@ fn test_get_full_neuron_of_indirectly_managed_neuron() {
     // manages neuron 3, which manages neuron 4. Thus, the principal can make ManageNeuron
     // proposals for neuron 2 directly, and for neuron 3 indirectly (via a ManageNeuron proposal for
     // neuron 2 with a MakeProposal command), but not for neuron 4 (that would need two levels of
-    // nesting).
+    // nesting). The same holds for a hotkey of neuron 1.
     let principal_id = PrincipalId::new_user_test_id(42);
+    let hot_key_principal_id = PrincipalId::new_user_test_id(44);
     let new_neuron_managed_by = |id: u64, manager_id: NeuronId| {
         simple_neuron_builder(id)
             .with_followees(hashmap! {
@@ -874,6 +875,7 @@ fn test_get_full_neuron_of_indirectly_managed_neuron() {
     };
     let neuron_controlled = simple_neuron_builder(1)
         .with_controller(principal_id)
+        .with_hot_keys(vec![hot_key_principal_id])
         .build();
     let neuron_managed = new_neuron_managed_by(2, neuron_controlled.id());
     let neuron_managed_indirectly = new_neuron_managed_by(3, neuron_managed.id());
@@ -892,7 +894,18 @@ fn test_get_full_neuron_of_indirectly_managed_neuron() {
     );
     assert_eq!(
         neuron_store.get_full_neuron(neuron_managed_indirectly.id(), principal_id),
+        Ok(neuron_managed_indirectly.clone())
+    );
+    assert_eq!(
+        neuron_store.get_full_neuron(neuron_managed_indirectly.id(), hot_key_principal_id),
         Ok(neuron_managed_indirectly)
+    );
+    assert_eq!(
+        neuron_store.get_full_neuron(neuron_managed_too_indirectly.id(), hot_key_principal_id),
+        Err(NeuronStoreError::NotAuthorizedToGetFullNeuron {
+            neuron_id: neuron_managed_too_indirectly.id(),
+            principal_id: hot_key_principal_id,
+        })
     );
     assert_eq!(
         neuron_store.get_full_neuron(neuron_managed_too_indirectly.id(), principal_id),

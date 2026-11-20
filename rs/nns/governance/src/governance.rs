@@ -1711,10 +1711,6 @@ impl Governance {
         let empty = Vec::new();
         let current_page = chunks.get(page_number as usize).unwrap_or(&empty);
 
-        // Used to decide whether the caller can (directly or indirectly) make ManageNeuron
-        // proposals for a neuron, which lets the caller read the full neuron.
-        let caller_neuron_ids = self.neuron_store.get_neuron_ids_readable_by_caller(caller);
-
         // Populate the above two neuron collections.
         for neuron_id in current_page {
             // Ignore when a neuron is not found. It is not guaranteed that a
@@ -1736,7 +1732,7 @@ impl Governance {
                         )
                         // Caller can (directly or indirectly) make ManageNeuron proposals for
                         // the neuron. Checked last, because it might load other neurons.
-                        || self.neuron_store.is_managed_by_any_of(&neuron.neuron_managers(), &caller_neuron_ids);
+                        || self.neuron_store.can_principal_manage_neuron_via_proposals(caller, neuron);
                 if let_caller_read_full_neuron {
                     full_neurons.push(neuron.clone().into_api(now, self.voting_power_economics(), true));
                 }
@@ -3577,7 +3573,9 @@ impl Governance {
 
                     let is_managed = self
                         .neuron_store
-                        .is_directly_managed_by_any_of(manager_id, caller_neurons);
+                        .is_directly_managed_by_any_of(manager_id, |id| {
+                            caller_neurons.contains(id)
+                        });
                     let _previous_result = is_manager_managed_by_caller_neurons
                         .borrow_mut()
                         .insert(*manager_id, is_managed);
