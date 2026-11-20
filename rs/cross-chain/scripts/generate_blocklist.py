@@ -76,6 +76,10 @@ pub fn is_blocked(address: &Address) -> bool {
 """
 
     def format_address(self, address):
+        # OFAC lists some addresses of other blockchains under XBT. They are written as
+        # comments, since the checker canister fails to parse them.
+        if not address.startswith(("1", "3", "bc1")):
+            return f'// "{address}", reason: not a Bitcoin mainnet address'
         return f'"{address}"'
 
     def currency_symbol(self):
@@ -153,7 +157,10 @@ def store_blocklist(blocklist_handler, addresses, filename):
     blocklist_file = open(filename, "w")
     blocklist_file.write(blocklist_handler.preamble())
     for address in addresses:
-        blocklist_file.write("    " + blocklist_handler.format_address(address) + ",\n")
+        entry = blocklist_handler.format_address(address)
+        if not entry.startswith("//"):
+            entry += ","
+        blocklist_file.write("    " + entry + "\n")
         print(address)
     blocklist_file.write("];\n\n")
     blocklist_file.write(blocklist_handler.postamble())
