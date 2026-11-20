@@ -34,7 +34,10 @@ impl<T: Eq> HeightIndex<T> {
         self.buckets.entry(height).or_default().push(value);
     }
 
-    pub fn remove_all_below(&mut self, height: Height) -> impl Iterator<Item = (Height, T)> {
+    pub fn remove_all_below(
+        &mut self,
+        height: Height,
+    ) -> impl Iterator<Item = (Height, T)> + use<T> {
         let above_height = self.buckets.split_off(&height);
         let below_height = std::mem::replace(&mut self.buckets, above_height);
 
