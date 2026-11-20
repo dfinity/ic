@@ -373,6 +373,104 @@ fn test_filter_proposals_manage_neuron_proposal_visibility() {
 }
 
 #[test]
+fn test_filter_proposals_indirectly_managed_neuron_proposal_visibility() {
+    // Step 1: Prepare the world. PROPOSER_PRINCIPAL controls neuron 1 (the indirect manager),
+    // which manages neuron 2 (the intermediate neuron), which manages neuron 3. Neuron 4 is
+    // managed by neuron 3, i.e. it is too far away from neuron 1.
+    let mut governance = new_governance();
+    let intermediate_principal = PrincipalId::new_self_authenticating(b"intermediate");
+    let new_neuron = |id: u64, controller: PrincipalId, manager_ids: Vec<NeuronId>| {
+        NeuronBuilder::new_for_test(
+            id,
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: ONE_YEAR_SECONDS,
+                aging_since_timestamp_seconds: 0,
+            },
+        )
+        .with_controller(controller)
+        .with_cached_neuron_stake_e8s(10 * E8)
+        .with_followees(hashmap! {
+            Topic::NeuronManagement as i32 => Followees {
+                followees: manager_ids,
+            }
+        })
+        .build()
+    };
+    let unrelated_principal = PrincipalId::new_self_authenticating(b"unrelated");
+    let neurons = vec![
+        new_neuron(1, *PROPOSER_PRINCIPAL, vec![]),
+        new_neuron(2, intermediate_principal, vec![NeuronId::from_u64(1)]),
+        // 2 followees are set so that the proposals are not instantly executed.
+        new_neuron(
+            3,
+            unrelated_principal,
+            vec![NeuronId::from_u64(2), NeuronId::from_u64(1000)],
+        ),
+        new_neuron(
+            4,
+            unrelated_principal,
+            vec![NeuronId::from_u64(3), NeuronId::from_u64(1000)],
+        ),
+    ];
+    for neuron in neurons {
+        governance.add_neuron(neuron.id().id, neuron).unwrap();
+    }
+    let make_manage_neuron_proposal = |governance: &mut Governance,
+                                       proposer_id: u64,
+                                       proposer_principal: PrincipalId,
+                                       managed_id: u64| {
+        governance
+            .make_proposal(
+                &NeuronId::from_u64(proposer_id),
+                &proposer_principal,
+                &Proposal {
+                    title: Some("Title".to_string()),
+                    summary: "Summary".to_string(),
+                    url: "".to_string(),
+                    action: Some(Action::ManageNeuron(Box::new(ManageNeuron {
+                        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                            NeuronId::from_u64(managed_id),
+                        )),
+                        id: None,
+                        command: Some(Command::RegisterVote(RegisterVote {
+                            proposal: Some(ProposalId { id: 1 }),
+                            vote: Vote::Yes as i32,
+                        })),
+                    }))),
+                    self_describing_action: None,
+                },
+            )
+            .now_or_never()
+            .unwrap()
+            .unwrap()
+    };
+    let proposal_for_neuron_3 =
+        make_manage_neuron_proposal(&mut governance, 2, intermediate_principal, 3);
+    let proposal_for_neuron_4 =
+        make_manage_neuron_proposal(&mut governance, 3, unrelated_principal, 4);
+    assert_eq!(proposal_for_neuron_3, ProposalId { id: 1 });
+    assert_eq!(proposal_for_neuron_4, ProposalId { id: 2 });
+
+    // Step 2: Run the code under test.
+    let list_proposal_ids = |principal: &PrincipalId| {
+        proposal_ids(&governance.list_proposals(principal, ListProposalInfoRequest::default()))
+    };
+
+    // Step 3: Verify results.
+
+    // The indirect manager sees the proposal for neuron 3, but not the one for neuron 4.
+    assert_eq!(list_proposal_ids(&PROPOSER_PRINCIPAL), vec![1]);
+    // The intermediate neuron's controller sees the proposal for neuron 3 directly, and the one
+    // for neuron 4 indirectly.
+    assert_eq!(list_proposal_ids(&intermediate_principal), vec![2, 1]);
+    // Some arbitrary principal sees neither.
+    assert_eq!(
+        list_proposal_ids(&PrincipalId::new_self_authenticating(b"some_principal")),
+        Vec::<u64>::new()
+    );
+}
+
+#[test]
 fn test_filter_proposals_by_status() {
     let proposal_actions = (0..3)
         .map(|_i| {

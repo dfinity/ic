@@ -19,6 +19,10 @@ on the process that this file is part of, see
   ManageNeuron proposal whose command is not `MakeProposal` (i.e. at most one
   level of nesting), and its summary can be at most 2,000 bytes.
 
+* The controllers and hotkeys of A, B, and C (in the example above) can now
+  read the full neurons E1, ..., En (via `get_full_neuron` and `list_neurons`),
+  and see ManageNeuron proposals for them in `list_proposals`.
+
 ## Changed
 
 * Limit decoded `payload` of `ExecuteNnsFunction` proposals. If the result is
