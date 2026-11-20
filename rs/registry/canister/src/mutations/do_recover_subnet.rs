@@ -31,6 +31,7 @@ use ic_registry_transport::{
     pb::v1::{RegistryMutation, registry_mutation},
     upsert,
 };
+use ic_types::crypto::CryptoHash;
 use on_wire::bytes;
 use prost::Message;
 use serde::Serialize;
@@ -206,7 +207,7 @@ impl Registry {
         cup_contents.cup_type = Some(CupType::Recovery(RecoveryArgs {
             height: payload.height,
             time: payload.time_ns,
-            state_hash: payload.state_hash,
+            state_hash: payload.state_hash.to_vec(),
         }));
 
         mutations.push(RegistryMutation {
@@ -288,7 +289,7 @@ pub struct RecoverSubnetPayload {
     /// The block time to start from (nanoseconds from Epoch)
     pub time_ns: u64,
     /// The hash of the state
-    pub state_hash: Vec<u8>,
+    pub state_hash: [u8; CryptoHash::LEN],
     /// Replace the members of the given subnet with these nodes
     pub replacement_nodes: Option<Vec<NodeId>>,
     /// A uri from which data to replace the registry local store should be
@@ -527,6 +528,7 @@ mod test {
         },
         registry::Registry,
     };
+    use candid::Decode;
     use ic_base_types::SubnetId;
     use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, VetKdCurve, VetKdKeyId};
     use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
@@ -540,7 +542,7 @@ mod test {
             initial_dkg_subnet_id: None,
             height: 0,
             time_ns: 0,
-            state_hash: vec![],
+            state_hash: CryptoHash::for_test().0,
             replacement_nodes: None,
             registry_store_uri: None,
             chain_key_config: None,
@@ -582,6 +584,66 @@ mod test {
         );
         registry.maybe_apply_mutation_internal(fake_subnet_mutation);
         (registry, subnet_id_holding_key)
+    }
+
+    /// The Candid shape of a [`RecoverSubnetPayload`] whose `state_hash` may have any length. It
+    /// leaves out the optional fields, which Candid decodes as `None`.
+    #[derive(CandidType)]
+    struct RecoverSubnetPayloadWithAnyHashLength {
+        subnet_id: PrincipalId,
+        height: u64,
+        time_ns: u64,
+        state_hash: Vec<u8>,
+    }
+
+    fn encode_recover_subnet_payload_with_hash_of_len(len: usize) -> Vec<u8> {
+        Encode!(&RecoverSubnetPayloadWithAnyHashLength {
+            subnet_id: subnet_test_id(1).get(),
+            height: 1,
+            time_ns: 2,
+            state_hash: vec![7; len],
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn recover_subnet_payload_decodes_with_32_byte_state_hash() {
+        // Step 1: Prepare the world.
+        let encoded_payload = encode_recover_subnet_payload_with_hash_of_len(CryptoHash::LEN);
+
+        // Step 2: Run the code under test.
+        let result = Decode!(&encoded_payload, RecoverSubnetPayload);
+
+        // Step 3: Verify result(s).
+        assert_eq!(
+            result.unwrap(),
+            RecoverSubnetPayload {
+                subnet_id: subnet_test_id(1).get(),
+                initial_dkg_subnet_id: None,
+                height: 1,
+                time_ns: 2,
+                state_hash: [7; CryptoHash::LEN],
+                replacement_nodes: None,
+                registry_store_uri: None,
+                chain_key_config: None,
+            }
+        );
+    }
+
+    #[test]
+    fn recover_subnet_payload_does_not_decode_with_state_hash_of_other_length() {
+        for len in [0, 1, CryptoHash::LEN - 1, CryptoHash::LEN + 1] {
+            // Step 1: Prepare the world.
+            let encoded_payload = encode_recover_subnet_payload_with_hash_of_len(len);
+
+            // Step 2: Run the code under test.
+            let result = Decode!(&encoded_payload, RecoverSubnetPayload);
+
+            // Step 3: Verify result(s).
+            // Only the alternate format includes the cause.
+            let err = format!("{:#}", result.unwrap_err());
+            assert!(err.contains("invalid length"), "len = {len}: {err}");
+        }
     }
 
     #[test]

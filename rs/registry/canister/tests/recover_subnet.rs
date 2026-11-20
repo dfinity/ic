@@ -37,7 +37,7 @@ use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     Height, RegistryVersion,
     crypto::{
-        AlgorithmId, BasicSig, BasicSigOf,
+        AlgorithmId, BasicSig, BasicSigOf, CryptoHash,
         canister_threshold_sig::idkg::{
             IDkgDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
             IDkgTranscriptParams, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
@@ -165,7 +165,7 @@ fn test_recover_subnet_with_replacement_nodes() {
                 initial_dkg_subnet_id: None,
                 height: 10,
                 time_ns: 1200,
-                state_hash: vec![10, 20, 30],
+                state_hash: CryptoHash::for_test().0,
                 replacement_nodes: Some(unassigned_node_ids.clone()),
                 registry_store_uri: None,
                 chain_key_config: None,
@@ -206,7 +206,7 @@ fn test_recover_subnet_with_replacement_nodes() {
                 Some(CupType::Recovery(RecoveryArgs {
                     height: payload.height,
                     time: payload.time_ns,
-                    state_hash: payload.state_hash,
+                    state_hash: payload.state_hash.to_vec(),
                 }))
             );
 
@@ -382,7 +382,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
             initial_dkg_subnet_id: Some(system_subnet_id),
             height: 10,
             time_ns: 1200,
-            state_hash: vec![10, 20, 30],
+            state_hash: CryptoHash::for_test().0,
             replacement_nodes: None,
             registry_store_uri: None,
             chain_key_config: Some(InitialChainKeyConfig {
@@ -639,7 +639,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
             initial_dkg_subnet_id: None,
             height: 10,
             time_ns: 1200,
-            state_hash: vec![10, 20, 30],
+            state_hash: CryptoHash::for_test().0,
             replacement_nodes: None,
             registry_store_uri: None,
             chain_key_config: Some(InitialChainKeyConfig {
@@ -816,7 +816,7 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
             initial_dkg_subnet_id: None,
             height: 10,
             time_ns: 1200,
-            state_hash: vec![10, 20, 30],
+            state_hash: CryptoHash::for_test().0,
             replacement_nodes: None,
             registry_store_uri: None,
             chain_key_config: None,
@@ -1122,7 +1122,7 @@ fn test_recover_subnet_resets_cup_contents() {
             initial_dkg_subnet_id: None,
             height: 10,
             time_ns: 1200,
-            state_hash: vec![10, 20, 30],
+            state_hash: CryptoHash::for_test().0,
             replacement_nodes: None,
             registry_store_uri: None,
             chain_key_config: Some(InitialChainKeyConfig {
