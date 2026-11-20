@@ -187,9 +187,8 @@ mod tests {
             let metadata = WasmMetadata::new(btreemap! {
                 String::from("dummy1") => CustomSection::new(CustomSectionType::Private, vec![0, 2]),
             });
-            // Exercise the `last_install_timestamp` leaf added in `V27`.
-            let last_install_timestamp = (certification_version >= CertificationVersion::V27)
-                .then(|| Time::from_nanos_since_unix_epoch(1234));
+            // Exercise the `last_install_timestamp` leaf.
+            let last_install_timestamp = Some(Time::from_nanos_since_unix_epoch(1234));
             let execution_state = ExecutionState::new(
                 wasm_binary,
                 last_install_timestamp,
@@ -200,11 +199,9 @@ mod tests {
                 metadata,
             );
             canister_state.execution_state = Some(execution_state);
-            // Exercise the `canister_creation_timestamp` leaf added in `V28`.
-            if certification_version >= CertificationVersion::V28 {
-                canister_state.system_state.canister_creation_timestamp =
-                    Some(Time::from_nanos_since_unix_epoch(1234));
-            }
+            // Exercise the `canister_creation_timestamp` leaf.
+            canister_state.system_state.canister_creation_timestamp =
+                Some(Time::from_nanos_since_unix_epoch(1234));
 
             state.put_canister_state(canister_state);
 
@@ -239,11 +236,8 @@ mod tests {
                         .into(),
                 );
             }
-            // Enqueue some refund messages for certification versions >= V22.
-            if certification_version >= CertificationVersion::V22 {
-                for i in 1..6 {
-                    stream.push(Refund::anonymous(canister_id, Cycles::new(i)).into());
-                }
+            for i in 1..6 {
+                stream.push(Refund::anonymous(canister_id, Cycles::new(i)).into());
             }
             stream.push_reject_signal(RejectReason::CanisterMigrating);
             stream.set_reverse_stream_flags(StreamFlags {
@@ -255,9 +249,7 @@ mod tests {
             stream.push_reject_signal(RejectReason::OutOfMemory);
             stream.push_reject_signal(RejectReason::Unknown);
             stream.push_reject_signal(RejectReason::CanisterStopping);
-            if certification_version >= CertificationVersion::V26 {
-                stream.push_reject_signal(RejectReason::EngineNotAllowed);
-            }
+            stream.push_reject_signal(RejectReason::EngineNotAllowed);
 
             let loopback_stream = Stream::new(
                 StreamIndexedQueue::with_begin(StreamIndex::from(13)),
@@ -378,10 +370,9 @@ mod tests {
             });
             subnet_metrics.threshold_signature_agreements =
                 BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
-            // Exercise the monotonic canisters' part, which only `V30` and later
-            // report. The gauge part stays zero, so that the hashes for earlier
-            // certification versions are unaffected. (In production, the monotonic
-            // part never exceeds the gauge part, but that is irrelevant here.)
+            // Exercise the monotonic canisters' part. (In production, the
+            // monotonic part never exceeds the gauge part, but that is irrelevant
+            // here.)
             subnet_metrics
                 .refresh_consumed_cycles(NominalCycles::zero(), NominalCycles::new(30_000_000_000));
 
@@ -409,20 +400,7 @@ mod tests {
         // PLEASE INCREMENT THE CERTIFICATION VERSION AND PROVIDE APPROPRIATE
         // BACKWARD COMPATIBILITY CODE FOR OLD CERTIFICATION VERSIONS THAT
         // NEED TO BE SUPPORTED.
-        let expected_hashes = [
-            "A58A2CE65A1EF1F32AA1B46E884B52FDBF14C4A8A01100C78401F958F5BE04E4",
-            "D23410333D985C91C2BE540D7282BCB28C356D6B587F7ABCEFC8BE2C4D7DE454",
-            "1090ACD6B66270816569DD4AEC2B315EAFB0AF7F00D6C4801BE88979765C67C5",
-            "5FB827932CC4FF419E47869F1AB37473311B81DFD10A7090FABB90E55B6495BE",
-            "3FFC2919D08408B3C9D582AE2BEE4D806707179B1D110E113EFEF3D709A62E24",
-            "BCD87ECE333D4F1C132EDE0F820EA717A6BD63F14544526FBBAF5BAA69A45C5A",
-            "DB79E2779240264D24194A0FA3609F1369F6C98800DEC23DEF69D2B395C0D2E1",
-            "0EC99B2AA159C259010B02E8568077959506C4153594338E9A69450F326CEE38",
-            "3EE82452CD7712A87BC313F6AD0BBEEC7F264A4699BEBD324A961080D96F5FD1",
-            "512D8886C4E68D75AA1EE4AFC26A67F2BA00E56FB75FE5C9FB7E69DDA25026EB",
-            "A15A37BD9A0454C39D6B9A4234001D19B02433D8F0CD790664027145790B06B3",
-            "C81D47E2FDC5822705E25AE2C06C11FDE4E3EE0ECE4187A5089A27C7B1688392",
-        ];
+        let expected_hashes = ["C81D47E2FDC5822705E25AE2C06C11FDE4E3EE0ECE4187A5089A27C7B1688392"];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 
         for (certification_version, expected_hash) in
