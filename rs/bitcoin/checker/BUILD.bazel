@@ -50,6 +50,7 @@ rust_canister(
     deps = [
         # Keep sorted.
         ":btc_checker_lib",
+        "//packages/ic-dummy-getrandom-for-wasm",
         "//packages/ic-http-types",
         "//packages/ic-secp256k1",
         "@crate_index//:askama",

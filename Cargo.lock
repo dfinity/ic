@@ -6949,6 +6949,7 @@ dependencies = [
  "ic-canister-log 0.2.0",
  "ic-cdk",
  "ic-cdk-management-canister",
+ "ic-dummy-getrandom-for-wasm",
  "ic-http-types",
  "ic-management-canister-types 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-metrics-assert",
