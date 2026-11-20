@@ -499,15 +499,18 @@ pub fn principal_id_from_public_key_or_principal(
 }
 
 /// Candid skipping quota for decoding the canister method arguments of client-supplied
-/// envelopes. The size of the arguments alone does not bound the decoding work, so this applies
-/// the same quota as the `ic_cdk` endpoint macros of the canister methods being called.
+/// envelopes, the same quota as the `ic_cdk` endpoint macros of the canister methods being
+/// called. The decoding quota below is the binding one, though: it also covers skipped values,
+/// at 50 times their cost, so at most `CANISTER_METHOD_ARG_DECODING_QUOTA / 50 = 2,000` units
+/// can be skipped, well below this quota.
 pub const CANISTER_METHOD_ARG_SKIPPING_QUOTA: usize = 10_000;
 
-/// Candid decoding quota for the canister method arguments of client-supplied envelopes. The
-/// skipping quota does not cover values that are decoded rather than skipped, e.g. a long vector
-/// of records whose fields are all optional, which take no bytes on the wire. This is the quota
-/// the NNS canisters use for their `http_request` endpoints, and well above the cost of the
-/// largest arguments built by `/construction/payloads`.
+/// Candid decoding quota for the canister method arguments of client-supplied envelopes. Unlike
+/// the skipping quota, it also covers values that are decoded rather than skipped, e.g. a long
+/// vector of records whose fields are all optional, which take no bytes on the wire, and it
+/// charges skipped values 50 times their cost. This is the quota the NNS canisters use for their
+/// `http_request` endpoints, and well above the cost of the arguments built by
+/// `/construction/payloads`, which skip nothing.
 pub const CANISTER_METHOD_ARG_DECODING_QUOTA: usize = 100_000;
 
 fn canister_method_arg_decoder_config() -> candid::DecoderConfig {
@@ -520,7 +523,7 @@ fn canister_method_arg_decoder_config() -> candid::DecoderConfig {
 
 /// Decodes the Candid-encoded argument of a client-supplied envelope as a single value of type
 /// `T`, under skipping and decoding quotas so that the decoding work is bounded regardless of
-/// the lengths declared in the type table.
+/// the vector lengths the argument declares.
 pub fn decode_canister_method_arg<T>(arg: &[u8]) -> Result<T, candid::Error>
 where
     T: candid::CandidType + serde::de::DeserializeOwned,

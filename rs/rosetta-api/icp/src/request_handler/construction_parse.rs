@@ -913,9 +913,10 @@ mod tests {
             let err =
                 parse_unsigned_set_dissolve_timestamp(&handler, &network_identifier, args.clone())
                     .unwrap_err();
-            // Skipped values count towards both quotas, so either one may be exceeded first.
+            // The decoding quota is the binding one: it charges skipped values 50 times their
+            // cost, so it runs out before the skipping quota.
             assert!(
-                format!("{err:?}").contains("cost exceeds the limit"),
+                format!("{err:?}").contains("Decoding cost exceeds the limit"),
                 "{name}: unexpected parse error: {err:?}"
             );
 
