@@ -281,7 +281,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                             // boundary node.
                             if unvalidated_artifact.peer_id == self.node_id {
                                 transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
-                                    artifact: unvalidated_artifact.message.signed_ingress.clone(),
+                                    artifact: unvalidated_artifact.message.signed_ingress().clone(),
                                     is_latency_sensitive: true,
                                 }));
                             }
@@ -316,7 +316,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                     transmits.extend(
                         expired_validated
                             .values()
-                            .map(|i| (&i.msg.signed_ingress).into())
+                            .map(|i| i.msg.signed_ingress().into())
                             .map(ArtifactTransmit::Abort),
                     );
 
@@ -350,7 +350,9 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
 
 impl ValidatedPoolReader<SignedIngress> for IngressPoolImpl {
     fn get(&self, id: &IngressMessageId) -> Option<SignedIngress> {
-        self.validated.get(id).map(|a| a.msg.signed_ingress.clone())
+        self.validated
+            .get(id)
+            .map(|a| a.msg.signed_ingress().clone())
     }
 }
 
