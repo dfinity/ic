@@ -244,10 +244,15 @@ impl ConsentMessage {
                         };
 
                         // Apply the offset minutes
-                        let offset = time::UtcOffset::from_whole_seconds(
-                            (utc_offset_minutes.unwrap_or(0) * 60).into(),
-                        )
-                        .expect("Invalid offset");
+                        let offset_minutes = utc_offset_minutes.unwrap_or(0);
+                        let offset = match time::UtcOffset::from_whole_seconds(
+                            i32::from(offset_minutes) * 60,
+                        ) {
+                            Ok(offset) => offset,
+                            Err(_) => {
+                                return format!("Invalid UTC offset: {offset_minutes} minutes");
+                            }
+                        };
                         let offset_dt = utc_dt.to_offset(offset);
 
                         // Format as a string including the offset
@@ -283,21 +288,28 @@ impl ConsentMessage {
 
     pub fn add_memo(&mut self, memo: GenericMemo) {
         match memo {
-            GenericMemo::Icrc1Memo(memo) => {
-                // Check if the memo is a valid UTF-8 string and display it as such if it is.
-                let memo_str = match std::str::from_utf8(memo.as_slice()) {
-                    Ok(valid_str) => valid_str.to_string(),
-                    Err(_) => hex::encode(memo.as_slice()),
-                };
-                match self {
-                    ConsentMessage::GenericDisplayMessage(message) => {
-                        message.push_str(&format!("\n\n**Memo:**\n`{memo_str}`"));
-                    }
-                    ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display
-                        .fields
-                        .push(("Memo".to_string(), Value::Text { content: memo_str })),
+            GenericMemo::Icrc1Memo(memo) => match self {
+                ConsentMessage::GenericDisplayMessage(message) => {
+                    // The memo is chosen by the caller, so it is shown as text only if
+                    // it cannot alter the surrounding Markdown.
+                    let memo_str = if is_markdown_safe_memo(memo.as_slice()) {
+                        memo.iter().copied().map(char::from).collect()
+                    } else {
+                        hex::encode(memo.as_slice())
+                    };
+                    message.push_str(&format!("\n\n**Memo:**\n`{memo_str}`"));
                 }
-            }
+                ConsentMessage::FieldsDisplayMessage(fields_display) => {
+                    // Field values are plain text, so any valid UTF-8 is shown as such.
+                    let memo_str = match std::str::from_utf8(memo.as_slice()) {
+                        Ok(valid_str) => valid_str.to_string(),
+                        Err(_) => hex::encode(memo.as_slice()),
+                    };
+                    fields_display
+                        .fields
+                        .push(("Memo".to_string(), Value::Text { content: memo_str }))
+                }
+            },
             GenericMemo::IntMemo(memo) => match self {
                 ConsentMessage::GenericDisplayMessage(message) => {
                     message.push_str(&format!("\n\n**Memo:**\n`{memo}`"));
@@ -313,6 +325,14 @@ impl ConsentMessage {
             },
         };
     }
+}
+
+/// Whether `memo` can be shown verbatim inside a Markdown code span: printable
+/// ASCII without backticks, so it can neither end the code span nor start a new
+/// block.
+fn is_markdown_safe_memo(memo: &[u8]) -> bool {
+    memo.iter()
+        .all(|&b| (b' '..=b'~').contains(&b) && b != b'`')
 }
 
 fn convert_tokens_to_string_representation(
@@ -332,3 +352,7 @@ fn nat_to_u64(tokens: Nat) -> Result<u64, Icrc21Error> {
         description: "Failed to convert tokens to u64".to_owned(),
     })
 }
+
+#[cfg(test)]
+#[path = "responses_tests.rs"]
+mod tests;
