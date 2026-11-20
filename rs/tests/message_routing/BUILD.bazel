@@ -185,6 +185,7 @@ system_test_nns(
         # Keep sorted.
         "//rs/protobuf",
         "//rs/recovery",
+        "//rs/recovery/subnet_merging",
         "//rs/registry/helpers",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
