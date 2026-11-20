@@ -1,8 +1,5 @@
 /* tag::catalog[]
-Title:: Draining and halting a subnet that is "cooling down", downloading,
-validating and merging the states of the subnets to merge, rerouting the
-canister ID ranges of the subnet, proposing the recovery CUP of the subnet it is
-merged into and uploading the merged state to it, with the subnet merging tool.
+Title:: Draining and merging a subnet that is "cooling down".
 
 Goal:: Verify that a subnet holding what a subnet merge has to drain violates
 the individual terms of the "merge readiness" condition, i.e. that the
@@ -13,13 +10,14 @@ subnet rejects ingress messages and query calls, the tool eventually finds the
 condition to hold, and it then halts the subnet and the subnet it is told to
 merge it into at their next CUP, downloads and validates the state each halted
 at, assembles the merged state from them, has the canister ID ranges of the
-subnet rerouted to the subnet it is merged into, proposes the recovery CUP of
-that subnet at the merged state, and uploads the merged state to a node of that
-subnet. The cooling down subnet also holds calls
-waiting for responses that never arrive: they are not drained, but make it
-possible to assert that a subnet merge populates the ingress history properly.
+subnet rerouted to the subnet it is merged into, and recovers the destination
+subnet at the merged state without losing any of the state of either subnet.
+The cooling down subnet also holds calls waiting for responses that do not
+arrive before the merge: they are not drained, but make it possible to assert
+that a subnet merge populates the ingress history properly, as every ingress
+message that is in progress across the merge completes after it.
 
-The subnet that is cooled down, i.e. the one that would be merged away, is
+The subnet that is cooled down, i.e. the one that is merged away, is
 called `S`, and the Application subnet the tool is told to merge `S` into is
 called `D`. `S` exchanges the same calls with `D` as with a third Application
 subnet `O`, which is not part of the merge: once the merge goes ahead, the
@@ -28,11 +26,14 @@ calls within the destination subnet, whereas those between `O` and the
 canisters of `S` have to be rerouted to `D` by a subnet that is not itself
 part of the merge.
 
-The tool submits its proposals through `ic-admin`, with the test neuron.
+The NNS subnet is none of these: it has to stay available throughout, as it is
+where the proposals of the merge are executed, including the one recovering `D`
+at the merged state. Every proposal of the merge is submitted by the tool,
+through `ic-admin` with the test neuron; this test submits none.
 
 "Executing" an update call below always means submitting it as an ingress
-message without waiting for it to complete: most of the calls of this test are
-never meant to complete.
+message without waiting for it to complete: most of the calls of this test only
+complete after the merge.
 
 Runbook::
 0. Set up an IC with an NNS subnet (with the NNS canisters installed) and three
@@ -45,22 +46,29 @@ Runbook::
 3. Wait until all loops have completed a few iterations, i.e. messages are
    actually flowing between `S` and each of `D` and `O` in both directions.
 4. Install the universal canisters of the steps below (`U1`, `U3`, `U5`, `U6`,
-   `U9` and `U10` on `S`, `U4` and `U7` on `D`, `U8` and `U11` on `O`) and
-   create two empty canisters `U2a` and `U2b` on `S`, controlled by `U1`.
+   `U9`, `U10`, `U12` and `U14` on `S`, `U4` and `U7` on `D`, `U8`, `U11` and
+   `U13` on `O`) and create two empty canisters `U2a` and `U2b` on `S`,
+   controlled by `U1`. Then give `U12` the state that has to survive the merge:
+   a blob in its stable memory, a canister snapshot, and a cycles balance to
+   compare against later.
 5. Start the endless loops, each of which calls the management canister's
    `canister_status` method for the looping canister over and over until the
    global data of that canister is set to `LOOP_BREAK_TRIGGER`, which this test
-   never does:
+   only does after the merge (step 26):
    a. execute an update call on `U3` (on `S`) with the loop as its payload;
    b. execute an update call on `U4` (on `D`) that calls `U5` (on `S`) with the
       loop as its payload, so that `S` holds a canister looping in a call from
-      another subnet that it can never respond to;
+      another subnet that it cannot respond to before the merge;
    c. execute an update call on `U6` (on `S`) that calls `U7` (on `D`) with the
       loop as its payload, so that `S` holds a canister waiting for a response
-      from another subnet that never arrives;
+      from another subnet that does not arrive before the merge;
    d. execute an update call on `U8` (on `O`) that calls `U9` (on `S`), like b;
    e. execute an update call on `U10` (on `S`) that calls `U11` (on `O`), like
-      c.
+      c;
+   f. execute an update call on `U13` (on `O`) making a best effort call to
+      `U14` (on `S`) that carries cycles and has the loop as its payload, so
+      that `U14` holds the call context of a best effort call whose deadline
+      passes before the merge.
    Wait until all of these loops are running.
 6. Execute an update call on `U1` that makes two calls to the management
    canister's `install_code` method, one per `U2x`, in mode `install`, with the
@@ -87,7 +95,9 @@ Runbook::
    `CheckRegistryForCoolingDownFlag`, which records the registry version `V`
    at which it reads the label back.
 9. After `CheckRegistryForCoolingDownFlag`: wait until `S` rejects ingress
-   messages, and then until it rejects query calls too.
+   messages, and then until it rejects query calls too. Then wait until `U13`'s
+   best effort call of step 5f timed out, i.e. its deadline has passed before
+   the merge.
 10. The following step of the tool is executed: `CheckMergeReadiness`, which
    waits until `S` is "merge ready" for `V`, i.e. until every term of the
    condition of step 7 holds.
@@ -99,7 +109,7 @@ Runbook::
    and `HaltDestinationSubnetAtCupHeight`, which set the `halt_at_cup_height`
    flag of `S` and `D`, and `WaitForHaltingCupOnSourceSubnet` and
    `WaitForHaltingCupOnDestinationSubnet`, which wait until the node of each
-   subnet that its state would be downloaded from serves the halting CUP.
+   subnet that its state is downloaded from serves the halting CUP.
 13. After `WaitForHaltingCupOnDestinationSubnet`: check that both subnets are
    halted, i.e. that every one of their nodes certifies the height its subnet
    halts at and none goes past it, even after `HALT_OBSERVATION_PERIOD`.
@@ -119,7 +129,6 @@ Runbook::
    `MergeStates`, which assembles the merged state locally, as a checkpoint
    holding the state of `D` with the canisters and canister snapshots of `S`
    added to it, and checks that its manifest has the expected root hash.
-   Neither subnet nor the registry is touched.
 16. After `MergeStates`: check that the merged state is a single checkpoint that
    holds exactly the canisters of the two downloaded checkpoints of `S` and `D`.
 17. The following steps of the tool are executed: `MergeSubnets`, which submits
@@ -147,14 +156,35 @@ Runbook::
    * The time is past the times of the CUPs both subnets halted at.
 
    Recovering a subnet that was instructed to halt at its next CUP replaces
-   that instruction with a plain halt, so also check that `D` is halted.
+   that instruction with a plain halt, so also check that `D` is halted: it
+   stays halted until `UnhaltDestinationSubnet`.
 21. The following step of the tool is executed:
    `UploadStateToDestinationSubnet`, which uploads the merged state to `D`'s
    node, replacing the state directory holding the checkpoint it halted at, and
-   starts its replica back up.
+   starts its replica back up. Deleting that checkpoint is what makes the
+   recovery unambiguous: it does not hold the canisters of `S`, so a replica
+   coming up on it would serve a state that silently lost them.
 22. After `UploadStateToDestinationSubnet`: check that the checkpoints directory
    of `D`'s node holds exactly the merged checkpoint, and that the replica on
    that node is running again and started from it.
+23. The following steps of the tool are executed:
+   `WaitForCupOnDestinationSubnet`, which waits until `D`'s node reports the
+   recovery CUP, i.e. it came up on the merged state, and
+   `UnhaltDestinationSubnet`, which submits a proposal unhalting `D`.
+24. After `UnhaltDestinationSubnet`: wait until `D` is healthy, then check that
+   `U12`, now served by `D`, kept the stable memory, the snapshot and (up to
+   what an idle canister burns) the cycles balance of step 4, and that `U7`,
+   which `D` hosted all along, can call `U12` now that both are on the same
+   subnet.
+25. Check that `U2a` and `U2b`, also served by `D` now, have been installed,
+   i.e. that the `install_code` calls of step 6 ran to completion while `S` was
+   cooling down rather than being lost or rejected.
+26. Set the global data of `U3`, `U5`, `U7`, `U9`, `U11` and `U14` to
+   `LOOP_BREAK_TRIGGER`, ending the endless loops, and check that every ingress
+   message that was in progress across the merge completed. The canisters of
+   `S` are reached through `D`, which serves them after the merge. Then stop
+   `U14`, which only succeeds once the call context of `U13`'s best effort call,
+   which the merge carried over, is closed.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -163,16 +193,26 @@ query calls and becomes "merge ready", and the loops of `UDS` and `UOS` of step
 2 are stalled; the tool then halts `S` and `D` at their next CUP, the states it
 downloads from them pass validation, the merged state it assembles from them
 holds exactly the canisters of both, and the registry version the tool records
-routes the canister ID ranges of `S` to `D`; and the registry holds the
-recovery CUP contents of `D` at the merged state, with `D` halted; and the
-replica on `D`'s node runs on the merged state the tool uploaded to it.
+routes the canister ID ranges of `S` to `D`; the registry holds the recovery
+CUP contents of `D` at the merged state, with `D` halted; the replica on `D`'s
+node runs on the merged state the tool uploaded to it; and once `D` is
+recovered at the merged state, the canisters of `S` kept their state and `U2a`
+and `U2b` are installed, every ingress message that was in progress across the
+merge completes, and the call context of the best effort call whose deadline
+passed before the merge is closed.
 
 end::catalog[] */
 
 use anyhow::{Result, anyhow, bail};
-use candid::Principal;
-use ic_agent::Agent;
-use ic_agent::agent::RejectCode;
+use candid::{Decode, Encode, Principal};
+use ic_agent::{
+    Agent, RequestId,
+    agent::{RejectCode, RequestStatusResponse},
+};
+use ic_management_canister_types::{
+    CanisterIdRecord, ListCanisterSnapshotsArgs, ListCanisterSnapshotsResult, SnapshotId,
+    TakeCanisterSnapshotArgs, TakeCanisterSnapshotResult,
+};
 use ic_protobuf::registry::subnet::v1::catch_up_package_contents::CupType;
 use ic_recovery::{
     CHECKPOINTS, IC_STATE, RECOVERY_DIRECTORY_NAME, RecoveryArgs, get_node_metrics,
@@ -250,13 +290,57 @@ const INSTALL_CODE_TARGETS: [&str; 2] = ["U2a", "U2b"];
 /// for it.
 const INIT_INSTRUCTIONS: u64 = 295 * B;
 
-/// The global data value that would end the endless loops of `U3`, `U5`, `U7`,
-/// `U9` and `U11`. The test never sets it, so those loops never end.
+/// Where in the stable memory of `U12` the blob that has to survive the merge is
+/// stored, and the blob itself.
+const STABLE_MEMORY_OFFSET: u32 = 0;
+const STABLE_MEMORY_BLOB: &[u8] = b"this blob has to survive the subnet merge";
+
+/// The cycles the best effort call of step 5f carries, and its timeout. The
+/// point of the call is that its callee holds the call context of a best effort
+/// call across the merge whose deadline has passed: the callee does not respond
+/// before the merge, the caller's side of the call times out well before it
+/// (the merge is many minutes away), and the cycles the call carries are held by
+/// the callee's open call context, which the merge has to carry over like any
+/// other canister state.
+const BEST_EFFORT_CALL_CYCLES: u128 = 1_000_000_000;
+const BEST_EFFORT_CALL_TIMEOUT_SECONDS: u32 = 60;
+
+/// The reject code (`SYS_UNKNOWN`) a best effort call is rejected with when its
+/// deadline passes before a response arrived.
+const REJECT_CODE_SYS_UNKNOWN: u32 = 6;
+
+/// How long the test waits for the best effort call of step 5f to time out,
+/// from the moment `S` is cooling down, which is about as long after the call
+/// was made as its timeout.
+const BEST_EFFORT_CALL_EXPIRY_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// What the canister of the destination subnet gets back from the canister that
+/// the merge moved onto it.
+const MERGED_CALL_REPLY: &[u8] = b"hello from the merged subnet";
+
+/// The fraction of its cycles balance that the canister holding the state that
+/// has to survive the merge may have burned in between the two readings, as one
+/// in `MAX_BURNED_CYCLES_FRACTION`.
+///
+/// A share rather than an amount because the two readings are however many
+/// minutes apart the waits of the steps in between take, and generous because
+/// what this is meant to catch is a balance that the merge did not carry over at
+/// all, which would be a loss of everything, rather than the resource charges of
+/// an idle canister, which have been observed to be some three billion cycles of
+/// a hundred trillion.
+const MAX_BURNED_CYCLES_FRACTION: u128 = 1_000;
+
+/// The global data value that ends the endless loops of `U3`, `U5`, `U7`, `U9`,
+/// `U11` and `U14`. The test only sets it after the merge (step 26), so those
+/// loops run across it.
 const LOOP_BREAK_TRIGGER: &[u8] = b"break";
 
-/// The number of nodes of every subnet. More than one so that the terms of the
-/// merge readiness condition, which must hold together on the same quorum of
-/// the replicas of a subnet, range over more than one replica.
+/// The number of nodes of every subnet. More than one so that the merge has to
+/// get the merged state to the other nodes of the destination subnet the way a
+/// recovery does, i.e. by state sync from the one node it was uploaded to, and so
+/// that the terms of the merge readiness condition, which must hold together on
+/// the same quorum of the replicas of a subnet, range over more than one
+/// replica.
 const SUBNET_SIZE: usize = 4;
 
 /// The DKG interval length of all subnets, i.e. one less than the
@@ -331,6 +415,13 @@ const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// into the timeout of its Bazel target.
 const HALT_TIMEOUT: Duration = Duration::from_millis(TWO_DKG_INTERVALS * ROUND_MILLIS);
 
+/// Timeout for an ingress message that was in progress across the merge to
+/// complete once the loop it is waiting for is broken. Generous because the
+/// destination subnet has just resumed from the merged state and is busy
+/// recomputing its manifest and draining the message loops of step 2 at the same
+/// time: this has been observed to take up to four minutes.
+const INGRESS_COMPLETION_TIMEOUT: Duration = Duration::from_secs(480);
+
 /// How long the loops of `UDS` and `UOS` are observed to be stalled (step 11).
 const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 
@@ -338,17 +429,23 @@ const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 /// stay at the height their subnet halts at (step 13).
 const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 
-/// Timeouts of the test itself, above the sum of the timeouts of its steps
-/// (dominated by `MERGE_READY_TIMEOUT`, `HALT_TIMEOUT` and
-/// `REPLICA_RESTART_TIMEOUT`, about 1700s together), so that a stuck step fails
-/// with its own error. `HALT_TIMEOUT` is counted once although it applies to
-/// each of the two subnets: both are scheduled to halt before either is waited
-/// for, so the two waits overlap. The overall timeout additionally covers the
-/// setup (booting the IC and installing the NNS) and has to stay well below the
-/// 3600s of the `eternal` timeout of the Bazel target, which also covers what
-/// runs outside of the test driver's own timeouts.
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2200);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(2800);
+/// Timeouts of the test itself.
+///
+/// The timeout of the test is above the sum of the timeouts of the waits that
+/// dominate it (`MERGE_READY_TIMEOUT`, `HALT_TIMEOUT`, `REPLICA_RESTART_TIMEOUT`
+/// and `INGRESS_COMPLETION_TIMEOUT`, about 2200s together) plus ten minutes for
+/// everything else, so that a stuck step fails with its own error.
+/// `HALT_TIMEOUT` is counted once although it applies to each of the two
+/// subnets: both are scheduled to halt before either is waited for, so the two
+/// waits overlap. Likewise `INGRESS_COMPLETION_TIMEOUT`, as the ingress
+/// messages it applies to complete concurrently.
+///
+/// The overall timeout additionally covers the setup (booting the IC and
+/// installing the NNS) and has to stay below the 3600s of the `eternal` timeout
+/// of the Bazel target, which also covers what runs outside of the test
+/// driver's own timeouts.
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2800);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(3300);
 
 /// The conditions this scenario violates, i.e. the ones step 7 checks. This
 /// includes `CommonQuorum`, since the replicas do not satisfy the individual
@@ -384,8 +481,11 @@ fn main() -> Result<()> {
         .add_test(systest!(test))
         .with_timeout_per_test(PER_TEST_TIMEOUT)
         .with_overall_timeout(OVERALL_TIMEOUT)
-        // The nodes of `D` restart their replicas once they see the recovery
-        // CUP of `D` in the registry.
+        // Recovering `D` at the merged state makes the orchestrator of each of
+        // its nodes restart the replica on the recovery CUP, so those nodes
+        // legitimately start the replica twice. The metrics to check have to
+        // stay prefix-free, so this updates the entry of the default set rather
+        // than adding a more specific one.
         .update_orchestrator_metrics_to_check("orchestrator_processes_start_attempts_total", 2)
         .execute_from_args()?;
     Ok(())
@@ -429,17 +529,73 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    // The agents are reused by all asynchronous checks, so these run on a
-    // single runtime. The steps of the merging tool create runtimes of their
-    // own, so they run outside of it.
+    // One runtime for the whole test, kept alive across all of its phases: the
+    // agents of the phase that sets the scenario up are used again by the phase
+    // that checks the outcome.
+    //
+    // The merging tool runs in between, on this thread, which is deliberately
+    // not inside that runtime: every registry read, ssh command and rsync of
+    // `ic-recovery` blocks on a runtime of its own, which a thread that is
+    // driving one cannot do.
     let runtime = Runtime::new().expect("failed to create a tokio runtime");
+
+    let context = runtime.block_on(prepare(&env));
+    merge(&env, &context, &runtime);
+}
+
+/// Everything the checks made in between the steps of the merging tool need
+/// from the phase that set the scenario up.
+///
+/// Canister ids and agents rather than `UniversalCanister`s, which borrow the
+/// agent they were created with: the canisters of the subnet that is merged
+/// away are reached through a different agent after the merge than before it.
+struct Context {
+    logger: Logger,
+    s_subnet: SubnetSnapshot,
+    /// The subnet `S` is merged into.
+    d_subnet: SubnetSnapshot,
+    s_agent: Agent,
+    d_agent: Agent,
+    o_agent: Agent,
+    /// A canister on `S` calling another subnet in a loop, `USO`.
+    uso: Principal,
+    /// The canisters on `D` and `O` calling `S` in a loop, `UDS` and `UOS`.
+    uds: Principal,
+    uos: Principal,
+    /// The canisters looping in the endless loops of step 5: `U3`, `U5`, `U9`
+    /// and `U14` on `S`, `U7` on `D` and `U11` on `O`.
+    u3: Principal,
+    u5: Principal,
+    u7: Principal,
+    u9: Principal,
+    u11: Principal,
+    u14: Principal,
+    /// The canister on `S` whose state has to survive the merge, and that state.
+    u12: Principal,
+    u12_snapshot: SnapshotId,
+    u12_cycles_before: u128,
+    /// The caller of the best effort call of step 5f, on `O`, and the ingress
+    /// message that made it call.
+    u13: Principal,
+    u13_request_id: RequestId,
+    /// The canisters `U1` installs code on while `S` is cooling down.
+    targets: Vec<Principal>,
+    /// The ingress messages that are in progress when the merge happens, with
+    /// the agent each of them has to be read through afterwards.
+    pending_ingress_messages: Vec<(&'static str, Agent, Principal, RequestId)>,
+}
+
+/// Steps 1 to 7: set the scenario up and check that `S` violates the
+/// individual conditions for merging it away.
+async fn prepare(env: &TestEnv) -> Context {
+    let logger = env.logger();
+    let topology = env.topology_snapshot();
 
     // The three Application subnets: `S` is the one that is set up to be
     // cooled down and merged away, and `D` is the one it is merged into. `S`
     // exchanges the same calls with `D` as with `O`, which is not part of the
     // merge.
-    let app_subnets: Vec<_> = env
-        .topology_snapshot()
+    let app_subnets: Vec<_> = topology
         .subnets()
         .filter(|subnet| subnet.subnet_type() == SubnetType::Application)
         .collect();
@@ -451,50 +607,12 @@ pub fn test(env: TestEnv) {
     let s_subnet = app_subnets[0].clone();
     let d_subnet = app_subnets[1].clone();
     let o_subnet = app_subnets[2].clone();
-    let agent = |subnet: &SubnetSnapshot| {
-        let node = subnet.nodes().next().unwrap();
-        runtime.block_on(assert_create_agent(node.get_public_url().as_str()))
-    };
-    let s_agent = agent(&s_subnet);
-    let d_agent = agent(&d_subnet);
-    let o_agent = agent(&o_subnet);
-
-    let context = runtime.block_on(prepare(
-        &env, s_subnet, d_subnet, o_subnet, &s_agent, &d_agent, &o_agent,
-    ));
-    cool_down(&env, &context, &runtime);
-}
-
-/// Everything the checks made in between the steps of the merging tool need
-/// from the phase that set the scenario up.
-struct Context<'a> {
-    logger: Logger,
-    s_subnet: SubnetSnapshot,
-    /// The subnet `S` is merged into.
-    d_subnet: SubnetSnapshot,
-    /// A canister on `S` calling another subnet in a loop, `USO`.
-    uso: UniversalCanister<'a>,
-    /// The canisters on `D` and `O` calling `S` in a loop, `UDS` and `UOS`.
-    uds: UniversalCanister<'a>,
-    uos: UniversalCanister<'a>,
-}
-
-/// Steps 1 to 7: set the scenario up and check that `S` violates the
-/// individual conditions for merging it away.
-async fn prepare<'a>(
-    env: &TestEnv,
-    s_subnet: SubnetSnapshot,
-    d_subnet: SubnetSnapshot,
-    o_subnet: SubnetSnapshot,
-    s_agent: &'a Agent,
-    d_agent: &'a Agent,
-    o_agent: &'a Agent,
-) -> Context<'a> {
-    let logger = env.logger();
-    let topology = env.topology_snapshot();
     let s_node = s_subnet.nodes().next().unwrap();
     let d_node = d_subnet.nodes().next().unwrap();
     let o_node = o_subnet.nodes().next().unwrap();
+    let s_agent = assert_create_agent(s_node.get_public_url().as_str()).await;
+    let d_agent = assert_create_agent(d_node.get_public_url().as_str()).await;
+    let o_agent = assert_create_agent(o_node.get_public_url().as_str()).await;
     info!(
         logger,
         "Subnets under test:\n  S={}\n  D={}\n  O={}\n  NNS={}",
@@ -514,10 +632,10 @@ async fn prepare<'a>(
         logger,
         "Step 1: Installing universal canisters USD, USO, UDS and UOS"
     );
-    let usd = UniversalCanister::new_with_retries(s_agent, s_id, &logger).await;
-    let uso = UniversalCanister::new_with_retries(s_agent, s_id, &logger).await;
-    let uds = UniversalCanister::new_with_retries(d_agent, d_id, &logger).await;
-    let uos = UniversalCanister::new_with_retries(o_agent, o_id, &logger).await;
+    let usd = UniversalCanister::new_with_retries(&s_agent, s_id, &logger).await;
+    let uso = UniversalCanister::new_with_retries(&s_agent, s_id, &logger).await;
+    let uds = UniversalCanister::new_with_retries(&d_agent, d_id, &logger).await;
+    let uos = UniversalCanister::new_with_retries(&o_agent, o_id, &logger).await;
     info!(
         logger,
         "Step 1 done: USD={}, USO={} on S; UDS={} on D; UOS={} on O",
@@ -571,76 +689,127 @@ async fn prepare<'a>(
     // `U1`'s calls for as long as they run.
     info!(
         logger,
-        "Step 4: Installing U1, U3, U5, U6, U9, U10 on S, U4, U7 on D and U8, U11 on O, and \
-         creating {} canisters for U1 to install code on",
+        "Step 4: Installing U1, U3, U5, U6, U9, U10, U12, U14 on S, U4, U7 on D and U8, U11, \
+         U13 on O, and creating {} canisters for U1 to install code on",
         INSTALL_CODE_TARGETS.len(),
     );
-    let u1 = UniversalCanister::new_with_retries(s_agent, s_id, &logger).await;
-    let u3 = UniversalCanister::new_with_retries(s_agent, s_id, &logger).await;
-    let u4 = UniversalCanister::new_with_retries(d_agent, d_id, &logger).await;
-    let u5 = UniversalCanister::new_with_retries(s_agent, s_id, &logger).await;
-    let u6 = UniversalCanister::new_with_retries(s_agent, s_id, &logger).await;
-    let u7 = UniversalCanister::new_with_retries(d_agent, d_id, &logger).await;
-    let u8 = UniversalCanister::new_with_retries(o_agent, o_id, &logger).await;
-    let u9 = UniversalCanister::new_with_retries(s_agent, s_id, &logger).await;
-    let u10 = UniversalCanister::new_with_retries(s_agent, s_id, &logger).await;
-    let u11 = UniversalCanister::new_with_retries(o_agent, o_id, &logger).await;
+    let u1 = UniversalCanister::new_with_retries(&s_agent, s_id, &logger).await;
+    let u3 = UniversalCanister::new_with_retries(&s_agent, s_id, &logger).await;
+    let u4 = UniversalCanister::new_with_retries(&d_agent, d_id, &logger).await;
+    let u5 = UniversalCanister::new_with_retries(&s_agent, s_id, &logger).await;
+    let u6 = UniversalCanister::new_with_retries(&s_agent, s_id, &logger).await;
+    let u7 = UniversalCanister::new_with_retries(&d_agent, d_id, &logger).await;
+    let u8 = UniversalCanister::new_with_retries(&o_agent, o_id, &logger).await;
+    let u9 = UniversalCanister::new_with_retries(&s_agent, s_id, &logger).await;
+    let u10 = UniversalCanister::new_with_retries(&s_agent, s_id, &logger).await;
+    let u11 = UniversalCanister::new_with_retries(&o_agent, o_id, &logger).await;
+    // `U12` carries the state that has to survive the merge, and `U13` on `O`
+    // and `U14` on `S` are the two ends of the best effort call of step 5f.
+    let u12 = UniversalCanister::new_with_retries(&s_agent, s_id, &logger).await;
+    let u13 = UniversalCanister::new_with_retries(&o_agent, o_id, &logger).await;
+    let u14 = UniversalCanister::new_with_retries(&s_agent, s_id, &logger).await;
     info!(
         logger,
-        "Step 4: U1={}, U3={}, U5={}, U6={}, U9={}, U10={} on S; U4={}, U7={} on D; U8={}, \
-         U11={} on O",
+        "Step 4: U1={}, U3={}, U5={}, U6={}, U9={}, U10={}, U12={}, U14={} on S; U4={}, U7={} \
+         on D; U8={}, U11={}, U13={} on O",
         u1.canister_id(),
         u3.canister_id(),
         u5.canister_id(),
         u6.canister_id(),
         u9.canister_id(),
         u10.canister_id(),
+        u12.canister_id(),
+        u14.canister_id(),
         u4.canister_id(),
         u7.canister_id(),
         u8.canister_id(),
         u11.canister_id(),
+        u13.canister_id(),
     );
     let mut targets = Vec::new();
     for name in INSTALL_CODE_TARGETS {
-        let target = create_canister(s_agent, s_id).await;
-        set_controller(&target, &u1.canister_id(), s_agent).await;
+        let target = create_canister(&s_agent, s_id).await;
+        set_controller(&target, &u1.canister_id(), &s_agent).await;
         info!(logger, "Step 4: {name}={target} on S, controlled by U1");
         targets.push(target);
     }
-    info!(logger, "Step 4 done: all canisters installed");
+    // The state of `U12` that the merge has to carry over: a blob in its
+    // stable memory, a canister snapshot, and its cycles balance.
+    u12.store_to_stable(STABLE_MEMORY_OFFSET, STABLE_MEMORY_BLOB)
+        .await;
+    let u12_snapshot = take_canister_snapshot(&s_agent, u12.canister_id()).await;
+    let u12_cycles_before = cycles_balance(&u12).await.unwrap();
+    info!(
+        logger,
+        "Step 4 done: all canisters installed; U12 holds {} bytes in its stable memory, snapshot \
+         {} and {u12_cycles_before} cycles",
+        STABLE_MEMORY_BLOB.len(),
+        hex::encode(&u12_snapshot),
+    );
 
     // Step 5: Start the endless loops.
     info!(logger, "Step 5: Starting the endless loops");
-    for (canister, name, callee) in [
-        (&u3, "U3", None),
-        (&u4, "U4", Some(&u5)),
-        (&u6, "U6", Some(&u7)),
-        (&u8, "U8", Some(&u9)),
-        (&u10, "U10", Some(&u11)),
+    // The ingress messages that stay in progress across the merge, so that step
+    // 23 can check that all of them eventually completed, each with the agent
+    // it has to be read through after the merge: the canisters of `S` are
+    // served by `D` by then.
+    let mut pending_ingress_messages = Vec::new();
+    for (canister, name, callee, agent_after_merge) in [
+        (&u3, "U3", None, &d_agent),
+        (&u4, "U4", Some(&u5), &d_agent),
+        (&u6, "U6", Some(&u7), &d_agent),
+        (&u8, "U8", Some(&u9), &o_agent),
+        (&u10, "U10", Some(&u11), &d_agent),
     ] {
         let payload = match callee {
             None => endless_loop(),
             Some(callee) => endless_loop_call(callee.canister_id()),
         };
-        canister
+        let request_id = canister
             .submit_update(payload)
             .await
             .unwrap_or_else(|e| panic!("submitting {name}'s update call should succeed: {e}"))
             .unwrap_or_else(|| panic!("{name}'s update call should not have completed already"));
+        pending_ingress_messages.push((
+            name,
+            agent_after_merge.clone(),
+            canister.canister_id(),
+            request_id,
+        ));
     }
+    // `U14` does not respond before the merge, so `U13` gets to see the call
+    // time out, and replies to its ingress message with the reject code.
+    let u13_request_id = u13
+        .submit_update(
+            wasm().call_simple_with_cycles_and_best_effort_response(
+                u14.canister_id(),
+                "update",
+                call_args()
+                    .other_side(endless_loop())
+                    .on_reject(wasm().reject_code().int_to_blob().append_and_reply()),
+                BEST_EFFORT_CALL_CYCLES,
+                BEST_EFFORT_CALL_TIMEOUT_SECONDS,
+            ),
+        )
+        .await
+        .expect("submitting U13's best effort call should succeed")
+        .expect("U13's best effort call should not have completed already");
+    // `U14` looping means that `U13`'s best effort call made it to `S` before
+    // `S` starts cooling down, i.e. that `U14` holds its call context.
     for (canister, name) in [
         (&u3, "U3"),
         (&u5, "U5"),
         (&u7, "U7"),
         (&u9, "U9"),
         (&u11, "U11"),
+        (&u14, "U14"),
     ] {
         await_loop_started(canister, name, &logger).await;
     }
     info!(
         logger,
-        "Step 5 done: U3 is looping, and U5, U7, U9 and U11 are looping in calls from U4, U6, \
-         U8 and U10, respectively"
+        "Step 5 done: U3 is looping, U5, U7, U9 and U11 are looping in calls from U4, U6, U8 and \
+         U10, respectively, and U14 is looping in a best effort call from U13"
     );
 
     // Step 6: Have `U1` install code on the canisters it controls. Step 7 has
@@ -665,21 +834,37 @@ async fn prepare<'a>(
 
     Context {
         logger,
-        uso,
-        uds,
-        uos,
         s_subnet,
         d_subnet,
+        uso: uso.canister_id(),
+        uds: uds.canister_id(),
+        uos: uos.canister_id(),
+        u3: u3.canister_id(),
+        u5: u5.canister_id(),
+        u7: u7.canister_id(),
+        u9: u9.canister_id(),
+        u11: u11.canister_id(),
+        u14: u14.canister_id(),
+        u12: u12.canister_id(),
+        u12_snapshot,
+        u12_cycles_before,
+        u13: u13.canister_id(),
+        u13_request_id,
+        targets,
+        pending_ingress_messages,
+        s_agent,
+        d_agent,
+        o_agent,
     }
 }
 
-/// Steps 8 to 22: hand the scenario over to the subnet merging tool, and make
+/// Steps 8 to 26: hand the scenario over to the subnet merging tool, and make
 /// the checks of the steps in between its steps.
 ///
 /// Plain synchronous code, like `rs/tests/consensus/subnet_splitting_test.rs`:
 /// the tool's steps block on runtimes of their own, and the asynchronous checks
 /// of this test are driven through `runtime`, which this thread is not inside.
-fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
+fn merge(env: &TestEnv, context: &Context, runtime: &Runtime) {
     let logger = &context.logger;
     let topology = env.topology_snapshot();
 
@@ -714,7 +899,9 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
 
     info!(
         logger,
-        "Step 8: Handing subnet S ({}) over to the subnet merging tool", context.s_subnet.subnet_id,
+        "Step 8: Merging subnet S ({}) into subnet D ({})",
+        context.s_subnet.subnet_id,
+        context.d_subnet.subnet_id,
     );
     let merging = SubnetMerging::new(
         logger.clone(),
@@ -722,6 +909,7 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
         /*neuron_args=*/ None,
         merging_args,
     );
+
     let mut executed_steps = vec![];
     for (step_type, step) in merging {
         info!(logger, "Next step: {step_type:?}");
@@ -735,6 +923,7 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
             StepType::CheckRegistryForCoolingDownFlag => {
                 info!(logger, "Step 8 done: subnet S is labeled \"cooling down\"");
                 runtime.block_on(check_ingress_and_queries_rejected(context));
+                runtime.block_on(check_best_effort_call_timed_out(context));
             }
             StepType::CheckMergeReadiness => {
                 info!(logger, "Step 10 done: subnet S is \"merge ready\"");
@@ -792,20 +981,24 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
                 );
                 runtime.block_on(check_merged_state_uploaded(env, context));
             }
+            StepType::WaitForCupOnDestinationSubnet => {}
+            StepType::UnhaltDestinationSubnet => {
+                info!(
+                    logger,
+                    "Step 23 done: subnet D came up on the merged state and is unhalted"
+                );
+                runtime.block_on(verify_after_merge(context));
+            }
         }
     }
+    // The tool skips a step it fails to create, and the checks above only run
+    // after the steps they are attached to.
     assert_eq!(
         executed_steps,
         StepType::iter().collect::<Vec<_>>(),
         "the subnet merging tool did not execute all of its steps in order"
     );
-
-    info!(
-        logger,
-        "Subnet S has been drained and halted, the states of S and D downloaded, validated and \
-         merged, the canister ID ranges of S rerouted to D, the recovery CUP of D proposed and \
-         the merged state uploaded to D, by the subnet merging tool"
-    );
+    info!(logger, "Subnet S has been merged into subnet D");
 }
 
 /// Step 18: check the registry version the tool recorded in
@@ -818,7 +1011,7 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
 ///
 /// The routing tables are read through a registry helper of the test's own,
 /// with a local store separate from the one of the tool.
-fn check_merge_registry_version(env: &TestEnv, context: &Context<'_>) {
+fn check_merge_registry_version(env: &TestEnv, context: &Context) {
     let logger = &context.logger;
     let recovery_dir = env.get_path(MERGING_DIR).join(RECOVERY_DIRECTORY_NAME);
     let s_subnet_id = context.s_subnet.subnet_id;
@@ -942,7 +1135,7 @@ fn test_registry_helper(env: &TestEnv, logger: &Logger) -> RegistryHelper {
 /// and their time is past the times of the CUPs both subnets halted at. Also
 /// check that `D` is halted, as the recovery turned its instruction to halt at
 /// its next CUP into a plain halt.
-fn check_recovery_cup_contents(env: &TestEnv, context: &Context<'_>) {
+fn check_recovery_cup_contents(env: &TestEnv, context: &Context) {
     let logger = &context.logger;
     let recovery_dir = env.get_path(MERGING_DIR).join(RECOVERY_DIRECTORY_NAME);
     let d_subnet_id = context.d_subnet.subnet_id;
@@ -1084,7 +1277,7 @@ fn merged_checkpoint(env: &TestEnv) -> (PathBuf, u64) {
 ///   merged checkpoint. The state manager sets it to the height of the
 ///   checkpoint it starts from, and no other node holds a checkpoint at that
 ///   height, so the replica runs again and started from the uploaded one.
-async fn check_merged_state_uploaded(env: &TestEnv, context: &Context<'_>) {
+async fn check_merged_state_uploaded(env: &TestEnv, context: &Context) {
     let logger = &context.logger;
     let node = merge_node_snapshot(&context.d_subnet);
     let node_ip = node.get_ip_addr();
@@ -1144,7 +1337,7 @@ async fn check_merged_state_uploaded(env: &TestEnv, context: &Context<'_>) {
 /// Step 16: check that the merged state the tool assembled is a single
 /// checkpoint holding exactly the canisters of the checkpoints downloaded from
 /// `S` and `D`.
-fn check_merged_state(env: &TestEnv, context: &Context<'_>) {
+fn check_merged_state(env: &TestEnv, context: &Context) {
     let recovery_dir = env.get_path(MERGING_DIR).join(RECOVERY_DIRECTORY_NAME);
     let single_checkpoint = |working_dir: &str| {
         let checkpoints_dir = recovery_dir
@@ -1219,7 +1412,7 @@ fn merge_node_snapshot(subnet: &SubnetSnapshot) -> IcNodeSnapshot {
 /// The tool only waits for the node of each subnet the state would be
 /// downloaded from, so the other nodes are waited for to catch up with the
 /// halting height.
-async fn check_subnets_halted(context: &Context<'_>) {
+async fn check_subnets_halted(context: &Context) {
     let logger = &context.logger;
     let subnets = [&context.s_subnet, &context.d_subnet];
     let mut halting_heights = Vec::new();
@@ -1310,9 +1503,9 @@ async fn check_subnets_halted(context: &Context<'_>) {
 /// rejects ingress messages based on its latest state, but query calls based on
 /// its latest certified state, which may still be one before the label took
 /// effect.
-async fn check_ingress_and_queries_rejected(context: &Context<'_>) {
+async fn check_ingress_and_queries_rejected(context: &Context) {
     let logger = &context.logger;
-    let uso = &context.uso;
+    let uso = UniversalCanister::from_canister_id(&context.s_agent, context.uso);
 
     info!(
         logger,
@@ -1379,14 +1572,16 @@ async fn check_ingress_and_queries_rejected(context: &Context<'_>) {
 ///
 /// Iterations whose call to `S` was rejected with `SYS_TRANSIENT` do not count
 /// (see `start_call_loop`).
-async fn check_loops_stalled(context: &Context<'_>) {
+async fn check_loops_stalled(context: &Context) {
     let logger = &context.logger;
     info!(
         logger,
         "Step 11: Checking that the call loops of UDS and UOS are stalled over \
          {STALL_OBSERVATION_PERIOD:?}"
     );
-    let canisters = [(&context.uds, "UDS"), (&context.uos, "UOS")];
+    let uds = UniversalCanister::from_canister_id(&context.d_agent, context.uds);
+    let uos = UniversalCanister::from_canister_id(&context.o_agent, context.uos);
+    let canisters = [(&uds, "UDS"), (&uos, "UOS")];
     let mut before = Vec::new();
     for (canister, _) in canisters {
         before.push(global_counter(canister).await.unwrap());
@@ -1516,6 +1711,252 @@ fn term(terms: &[Term], condition: Condition) -> &Term {
         .unwrap_or_else(|| panic!("the readiness condition has no term for {condition:?}"))
 }
 
+/// Steps 24 to 26: check that the merge carried the state of `S`'s canisters
+/// over, that `S`'s `install_code` calls completed, and that every ingress
+/// message that was in progress across the merge completes.
+async fn verify_after_merge(context: &Context) {
+    let logger = &context.logger;
+
+    // The tool has unhalted `D`; a halted subnet delivers no batches, so none of
+    // the calls below would be answered before it is healthy again.
+    context
+        .d_subnet
+        .nodes()
+        .next()
+        .unwrap()
+        .await_status_is_healthy_async()
+        .await
+        .expect("subnet D did not become healthy after the merge");
+    info!(logger, "Step 24: subnet D is healthy");
+
+    // Step 24: `U12` was hosted by `S` and is served by `D` now.
+    info!(logger, "Step 24: Checking the state of U12 after the merge");
+    let u12 = UniversalCanister::from_canister_id(&context.d_agent, context.u12);
+    // `D` now hosts the canister ID ranges of `S`, but the NNS delegation it
+    // serves responses with only lists them once it has fetched a new one; until
+    // then, it rejects requests with a `503 Service Unavailable` because its
+    // delegation is inconsistent with its state. So the first request is
+    // retried until `D` serves a consistent delegation.
+    let u12_stable_memory = retry_with_msg_async!(
+        "reading the stable memory of U12 from subnet D",
+        logger,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            u12.read_stable(
+                STABLE_MEMORY_OFFSET,
+                STABLE_MEMORY_BLOB.len().try_into().unwrap(),
+            )
+            .await
+            .map_err(|err| anyhow!("could not read the stable memory of U12: {err}"))
+        }
+    )
+    .await
+    .expect("subnet D did not serve U12 after the merge");
+    assert_eq!(
+        u12_stable_memory, STABLE_MEMORY_BLOB,
+        "the stable memory of U12 did not survive the merge",
+    );
+    assert!(
+        canister_snapshot_ids(&context.d_agent, context.u12)
+            .await
+            .contains(&context.u12_snapshot),
+        "the snapshot of U12 did not survive the merge",
+    );
+    let u12_cycles_after = cycles_balance(&u12)
+        .await
+        .expect("failed to read the cycles balance of U12 after the merge");
+    let u12_cycles_before = context.u12_cycles_before;
+    assert!(
+        u12_cycles_after <= u12_cycles_before
+            && u12_cycles_before - u12_cycles_after
+                <= u12_cycles_before / MAX_BURNED_CYCLES_FRACTION,
+        "the cycles balance of U12 went from {u12_cycles_before} to {u12_cycles_after} across \
+         the merge, a difference of more than the one in {MAX_BURNED_CYCLES_FRACTION} an idle \
+         canister is expected to burn",
+    );
+
+    // `U7` was hosted by `D` all along. Now that `U12` is on `D` too, they must
+    // be able to call each other.
+    let u7 = UniversalCanister::from_canister_id(&context.d_agent, context.u7);
+    let u7_reply = u7
+        .update(wasm().call_simple(
+            context.u12,
+            "update",
+            call_args().other_side(wasm().push_bytes(MERGED_CALL_REPLY).append_and_reply()),
+        ))
+        .await
+        .expect("U7 should be able to call a canister that was hosted by S");
+    assert_eq!(
+        u7_reply, MERGED_CALL_REPLY,
+        "U7 got an unexpected reply from U12",
+    );
+    info!(
+        logger,
+        "Step 24 done: U12 kept its stable memory, snapshot and cycles, and U7 can call it"
+    );
+
+    // Step 25: `U1`'s `install_code` calls ran while `S` was cooling down, and
+    // whether they installed the universal canister module shows in a query: a
+    // canister that has no module rejects every query. `D` has to be the one
+    // asked, as `S` answered no query from the moment it started cooling down
+    // until it was halted for the merge.
+    info!(
+        logger,
+        "Step 25: Checking that {} have been installed",
+        INSTALL_CODE_TARGETS.join(", "),
+    );
+    for (&target, name) in context.targets.iter().zip(INSTALL_CODE_TARGETS) {
+        let canister = UniversalCanister::from_canister_id(&context.d_agent, target);
+        let reply = canister
+            .query(wasm().reply_data(name.as_bytes()))
+            .await
+            .unwrap_or_else(|e| {
+                panic!("{name} ({target}) does not answer queries, so it was not installed: {e}")
+            });
+        assert_eq!(
+            reply,
+            name.as_bytes(),
+            "{name} ({target}) answered a query with an unexpected reply",
+        );
+    }
+    info!(
+        logger,
+        "Step 25 done: {} have been installed",
+        INSTALL_CODE_TARGETS.join(", "),
+    );
+
+    // Step 26: Let the endless loops finish and check that every ingress message
+    // that was still in progress when the merge happened completed.
+    //
+    // The canisters of `S` now live on `D`, which serves them under the same
+    // canister IDs, so the agent for `D` is what reaches them. `U11` did not
+    // move: it is on `O`.
+    info!(
+        logger,
+        "Step 26: Breaking the endless loops and waiting for the pending ingress messages"
+    );
+    for (agent, canister_id, name) in [
+        (&context.d_agent, context.u3, "U3"),
+        (&context.d_agent, context.u5, "U5"),
+        (&context.d_agent, context.u7, "U7"),
+        (&context.d_agent, context.u9, "U9"),
+        (&context.o_agent, context.u11, "U11"),
+        (&context.d_agent, context.u14, "U14"),
+    ] {
+        let canister = UniversalCanister::from_canister_id(agent, canister_id);
+        retry_with_msg_async!(
+            format!("setting the global data of {name} to {LOOP_BREAK_TRIGGER:?}"),
+            logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                canister
+                    .update(wasm().set_global_data(LOOP_BREAK_TRIGGER).reply_data(&[]))
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| anyhow!("failed to break {name}'s loop: {e}"))
+            }
+        )
+        .await
+        .unwrap_or_else(|e| panic!("could not break {name}'s endless loop: {e}"));
+        info!(logger, "Step 26: broke {name}'s endless loop");
+    }
+
+    for (name, agent, canister_id, request_id) in &context.pending_ingress_messages {
+        await_ingress_message_replied(agent, *canister_id, request_id, name, logger).await;
+        info!(logger, "Step 26: {name}'s ingress message completed");
+    }
+    // `U14` now replies to `U13`'s best effort call, whose deadline passed
+    // before the merge, closing the call context the merge carried over. A
+    // canister only stops once it has no open call context, so `U14` stopping
+    // shows that.
+    stop_canister(&context.d_agent, context.u14).await;
+    info!(
+        logger,
+        "Step 26 done: all the ingress messages that were pending across the merge completed, \
+         and U14 closed the call context of U13's best effort call"
+    );
+}
+
+/// Step 9, continued: wait until `U13`'s best effort call to `U14` timed out,
+/// i.e. until the ingress message that made `U13` call is replied to with the
+/// reject code of a timeout. From here on, `U14` holds the call context of a
+/// best effort call whose deadline has passed.
+///
+/// This is checked now rather than after the merge because the status of the
+/// ingress message is only kept for `MAX_INGRESS_TTL`.
+async fn check_best_effort_call_timed_out(context: &Context) {
+    let logger = &context.logger;
+    info!(
+        logger,
+        "Step 9: Waiting until U13's best effort call to U14 timed out"
+    );
+    let reply = retry_with_msg_async!(
+        "waiting for U13's best effort call to time out",
+        logger,
+        BEST_EFFORT_CALL_EXPIRY_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            let (status, _) = context
+                .o_agent
+                .request_status_raw(&context.u13_request_id, context.u13)
+                .await
+                .map_err(|e| anyhow!("failed to read the status of U13's message: {e}"))?;
+            match status {
+                RequestStatusResponse::Replied(reply) => Ok(reply.arg),
+                RequestStatusResponse::Rejected(reject) => {
+                    panic!("U13's ingress message was rejected: {reject:?}")
+                }
+                other => bail!("U13's ingress message is {other:?}"),
+            }
+        }
+    )
+    .await
+    .expect("U13's best effort call did not time out");
+    assert_eq!(
+        reply,
+        REJECT_CODE_SYS_UNKNOWN.to_le_bytes(),
+        "U13's best effort call was not rejected with SYS_UNKNOWN, i.e. it did not time out",
+    );
+    info!(
+        logger,
+        "Step 9 done: U13's best effort call to U14 timed out"
+    );
+}
+
+/// Waits until the ingress message `request_id` sent to `canister_id` is
+/// replied, i.e. until the update call it carries completed successfully.
+async fn await_ingress_message_replied(
+    agent: &Agent,
+    canister_id: Principal,
+    request_id: &RequestId,
+    name: &str,
+    logger: &Logger,
+) {
+    retry_with_msg_async!(
+        format!("waiting for {name}'s ingress message to complete"),
+        logger,
+        INGRESS_COMPLETION_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            let (status, _) = agent
+                .request_status_raw(request_id, canister_id)
+                .await
+                .map_err(|e| anyhow!("failed to read the status of {name}'s message: {e}"))?;
+            match status {
+                RequestStatusResponse::Replied(_) => Ok(()),
+                RequestStatusResponse::Rejected(reject) => {
+                    panic!("{name}'s ingress message was rejected: {reject:?}")
+                }
+                other => bail!("{name}'s ingress message is {other:?}"),
+            }
+        }
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{name}'s ingress message did not complete: {e}"));
+}
+
 /// Starts an endless loop of calls from `canister` to `peer` (on another
 /// subnet): `canister` is made to execute the loop body below once, via an
 /// ingress message; from there on the reply (or reject) callback of every call
@@ -1577,13 +2018,13 @@ async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
         .expect("starting the call loop should succeed");
 }
 
-/// The payload of the endless loops of `U3`, `U5`, `U7`, `U9` and `U11`: bump the
-/// global counter, so that the test can observe (via a query) that the payload
-/// started executing, and then loop until the global data is set to
-/// `LOOP_BREAK_TRIGGER`, which this test never does.
+/// The payload of the endless loops of `U3`, `U5`, `U7`, `U9`, `U11` and `U14`:
+/// bump the global counter, so that the test can observe (via a query) that the
+/// payload started executing, and then loop until the global data is set to
+/// `LOOP_BREAK_TRIGGER`, which this test only does after the merge.
 ///
-/// The canister never responds to the call it is executing, so that call
-/// context stays open forever.
+/// The canister only responds to the call it is executing once the loop ends,
+/// so that call context stays open until then.
 fn endless_loop() -> Vec<u8> {
     wasm()
         .inc_global_counter()
@@ -1746,6 +2187,70 @@ async fn await_loop_started(canister: &UniversalCanister<'_>, name: &str, logger
     )
     .await
     .unwrap_or_else(|e| panic!("{name}'s endless loop did not start: {e}"));
+}
+
+/// Takes a snapshot of `canister_id` and returns its ID.
+///
+/// Calls the management canister directly rather than through `ic_utils`, whose
+/// `ic-management-canister-types` is a different version than this workspace's.
+async fn take_canister_snapshot(agent: &Agent, canister_id: Principal) -> SnapshotId {
+    let args = TakeCanisterSnapshotArgs {
+        canister_id,
+        replace_snapshot: None,
+        sender_canister_version: None,
+        uninstall_code: None,
+    };
+    let reply = agent
+        .update(&Principal::management_canister(), "take_canister_snapshot")
+        .with_arg(Encode!(&args).unwrap())
+        .with_effective_canister_id(canister_id)
+        .call_and_wait()
+        .await
+        .expect("taking a canister snapshot should succeed");
+    Decode!(&reply, TakeCanisterSnapshotResult)
+        .expect("failed to decode the snapshot taken")
+        .id
+}
+
+/// Stops `canister_id`, which only succeeds once it has no open call context.
+async fn stop_canister(agent: &Agent, canister_id: Principal) {
+    agent
+        .update(&Principal::management_canister(), "stop_canister")
+        .with_arg(Encode!(&CanisterIdRecord { canister_id }).unwrap())
+        .with_effective_canister_id(canister_id)
+        .call_and_wait()
+        .await
+        .unwrap_or_else(|e| panic!("stopping canister {canister_id} should succeed: {e}"));
+}
+
+/// The IDs of the snapshots `canister_id` holds.
+async fn canister_snapshot_ids(agent: &Agent, canister_id: Principal) -> Vec<SnapshotId> {
+    let args = ListCanisterSnapshotsArgs { canister_id };
+    let reply = agent
+        .update(&Principal::management_canister(), "list_canister_snapshots")
+        .with_arg(Encode!(&args).unwrap())
+        .with_effective_canister_id(canister_id)
+        .call_and_wait()
+        .await
+        .expect("listing the canister snapshots should succeed");
+    Decode!(&reply, ListCanisterSnapshotsResult)
+        .expect("failed to decode the canister snapshots")
+        .into_iter()
+        .map(|snapshot| snapshot.id)
+        .collect()
+}
+
+/// `canister`'s cycles balance, read via a query.
+async fn cycles_balance(canister: &UniversalCanister<'_>) -> Result<u128> {
+    let reply = canister
+        .query(wasm().cycles_balance128().append_and_reply())
+        .await
+        .map_err(|e| anyhow!("failed to read the cycles balance: {e}"))?;
+    let reply: [u8; 16] = reply
+        .as_slice()
+        .try_into()
+        .map_err(|_| anyhow!("expected 16 bytes, got {} bytes: {reply:?}", reply.len()))?;
+    Ok(u128::from_le_bytes(reply))
 }
 
 /// Returns `canister`'s global counter, read via a query.
