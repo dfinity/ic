@@ -115,8 +115,8 @@ pub(crate) struct ProposeToUpdateRecoveryCupCmd {
 }
 
 fn state_hash_from_hex(state_hash: &str) -> Result<CryptoHash, String> {
-    let bytes = hex::decode(state_hash)?;
-    let hash = CryptoHash::try_from(bytes)?;
+    let bytes = hex::decode(state_hash).map_err(|err| err.to_string())?;
+    let hash = CryptoHash::try_from(bytes).map_err(|err| err.to_string())?;
     Ok(hash)
 }
 
