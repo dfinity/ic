@@ -555,6 +555,28 @@ pub mod upgrade_sns_controlled_canister {
         pub wasm_memory_persistence: ::core::option::Option<i32>,
     }
 }
+/// A proposal to load a snapshot into the dapp canister that it was taken from.
+/// This rolls the canister back to its code and memory at the time when the
+/// snapshot was taken. Everything that the canister did since then (e.g. data
+/// that it stored) is lost.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
+)]
+pub struct LoadCanisterSnapshot {
+    /// The dapp canister to restore.
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The ID of the snapshot to load. It must be a snapshot of canister_id.
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub snapshot_id: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.
 #[derive(
@@ -1088,7 +1110,7 @@ pub struct Proposal {
     /// of this mapping.
     #[prost(
         oneof = "proposal::Action",
-        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23"
+        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -1218,6 +1240,11 @@ pub mod proposal {
         /// Id = 19.
         #[prost(message, tag = "23")]
         UpgradeExtension(super::UpgradeExtension),
+        /// Load a snapshot into a dapp canister.
+        ///
+        /// Id = 20.
+        #[prost(message, tag = "24")]
+        LoadCanisterSnapshot(super::LoadCanisterSnapshot),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]

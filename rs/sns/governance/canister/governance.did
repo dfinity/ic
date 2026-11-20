@@ -24,6 +24,7 @@ type Action = variant {
   ExecuteGenericNervousSystemFunction : ExecuteGenericNervousSystemFunction;
   ManageLedgerParameters : ManageLedgerParameters;
   Motion : Motion;
+  LoadCanisterSnapshot : LoadCanisterSnapshot;
 };
 
 type ActionAuxiliary = variant {
@@ -916,6 +917,11 @@ type ChunkedCanisterWasm = record {
 type CanisterUpgradeOptions = record {
   skip_pre_upgrade : opt bool;
   wasm_memory_persistence : opt int32;
+};
+
+type LoadCanisterSnapshot = record {
+  canister_id : opt principal;
+  snapshot_id : opt blob;
 };
 
 type UpgradeSnsControlledCanister = record {
