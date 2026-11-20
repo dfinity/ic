@@ -897,7 +897,6 @@ mod tests {
 
             pool.apply(vec![ChangeAction::RemoveAllBelow(Height::from(10))]);
 
-            // Unvalidated artifacts at exactly the given height stay.
             assert_eq!(
                 pool.unvalidated_shares_at_height(Height::from(9)).count(),
                 0
@@ -907,6 +906,7 @@ mod tests {
                     .count(),
                 0
             );
+            // Unvalidated artifacts at exactly the given height stay.
             assert_eq!(
                 pool.unvalidated_shares_at_height(Height::from(10)).count(),
                 1
