@@ -1269,15 +1269,42 @@ fn aligned_buffer_is_aligned_and_never_shrinks() {
     assert_eq!(buffer.0.len(), 4);
 }
 
+/// Returns whether `file` was opened with `O_DIRECT`.
+#[cfg(target_os = "linux")]
+fn opened_with_o_direct(file: &fs::File) -> bool {
+    use nix::fcntl::{FcntlArg, OFlag, fcntl};
+    let flags = fcntl(file, FcntlArg::F_GETFL).unwrap();
+    OFlag::from_bits_truncate(flags).contains(OFlag::O_DIRECT)
+}
+
+/// Returns whether the file system holding the file at `path` supports
+/// `O_DIRECT`.
+#[cfg(target_os = "linux")]
+fn supports_o_direct(path: &Path) -> bool {
+    use std::os::unix::fs::OpenOptionsExt;
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(nix::libc::O_DIRECT)
+        .open(path)
+        .is_ok()
+}
+
 #[test]
 fn read_chunk_reads_whole_and_partial_chunks() {
     let dir = tmpdir("read_chunk");
-    // A protobuf is opened buffered, anything else with `O_DIRECT`.
     for name in ["file", CANISTER_FILE] {
         let path = dir.path().join(name);
         let data: Vec<u8> = (0..3 * 4096 + 123).map(|i| (i % 251) as u8).collect();
         fs::write(&path, &data).unwrap();
         let file = open_for_hashing(&path).unwrap();
+        // A protobuf is opened buffered, anything else with `O_DIRECT` where
+        // the file system supports it.
+        #[cfg(target_os = "linux")]
+        assert_eq!(
+            opened_with_o_direct(&file),
+            name != CANISTER_FILE && supports_o_direct(&path),
+            "{name}"
+        );
         let mut buffer = AlignedBuffer::with_capacity(8192);
 
         assert_eq!(
