@@ -364,6 +364,25 @@ const REWARD_REDUCTIONS: &[RewardReduction] = &[
             "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG
         ],
     },
+    // Fourth round: 50% for three months for the node providers that failed to respond within the
+    // 24h window in BOTH of the incident-response smoke tests of October 2 and November 19, 2026.
+    // A late (>24h) response counts as a failure. The window starts on 2026-12-01, the first
+    // period boundary (1st or 15th) after the November 19 drill, and the three-month clock
+    // restarts there. All providers in this round are also in the third round, whose window runs
+    // until 2027-01-15; on the overlapping days they are reduced to 50%, not 25%, so this entry
+    // only changes their rewards from 2027-01-15 on, and they are reduced continuously until
+    // 2027-03-01.
+    RewardReduction {
+        start: (2026, 12, 1),
+        end: (2027, 3, 1),
+        multiplier: (5, 1), // 0.5
+        providers: &[
+            "i7dto-bgkj2-xo5dx-cyrb7-zkk5y-q46eh-gz6iq-qkgyc-w4qte-scgtb-6ae", // Iancu Aurel
+            "7ws2n-wqorv-vmo4m-5e222-n42c3-hk43s-ei3kp-4hpbn-xlkzo-jgv7i-tqe", // InfoObjects
+            "sixix-2nyqd-t2k2v-vlsyz-dssko-ls4hl-hyij4-y7mdp-ja6cj-nsmpf-yae", // Starbase
+            "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG
+        ],
+    },
 ];
 
 /// One reduction window and the multiplier that applies within it.
@@ -874,7 +893,7 @@ mod reward_reduction_tests {
     // Tests against the real, compiled-in `REWARD_REDUCTIONS` table.
     // ------------------------------------------------------------------------------------------
 
-    /// In all three rounds: reduced continuously from 2026-07-15 to 2027-01-15.
+    /// In all four rounds: reduced continuously from 2026-07-15 to 2027-03-01.
     const CONTINUING_PROVIDER: &str =
         "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae"; // Zondax AG
     /// First round only: recovered, so rewarded in full again from 2026-10-15.
@@ -883,8 +902,8 @@ mod reward_reduction_tests {
     /// Second round only: newly added, reduced from 2026-08-01 to 2026-11-01.
     const NEWLY_ADDED_PROVIDER: &str =
         "kos24-5xact-6aror-uofg2-tnvt6-dq3bk-c2c5z-jtptt-jbqvc-lmegy-qae"; // Anonstake
-    /// Second and third rounds: reduced continuously from 2026-08-01 to 2027-01-15.
-    const SECOND_AND_THIRD_ROUND_PROVIDER: &str =
+    /// Second, third and fourth rounds: reduced continuously from 2026-08-01 to 2027-03-01.
+    const SECOND_TO_FOURTH_ROUND_PROVIDER: &str =
         "sixix-2nyqd-t2k2v-vlsyz-dssko-ls4hl-hyij4-y7mdp-ja6cj-nsmpf-yae"; // Starbase
 
     fn real_multiplier_on(provider: &str, date: NaiveDate) -> Option<Decimal> {
@@ -915,7 +934,11 @@ mod reward_reduction_tests {
             d(2026, 10, 15),
             d(2026, 10, 31),
             d(2026, 11, 1),
+            d(2026, 11, 30),
+            d(2026, 12, 1),
             d(2027, 1, 14),
+            d(2027, 1, 15),
+            d(2027, 2, 28),
         ] {
             assert_eq!(
                 real_multiplier_on(CONTINUING_PROVIDER, day),
@@ -927,35 +950,45 @@ mod reward_reduction_tests {
             real_multiplier_on(CONTINUING_PROVIDER, d(2026, 7, 14)),
             None
         );
-        assert_eq!(
-            real_multiplier_on(CONTINUING_PROVIDER, d(2027, 1, 15)),
-            None
-        );
+        assert_eq!(real_multiplier_on(CONTINUING_PROVIDER, d(2027, 3, 1)), None);
     }
 
     #[test]
-    fn second_and_third_round_provider_is_reduced_from_august_to_january() {
+    fn second_to_fourth_round_provider_is_reduced_from_august_to_march() {
         let half = Some(Decimal::new(5, 1));
         assert_eq!(
-            real_multiplier_on(SECOND_AND_THIRD_ROUND_PROVIDER, d(2026, 7, 31)),
+            real_multiplier_on(SECOND_TO_FOURTH_ROUND_PROVIDER, d(2026, 7, 31)),
             None
         );
         for day in [
             d(2026, 8, 1),
             d(2026, 10, 31),
             d(2026, 11, 1),
+            d(2026, 12, 1),
             d(2027, 1, 14),
+            d(2027, 1, 15),
+            d(2027, 2, 28),
         ] {
             assert_eq!(
-                real_multiplier_on(SECOND_AND_THIRD_ROUND_PROVIDER, day),
+                real_multiplier_on(SECOND_TO_FOURTH_ROUND_PROVIDER, day),
                 half,
                 "expected a 0.5 reduction on {day}"
             );
         }
         assert_eq!(
-            real_multiplier_on(SECOND_AND_THIRD_ROUND_PROVIDER, d(2027, 1, 15)),
+            real_multiplier_on(SECOND_TO_FOURTH_ROUND_PROVIDER, d(2027, 3, 1)),
             None
         );
+    }
+
+    /// Every provider of the fourth round is still reduced by the third round when it starts, so
+    /// the multipliers above cannot show its start date. Pin its window directly.
+    #[test]
+    fn fourth_round_window_runs_from_december_to_march() {
+        let fourth = &REWARD_REDUCTIONS[3];
+        assert_eq!(fourth.start, (2026, 12, 1));
+        assert_eq!(fourth.end, (2027, 3, 1));
+        assert_eq!(fourth.multiplier, (5, 1));
     }
 
     #[test]
@@ -1003,16 +1036,21 @@ mod reward_reduction_tests {
     fn reward_reduction_round_membership_is_as_intended() {
         let by_provider = parse_reward_reductions(REWARD_REDUCTIONS);
 
-        // 19 providers in the first round, 18 in the second, 4 in the third. 13 are in the first
-        // and second, all 4 of the third are in the second, and 3 of those 4 are in all three.
-        assert_eq!(REWARD_REDUCTIONS.len(), 3);
+        // 19 providers in the first round, 18 in the second, 4 in the third, 4 in the fourth. 13
+        // are in the first and second, all 4 of the third are in the second, and 3 of those 4 are
+        // in the first as well. The fourth round is the third round's cohort again, so it adds a
+        // window to each of those 4 and no new provider.
+        assert_eq!(REWARD_REDUCTIONS.len(), 4);
         assert_eq!(REWARD_REDUCTIONS[0].providers.len(), 19);
         assert_eq!(REWARD_REDUCTIONS[1].providers.len(), 18);
         assert_eq!(REWARD_REDUCTIONS[2].providers.len(), 4);
+        assert_eq!(REWARD_REDUCTIONS[3].providers.len(), 4);
         let in_two = by_provider.values().filter(|w| w.len() == 2).count();
         let in_three = by_provider.values().filter(|w| w.len() == 3).count();
-        assert_eq!(in_three, 3);
-        assert_eq!(in_two, (13 - 3) + (4 - 3));
+        let in_four = by_provider.values().filter(|w| w.len() == 4).count();
+        assert_eq!(in_four, 3);
+        assert_eq!(in_three, 4 - 3);
+        assert_eq!(in_two, 13 - 3);
         assert_eq!(by_provider.len(), 19 + 18 - 13);
 
         // No round lists a provider twice.
@@ -1107,11 +1145,19 @@ mod reward_reduction_tests {
         "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG
     ];
 
+    /// Fourth round: missed the 24h window in BOTH the October 2 and November 19, 2026 drills.
+    const FOURTH_ROUND_COHORT: [&str; 4] = [
+        "i7dto-bgkj2-xo5dx-cyrb7-zkk5y-q46eh-gz6iq-qkgyc-w4qte-scgtb-6ae", // Iancu Aurel (no reply / no reply)
+        "7ws2n-wqorv-vmo4m-5e222-n42c3-hk43s-ei3kp-4hpbn-xlkzo-jgv7i-tqe", // InfoObjects (no reply / no reply)
+        "sixix-2nyqd-t2k2v-vlsyz-dssko-ls4hl-hyij4-y7mdp-ja6cj-nsmpf-yae", // Starbase (no reply / no reply)
+        "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG (no reply / no reply)
+    ];
+
     #[test]
     fn reward_reduction_cohorts_are_pinned() {
         assert_eq!(
             REWARD_REDUCTIONS.len(),
-            3,
+            4,
             "a new round needs a pinned cohort here"
         );
         for (round, expected, label) in [
@@ -1129,6 +1175,11 @@ mod reward_reduction_tests {
                 &REWARD_REDUCTIONS[2],
                 THIRD_ROUND_COHORT.as_slice(),
                 "third",
+            ),
+            (
+                &REWARD_REDUCTIONS[3],
+                FOURTH_ROUND_COHORT.as_slice(),
+                "fourth",
             ),
         ] {
             let actual: BTreeSet<&str> = round.providers.iter().copied().collect();
