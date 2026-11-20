@@ -27,4 +27,9 @@ on the process that this file is part of, see
 
 ## Fixed
 
+* Refreshing a neuron's stake no longer locks the neuron when the balance of
+  the neuron's account equals its recorded stake. Such a refresh now succeeds
+  even while another operation on the neuron is in progress, and does not delay
+  other operations on the neuron.
+
 ## Security
