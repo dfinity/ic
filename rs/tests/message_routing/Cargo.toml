@@ -67,3 +67,7 @@ path = "state_sync_malicious_chunk_test.rs"
 [[bin]]
 name = "subnet_cooling_down_test"
 path = "subnet_cooling_down_test.rs"
+
+[[bin]]
+name = "subnet_merging_on_node_test"
+path = "subnet_merging_on_node_test.rs"
