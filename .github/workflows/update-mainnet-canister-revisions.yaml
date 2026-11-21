@@ -12,6 +12,9 @@ on:
   pull_request:
     paths:
       - '.github/workflows/update-mainnet-canister-revisions.yaml'
+      - 'ci/src/mainnet_revisions/mainnet_revisions.py'
+      - 'ci/scripts/fetch-attested-sums.sh'
+      - 'rs/nervous_system/tools/sync-with-released-nervous-system-wasms/**'
 
 defaults:
   run:
