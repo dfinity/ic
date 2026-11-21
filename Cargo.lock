@@ -8785,7 +8785,6 @@ dependencies = [
  "k256",
  "p256",
  "rand 0.8.8",
- "secp256k1 0.29.100",
 ]
 
 [[package]]
@@ -13803,7 +13802,6 @@ dependencies = [
  "pem 4.0.0",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
- "secp256k1 0.29.100",
  "sha2 0.10.9",
  "simple_asn1",
  "wycheproof",

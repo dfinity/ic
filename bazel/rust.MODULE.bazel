@@ -1396,15 +1396,6 @@ crate.spec(
     version = "^0.11.0",
 )
 crate.spec(
-    features = [
-        "global-context",
-        "rand",
-        "std",
-    ],
-    package = "secp256k1",
-    version = "^0.29",
-)
-crate.spec(
     package = "security-framework",
     version = "^3",
 )

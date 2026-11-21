@@ -4115,7 +4115,6 @@ dependencies = [
  "scopeguard",
  "scraper",
  "scrypt",
- "secp256k1 0.29.100",
  "security-framework 3.7.0",
  "semver 1.0.28",
  "serde",

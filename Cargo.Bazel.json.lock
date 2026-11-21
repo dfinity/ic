@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "45f4b96fc62da19e01b14d4715a4f11bd316a72faf755409c813296086d0cfbf",
+  "checksum": "70ec63791f7f2b109e36880980c9f142a7a182574eae9a41e6b37be5c0218f5a",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18423,10 +18423,6 @@
           {
             "id": "scrypt 0.11.0",
             "target": "scrypt"
-          },
-          {
-            "id": "secp256k1 0.29.100",
-            "target": "secp256k1"
           },
           {
             "id": "security-framework 3.7.0",
@@ -49575,8 +49571,6 @@
       "common_attrs": {
         "crate_features": [
           "alloc",
-          "default",
-          "global-context",
           "hashes",
           "rand",
           "recovery",
@@ -66953,7 +66947,6 @@
     "scopeguard 1.2.0",
     "scraper 0.29.0",
     "scrypt 0.11.0",
-    "secp256k1 0.29.100",
     "security-framework 3.7.0",
     "semver 1.0.28",
     "serde 1.0.229",

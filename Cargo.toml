@@ -910,7 +910,6 @@ schemars = { version = "0.8.21", features = ["derive"] }
 scoped_threadpool = "^0.1.9"
 scopeguard = "1.2.0"
 scraper = { version = "0.29.0", default-features = false }
-secp256k1 = { version = "0.29", features = ["global-context", "rand", "std"] }
 semver = { version = "1.0.9", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
