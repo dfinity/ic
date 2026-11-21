@@ -54,6 +54,11 @@ pub const GROUP_TTL: Duration = Duration::from_secs(90);
 
 pub const LOG_CLOSE_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// How long the driver waits for a task's subprocess to finish after killing
+/// it. Finishing includes draining its stdout and stderr and waiting up to
+/// [`LOG_CLOSE_TIMEOUT`] for its log channel to close, so this must be longer.
+pub const KILLED_TASK_EXIT_TIMEOUT: Duration = Duration::from_secs(30);
+
 fn node_logs(infra_group_name: &str) -> String {
     format!(
         "/app/discover#/?_g=(time:(from:now-1y,to:now))&_a=(columns:!(host.name,message,level),filters:!(('$state':(store:appState),query:(match_phrase:(tags:{infra_group_name})))),grid:(columns:(host.name:(width:513))),index:'535335e8-7195-4af7-95ab-e59ab3bb8056',interval:auto,query:(language:kuery,query:''),sort:!(!('@timestamp',desc)))"
