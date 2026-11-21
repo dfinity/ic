@@ -6,6 +6,7 @@ use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::UserError;
 use ic_http_types::{HttpRequest, HttpResponse};
+use ic_icrc1::archive_limits::{ARCHIVE_MEMORY_LIMIT, DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE};
 use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
 use ic_icrc1::{Block, Operation, Transaction, hash::Hash};
 use ic_icrc1_ledger::FeatureFlags;
@@ -1539,6 +1540,149 @@ pub fn test_get_all_blocks_with_archiving_disabled<T, Tokens>(
     // of the ledger itself. This catches any blocks that were retrieved more than once, or not at
     // all.
     verify_ledger_state::<Tokens>(&env, ledger_id, None, AllowancesRecentlyPurged::No);
+}
+
+pub fn test_archive_and_dedup_config_metrics<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let (env, ledger_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
+
+    let metric = |name: &str| parse_metric(&env, ledger_id, name);
+
+    assert_eq!(
+        metric("ledger_archive_trigger_threshold"),
+        ARCHIVE_TRIGGER_THRESHOLD
+    );
+    assert_eq!(
+        metric("ledger_archive_num_blocks_to_archive"),
+        NUM_BLOCKS_TO_ARCHIVE
+    );
+    assert_eq!(
+        metric("ledger_archive_node_max_memory_size_bytes"),
+        1024 * 1024 * 1024,
+        "setup() leaves node_max_memory_size_bytes unset, so the effective value should be the default"
+    );
+    assert_eq!(
+        metric("ledger_archive_max_message_size_bytes"),
+        2 * 1024 * 1024,
+        "setup() leaves max_message_size_bytes unset, so the archive option should be the default"
+    );
+    assert!(
+        metric("ledger_max_message_size_bytes") <= metric("ledger_archive_max_message_size_bytes"),
+        "the size actually used when archiving is the smaller of the two, so both have to be visible"
+    );
+    assert_eq!(metric("ledger_archive_cycles_for_archive_creation"), 0);
+    assert_eq!(
+        metric("ledger_archive_max_transactions_per_response"),
+        DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE,
+        "setup() leaves max_transactions_per_response unset, so the effective value should be the default"
+    );
+
+    assert_eq!(metric("ledger_transaction_window_seconds"), 24 * 60 * 60);
+    assert!(metric("ledger_max_transactions_in_window") > 0);
+    assert!(metric("ledger_max_transactions_to_purge") > 0);
+
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: Some(1234),
+            node_max_memory_size_bytes: Some(5678),
+            max_transactions_per_response: Some(42),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(
+        ledger_id,
+        ledger_wasm.clone(),
+        Encode!(&upgrade_args).unwrap(),
+    )
+    .expect("failed to change the archive options");
+
+    assert_eq!(metric("ledger_archive_trigger_threshold"), 1234);
+    assert_eq!(metric("ledger_archive_node_max_memory_size_bytes"), 5678);
+    assert_eq!(metric("ledger_archive_max_transactions_per_response"), 42);
+
+    let above_cap = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            node_max_memory_size_bytes: Some(ARCHIVE_MEMORY_LIMIT * 2),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(ledger_id, ledger_wasm, Encode!(&above_cap).unwrap())
+        .expect("failed to change the archive options");
+    assert_eq!(
+        metric("ledger_archive_node_max_memory_size_bytes"),
+        ARCHIVE_MEMORY_LIMIT,
+        "the reported cap must not exceed what an ICRC archive will accept"
+    );
+    assert_eq!(
+        metric("ledger_archive_num_blocks_to_archive"),
+        NUM_BLOCKS_TO_ARCHIVE,
+        "options not named in ChangeArchiveOptions must be left alone"
+    );
+}
+
+pub fn test_archive_reports_its_own_config_metrics<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    let (env, ledger_id) = setup(
+        ledger_wasm.clone(),
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+    for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
+        transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
+    }
+    let archives = list_archives(&env, ledger_id);
+    assert_eq!(archives.len(), 1);
+    let archive_id = CanisterId::unchecked_from_principal(archives[0].canister_id.into());
+
+    let ledger_cap = parse_metric(&env, ledger_id, "ledger_archive_node_max_memory_size_bytes");
+    let archive_cap = parse_metric(&env, archive_id, "archive_max_memory_size_bytes");
+    assert_eq!(
+        archive_cap, ledger_cap,
+        "the archive was just spawned, so its cap should match what the ledger would pass"
+    );
+    assert_eq!(
+        parse_metric(&env, archive_id, "archive_max_transactions_per_response"),
+        DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE
+    );
+
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            node_max_memory_size_bytes: Some(ledger_cap + 4096),
+            max_transactions_per_response: Some(7),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(ledger_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
+        .expect("failed to change the archive options");
+
+    assert_eq!(
+        parse_metric(&env, ledger_id, "ledger_archive_node_max_memory_size_bytes"),
+        ledger_cap + 4096
+    );
+    assert_eq!(
+        parse_metric(&env, archive_id, "archive_max_memory_size_bytes"),
+        archive_cap,
+        "an existing archive keeps the cap it was installed with"
+    );
+    assert_eq!(
+        parse_metric(&env, archive_id, "archive_max_transactions_per_response"),
+        DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE,
+        "an existing archive keeps the response limit it was installed with"
+    );
 }
 
 pub fn test_upgrade_archive_options<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
