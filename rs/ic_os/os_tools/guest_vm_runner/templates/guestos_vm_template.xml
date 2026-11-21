@@ -14,8 +14,6 @@
   </memoryBacking>
   {%- endif %}
   <vcpu placement='static'>{{nr_of_vcpus}}</vcpu>
-  <!-- For the disk's queues, see its driver. -->
-  <iothreads>4</iothreads>
 
   {%- if cpu_domain == "qemu" %}
   <cpu mode='host-model'/>
@@ -83,13 +81,7 @@
   <devices>
     <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
-      <!-- I/O threads process the disk's queues, rather than QEMU's main loop under its
-           global lock. -->
-      <driver name='qemu' type='raw' cache='none' io='threads' discard='unmap'>
-        <iothreads>
-          <iothread id='1'/><iothread id='2'/><iothread id='3'/><iothread id='4'/>
-        </iothreads>
-      </driver>
+      <driver name='qemu' type='raw' cache='none' discard='unmap'/>
       <source dev='{{disk_device.display()}}' index='1'/>
       <backingStore/>
       <target dev='vda' bus='virtio'/>

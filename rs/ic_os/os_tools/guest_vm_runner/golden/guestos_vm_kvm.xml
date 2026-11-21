@@ -9,8 +9,6 @@
   <memory unit='GiB'>12</memory>
   <currentMemory unit='GiB'>12</currentMemory>
   <vcpu placement='static'>56</vcpu>
-  <!-- For the disk's queues, see its driver. -->
-  <iothreads>4</iothreads>
   <cpu mode='host-passthrough' migratable='off'>
     <cache mode='passthrough'/>
     <topology sockets='2' cores='14' threads='2'/>
@@ -45,13 +43,7 @@
   <devices>
     <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
-      <!-- I/O threads process the disk's queues, rather than QEMU's main loop under its
-           global lock. -->
-      <driver name='qemu' type='raw' cache='none' io='threads' discard='unmap'>
-        <iothreads>
-          <iothread id='1'/><iothread id='2'/><iothread id='3'/><iothread id='4'/>
-        </iothreads>
-      </driver>
+      <driver name='qemu' type='raw' cache='none' discard='unmap'/>
       <source dev='/dev/guest_disk' index='1'/>
       <backingStore/>
       <target dev='vda' bus='virtio'/>
