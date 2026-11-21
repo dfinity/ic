@@ -32,11 +32,13 @@ impl From<CertificationContent> for pb::CertificationContent {
         }
     }
 }
-impl From<pb::CertificationContent> for CertificationContent {
-    fn from(value: pb::CertificationContent) -> Self {
-        CertificationContent {
-            hash: CryptoHashOfPartialState::new(CryptoHash::from(value.hash)),
-        }
+impl TryFrom<pb::CertificationContent> for CertificationContent {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::CertificationContent) -> Result<Self, Self::Error> {
+        Ok(CertificationContent {
+            hash: CryptoHashOfPartialState::new(CryptoHash::try_from(value.hash)?),
+        })
     }
 }
 

@@ -132,8 +132,8 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
             canister_http_responses: value
                 .stripped_canister_http_responses
                 .into_iter()
-                .map(|response| CryptoHashOf::new(CryptoHash::from(response.content_hash)))
-                .collect(),
+                .map(|response| CryptoHash::try_from(response.content_hash).map(CryptoHashOf::new))
+                .collect::<Result<_, _>>()?,
         };
 
         Ok(Self {
@@ -248,7 +248,7 @@ impl TryFrom<pb::StrippedConsensusMessageId> for MaybeStrippedConsensusMessageId
         } else {
             Self::StrippedBlockProposal {
                 unstripped_id,
-                stripped_message_ids_hash: CryptoHashOf::new(CryptoHash::from(hash)),
+                stripped_message_ids_hash: CryptoHashOf::new(CryptoHash::try_from(hash)?),
             }
         })
     }

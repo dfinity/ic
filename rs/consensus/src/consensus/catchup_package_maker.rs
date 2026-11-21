@@ -449,7 +449,7 @@ pub(crate) fn create_post_split_summary_block(
     Ok(Block {
         version: splitting_summary_block.version.clone(),
         // Fake parent
-        parent: CryptoHashOf::<Block>::nonexistent(),
+        parent: CryptoHashOf::<Block>::NONEXISTENT,
         payload: Payload::new(
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
@@ -484,7 +484,7 @@ pub(crate) fn create_post_split_random_beacon(cup_block: &Block) -> Result<Rando
         content: RandomBeaconContent {
             version: cup_block.version.clone(),
             height: cup_block.height(),
-            parent: CryptoHashOf::<RandomBeacon>::nonexistent(),
+            parent: CryptoHashOf::<RandomBeacon>::NONEXISTENT,
         },
         signature: ThresholdSignature {
             signer: transcript.dkg_id.clone(),

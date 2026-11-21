@@ -19,10 +19,9 @@ impl TryFrom<pb::Advert> for Advert {
 
     fn try_from(advert: pb::Advert) -> Result<Self, Self::Error> {
         Ok(Advert {
-            id: advert
-                .id
-                .map(StateSyncArtifactId::from)
-                .ok_or(ProxyDecodeError::MissingField("id"))?,
+            id: StateSyncArtifactId::try_from(
+                advert.id.ok_or(ProxyDecodeError::MissingField("id"))?,
+            )?,
         })
     }
 }

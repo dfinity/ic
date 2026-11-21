@@ -271,7 +271,7 @@ impl HasHeight for BlockMetadata {
 
 /// An object whose hash production code fills in where the object does not exist.
 pub trait NonexistentHash: private::CryptoHashOfSeal {
-    /// Returns a hash that stands for the hash of an object of this type that does not exist.
+    /// A hash that stands for the hash of an object of this type that does not exist.
     ///
     /// This hash was chosen arbitrarily to be all zeros. The probability that an actual object
     /// hashes to it is negligible, so it cannot be confused with the hash of an actual object.
@@ -279,9 +279,7 @@ pub trait NonexistentHash: private::CryptoHashOfSeal {
     /// This is not meant for tests (see [`CryptoHash::for_test`]): production code uses it where
     /// there is a gap in the blockchain, i.e. where a block, a random beacon or a state does not
     /// extend a previous one, like during a genesis, recovery, or splitting.
-    fn nonexistent() -> CryptoHashOf<Self::T> {
-        CryptoHashOf::new(CryptoHash::from([0; CryptoHash::LEN]))
-    }
+    const NONEXISTENT: CryptoHashOf<Self::T> = CryptoHashOf::new(CryptoHash([0; CryptoHash::LEN]));
 }
 
 impl<H: private::CryptoHashOfSeal> NonexistentHash for H {}
@@ -291,9 +289,9 @@ mod private {
 
     // The combinations of the public trait above and the two traits below within this private
     // module allows to:
-    //   - Call `nonexistent` directly on a `CryptoHashOf<T>`, even though the latter is a foreign
+    //   - Use `NONEXISTENT` directly on a `CryptoHashOf<T>`, even though the latter is a foreign
     //     type
-    //   - Have the trait's implementation of `nonexistent` be inlined and have no code be able to
+    //   - Have the trait's definition of `NONEXISTENT` be the only one and have no code be able to
     //     override it
     //   - Control which types can actually have a nonexistent hash, by implementing
     //     `NonexistentHashSeal` for them below
@@ -460,7 +458,7 @@ impl TryFrom<pb::BlockProposal> for BlockProposal {
         Ok(Signed {
             content: Hashed {
                 value: try_from_option_field(block_proposal.value, "BlockProposal::value")?,
-                hash: CryptoHashOf::from(CryptoHash::from(block_proposal.hash)),
+                hash: CryptoHashOf::from(CryptoHash::try_from(block_proposal.hash)?),
             },
             signature: BasicSignature {
                 signature: BasicSigOf::from(BasicSig(block_proposal.signature)),
@@ -546,7 +544,7 @@ impl TryFrom<pb::Notarization> for Notarization {
             content: NotarizationContent {
                 version: ReplicaVersion::try_from(notarization.version.as_str())?,
                 height: Height::from(notarization.height),
-                block: CryptoHashOf::from(CryptoHash::from(notarization.block)),
+                block: CryptoHashOf::from(CryptoHash::try_from(notarization.block)?),
             },
             signature: MultiSignature {
                 signature: CombinedMultiSigOf::from(CombinedMultiSig(notarization.signature)),
@@ -584,7 +582,7 @@ impl TryFrom<pb::NotarizationShare> for NotarizationShare {
             content: NotarizationContent {
                 version: ReplicaVersion::try_from(notarization.version.as_str())?,
                 height: Height::from(notarization.height),
-                block: CryptoHashOf::from(CryptoHash::from(notarization.block)),
+                block: CryptoHashOf::from(CryptoHash::try_from(notarization.block)?),
             },
             signature: MultiSignatureShare {
                 signature: IndividualMultiSigOf::new(IndividualMultiSig(notarization.signature)),
@@ -648,7 +646,7 @@ impl TryFrom<pb::Finalization> for Finalization {
             content: FinalizationContent {
                 version: ReplicaVersion::try_from(finalization.version.as_str())?,
                 height: Height::from(finalization.height),
-                block: CryptoHashOf::from(CryptoHash::from(finalization.block)),
+                block: CryptoHashOf::from(CryptoHash::try_from(finalization.block)?),
             },
             signature: MultiSignature {
                 signature: CombinedMultiSigOf::from(CombinedMultiSig(finalization.signature)),
@@ -686,7 +684,7 @@ impl TryFrom<pb::FinalizationShare> for FinalizationShare {
             content: FinalizationContent {
                 version: ReplicaVersion::try_from(finalization.version.as_str())?,
                 height: Height::from(finalization.height),
-                block: CryptoHashOf::from(CryptoHash::from(finalization.block)),
+                block: CryptoHashOf::from(CryptoHash::try_from(finalization.block)?),
             },
             signature: MultiSignatureShare {
                 signature: IndividualMultiSigOf::new(IndividualMultiSig(finalization.signature)),
@@ -757,7 +755,7 @@ impl TryFrom<pb::RandomBeacon> for RandomBeacon {
             content: RandomBeaconContent {
                 version: ReplicaVersion::try_from(beacon.version)?,
                 height: Height::from(beacon.height),
-                parent: CryptoHashOf::from(CryptoHash::from(beacon.parent)),
+                parent: CryptoHashOf::from(CryptoHash::try_from(beacon.parent)?),
             },
             signature: ThresholdSignature {
                 signature: CombinedThresholdSigOf::new(CombinedThresholdSig(beacon.signature)),
@@ -793,7 +791,7 @@ impl TryFrom<pb::RandomBeaconShare> for RandomBeaconShare {
             content: RandomBeaconContent {
                 version: ReplicaVersion::try_from(beacon.version)?,
                 height: Height::from(beacon.height),
-                parent: CryptoHashOf::from(CryptoHash::from(beacon.parent)),
+                parent: CryptoHashOf::from(CryptoHash::try_from(beacon.parent)?),
             },
             signature: ThresholdSignatureShare {
                 signature: ThresholdSigShareOf::new(ThresholdSigShare(beacon.signature)),
@@ -968,9 +966,9 @@ impl TryFrom<pb::EquivocationProof> for EquivocationProof {
             version: ReplicaVersion::try_from(proof.version)?,
             height: Height::new(proof.height),
             subnet_id: subnet_id_try_from_option(proof.subnet_id, "EquivocationProof::subnet_id")?,
-            hash1: CryptoHashOf::new(CryptoHash::from(proof.hash1)),
+            hash1: CryptoHashOf::new(CryptoHash::try_from(proof.hash1)?),
             signature1: BasicSigOf::new(BasicSig(proof.signature1)),
-            hash2: CryptoHashOf::new(CryptoHash::from(proof.hash2)),
+            hash2: CryptoHashOf::new(CryptoHash::try_from(proof.hash2)?),
             signature2: BasicSigOf::new(BasicSig(proof.signature2)),
         })
     }
@@ -1175,40 +1173,40 @@ impl TryFrom<pb::ConsensusMessageHash> for ConsensusMessageHash {
 
         Ok(match kind {
             Kind::RandomBeacon(x) => {
-                ConsensusMessageHash::RandomBeacon(CryptoHashOf::new(CryptoHash::from(x)))
+                ConsensusMessageHash::RandomBeacon(CryptoHashOf::new(CryptoHash::try_from(x)?))
             }
             Kind::Finalization(x) => {
-                ConsensusMessageHash::Finalization(CryptoHashOf::new(CryptoHash::from(x)))
+                ConsensusMessageHash::Finalization(CryptoHashOf::new(CryptoHash::try_from(x)?))
             }
             Kind::Notarization(x) => {
-                ConsensusMessageHash::Notarization(CryptoHashOf::new(CryptoHash::from(x)))
+                ConsensusMessageHash::Notarization(CryptoHashOf::new(CryptoHash::try_from(x)?))
             }
             Kind::BlockProposal(x) => {
-                ConsensusMessageHash::BlockProposal(CryptoHashOf::new(CryptoHash::from(x)))
+                ConsensusMessageHash::BlockProposal(CryptoHashOf::new(CryptoHash::try_from(x)?))
             }
             Kind::RandomBeaconShare(x) => {
-                ConsensusMessageHash::RandomBeaconShare(CryptoHashOf::new(CryptoHash::from(x)))
+                ConsensusMessageHash::RandomBeaconShare(CryptoHashOf::new(CryptoHash::try_from(x)?))
             }
             Kind::NotarizationShare(x) => {
-                ConsensusMessageHash::NotarizationShare(CryptoHashOf::new(CryptoHash::from(x)))
+                ConsensusMessageHash::NotarizationShare(CryptoHashOf::new(CryptoHash::try_from(x)?))
             }
             Kind::FinalizationShare(x) => {
-                ConsensusMessageHash::FinalizationShare(CryptoHashOf::new(CryptoHash::from(x)))
+                ConsensusMessageHash::FinalizationShare(CryptoHashOf::new(CryptoHash::try_from(x)?))
             }
             Kind::RandomTape(x) => {
-                ConsensusMessageHash::RandomTape(CryptoHashOf::new(CryptoHash::from(x)))
+                ConsensusMessageHash::RandomTape(CryptoHashOf::new(CryptoHash::try_from(x)?))
             }
             Kind::RandomTapeShare(x) => {
-                ConsensusMessageHash::RandomTapeShare(CryptoHashOf::new(CryptoHash::from(x)))
+                ConsensusMessageHash::RandomTapeShare(CryptoHashOf::new(CryptoHash::try_from(x)?))
             }
             Kind::CatchUpPackage(x) => {
-                ConsensusMessageHash::CatchUpPackage(CryptoHashOf::new(CryptoHash::from(x)))
+                ConsensusMessageHash::CatchUpPackage(CryptoHashOf::new(CryptoHash::try_from(x)?))
             }
-            Kind::CatchUpPackageShare(x) => {
-                ConsensusMessageHash::CatchUpPackageShare(CryptoHashOf::new(CryptoHash::from(x)))
-            }
+            Kind::CatchUpPackageShare(x) => ConsensusMessageHash::CatchUpPackageShare(
+                CryptoHashOf::new(CryptoHash::try_from(x)?),
+            ),
             Kind::EquivocationProof(x) => {
-                ConsensusMessageHash::EquivocationProof(CryptoHashOf::new(CryptoHash::from(x)))
+                ConsensusMessageHash::EquivocationProof(CryptoHashOf::new(CryptoHash::try_from(x)?))
             }
         })
     }
@@ -1513,7 +1511,7 @@ impl TryFrom<pb::Block> for Block {
         };
         Ok(Block {
             version: ReplicaVersion::try_from(block.version)?,
-            parent: CryptoHashOf::from(CryptoHash::from(block.parent)),
+            parent: CryptoHashOf::from(CryptoHash::try_from(block.parent)?),
             height: Height::from(block.height),
             rank: Rank(block.rank),
             context: ValidationContext {
@@ -1527,7 +1525,7 @@ impl TryFrom<pb::Block> for Block {
             // are signed, the entire content can be trusted and so this should
             // not be too much of an issue.
             payload: Payload::new_from_hash_and_value(
-                CryptoHashOf::from(CryptoHash::from(block.payload_hash)),
+                CryptoHashOf::from(CryptoHash::try_from(block.payload_hash)?),
                 payload,
             ),
         })

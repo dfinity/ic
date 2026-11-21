@@ -275,8 +275,12 @@ impl IdKey {
         TypeKey::try_from(self.0[TYPE_OFFSET])
     }
 
-    fn hash(&self) -> CryptoHash {
-        CryptoHash::from(self.0[HASH_OFFSET..].to_vec())
+    fn hash(&self) -> Result<CryptoHash, String> {
+        let bytes = &self.0[HASH_OFFSET..];
+        bytes
+            .try_into()
+            .map(CryptoHash)
+            .map_err(|_| format!("Invalid hash length {} in IdKey", bytes.len()))
     }
 
     fn with_type_key(&self, type_key: TypeKey) -> Self {
@@ -961,7 +965,7 @@ impl From<&ConsensusMessageId> for ArtifactKey {
 impl TryFrom<ArtifactKey> for ConsensusMessageId {
     type Error = String;
     fn try_from(key: ArtifactKey) -> Result<Self, Self::Error> {
-        let h = key.id_key.hash();
+        let h = key.id_key.hash()?;
         let hash = match key.type_key {
             TypeKey::RandomBeacon => ConsensusMessageHash::RandomBeacon(h.into()),
             TypeKey::Finalization => ConsensusMessageHash::Finalization(h.into()),
@@ -1398,7 +1402,7 @@ impl HasTypeKey for CertificationShare {
 impl TryFrom<ArtifactKey> for CertificationMessageId {
     type Error = String;
     fn try_from(key: ArtifactKey) -> Result<Self, Self::Error> {
-        let h = key.id_key.hash();
+        let h = key.id_key.hash()?;
         let hash = match key.type_key {
             TypeKey::Certification => CertificationMessageHash::Certification(h.into()),
             TypeKey::CertificationShare => CertificationMessageHash::CertificationShare(h.into()),
@@ -2228,7 +2232,7 @@ mod tests {
         assert_eq!(Height::from(height_key), height, "height does not match");
         assert_eq!(id_key.height(), height, "Height of IdKey does not match");
         assert_eq!(
-            &id_key.hash(),
+            &id_key.hash().unwrap(),
             hash.digest(),
             "Hash of IdKey does not match"
         );

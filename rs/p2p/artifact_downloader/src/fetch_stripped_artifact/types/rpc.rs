@@ -32,7 +32,8 @@ impl TryFrom<pb::GetIngressMessageInBlockRequest> for GetIngressMessageInBlockRe
             value.block_proposal_id,
             "GetIngressMessageInBlockRequest::block_proposal_id",
         )?;
-        let ingress_bytes_hash = CryptoHashOf::from(CryptoHash::from(value.ingress_bytes_hash));
+        let ingress_bytes_hash =
+            CryptoHashOf::from(CryptoHash::try_from(value.ingress_bytes_hash)?);
 
         match &consensus_message_id.hash {
             ConsensusMessageHash::BlockProposal(_) => {}
@@ -196,7 +197,7 @@ impl TryFrom<pb::GetCanisterHttpResponseInBlockRequest> for GetCanisterHttpRespo
         };
 
         Ok(Self {
-            content_hash: CryptoHashOf::from(CryptoHash::from(value.content_hash)),
+            content_hash: CryptoHashOf::from(CryptoHash::try_from(value.content_hash)?),
             block_proposal_id: consensus_message_id,
         })
     }
