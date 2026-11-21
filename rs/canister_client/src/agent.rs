@@ -30,6 +30,10 @@ const INGRESS_TIMEOUT: Duration = Duration::from_secs(60 * 6);
 /// from an 'execute_query' call.
 const QUERY_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Minimum time between submissions of the same update call while the IC does not
+/// know it.
+const MIN_RESUBMIT_INTERVAL: Duration = Duration::from_secs(10);
+
 const MIN_POLL_INTERVAL: Duration = Duration::from_millis(500);
 // The value must be smaller than `ic_http_handler::MAX_TCP_PEEK_TIMEOUT_SECS`.
 // See VER-1060 for details.
@@ -262,14 +266,17 @@ impl Agent {
             self.sender_field.clone(),
         )
         .map_err(|err| format!("{err}"))?;
+        let http_body = Vec::<u8>::from(http_body);
+        let path = update_path(*effective_canister_id);
         self.http_client
             .post_with_response(
                 &self.url,
-                &update_path(*effective_canister_id),
-                http_body.into(),
+                &path,
+                http_body.clone(),
                 tokio::time::Instant::from_std(deadline),
             )
             .await?;
+        let mut last_submit_time = Instant::now();
 
         // Check request status for the first time after 2s (~ time between blocks)
         let mut next_poll_time = Instant::now() + Duration::from_secs(2);
@@ -292,6 +299,23 @@ impl Agent {
                             "The call has completed but the reply/reject data has been pruned."
                                 .to_string(),
                         );
+                    }
+                    // A node whose latest finalized block lags the wall clock by
+                    // more than `PERMITTED_DRIFT + PERMITTED_DRIFT_AT_VALIDATOR`
+                    // discards the request without telling us, so resubmit it while
+                    // the IC does not know it. The IC executes a request at most once,
+                    // so resubmitting one it already knows is a no-op.
+                    "unknown" if last_submit_time.elapsed() >= MIN_RESUBMIT_INTERVAL => {
+                        last_submit_time = Instant::now();
+                        let _ignored_response = self
+                            .http_client
+                            .post_with_response(
+                                &self.url,
+                                &path,
+                                http_body.clone(),
+                                tokio::time::Instant::from_std(deadline),
+                            )
+                            .await;
                     }
                     "unknown" | "received" | "processing" => {}
                     _ => {
