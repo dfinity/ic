@@ -14,9 +14,7 @@ use crate::driver::{
     log_events::LogEvent,
     nested::HasNestedVms,
     test_env::TestEnvAttribute,
-    test_env_api::{
-        HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo, SshSession, try_scp_send_to,
-    },
+    test_env_api::{HasTopologySnapshot, HasVmName, NodesInfo, SshSession, try_scp_send_to},
     test_setup::GroupSetup,
     universal_vm::UniversalVms,
 };
@@ -141,52 +139,50 @@ impl VectorVm {
             .read_json_object::<NodesInfo, _>(NODES_INFO)?
             .into_keys()
             .collect::<Vec<NodeId>>();
-        match env.safe_topology_snapshot() {
-            Err(e) => warn!(
-                log,
-                "Skipping adding IC nodes as vector targets for now because could not fetch topology snapshot because: {e:?}"
-            ),
-            Ok(snapshot) => {
-                let nodes = snapshot
-                    .subnets()
-                    .flat_map(|s| s.nodes())
-                    .chain(snapshot.unassigned_nodes())
-                    .chain(snapshot.api_boundary_nodes());
-
-                for node in nodes {
-                    let node_id = node.node_id;
-                    // Only consider nodes that are part of the testnet to make up for system tests
-                    // that use mainnet state, where the registry could contain nodes that are not
-                    // part of the testnet.
-                    if !testnet_nodes.contains(&node_id) {
-                        continue;
-                    }
-
-                    let ip = node.get_ip_addr();
-
-                    let labels = [
-                        // We don't have host os in these tests so this is the only job.
-                        // It is here to keep consistency between mainnet and testnet logs.
-                        (JOB, "node_exporter".to_string()),
-                        (IS_API_BN, node.is_api_boundary_node().to_string()),
-                        (IS_MALICIOUS, node.is_malicious().to_string()),
-                    ]
-                    .into_iter()
-                    .chain(match node.subnet_id() {
-                        None => vec![],
-                        Some(s) => vec![(IC_SUBNET, s.get().to_string())],
-                    })
-                    .map(|(key, val)| (key.to_string(), val))
-                    .collect();
-
-                    add_vector_target(
-                        &mut sources,
-                        &mut transforms,
-                        node_id.to_string(),
-                        ip,
-                        Some(labels),
+        for (ic_name, snapshot) in env.safe_topology_snapshots() {
+            let snapshot = match snapshot {
+                Ok(snapshot) => snapshot,
+                Err(e) => {
+                    warn!(
+                        log,
+                        "Not adding the nodes of IC {ic_name:?} as vector targets yet: could not read its topology snapshot: {e:?}"
                     );
+                    continue;
                 }
+            };
+            for node in snapshot.all_nodes() {
+                let node_id = node.node_id;
+                // Only consider nodes that are part of the testnet to make up for system tests
+                // that use mainnet state, where the registry could contain nodes that are not
+                // part of the testnet.
+                if !testnet_nodes.contains(&node_id) {
+                    continue;
+                }
+
+                let ip = node.get_ip_addr();
+
+                let labels = [
+                    // We don't have host os in these tests so this is the only job.
+                    // It is here to keep consistency between mainnet and testnet logs.
+                    (JOB, "node_exporter".to_string()),
+                    (IS_API_BN, node.is_api_boundary_node().to_string()),
+                    (IS_MALICIOUS, node.is_malicious().to_string()),
+                ]
+                .into_iter()
+                .chain(match node.subnet_id() {
+                    None => vec![],
+                    Some(s) => vec![(IC_SUBNET, s.get().to_string())],
+                })
+                .map(|(key, val)| (key.to_string(), val))
+                .collect();
+
+                add_vector_target(
+                    &mut sources,
+                    &mut transforms,
+                    node_id.to_string(),
+                    ip,
+                    Some(labels),
+                );
             }
         }
 
