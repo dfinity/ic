@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "9c881d78a67d4ef33b2b2197f1cf2129af963f608389df2c657b82f400e27995",
+  "checksum": "56c88aba536b1882ec1442f268583b5823bdfd5de9f39d9c7dea78c9db6b3c7c",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18292,6 +18292,11 @@
           {
             "alias": "rand_0_9",
             "id": "rand 0.9.5",
+            "target": "rand"
+          },
+          {
+            "alias": "rand_0_10",
+            "id": "rand 0.10.4",
             "target": "rand"
           },
           {
@@ -66931,6 +66936,7 @@
     "quote 1.0.47",
     "rand 0.8.8",
     "rand 0.9.5",
+    "rand 0.10.4",
     "rand_chacha 0.3.1",
     "rand_chacha 0.9.0",
     "rand_distr 0.4.3",
