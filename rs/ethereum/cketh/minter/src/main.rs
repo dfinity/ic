@@ -62,6 +62,9 @@ use ic_cketh_minter::{endpoints, erc20};
 use ic_ethereum_types::Address;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc21::errors::Icrc21Error;
+use icrc_ledger_types::icrc21::requests::ConsentMessageRequest;
+use icrc_ledger_types::icrc21::responses::ConsentInfo;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::str::FromStr;
@@ -727,6 +730,18 @@ async fn estimate_erc20_transaction_fee() -> Option<Wei> {
                 .to_price(CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT)
                 .max_transaction_fee()
         })
+}
+
+#[update]
+async fn icrc21_canister_call_consent_message(
+    consent_msg_request: ConsentMessageRequest,
+) -> Result<ConsentInfo, Icrc21Error> {
+    ic_cketh_minter::icrc21::icrc21_canister_call_consent_message(consent_msg_request).await
+}
+
+#[query]
+fn icrc10_supported_standards() -> Vec<ic_cketh_minter::icrc21::StandardRecord> {
+    ic_cketh_minter::icrc21::icrc10_supported_standards()
 }
 
 #[query]
