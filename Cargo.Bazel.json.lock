@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "70ec63791f7f2b109e36880980c9f142a7a182574eae9a41e6b37be5c0218f5a",
+  "checksum": "738dbbb44adb6b9b6772cfa0684d02b1e1d3d495f68400e49fbc28c70c781778",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18079,7 +18079,7 @@
             "target": "libcryptsetup_rs"
           },
           {
-            "id": "libfuzzer-sys 0.4.7",
+            "id": "libfuzzer-sys 0.4.13",
             "target": "libfuzzer_sys"
           },
           {
@@ -33116,7 +33116,7 @@
       ],
       "version": "2.3.0"
     },
-    "libfuzzer-sys 0.4.7": {
+    "libfuzzer-sys 0.4.13": {
       "build_script_attrs": {
         "deps": [
           {
@@ -33130,10 +33130,6 @@
           {
             "id": "arbitrary 1.5.0",
             "target": "arbitrary"
-          },
-          {
-            "id": "once_cell 1.21.4",
-            "target": "once_cell"
           }
         ],
         "edition": "2018",
@@ -33142,7 +33138,7 @@
         ]
       },
       "library_target_name": "libfuzzer_sys",
-      "license": "MIT/Apache-2.0/NCSA",
+      "license": "(MIT OR Apache-2.0) AND NCSA",
       "license_file": "LICENSE-APACHE",
       "license_ids": [
         "Apache-2.0",
@@ -33153,8 +33149,8 @@
       "package_url": "https://github.com/rust-fuzz/libfuzzer",
       "repository": {
         "Http": {
-          "sha256": "a96cfd5557eb82f2b83fed4955246c988d331975a002961b07c81584d107e7f7",
-          "url": "https://static.crates.io/crates/libfuzzer-sys/0.4.7/download"
+          "sha256": "a9fd2f41a1cba099f79a0b6b6c35656cf7c03351a7bae8ff0f28f25270f929d2",
+          "url": "https://static.crates.io/crates/libfuzzer-sys/0.4.13/download"
         }
       },
       "targets": [
@@ -33171,7 +33167,7 @@
           }
         }
       ],
-      "version": "0.4.7"
+      "version": "0.4.13"
     },
     "libloading 0.5.2": {
       "build_script_attrs": {
@@ -66859,7 +66855,7 @@
     "leb128 0.2.7",
     "libc 0.2.191",
     "libcryptsetup-rs 0.16.1",
-    "libfuzzer-sys 0.4.7",
+    "libfuzzer-sys 0.4.13",
     "libnss 0.5.0",
     "libsystemd 0.7.2",
     "little-loadshedder 0.2.0",
