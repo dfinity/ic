@@ -14,7 +14,6 @@ rust_library(
         "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/monitoring/logger",
-        "//rs/phantom_newtype",
         "//rs/protobuf",
         "//rs/registry/helpers",
         "//rs/types/management_canister_types",

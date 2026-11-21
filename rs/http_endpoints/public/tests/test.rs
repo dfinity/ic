@@ -829,9 +829,9 @@ fn can_retrieve_subnet_metrics(
                         certificate.signature().to_vec(),
                     )),
                 },
-                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                    hash_tree.digest().to_vec(),
-                ))),
+                content: CertificationContent::new(CryptoHashOfPartialState::from(
+                    CryptoHash::from(hash_tree.digest().0),
+                )),
             },
         };
 

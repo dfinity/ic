@@ -320,13 +320,13 @@ mod tests {
             let old_advert = Advert {
                 id: StateSyncArtifactId {
                     height: Height::from(0),
-                    hash: CryptoHash(vec![]),
+                    hash: CryptoHash::for_test(),
                 },
             };
             let advert = Advert {
                 id: StateSyncArtifactId {
                     height: Height::from(1),
-                    hash: CryptoHash(vec![]),
+                    hash: CryptoHash::for_test(),
                 },
             };
 

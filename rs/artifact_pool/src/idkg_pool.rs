@@ -703,7 +703,7 @@ mod tests {
             let support = IDkgDealingSupport {
                 transcript_id: *transcript_id,
                 dealer_id: *dealer_id,
-                dealing_hash: CryptoHashOf::new(CryptoHash(vec![*hash; 32])),
+                dealing_hash: CryptoHashOf::new(CryptoHash::from([*hash; 32])),
                 sig_share: BasicSignature::fake(*signer_id),
             };
             if test_unvalidated {
@@ -786,7 +786,7 @@ mod tests {
                 support.transcript_id,
                 support.dealer_id,
                 support.sig_share.signer,
-                support.dealing_hash.as_ref().0[0],
+                support.dealing_hash.get_ref().as_ref()[0],
             )
         };
 
@@ -902,7 +902,7 @@ mod tests {
                 support.transcript_id,
                 support.dealer_id,
                 support.sig_share.signer,
-                support.dealing_hash.as_ref().0[0],
+                support.dealing_hash.get_ref().as_ref()[0],
             )
         };
 
@@ -1126,7 +1126,7 @@ mod tests {
                     let support = IDkgDealingSupport {
                         transcript_id: dummy_idkg_transcript_id_for_tests(100),
                         dealer_id: NODE_2,
-                        dealing_hash: CryptoHashOf::new(CryptoHash(vec![1])),
+                        dealing_hash: CryptoHashOf::new(CryptoHash::for_test()),
                         sig_share: BasicSignature::fake(NODE_2),
                     };
                     let msg = IDkgMessage::DealingSupport(support);
@@ -1384,7 +1384,7 @@ mod tests {
                         IDkgMessage::DealingSupport(IDkgDealingSupport {
                             transcript_id: tid,
                             dealer_id: NODE_3,
-                            dealing_hash: CryptoHashOf::new(CryptoHash(vec![i; 32])),
+                            dealing_hash: CryptoHashOf::new(CryptoHash::from([i; 32])),
                             sig_share: BasicSignature::fake(node),
                         }),
                     ));

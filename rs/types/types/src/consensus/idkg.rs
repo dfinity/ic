@@ -1141,7 +1141,7 @@ impl From<IDkgArtifactIdData> for pb::IDkgArtifactIdData {
     fn from(value: IDkgArtifactIdData) -> Self {
         Self {
             height: value.height.get(),
-            hash: value.hash.0,
+            hash: value.hash.into_vec(),
             subnet_id: Some(subnet_id_into_protobuf(value.subnet_id)),
         }
     }
@@ -1153,7 +1153,7 @@ impl TryFrom<pb::IDkgArtifactIdData> for IDkgArtifactIdData {
         Ok(Self {
             height: Height::from(value.height),
             subnet_id: subnet_id_try_from_option(value.subnet_id, "IDkgArtifactIdData::subnet_id")?,
-            hash: CryptoHash(value.hash),
+            hash: CryptoHash::from(value.hash),
         })
     }
 }
@@ -1172,7 +1172,7 @@ impl From<SigShareIdData> for pb::SigShareIdData {
     fn from(value: SigShareIdData) -> Self {
         Self {
             height: value.height.get(),
-            hash: value.hash.0,
+            hash: value.hash.into_vec(),
         }
     }
 }
@@ -1182,7 +1182,7 @@ impl TryFrom<pb::SigShareIdData> for SigShareIdData {
     fn try_from(value: pb::SigShareIdData) -> Result<Self, Self::Error> {
         Ok(Self {
             height: Height::from(value.height),
-            hash: CryptoHash(value.hash),
+            hash: CryptoHash::from(value.hash),
         })
     }
 }

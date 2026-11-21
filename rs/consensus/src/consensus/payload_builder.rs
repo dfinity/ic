@@ -318,9 +318,9 @@ pub(crate) mod test {
             merkle_proof,
             certification: Signed {
                 signature: ThresholdSignature::fake(),
-                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                    vec![],
-                ))),
+                content: CertificationContent::new(CryptoHashOfPartialState::from(
+                    CryptoHash::for_test(),
+                )),
             },
         }
     }

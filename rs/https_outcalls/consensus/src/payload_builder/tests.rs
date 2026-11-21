@@ -230,7 +230,7 @@ fn multiple_payload_test() {
                 let past_payloads = vec![PastPayload {
                     height: Height::from(0),
                     time: UNIX_EPOCH,
-                    block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+                    block_hash: CryptoHashOf::from(CryptoHash::for_test()),
                     payload: &past_payload,
                 }];
 
@@ -679,7 +679,7 @@ fn duplicate_validation() {
         let past_payloads = vec![PastPayload {
             height: Height::new(1),
             time: UNIX_EPOCH,
-            block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+            block_hash: CryptoHashOf::from(CryptoHash::for_test()),
             payload: &payload,
         }];
 
@@ -928,7 +928,7 @@ fn divergence_share_with_content_hash_of_wrong_length_rejected() {
         // Shares whose content hash is one byte longer than a SHA-256 digest, among an
         // otherwise valid divergence of two equal halves.
         let other_metadata = CanisterHttpResponseMetadata {
-            content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 33])),
+            content_hash: CryptoHashOf::new(CryptoHash::from(vec![0xAB; 33])),
             ..metadata.clone()
         };
         let payload = CanisterHttpPayload {
@@ -972,7 +972,7 @@ fn divergence_error_message() {
             let mut new_hash = [0; 32];
             rng.fill(&mut new_hash);
 
-            sample.content_hash = CryptoHashOf::from(CryptoHash(new_hash.to_vec()));
+            sample.content_hash = CryptoHashOf::from(CryptoHash::from(new_hash));
 
             Signed {
                 content: CanisterHttpResponseReceipt {
@@ -2948,7 +2948,7 @@ fn flexible_invalid_already_delivered_callback_id() {
         let past_payloads = vec![PastPayload {
             height: Height::new(1),
             time: UNIX_EPOCH,
-            block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+            block_hash: CryptoHashOf::from(CryptoHash::for_test()),
             payload: &past_payload_bytes,
         }];
 
@@ -3216,7 +3216,7 @@ fn flexible_invalid_content_hash_mismatch() {
     setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let mut entry = flexible_response(42, 0, b"data");
         let expected_calculated_hash = crypto_hash(&entry.response);
-        let wrong_metadata_hash = CryptoHashOf::new(CryptoHash(vec![0xff; 32]));
+        let wrong_metadata_hash = CryptoHashOf::new(CryptoHash::from([0xff; 32]));
         entry.proof.content.metadata.content_hash = wrong_metadata_hash.clone();
 
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
@@ -3637,7 +3637,7 @@ fn into_messages_emits_initial_spend_reports() {
     let (_, div_metadata) = test_response_and_metadata(div_callback.get());
     let divergent_share = |node: u64, hash: u8, spent: u128| {
         let mut metadata = div_metadata.clone();
-        metadata.content_hash = CryptoHashOf::from(CryptoHash(vec![hash; 32]));
+        metadata.content_hash = CryptoHashOf::from(CryptoHash::from([hash; 32]));
         Signed {
             content: CanisterHttpResponseReceipt {
                 metadata,
@@ -5543,7 +5543,7 @@ fn flexible_error_too_many_rejects_content_hash_mismatch() {
         let entry_ok = flexible_reject_response(callback_id.get(), 0);
         let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
         entry_bad.proof.content.metadata.content_hash =
-            CryptoHashOf::new(CryptoHash(vec![0xFF; 32]));
+            CryptoHashOf::new(CryptoHash::from([0xFF; 32]));
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
@@ -5566,7 +5566,7 @@ fn flexible_error_too_many_rejects_content_hash_mismatch() {
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
                     InvalidCanisterHttpPayloadReason::ContentHashMismatch { metadata_hash: mh, calculated_hash: ch }
                 )
-            )) if mh == CryptoHashOf::new(CryptoHash(vec![0xFF; 32])) && ch != mh
+            )) if mh == CryptoHashOf::new(CryptoHash::from([0xFF; 32])) && ch != mh
         );
     });
 }
@@ -8479,7 +8479,7 @@ fn metadata_share_with_content_size(
 ) -> CanisterHttpResponseShare {
     let metadata = CanisterHttpResponseMetadata {
         id: CallbackId::new(callback_id),
-        content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
+        content_hash: CryptoHashOf::new(CryptoHash::from([0xAB; 32])),
         content_size,
         is_reject: false,
         replica_version: test_replica_version(),
@@ -8490,7 +8490,7 @@ fn metadata_share_with_content_size(
 fn reject_metadata_share(callback_id: u64, signer_node: u64) -> CanisterHttpResponseShare {
     let metadata = CanisterHttpResponseMetadata {
         id: CallbackId::new(callback_id),
-        content_hash: CryptoHashOf::new(CryptoHash(vec![0xCD; 32])),
+        content_hash: CryptoHashOf::new(CryptoHash::from([0xCD; 32])),
         content_size: 50,
         is_reject: true,
         replica_version: test_replica_version(),
@@ -8836,7 +8836,7 @@ fn async_receipt_is_not_repeated_after_a_past_payload_reported_it() {
     let past_payloads = vec![PastPayload {
         height: Height::new(1),
         time: UNIX_EPOCH,
-        block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+        block_hash: CryptoHashOf::from(CryptoHash::for_test()),
         payload: &past,
     }];
 
@@ -9191,7 +9191,7 @@ fn validate_payload_fails_for_an_async_receipt_repeated_from_a_past_payload() {
     let past_payloads = vec![PastPayload {
         height: Height::new(1),
         time: UNIX_EPOCH,
-        block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+        block_hash: CryptoHashOf::from(CryptoHash::for_test()),
         payload: &past,
     }];
 

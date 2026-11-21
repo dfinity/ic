@@ -23,7 +23,7 @@ fn should_produce_deterministic_randomness_from_random_beacon_and_purpose() {
 
     let mut rng = Csprng::from_random_beacon_and_purpose(&random_beacon, &BlockmakerRanking);
 
-    assert_eq!(rng.next_u32(), 1_242_121_839);
+    assert_eq!(rng.next_u32(), 4_028_774_263);
 }
 
 #[test]
@@ -131,7 +131,7 @@ fn fake_random_beacon(height: u64) -> RandomBeacon {
     Signed {
         content: RandomBeaconContent::new(
             Height::from(height),
-            CryptoHashOf::new(CryptoHash(vec![])),
+            CryptoHashOf::new(CryptoHash::for_test()),
             // The random beacon is used as a randomness source, so changing the replica version
             // can affect the output.
             ReplicaVersion::from_str("0.8.0").unwrap(),

@@ -521,7 +521,7 @@ mod tests {
     }
 
     fn gen_content() -> CertificationContent {
-        CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(Vec::new())))
+        CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash::for_test()))
     }
 
     fn fake_share(height: u64, node: u64) -> CertificationMessage {

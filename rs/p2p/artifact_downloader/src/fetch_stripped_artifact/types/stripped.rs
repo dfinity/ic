@@ -132,7 +132,7 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
             canister_http_responses: value
                 .stripped_canister_http_responses
                 .into_iter()
-                .map(|response| CryptoHashOf::new(CryptoHash(response.content_hash)))
+                .map(|response| CryptoHashOf::new(CryptoHash::from(response.content_hash)))
                 .collect(),
         };
 
@@ -158,7 +158,7 @@ impl From<StrippedBlockProposal> for pb::StrippedBlockProposal {
                 .map(
                     |(ingress_message_id, ingress_bytes_hash)| pb::StrippedIngressMessage {
                         stripped: Some(ingress_message_id.into()),
-                        ingress_bytes_hash: ingress_bytes_hash.get().0,
+                        ingress_bytes_hash: ingress_bytes_hash.get().into_vec(),
                     },
                 )
                 .collect(),
@@ -173,7 +173,7 @@ impl From<StrippedBlockProposal> for pb::StrippedBlockProposal {
             stripped_canister_http_responses: canister_http_responses
                 .into_iter()
                 .map(|content_hash| pb::StrippedCanisterHttpResponse {
-                    content_hash: content_hash.get().0,
+                    content_hash: content_hash.get().into_vec(),
                 })
                 .collect(),
         }
@@ -222,7 +222,7 @@ impl From<MaybeStrippedConsensusMessageId> for pb::StrippedConsensusMessageId {
             MaybeStrippedConsensusMessageId::StrippedBlockProposal {
                 unstripped_id,
                 stripped_message_ids_hash,
-            } => (unstripped_id, stripped_message_ids_hash.get().0),
+            } => (unstripped_id, stripped_message_ids_hash.get().into_vec()),
             MaybeStrippedConsensusMessageId::Unstripped(id) => (id, vec![]),
         };
 
@@ -248,7 +248,7 @@ impl TryFrom<pb::StrippedConsensusMessageId> for MaybeStrippedConsensusMessageId
         } else {
             Self::StrippedBlockProposal {
                 unstripped_id,
-                stripped_message_ids_hash: CryptoHashOf::new(CryptoHash(hash)),
+                stripped_message_ids_hash: CryptoHashOf::new(CryptoHash::from(hash)),
             }
         })
     }
@@ -511,7 +511,7 @@ mod tests {
             ]));
         proto.ingress_messages.push(pb::StrippedIngressMessage {
             stripped: Some(other_signed_ingress_id.ingress_message_id.into()),
-            ingress_bytes_hash: other_signed_ingress_id.ingress_bytes_hash.get().0,
+            ingress_bytes_hash: other_signed_ingress_id.ingress_bytes_hash.get().into_vec(),
         });
         assert_eq!(proto.ingress_messages.len(), 2);
 

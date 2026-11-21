@@ -17,7 +17,6 @@ ic-management-canister-types-private = { path = "../../types/management_canister
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-types = { path = "../../types/types" }
-phantom_newtype = { path = "../../phantom_newtype" }
 slog = { workspace = true }
 
 [dev-dependencies]

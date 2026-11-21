@@ -255,7 +255,7 @@ impl Debug for IdKey {
 
 impl IdKey {
     fn new(height: Height, type_key: TypeKey, hash: &CryptoHash) -> Self {
-        let hash_bytes = &hash.0;
+        let hash_bytes = hash.as_ref();
         let len = hash_bytes.len() + 8 + 1;
         let mut bytes: Vec<u8> = vec![0; len];
         bytes[HEIGHT_OFFSET..TYPE_OFFSET].copy_from_slice(&u64::to_be_bytes(height.get()));
@@ -276,7 +276,7 @@ impl IdKey {
     }
 
     fn hash(&self) -> CryptoHash {
-        CryptoHash(self.0[HASH_OFFSET..].to_vec())
+        CryptoHash::from(self.0[HASH_OFFSET..].to_vec())
     }
 
     fn with_type_key(&self, type_key: TypeKey) -> Self {
@@ -2254,10 +2254,9 @@ mod tests {
         ];
 
         let hashes = [
-            CryptoHash(vec![]),
-            CryptoHash(vec![2_u8; 1]),
-            CryptoHash(vec![2_u8; 32]),
-            CryptoHash(vec![2_u8; 128]),
+            CryptoHash::from([0; 32]),
+            CryptoHash::from([2_u8; 32]),
+            CryptoHash::from([u8::MAX; 32]),
         ];
 
         let message_types = [IDkgMessageType::Dealing, IDkgMessageType::EcdsaSigShare];

@@ -355,7 +355,7 @@ impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCon
                     payload.content.content,
                 )),
             }),
-            hash: metadata.content_hash.get().0,
+            hash: metadata.content_hash.get().into_vec(),
             replica_version: metadata.replica_version.into(),
             signatures: signatures
                 .into_iter()
@@ -416,7 +416,7 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
             proof: CanisterHttpResponseProof {
                 metadata: CanisterHttpResponseMetadata {
                     id,
-                    content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(
+                    content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash::from(
                         payload.hash,
                     )),
                     content_size: payload.content_size,
@@ -508,7 +508,7 @@ impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
         pb::CanisterHttpShare {
             metadata: Some(pb::CanisterHttpResponseMetadata {
                 id: metadata.id.get(),
-                content_hash: metadata.content_hash.get().0,
+                content_hash: metadata.content_hash.get().into_vec(),
                 replica_version: metadata.replica_version.into(),
                 content_size: metadata.content_size,
                 is_reject: metadata.is_reject,
@@ -529,7 +529,7 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
             .metadata
             .ok_or(ProxyDecodeError::MissingField("share.metadata"))?;
         let id = CanisterHttpRequestId::new(metadata.id);
-        let content_hash = CryptoHashOf::new(CryptoHash(metadata.content_hash));
+        let content_hash = CryptoHashOf::new(CryptoHash::from(metadata.content_hash));
         let replica_version = ReplicaVersion::try_from(metadata.replica_version)
             .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?;
         let signature = share
@@ -868,9 +868,7 @@ mod tests {
             content: CanisterHttpResponseReceipt {
                 metadata: CanisterHttpResponseMetadata {
                     id: CanisterHttpRequestId::new(2),
-                    content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(vec![
-                        4, 5, 6, 7,
-                    ])),
+                    content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash::for_test()),
                     content_size: 42,
                     is_reject: false,
                     replica_version: ReplicaVersion::try_from("test_replica_version").unwrap(),

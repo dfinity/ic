@@ -33,11 +33,8 @@ fn read_manifest(path: &Path) -> Result<Manifest, String> {
     .map_err(|err| format!("Failed to parse the manifest at {}: {err}", path.display()))?;
     let manifest = Manifest::new(version, files, chunks);
 
-    validate_manifest(
-        &manifest,
-        &CryptoHashOfState::from(CryptoHash(hash.to_vec())),
-    )
-    .map_err(|err| format!("Invalid manifest at {}: {err}", path.display()))?;
+    validate_manifest(&manifest, &CryptoHashOfState::from(CryptoHash::from(hash)))
+        .map_err(|err| format!("Invalid manifest at {}: {err}", path.display()))?;
 
     Ok(manifest)
 }

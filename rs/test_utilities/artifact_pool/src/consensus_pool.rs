@@ -337,9 +337,9 @@ impl TestConsensusPool {
             version: self.replica_version.clone(),
             height,
             subnet_id: self.subnet_id,
-            hash1: CryptoHashOf::new(CryptoHash(vec![1, 2, 3])),
+            hash1: CryptoHashOf::new(CryptoHash::from([1; 32])),
             signature1: BasicSigOf::new(BasicSig(vec![])),
-            hash2: CryptoHashOf::new(CryptoHash(vec![4, 5, 6])),
+            hash2: CryptoHashOf::new(CryptoHash::from([4; 32])),
             signature2: BasicSigOf::new(BasicSig(vec![])),
         }
     }
@@ -381,7 +381,7 @@ impl TestConsensusPool {
         fake_catch_up_package(CatchUpContent::new(
             HashedBlock::new(ic_types::crypto::crypto_hash, block),
             HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon),
-            CryptoHashOf::from(CryptoHash(Vec::new())),
+            CryptoHashOf::from(CryptoHash::for_test()),
             None,
         ))
     }

@@ -119,7 +119,7 @@ fn incomplete_state_for_tests(
     height: Height,
     state: DownloadState,
 ) -> IncompleteState {
-    let hash = CryptoHashOfState::from(CryptoHash(vec![0; 32]));
+    let hash = CryptoHashOfState::from(CryptoHash::from([0; 32]));
     let mut result = IncompleteState::try_new(
         env.log.clone(),
         height,

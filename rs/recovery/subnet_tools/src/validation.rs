@@ -97,7 +97,7 @@ fn validate_cup_and_extract_state_hash(
         block_time.as_nanos_since_unix_epoch()
     );
 
-    let state_hash = hex::encode(&cup.content.state_hash.get_ref().0);
+    let state_hash = hex::encode(cup.content.state_hash.get_ref());
     info!(logger, "State hash from the CUP: {}", state_hash);
 
     ic_crypto_utils_threshold_sig::verify_combined(

@@ -1267,23 +1267,23 @@ mod tests {
 
     use super::*;
 
-    fn make_certification(height: u64, hash: Vec<u8>) -> CertificationMessage {
+    fn make_certification(height: u64, hash: u8) -> CertificationMessage {
         CertificationMessage::Certification(Certification {
             height: Height::from(height),
             height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
-                content: CertificationContent::new(CryptoHash(hash).into()),
+                content: CertificationContent::new(CryptoHash::from([hash; 32]).into()),
                 signature: ThresholdSignature::fake(),
             },
         })
     }
 
-    fn make_share(height: u64, hash: Vec<u8>, node_id: u64) -> CertificationMessage {
+    fn make_share(height: u64, hash: u8, node_id: u64) -> CertificationMessage {
         CertificationMessage::CertificationShare(CertificationShare {
             height: Height::from(height),
             height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
-                content: CertificationContent::new(CryptoHash(hash).into()),
+                content: CertificationContent::new(CryptoHash::from([hash; 32]).into()),
                 signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
             },
         })
@@ -1333,7 +1333,7 @@ mod tests {
         let logger = crate::util::make_logger();
         let (tmp, pool1, _pool2) = setup_merge_certs(&logger);
         let work_dir = tmp.path().to_path_buf();
-        pool1.validated.insert(make_certification(1, vec![1, 2, 3]));
+        pool1.validated.insert(make_certification(1, 1));
 
         MergeCertificationPoolsStep {
             logger: logger.clone(),
@@ -1366,26 +1366,26 @@ mod tests {
 
         // Add two different certifications for height 1 to both pools,
         // only one of them should be kept after the merge.
-        let cert1 = make_certification(1, vec![1, 2, 3]);
-        let cert1_2 = make_certification(1, vec![4, 5, 6]);
+        let cert1 = make_certification(1, 1);
+        let cert1_2 = make_certification(1, 2);
         pool1.validated.insert(cert1);
         pool2.validated.insert(cert1_2);
 
         // Add the same certification for height 2 to both pools,
         // it should only exists in the merged pool once.
-        let cert2 = make_certification(2, vec![1, 2, 3]);
+        let cert2 = make_certification(2, 1);
         pool1.validated.insert(cert2.clone());
         pool2.validated.insert(cert2);
 
         // Add two more certifications for heights 3 and 4, one to each pool.
-        let cert3 = make_certification(3, vec![1, 2, 3]);
-        let cert4 = make_certification(4, vec![1, 2, 3]);
+        let cert3 = make_certification(3, 1);
+        let cert4 = make_certification(4, 1);
         pool1.validated.insert(cert4);
         pool2.validated.insert(cert3);
 
         // Add a share at height 3 to one pool. It should not be added to the
         // merged pool as it is lower than the highest full certification (4).
-        let share3 = make_share(3, vec![1], 1);
+        let share3 = make_share(3, 8, 1);
         pool1.validated.insert(share3);
 
         step.exec().expect("Failed to execute step.");
@@ -1425,16 +1425,16 @@ mod tests {
         };
 
         // Add a full certification at height 4.
-        let cert4 = make_certification(4, vec![1, 2, 3]);
+        let cert4 = make_certification(4, 1);
 
         // Shares below or equal to the highest full share should be ignored.
-        let share3 = make_share(3, vec![3], 1);
-        let share4 = make_share(4, vec![4], 2);
+        let share3 = make_share(3, 3, 1);
+        let share4 = make_share(4, 4, 2);
 
         // These shares should be included in the new pool.
-        let share5 = make_share(5, vec![5], 1);
-        let share6 = make_share(6, vec![6], 1);
-        let share6_2 = make_share(6, vec![6, 2], 2);
+        let share5 = make_share(5, 5, 1);
+        let share6 = make_share(6, 6, 1);
+        let share6_2 = make_share(6, 7, 2);
 
         pool1.validated.insert(cert4);
         pool1.validated.insert(share3);

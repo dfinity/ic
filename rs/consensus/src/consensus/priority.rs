@@ -142,7 +142,9 @@ mod tests {
 
     fn cup_share_id_at(height: Height) -> ConsensusMessageId {
         ConsensusMessageId {
-            hash: ConsensusMessageHash::CatchUpPackageShare(CryptoHashOf::new(CryptoHash(vec![]))),
+            hash: ConsensusMessageHash::CatchUpPackageShare(CryptoHashOf::new(
+                CryptoHash::for_test(),
+            )),
             height,
         }
     }
@@ -173,9 +175,9 @@ mod tests {
                 test_replica_version(),
             ));
             let equivocation_proof_id = ConsensusMessageId {
-                hash: ConsensusMessageHash::EquivocationProof(CryptoHashOf::new(CryptoHash(
-                    vec![],
-                ))),
+                hash: ConsensusMessageHash::EquivocationProof(CryptoHashOf::new(
+                    CryptoHash::for_test(),
+                )),
                 height: block.height(),
             };
             assert_eq!(bouncer(&beacon.get_id()), MaybeWantsLater);
@@ -185,7 +187,9 @@ mod tests {
 
             // Regardless of bounds, we should always fetch CUPs.
             let cup_id = ConsensusMessageId {
-                hash: ConsensusMessageHash::CatchUpPackage(CryptoHashOf::new(CryptoHash(vec![]))),
+                hash: ConsensusMessageHash::CatchUpPackage(CryptoHashOf::new(
+                    CryptoHash::for_test(),
+                )),
                 height: Height::new(100000000),
             };
             assert_eq!(bouncer(&cup_id), Wants);

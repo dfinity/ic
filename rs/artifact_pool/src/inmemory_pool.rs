@@ -325,7 +325,7 @@ pub mod test {
         Signed {
             content: NotarizationContent::new(
                 Height::from(height),
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 ReplicaVersion::try_from("1.0").unwrap(),
             ),
             signature: MultiSignatureShare::fake(node_test_id(signer)),

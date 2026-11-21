@@ -1607,7 +1607,7 @@ mod tests {
         proto
             .stripped_canister_http_responses
             .push(pb::StrippedCanisterHttpResponse {
-                content_hash: ic_types::crypto::crypto_hash(&response).get().0,
+                content_hash: ic_types::crypto::crypto_hash(&response).get().into_vec(),
             });
         assert_eq!(proto.stripped_canister_http_responses.len(), 2);
         let stripped = StrippedBlockProposal::try_from(proto).unwrap();
@@ -2185,7 +2185,7 @@ mod tests {
     async fn assemble_accepts_unstripped_finalization() {
         let message = ConsensusMessage::Finalization(Finalization::fake(FinalizationContent::new(
             Height::new(100),
-            CryptoHashOf::from(CryptoHash(vec![])),
+            CryptoHashOf::from(CryptoHash::for_test()),
             test_replica_version(),
         )));
         let stripped = message.clone().strip();

@@ -717,7 +717,7 @@ impl
             prev_state_hash: metadata
                 .prev_state_hash
                 .as_ref()
-                .map(|h| h.get_ref().0.clone()),
+                .map(|h| h.get_ref().as_ref().to_vec()),
         }
     }
 }
