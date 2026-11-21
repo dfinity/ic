@@ -996,6 +996,7 @@ fn inject_heap_bulk_check_fn(
         instructions: Instructions::new(instructions_with_offsets, 0, false),
         num_instructions,
         name: None,
+        local_names: None,
     };
     let mut builder = FunctionBuilder::new(&operand_types, &operand_types);
     builder.body = body;
@@ -1213,6 +1214,7 @@ fn export_additional_symbols<'a>(
         instructions: Instructions::new(instructions_with_offsets, 0, false),
         num_instructions,
         name: None,
+        local_names: None,
     };
 
     let mut builder = FunctionBuilder::new(&[DataType::I64], &[DataType::I64]);
@@ -1269,7 +1271,8 @@ fn export_additional_symbols<'a>(
                 offset: 0,
                 // We assume the bytemap for stable memory is always
                 // inserted directly after the stable memory.
-                memory: stable_memory_index + 1,
+                target: wirm::wasmparser::MemArgTarget::Memory(stable_memory_index + 1),
+                ordering: None,
             },
         },
         LocalTee { local_index: tmp },
@@ -1319,6 +1322,7 @@ fn export_additional_symbols<'a>(
         instructions: Instructions::new(instructions_with_offsets, 0, false),
         num_instructions,
         name: None,
+        local_names: None,
     };
     let mut builder = FunctionBuilder::new(
         &[DataType::I32, DataType::I32],
