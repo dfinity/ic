@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -8,6 +8,7 @@ rust_binary(
     name = "sync-with-released-nervous-system-wasms",
     srcs = [
         "src/main.rs",
+        "src/main_tests.rs",
     ],
     args = ["$(location //:mainnet-canister-revisions.json) $(location @crate_index//:ic-wasm__ic-wasm)"],
     data = [
@@ -29,5 +30,13 @@ rust_binary(
         "@crate_index//:serde_json",
         "@crate_index//:sha2",
         "@crate_index//:tokio",
+    ],
+)
+
+rust_test(
+    name = "sync-with-released-nervous-system-wasms_test",
+    crate = ":sync-with-released-nervous-system-wasms",
+    deps = [
+        "@crate_index//:http",
     ],
 )
