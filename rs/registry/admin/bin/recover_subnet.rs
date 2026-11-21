@@ -11,7 +11,7 @@ use ic_canister_client::{Agent, Sender};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_types::{NodeId, PrincipalId, SubnetId};
+use ic_types::{NodeId, PrincipalId, SubnetId, crypto::CryptoHash};
 use registry_canister::mutations::do_recover_subnet;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -114,6 +114,12 @@ pub(crate) struct ProposeToUpdateRecoveryCupCmd {
     pub max_parallel_pre_signature_transcripts_in_creation: Option<u32>,
 }
 
+fn state_hash_from_hex(state_hash: &str) -> Result<CryptoHash, String> {
+    let bytes = hex::decode(state_hash).map_err(|err| err.to_string())?;
+    let hash = CryptoHash::try_from(bytes).map_err(|err| err.to_string())?;
+    Ok(hash)
+}
+
 impl ProposalTitle for ProposeToUpdateRecoveryCupCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
@@ -188,8 +194,9 @@ impl ProposeToUpdateRecoveryCupCmd {
         &self,
         subnet_id: SubnetId,
     ) -> do_recover_subnet::RecoverSubnetPayload {
-        let state_hash = hex::decode(self.state_hash.clone())
-            .unwrap_or_else(|err| panic!("The provided state hash was invalid: {err}"));
+        let state_hash = state_hash_from_hex(&self.state_hash)
+            .unwrap_or_else(|err| panic!("The provided state hash was invalid: {err}"))
+            .0;
 
         let replacement_nodes = self
             .replacement_nodes
@@ -268,8 +275,9 @@ mod tests {
             initial_dkg_subnet_id: None,
             height,
             time_ns,
-            state_hash: hex::decode(state_hash)
-                .unwrap_or_else(|err| panic!("Invalid state hash: {err}")),
+            state_hash: state_hash_from_hex(&state_hash)
+                .unwrap_or_else(|err| panic!("Invalid state hash: {err}"))
+                .0,
             replacement_nodes: None,
             registry_store_uri: None,
             chain_key_config: None,
@@ -418,6 +426,16 @@ mod tests {
             cmd.new_payload_for_subnet(subnet_id).initial_dkg_subnet_id,
             Some(SubnetId::from(initial_dkg_subnet_id))
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "expected a blob of length 32, got 31")]
+    fn should_panic_when_state_hash_is_not_32_bytes_long() {
+        let subnet_id = SubnetId::from(PrincipalId::new_user_test_id(1));
+        let state_hash = "5d".repeat(31);
+        let cmd = empty_propose_to_recover_subnet_cmd(subnet_id, 1, 2, state_hash);
+
+        let _ = cmd.new_payload_for_subnet(subnet_id);
     }
 
     #[test]
