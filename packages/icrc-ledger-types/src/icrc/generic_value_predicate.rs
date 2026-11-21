@@ -60,7 +60,7 @@ impl ValuePredicateFailures {
             And(failures) => {
                 writeln!(
                     f,
-                    "{:width$}Expected all of the following validators to be successfull:",
+                    "{:width$}Expected all of the following validators to be successful:",
                     "",
                     width = indent
                 )?;
@@ -71,7 +71,7 @@ impl ValuePredicateFailures {
             Or(failures) => {
                 writeln!(
                     f,
-                    "{:width$}Expected at least one of the following validators to be successfull:",
+                    "{:width$}Expected at least one of the following validators to be successful:",
                     "",
                     width = indent
                 )?;
