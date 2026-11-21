@@ -71,6 +71,24 @@ system_test_nns(
 )
 
 system_test(
+    name = "certification_compatibility_test",
+    cpus = MIN_LOCAL_CPUS,  # Empty setup (|_| ()), no VMs deployed.
+    env = MAINNET_ENV,
+    guestos = False,  # The setup is `|_| ()` so no GuestOS image is ever booted.
+    # TODO: Add MAINNET_TYPES_TEST_RUNTIME_DEPS once both mainnet versions keep the certification
+    # pool across replica versions (see `MAINNET_VERSIONS_KEEP_CERTIFICATION_POOL`).
+    runtime_deps = {
+        "TYPES_TEST_PATH": "//rs/types/types:types_test",
+    },
+    deps = [
+        # Keep sorted.
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test(
     name = "cup_compatibility_test",
     cpus = MIN_LOCAL_CPUS,  # Empty setup (|_| ()), no VMs deployed.
     env = MAINNET_ENV,

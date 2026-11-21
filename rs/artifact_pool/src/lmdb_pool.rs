@@ -669,6 +669,82 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         Ok(artifact_ids)
     }
 
+    /// Remove all index entries for the given [`TypeKey`] with heights
+    /// greater than the given [`HeightKey`]. Update the type's meta table
+    /// if necessary. Return the [`ArtifactKey`]s of deleted entries.
+    fn tx_purge_index_above(
+        &self,
+        tx: &mut RwTransaction,
+        type_key: TypeKey,
+        height_key: HeightKey,
+    ) -> lmdb::Result<Vec<ArtifactKey>> {
+        let mut artifact_ids = Vec::new();
+        // only delete if meta exists
+        if let Some(meta) = self.get_meta(tx, &type_key) {
+            // nothing to delete if max height is not higher
+            if meta.max <= height_key {
+                return Ok(artifact_ids);
+            }
+
+            let index_db = self.get_index_db(&type_key);
+            {
+                let mut cursor = tx.open_rw_cursor(index_db)?;
+
+                while let Some((key, id)) = cursor.iter().next().transpose()? {
+                    if HeightKey::from(key) <= height_key {
+                        continue;
+                    }
+                    artifact_ids.push(ArtifactKey {
+                        type_key,
+                        height_key: HeightKey::from(key),
+                        id_key: IdKey::from(id),
+                    });
+                    cursor.del(WriteFlags::empty())?;
+                }
+            }
+
+            // update meta
+            let meta = tx_get_key(tx, index_db, GetOp::Last)?.map(|key| Meta {
+                min: meta.min,
+                max: key,
+            });
+
+            match meta {
+                None => tx.del(self.meta, &type_key, None)?,
+                Some(meta) => self.update_meta(tx, &type_key, &meta)?,
+            }
+        }
+
+        Ok(artifact_ids)
+    }
+
+    /// Remove all artifacts with heights greater than the given [`HeightKey`].
+    /// Return [`ArtifactKey`]s of the removed artifacts.
+    fn tx_purge_above(
+        &self,
+        tx: &mut RwTransaction,
+        height_key: HeightKey,
+    ) -> lmdb::Result<Vec<ArtifactKey>> {
+        let mut purged = Vec::new();
+        // delete from all index tables
+        for &type_key in Artifact::TYPE_KEYS {
+            purged.append(&mut self.tx_purge_index_above(tx, type_key, height_key)?);
+        }
+
+        // delete from artifacts table
+        let mut cursor = tx.open_rw_cursor(self.artifacts)?;
+        let height = Height::from(height_key);
+
+        while let Some((key, _)) = cursor.iter().next().transpose()? {
+            if IdKey::from(key).height() <= height {
+                continue;
+            }
+            cursor.del(WriteFlags::empty())?;
+        }
+
+        Ok(purged)
+    }
+
     /// Remove all artifacts with heights less than the given [`HeightKey`].
     /// Return [`ArtifactKey`]s of the removed artifacts.
     fn tx_purge_below(
@@ -1426,14 +1502,13 @@ impl PoolArtifact for CertificationMessage {
         value: Self::ObjectType,
         artifacts: Database,
         tx: &mut RwTransaction,
-        log: &ReplicaLogger,
+        _log: &ReplicaLogger,
     ) -> lmdb::Result<()> {
-        let bytes = log_err!(
-            bincode::serialize::<Self::ObjectType>(&value),
-            log,
-            "CertificationArtifact::save serialize"
-        )
-        .ok_or(lmdb::Error::Panic)?;
+        // Certification artifacts are protobuf-encoded, as the certification pool is kept
+        // across replica versions. Neighbouring replica versions must thus be able to decode
+        // each other's certification messages, which is checked by
+        // `//rs/tests/consensus/orchestrator:certification_compatibility_test`.
+        let bytes = pb::CertificationMessage::from(value).encode_to_vec();
         tx.put(artifacts, &key, &bytes, WriteFlags::empty())
     }
 
@@ -1445,10 +1520,16 @@ impl PoolArtifact for CertificationMessage {
         log: &ReplicaLogger,
     ) -> lmdb::Result<T> {
         let bytes = tx.get(artifacts, &key)?;
-        let msg = log_err!(
-            bincode::deserialize::<Self::ObjectType>(bytes),
+        let protobuf = log_err!(
+            pb::CertificationMessage::decode(bytes),
             log,
-            "CertificationArtifact::load_as deserialize"
+            "CertificationArtifact::load_as protobuf decoding"
+        )
+        .ok_or(lmdb::Error::Panic)?;
+        let msg = log_err!(
+            CertificationMessage::try_from(protobuf),
+            log,
+            "CertificationArtifact::load_as protobuf conversion"
         )
         .ok_or(lmdb::Error::Panic)?;
         log_err!(
@@ -1467,7 +1548,7 @@ impl PersistentHeightIndexedPool<CertificationMessage> {
         log: ReplicaLogger,
     ) -> PersistentHeightIndexedPool<CertificationMessage> {
         let mut path = config.persistent_pool_validated_persistent_db_path;
-        path.push("certification");
+        path.push(crate::CERTIFICATION_POOL_DIR);
         std::fs::create_dir_all(path.as_path()).ok();
         PersistentHeightIndexedPool::new(path.as_path(), read_only, log)
     }
@@ -1499,6 +1580,30 @@ impl PersistentHeightIndexedPool<CertificationMessage> {
             .collect();
         tx.commit()?;
         Ok(purged)
+    }
+
+    fn purge_above_height(&self, height: Height) -> lmdb::Result<Vec<CertificationMessageId>> {
+        let mut tx = self.db_env.begin_rw_txn()?;
+        let purged = self
+            .tx_purge_above(&mut tx, HeightKey::from(height))?
+            .into_iter()
+            .map(CertificationMessageId::try_from)
+            .flat_map(|r| log_err!(r, self.log, "CertificationMessage::purge_above_height"))
+            .collect();
+        tx.commit()?;
+        Ok(purged)
+    }
+
+    /// Remove all artifacts with heights strictly greater than the given [`Height`].
+    /// Return the [`CertificationMessageId`]s of the removed artifacts.
+    pub fn purge_above(&self, height: Height) -> Vec<CertificationMessageId> {
+        match self.purge_above_height(height) {
+            Ok(purged) => purged,
+            err => {
+                log_err!(err, self.log, "CertificationArtifact::purge_above");
+                Vec::new()
+            }
+        }
     }
 }
 
