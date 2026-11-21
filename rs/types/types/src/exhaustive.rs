@@ -589,9 +589,12 @@ impl ExhaustiveSet for BitcoinAdapterResponse {
 
 impl ExhaustiveSet for CryptoHash {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let mut data = [0; 32];
-        rng.fill_bytes(&mut data);
-        vec![Self(data.to_vec())]
+        // Besides random hashes, artifacts contain the empty hash, which stands in for hashes
+        // that don't exist, e.g. the parents of the block and the random beacon of a
+        // genesis/recovery/post-split CUPs, and the state hash of genesis CUPs.
+        let mut random = vec![0; 32];
+        rng.fill_bytes(&mut random);
+        vec![Self(random), Self(vec![])]
     }
 }
 
@@ -1070,7 +1073,11 @@ mod tests {
 
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
-    use crate::{canister_http::CanisterHttpResponse, consensus::ConsensusMessage};
+    use crate::{
+        canister_http::CanisterHttpResponse,
+        consensus::{ConsensusMessage, catchup::CatchUpContentProtobufBytes},
+        crypto::Signable,
+    };
 
     use super::*;
 
@@ -1116,6 +1123,19 @@ mod tests {
                         cup.block.as_ref().payload.as_ref()
                     );
                 }
+                // A replica verifies the signature of a CUP over the bytes it received, and uses
+                // the deserialized content otherwise. Both must therefore have the same signed
+                // bytes, which also covers the parts the integrity check doesn't, like the state
+                // hash.
+                let received = pb::CatchUpPackage {
+                    content: bytes,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    cup.as_signed_bytes(),
+                    CatchUpContentProtobufBytes::from(&received).as_signed_bytes(),
+                    "Signed bytes of file {path:?} changed after deserialization"
+                );
             }
         }
     }
