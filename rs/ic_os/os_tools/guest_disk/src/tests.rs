@@ -980,7 +980,6 @@ fn test_upgrade_removes_stale_keyslots() {
         fixture.store_device_path(),
         &LuksHeaderLocation::Detached(fixture.store_header_path()),
         STALE_KEY,
-        guest_disk::encryption_sector_size(Partition::Store),
     )
     .unwrap();
     crypt_device
@@ -1018,7 +1017,6 @@ fn test_rekey_migrates_legacy_keyslot_and_token_positions() {
         fixture.store_device_path(),
         &LuksHeaderLocation::Detached(fixture.store_header_path()),
         STALE_KEY,
-        guest_disk::encryption_sector_size(Partition::Store),
     )
     .unwrap();
     crypt_device
@@ -1104,19 +1102,6 @@ fn test_cannot_open_store_when_no_key_works() {
     fixture
         .can_open_store()
         .expect_err("no key should open the device");
-}
-
-#[test]
-fn test_format_encrypts_store_in_4_kib_sectors() {
-    for sev_enabled in [true, false] {
-        let fixture = TestFixture::new(sev_enabled);
-        fixture.store_partition().format().unwrap();
-        let mut crypt_device = fixture.store_partition().open_crypt_device();
-        assert_eq!(
-            libcryptsetup_rs::get_sector_size(Some(&mut crypt_device)),
-            4096
-        );
-    }
 }
 
 #[test]

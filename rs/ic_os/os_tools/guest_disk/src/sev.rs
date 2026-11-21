@@ -30,7 +30,7 @@ use crate::crypt::{
     destroy_keyslots_except_first, format_luks2_device, open_luks2_device,
     read_single_keyslot_token, write_keyslot_token,
 };
-use crate::{DiskEncryption, Partition, activate_flags, encryption_sector_size};
+use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result, bail};
 use attestation::attestation_report::AttestationReportExt;
 use config_types::GuestVMType;
@@ -120,7 +120,6 @@ impl DiskEncryption for SevDiskEncryption {
             device_path,
             &self.header_location(partition),
             key.as_bytes(),
-            encryption_sector_size(partition),
         )
         .context("Failed to format partition")?;
         write_keyslot_token(&mut crypt_device, sev_metadata)
