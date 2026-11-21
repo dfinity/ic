@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "738dbbb44adb6b9b6772cfa0684d02b1e1d3d495f68400e49fbc28c70c781778",
+  "checksum": "b526d903db5cbd1f986c642a9912f91569bd93d5e88314d1f5ac180becaa608e",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18537,7 +18537,7 @@
             "target": "static_assertions"
           },
           {
-            "id": "strum 0.26.3",
+            "id": "strum 0.28.0",
             "target": "strum"
           },
           {
@@ -18816,7 +18816,7 @@
             "target": "rust_decimal_macros"
           },
           {
-            "id": "strum_macros 0.26.4",
+            "id": "strum_macros 0.28.0",
             "target": "strum_macros"
           },
           {
@@ -66971,8 +66971,8 @@
     "socks5-impl 0.6.2",
     "ssh2 0.9.7",
     "static_assertions 1.1.0",
-    "strum 0.26.3",
-    "strum_macros 0.26.4",
+    "strum 0.28.0",
+    "strum_macros 0.28.0",
     "stubborn-io 0.3.6",
     "subtle 2.6.1",
     "syn 3.0.10",

@@ -3070,7 +3070,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "sev_guest",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "tracing",
  "url",
@@ -3086,7 +3086,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.21",
  "url",
 ]
@@ -5611,7 +5611,7 @@ dependencies = [
  "clap",
  "ic-sys",
  "regex",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.21",
 ]
@@ -5790,7 +5790,7 @@ dependencies = [
  "prometheus",
  "regex",
  "sev_host",
- "strum_macros 0.26.4",
+ "strum_macros 0.28.0",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
@@ -6511,8 +6511,8 @@ dependencies = [
  "registry-canister",
  "serde",
  "serde_json",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "tokio",
  "url",
@@ -6667,7 +6667,7 @@ dependencies = [
  "slog-async",
  "slog-envlogger",
  "slog-term",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
 ]
 
@@ -6723,8 +6723,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
 ]
 
@@ -6916,7 +6916,7 @@ dependencies = [
  "serde_yaml",
  "sha3 0.10.9",
  "simple_moving_average",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.21",
  "tikv-jemalloc-ctl",
@@ -7406,8 +7406,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "test-strategy",
 ]
@@ -7605,8 +7605,8 @@ dependencies = [
 name = "ic-certification-version"
 version = "0.9.0"
 dependencies = [
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -7816,8 +7816,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "thiserror 2.0.21",
  "time",
@@ -7854,8 +7854,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -7949,8 +7949,8 @@ dependencies = [
  "slog-async",
  "slog-envlogger",
  "slog-term",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "tokio",
 ]
@@ -8021,7 +8021,7 @@ dependencies = [
  "prost",
  "rayon",
  "slog",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -8132,7 +8132,7 @@ dependencies = [
  "rand 0.8.8",
  "rayon",
  "slog",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -8319,8 +8319,8 @@ dependencies = [
  "serde",
  "slog",
  "static_assertions",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
@@ -8464,7 +8464,7 @@ dependencies = [
  "proptest-derive",
  "serde",
  "serde_cbor",
- "strum 0.26.3",
+ "strum 0.28.0",
  "wycheproof",
  "zeroize",
 ]
@@ -8587,8 +8587,8 @@ dependencies = [
  "serde_cbor",
  "slog",
  "slog-async",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "stubborn-io",
  "tarpc",
  "tempfile",
@@ -8620,7 +8620,7 @@ dependencies = [
  "ic-types",
  "paste",
  "proptest",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -8661,8 +8661,8 @@ version = "0.9.0"
 dependencies = [
  "ic-metrics",
  "prometheus",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -8706,8 +8706,8 @@ name = "ic-crypto-internal-test-vectors"
 version = "0.9.0"
 dependencies = [
  "hex",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -8733,7 +8733,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum_macros 0.26.4",
+ "strum_macros 0.28.0",
  "subtle",
  "zeroize",
 ]
@@ -8766,8 +8766,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "subtle",
  "zeroize",
 ]
@@ -8818,8 +8818,8 @@ dependencies = [
  "phantom_newtype",
  "serde",
  "serde_cbor",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "thiserror 2.0.21",
  "zeroize",
 ]
@@ -8883,8 +8883,8 @@ dependencies = [
  "ic-types-test-utils",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -8924,7 +8924,7 @@ dependencies = [
  "ic-types",
  "rand 0.8.8",
  "simple_asn1",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -9013,8 +9013,8 @@ dependencies = [
  "ic-types",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -9562,8 +9562,8 @@ dependencies = [
  "serde_bytes",
  "slog",
  "slog-term",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "target-lexicon",
  "tempfile",
  "wasm-encoder 0.254.2",
@@ -9609,8 +9609,8 @@ dependencies = [
  "ic-heap-bytes",
  "regex-lite",
  "serde",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -9712,7 +9712,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "slog",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "test-strategy",
  "tokio",
@@ -10223,7 +10223,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-test-utilities-registry",
  "ic-types",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -10381,8 +10381,8 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "serde_json",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "tokio",
  "tokio-rusqlite",
@@ -10596,7 +10596,7 @@ dependencies = [
  "rosetta-core",
  "serde_bytes",
  "serde_json",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -10747,8 +10747,8 @@ dependencies = [
  "phantom_newtype",
  "proptest",
  "serde",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "thiserror 2.0.21",
  "tower",
 ]
@@ -10757,7 +10757,7 @@ dependencies = [
 name = "ic-interfaces-adapter-client"
 version = "0.9.0"
 dependencies = [
- "strum_macros 0.26.4",
+ "strum_macros 0.28.0",
  "thiserror 2.0.21",
 ]
 
@@ -11116,8 +11116,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "tokio",
  "url",
@@ -11195,8 +11195,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -11354,8 +11354,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "tokio",
 ]
@@ -12173,8 +12173,8 @@ dependencies = [
  "rust_decimal_macros",
  "serde",
  "serde_bytes",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "tla_instrumentation",
  "tla_instrumentation_proc_macros",
@@ -12200,8 +12200,8 @@ dependencies = [
  "prost",
  "serde",
  "serde_bytes",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -12480,7 +12480,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "tokio",
  "wat",
@@ -12809,7 +12809,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
 ]
 
@@ -12970,8 +12970,8 @@ dependencies = [
  "slog",
  "slog-async",
  "slog-term",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "tokio",
  "url",
@@ -13139,8 +13139,8 @@ dependencies = [
  "ic-types",
  "rand 0.8.8",
  "serde",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -13341,8 +13341,8 @@ dependencies = [
  "candid",
  "ic-protobuf",
  "serde",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -13438,7 +13438,7 @@ dependencies = [
  "serde_json",
  "slog",
  "slog-async",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "time",
  "tokio",
@@ -13655,8 +13655,8 @@ dependencies = [
  "serde",
  "serde_cbor",
  "static_assertions",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "test-strategy",
 ]
@@ -13754,8 +13754,8 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "serde_json",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "test-strategy",
  "tokio",
@@ -14028,8 +14028,8 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "sns-treasury-manager",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
@@ -14052,8 +14052,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -14686,7 +14686,7 @@ dependencies = [
  "scoped_threadpool",
  "serde",
  "serde_bytes",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "test-strategy",
  "tokio",
@@ -14775,8 +14775,8 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "tokio",
  "url",
@@ -14812,8 +14812,8 @@ dependencies = [
  "proxy_canister",
  "serde",
  "slog",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "url",
 ]
 
@@ -15099,7 +15099,7 @@ dependencies = [
  "phantom_newtype",
  "prost",
  "serde",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -15160,8 +15160,8 @@ dependencies = [
  "num-traits",
  "prometheus",
  "slog",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "tokio",
  "wat",
@@ -15292,7 +15292,7 @@ dependencies = [
  "proptest",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -15541,8 +15541,8 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "serde_with",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "thiserror 2.0.21",
 ]
 
@@ -15556,8 +15556,8 @@ dependencies = [
  "ic-utils-thousands",
  "serde",
  "serde_cbor",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -15568,7 +15568,7 @@ dependencies = [
  "ic-types",
  "ic-types-cycles",
  "proptest",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -15726,8 +15726,8 @@ dependencies = [
  "ic-types",
  "rand 0.8.8",
  "simple_asn1",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -15754,7 +15754,7 @@ dependencies = [
  "ic-validator",
  "ic-validator-http-request-test-utils",
  "rand 0.8.8",
- "strum 0.26.3",
+ "strum 0.28.0",
  "time",
 ]
 
@@ -16378,7 +16378,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum_macros 0.26.4",
+ "strum_macros 0.28.0",
  "tempfile",
 ]
 
@@ -16469,8 +16469,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "sha2 0.10.9",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "time",
 ]
 
@@ -18030,7 +18030,7 @@ dependencies = [
  "rejoin-test-lib",
  "serde_json",
  "slog",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "tokio",
  "xnet-test",
@@ -19262,8 +19262,8 @@ dependencies = [
  "sev_guest",
  "slog",
  "slog-async",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "tokio",
  "tokio-rustls",
@@ -19881,8 +19881,8 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "slog",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
@@ -19990,7 +19990,7 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "slog",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "time",
  "tokio",
@@ -20886,7 +20886,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.21",
  "uuid",
 ]
@@ -21182,8 +21182,8 @@ dependencies = [
  "rstest",
  "serde",
  "serde_json",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tempfile",
  "tokio",
  "url",
