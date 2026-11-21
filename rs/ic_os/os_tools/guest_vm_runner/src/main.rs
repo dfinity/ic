@@ -968,11 +968,18 @@ mod tests {
 
     impl TestServiceInstance {
         async fn wait_for_systemd_ready(&mut self) {
+            self.wait_for_systemd_ready_count(1).await;
+        }
+
+        /// Waits until the service has notified systemd `count` times that it's ready. The service
+        /// notifies systemd every time it starts the VM, so `count = 2` means that the VM was
+        /// restarted once.
+        async fn wait_for_systemd_ready_count(&mut self, count: u32) {
             tokio::select! {
                 biased;
-                    _ = self.systemd_notifier.await_ready() => {/*success*/},
+                    _ = self.systemd_notifier.await_ready_count(count) => {/*success*/},
                 result = &mut self.task => {
-                    panic!("{} stopped before becoming ready. Status: {result:?}", self.vm_domain_name);
+                    panic!("{} stopped before becoming ready {count} time(s). Status: {result:?}", self.vm_domain_name);
                 }
             }
         }
@@ -1276,8 +1283,10 @@ mod tests {
         // Kill the VM
         service.get_domain().destroy_flags(0).unwrap();
 
-        // Assert that the VM is running again after a short delay
-        assert_with_retry(|| service.check_vm_running()).await;
+        // Assert that the VM is restarted. Wait for the service to report the restart instead of
+        // polling with a timeout: a stalled CI worker can delay the restart by many seconds.
+        service.wait_for_systemd_ready_count(2).await;
+        service.check_vm_running().unwrap();
     }
 
     #[tokio::test]
@@ -1290,12 +1299,10 @@ mod tests {
         // Suspend the VM, as QEMU does on an invalid VMCB
         service.get_domain().suspend().unwrap();
 
-        // Assert that the VM is restarted after STUCK_STATE_TIMEOUT is hit
-        assert_with_retry_timeout(
-            || service.check_vm_running(),
-            Duration::from_secs(5) + STUCK_STATE_TIMEOUT,
-        )
-        .await;
+        // Assert that the VM is restarted after STUCK_STATE_TIMEOUT is hit (see test_vm_killed for
+        // why this waits for the service instead of polling with a timeout)
+        service.wait_for_systemd_ready_count(2).await;
+        service.check_vm_running().unwrap();
     }
 
     #[tokio::test]
