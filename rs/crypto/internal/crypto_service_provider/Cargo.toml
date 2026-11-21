@@ -10,7 +10,6 @@ documentation.workspace = true
 base64 = { workspace = true }
 bincode = { workspace = true }
 bytes = { workspace = true }
-educe = "0.5"
 futures = { workspace = true }
 hex = { workspace = true }
 ic-adapter-metrics-client = { path = "../../../monitoring/adapter_metrics/client" }

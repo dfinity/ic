@@ -3947,7 +3947,6 @@ dependencies = [
  "directories-next",
  "duration-string",
  "ed25519-dalek",
- "educe 0.5.11",
  "erased-serde",
  "escargot",
  "ethnum",

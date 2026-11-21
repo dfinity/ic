@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "f8c81e0f97c8aece5d8c83fa74ee9566c1db6e53636a5221d5f5d1c0fe59e803",
+  "checksum": "45f4b96fc62da19e01b14d4715a4f11bd316a72faf755409c813296086d0cfbf",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18804,10 +18804,6 @@
             "target": "derive_new"
           },
           {
-            "id": "educe 0.5.11",
-            "target": "educe"
-          },
-          {
             "id": "indoc 2.0.8",
             "target": "indoc"
           },
@@ -19787,19 +19783,8 @@
     "educe 0.5.11": {
       "common_attrs": {
         "crate_features": [
-          "Clone",
-          "Copy",
           "Debug",
-          "Default",
-          "Deref",
-          "DerefMut",
-          "Eq",
-          "Hash",
-          "Into",
-          "Ord",
-          "PartialEq",
-          "PartialOrd",
-          "default"
+          "Default"
         ],
         "deps": [
           {
@@ -66800,7 +66785,6 @@
     "directories-next 2.0.0",
     "duration-string 0.5.3",
     "ed25519-dalek 2.2.0",
-    "educe 0.5.11",
     "erased-serde 0.3.31",
     "escargot 1.0.1",
     "ethnum 1.5.3",

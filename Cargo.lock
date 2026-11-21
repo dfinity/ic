@@ -8524,7 +8524,6 @@ dependencies = [
  "base64 0.23.1",
  "bincode",
  "bytes",
- "educe 0.5.11",
  "futures",
  "hex",
  "ic-adapter-metrics-client",
