@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Bumped `ic-management-canister-types` to v0.11.0, so the reexported `CanisterSettings` has the new fields `minimum_incoming_canister_call_cycles` and `status_visibility`.
+- Bumped `ic-transport-types` to v0.50.0, so the reexported `SubnetMetrics` (returned by `PocketIc::get_subnet_metrics`) is the ic-transport-types 0.50 type.
+  This is a breaking change for code that names `ic_transport_types::SubnetMetrics` from an older ic-transport-types version; code that uses `pocket_ic::SubnetMetrics` is unaffected.
 
 ## 16.1.0 - 2026-10-08
 
