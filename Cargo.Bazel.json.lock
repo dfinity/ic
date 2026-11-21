@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "9c881d78a67d4ef33b2b2197f1cf2129af963f608389df2c657b82f400e27995",
+  "checksum": "5cc2685f142ef68dd7b97bde844d8223f575379a45800463d20aebee94def14e",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -23048,6 +23048,7 @@
       "version": "0.3.4"
     },
     "getrandom 0.4.3": {
+      "additive_build_file_content": "load(\"@rules_rust//rust:defs.bzl\", \"rust_library\")\n\nrust_library(\n    name = \"getrandom_no_wasm_bindgen\",\n    srcs = glob(\n        allow_empty = True,\n        include = [\"**/*.rs\"],\n    ),\n    compile_data = glob(\n        allow_empty = True,\n        include = [\"**\"],\n        exclude = [\n            \"**/* *\",\n            \".tmp_git_root/**/*\",\n            \"BUILD\",\n            \"BUILD.bazel\",\n            \"WORKSPACE\",\n            \"WORKSPACE.bazel\",\n        ],\n    ),\n    crate_features = [\"std\", \"sys_rng\"],\n    crate_name = \"getrandom\",\n    crate_root = \"src/lib.rs\",\n    deps = [\n        \":build_script_build\",\n        \"@crate_index//:cfg-if\",\n        \"@crate_index__rand_core-0.10.1//:rand_core\",\n    ] + select({\n        \"@rules_rust//rust/platform:aarch64-apple-darwin\": [\"@crate_index//:libc\"],\n        \"@rules_rust//rust/platform:aarch64-unknown-linux-gnu\": [\"@crate_index//:libc\"],\n        \"@rules_rust//rust/platform:wasm32-unknown-unknown\": [],\n        \"@rules_rust//rust/platform:x86_64-apple-darwin\": [\"@crate_index//:libc\"],\n        \"@rules_rust//rust/platform:x86_64-unknown-linux-gnu\": [\"@crate_index//:libc\"],\n        \"//conditions:default\": [],\n    }),\n    edition = \"2024\",\n    rustc_env_files = [\":cargo_toml_env_vars\"],\n    rustc_flags = [\"--cap-lints=allow\"] + select({\n        \"@rules_rust//rust/platform:wasm32-unknown-unknown\": ['--cfg=getrandom_backend=\"unsupported\"'],\n        \"//conditions:default\": [],\n    }),\n    tags = [\"cargo-bazel\", \"crate-name=getrandom\", \"manual\", \"noclippy\", \"norustfmt\"],\n    target_compatible_with = select({\n        \"@rules_rust//rust/platform:aarch64-apple-darwin\": [],\n        \"@rules_rust//rust/platform:aarch64-unknown-linux-gnu\": [],\n        \"@rules_rust//rust/platform:wasm32-unknown-unknown\": [],\n        \"@rules_rust//rust/platform:x86_64-apple-darwin\": [],\n        \"@rules_rust//rust/platform:x86_64-unknown-linux-gnu\": [],\n        \"//conditions:default\": [\"@platforms//:incompatible\"],\n    }),\n    version = \"0.4.3\",\n    visibility = [\"//visibility:public\"],\n)\n",
       "build_script_attrs": {},
       "common_attrs": {
         "crate_features": {
@@ -23148,6 +23149,9 @@
         "MIT"
       ],
       "name": "getrandom",
+      "override_targets": {
+        "lib": "@@rules_rust++crate+crate_index__getrandom-0.4.3//:getrandom_no_wasm_bindgen"
+      },
       "package_url": "https://github.com/rust-random/getrandom",
       "repository": {
         "Http": {
