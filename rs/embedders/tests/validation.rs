@@ -1029,6 +1029,42 @@ fn can_validate_module_with_max_raw_custom_sections() {
     assert_eq!(validation_details.wasm_metadata, WasmMetadata::default());
 }
 
+// Wasmtime does not check the indices in the `name` section. A function name
+// whose index is past the last function is dropped during instrumentation.
+#[test]
+fn can_validate_module_with_out_of_range_function_name() {
+    use wasm_encoder::Section;
+
+    let mut wasm = wat::parse_str("(module (func) (func))").unwrap();
+    let mut function_names = wasm_encoder::NameMap::new();
+    function_names.append(0, "f0");
+    // The module defines functions 0 and 1 only.
+    function_names.append(2, "f2");
+    let mut name_section = wasm_encoder::NameSection::new();
+    name_section.functions(&function_names);
+    name_section.append_to(&mut wasm);
+
+    let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
+    let (_, output) =
+        validate_and_instrument_for_testing(&embedder, &BinaryEncodedWasm::new(wasm)).unwrap();
+
+    let mut names = vec![];
+    for payload in wasmparser::Parser::new(0).parse_all(output.binary.as_slice()) {
+        if let wasmparser::Payload::CustomSection(reader) = payload.unwrap()
+            && let wasmparser::KnownCustom::Name(subsections) = reader.as_known()
+        {
+            for subsection in subsections {
+                if let wasmparser::Name::Function(map) = subsection.unwrap() {
+                    for naming in map {
+                        names.push(naming.unwrap().name.to_string());
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(names, vec!["f0"]);
+}
+
 #[test]
 fn can_reject_module_with_custom_sections_too_big() {
     let content = vec![0, 1, 6, 5, 6, 7, 4, 6];
