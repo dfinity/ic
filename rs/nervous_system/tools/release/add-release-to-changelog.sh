@@ -25,11 +25,17 @@ cd "$(repo_root)"
 PWD="$(pwd)"
 
 # Fetch the proposal.
+#
+# --update is used (even though get_proposal_info is a query method) so that
+# the reply is certified by the NNS subnet, rather than being the word of
+# whichever single replica happens to answer a query. The title of the reply
+# determines which files this script rewrites.
 print_cyan "⏳ Fetching proposal ${PROPOSAL_ID}..." >&2
 PROPOSAL_INFO=$(
     __dfx --quiet \
         canister call \
         --ic \
+        --update \
         --candid rs/nns/governance/canister/governance.did \
         $(nns_canister_id governance) \
         get_proposal_info "(${PROPOSAL_ID})" \
@@ -71,10 +77,32 @@ elif grep 'Publish SNS .* WASM Built at Commit .*' <<<"${TITLE}" &>/dev/null; th
     )
     DESTINATION_COMMIT_ID=$(echo "${TITLE}" | sed 's/Publish SNS .* WASM Built at Commit //')
 else
-    print_red "💀 Unable to parse proposal title: ${TITLE}" >&2
+    # The title is printed with printf %q, not print_red, because it is
+    # untrusted, and print_red uses `echo -e`, which would turn escape
+    # sequences in it into terminal control characters.
+    print_red "💀 Unable to parse proposal title:" >&2
+    printf '%q\n' "${TITLE}" >&2
     print_red "(In particular, unable to determine which canister and commit.)" >&2
     exit 1
 fi
+
+# Fail if what was extracted from the (untrusted) title is malformed. This
+# must happen before either value is printed with print_* (see above for why);
+# offending values are printed with printf %q instead.
+#
+# Proposal titles contain an abbreviated (7 character) commit ID, but a full
+# one is also accepted.
+if [[ ! "${CANISTER_NAME}" =~ ^[a-z0-9_-]+$ ]]; then
+    print_red "💀 Malformed canister name in proposal title:" >&2
+    printf '%q\n' "${CANISTER_NAME}" >&2
+    exit 1
+fi
+if [[ ! "${DESTINATION_COMMIT_ID}" =~ ^[0-9a-f]{7,40}$ ]]; then
+    print_red "💀 Malformed commit ID in proposal title:" >&2
+    printf '%q\n' "${DESTINATION_COMMIT_ID}" >&2
+    exit 1
+fi
+
 SECONDS_AGO=$(($(gdate +%s) - ${PROPOSED_TIMESTAMP_SECONDS}))
 PROPOSED_ON=$(
     gdate --utc \
@@ -83,8 +111,9 @@ PROPOSED_ON=$(
 )
 print_cyan "🏃 ${GOVERNANCE_TYPE} ${CANISTER_NAME} proposal was submitted ${SECONDS_AGO} seconds ago." >&2
 
-# Fail if the proposal's commit is not checked out.
-if [[ $(git rev-parse HEAD) != $DESTINATION_COMMIT_ID* ]]; then
+# Fail if the proposal's commit is not checked out. The commit ID is quoted so
+# that it is compared literally (as a prefix), not as a glob pattern.
+if [[ $(git rev-parse HEAD) != "${DESTINATION_COMMIT_ID}"* ]]; then
     print_red "💀 You currently have $(git rev-parse HEAD)" >&2
     print_red "checked out, but this command only supports being run when" >&2
     print_red "the proposal's commit (${DESTINATION_COMMIT_ID}) is checked out." >&2
