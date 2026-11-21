@@ -45,6 +45,8 @@ pub fn crypt_name(partition: Partition) -> &'static str {
 pub(crate) fn activate_flags(partition: Partition) -> CryptActivate {
     match partition {
         Partition::Var => CryptActivate::empty(),
-        Partition::Store => CryptActivate::ALLOW_DISCARDS,
+        // Encrypted writes go to the disk from the CPUs that encrypted them, not all from
+        // dm-crypt's single write thread, which caps deep-queue writes with 4 KiB sectors.
+        Partition::Store => CryptActivate::ALLOW_DISCARDS | CryptActivate::SUBMIT_FROM_CRYPT_CPUS,
     }
 }
