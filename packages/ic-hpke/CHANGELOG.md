@@ -8,3 +8,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - Not Yet Released
 
 Initial release.
+
+- The RNG arguments of `PrivateKey::generate`, `PublicKey::encrypt` and `PublicKey::encrypt_noauth` are rand_core 0.10 `CryptoRng`s (hpke 0.15).
