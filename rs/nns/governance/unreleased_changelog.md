@@ -17,7 +17,11 @@ on the process that this file is part of, see
   ManageNeuron proposal for any Ei. Changing the members of the group only
   requires changing the followees of D. The nested proposal must be a
   ManageNeuron proposal whose command is not `MakeProposal` (i.e. at most one
-  level of nesting), and its summary can be at most 2,000 bytes.
+  level of nesting).
+
+* The action of a ManageNeuron proposal can be at most 10,000 bytes (protobuf
+  encoded). With the `MakeProposal` command, this limits the size of the
+  nested proposal.
 
 ## Changed
 

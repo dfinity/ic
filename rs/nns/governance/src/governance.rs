@@ -256,11 +256,12 @@ pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 200;
 /// The max number of open manage neuron proposals.
 pub const MAX_NUMBER_OF_OPEN_MANAGE_NEURON_PROPOSALS: usize = 10_000;
 
-/// The max summary length of a proposal that is nested in a ManageNeuron proposal (via the
-/// MakeProposal command). This is much smaller than the general limit, because ManageNeuron
-/// proposals are cheap, and many of them can be open at the same time. The rationale for the
-/// nested proposal is expected to be in the summary of the enclosing proposal.
-pub const NESTED_PROPOSAL_SUMMARY_BYTES_MAX: usize = 2_000;
+/// The max size of the action of a ManageNeuron proposal (i.e. of its ManageNeuron), measured as
+/// the length of its protobuf encoding. ManageNeuron proposals are cheap, and many of them can be
+/// open at the same time, so each of them must be small. Every command other than MakeProposal
+/// is much smaller than this. With MakeProposal, this limits the size of the proposal that is
+/// made (e.g. its summary).
+pub const MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX: usize = 10_000;
 
 /// Max number of hot key for each neuron.
 pub const MAX_NUM_HOT_KEYS_PER_NEURON: usize = 10;
@@ -4635,13 +4636,8 @@ impl Governance {
             return Self::merge_maturity_removed_error();
         }
 
-        // Below we make sure the manage neuron proposal is not too large. Otherwise they can occupy
-        // a lot of space due to its low fee (0.01 ICP) and high limit of open proposals (100K).
-        //
         // TODO: consolidate the validation logic with the `manage_neuron` implementation.
         match command {
-            // A general proposal can be large (e.g. it can contain a WASM), so only small
-            // ManageNeuron proposals can be made through a ManageNeuron proposal.
             Command::MakeProposal(nested_proposal) => {
                 self.validate_nested_make_proposal(nested_proposal)?;
             }
@@ -4693,6 +4689,20 @@ impl Governance {
             _ => {}
         };
 
+        // Make sure the manage neuron proposal is not too large. Otherwise they can occupy
+        // a lot of space due to its low fee (0.01 ICP) and high limit of open proposals (10K).
+        let encoded_bytes = prost::Message::encoded_len(manage_neuron);
+        if encoded_bytes > MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "The action of a ManageNeuron proposal can be at most {} bytes \
+                     (protobuf encoded), but it is {} bytes.",
+                    MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX, encoded_bytes,
+                ),
+            ));
+        }
+
         let is_managed_neuron_not_for_profit = self
             .with_neuron_by_neuron_id_or_subaccount(&managed_id, |managed_neuron| {
                 managed_neuron.not_for_profit
@@ -4721,73 +4731,66 @@ impl Governance {
         Ok(())
     }
 
-    /// Validates the proposal in a MakeProposal command of a ManageNeuron proposal.
+    /// Validates the proposal in the MakeProposal command of a ManageNeuron proposal (the "nested"
+    /// proposal). Returns an InvalidProposal error unless all of the following hold:
     ///
-    /// Such a "nested" proposal lets a group of neurons manage many neurons through one
-    /// intermediate neuron. Suppose that neuron D follows neurons A, B, and C on the
-    /// NeuronManagement topic, and that neurons E1, ..., En follow D on that topic. Then A, B, and
-    /// C can make a ManageNeuron proposal for D whose command is MakeProposal, and whose nested
-    /// proposal is a ManageNeuron proposal for some Ei. Once adopted, D makes the nested proposal
-    /// (and votes to adopt it). Changing the members of the group only requires changing the
-    /// followees of D, rather than the followees of each Ei.
+    ///     1. The nested proposal is a ManageNeuron proposal.
+    ///     2. Its command is not MakeProposal (i.e. there is at most one level of nesting).
+    ///     3. It does not have a self describing action.
+    ///     4. It is valid on its own (see validate_proposal).
     ///
-    /// Because ManageNeuron proposals are cheap and many of them can be open at the same time,
-    /// the nested proposal must be small:
+    /// (The size of the nested proposal is limited by MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX,
+    /// which is checked by the caller.)
     ///
-    ///     1. It must be a ManageNeuron proposal.
-    ///     2. Its command must not be MakeProposal (i.e. there is at most one level of nesting).
-    ///     3. Its summary must be at most NESTED_PROPOSAL_SUMMARY_BYTES_MAX bytes.
-    ///     4. It must not have a self describing action (that is filled in by Governance).
+    /// This does NOT check whether the neuron that would make the nested proposal (the neuron
+    /// targeted by the enclosing proposal) is a followee of the neuron targeted by the nested
+    /// proposal on the NeuronManagement topic: this validation happens before the caller is
+    /// authorized, so the result would disclose (private) followees to anyone. Instead, that is
+    /// checked (after authorization) when the nested proposal is actually made, i.e. when the
+    /// enclosing proposal is executed.
     ///
-    /// In addition, the nested proposal must be valid on its own.
-    ///
-    /// Whether the intermediate neuron is allowed to make the nested proposal (i.e. whether it is
-    /// a followee of the targeted neuron on the NeuronManagement topic) is deliberately NOT
-    /// checked here: this validation happens before the caller is authorized, so the result
-    /// would disclose (private) followees of the targeted neuron to anyone. Instead, it is
-    /// checked (after authorization) when the intermediate neuron actually makes the nested
-    /// proposal, i.e. when the enclosing proposal is executed.
+    /// Nested proposals let a group of neurons manage many neurons through one intermediate
+    /// neuron. Suppose that neuron D follows neurons A, B, and C on the NeuronManagement topic,
+    /// and that neurons E1, ..., En follow D on that topic. Then A, B, and C can make a
+    /// ManageNeuron proposal for D whose command is MakeProposal, and whose nested proposal is a
+    /// ManageNeuron proposal for some Ei. Once adopted, D makes the nested proposal (and votes to
+    /// adopt it). Changing the members of the group only requires changing the followees of D,
+    /// rather than the followees of each Ei.
     fn validate_nested_make_proposal(
         &self,
         nested_proposal: &Proposal,
     ) -> Result<(), GovernanceError> {
-        let invalid_proposal_error = |message: String| {
-            GovernanceError::new_with_message(ErrorType::InvalidProposal, message)
-        };
+        let invalid_proposal_error =
+            |message: &str| GovernanceError::new_with_message(ErrorType::InvalidProposal, message);
 
+        // The nested proposal must manage another neuron.
         let Some(Action::ManageNeuron(nested_manage_neuron)) = &nested_proposal.action else {
             return Err(invalid_proposal_error(
-                "A ManageNeuron proposal can only make another ManageNeuron proposal \
-                 (via its MakeProposal command)."
-                    .to_string(),
+                "When a ManageNeuron proposal is to make (another) proposal, \
+                 the second proposal must be (another) ManageNeuron proposal.",
             ));
         };
+
+        // However, the other neuron must not make a THIRD proposal.
         if let Some(Command::MakeProposal(_)) = &nested_manage_neuron.command {
             return Err(invalid_proposal_error(
-                "A proposal made through a ManageNeuron proposal cannot itself have a \
-                 MakeProposal command (at most one level of nesting is allowed)."
-                    .to_string(),
+                "A proposal made through a ManageNeuron proposal cannot itself \
+                 make a third proposal.",
             ));
         }
-        if nested_proposal.summary.len() > NESTED_PROPOSAL_SUMMARY_BYTES_MAX {
-            return Err(invalid_proposal_error(format!(
-                "The summary of a proposal made through a ManageNeuron proposal can be at most \
-                 {} bytes, but it is {} bytes.",
-                NESTED_PROPOSAL_SUMMARY_BYTES_MAX,
-                nested_proposal.summary.len(),
-            )));
-        }
+
+        // The self_describing_action field is written only by Governance itself, when it makes
+        // a proposal; it is not set when converting from the API type. Therefore, this is a
+        // "belt and suspenders" check.
         if nested_proposal.self_describing_action.is_some() {
             return Err(invalid_proposal_error(
                 "A proposal made through a ManageNeuron proposal must not specify a \
-                 self_describing_action."
-                    .to_string(),
+                 self_describing_action.",
             ));
         }
 
-        // Title, URL, and the nested ManageNeuron command are validated like for any other
-        // proposal. This does not recurse further, because the nested command is not
-        // MakeProposal.
+        // Reject an invalid nested proposal now, rather than only after the enclosing proposal
+        // has been adopted.
         self.validate_proposal(nested_proposal)?;
 
         Ok(())

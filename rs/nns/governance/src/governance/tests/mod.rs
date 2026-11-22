@@ -1835,3 +1835,38 @@ fn test_post_upgrade_panics_if_neuron_minimum_dissolve_delay_to_vote_seconds_bel
     // Should panic because the value is below 2 weeks.
     Governance::maybe_reduce_neuron_minimum_dissolve_delay_to_vote_seconds(&mut heap_data);
 }
+
+/// Every command other than MakeProposal must fit in a ManageNeuron proposal. The largest such
+/// command is SetFollowing, with the max number of followees on every topic.
+#[test]
+fn test_largest_set_following_fits_in_manage_neuron_proposal() {
+    use crate::pb::v1::manage_neuron::{
+        NeuronIdOrSubaccount, SetFollowing, set_following::FolloweesForTopic,
+    };
+    use strum::IntoEnumIterator;
+
+    // Step 1: Prepare the world.
+    let largest_neuron_id = NeuronId { id: u64::MAX };
+    let topic_following = Topic::iter()
+        .map(|topic| FolloweesForTopic {
+            topic: Some(topic as i32),
+            followees: vec![largest_neuron_id; MAX_FOLLOWEES_PER_TOPIC],
+        })
+        .collect::<Vec<FolloweesForTopic>>();
+    let manage_neuron = ManageNeuron {
+        id: None,
+        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(largest_neuron_id)),
+        command: Some(manage_neuron::Command::SetFollowing(SetFollowing {
+            topic_following,
+        })),
+    };
+
+    // Step 2: Run the code under test.
+    let encoded_bytes = prost::Message::encoded_len(&manage_neuron);
+
+    // Step 3: Verify result. Leave plenty of room for new topics.
+    assert!(
+        2 * encoded_bytes <= MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX,
+        "{encoded_bytes}"
+    );
+}
