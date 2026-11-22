@@ -81,9 +81,10 @@ fio --filename=/var/lib/ic/data/benchmark/testfile --io_size=10GB --size=60GB --
 unsample write
 fio --filename=/var/lib/ic/data/benchmark/testfile --io_size=10GB --size=60GB --direct=1 --buffered=0 --invalidate 1 --norandommap --random_generator=lfsr --rw=read --bs=4m --ioengine=libaio --iodepth=32 --numjobs=16 --group_reporting --name=throughput-sw-job --eta-newline=1 >results/fio-read.log
 
-# The same deep-queue write, overwriting the test file for 20 s, with dm-crypt's default write path,
-# then with `submit_from_crypt_cpus` (set live with `cryptsetup refresh`), then 16 jobs with one
-# write in flight each (64 MiB in flight in all), each sampled as above. Restores the store's
+# Overwrites of the test file for 20 s each by 16 jobs of 4 MiB writes, 2 to 32 in flight per job
+# (128 MiB to 2 GiB in all), with dm-crypt's default write path, then 32 in flight with
+# `submit_from_crypt_cpus` (set live with `cryptsetup refresh`), each sampled as above: whether the
+# collapse starts where the data in flight exceeds dm-crypt's buffer budget. Restores the store's
 # flags afterwards.
 (
     set +x
@@ -91,7 +92,7 @@ fio --filename=/var/lib/ic/data/benchmark/testfile --io_size=10GB --size=60GB --
     T=(--filename=/var/lib/ic/data/benchmark/testfile --size=60GB --direct=1 --buffered=0 --norandommap
         --random_generator=lfsr --rw=write --ioengine=libaio --group_reporting --time_based --runtime=20
         --numjobs=16 --bs=4m)
-    for v in none-d32 sfcc-d32 none-d1; do
+    for v in none-d2 none-d4 none-d8 none-d16 none-d32 sfcc-d32; do
         flags=(--allow-discards)
         case $v in sfcc-*) flags+=(--perf-submit_from_crypt_cpus) ;; esac
         cryptsetup refresh store-crypt --key-file "$K" "${flags[@]}" >/dev/null 2>&1 || echo "refresh for $v failed"
