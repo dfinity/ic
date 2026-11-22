@@ -5814,8 +5814,12 @@ pub fn two_subnets_with_config(
     let subnet_id2 = env2.get_subnet_id();
 
     let mut routing_table = RoutingTable::new();
-    let next_unallocated_canister_index =
-        routing_table_insert_subnet(&mut routing_table, subnet_id1, 0).unwrap();
+    let next_unallocated_canister_index = routing_table_insert_subnet(
+        &mut routing_table,
+        subnet_id1,
+        /* next_unallocated_canister_index = */ 0,
+    )
+    .unwrap();
     routing_table_insert_subnet(
         &mut routing_table,
         subnet_id2,
