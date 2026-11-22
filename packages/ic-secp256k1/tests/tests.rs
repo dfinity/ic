@@ -267,21 +267,22 @@ fn generate_from_seed_is_stable() {
 #[test]
 fn generate_using_rng_draws_32_bytes_until_they_encode_a_scalar_in_range() {
     // generate_using_rng draws 32 bytes at a time with fill_bytes until they
-    // encode a scalar in [1, n), where n is the group order. So an RNG in a
-    // given state always yields the same key and is left in the same state.
+    // encode a scalar in [1, n), where n is the group order. Zero and values
+    // of at least n are rejected, not reduced modulo n.
     let n_minus_1 = hex!("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140");
     let mut one = [0_u8; 32];
     one[31] = 1;
 
     for valid in [n_minus_1, one] {
-        // 0 and n are rejected and `valid` is accepted, so the bytes after
-        // it are never drawn
-        let mut rng = ScriptedRng::new([[0_u8; 32], SECP256K1_ORDER, valid, [0x42; 32]].concat());
+        // 0, n and 2^256 - 1 are rejected and `valid` is accepted, so the
+        // bytes after it are never drawn
+        let mut rng =
+            ScriptedRng::new([[0_u8; 32], SECP256K1_ORDER, [0xff; 32], valid, [0x42; 32]].concat());
 
         let sk = PrivateKey::generate_using_rng(&mut rng);
 
         assert_eq!(sk.serialize_sec1(), valid);
-        assert_eq!(rng.consumed, 96);
+        assert_eq!(rng.consumed, 128);
     }
 }
 
