@@ -175,7 +175,9 @@ pub(crate) fn make_canister_id_allocation_mutation(
 /// on all upgrades after the first one. Also returns no mutations if no canister IDs have ever been
 /// allocated (e.g., in a registry without a routing table), since there is nothing to record yet.
 ///
-/// TODO: Remove this once the registry canister on mainnet has been upgraded with it.
+/// TODO: Remove this once the registry canister on mainnet has been upgraded with it. Remove
+/// `check_canister_id_allocation_covers_mainnet_history` (in the NNS golden state test) along with
+/// it.
 pub(crate) fn backfill_canister_id_allocation(registry: &Registry) -> Vec<RegistryMutation> {
     let key = make_canister_id_allocation_key();
     if registry

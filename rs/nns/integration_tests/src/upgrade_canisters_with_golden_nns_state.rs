@@ -384,8 +384,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 }
 
 /// One past the largest canister index that mainnet had allocated to a subnet by registry version
-/// 65131, found by replaying the routing table history (block 0x9f00000..=0x9ffffff of subnet
-/// 3wusz). Some subnets that held canister IDs below this have since been deleted.
+/// 65131.
 const MIN_MAINNET_NEXT_UNALLOCATED_CANISTER_INDEX: u64 = 0xa00_0000;
 
 // The registry canister backfills the `CanisterIdAllocation` from the full history of the routing
