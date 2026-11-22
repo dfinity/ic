@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "9c881d78a67d4ef33b2b2197f1cf2129af963f608389df2c657b82f400e27995",
+  "checksum": "0f9ce88ad096e22fefe4f435ba61b8699b81b27879f5622586e6df2030a6834a",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18372,7 +18372,7 @@
             "target": "rusb"
           },
           {
-            "id": "rusqlite 0.42.0",
+            "id": "rusqlite 0.43.0",
             "target": "rusqlite"
           },
           {
@@ -18612,7 +18612,7 @@
             "target": "tokio_metrics"
           },
           {
-            "id": "tokio-rusqlite 0.9.0",
+            "id": "tokio-rusqlite 0.10.0",
             "target": "tokio_rusqlite"
           },
           {
@@ -47522,7 +47522,7 @@
       ],
       "version": "0.9.4"
     },
-    "rusqlite 0.42.0": {
+    "rusqlite 0.43.0": {
       "common_attrs": {
         "crate_features": [
           "bundled",
@@ -47609,8 +47609,8 @@
       "package_url": "https://github.com/rusqlite/rusqlite",
       "repository": {
         "Http": {
-          "sha256": "a4edff0039f148731aee2fd80f76dbfeb12d204ab3d1c544838d34e02151049b",
-          "url": "https://static.crates.io/crates/rusqlite/0.42.0/download"
+          "sha256": "f172c4812a19b26d1c23cdb0070e69db335503dfa378b910eb857386e5b8beba",
+          "url": "https://static.crates.io/crates/rusqlite/0.43.0/download"
         }
       },
       "targets": [
@@ -47621,7 +47621,7 @@
           }
         }
       ],
-      "version": "0.42.0"
+      "version": "0.43.0"
     },
     "rust_decimal 1.43.0": {
       "build_script_attrs": {},
@@ -57057,7 +57057,7 @@
       ],
       "version": "0.5.2"
     },
-    "tokio-rusqlite 0.9.0": {
+    "tokio-rusqlite 0.10.0": {
       "common_attrs": {
         "crate_features": [
           "default"
@@ -57068,7 +57068,7 @@
             "target": "crossbeam_channel"
           },
           {
-            "id": "rusqlite 0.42.0",
+            "id": "rusqlite 0.43.0",
             "target": "rusqlite"
           },
           {
@@ -57088,8 +57088,8 @@
       "package_url": "https://github.com/programatik29/tokio-rusqlite",
       "repository": {
         "Http": {
-          "sha256": "cef2b2b09428079c22bf68cb48170c80b4f8c9c3ae1879aabfc22a94b5eaf2a1",
-          "url": "https://static.crates.io/crates/tokio-rusqlite/0.9.0/download"
+          "sha256": "bf2a5f12f89def36f15f2ed88aae9101320b9476766b02a63b3349e05b49e33a",
+          "url": "https://static.crates.io/crates/tokio-rusqlite/0.10.0/download"
         }
       },
       "targets": [
@@ -57100,7 +57100,7 @@
           }
         }
       ],
-      "version": "0.9.0"
+      "version": "0.10.0"
     },
     "tokio-rustls 0.26.6": {
       "common_attrs": {
@@ -66950,7 +66950,7 @@
     "rsa 0.10.0",
     "rstest 0.28.0",
     "rusb 0.9.4",
-    "rusqlite 0.42.0",
+    "rusqlite 0.43.0",
     "rust_decimal 1.43.0",
     "rust_decimal_macros 1.40.0",
     "rustc-demangle 0.1.28",
@@ -67013,7 +67013,7 @@
     "tokio 1.54.1",
     "tokio-io-timeout 1.2.1",
     "tokio-metrics 0.5.2",
-    "tokio-rusqlite 0.9.0",
+    "tokio-rusqlite 0.10.0",
     "tokio-rustls 0.26.6",
     "tokio-serde 0.9.0",
     "tokio-socks 0.5.3",
