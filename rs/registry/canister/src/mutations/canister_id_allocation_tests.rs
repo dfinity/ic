@@ -135,8 +135,11 @@ fn test_add_subnet_without_canister_id_allocation_uses_history() {
 #[test]
 fn test_compute_next_unallocated_canister_index_from_history() {
     // Step 1: Prepare the world: three routing table versions, the last of which no longer
-    // contains subnet 2.
-    let mut registry = Registry::new();
+    // contains subnet 2. This is like the previous test, except that it also stores a version in
+    // which the routing table only contains subnet 1 (Step 1.1).
+
+    // Step 1.1: Insert a routing table containing only subnet 1 into registry, and remember its
+    // version. This is the one thing that the previous test does not do.
     let mut routing_table = RoutingTable::new();
     let next_unallocated_canister_index = routing_table_insert_subnet(
         &mut routing_table,
@@ -144,8 +147,11 @@ fn test_compute_next_unallocated_canister_index_from_history() {
         /* next_unallocated_canister_index = */ 0,
     )
     .unwrap();
+    let mut registry = Registry::new();
     set_routing_table_without_canister_id_allocation(&mut registry, routing_table.clone());
     let version_with_subnet_1 = registry.latest_version();
+
+    // Step 1.2: Add subnet 2 to the routing table in registry.
     routing_table_insert_subnet(
         &mut routing_table,
         subnet_test_id(2),
@@ -153,6 +159,8 @@ fn test_compute_next_unallocated_canister_index_from_history() {
     )
     .unwrap();
     set_routing_table_without_canister_id_allocation(&mut registry, routing_table.clone());
+
+    // Step 1.3: Remove subnet 2 from registry, but without updating CanisterIdAllocation.
     routing_table.remove_subnet(subnet_test_id(2));
     set_routing_table_without_canister_id_allocation(&mut registry, routing_table);
 
