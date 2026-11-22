@@ -89,14 +89,6 @@ pub(crate) fn check_canister_migrations_invariants(
     Ok(())
 }
 
-/// Decodes the `next_unallocated_canister_index` of the `CanisterIdAllocation` in `bytes`.
-pub(crate) fn decode_next_unallocated_canister_index(
-    bytes: &[u8],
-) -> Result<u64, prost::DecodeError> {
-    let canister_id_allocation = pbCanisterIdAllocation::decode(bytes)?;
-    Ok(canister_id_allocation.next_unallocated_canister_index)
-}
-
 /// Checks the invariants of the `CanisterIdAllocation` (no canister index at or above its
 /// `next_unallocated_canister_index` has ever been allocated to a subnet):
 ///
@@ -123,11 +115,12 @@ pub(crate) fn check_canister_id_allocation_invariants(
         }
         return Ok(());
     };
-    let next_unallocated_canister_index =
-        decode_next_unallocated_canister_index(bytes).map_err(|err| InvariantCheckError {
+    let next_unallocated_canister_index = pbCanisterIdAllocation::decode(bytes.as_slice())
+        .map_err(|err| InvariantCheckError {
             msg: "Unable to decode the CanisterIdAllocation.".to_string(),
             source: Some(Box::new(err)),
-        })?;
+        })?
+        .next_unallocated_canister_index;
 
     if let Some(previous) = previous_next_unallocated_canister_index
         && next_unallocated_canister_index < previous

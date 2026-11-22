@@ -13,7 +13,7 @@ use crate::{
         replica_version::check_replica_version_invariants,
         routing_table::{
             check_canister_id_allocation_invariants, check_canister_migrations_invariants,
-            check_routing_table_invariants, decode_next_unallocated_canister_index,
+            check_routing_table_invariants,
         },
         standard_engine_replica_version::check_standard_engine_replica_version_invariants,
         subnet::check_subnet_invariants,
@@ -26,12 +26,14 @@ use crate::{
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_nervous_system_string::clamp_debug_len;
+use ic_protobuf::registry::routing_table::v1::CanisterIdAllocation;
 use ic_registry_canister_chunkify::dechunkify;
 use ic_registry_keys::make_canister_id_allocation_key;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_transport::pb::v1::{
     RegistryMutation, high_capacity_registry_value, registry_mutation::Type,
 };
+use prost::Message;
 
 impl Registry {
     pub fn check_changelog_version_invariants(&self) {
@@ -118,9 +120,11 @@ impl Registry {
                 self.latest_version(),
             )
             .map(|registry_value| {
-                decode_next_unallocated_canister_index(&registry_value.value).unwrap_or_else(
-                    |err| panic!("Unable to decode the stored CanisterIdAllocation: {err}"),
-                )
+                CanisterIdAllocation::decode(registry_value.value.as_slice())
+                    .unwrap_or_else(|err| {
+                        panic!("Unable to decode the stored CanisterIdAllocation: {err}")
+                    })
+                    .next_unallocated_canister_index
             });
         result = result.and(check_canister_id_allocation_invariants(
             &snapshot,
