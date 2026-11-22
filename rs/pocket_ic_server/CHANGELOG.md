@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A flexible HTTP outcall delivers responses up to 2,031,616 bytes (2 MiB − 64 KiB) in total rather than 2 MiB:
   it delivers fewer than `max_responses` responses where more would exceed that, and fails with `responses_too_large`
   once the smallest responses that would have to be delivered exceed it.
+- If the TLS certificate or private key file of an HTTPS gateway (`https_config`) cannot be parsed,
+  the error message is worded differently, e.g., `The private key file contained no keys` instead of `private key format not supported`.
 
 ### Fixed
 - Requests to the bitcoin and dogecoin adapters (fetching blocks and sending transactions) time out after 1 s instead of 50 ms,

@@ -685,7 +685,7 @@ where
     ) -> HashMap</* topic ID */ i32, Followees> {
         range
             // create groups for topics
-            .group_by(|(followees_key, _followee_id)| followees_key.topic)
+            .chunk_by(|(followees_key, _followee_id)| followees_key.topic)
             .into_iter()
             // convert (Topic, group) into (i32, followees)
             .map(|(topic, group)| {
@@ -693,9 +693,9 @@ where
                 // a specific follower and topic. We have strong guarantee that StableBTreeMap's
                 // range() returns followee entries with ascending `FolloweesKey::index` (because
                 // the Ord implementation of FolloweesKey), and the current implementation of
-                // `group_by()` preserves the order of the elements within groups. Therefore
+                // `chunk_by()` preserves the order of the elements within groups. Therefore
                 // `sorted_by_key()` below is technically not needed. However, the
-                // `Itertools::group_by` documentation does not specify whether it actually preserves
+                // `Itertools::chunk_by` documentation does not specify whether it actually preserves
                 // the order. For this reason we choose to still sort by `FolloweesKey::index`,
                 // instead of relying on an undefined behavior.
                 let followees = group

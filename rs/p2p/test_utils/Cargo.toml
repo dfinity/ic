@@ -36,7 +36,6 @@ ic-types = { path = "../../types/types" }
 mockall = { workspace = true }
 pin-project-lite = { workspace = true }
 quinn = { workspace = true }
-quinn-udp = { workspace = true }
 rcgen = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }

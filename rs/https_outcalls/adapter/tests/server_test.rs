@@ -39,9 +39,11 @@ mod test {
     use uuid::Uuid;
 
     #[cfg(feature = "http")]
-    use socks5_impl::protocol::{
-        Address, AsyncStreamOperation, AuthMethod, Reply, Request as Socks5Request,
-        Response as Socks5Response, handshake,
+    use socks5_impl::{
+        Address, AsyncStreamOperation,
+        protocol::{
+            AuthMethod, Reply, Request as Socks5Request, Response as Socks5Response, handshake,
+        },
     };
     #[cfg(feature = "http")]
     use std::io;
@@ -276,7 +278,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let _req = match Socks5Request::retrieve_from_async_stream(&mut stream).await {
             Ok(req) => req,
             Err(e) => {
-                Socks5Response::new(Reply::GeneralFailure, Address::unspecified())
+                Socks5Response::new(Reply::GeneralFailure, Address::unspecified_v4())
                     .write_to_async_stream(&mut stream)
                     .await?;
                 stream.shutdown().await?;
@@ -329,6 +331,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                 .await
                 .unwrap();
             axum_server::from_tcp_rustls(listener, tls_config)
+                .unwrap()
                 .serve(router().into_make_service())
                 .await
                 .unwrap();
