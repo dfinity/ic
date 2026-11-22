@@ -508,6 +508,8 @@ mod tests {
     #[test]
     fn test_decreasing_canister_id_allocation_fails_invariants_check() {
         let mut snapshot = new_snapshot_with_routing_table_up_to_0x1ff();
+        // On its own, 0x200 is valid: the routing table ends at 0x1ff. The check should fail only
+        // because the previous value (0x300, passed below) is higher, i.e., this is a decrease.
         insert_canister_id_allocation_to_snapshot(0x200, &mut snapshot);
 
         let error = check_canister_id_allocation_invariants(
