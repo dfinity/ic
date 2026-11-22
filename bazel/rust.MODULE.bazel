@@ -1225,7 +1225,7 @@ crate.spec(
 )
 crate.spec(
     package = "ratelimit",
-    version = "^0.9.1",
+    version = "^0.10.1",
 )
 crate.spec(
     package = "ratatui",

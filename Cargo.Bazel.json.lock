@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "2710c38bdcec015182a29ac9938288008f50c00b8ea5c9e0da97995219f0bf9c",
+  "checksum": "3cce7ec76e584b8765a36e7c781684e1f1c151bf1e3e62eb89b879a61128078c",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18236,7 +18236,7 @@
             "target": "ratatui"
           },
           {
-            "id": "ratelimit 0.9.1",
+            "id": "ratelimit 0.10.1",
             "target": "ratelimit"
           },
           {
@@ -45057,7 +45057,7 @@
       ],
       "version": "0.29.0"
     },
-    "ratelimit 0.9.1": {
+    "ratelimit 0.10.1": {
       "common_attrs": {
         "deps": [
           {
@@ -45069,7 +45069,7 @@
             "target": "parking_lot"
           },
           {
-            "id": "thiserror 1.0.69",
+            "id": "thiserror 2.0.21",
             "target": "thiserror"
           }
         ],
@@ -45086,8 +45086,8 @@
       "package_url": "https://github.com/pelikan-io/rustcommon",
       "repository": {
         "Http": {
-          "sha256": "6c1bb13e2dcfa2232ac6887157aad8d9b3fe4ca57f7c8d4938ff5ea9be742300",
-          "url": "https://static.crates.io/crates/ratelimit/0.9.1/download"
+          "sha256": "5dc94ed8e3de45f6d8d052869d48c0dbeebcaa7a6c345ec7f0f917e10347428e",
+          "url": "https://static.crates.io/crates/ratelimit/0.10.1/download"
         }
       },
       "targets": [
@@ -45098,7 +45098,7 @@
           }
         }
       ],
-      "version": "0.9.1"
+      "version": "0.10.1"
     },
     "raw-cpuid 11.6.0": {
       "common_attrs": {
@@ -66830,7 +66830,7 @@
     "rand_chacha 0.9.0",
     "rand_distr 0.4.3",
     "ratatui 0.29.0",
-    "ratelimit 0.9.1",
+    "ratelimit 0.10.1",
     "rayon 1.12.0",
     "rcgen 0.13.2",
     "regex 1.13.2",
