@@ -106,24 +106,11 @@ impl Registry {
                     &routing_table,
                 ));
 
-                // Canister ID allocation invariants. The value before the mutations passed these
-                // checks when it was written, so it decodes.
-                let previous_next_unallocated_canister_index = self
-                    .get(
-                        make_canister_id_allocation_key().as_bytes(),
-                        self.latest_version(),
-                    )
-                    .map(|registry_value| {
-                        CanisterIdAllocation::decode(registry_value.value.as_slice())
-                            .unwrap_or_else(|err| {
-                                panic!("Unable to decode the stored CanisterIdAllocation: {err}")
-                            })
-                            .next_unallocated_canister_index
-                    });
+                // Canister ID allocation invariants
                 result = result.and(check_canister_id_allocation_invariants(
                     &snapshot,
                     &routing_table,
-                    previous_next_unallocated_canister_index,
+                    self.get_latest_next_unallocated_canister_index_or_panic(),
                 ));
             }
             Err(err) => result = result.and(Err(err)),
@@ -162,6 +149,25 @@ impl Registry {
                 LOG_PREFIX, e.msg
             );
         }
+    }
+
+    /// Returns the `next_unallocated_canister_index` of the `CanisterIdAllocation` in the latest
+    /// version, i.e., before the mutations being checked, or `None` if there is no
+    /// `CanisterIdAllocation`.
+    ///
+    /// Panics if it cannot be decoded. That cannot happen, since it passed the invariant checks
+    /// when it was written.
+    fn get_latest_next_unallocated_canister_index_or_panic(&self) -> Option<u64> {
+        let registry_value = self.get(
+            make_canister_id_allocation_key().as_bytes(),
+            self.latest_version(),
+        )?;
+
+        let canister_id_allocation = CanisterIdAllocation::decode(registry_value.value.as_slice())
+            .unwrap_or_else(|err| {
+                panic!("Unable to decode the stored CanisterIdAllocation: {err}")
+            });
+        Some(canister_id_allocation.next_unallocated_canister_index)
     }
 
     fn take_latest_snapshot_with_mutations(
