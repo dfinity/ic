@@ -334,7 +334,7 @@ fn check_merged_state_proposed(
             .unwrap_or_else(|e| panic!("failed to run `{script}` on node {node_ip}: {e}"))
     };
 
-    let checkpoints = run(&format!("sudo ls {MERGED_CHECKPOINTS_DIR}"));
+    let checkpoints = run(&format!("ls {MERGED_CHECKPOINTS_DIR}"));
     let checkpoints: Vec<&str> = checkpoints.split_whitespace().collect();
     let [checkpoint] = checkpoints.as_slice() else {
         panic!(
@@ -346,7 +346,7 @@ fn check_merged_state_proposed(
         .unwrap_or_else(|e| panic!("checkpoint {checkpoint} is not named by its height: {e}"));
 
     let in_checkpoint = run(&format!(
-        "sudo ls {MERGED_CHECKPOINTS_DIR}/{checkpoint}/canister_states"
+        "ls {MERGED_CHECKPOINTS_DIR}/{checkpoint}/canister_states"
     ));
     let in_checkpoint: BTreeSet<String> =
         in_checkpoint.split_whitespace().map(String::from).collect();
