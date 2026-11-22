@@ -87,7 +87,8 @@ fn test_add_subnet_does_not_reuse_canister_ids_of_deleted_last_subnet() {
 fn test_add_subnet_without_canister_id_allocation_uses_history() {
     // Step 1: Prepare the world: a routing table written without a CanisterIdAllocation (as
     // before its introduction), in which subnet 2 (holding the last range) is then deleted.
-    let mut registry = Registry::new();
+
+    // Step 1.1: Insert a couple of subnets into routing_table.
     let mut routing_table = RoutingTable::new();
     let next_unallocated_canister_index = routing_table_insert_subnet(
         &mut routing_table,
@@ -101,9 +102,18 @@ fn test_add_subnet_without_canister_id_allocation_uses_history() {
         next_unallocated_canister_index,
     )
     .unwrap();
+
+    // Step 1.2: Insert routing_table into Registry.
+    let mut registry = Registry::new();
     set_routing_table_without_canister_id_allocation(&mut registry, routing_table.clone());
+
+    // Step 1.3: Remove subnet 2 from registry, but without updating CanisterIdAllocation.
     routing_table.remove_subnet(subnet_test_id(2));
     set_routing_table_without_canister_id_allocation(&mut registry, routing_table);
+
+    // Step 1.4: Verify setup: No CanisterIdAllocation record. Despite this,
+    // subnet 2's canister IDs will not get recycled, because, subnet 2 is
+    // still in history, even though it is not in the most recent snapshot.
     assert_eq!(
         registry.get(
             make_canister_id_allocation_key().as_bytes(),
