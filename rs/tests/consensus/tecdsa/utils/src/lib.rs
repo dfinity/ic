@@ -1249,8 +1249,8 @@ pub fn verify_bip340_signature(sec1_pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
         Err(_) => return false,
     };
 
-    // from_bytes takes just the x coordinate encoding:
-    match k256::schnorr::VerifyingKey::from_bytes(&sec1_pk[1..]) {
+    // from_slice takes just the x coordinate encoding:
+    match k256::schnorr::VerifyingKey::from_slice(&sec1_pk[1..]) {
         Ok(bip340) => bip340.verify_raw(msg, &signature).is_ok(),
         _ => false,
     }

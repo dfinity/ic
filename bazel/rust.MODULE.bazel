@@ -225,7 +225,7 @@ crate.spec(
         "secp256k1",
     ],
     package = "bip32",
-    version = "^0.5.0",
+    version = "^0.6.0",
 )
 crate.spec(
     package = "bit-vec",
@@ -925,16 +925,15 @@ crate.spec(
 crate.spec(
     default_features = False,
     features = [
+        "alloc",
         "arithmetic",
         "ecdsa",
         "pem",
         "pkcs8",
-        "precomputed-tables",
         "schnorr",
-        "std",
     ],
     package = "k256",
-    version = "^0.13.4",
+    version = "^0.14.0",
 )
 crate.spec(
     features = [
@@ -1133,16 +1132,17 @@ crate.spec(
         "pkcs8",
     ],
     package = "p256",
-    version = "^0.13.2",
+    version = "^0.14.0",
 )
 crate.spec(
     default_features = False,
     features = [
+        "alloc",
         "ecdsa",
         "pem",
     ],
     package = "p384",
-    version = "0.13",
+    version = "^0.14.0",
 )
 crate.spec(
     package = "pairing",

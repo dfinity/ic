@@ -1,7 +1,7 @@
 use attestation::LAUNCH_MEASUREMENT_LEN;
 use p384::ecdsa::Signature;
 use p384::ecdsa::signature::Signer;
-use p384::pkcs8::EncodePublicKey;
+use p384::elliptic_curve::Generate;
 use rand::SeedableRng;
 use rsa::PrivateKey;
 use rsa::sha2::Sha384;
@@ -138,13 +138,10 @@ impl FakeAttestationReportSigner {
         .unwrap();
 
         // VCEK - P384 ECDSA (signed by ASK)
-        let vcek_key = p384::ecdsa::SigningKey::random(&mut rng);
-        // p384 implements the spki 0.7 traits and x509-cert takes spki 0.8 types, so the public
-        // key goes through its DER encoding.
-        let vcek_public_key_der = vcek_key.verifying_key().to_public_key_der().unwrap();
+        let vcek_key = p384::ecdsa::SigningKey::generate_from_rng(&mut RandCore10(&mut rng));
         let vcek_cert = create_certificate(
             "VCEK",
-            SubjectPublicKeyInfo::try_from(vcek_public_key_der.as_bytes()).unwrap(),
+            SubjectPublicKeyInfo::from_key(vcek_key.verifying_key()).unwrap(),
             ask_key,
             Some(&ask_cert),
             &mut rng,
@@ -279,7 +276,7 @@ impl BuilderProfile for CaProfile {
     }
 }
 
-/// Makes a rand 0.8 RNG usable as the rand_core 0.10 RNG that `rsa` and x509-cert's
+/// Makes a rand 0.8 RNG usable as the rand_core 0.10 RNG that `rsa`, `p384` and x509-cert's
 /// `Builder::build_with_rng` take.
 struct RandCore10<'a, R>(&'a mut R);
 

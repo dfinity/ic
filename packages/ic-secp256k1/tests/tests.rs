@@ -670,7 +670,7 @@ mod try_recovery_from_digest {
         assert_eq!(
             public_key.serialize_sec1(false),
             recovered_public_key
-                .to_encoded_point(false)
+                .to_sec1_point(false)
                 .as_bytes()
                 .to_vec()
         );

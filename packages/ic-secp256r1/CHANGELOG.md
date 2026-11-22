@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- Upgrade the `p256` dependency from `0.13` to `0.14`. The public API is unchanged.
+- `PrivateKey::generate_using_rng` draws 32 bytes from the RNG until they encode a valid secret key, as `p256::ecdsa::SigningKey::random` did, so the same RNG state still yields the same key, and `PrivateKey::generate_insecure_key_for_testing` the same key for the same seed.
+
+### Fixed
+
+- ECDSA signing derives the RFC 6979 nonce from the digest reduced modulo the group order, as RFC 6979 specifies. This changes the signature only for digests whose value is at least the group order (for SHA-256 digests, about one in 2^32).
+
 ## [0.3.0] - 2026-10-20
 
 ### Added
