@@ -1,7 +1,7 @@
+use crate::BOUND_EXCEEDED_MARKER;
 use crate::DataSize;
-use crate::bounded_bytes::BOUND_EXCEEDED_MARKER;
 use candid::{CandidType, Deserialize};
-use serde::{Deserializer, Serialize, Serializer};
+use serde::Deserializer;
 use std::fmt;
 
 /// Indicates that `BoundedVec<...>` template parameter (eg. length, total data size, etc) is unbounded.
@@ -43,20 +43,6 @@ impl<
 
     pub fn into_vec(self) -> Vec<T> {
         self.0
-    }
-}
-
-/// Serializes as a plain sequence, i.e. the format `Deserialize` reads back.
-impl<
-    const MAX_ALLOWED_LEN: usize,
-    const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
-    const MAX_ALLOWED_ELEMENT_DATA_SIZE: usize,
-    T: Serialize,
-> Serialize
-    for BoundedVec<MAX_ALLOWED_LEN, MAX_ALLOWED_TOTAL_DATA_SIZE, MAX_ALLOWED_ELEMENT_DATA_SIZE, T>
-{
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.0.serialize(serializer)
     }
 }
 

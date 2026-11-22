@@ -7,9 +7,7 @@ mod provisional;
 
 #[cfg(feature = "fuzzing_code")]
 use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
-use bounded_bytes::{
-    deserialize_bounded_blob, deserialize_bounded_byte_buf, is_bound_exceeded_error,
-};
+use bounded_bytes::{deserialize_bounded_blob, deserialize_bounded_byte_buf};
 pub use bounded_vec::*;
 use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode, Reserved};
 pub use data_size::*;
@@ -161,6 +159,16 @@ pub enum Method {
 
     // Canister metrics
     CanisterMetrics,
+}
+
+/// Every error raised for a value exceeding a bound contains this text, be it
+/// from `BoundedVec` or from the deserializers in `bounded_bytes`.
+const BOUND_EXCEEDED_MARKER: &str = "exceeds maximum allowed";
+
+/// Returns true if decoding failed because a value exceeded its bound, as
+/// opposed to the payload not having the expected Candid type.
+fn is_bound_exceeded_error(err: &candid::Error) -> bool {
+    format!("{err:?}").contains(BOUND_EXCEEDED_MARKER)
 }
 
 fn candid_error_to_user_error(err: candid::Error) -> UserError {
@@ -5087,7 +5095,7 @@ impl DataSize for Global {
 /// }
 /// ```
 
-#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct UploadCanisterSnapshotMetadataArgs {
     pub canister_id: PrincipalId,
     pub replace_snapshot: Option<SnapshotId>,
@@ -5095,10 +5103,7 @@ pub struct UploadCanisterSnapshotMetadataArgs {
     pub globals: BoundedGlobals,
     pub wasm_memory_size: u64,
     pub stable_memory_size: u64,
-    #[serde(
-        serialize_with = "serde_bytes::serialize",
-        deserialize_with = "deserialize_bounded_blob::<_, MAX_ALLOWED_CERTIFIED_DATA_LENGTH>"
-    )]
+    #[serde(deserialize_with = "deserialize_bounded_blob::<_, MAX_ALLOWED_CERTIFIED_DATA_LENGTH>")]
     pub certified_data: Vec<u8>,
     pub global_timer: Option<GlobalTimer>,
     pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,

@@ -8,18 +8,9 @@
 //! has been read: the size of a blob or text in memory equals its size on the
 //! wire, so reading it first costs no more than the payload itself.
 
+use crate::BOUND_EXCEEDED_MARKER;
 use serde::{Deserialize, Deserializer, de::Error};
 use serde_bytes::ByteBuf;
-
-/// Every error raised for a value exceeding a bound contains this text, be it
-/// from `BoundedVec` or from the deserializers in this module.
-pub(crate) const BOUND_EXCEEDED_MARKER: &str = "exceeds maximum allowed";
-
-/// Returns true if decoding failed because a value exceeded its bound, as
-/// opposed to the payload not having the expected Candid type.
-pub(crate) fn is_bound_exceeded_error(err: &candid::Error) -> bool {
-    format!("{err:?}").contains(BOUND_EXCEEDED_MARKER)
-}
 
 fn check_len<E: Error>(kind: &str, len: usize, max_allowed_len: usize) -> Result<(), E> {
     if len > max_allowed_len {
