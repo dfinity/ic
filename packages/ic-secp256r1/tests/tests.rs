@@ -206,6 +206,22 @@ fn should_reject_digests_shorter_than_16_bytes() {
 }
 
 #[test]
+fn should_use_only_the_leftmost_32_bytes_of_a_longer_digest() {
+    let rng = &mut test_rng();
+
+    let sk = PrivateKey::generate_using_rng(rng);
+    let pk = sk.public_key();
+
+    let digest = [rng.r#gen::<[u8; 32]>(), rng.r#gen::<[u8; 32]>()].concat();
+
+    let sig = sk
+        .sign_digest(&digest)
+        .expect("a 64-byte digest can be signed");
+    assert_eq!(Some(sig), sk.sign_digest(&digest[..32]));
+    assert!(pk.verify_signature_prehashed(&digest, &sig));
+}
+
+#[test]
 fn should_serialization_and_deserialization_round_trip_for_public_keys()
 -> Result<(), KeyDecodingError> {
     let rng = &mut test_rng();

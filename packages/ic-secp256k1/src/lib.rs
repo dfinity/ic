@@ -499,6 +499,9 @@ impl PrivateKey {
             return self.sign_digest_with_ecdsa(&zdigest);
         }
 
+        // ECDSA uses only the leftmost 32 bytes of a longer digest
+        let digest = &digest[..digest.len().min(32)];
+
         use k256::ecdsa::{Signature, signature::hazmat::PrehashSigner};
         let ecdsa = k256::ecdsa::SigningKey::from(&self.key);
         let sig: Signature = ecdsa.sign_prehash(digest).expect("Failed to sign digest");

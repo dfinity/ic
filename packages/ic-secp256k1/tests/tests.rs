@@ -86,6 +86,11 @@ fn should_handle_short_digests_like_zero_prefixed_ones_except_in_recovery() {
             pk.verify_ecdsa_signature_prehashed_with_malleability(digest, &sig),
             "len = {len}"
         );
+        assert!(pk.verify_signature_prehashed(digest, &sig), "len = {len}");
+        assert!(
+            pk.verify_signature_prehashed_with_malleability(digest, &sig),
+            "len = {len}"
+        );
 
         let recid = pk
             .try_recovery_from_digest(&zero_prefixed, &sig)
@@ -103,6 +108,20 @@ fn should_handle_short_digests_like_zero_prefixed_ones_except_in_recovery() {
             "len = {len}"
         );
     }
+}
+
+#[test]
+fn should_use_only_the_leftmost_32_bytes_of_a_longer_digest() {
+    let rng = &mut test_rng();
+
+    let sk = PrivateKey::generate_using_rng(rng);
+    let pk = sk.public_key();
+
+    let digest = [rng.r#gen::<[u8; 32]>(), rng.r#gen::<[u8; 32]>()].concat();
+
+    let sig = sk.sign_digest_with_ecdsa(&digest);
+    assert_eq!(sig, sk.sign_digest_with_ecdsa(&digest[..32]));
+    assert!(pk.verify_ecdsa_signature_prehashed(&digest, &sig));
 }
 
 #[test]

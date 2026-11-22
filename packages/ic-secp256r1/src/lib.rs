@@ -500,6 +500,9 @@ impl PrivateKey {
             return None;
         }
 
+        // ECDSA uses only the leftmost 32 bytes of a longer digest
+        let digest = &digest[..digest.len().min(32)];
+
         use p256::ecdsa::{Signature, signature::hazmat::PrehashSigner};
         let sig: Signature = self
             .key
