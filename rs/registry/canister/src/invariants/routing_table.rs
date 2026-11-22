@@ -106,6 +106,7 @@ pub(crate) fn check_canister_id_allocation_invariants(
     routing_table: &RoutingTable,
     previous_next_unallocated_canister_index: Option<u64>,
 ) -> Result<(), InvariantCheckError> {
+    // Enforce no deleting.
     let Some(bytes) = snapshot.get(make_canister_id_allocation_key().as_bytes()) else {
         if previous_next_unallocated_canister_index.is_some() {
             return Err(InvariantCheckError {
