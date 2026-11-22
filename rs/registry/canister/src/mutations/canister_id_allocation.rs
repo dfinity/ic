@@ -26,9 +26,11 @@ impl Registry {
     /// Returns a canister index such that no canister index at or above it has ever been allocated
     /// to any subnet, as of `version`.
     ///
-    /// This is read from the `CanisterIdAllocation`. If that does not exist yet (e.g., the
-    /// registry has not been upgraded past the release introducing it), it is computed from the
-    /// full history of the routing table instead.
+    /// This is read from the `CanisterIdAllocation`. In production, that always exists: the
+    /// post-upgrade backfill writes it the first time the registry is upgraded to a release that
+    /// knows about it. It only does not exist in a fresh registry (e.g., in tests that fill the
+    /// registry through mutations), in which case this is computed from the full history of the
+    /// routing table instead.
     pub(crate) fn get_next_unallocated_canister_index(&self, version: u64) -> u64 {
         let key = make_canister_id_allocation_key();
         let Some(registry_value) = self.get(key.as_bytes(), version) else {
