@@ -1494,7 +1494,7 @@ dependencies = [
  "sync_wrapper",
  "tokio",
  "tokio-tungstenite 0.29.0",
- "tower 0.5.3",
+ "tower",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -1563,7 +1563,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-semantic-conventions",
  "pin-project-lite",
- "tower 0.5.3",
+ "tower",
 ]
 
 [[package]]
@@ -4015,7 +4015,6 @@ dependencies = [
  "libfuzzer-sys",
  "libnss",
  "libsystemd",
- "little-loadshedder",
  "lmdb-rkv",
  "lmdb-rkv-sys",
  "loopdev-3",
@@ -4160,7 +4159,7 @@ dependencies = [
  "tonic",
  "tonic-prost",
  "tonic-prost-build",
- "tower 0.5.3",
+ "tower",
  "tower-http 0.7.1",
  "tower-test",
  "tower_governor",
@@ -5885,7 +5884,7 @@ dependencies = [
  "tokio-io-timeout",
  "tokio-rustls",
  "tokio-util",
- "tower 0.5.3",
+ "tower",
  "tower-http 0.7.1",
  "tower-service",
  "tracing",
@@ -6185,7 +6184,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-util",
- "tower 0.5.3",
+ "tower",
  "tower-http 0.7.1",
  "tracing",
  "tracing-core",
@@ -7586,16 +7585,6 @@ name = "litrs"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4744e383959f0db86ede514b809b1c53251889093803c05267acc7d4e7030d70"
-
-[[package]]
-name = "little-loadshedder"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1edea14a875dba8659cb864480c27e8eb2d099542b657729a7567625a2c1d65a"
-dependencies = [
- "tokio",
- "tower 0.4.13",
-]
 
 [[package]]
 name = "lmdb-rkv"
@@ -10237,7 +10226,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tokio-util",
- "tower 0.5.3",
+ "tower",
  "tower-http 0.6.11",
  "tower-service",
  "url",
@@ -12756,7 +12745,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
- "tower 0.5.3",
+ "tower",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -12814,21 +12803,6 @@ dependencies = [
 
 [[package]]
 name = "tower"
-version = "0.4.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8fa9be0de6cf49e536ce1851f987bd21a43b771b09473c3549a6c853db37c1c"
-dependencies = [
- "futures-core",
- "futures-util",
- "pin-project",
- "pin-project-lite",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "tower"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebe5ef63511595f1344e2d5cfa636d973292adc0eec1f0ad45fae9f0851ab1d4"
@@ -12864,7 +12838,7 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-util",
- "tower 0.5.3",
+ "tower",
  "tower-layer",
  "tower-service",
  "url",
@@ -12887,7 +12861,7 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-util",
- "tower 0.5.3",
+ "tower",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -12933,7 +12907,7 @@ dependencies = [
  "pin-project",
  "thiserror 2.0.21",
  "tonic",
- "tower 0.5.3",
+ "tower",
  "tracing",
 ]
 

@@ -906,10 +906,6 @@ crate.spec(
     version = "0.7.2",
 )
 crate.spec(
-    package = "little-loadshedder",
-    version = "^0.2.0",
-)
-crate.spec(
     git = "https://github.com/dfinity-lab/lmdb-rs",
     package = "lmdb-rkv",
     rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f",
