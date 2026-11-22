@@ -2520,7 +2520,8 @@ pub const MAX_ALLOWED_ENVIRONMENT_VARIABLE_VALUE_LENGTH: usize = 128;
 
 /// Environment variables bounded in number and in the size of a single
 /// variable, i.e. of its name and value together. An individual name or value
-/// can thus still exceed its own maximum length.
+/// can thus still exceed its own maximum length, which must be checked
+/// separately after decoding.
 pub type BoundedEnvironmentVariables = BoundedVec<
     MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT,
     UNBOUNDED,
@@ -4181,8 +4182,7 @@ impl DataSize for ChunkHash {
 }
 
 /// Maximum number of chunk hashes allowed in a request to install a Wasm
-/// module assembled from the chunks, which is the number of chunks of maximum
-/// length making up a Wasm module of maximum size.
+/// module assembled from the chunks.
 pub const MAX_ALLOWED_CHUNK_HASHES_COUNT: usize = 100;
 
 /// Chunk hashes bounded in number and in the length of a single hash.
@@ -6109,6 +6109,76 @@ mod tests {
                 assert_bound_exceeded(InstallChunkedCodeArgs::decode(&payload), &expected);
             }
         }
+    }
+
+    /// `is_bound_exceeded_error` must recognize the error of every bound, be
+    /// it from the deserializers of `bounded_bytes` or from `BoundedVec`, and
+    /// only those errors: the decoders of `CreateCanisterArgs` and
+    /// `InstallChunkedCodeArgs` rely on it to report a value exceeding its
+    /// bound instead of falling back, and to still fall back for a payload of
+    /// an unexpected type.
+    #[test]
+    fn bound_exceeded_errors_are_recognized() {
+        use bounded_bytes::deserialize_bounded_option_blob;
+        use bounded_bytes::deserialize_bounded_text;
+
+        const MAX_LEN: usize = 8;
+
+        #[derive(Debug, CandidType, Deserialize)]
+        struct Bounded {
+            #[serde(deserialize_with = "deserialize_bounded_blob::<_, MAX_LEN>")]
+            blob: Vec<u8>,
+            #[serde(deserialize_with = "deserialize_bounded_byte_buf::<_, MAX_LEN>")]
+            byte_buf: ByteBuf,
+            #[serde(deserialize_with = "deserialize_bounded_option_blob::<_, MAX_LEN>")]
+            option_blob: Option<Vec<u8>>,
+            #[serde(deserialize_with = "deserialize_bounded_text::<_, MAX_LEN>")]
+            text: String,
+        }
+
+        fn decode_error<'a, T: CandidType + Deserialize<'a>>(blob: &'a [u8]) -> candid::Error {
+            Decode!([decoder_config()]; blob, T)
+                .err()
+                .expect("decoding should fail")
+        }
+
+        // Each of the deserializers of `bounded_bytes`.
+        let value = |blob, byte_buf, option_blob: Option<usize>, text| Bounded {
+            blob: vec![1; blob],
+            byte_buf: ByteBuf::from(vec![2; byte_buf]),
+            option_blob: option_blob.map(|len| vec![3; len]),
+            text: "x".repeat(text),
+        };
+        for value in [
+            value(MAX_LEN + 1, 0, None, 0),
+            value(0, MAX_LEN + 1, None, 0),
+            value(0, 0, Some(MAX_LEN + 1), 0),
+            value(0, 0, None, MAX_LEN + 1),
+        ] {
+            assert!(is_bound_exceeded_error(&decode_error::<Bounded>(
+                &Encode!(&value).unwrap()
+            )));
+        }
+
+        // Each of the bounds of `BoundedVec`.
+        let elements = Encode!(&vec![vec![0_u8; 4]; 4]).unwrap();
+        type BoundedLen = BoundedVec<3, UNBOUNDED, UNBOUNDED, Vec<u8>>;
+        assert!(is_bound_exceeded_error(&decode_error::<BoundedLen>(
+            &elements
+        )));
+        type BoundedTotalSize = BoundedVec<UNBOUNDED, 100, UNBOUNDED, Vec<u8>>;
+        assert!(is_bound_exceeded_error(&decode_error::<BoundedTotalSize>(
+            &elements
+        )));
+        type BoundedElementSize = BoundedVec<UNBOUNDED, UNBOUNDED, 27, Vec<u8>>;
+        assert!(is_bound_exceeded_error(
+            &decode_error::<BoundedElementSize>(&elements)
+        ));
+
+        // A payload of an unexpected type.
+        let text = Encode!(&"text").unwrap();
+        assert!(!is_bound_exceeded_error(&decode_error::<Bounded>(&text)));
+        assert!(!is_bound_exceeded_error(&decode_error::<BoundedLen>(&text)));
     }
 
     #[test]

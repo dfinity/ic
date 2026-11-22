@@ -2,17 +2,18 @@
 //! `#[serde(deserialize_with = "...")]` on fields whose Rust type stays a
 //! plain `Vec<u8>`, `ByteBuf` or `String`.
 //!
-//! The length is checked once the value has been read: the size of a blob or
-//! text in memory equals its size on the wire, so reading it first costs no
-//! more than the payload itself, and delegating to the regular deserializers
-//! keeps the accepted wire types exactly those of an unbounded field.
+//! Each helper reads the value with the deserializer an unbounded field of the
+//! same type uses and only adds a length check, so a bounded field accepts the
+//! same encodings as an unbounded one. The length is checked once the value
+//! has been read: the size of a blob or text in memory equals its size on the
+//! wire, so reading it first costs no more than the payload itself.
 
 use serde::{Deserialize, Deserializer, de::Error};
 use serde_bytes::ByteBuf;
 
 /// Every error raised for a value exceeding a bound contains this text, be it
 /// from `BoundedVec` or from the deserializers in this module.
-const BOUND_EXCEEDED_MARKER: &str = "exceeds maximum allowed";
+pub(crate) const BOUND_EXCEEDED_MARKER: &str = "exceeds maximum allowed";
 
 /// Returns true if decoding failed because a value exceeded its bound, as
 /// opposed to the payload not having the expected Candid type.
@@ -80,8 +81,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BoundedVec, Payload, UNBOUNDED};
-    use candid::{CandidType, Decode, Encode};
+    use crate::Payload;
+    use candid::CandidType;
     use ic_error_types::ErrorCode;
 
     const MAX_LEN: usize = 8;
@@ -212,46 +213,5 @@ mod tests {
                 error.description()
             );
         }
-    }
-
-    #[test]
-    fn bound_exceeded_errors_are_recognized() {
-        fn decode_error<'a, T: CandidType + Deserialize<'a>>(blob: &'a [u8]) -> candid::Error {
-            Decode!([crate::decoder_config()]; blob, T)
-                .err()
-                .expect("decoding should fail")
-        }
-
-        // The deserializers of this module.
-        for value in [
-            value(MAX_LEN + 1, 0, None, 0),
-            value(0, MAX_LEN + 1, None, 0),
-            value(0, 0, Some(MAX_LEN + 1), 0),
-            value(0, 0, None, MAX_LEN + 1),
-        ] {
-            assert!(is_bound_exceeded_error(&decode_error::<Bounded>(
-                &value.encode()
-            )));
-        }
-
-        // Each of the bounds of `BoundedVec`.
-        let elements = Encode!(&vec![vec![0_u8; 4]; 4]).unwrap();
-        type BoundedLen = BoundedVec<3, UNBOUNDED, UNBOUNDED, Vec<u8>>;
-        assert!(is_bound_exceeded_error(&decode_error::<BoundedLen>(
-            &elements
-        )));
-        type BoundedTotalSize = BoundedVec<UNBOUNDED, 100, UNBOUNDED, Vec<u8>>;
-        assert!(is_bound_exceeded_error(&decode_error::<BoundedTotalSize>(
-            &elements
-        )));
-        type BoundedElementSize = BoundedVec<UNBOUNDED, UNBOUNDED, 27, Vec<u8>>;
-        assert!(is_bound_exceeded_error(
-            &decode_error::<BoundedElementSize>(&elements)
-        ));
-
-        // A payload of an unexpected type.
-        let text = Encode!(&"text").unwrap();
-        assert!(!is_bound_exceeded_error(&decode_error::<Bounded>(&text)));
-        assert!(!is_bound_exceeded_error(&decode_error::<BoundedLen>(&text)));
     }
 }

@@ -1,4 +1,5 @@
 use crate::DataSize;
+use crate::bounded_bytes::BOUND_EXCEEDED_MARKER;
 use candid::{CandidType, Deserialize};
 use serde::{Deserializer, Serialize, Serializer};
 use std::fmt;
@@ -126,14 +127,14 @@ impl<
                 while let Some(element) = seq.next_element::<T>()? {
                     if elements.len() >= MAX_ALLOWED_LEN {
                         return Err(serde::de::Error::custom(format!(
-                            "The number of elements exceeds maximum allowed {MAX_ALLOWED_LEN}"
+                            "The number of elements {BOUND_EXCEEDED_MARKER} {MAX_ALLOWED_LEN}"
                         )));
                     }
                     // Check that the new element data size is below the maximum allowed limit.
                     let new_element_data_size = element.data_size();
                     if new_element_data_size > MAX_ALLOWED_ELEMENT_DATA_SIZE {
                         return Err(serde::de::Error::custom(format!(
-                            "The single element data size exceeds maximum allowed {MAX_ALLOWED_ELEMENT_DATA_SIZE}"
+                            "The single element data size {BOUND_EXCEEDED_MARKER} {MAX_ALLOWED_ELEMENT_DATA_SIZE}"
                         )));
                     }
                     // Check that the new total data size (including new element data size)
@@ -141,7 +142,7 @@ impl<
                     let new_total_data_size = total_data_size + new_element_data_size;
                     if new_total_data_size > MAX_ALLOWED_TOTAL_DATA_SIZE {
                         return Err(serde::de::Error::custom(format!(
-                            "The total data size exceeds maximum allowed {MAX_ALLOWED_TOTAL_DATA_SIZE}"
+                            "The total data size {BOUND_EXCEEDED_MARKER} {MAX_ALLOWED_TOTAL_DATA_SIZE}"
                         )));
                     }
                     total_data_size = new_total_data_size;

@@ -39,7 +39,7 @@ use dfn_candid::candid_one;
 use ic_management_canister_types_private::{
     BoundedHttpHeaders, CanisterHttpResponsePayload, FlexibleCanisterHttpRequestArgs,
     FlexibleHttpGlobalError, FlexibleHttpRequestErr, FlexibleHttpRequestResult, HttpHeader,
-    HttpMethod, ReplicationCounts, TransformContext, TransformFunc,
+    HttpMethod, Payload, ReplicationCounts, TransformContext, TransformFunc,
 };
 use ic_system_test_driver::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_system_test_driver::driver::{
@@ -266,7 +266,7 @@ async fn send_flexible_reporting_refund(
             "send_flexible_request",
             candid_one::<FlexibleResponseWithRefundedCycles, FlexibleRemoteHttpRequest>,
             FlexibleRemoteHttpRequest {
-                request: args.into(),
+                request: args.encode(),
                 cycles,
             },
         )

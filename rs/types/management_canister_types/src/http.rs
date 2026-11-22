@@ -43,28 +43,27 @@ const KIB: usize = 1_024;
 
 /// Maximum number of HTTP headers in the request.
 ///
-/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+/// Described in <https://docs.internetcomputer.org/references/ic-interface-spec/management-canister/#ic-http_request>.
 const HTTP_HEADERS_MAX_NUMBER: usize = 64;
 
 /// Maximum size of all the HTTP headers in the request.
 ///
-/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+/// Described in <https://docs.internetcomputer.org/references/ic-interface-spec/management-canister/#ic-http_request>.
 const HTTP_HEADERS_TOTAL_MAX_SIZE: usize = 48 * KIB;
 
 /// Maximum size of a single HTTP header in the request.
 ///
-/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+/// Described in <https://docs.internetcomputer.org/references/ic-interface-spec/management-canister/#ic-http_request>.
 const HTTP_HEADERS_ELEMENT_MAX_SIZE: usize = 16 * KIB; // name + value = 8KiB + 8KiB
 
 /// Maximum length of the URL in the request.
 ///
-/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+/// Described in <https://docs.internetcomputer.org/references/ic-interface-spec/management-canister/#ic-http_request>.
 pub const HTTP_URL_MAX_SIZE: usize = 8192;
 
-/// Maximum size of the body in the request. The headers count towards the same
-/// limit, so a request with a body of this size is only valid without headers.
+/// Maximum size of the body in the request.
 ///
-/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+/// Described in <https://docs.internetcomputer.org/references/ic-interface-spec/management-canister/#ic-http_request>.
 pub const HTTP_BODY_MAX_SIZE: usize = 2_000_000;
 
 /// The numeric representation for the Legacy pricing version.
@@ -75,7 +74,7 @@ pub const PRICING_VERSION_PAY_AS_YOU_GO: u32 = 2;
 /// The default pricing version for HTTP outcalls.
 ///
 /// If the field is missing, this is the version that will be assumed by the replica.
-/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+/// Described in <https://docs.internetcomputer.org/references/ic-interface-spec/management-canister/#ic-http_request>.
 pub const DEFAULT_HTTP_OUTCALLS_PRICING_VERSION: u32 = PRICING_VERSION_LEGACY;
 
 /// The pricing versions an HTTP outcall may select on a subnet where the

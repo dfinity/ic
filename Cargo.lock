@@ -20478,8 +20478,8 @@ dependencies = [
  "futures",
  "ic-cdk",
  "ic-management-canister-types-private",
- "ic-utils 0.9.0",
  "serde",
+ "serde_bytes",
 ]
 
 [[package]]

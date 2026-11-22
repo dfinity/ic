@@ -15,8 +15,7 @@ use ic_cdk::call::{Call, CallFailed};
 use ic_cdk::futures::spawn_017_compat;
 use ic_cdk::{query, update};
 use ic_management_canister_types_private::{
-    BoundedHttpHeaders, CanisterHttpResponsePayload, FlexibleCanisterHttpRequestArgs, HttpHeader,
-    Payload, TransformArgs,
+    BoundedHttpHeaders, CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
 };
 use proxy_canister::{
     FlexibleRemoteHttpRequest, FlexibleResponseWithRefundedCycles, RejectionCode,
@@ -55,10 +54,9 @@ async fn send_flexible_request(
     request: FlexibleRemoteHttpRequest,
 ) -> FlexibleResponseWithRefundedCycles {
     let FlexibleRemoteHttpRequest { request, cycles } = request;
-    let request = FlexibleCanisterHttpRequestArgs::from(request);
 
     let result = Call::unbounded_wait(Principal::management_canister(), "flexible_http_request")
-        .with_raw_args(&request.encode())
+        .with_raw_args(&request)
         .with_cycles(u128::from(cycles))
         .await
         .map(|response| response.into_bytes())
