@@ -7,7 +7,7 @@
     "urls": NNS_URLS
   },
   "dev_vm_resources": {
-    "memory": "16",
+    "memory": "128",
     "cpu": "kvm",
     "nr_of_vcpus": 16
   }
