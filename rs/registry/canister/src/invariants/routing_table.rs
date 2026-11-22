@@ -89,8 +89,12 @@ pub(crate) fn check_canister_migrations_invariants(
     Ok(())
 }
 
-/// Checks the invariants of the `CanisterIdAllocation` (no canister index at or above its
-/// `next_unallocated_canister_index` has ever been allocated to a subnet):
+/// Checks the invariants of the `CanisterIdAllocation`.
+///
+/// The `CanisterIdAllocation` is meant to guarantee that no canister index at or above its
+/// `next_unallocated_canister_index` has ever been allocated to a subnet. This function cannot
+/// check that, since it only sees the current snapshot and the previous value, not the history.
+/// What it does check is the following:
 ///
 /// * Once present, it is never deleted.
 /// * It never decreases. `previous_next_unallocated_canister_index` is its value before the
