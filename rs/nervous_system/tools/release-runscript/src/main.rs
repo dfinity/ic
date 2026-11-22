@@ -547,12 +547,10 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
     // --- Generate NNS forum post ---
     if !nns_proposal_text_paths.is_empty() {
         let script = ic.join("rs/nervous_system/tools/release/cmd.sh");
+        let proposal_args =
+            pair_proposal_text_paths_with_ids(&nns_proposal_text_paths, &nns_proposal_ids)?;
         let mut args = vec!["generate_forum_post_nns_upgrades"];
-        let path_strs: Vec<&str> = nns_proposal_text_paths
-            .iter()
-            .map(|p| p.to_str().unwrap())
-            .collect();
-        args.extend(path_strs.iter());
+        args.extend(proposal_args.iter().map(|arg| arg.as_str()));
 
         let output =
             run_script(script, &args, &ic).expect("Failed to run generate_forum_post_nns_upgrades");
@@ -571,17 +569,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
 
         open_webpage(&url)?;
 
-        use std::fmt::Write;
-        println!(
-            "NNS forum post copied to clipboard. Please paste in the following proposal texts as well: {}",
-            nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
-                let _ = write!(
-                    acc,
-                    "\n  - [Proposal {id}](https://dashboard.internetcomputer.org/proposal/{id})",
-                );
-                acc
-            })
-        );
+        println!("NNS forum post copied to clipboard.");
 
         press_enter_to_continue()?;
     }
@@ -589,12 +577,10 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
     // --- Generate SNS forum post ---
     if !sns_proposal_text_paths.is_empty() {
         let script = ic.join("rs/nervous_system/tools/release/cmd.sh");
+        let proposal_args =
+            pair_proposal_text_paths_with_ids(&sns_proposal_text_paths, &sns_proposal_ids)?;
         let mut args = vec!["generate_forum_post_sns_wasm_publish"];
-        let path_strs: Vec<&str> = sns_proposal_text_paths
-            .iter()
-            .map(|p| p.to_str().unwrap())
-            .collect();
-        args.extend(path_strs.iter());
+        args.extend(proposal_args.iter().map(|arg| arg.as_str()));
 
         let output = run_script(script, &args, &ic)
             .expect("Failed to run generate_forum_post_sns_wasm_publish");
@@ -613,17 +599,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
 
         open_webpage(&url)?;
 
-        use std::fmt::Write;
-        println!(
-            "SNS forum post copied to clipboard. Please paste in the following proposal texts as well: {}",
-            sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
-                let _ = write!(
-                    acc,
-                    "\n  - [Proposal {id}](https://dashboard.internetcomputer.org/proposal/{id})",
-                );
-                acc
-            })
-        );
+        println!("SNS forum post copied to clipboard.");
 
         press_enter_to_continue()?;
     }
@@ -631,7 +607,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
     print_step(
         6,
         "Post to the DFINITY forum",
-        "Make sure to add the proposal IDs to the forum post!",
+        "Make sure that the forum post(s) have been posted.",
     )?;
 
     // Continue to the next automated step.
@@ -640,6 +616,40 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
         nns_proposal_ids,
         sns_proposal_ids,
     })
+}
+
+/// Returns Strings of the form "${proposal_path}:${proposal_id}".
+///
+/// Each is an argument to the forum post generators
+/// (generate_forum_post_nns_upgrades, and
+/// generate_forum_post_sns_wasm_publish).
+///
+/// proposal_ids[i] must be the ID of the proposal whose text is in
+/// proposal_text_paths[i].
+fn pair_proposal_text_paths_with_ids(
+    proposal_text_paths: &[PathBuf],
+    proposal_ids: &[String],
+) -> Result<Vec<String>> {
+    if proposal_text_paths.len() != proposal_ids.len() {
+        bail!(
+            "There must be one proposal ID per proposal text, but got {} proposal texts \
+             ({:?}) and {} proposal IDs ({:?}).",
+            proposal_text_paths.len(),
+            proposal_text_paths,
+            proposal_ids.len(),
+            proposal_ids,
+        );
+    }
+
+    let result = proposal_text_paths
+        .iter()
+        .zip(proposal_ids)
+        .map(|(proposal_text_path, proposal_id)| {
+            format!("{}:{}", proposal_text_path.display(), proposal_id)
+        })
+        .collect::<Vec<String>>();
+
+    Ok(result)
 }
 
 fn run_schedule_vote(cmd: ScheduleVote) -> Result<()> {

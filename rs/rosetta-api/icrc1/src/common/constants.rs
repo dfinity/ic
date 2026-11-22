@@ -20,6 +20,10 @@ pub const INGRESS_INTERVAL_OVERLAP: Duration = Duration::from_secs(120);
 /// Maximum permitted ingress window, mirroring the 24-hour bound documented on
 /// `ConstructionPayloadsRequestMetadata`.
 pub const MAX_INGRESS_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
+/// Maximum permitted memo length in `/construction/payloads`. The memo is copied
+/// into every envelope of the unsigned transaction, so its size must be bounded.
+/// This is well above the max memo length of any production ICRC-1 ledger.
+pub const MAX_MEMO_LENGTH_BYTES: usize = 1024;
 /// Maximum permitted size of the Candid-encoded ledger method arguments built in
 /// `/construction/payloads`. The arguments are copied into every envelope of the unsigned
 /// transaction, so their size must be bounded.

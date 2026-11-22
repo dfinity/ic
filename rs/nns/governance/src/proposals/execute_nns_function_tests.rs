@@ -1,8 +1,10 @@
 use crate::{
-    pb::v1::{ExecuteNnsFunction, NnsFunction},
+    pb::v1::{ExecuteNnsFunction, NnsFunction, SelfDescribingValue as SelfDescribingValuePb},
     proposals::{
         ValidProposalAction,
-        execute_nns_function::{ValidExecuteNnsFunction, ValidNnsFunction},
+        execute_nns_function::{
+            ValidExecuteNnsFunction, ValidNnsFunction, validate_self_describing_value_size,
+        },
     },
     test_utils::{ExpectedCallCanisterMethodCallArguments, MockEnvironment},
 };
@@ -11,7 +13,9 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
 use ic_nervous_system_root::change_canister::AddCanisterRequest;
-use ic_nns_constants::{BITCOIN_MAINNET_CANISTER_ID, CYCLES_MINTING_CANISTER_ID};
+use ic_nns_constants::{
+    BITCOIN_MAINNET_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, REGISTRY_CANISTER_ID,
+};
 use ic_nns_governance_api::{
     SelfDescribingValue,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
@@ -177,7 +181,7 @@ service : {
 
     // Test through ValidProposalAction::to_self_describing
     let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
-    let result = proposal_action.to_self_describing(env).await.unwrap();
+    let result = proposal_action.to_self_describing(env).await;
 
     // Verify the type name and description
     assert_eq!(result.type_name, "Update Subnet Type");
@@ -222,7 +226,7 @@ async fn test_to_self_describing_uninstall_code() {
     let env = Arc::new(MockEnvironment::new(vec![], 0));
 
     let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
-    let result = proposal_action.to_self_describing(env).await.unwrap();
+    let result = proposal_action.to_self_describing(env).await;
 
     assert_eq!(result.type_name, "Uninstall Code");
     assert!(
@@ -257,7 +261,7 @@ async fn test_to_self_describing_bitcoin_set_config() {
     let env = Arc::new(MockEnvironment::new(vec![], 0));
 
     let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
-    let result = proposal_action.to_self_describing(env).await.unwrap();
+    let result = proposal_action.to_self_describing(env).await;
 
     assert_eq!(result.type_name, "Set Bitcoin Config");
     assert!(
@@ -295,7 +299,7 @@ async fn test_to_self_describing_subnet_rental_request() {
     let env = Arc::new(MockEnvironment::new(vec![], 0));
 
     let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
-    let result = proposal_action.to_self_describing(env).await.unwrap();
+    let result = proposal_action.to_self_describing(env).await;
 
     assert_eq!(result.type_name, "Subnet Rental Request");
     assert!(
@@ -338,7 +342,7 @@ async fn test_to_self_describing_add_sns_wasm() {
     let env = Arc::new(MockEnvironment::new(vec![], 0));
 
     let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
-    let result = proposal_action.to_self_describing(env).await.unwrap();
+    let result = proposal_action.to_self_describing(env).await;
 
     assert_eq!(
         SelfDescribingValue::from(result.value.unwrap()),
@@ -463,7 +467,7 @@ async fn test_to_self_describing_nns_canister_install() {
     ));
 
     let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
-    let result = proposal_action.to_self_describing(env).await.unwrap();
+    let result = proposal_action.to_self_describing(env).await;
 
     let wasm_hash = Sha256::hash(&wasm_module).to_vec();
     let arg_hash = Sha256::hash(&arg).to_vec();
@@ -521,7 +525,7 @@ async fn test_to_self_describing_hard_reset_nns_root_to_version() {
     ));
 
     let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
-    let result = proposal_action.to_self_describing(env).await.unwrap();
+    let result = proposal_action.to_self_describing(env).await;
 
     let wasm_hash = Sha256::hash(&wasm_module).to_vec();
     let init_arg_hash = Sha256::hash(&init_arg).to_vec();
@@ -533,4 +537,186 @@ async fn test_to_self_describing_hard_reset_nns_root_to_version() {
             "init_arg_hash".to_string() => SelfDescribingValue::from(init_arg_hash),
         })
     );
+}
+
+#[test]
+fn test_validate_self_describing_value_size() {
+    let new_blob_value = |len_bytes: usize| SelfDescribingValuePb::from(vec![42_u8; len_bytes]);
+
+    // Small values are fine.
+    assert_eq!(
+        validate_self_describing_value_size(&new_blob_value(30_000)),
+        Ok(())
+    );
+
+    // Large values are not.
+    let err = validate_self_describing_value_size(&new_blob_value(120_000)).unwrap_err();
+    assert!(err.contains("too large"), "{}", err);
+}
+
+#[tokio::test]
+async fn test_to_self_describing_limits_value_but_keeps_type_name_and_description() {
+    // Step 1: Prepare the world.
+
+    // Registry interface (partial).
+    let registry_candid = r#"
+        type KeyConfig = record {
+            key_id : opt nat32;
+        };
+
+        type Letter = variant {
+            A;
+        };
+
+        type UpdateSubnetRequest = record {
+            // Cheap to decode, but results in large SelfDescribingValue.
+            key_configs : vec KeyConfig;
+
+            // Expensive to decode, relative to size of resulting
+            // SelfDescribingValue.
+            letters : vec Letter;
+        };
+
+        service : {
+            update_subnet : (UpdateSubnetRequest) -> ();
+        }
+    "#;
+
+    // Corresponding Rust types.
+
+    #[derive(candid::CandidType, Clone)]
+    struct KeyConfig {
+        key_id: Option<u32>,
+    }
+
+    #[derive(candid::CandidType, Clone)]
+    enum Letter {
+        A,
+    }
+
+    #[derive(candid::CandidType)]
+    struct UpdateSubnetRequest {
+        key_configs: Vec<KeyConfig>,
+        letters: Vec<Letter>,
+    }
+
+    let cases = vec![
+        // Happy case: converting to SelfDescribingValue succeeds.
+        (
+            "No issues with converting `payload` to SelfDescribingValue",
+            UpdateSubnetRequest {
+                key_configs: vec![KeyConfig { key_id: Some(42) }; 2_000],
+                letters: vec![],
+            },
+            5_000..15_000, // expected payload len
+            Ok(()),        // expected SelfDescribingValue conversion result
+        ),
+        // Sad cases.
+        (
+            // Decoding is within budget, but the result is about 230 KB.
+            "Result of converting `payload` to SelfDescribingValue is too large",
+            UpdateSubnetRequest {
+                key_configs: vec![KeyConfig { key_id: Some(42) }; 12_000],
+                letters: vec![],
+            },
+            55_000..65_000,         // expected payload len
+            Err(vec!["too large"]), // expected SelfDescribingValue conversion result
+        ),
+        (
+            // Costs about 840_000 to decode, vs. a budget of about 600_000.
+            // Candid stops decoding before the size of the result can even be
+            // checked.
+            "Candid decoding `payload` exceeds budget",
+            UpdateSubnetRequest {
+                key_configs: vec![],
+                letters: vec![Letter::A; 40_000],
+            },
+            35_000..45_000,                       // expected payload len
+            Err(vec!["cost", "exceed", "limit"]), // expected SelfDescribingValue conversion result
+        ),
+    ];
+
+    // Prepare `canister_metadata` response from the Management canister for
+    // when Governance requests Registry's interface.
+    let metadata_request =
+        CanisterMetadataRequest::new(REGISTRY_CANISTER_ID, "candid:service".to_string());
+    let metadata_response = CanisterMetadataResponse::new(registry_candid.as_bytes().to_vec());
+    let expected_metadata_call = ExpectedCallCanisterMethodCallArguments::new(
+        CanisterId::ic_00(),
+        "canister_metadata",
+        Encode!(&metadata_request).unwrap(),
+    );
+    let env = Arc::new(MockEnvironment::new(
+        vec![
+            (
+                expected_metadata_call,
+                Ok(Encode!(&metadata_response).unwrap()),
+            );
+            // Each case requests it twice: once via
+            // convert_payload_to_self_describing_value, and once via
+            // to_self_describing.
+            2 * cases.len()
+        ],
+        0,
+    ));
+
+    for (label, request, expected_payload_len_range, expected_result) in cases {
+        // Step 2: Run the code under test.
+
+        // Step 2.1: Prepare argument.
+        let payload = Encode!(&request).unwrap();
+        assert!(
+            expected_payload_len_range.contains(&payload.len()),
+            "{}: {}",
+            label,
+            payload.len()
+        );
+        let execute_nns_function = ValidExecuteNnsFunction {
+            nns_function: ValidNnsFunction::UpdateConfigOfSubnet,
+            payload,
+        };
+        let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function.clone());
+
+        // Step 2.2: Convert the whole action to be self-describing.
+        let outer_result = proposal_action.to_self_describing(env.clone()).await;
+
+        // Step 2.3: Convert just payload to SelfDescribingValue. This is so we
+        // can see WHY things fail.
+        let inner_result = execute_nns_function
+            .convert_payload_to_self_describing_value(env.clone())
+            .await;
+
+        // Step 3: Verify result(s).
+
+        // Step 3.1: The fields that are supposed to be populated in all cases.
+        assert_eq!(outer_result.type_name, "Update Subnet Config", "{}", label);
+        assert_eq!(
+            outer_result.type_description,
+            ValidNnsFunction::UpdateConfigOfSubnet.type_description(),
+            "{}",
+            label,
+        );
+
+        // Step 3.2: Whether value is populated, and if not, why.
+        match expected_result {
+            Ok(()) => {
+                // Assert both results are success.
+                let value = inner_result.unwrap();
+                assert_eq!(outer_result.value, Some(value), "{}", label);
+            }
+            Err(key_words) => {
+                let err = inner_result.unwrap_err();
+                for key_word in key_words {
+                    assert!(
+                        err.to_lowercase().contains(key_word),
+                        "{}: {} not in {}",
+                        label,
+                        key_word,
+                        err
+                    );
+                }
+                assert_eq!(outer_result.value, None, "{}", label);
+            }
+        }
+    }
 }

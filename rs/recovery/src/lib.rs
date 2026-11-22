@@ -858,6 +858,7 @@ impl Recovery {
                     chain_key_config,
                     replacement_nodes,
                     registry_params,
+                    /*summary=*/ None,
                     SystemTime::now(),
                 ),
         })
@@ -987,7 +988,8 @@ impl Recovery {
         }
     }
 
-    /// Return a [StopReplicaStep] to stop the replica with the given IP
+    /// Return a [StopReplicaStep] to stop the replica and crypto vault of the node with the
+    /// given IP
     pub fn get_stop_replica_step(&self, node_ip: IpAddr) -> impl Step + use<> {
         StopReplicaStep {
             logger: self.logger.clone(),

@@ -190,6 +190,9 @@ impl AdminHelper {
         ic_admin
     }
 
+    /// Return an ic_admin command to propose a recovery CUP for the given
+    /// subnet. The proposal's summary is `summary` if given, or a generic
+    /// "Recover subnet <subnet_id>." otherwise.
     pub fn get_propose_to_update_recovery_cup_command(
         &self,
         subnet_id: SubnetId,
@@ -199,6 +202,7 @@ impl AdminHelper {
         chain_key_config: Option<(ChainKeyConfig, SubnetId)>,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
+        summary: Option<String>,
         time: SystemTime,
     ) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base();
@@ -269,7 +273,8 @@ impl AdminHelper {
                 .add_argument("registry-version", params.registry_version);
         }
 
-        ic_admin.add_argument(SUMMARY_ARG, quote(format!("Recover subnet {subnet_id}.")));
+        let summary = summary.unwrap_or_else(|| format!("Recover subnet {subnet_id}."));
+        ic_admin.add_argument(SUMMARY_ARG, quote(summary));
 
         let since_the_epoch = time
             .duration_since(UNIX_EPOCH)
@@ -546,6 +551,7 @@ mod tests {
                 None,
                 &[],
                 None,
+                None,
                 UNIX_EPOCH + Duration::from_nanos(123456),
             )
             .join(" ");
@@ -611,6 +617,7 @@ mod tests {
                     registry_store_hash: "fake_registry_store_hash".to_string(),
                     registry_version: RegistryVersion::from(666),
                 }),
+                Some("Recover subnet with a custom summary.".to_string()),
                 UNIX_EPOCH + Duration::from_nanos(123456),
             )
             .join(" ");
@@ -639,7 +646,7 @@ mod tests {
             --registry-store-uri https://fake_registry_store_uri.com/ \
             --registry-store-hash fake_registry_store_hash \
             --registry-version 666 \
-            --summary \"Recover subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \
+            --summary \"Recover subnet with a custom summary.\" \
             --time-ns 123456 \
             --proposer fake_neuron_id"
         );

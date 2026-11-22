@@ -27,7 +27,6 @@ ic-http-endpoints-xnet = { path = "../http_endpoints/xnet" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
-ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-tracing-logging-layer = { path = "../monitoring/tracing/logging_layer" }
 ic-logger = { path = "../monitoring/logger" }
 ic-messaging = { path = "../messaging" }

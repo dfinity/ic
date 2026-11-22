@@ -13,6 +13,7 @@ rust_library(
         "//rs/rust_canisters/xnet_test",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/message_routing/common:systest_message_routing_common",
+        "//rs/types/types",
         "@crate_index//:futures",
         "@crate_index//:slog",
         "@crate_index//:tokio",

@@ -48,3 +48,16 @@ pub(crate) fn activate_flags(partition: Partition) -> CryptActivate {
         Partition::Store => CryptActivate::ALLOW_DISCARDS,
     }
 }
+
+/// Returns the encryption sector size to format the given partition with, in bytes, or 0 to leave
+/// it to libcryptsetup (which follows the virtual disk's 512 B blocks).
+///
+/// The store holds the replica's state, where 4 KiB sectors take an eighth of the cipher calls of
+/// 512 B ones. A store keeps the sector size it was formatted with: only a newly formatted one
+/// gets 4 KiB sectors, with its volume group and filesystems created afresh on top.
+pub fn encryption_sector_size(partition: Partition) -> u32 {
+    match partition {
+        Partition::Var => 0,
+        Partition::Store => 4096,
+    }
+}

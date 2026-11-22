@@ -185,7 +185,7 @@ def main():
         [
             args.zstd,
             "-q",
-            "--threads=0",
+            "--single-thread",
             temp_tar,
             "-o",
             out_file,

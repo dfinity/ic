@@ -8,7 +8,6 @@
 //! for information about the signature format
 use ic_crypto_sha2::Sha256;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
-use num_traits::{FromPrimitive, Zero};
 use rsa::traits::PublicKeyParts;
 use rsa::{Pkcs1v15Sign, pkcs8};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -18,7 +17,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 pub struct RsaPublicKey {
     der: Vec<u8>,
     #[serde(skip_serializing)]
-    key: rsa::RsaPublicKey,
+    key: rsa::PublicKey,
 }
 
 impl<'de> Deserialize<'de> for RsaPublicKey {
@@ -35,7 +34,7 @@ impl<'de> Deserialize<'de> for RsaPublicKey {
 
 impl RsaPublicKey {
     pub const MINIMUM_RSA_KEY_SIZE: usize = 2048;
-    pub const MAXIMUM_RSA_KEY_SIZE: usize = 8192;
+    pub const MAXIMUM_RSA_KEY_SIZE: usize = 4096;
 
     /// Create the SPKI encoding of an RSA public key from the public parameters
     ///
@@ -85,19 +84,33 @@ impl RsaPublicKey {
     /// # Arguments
     /// * `bytes` the DER encoded data
     pub fn from_der_spki(bytes: &[u8]) -> CryptoResult<Self> {
-        use rsa::BigUint;
+        let spki = pkcs8::SubjectPublicKeyInfoRef::try_from(bytes).map_err(|e| {
+            CryptoError::MalformedPublicKey {
+                algorithm: AlgorithmId::RsaSha256,
+                key_bytes: Some(bytes.to_vec()),
+                internal_error: format!("Parsing RSA key failed {e:?}"),
+            }
+        })?;
 
-        let parsed: rsa::RsaPublicKey = pkcs8::DecodePublicKey::from_public_key_der(bytes)
-            .map_err(|e| CryptoError::MalformedPublicKey {
+        // `rsa::PublicKey` also decodes keys whose algorithm is id-RSASSA-PSS,
+        // which may only be used for RSASSA-PSS signatures (RFC 4055, section 1.2)
+        if spki.algorithm.oid != rsa::pkcs1::ALGORITHM_OID {
+            return Err(CryptoError::MalformedPublicKey {
+                algorithm: AlgorithmId::RsaSha256,
+                key_bytes: Some(bytes.to_vec()),
+                internal_error: format!("RSA key has unexpected algorithm {}", spki.algorithm.oid),
+            });
+        }
+
+        let parsed =
+            rsa::PublicKey::try_from(spki).map_err(|e| CryptoError::MalformedPublicKey {
                 algorithm: AlgorithmId::RsaSha256,
                 key_bytes: Some(bytes.to_vec()),
                 internal_error: format!("Parsing RSA key failed {e:?}"),
             })?;
 
-        let two = BigUint::from_i8(2).expect("Unable to create 2 BigUint");
-
-        // RustCrypto/rsa does not verify that the public exponent is odd
-        if parsed.e() % &two == BigUint::zero() {
+        // The public exponent must be odd
+        if !parsed.e().bit_vartime(0) {
             return Err(CryptoError::MalformedPublicKey {
                 algorithm: AlgorithmId::RsaSha256,
                 key_bytes: Some(bytes.to_vec()),
@@ -105,8 +118,8 @@ impl RsaPublicKey {
             });
         }
 
-        // RustCrypto/rsa does not verify that the public modulus is odd
-        if parsed.n() % &two == BigUint::zero() {
+        // The public modulus must be odd
+        if !parsed.n().bit_vartime(0) {
             return Err(CryptoError::MalformedPublicKey {
                 algorithm: AlgorithmId::RsaSha256,
                 key_bytes: Some(bytes.to_vec()),
@@ -114,8 +127,8 @@ impl RsaPublicKey {
             });
         }
 
-        // RustCrypto/rsa does not check if the modulus is valid size
-        let modulus_bits = parsed.n().bits();
+        // The IC's limits on the modulus size are stricter than those of `rsa::PublicKey`
+        let modulus_bits = parsed.n().bit_width_vartime() as usize;
 
         if modulus_bits < Self::MINIMUM_RSA_KEY_SIZE {
             return Err(CryptoError::MalformedPublicKey {
@@ -154,7 +167,7 @@ impl RsaPublicKey {
 
         match &self
             .key
-            .verify(Pkcs1v15Sign::new::<sha2::Sha256>(), &digest, signature)
+            .verify(Pkcs1v15Sign::new::<rsa::sha2::Sha256>(), &digest, signature)
         {
             Ok(_) => Ok(()),
             Err(e) => Err(CryptoError::SignatureVerification {

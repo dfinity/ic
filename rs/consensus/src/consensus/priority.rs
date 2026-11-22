@@ -1,4 +1,4 @@
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::{pool_reader::PoolReader, subnet_splitting::is_split_scheduled};
 use ic_interfaces::{
     consensus_pool::ConsensusPool,
     p2p::consensus::{Bouncer, BouncerValue, BouncerValue::*},
@@ -18,7 +18,10 @@ pub fn new_bouncer(
     let finalized_height = pool_reader.get_finalized_height();
     let notarized_height = pool_reader.get_notarized_height();
     let beacon_height = pool_reader.get_random_beacon_height();
-    let next_summary_height = pool_reader.get_next_summary_height();
+    // With a split scheduled, the post-split CUP is made for the next summary height.
+    let post_split_cup_height =
+        is_split_scheduled(&pool_reader.get_highest_finalized_summary_block())
+            .map(|_| pool_reader.get_next_summary_height());
 
     Box::new(move |id: &'_ ConsensusMessageId| {
         compute_bouncer(
@@ -28,7 +31,7 @@ pub fn new_bouncer(
             finalized_height,
             notarized_height,
             beacon_height,
-            next_summary_height,
+            post_split_cup_height,
             id,
         )
     })
@@ -46,7 +49,7 @@ fn compute_bouncer(
     finalized_height: Height,
     notarized_height: Height,
     beacon_height: Height,
-    next_summary_height: Height,
+    post_split_cup_height: Option<Height>,
     id: &ConsensusMessageId,
 ) -> BouncerValue {
     let height = id.height;
@@ -109,10 +112,11 @@ fn compute_bouncer(
             }
         }
         ConsensusMessageHash::CatchUpPackage(_) => Wants,
+        // Except for the post-split CUP, shares can only be validated at finalized heights.
         ConsensusMessageHash::CatchUpPackageShare(_) => {
             if height <= cup_height {
                 Unwanted
-            } else if height <= next_summary_height {
+            } else if height <= finalized_height || Some(height) == post_split_cup_height {
                 Wants
             } else {
                 MaybeWantsLater
@@ -126,14 +130,22 @@ mod tests {
     use super::*;
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_test_utilities_consensus::fake::FakeContent;
-    use ic_test_utilities_types::ids::{node_test_id, test_replica_version};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::{
         consensus::{
-            ConsensusMessageHashable, Finalization, FinalizationContent, HasHeight, Notarization,
-            NotarizationContent,
+            BlockPayload, ConsensusMessageHashable, Finalization, FinalizationContent, HasHeight,
+            HashedBlock, Notarization, NotarizationContent, Payload,
+            dkg::{SplittingArgs, SubnetSplittingStatus},
         },
         crypto::{CryptoHash, CryptoHashOf},
     };
+
+    fn cup_share_id_at(height: Height) -> ConsensusMessageId {
+        ConsensusMessageId {
+            hash: ConsensusMessageHash::CatchUpPackageShare(CryptoHashOf::new(CryptoHash(vec![]))),
+            height,
+        }
+    }
 
     #[test]
     fn test_bouncer_for_validation_gap() {
@@ -178,17 +190,6 @@ mod tests {
             };
             assert_eq!(bouncer(&cup_id), Wants);
 
-            // CUP shares are exempt from the validator-CUP gap as well: even though the
-            // share is at the same height as the stashed artifacts above, we should
-            // still fetch it, since it is not above the next summary height.
-            let cup_share_id = ConsensusMessageId {
-                hash: ConsensusMessageHash::CatchUpPackageShare(CryptoHashOf::new(CryptoHash(
-                    vec![],
-                ))),
-                height: block.height(),
-            };
-            assert_eq!(bouncer(&cup_share_id), Wants);
-
             // Insert CUP for next summary height and recompute bouncer function.
             pool.insert_validated(pool.make_catch_up_package(Height::new(dkg_interval + 1)));
             let bouncer = new_bouncer(&pool, expected_batch_height);
@@ -212,20 +213,15 @@ mod tests {
 
             // Advance the pool into the second DKG interval, producing a CUP at the
             // interval boundary.
-            pool.advance_round_normal_operation_n(dkg_interval + 1);
+            pool.advance_round_normal_operation_n(dkg_interval + 3);
 
             let pool_reader = PoolReader::new(&pool);
             let cup_height = pool_reader.get_catch_up_height();
+            let finalized_height = pool_reader.get_finalized_height();
             let next_summary_height = pool_reader.get_next_summary_height();
             assert_eq!(cup_height, Height::new(dkg_interval + 1));
+            assert_eq!(finalized_height, Height::new(dkg_interval + 3));
             assert_eq!(next_summary_height, Height::new(2 * (dkg_interval + 1)));
-
-            let cup_share_id_at = |height| ConsensusMessageId {
-                hash: ConsensusMessageHash::CatchUpPackageShare(CryptoHashOf::new(CryptoHash(
-                    vec![],
-                ))),
-                height,
-            };
 
             let expected_batch_height = Height::from(1);
             let bouncer = new_bouncer(&pool, expected_batch_height);
@@ -233,13 +229,72 @@ mod tests {
             // Shares at or below the current CUP height are useless.
             assert_eq!(bouncer(&cup_share_id_at(Height::new(0))), Unwanted);
             assert_eq!(bouncer(&cup_share_id_at(cup_height)), Unwanted);
-            // Shares between the current CUP height (exclusive) and the next summary
+            // Shares between the current CUP height (exclusive) and the finalized
             // height (inclusive) should be fetched.
             assert_eq!(bouncer(&cup_share_id_at(cup_height.increment())), Wants);
-            assert_eq!(bouncer(&cup_share_id_at(next_summary_height)), Wants);
-            // Shares beyond the next summary height might become useful later.
+            assert_eq!(bouncer(&cup_share_id_at(finalized_height)), Wants);
+            // Shares above the finalized height might become useful later.
             assert_eq!(
-                bouncer(&cup_share_id_at(next_summary_height.increment())),
+                bouncer(&cup_share_id_at(finalized_height.increment())),
+                MaybeWantsLater
+            );
+            assert_eq!(
+                bouncer(&cup_share_id_at(next_summary_height)),
+                MaybeWantsLater
+            );
+        })
+    }
+
+    #[test]
+    fn test_bouncer_for_post_split_catch_up_package_shares() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let dkg_interval = 499;
+            let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(dkg_interval)
+                .build();
+
+            // Finalize a summary block that schedules a split, without a CUP for it.
+            pool.advance_round_normal_operation_n(dkg_interval);
+            let mut proposal = pool.make_next_block();
+            let block = proposal.content.as_mut();
+            let mut payload = block.payload.as_ref().as_summary().clone();
+            payload.dkg.subnet_splitting_status = SubnetSplittingStatus::Scheduled(SplittingArgs {
+                source_subnet_id: subnet_test_id(0),
+                destination_subnet_id: subnet_test_id(1),
+            });
+            block.payload = Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Summary(payload),
+            );
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            pool.insert_validated(proposal.clone());
+            pool.notarize(&proposal);
+            pool.finalize(&proposal);
+
+            let pool_reader = PoolReader::new(&pool);
+            let finalized_height = pool_reader.get_finalized_height();
+            let next_cup_height = pool_reader.get_next_cup_height();
+            let post_split_cup_height = pool_reader.get_next_summary_height();
+            assert_eq!(finalized_height, Height::new(dkg_interval + 1));
+            assert_eq!(post_split_cup_height, Height::new(2 * (dkg_interval + 1)));
+            // The post-split CUP height exceeds the validator-CUP gap.
+            assert!(
+                post_split_cup_height
+                    > next_cup_height + Height::new(ACCEPTABLE_NOTARIZATION_CUP_GAP)
+            );
+
+            let expected_batch_height = Height::from(1);
+            let bouncer = new_bouncer(&pool, expected_batch_height);
+
+            assert_eq!(bouncer(&cup_share_id_at(finalized_height)), Wants);
+            assert_eq!(
+                bouncer(&cup_share_id_at(finalized_height.increment())),
+                MaybeWantsLater
+            );
+            // Shares for the post-split CUP can be validated before its height is finalized.
+            assert_eq!(bouncer(&cup_share_id_at(post_split_cup_height)), Wants);
+            assert_eq!(
+                bouncer(&cup_share_id_at(post_split_cup_height.increment())),
                 MaybeWantsLater
             );
         })

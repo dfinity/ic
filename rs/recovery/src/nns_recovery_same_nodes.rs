@@ -35,7 +35,8 @@ pub enum StepType {
     /// Before we can start the recovery process, we need to prevent the subnet from attempting to
     /// finalize new blocks. There is no way of halting the NNS subnet like we do for application
     /// subnets (by issuing a proposal), so this is a requirement before starting the recovery. As a
-    /// fail-safe, this first step will stop the replica process on the given admin node.
+    /// fail-safe, this first step will stop the replica process and the crypto vault on the given
+    /// admin node.
     StopReplica,
     /// In order to determine whether we had a possible state divergence during the subnet failure,
     /// we need to pull the certification pools from as many nodes as possible.

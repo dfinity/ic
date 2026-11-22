@@ -8,8 +8,8 @@ use crate::icrc2::approve::ApproveArgs;
 use crate::icrc2::transfer_from::TransferFromArgs;
 use crate::icrc21::errors::Icrc21Error;
 use crate::icrc21::requests::ConsentMessageMetadata;
-use candid::Decode;
-use candid::{Nat, Principal};
+use candid::{CandidType, DecoderConfig, Nat, Principal, decode_one_with_config};
+use serde::de::DeserializeOwned;
 use serde_bytes::ByteBuf;
 use std::fmt::{self, Display};
 use strum::{self, IntoEnumIterator};
@@ -17,6 +17,40 @@ use strum_macros::{Display, EnumIter, EnumString};
 
 // Maximum number of bytes that an argument to an ICRC-1 ledger function can have when passed to the ICRC-21 endpoint.
 pub const MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES: u16 = 500;
+
+/// Candid skipping quota for decoding the `arg` of a `ConsentMessageRequest`.
+///
+/// This is the quota that the `ic_cdk` endpoint macros apply to the arguments of the endpoints
+/// being described (e.g. `icrc1_transfer`), so `arg` is decoded under the same limit as the call
+/// it describes.
+const CONSENT_MESSAGE_ARG_SKIPPING_QUOTA: usize = 10_000;
+
+/// Returns an error if `arg` (the argument of the call to describe) is larger than
+/// `MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES`.
+pub fn validate_consent_message_arg_size(arg: &[u8]) -> Result<(), Icrc21Error> {
+    if arg.len() > MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize {
+        return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+            description: format!(
+                "The argument size is too large. The maximum allowed size is {MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES} bytes."
+            ),
+        }));
+    }
+    Ok(())
+}
+
+/// Decodes `arg`, the argument of the call to describe, as a single value of type `T`.
+///
+/// The size limit on `arg` alone does not bound the work that Candid decoding may do, so
+/// decoding uses the same skipping quota as the endpoint being described. Call
+/// `validate_consent_message_arg_size` before this.
+pub fn decode_consent_message_arg<T>(arg: &[u8]) -> Result<T, candid::Error>
+where
+    T: CandidType + DeserializeOwned,
+{
+    let mut config = DecoderConfig::new();
+    config.set_skipping_quota(CONSENT_MESSAGE_ARG_SKIPPING_QUOTA);
+    decode_one_with_config(arg, &config)
+}
 
 #[derive(Debug, EnumString, EnumIter, Display)]
 pub enum Icrc21Function {
@@ -330,13 +364,7 @@ pub fn build_icrc21_consent_info(
     decimals: u8,
     transfer_args: Option<GenericTransferArgs>,
 ) -> Result<ConsentInfo, Icrc21Error> {
-    if consent_msg_request.arg.len() > MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize {
-        return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-            description: format!(
-                "The argument size is too large. The maximum allowed size is {MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES} bytes."
-            ),
-        }));
-    }
+    validate_consent_message_arg_size(&consent_msg_request.arg)?;
 
     // for now, respond in English regardless of what the client requested
     let metadata = ConsentMessageMetadata {
@@ -374,11 +402,13 @@ pub fn build_icrc21_consent_info(
                 to,
                 fee,
                 created_at_time: _,
-            } = Decode!(&consent_msg_request.arg, TransferArg).map_err(|e| {
-                Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                    description: format!("Failed to decode TransferArg: {e}"),
-                })
-            })?;
+            } = decode_consent_message_arg::<TransferArg>(&consent_msg_request.arg).map_err(
+                |e| {
+                    Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                        description: format!("Failed to decode TransferArg: {e}"),
+                    })
+                },
+            )?;
             icrc21_check_fee(&fee, &ledger_fee)?;
             let sender = Account {
                 owner: caller_principal,
@@ -404,11 +434,13 @@ pub fn build_icrc21_consent_info(
                 spender_subaccount,
                 fee,
                 created_at_time: _,
-            } = Decode!(&consent_msg_request.arg, TransferFromArgs).map_err(|e| {
-                Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                    description: format!("Failed to decode TransferFromArgs: {e}"),
-                })
-            })?;
+            } = decode_consent_message_arg::<TransferFromArgs>(&consent_msg_request.arg).map_err(
+                |e| {
+                    Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                        description: format!("Failed to decode TransferFromArgs: {e}"),
+                    })
+                },
+            )?;
             icrc21_check_fee(&fee, &ledger_fee)?;
             let spender = Account {
                 owner: caller_principal,
@@ -436,11 +468,13 @@ pub fn build_icrc21_consent_info(
                 expected_allowance,
                 fee,
                 created_at_time: _,
-            } = Decode!(&consent_msg_request.arg, ApproveArgs).map_err(|e| {
-                Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                    description: format!("Failed to decode ApproveArgs: {e}"),
-                })
-            })?;
+            } = decode_consent_message_arg::<ApproveArgs>(&consent_msg_request.arg).map_err(
+                |e| {
+                    Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                        description: format!("Failed to decode ApproveArgs: {e}"),
+                    })
+                },
+            )?;
             icrc21_check_fee(&fee, &ledger_fee)?;
             let approver = Account {
                 owner: caller_principal,
@@ -506,3 +540,7 @@ pub fn icrc21_check_fee(fee: &Option<Nat>, ledger_fee: &Nat) -> Result<(), Icrc2
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "lib_tests.rs"]
+mod tests;

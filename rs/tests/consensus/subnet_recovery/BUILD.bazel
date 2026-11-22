@@ -259,6 +259,7 @@ system_test_nns(
         "system_test_large",  # only run as part of release-testing since this test requires many resources.
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",  # Spread the VMs: packed onto a few hosts they starve the VMs of other tests of CPU time.
     runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         ":lib",

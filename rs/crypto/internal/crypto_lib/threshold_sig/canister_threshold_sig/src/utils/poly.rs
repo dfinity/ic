@@ -187,11 +187,10 @@ impl Polynomial {
             return Err(CanisterThresholdError::CurveMismatch);
         }
 
-        let n_coeffs = self.coefficients.len();
-        let mut coeffs = Vec::with_capacity(n_coeffs);
+        let mut coeffs = Vec::with_capacity(self.coefficients.len());
 
-        for i in 0..n_coeffs {
-            coeffs.push(self.coefficients[i].mul(scalar)?);
+        for coeff in &self.coefficients {
+            coeffs.push(coeff.mul(scalar)?);
         }
 
         Self::new(self.curve_type(), coeffs)

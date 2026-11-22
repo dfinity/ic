@@ -27,6 +27,7 @@ num-traits = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+candid = { workspace = true }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-consensus-mocks = { path = "../mocks" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
