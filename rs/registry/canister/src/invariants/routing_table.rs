@@ -20,26 +20,26 @@ use prost::Message;
 pub(crate) fn check_routing_table_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<RoutingTable, InvariantCheckError> {
-    Ok(get_routing_table(snapshot))
-}
-
-// Return routing table from snapshot
-fn get_routing_table(snapshot: &RegistrySnapshot) -> RoutingTable {
-    // If there are shards, they should match the routing table record.
-    let shards = get_routing_table_shards(snapshot);
-    RoutingTable::try_from(shards).unwrap()
-}
-
-fn get_routing_table_shards(snapshot: &RegistrySnapshot) -> Vec<pbRoutingTable> {
     let start = make_canister_ranges_key(CanisterId::from_u64(0)).into_bytes();
     let end = make_canister_ranges_key(CanisterId::from_u64(u64::MAX)).into_bytes();
+
     let mut shards = vec![];
-    for (_, value) in snapshot.range(start..=end) {
-        let routing_table_proto = pbRoutingTable::decode(value.as_slice()).unwrap();
-        shards.push(routing_table_proto);
+    for (key, value) in snapshot.range(start..=end) {
+        let shard =
+            pbRoutingTable::decode(value.as_slice()).map_err(|err| InvariantCheckError {
+                msg: format!(
+                    "Unable to decode the routing table shard {}.",
+                    String::from_utf8_lossy(key)
+                ),
+                source: Some(Box::new(err)),
+            })?;
+        shards.push(shard);
     }
 
-    shards
+    RoutingTable::try_from(shards).map_err(|err| InvariantCheckError {
+        msg: "The routing table shards do not form a valid routing table.".to_string(),
+        source: Some(Box::new(err)),
+    })
 }
 
 /// Iff `canister_migrations` is present, check that its invariants hold if reading and conversion succeed.
@@ -171,6 +171,10 @@ mod tests {
     use maplit::btreemap;
     use prost::Message;
     use std::convert::TryFrom;
+
+    fn get_routing_table(snapshot: &RegistrySnapshot) -> RoutingTable {
+        check_routing_table_invariants(snapshot).unwrap()
+    }
 
     fn insert_routing_table_to_snapshot(
         routing_table: RoutingTable,
@@ -365,6 +369,55 @@ mod tests {
         assert!(
             check_canister_migrations_invariants(&snapshot, &get_routing_table(&snapshot)).is_err()
         );
+    }
+
+    #[test]
+    fn test_overlapping_routing_table_shards_fail_invariants_check() {
+        // Step 1: Prepare the world: two shards whose ranges overlap.
+        let mut snapshot = RegistrySnapshot::new();
+        for (shard_key, start, end, subnet_id) in [
+            (0x000, 0x000, 0x1ff, subnet_test_id(1)),
+            (0x100, 0x100, 0x2ff, subnet_test_id(2)),
+        ] {
+            let range = CanisterIdRange {
+                start: CanisterId::from(start),
+                end: CanisterId::from(end),
+            };
+            let shard = RoutingTable::try_from(btreemap! { range => subnet_id }).unwrap();
+            snapshot.insert(
+                make_canister_ranges_key(CanisterId::from(shard_key)).into_bytes(),
+                PbRoutingTable::from(shard).encode_to_vec(),
+            );
+        }
+
+        // Step 2: Run the code under test.
+        let result = check_routing_table_invariants(&snapshot);
+
+        // Step 3: Verify result: an error, not a panic.
+        let error = result.unwrap_err();
+        assert!(
+            error.msg.contains("not form a valid routing table"),
+            "{}",
+            error.msg
+        );
+        assert!(error.source.is_some());
+    }
+
+    #[test]
+    fn test_undecodable_routing_table_shard_fails_invariants_check() {
+        // Step 1: Prepare the world.
+        let mut snapshot = RegistrySnapshot::new();
+        let shard_key = make_canister_ranges_key(CanisterId::from(0));
+        snapshot.insert(shard_key.clone().into_bytes(), b"not a protobuf".to_vec());
+
+        // Step 2: Run the code under test.
+        let result = check_routing_table_invariants(&snapshot);
+
+        // Step 3: Verify result: an error naming the shard, not a panic.
+        let error = result.unwrap_err();
+        assert!(error.msg.contains("Unable to decode"), "{}", error.msg);
+        assert!(error.msg.contains(&shard_key), "{}", error.msg);
+        assert!(error.source.is_some());
     }
 
     fn insert_canister_id_allocation_to_snapshot(
