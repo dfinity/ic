@@ -323,3 +323,27 @@ fn test_backfill_canister_id_allocation_without_routing_table_is_a_noop() {
     // Step 3: Verify result: nothing has been allocated, so there is nothing to record.
     assert_eq!(mutations, vec![]);
 }
+
+#[test]
+#[should_panic(expected = "no canister index is left unallocated")]
+fn test_compute_next_unallocated_canister_index_from_history_panics_on_range_ending_at_u64_max() {
+    // Step 1: Prepare the world: a (deleted) version of the legacy single-key routing table with a
+    // range that ends at the largest canister index.
+    let legacy_routing_table = LegacyCompatibleRoutingTable {
+        entries: vec![LegacyCompatibleRoutingTableEntry {
+            range: Some(LegacyCompatibleCanisterIdRange {
+                legacy_end: Some(u64::MAX),
+                end_canister_id: None,
+            }),
+        }],
+    }
+    .encode_to_vec();
+    let mut registry = Registry::new();
+    let legacy_key = make_routing_table_record_key();
+    registry.apply_mutations_for_test(vec![insert(&legacy_key, legacy_routing_table)]);
+    registry.apply_mutations_for_test(vec![delete(&legacy_key)]);
+
+    // Step 2: Run the code under test. Step 3: Verify result: it panics (see `should_panic`),
+    // rather than wrapping around to 0.
+    registry.compute_next_unallocated_canister_index_from_history(registry.latest_version());
+}

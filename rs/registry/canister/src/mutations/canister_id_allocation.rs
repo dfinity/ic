@@ -73,8 +73,18 @@ impl Registry {
                     .max();
 
                 if let Some(max_end) = max_end {
+                    // A range ending at u64::MAX would leave no canister index unallocated. Rather
+                    // than wrapping around to 0 (and thereby allowing every canister ID to be
+                    // allocated again), panic.
+                    let after_max_end = max_end.checked_add(1).unwrap_or_else(|| {
+                        panic!(
+                            "A range in routing table key {} ends at {max_end}, so no canister \
+                             index is left unallocated.",
+                            String::from_utf8_lossy(key),
+                        )
+                    });
                     next_unallocated_canister_index =
-                        next_unallocated_canister_index.max(max_end + 1);
+                        next_unallocated_canister_index.max(after_max_end);
                 }
             }
         }
