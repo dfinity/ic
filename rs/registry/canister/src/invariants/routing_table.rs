@@ -396,8 +396,12 @@ mod tests {
         let snapshot = new_snapshot_with_routing_table_up_to_0x1ff();
 
         assert!(
-            check_canister_id_allocation_invariants(&snapshot, &get_routing_table(&snapshot), None)
-                .is_ok()
+            check_canister_id_allocation_invariants(
+                &snapshot,
+                &get_routing_table(&snapshot),
+                /* previous_next_unallocated_canister_index = */ None
+            )
+            .is_ok()
         );
     }
 
@@ -408,14 +412,10 @@ mod tests {
         insert_canister_id_allocation_to_snapshot(0x300, &mut snapshot);
 
         assert!(
-            check_canister_id_allocation_invariants(&snapshot, &get_routing_table(&snapshot), None)
-                .is_ok()
-        );
-        assert!(
             check_canister_id_allocation_invariants(
                 &snapshot,
                 &get_routing_table(&snapshot),
-                Some(0x200)
+                /* previous_next_unallocated_canister_index = */ None
             )
             .is_ok()
         );
@@ -423,7 +423,15 @@ mod tests {
             check_canister_id_allocation_invariants(
                 &snapshot,
                 &get_routing_table(&snapshot),
-                Some(0x300)
+                /* previous_next_unallocated_canister_index = */ Some(0x200)
+            )
+            .is_ok()
+        );
+        assert!(
+            check_canister_id_allocation_invariants(
+                &snapshot,
+                &get_routing_table(&snapshot),
+                /* previous_next_unallocated_canister_index = */ Some(0x300)
             )
             .is_ok()
         );
@@ -434,9 +442,12 @@ mod tests {
         let mut snapshot = new_snapshot_with_routing_table_up_to_0x1ff();
         insert_canister_id_allocation_to_snapshot(0x1ff, &mut snapshot);
 
-        let error =
-            check_canister_id_allocation_invariants(&snapshot, &get_routing_table(&snapshot), None)
-                .unwrap_err();
+        let error = check_canister_id_allocation_invariants(
+            &snapshot,
+            &get_routing_table(&snapshot),
+            /* previous_next_unallocated_canister_index = */ None,
+        )
+        .unwrap_err();
 
         assert!(error.msg.contains("at or above"), "{}", error.msg);
         assert!(
@@ -494,7 +505,7 @@ mod tests {
         let error = check_canister_id_allocation_invariants(
             &snapshot,
             &get_routing_table(&snapshot),
-            Some(0x300),
+            /* previous_next_unallocated_canister_index = */ Some(0x300),
         )
         .unwrap_err();
 
@@ -509,9 +520,12 @@ mod tests {
             b"not a protobuf".to_vec(),
         );
 
-        let error =
-            check_canister_id_allocation_invariants(&snapshot, &get_routing_table(&snapshot), None)
-                .unwrap_err();
+        let error = check_canister_id_allocation_invariants(
+            &snapshot,
+            &get_routing_table(&snapshot),
+            /* previous_next_unallocated_canister_index = */ None,
+        )
+        .unwrap_err();
 
         assert!(error.msg.contains("Unable to decode"), "{}", error.msg);
         assert!(error.source.is_some());
@@ -524,7 +538,7 @@ mod tests {
         let error = check_canister_id_allocation_invariants(
             &snapshot,
             &get_routing_table(&snapshot),
-            Some(0x200),
+            /* previous_next_unallocated_canister_index = */ Some(0x200),
         )
         .unwrap_err();
 
