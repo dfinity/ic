@@ -355,8 +355,9 @@ impl SubnetMerging {
             // Checked for each subnet on its own, by
             // `get_and_pre_validate_subnet_record`.
             chain_key_config: _,
-            // Set by the tool itself, which halts both subnets and recovers the
-            // destination subnet.
+            // Changed by the merge itself: the tool sets `halt_at_cup_height` on both
+            // subnets, and the recovery CUP proposal turns it into `is_halted` on the
+            // destination subnet, which a follow-up step unhalts.
             is_halted: _,
             halt_at_cup_height: _,
             // Capacity, not checked yet: a follow-up is to load the merged

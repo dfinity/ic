@@ -840,13 +840,8 @@ impl Step for ProposeRecoveryCupStep {
 /// the replica back up on it.
 ///
 /// If the tool runs on that node, a copy of the merged state is moved into
-/// place rather than the merged state itself. The files of the merged
-/// checkpoint are hard links to the files of the downloaded checkpoints, which
-/// stay in the tool's directory, and owners are per file, not per link. When
-/// the tool's directory is in `/var/lib/ic/data`, the restart's
-/// `setup-permissions` would then give the shared files to `ic-replica` and,
-/// along with the tool's directory, to `admin`, and the replica can't start
-/// from files it doesn't own. An upload over SSH writes new files on the node.
+/// place, because the merged checkpoint's files are hard links into the tool's
+/// directory, and the replica can't start from files shared with it.
 pub(crate) struct UploadMergedStateStep {
     pub(crate) node: DataLocation,
     pub(crate) layout: Layout,
