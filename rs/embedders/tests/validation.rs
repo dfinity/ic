@@ -1168,6 +1168,140 @@ fn parameter_names_do_not_change_validation_and_instrumentation() {
     }
 }
 
+/// Encodes the given indices and names as a name map.
+fn encoded_name_map(names: &[(u32, &str)]) -> Vec<u8> {
+    use wasm_encoder::Encode;
+
+    let mut map = wasm_encoder::NameMap::new();
+    for (index, name) in names {
+        map.append(*index, name);
+    }
+    let mut payload = vec![];
+    map.encode(&mut payload);
+    payload
+}
+
+/// Encodes the given indices and name maps as an indirect name map.
+fn encoded_indirect_name_map(maps: &[(u32, &[(u32, &str)])]) -> Vec<u8> {
+    use wasm_encoder::Encode;
+
+    let mut map = wasm_encoder::IndirectNameMap::new();
+    for (index, names) in maps {
+        let mut name_map = wasm_encoder::NameMap::new();
+        for (index, name) in *names {
+            name_map.append(*index, name);
+        }
+        map.append(*index, &name_map);
+    }
+    let mut payload = vec![];
+    map.encode(&mut payload);
+    payload
+}
+
+/// Asserts that the module with the `name` subsections `with` validates and
+/// instruments like the module with the subsections `without`.
+fn assert_name_subsections_ignored(with: &[(u8, &[u8])], without: &[(u8, &[u8])]) {
+    assert_same_validation_and_instrumentation(
+        &module_with_name_subsections(with),
+        &module_with_name_subsections(without),
+    );
+}
+
+// Validation and instrumentation ignore a `name` subsection whose id is not
+// greater than the id of the last subsection before it that they do not
+// ignore.
+#[test]
+fn can_validate_module_with_name_subsections_out_of_order() {
+    let (function_names, local_names) = function_and_local_names();
+    let other_function_names = encoded_name_map(&[(0, "g0")]);
+    let module_name = [1, b'm'];
+    let other_module_name = [1, b'n'];
+    // A repeated id, and a smaller id after a greater one.
+    assert_name_subsections_ignored(
+        &[(1, &function_names), (1, &other_function_names)],
+        &[(1, &function_names)],
+    );
+    assert_name_subsections_ignored(
+        &[(2, &local_names), (1, &function_names)],
+        &[(2, &local_names)],
+    );
+    // A second module name, and the module name after the function names.
+    assert_name_subsections_ignored(
+        &[
+            (0, &module_name),
+            (0, &other_module_name),
+            (1, &function_names),
+        ],
+        &[(0, &module_name), (1, &function_names)],
+    );
+    assert_name_subsections_ignored(
+        &[(1, &function_names), (0, &module_name), (2, &local_names)],
+        &[(1, &function_names), (2, &local_names)],
+    );
+    // Subsections with unknown ids.
+    assert_name_subsections_ignored(
+        &[(1, &function_names), (15, &[1, 2]), (14, &[3]), (15, &[4])],
+        &[(1, &function_names), (15, &[1, 2])],
+    );
+}
+
+// Validation and instrumentation ignore a `name` subsection with a name map
+// whose indices are not strictly increasing.
+#[test]
+fn can_validate_module_with_name_maps_out_of_order() {
+    let (function_names, local_names) = function_and_local_names();
+    // Function names out of order, and with a repeated index.
+    for names in [
+        encoded_name_map(&[(1, "f1"), (0, "f0")]),
+        encoded_name_map(&[(0, "f0"), (0, "g0")]),
+    ] {
+        assert_name_subsections_ignored(&[(1, &names), (2, &local_names)], &[(2, &local_names)]);
+    }
+    // Local names whose map of functions is out of order, and local names
+    // whose map of the locals of function 0 is out of order.
+    for names in [
+        encoded_indirect_name_map(&[(1, &[]), (0, &[(0, "x")])]),
+        encoded_indirect_name_map(&[(0, &[(1, "y"), (0, "x")])]),
+    ] {
+        assert_name_subsections_ignored(
+            &[(1, &function_names), (2, &names)],
+            &[(1, &function_names)],
+        );
+    }
+    // Label names whose map of functions is out of order, and type names out
+    // of order.
+    for (id, names) in [
+        (3, encoded_indirect_name_map(&[(1, &[]), (0, &[])])),
+        (4, encoded_name_map(&[(1, "t1"), (0, "t0")])),
+    ] {
+        assert_name_subsections_ignored(
+            &[(1, &function_names), (2, &local_names), (id, &names)],
+            &[(1, &function_names), (2, &local_names)],
+        );
+    }
+}
+
+// A `name` subsection that cannot be parsed is not ignored, even if its id or
+// its name map is out of order.
+#[test]
+fn can_reject_module_with_malformed_name_subsection_out_of_order() {
+    let (function_names, _) = function_and_local_names();
+    // Function names out of order, the second of which is not UTF-8.
+    let malformed_names: &[u8] = &[2, 1, 1, b'b', 0, 1, 0xff];
+    for subsections in [
+        vec![(1, &function_names[..]), (1, malformed_names)],
+        vec![(1, malformed_names)],
+    ] {
+        assert_matches!(
+            validate_wasm_binary(
+                &module_with_name_subsections(&subsections),
+                &EmbeddersConfig::default()
+            ),
+            Err(WasmValidationError::DecodingError(_))
+        );
+    }
+}
+
 #[test]
 fn can_reject_module_with_custom_sections_too_big() {
     let content = vec![0, 1, 6, 5, 6, 7, 4, 6];

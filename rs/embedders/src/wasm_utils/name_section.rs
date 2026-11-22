@@ -1,5 +1,4 @@
-//! Removes the parameter-name subsections from the `name` sections of a Wasm
-//! module.
+//! Removes the `name` subsections that validation and instrumentation ignore.
 
 use std::borrow::Cow;
 
@@ -14,48 +13,76 @@ const NAME_SECTION_NAME: &[u8] = b"name";
 /// types (12) and of tag types (13).
 const PARAMETER_NAMES_SUBSECTION_IDS: [u8; 2] = [12, 13];
 
-/// Returns `wasm` without the subsections 12 (parameter names of function
-/// types) and 13 (parameter names of tag types) of its `name` sections.
+/// The maximum length in bytes of the module name and of the names in the
+/// inner name maps of an indirect name map. The names in the other name maps
+/// have no maximum length.
+const MAX_NAME_LEN: usize = 100_000;
+
+/// Returns `wasm` without the `name` subsections that validation and
+/// instrumentation ignore. In each `name` section, these are:
 ///
-/// These names are not needed to validate, instrument or compile the module,
-/// and removing them before Wirm parses it keeps their content from affecting
-/// whether the module is accepted. All other bytes stay as they are, except
-/// that each changed `name` section gets its new size. If a subsection of a
-/// `name` section cannot be walked, that subsection and the rest of the section
-/// are kept as they are, so they fail to parse as they would in `wasm`.
+/// - the subsections 12 (parameter names of function types) and 13
+///   (parameter names of tag types);
+/// - each subsection whose id is not greater than the id of the last
+///   subsection kept before it;
+/// - each subsection with a name map whose indices are not strictly
+///   increasing: the name map of the subsections 1, 4 to 9 and 11, or the
+///   outer map or one of the inner maps of the subsections 2, 3 and 10.
 ///
-/// Returns `wasm` itself, without copying, if it has no such subsection or if
-/// its sections cannot be walked.
-pub(super) fn remove_parameter_name_subsections(wasm: &[u8]) -> Cow<'_, [u8]> {
-    match without_parameter_name_subsections(wasm) {
+/// These names are not needed to validate, instrument or compile the module.
+/// Wirm parses the `name` section with wasmparser, which rejects subsections
+/// and name maps that are out of order, and reads the subsections 12 and 13.
+/// Removing these subsections before Wirm parses the module keeps their order,
+/// and the content of the subsections 12 and 13, from affecting whether the
+/// module is accepted.
+///
+/// All other bytes stay as they are, except that each changed `name` section
+/// gets its new size. The content of the subsections 0 to 11 is parsed as
+/// wasmparser parses it. If a subsection cannot be parsed, that subsection and
+/// the rest of its section are kept as they are, so that they fail to parse as
+/// they would in `wasm`.
+///
+/// Returns `wasm` itself, without copying, if nothing is removed or if its
+/// sections cannot be walked.
+pub(super) fn remove_ignored_name_subsections(wasm: &[u8]) -> Cow<'_, [u8]> {
+    match without_ignored_name_subsections(wasm) {
         Some(stripped) => Cow::Owned(stripped),
         None => Cow::Borrowed(wasm),
     }
 }
 
-/// Returns `None` if `wasm` has no parameter-name subsection or if its
-/// sections cannot be walked.
-fn without_parameter_name_subsections(wasm: &[u8]) -> Option<Vec<u8>> {
+/// Returns `None` if nothing is removed or if the sections of `wasm` cannot be
+/// walked.
+fn without_ignored_name_subsections(wasm: &[u8]) -> Option<Vec<u8>> {
     let mut rest = wasm.strip_prefix(MODULE_HEADER)?;
     // The bytes of `wasm` before `rest`, with the subsections removed. Only
     // created once a section has a subsection to remove.
     let mut stripped: Option<Vec<u8>> = None;
     while !rest.is_empty() {
         let (section, after) = split_section(rest)?;
-        match section {
-            Section::Name { name, subsections } if has_parameter_names(subsections) => {
-                let stripped = stripped.get_or_insert_with(|| {
-                    let mut stripped = Vec::with_capacity(wasm.len());
-                    stripped.extend_from_slice(&wasm[..wasm.len() - rest.len()]);
-                    stripped
-                });
-                push_name_section(stripped, name, subsections);
+        // The encoded name, the subsections and the length of the kept
+        // subsections of a `name` section with a subsection to remove.
+        let changed = match section {
+            Section::Name { name, subsections } => {
+                let kept_len: usize = kept_subsections(subsections).map(<[u8]>::len).sum();
+                (kept_len < subsections.len()).then_some((name, subsections, kept_len))
             }
-            Section::Name { .. } | Section::Other => {
-                if let Some(stripped) = &mut stripped {
-                    stripped.extend_from_slice(&rest[..rest.len() - after.len()]);
-                }
+            Section::Other => None,
+        };
+        if let Some((name, subsections, kept_len)) = changed {
+            let stripped = stripped.get_or_insert_with(|| {
+                let mut stripped = Vec::with_capacity(wasm.len());
+                stripped.extend_from_slice(&wasm[..wasm.len() - rest.len()]);
+                stripped
+            });
+            stripped.push(CUSTOM_SECTION_ID);
+            push_leb128(stripped, name.len() + kept_len);
+            stripped.extend_from_slice(name);
+            for subsection in kept_subsections(subsections) {
+                stripped.extend_from_slice(subsection);
             }
+        } else if let Some(stripped) = &mut stripped {
+            stripped.extend_from_slice(&rest[..rest.len() - after.len()]);
         }
         rest = after;
     }
@@ -74,76 +101,120 @@ enum Section<'a> {
 
 /// Splits the section at the start of `bytes` from the bytes after it.
 fn split_section(bytes: &[u8]) -> Option<(Section<'_>, &[u8])> {
-    let (&id, after_id) = bytes.split_first()?;
-    let (size, after_size) = read_leb128_u32(after_id)?;
-    let (payload, after) = after_size.split_at_checked(size)?;
+    let (&id, mut after) = bytes.split_first()?;
+    let size = read_var_u32(&mut after)?;
+    let payload = read_bytes(&mut after, size)?;
     if id != CUSTOM_SECTION_ID {
         return Some((Section::Other, after));
     }
-    let (name_len, after_name_len) = read_leb128_u32(payload)?;
-    let (name, subsections) = after_name_len.split_at_checked(name_len)?;
-    if name != NAME_SECTION_NAME {
+    let mut subsections = payload;
+    let name_len = read_var_u32(&mut subsections)?;
+    if read_bytes(&mut subsections, name_len)? != NAME_SECTION_NAME {
         return Some((Section::Other, after));
     }
     let name = &payload[..payload.len() - subsections.len()];
     Some((Section::Name { name, subsections }, after))
 }
 
-/// Iterates over the subsections of a `name` section as their id and their
-/// bytes (id, size and payload). If a subsection cannot be walked, the last
-/// item is the bytes from that subsection to the end, without an id.
-fn subsections_of(mut subsections: &[u8]) -> impl Iterator<Item = (Option<u8>, &[u8])> {
+/// Iterates over the kept subsections of a `name` section, as their bytes (id,
+/// size and content). If a subsection cannot be parsed, the last item is the
+/// bytes from that subsection to the end of the section.
+fn kept_subsections(mut subsections: &[u8]) -> impl Iterator<Item = &[u8]> {
+    let mut last_kept_id = None;
     std::iter::from_fn(move || {
-        if subsections.is_empty() {
-            return None;
-        }
-        Some(match split_subsection(subsections) {
-            Some((id, subsection, after)) => {
-                subsections = after;
-                (Some(id), subsection)
+        while !subsections.is_empty() {
+            let Some((id, content, after)) = split_subsection(subsections) else {
+                return Some(std::mem::take(&mut subsections));
+            };
+            let Some(indices_in_order) = parse_content(id, content) else {
+                return Some(std::mem::take(&mut subsections));
+            };
+            let subsection = &subsections[..subsections.len() - after.len()];
+            subsections = after;
+            if indices_in_order
+                && last_kept_id.is_none_or(|last_kept_id| id > last_kept_id)
+                && !PARAMETER_NAMES_SUBSECTION_IDS.contains(&id)
+            {
+                last_kept_id = Some(id);
+                return Some(subsection);
             }
-            None => (None, std::mem::take(&mut subsections)),
-        })
+        }
+        None
     })
 }
 
-/// Splits the subsection at the start of `bytes` from the bytes after it.
+/// Splits the subsection at the start of `bytes` into its id and its content,
+/// and the bytes after it. Like wasmparser, only accepts ids that fit in 7
+/// bits.
 fn split_subsection(bytes: &[u8]) -> Option<(u8, &[u8], &[u8])> {
-    let (&id, after_id) = bytes.split_first()?;
-    let (size, after_size) = read_leb128_u32(after_id)?;
-    let (_payload, after) = after_size.split_at_checked(size)?;
-    Some((id, &bytes[..bytes.len() - after.len()], after))
-}
-
-fn is_parameter_names(id: Option<u8>) -> bool {
-    id.is_some_and(|id| PARAMETER_NAMES_SUBSECTION_IDS.contains(&id))
-}
-
-fn has_parameter_names(subsections: &[u8]) -> bool {
-    subsections_of(subsections).any(|(id, _)| is_parameter_names(id))
-}
-
-/// Appends a `name` section with the encoded `name` and the given subsections
-/// except the parameter-name subsections.
-fn push_name_section(out: &mut Vec<u8>, name: &[u8], subsections: &[u8]) {
-    let kept = || {
-        subsections_of(subsections)
-            .filter(|(id, _)| !is_parameter_names(*id))
-            .map(|(_, subsection)| subsection)
-    };
-    let size = name.len() + kept().map(<[u8]>::len).sum::<usize>();
-    out.push(CUSTOM_SECTION_ID);
-    push_leb128(out, size);
-    out.extend_from_slice(name);
-    for subsection in kept() {
-        out.extend_from_slice(subsection);
+    let (&id, mut after) = bytes.split_first()?;
+    if id & 0x80 != 0 {
+        return None;
     }
+    let size = read_var_u32(&mut after)?;
+    let content = read_bytes(&mut after, size)?;
+    Some((id, content, after))
 }
 
-/// Reads an unsigned LEB128 `u32` from the start of `bytes` like wasmparser
-/// does: at most 5 bytes, of which the 5th may only use its low 4 bits.
-/// Returns the value and the bytes after it.
-fn read_leb128_u32(bytes: &[u8]) -> Option<(usize, &[u8])> {
+/// Parses the content of the subsection with the given id like wasmparser
+/// does: the module name (0), a name map (1, 4 to 9 and 11) or an indirect
+/// name map (2, 3 and 10). Returns whether the indices of its name maps are
+/// strictly increasing, or `None` if it cannot be parsed. The content of the
+/// other subsections is not parsed.
+fn parse_content(id: u8, mut content: &[u8]) -> Option<bool> {
+    let indices_in_order = match id {
+        0 => read_name(&mut content, Some(MAX_NAME_LEN)).map(|()| true),
+        1 | 4..=9 | 11 => read_name_map(&mut content, None),
+        2 | 3 | 10 => read_indirect_name_map(&mut content),
+        _ => return Some(true),
+    }?;
+    content.is_empty().then_some(indices_in_order)
+}
+
+/// Reads a name map whose names are at most `max_name_len` bytes long, and
+/// returns whether its indices are strictly increasing.
+fn read_name_map(bytes: &mut &[u8], max_name_len: Option<usize>) -> Option<bool> {
+    read_map(bytes, |bytes| read_name(bytes, max_name_len).map(|()| true))
+}
+
+/// Reads an indirect name map, and returns whether its indices and the indices
+/// of each of its inner name maps are strictly increasing.
+fn read_indirect_name_map(bytes: &mut &[u8]) -> Option<bool> {
+    read_map(bytes, |bytes| read_name_map(bytes, Some(MAX_NAME_LEN)))
+}
+
+/// Reads a count followed by that many entries, each an index followed by what
+/// `read_value` reads. Returns whether the indices are strictly increasing and
+/// `read_value` returned `true` for each entry.
+fn read_map(
+    bytes: &mut &[u8],
+    mut read_value: impl FnMut(&mut &[u8]) -> Option<bool>,
+) -> Option<bool> {
+    let count = read_var_u32(bytes)?;
+    let mut last_index = None;
+    let mut in_order = true;
+    for _ in 0..count {
+        let index = read_var_u32(bytes)?;
+        in_order &= read_value(bytes)? && last_index.is_none_or(|last_index| index > last_index);
+        last_index = Some(index);
+    }
+    Some(in_order)
+}
+
+/// Reads a name: its length and its bytes, which have to be UTF-8 and, if
+/// `max_len` is given, at most that long.
+fn read_name(bytes: &mut &[u8], max_len: Option<usize>) -> Option<()> {
+    let len = read_var_u32(bytes)?;
+    if max_len.is_some_and(|max_len| len > max_len) {
+        return None;
+    }
+    let name = read_bytes(bytes, len)?;
+    std::str::from_utf8(name).is_ok().then_some(())
+}
+
+/// Reads an unsigned LEB128 `u32` like wasmparser does: at most 5 bytes, of
+/// which the 5th may only use its low 4 bits.
+fn read_var_u32(bytes: &mut &[u8]) -> Option<usize> {
     let mut value = 0_usize;
     for (i, &byte) in bytes.iter().take(5).enumerate() {
         if i == 4 && byte >> 4 != 0 {
@@ -151,10 +222,17 @@ fn read_leb128_u32(bytes: &[u8]) -> Option<(usize, &[u8])> {
         }
         value |= usize::from(byte & 0x7f) << (7 * i);
         if byte & 0x80 == 0 {
-            return Some((value, &bytes[i + 1..]));
+            *bytes = &bytes[i + 1..];
+            return Some(value);
         }
     }
     None
+}
+
+fn read_bytes<'a>(bytes: &mut &'a [u8], len: usize) -> Option<&'a [u8]> {
+    let (read, after) = bytes.split_at_checked(len)?;
+    *bytes = after;
+    Some(read)
 }
 
 /// Appends `value` in the shortest unsigned LEB128 encoding.
@@ -182,9 +260,40 @@ mod tests {
         bytes
     }
 
+    /// Encodes a name: its length and its bytes.
+    fn name(bytes: &[u8]) -> Vec<u8> {
+        let mut name = vec![];
+        push_leb128(&mut name, bytes.len());
+        name.extend_from_slice(bytes);
+        name
+    }
+
+    /// Encodes a name map with the given indices and names.
+    fn name_map(names: &[(usize, &[u8])]) -> Vec<u8> {
+        let mut map = vec![];
+        push_leb128(&mut map, names.len());
+        for (index, bytes) in names {
+            push_leb128(&mut map, *index);
+            map.extend(name(bytes));
+        }
+        map
+    }
+
+    /// Encodes an indirect name map with the given indices and encoded name
+    /// maps.
+    fn indirect_name_map(maps: &[(usize, Vec<u8>)]) -> Vec<u8> {
+        let mut map = vec![];
+        push_leb128(&mut map, maps.len());
+        for (index, name_map) in maps {
+            push_leb128(&mut map, *index);
+            map.extend_from_slice(name_map);
+        }
+        map
+    }
+
     /// The encoded name of a `name` section.
     fn encoded_name() -> Vec<u8> {
-        [&[4][..], NAME_SECTION_NAME].concat()
+        name(NAME_SECTION_NAME)
     }
 
     fn name_section(subsections: &[Vec<u8>]) -> Vec<u8> {
@@ -207,9 +316,19 @@ mod tests {
         ]
     }
 
+    /// Subsection 0, naming the module.
+    fn module_name() -> Vec<u8> {
+        section(0, &[1, b'm'])
+    }
+
     /// Subsection 1, naming function 0.
     fn function_names() -> Vec<u8> {
         section(1, &[1, 0, 1, b'f'])
+    }
+
+    /// Subsection 2, naming local 0 of function 0.
+    fn local_names() -> Vec<u8> {
+        section(2, &[1, 0, 1, 0, 1, b'x'])
     }
 
     /// Subsection 12 or 13, naming parameter 0 of type 0.
@@ -218,7 +337,7 @@ mod tests {
     }
 
     fn assert_unchanged(wasm: &[u8]) {
-        let result = remove_parameter_name_subsections(wasm);
+        let result = remove_ignored_name_subsections(wasm);
         assert!(
             matches!(result, Cow::Borrowed(bytes) if std::ptr::eq(bytes, wasm)),
             "expected the input itself, got {result:?}"
@@ -226,7 +345,7 @@ mod tests {
     }
 
     fn assert_stripped(wasm: &[u8], expected: &[u8]) {
-        let result = remove_parameter_name_subsections(wasm);
+        let result = remove_ignored_name_subsections(wasm);
         assert!(matches!(result, Cow::Owned(_)));
         assert_eq!(&*result, expected);
     }
@@ -241,35 +360,51 @@ mod tests {
     }
 
     #[test]
-    fn name_section_without_parameter_names_is_unchanged() {
+    fn well_formed_name_section_is_unchanged() {
         let [types, functions, code] = type_function_code_sections();
-        let module_name = section(0, &[1, b'm']);
-        let local_names = section(2, &[1, 0, 1, 0, 1, b'x']);
         let unknown = section(14, &[1, 2, 3]);
         assert_unchanged(&module(&[
             types,
             functions,
             code,
-            name_section(&[module_name, function_names(), local_names, unknown]),
+            name_section(&[module_name(), function_names(), local_names(), unknown]),
         ]));
         assert_unchanged(&module(&[name_section(&[])]));
+
+        // Every known subsection up to 11, with gaps between indices, the
+        // largest index, empty names and empty maps. Each inner map has its
+        // own order, so it can start at 0 again.
+        let names = name_map(&[(0, b"a"), (1, b""), (7, b"c"), (0xffff_ffff, b"d")]);
+        let indirect_names = indirect_name_map(&[
+            (0, names.clone()),
+            (1, name_map(&[])),
+            (5, name_map(&[(0, b"e")])),
+        ]);
+        let mut subsections = vec![module_name()];
+        for id in 1..=11 {
+            if [2, 3, 10].contains(&id) {
+                subsections.push(section(id, &indirect_names));
+            } else {
+                subsections.push(section(id, &names));
+            }
+        }
+        subsections.extend([section(14, &[]), section(0x7f, &[1, 2, 3])]);
+        assert_unchanged(&module(&[name_section(&subsections)]));
     }
 
     #[test]
     fn parameter_names_are_removed() {
         let [types, functions, code] = type_function_code_sections();
-        let module_name = section(0, &[1, b'm']);
-        let local_names = section(2, &[1, 0, 1, 0, 1, b'x']);
         let expected = module(&[
             types.clone(),
             functions.clone(),
             code.clone(),
-            name_section(&[module_name.clone(), function_names(), local_names.clone()]),
+            name_section(&[module_name(), function_names(), local_names()]),
         ]);
         for ids in [vec![12], vec![13], vec![12, 13], vec![13, 12, 12]] {
-            let mut subsections = vec![module_name.clone(), function_names()];
+            let mut subsections = vec![module_name(), function_names()];
             subsections.extend(ids.into_iter().map(parameter_names));
-            subsections.push(local_names.clone());
+            subsections.push(local_names());
             assert_stripped(
                 &module(&[
                     types.clone(),
@@ -289,11 +424,193 @@ mod tests {
     #[test]
     fn malformed_parameter_names_are_removed() {
         // Parameter 0 of type 0 named by the byte 0xff, which is not UTF-8,
-        // and a name map that declares more names than it holds.
-        for payload in [&[1, 0, 1, 0, 1, 0xff][..], &[1, 0, 9]] {
+        // a name map that declares more names than it holds, and an indirect
+        // name map whose indices are out of order.
+        for payload in [&[1, 0, 1, 0, 1, 0xff][..], &[1, 0, 9], &[2, 1, 0, 0, 0]] {
             assert_stripped(
                 &module(&[name_section(&[function_names(), section(12, payload)])]),
                 &module(&[name_section(&[function_names()])]),
+            );
+        }
+    }
+
+    #[test]
+    fn subsections_out_of_order_are_removed() {
+        let other_module_name = section(0, &[1, b'n']);
+        let unknown = |id| section(id, &[1, 2, 3]);
+        for (subsections, kept) in [
+            // A repeated id, and a smaller id after a greater one.
+            (
+                vec![function_names(), function_names()],
+                vec![function_names()],
+            ),
+            (vec![local_names(), function_names()], vec![local_names()]),
+            (
+                vec![module_name(), other_module_name.clone()],
+                vec![module_name()],
+            ),
+            (
+                vec![function_names(), module_name()],
+                vec![function_names()],
+            ),
+            (
+                vec![unknown(15), unknown(14), unknown(15)],
+                vec![unknown(15)],
+            ),
+            // Each id is compared with the id of the last kept subsection, not
+            // with that of a removed one.
+            (
+                vec![local_names(), function_names(), unknown(14)],
+                vec![local_names(), unknown(14)],
+            ),
+            (
+                vec![
+                    parameter_names(13),
+                    function_names(),
+                    parameter_names(12),
+                    local_names(),
+                ],
+                vec![function_names(), local_names()],
+            ),
+            (
+                vec![
+                    section(1, &name_map(&[(1, b"b"), (0, b"a")])),
+                    function_names(),
+                ],
+                vec![function_names()],
+            ),
+        ] {
+            assert_stripped(
+                &module(&[name_section(&subsections)]),
+                &module(&[name_section(&kept)]),
+            );
+        }
+    }
+
+    #[test]
+    fn name_maps_out_of_order_are_removed() {
+        let expected = module(&[name_section(&[module_name()])]);
+        // Decreasing, repeated, and decreasing after a gap.
+        let names_out_of_order = [
+            name_map(&[(1, b"b"), (0, b"a")]),
+            name_map(&[(0, b"a"), (0, b"b")]),
+            name_map(&[(0, b"a"), (2, b"c"), (1, b"b")]),
+        ];
+        for id in [1, 4, 5, 6, 7, 8, 9, 11] {
+            for names in &names_out_of_order {
+                assert_stripped(
+                    &module(&[name_section(&[module_name(), section(id, names)])]),
+                    &expected,
+                );
+            }
+        }
+        let names = name_map(&[(0, b"a"), (1, b"b")]);
+        for id in [2, 3, 10] {
+            for indirect_names in [
+                // The outer map.
+                indirect_name_map(&[(1, names.clone()), (0, names.clone())]),
+                indirect_name_map(&[(0, names.clone()), (0, names.clone())]),
+                // An inner map.
+                indirect_name_map(&[(0, names_out_of_order[0].clone())]),
+                indirect_name_map(&[(0, names.clone()), (1, names_out_of_order[1].clone())]),
+            ] {
+                assert_stripped(
+                    &module(&[name_section(&[module_name(), section(id, &indirect_names)])]),
+                    &expected,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn indices_are_compared_by_value() {
+        // Index 1 in the longest encoding before index 0, and index 0 in the
+        // longest encoding before index 1.
+        let padded = |index: u8| [0x80 | index, 0x80, 0x80, 0x80, 0];
+        let out_of_order = section(1, &[&[2][..], &padded(1), &[1, b'a', 0, 1, b'b']].concat());
+        let in_order = section(1, &[&[2][..], &padded(0), &[1, b'a', 1, 1, b'b']].concat());
+        assert_stripped(
+            &module(&[name_section(&[module_name(), out_of_order])]),
+            &module(&[name_section(&[module_name()])]),
+        );
+        assert_unchanged(&module(&[name_section(&[module_name(), in_order])]));
+    }
+
+    #[test]
+    fn names_are_limited_in_length_as_in_wasmparser() {
+        let longest = [b'x'; MAX_NAME_LEN];
+        let too_long = [b'x'; MAX_NAME_LEN + 1];
+        // A module name or a name in an inner map of 100_000 bytes, and a
+        // longer name in a name map, can be parsed, so the parameter names
+        // after them are removed.
+        for parsed in [
+            section(0, &name(&longest)),
+            section(2, &indirect_name_map(&[(0, name_map(&[(0, &longest)]))])),
+            section(4, &name_map(&[(0, &too_long)])),
+        ] {
+            assert_stripped(
+                &module(&[name_section(&[parsed.clone(), parameter_names(12)])]),
+                &module(&[name_section(&[parsed])]),
+            );
+        }
+        // A longer module name or name in an inner map cannot be parsed, so
+        // the rest of the section is kept.
+        for unparsed in [
+            section(0, &name(&too_long)),
+            section(2, &indirect_name_map(&[(0, name_map(&[(0, &too_long)]))])),
+        ] {
+            assert_unchanged(&module(&[name_section(&[unparsed, parameter_names(12)])]));
+        }
+    }
+
+    #[test]
+    fn unparsable_subsections_are_kept_with_the_rest_of_the_section() {
+        // Each subsection would be removed if it could be parsed: its id is
+        // not greater than that of the function names before it, or one of its
+        // name maps is out of order.
+        for unparsable in [
+            // A module name that is not UTF-8, that is cut off, without a
+            // length, or followed by more bytes.
+            section(0, &[1, 0xff]),
+            section(0, &[2, b'm']),
+            section(0, &[]),
+            section(0, &[1, b'm', 0]),
+            // Function names without a count, or out of order with a name
+            // that is not UTF-8.
+            section(1, &[]),
+            section(1, &name_map(&[(1, b"b"), (0, b"\xff")])),
+            // Type names out of order that declare more names than they hold,
+            // with bytes after their names, or with an index whose encoding is
+            // too long.
+            section(4, &[3, 1, 1, b'b', 0, 1, b'a']),
+            section(4, &[&name_map(&[(1, b"b"), (0, b"a")])[..], &[0]].concat()),
+            section(
+                4,
+                &[2, 1, 1, b'b', 0x80, 0x80, 0x80, 0x80, 0x80, 0, 1, b'a'],
+            ),
+            // Local names out of order with an inner name that is not UTF-8,
+            // and field names out of order with an inner map that declares
+            // more names than it holds.
+            section(
+                2,
+                &indirect_name_map(&[(1, name_map(&[])), (0, name_map(&[(0, b"\xff")]))]),
+            ),
+            section(10, &[2, 1, 0, 0, 2, 0, 1, b'a']),
+        ] {
+            let kept = module(&[name_section(&[
+                function_names(),
+                unparsable.clone(),
+                parameter_names(12),
+            ])]);
+            assert_unchanged(&kept);
+            assert_stripped(
+                &module(&[name_section(&[
+                    function_names(),
+                    parameter_names(13),
+                    unparsable,
+                    parameter_names(12),
+                ])]),
+                &kept,
             );
         }
     }
@@ -362,11 +679,13 @@ mod tests {
         let head = [encoded_name(), function_names()].concat();
         let too_long_size = [1, 0x80, 0x80, 0x80, 0x80, 0x80, 0];
         // A subsection whose size is past the end of the section, whose size
-        // encoding is cut off by the end of the section, or is too long.
+        // encoding is cut off by the end of the section or is too long, or
+        // whose id does not fit in 7 bits.
         for tail in [
             [&[1, 0x7f, 0][..], &parameter_names(13)].concat(),
             vec![1, 0x80],
             [&too_long_size[..], &parameter_names(13)].concat(),
+            [&[0x80 | 12][..], &parameter_names(12)[1..]].concat(),
         ] {
             let expected = module(&[section(0, &[&head[..], &tail].concat())]);
             assert_unchanged(&expected);
@@ -396,6 +715,7 @@ mod tests {
                 name_section(&[function_names(), parameter_names(12)]),
                 stripped.clone(),
                 name_section(&[parameter_names(13), function_names()]),
+                name_section(&[function_names(), function_names()]),
             ]),
             &module(&[
                 types,
@@ -403,9 +723,15 @@ mod tests {
                 code,
                 stripped.clone(),
                 stripped.clone(),
+                stripped.clone(),
                 stripped,
             ]),
         );
+        // The order of the ids is checked in each section on its own.
+        assert_unchanged(&module(&[
+            name_section(&[module_name(), local_names()]),
+            name_section(&[module_name(), function_names()]),
+        ]));
     }
 
     #[test]

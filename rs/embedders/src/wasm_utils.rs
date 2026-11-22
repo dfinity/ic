@@ -17,7 +17,7 @@ use ic_wasm_types::{BinaryEncodedWasm, WasmInstrumentationError};
 use serde::{Deserialize, Serialize};
 
 use self::{
-    instrumentation::instrument, name_section::remove_parameter_name_subsections,
+    instrumentation::instrument, name_section::remove_ignored_name_subsections,
     validation::has_wasm64_memory, validation::validate_wasm_binary,
 };
 use crate::wasmtime_embedder::StoreData;
@@ -213,7 +213,7 @@ fn validate_and_instrument(
     wasm: &BinaryEncodedWasm,
     config: &EmbeddersConfig,
 ) -> HypervisorResult<(WasmValidationDetails, InstrumentationOutput)> {
-    let wasm = match remove_parameter_name_subsections(wasm.as_slice()) {
+    let wasm = match remove_ignored_name_subsections(wasm.as_slice()) {
         Cow::Borrowed(_) => Cow::Borrowed(wasm),
         Cow::Owned(stripped) => Cow::Owned(BinaryEncodedWasm::new(stripped)),
     };
