@@ -2319,9 +2319,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.10.40"
+version = "0.10.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eabf7c87ac020b0d9e07b02b63e6a109224044a524ce5b7ce98307bc5ea4d7e1"
+checksum = "a253dd9596f4b17d3fab70379d4a6b421a996b2e556f2389fdd18d1d988ff733"
 dependencies = [
  "anyhow",
  "binrw",
@@ -2342,9 +2342,9 @@ dependencies = [
 
 [[package]]
 name = "candid_derive"
-version = "0.10.40"
+version = "0.10.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6d61cd9491fc0ef12a5d2106b742e0e166026afc9e20cadd82d3f1e695cf7fc"
+checksum = "48fb0884cb905b01bc3e7566e3d01f33cace6779b76384f70aea8552cef6a942"
 dependencies = [
  "lazy_static",
  "proc-macro2",
@@ -2354,28 +2354,9 @@ dependencies = [
 
 [[package]]
 name = "candid_parser"
-version = "0.1.4"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48a3da76f989cd350b7342c64c6c6008341bb6186f6832ef04e56dc50ba0fd76"
-dependencies = [
- "anyhow",
- "candid",
- "codespan-reporting",
- "convert_case 0.6.0",
- "hex",
- "lalrpop 0.20.2",
- "lalrpop-util 0.20.2",
- "logos 0.13.0",
- "num-bigint 0.4.8",
- "pretty",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "candid_parser"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4d1368a4edc90c239b652b675a99fb21e5ce600c7ef3da082a3fcdb07bd1e1f"
+checksum = "0869423fd06018874025dcde34b6c094cf679faa9d552ba2cbbb1d7b62177aa4"
 dependencies = [
  "anyhow",
  "candid",
@@ -2385,7 +2366,7 @@ dependencies = [
  "hex",
  "lalrpop 0.20.2",
  "lalrpop-util 0.20.2",
- "logos 0.14.4",
+ "logos",
  "num-bigint 0.4.8",
  "pretty",
  "serde",
@@ -3919,7 +3900,7 @@ dependencies = [
  "bytes",
  "canbench-rs",
  "candid",
- "candid_parser 0.1.4",
+ "candid_parser",
  "cargo_metadata",
  "cc",
  "cfg-if",
@@ -4719,7 +4700,7 @@ checksum = "72cf461f865c862bb7dc573f643dd6a2b6842f7c30b07882b56bd148cc2761b8"
 dependencies = [
  "bit-set 0.8.0",
  "regex-automata",
- "regex-syntax 0.8.12",
+ "regex-syntax",
 ]
 
 [[package]]
@@ -6477,7 +6458,7 @@ checksum = "62beb934ad93d6cab235018e6b2ad15c72a54cd2148885f7b83dc8f5362806b7"
 dependencies = [
  "anyhow",
  "candid",
- "candid_parser 0.4.1",
+ "candid_parser",
  "clap",
  "libflate",
  "parse-display",
@@ -6537,8 +6518,9 @@ dependencies = [
 
 [[package]]
 name = "icrc1-test-env"
-version = "0.1.1"
-source = "git+https://github.com/dfinity/ICRC-1?rev=26a80d777e079644cd69e883e18dad1a201f5b1a#26a80d777e079644cd69e883e18dad1a201f5b1a"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "434895e78ad887188e8f9c4beda993a3a18aacea7892ddd9797b7266ec7b60c5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6549,8 +6531,9 @@ dependencies = [
 
 [[package]]
 name = "icrc1-test-suite"
-version = "0.1.1"
-source = "git+https://github.com/dfinity/ICRC-1?rev=26a80d777e079644cd69e883e18dad1a201f5b1a#26a80d777e079644cd69e883e18dad1a201f5b1a"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e544e494fc0560be38838cf0bd1505ade364fc712d57e93559cee06629dea13"
 dependencies = [
  "anyhow",
  "candid",
@@ -6851,9 +6834,9 @@ dependencies = [
 
 [[package]]
 name = "intmap"
-version = "1.1.0"
+version = "3.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b357564d111300f8a33b79e06795235529a627a1f7078d2b1db7f7dcdf032874"
+checksum = "a2e611826a1868311677fdcdfbec9e8621d104c732d080f546a854530232f0ee"
 dependencies = [
  "serde",
 ]
@@ -7167,7 +7150,7 @@ dependencies = [
  "percent-encoding",
  "referencing",
  "regex",
- "regex-syntax 0.8.12",
+ "regex-syntax",
  "serde",
  "serde_json",
  "unicode-general-category",
@@ -7275,7 +7258,7 @@ dependencies = [
  "petgraph 0.6.5",
  "pico-args",
  "regex",
- "regex-syntax 0.8.12",
+ "regex-syntax",
  "string_cache 0.8.9",
  "term 0.7.0",
  "tiny-keccak",
@@ -7296,7 +7279,7 @@ dependencies = [
  "lalrpop-util 0.22.2",
  "petgraph 0.7.1",
  "regex",
- "regex-syntax 0.8.12",
+ "regex-syntax",
  "sha3 0.10.9",
  "string_cache 0.8.9",
  "term 1.2.1",
@@ -7658,34 +7641,11 @@ checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 
 [[package]]
 name = "logos"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c000ca4d908ff18ac99b93a062cb8958d331c3220719c52e77cb19cc6ac5d2c1"
-dependencies = [
- "logos-derive 0.13.0",
-]
-
-[[package]]
-name = "logos"
 version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7251356ef8cb7aec833ddf598c6cb24d17b689d20b993f9d11a3d764e34e6458"
 dependencies = [
- "logos-derive 0.14.4",
-]
-
-[[package]]
-name = "logos-codegen"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc487311295e0002e452025d6b580b77bb17286de87b57138f3b5db711cded68"
-dependencies = [
- "beef",
- "fnv",
- "proc-macro2",
- "quote",
- "regex-syntax 0.6.29",
- "syn 2.0.119",
+ "logos-derive",
 ]
 
 [[package]]
@@ -7699,17 +7659,8 @@ dependencies = [
  "lazy_static",
  "proc-macro2",
  "quote",
- "regex-syntax 0.8.12",
+ "regex-syntax",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "logos-derive"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbfc0d229f1f42d790440136d941afd806bc9e949e2bcb8faa813b0f00d1267e"
-dependencies = [
- "logos-codegen 0.13.0",
 ]
 
 [[package]]
@@ -7718,7 +7669,7 @@ version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24fb722b06a9dc12adb0963ed585f19fc61dc5413e6a9be9422ef92c091e731d"
 dependencies = [
- "logos-codegen 0.14.4",
+ "logos-codegen",
 ]
 
 [[package]]
@@ -8811,7 +8762,7 @@ checksum = "e78deb158fb1d73b29efb4b7e9b9860b78059c670de06bd28df8d0b458ded0eb"
 dependencies = [
  "parse-display-derive",
  "regex",
- "regex-syntax 0.8.12",
+ "regex-syntax",
 ]
 
 [[package]]
@@ -8823,7 +8774,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "regex",
- "regex-syntax 0.8.12",
+ "regex-syntax",
  "structmeta",
  "syn 2.0.119",
 ]
@@ -9577,7 +9528,7 @@ dependencies = [
  "rand 0.8.8",
  "rand_chacha 0.3.1",
  "rand_xorshift",
- "regex-syntax 0.8.12",
+ "regex-syntax",
  "rusty-fork",
  "tempfile",
  "unarray",
@@ -10168,7 +10119,7 @@ dependencies = [
  "aho-corasick",
  "memchr",
  "regex-automata",
- "regex-syntax 0.8.12",
+ "regex-syntax",
 ]
 
 [[package]]
@@ -10179,7 +10130,7 @@ checksum = "41d60ef07df457506a0a1a2073112eb4aae5733dbd2813c3da77d1b0fd441158"
 dependencies = [
  "aho-corasick",
  "memchr",
- "regex-syntax 0.8.12",
+ "regex-syntax",
 ]
 
 [[package]]
@@ -10191,7 +10142,7 @@ dependencies = [
  "aho-corasick",
  "itertools 0.14.0",
  "regex",
- "regex-syntax 0.8.12",
+ "regex-syntax",
 ]
 
 [[package]]
@@ -10199,12 +10150,6 @@ name = "regex-lite"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cab834c73d247e67f4fae452806d17d3c7501756d98c8808d7c9c7aa7d18f973"
-
-[[package]]
-name = "regex-syntax"
-version = "0.6.29"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f162c6dd7b008981e4d40210aca20b4bd0f9b60ca9271061b07f78537722f2e1"
 
 [[package]]
 name = "regex-syntax"

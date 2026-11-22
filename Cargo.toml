@@ -648,7 +648,7 @@ build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "2
 bytes = "1.12.1"
 canbench-rs = "0.7.0"
 candid = { version = "0.10.37" }
-candid_parser = { version = "0.1.2" }
+candid_parser = { version = "0.4.2" }
 cargo_metadata = "0.23"
 chrono = { version = "0.4.42", default-features = false, features = [
     "alloc",

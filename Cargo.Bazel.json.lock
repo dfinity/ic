@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "9c881d78a67d4ef33b2b2197f1cf2129af963f608389df2c657b82f400e27995",
+  "checksum": "f88a378b87b59d19b61f9a59fda4e39d8cbc037faaedde890922304302995cad",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -10226,7 +10226,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -10310,7 +10310,7 @@
       ],
       "version": "0.7.0"
     },
-    "candid 0.10.40": {
+    "candid 0.10.41": {
       "common_attrs": {
         "crate_features": [
           "all",
@@ -10383,7 +10383,7 @@
         "edition": "2021",
         "proc_macro_deps": [
           {
-            "id": "candid_derive 0.10.40",
+            "id": "candid_derive 0.10.41",
             "target": "candid_derive"
           },
           {
@@ -10425,8 +10425,8 @@
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "sha256": "eabf7c87ac020b0d9e07b02b63e6a109224044a524ce5b7ce98307bc5ea4d7e1",
-          "url": "https://static.crates.io/crates/candid/0.10.40/download"
+          "sha256": "a253dd9596f4b17d3fab70379d4a6b421a996b2e556f2389fdd18d1d988ff733",
+          "url": "https://static.crates.io/crates/candid/0.10.41/download"
         }
       },
       "targets": [
@@ -10437,9 +10437,9 @@
           }
         }
       ],
-      "version": "0.10.40"
+      "version": "0.10.41"
     },
-    "candid_derive 0.10.40": {
+    "candid_derive 0.10.41": {
       "common_attrs": {
         "deps": [
           {
@@ -10471,8 +10471,8 @@
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "sha256": "b6d61cd9491fc0ef12a5d2106b742e0e166026afc9e20cadd82d3f1e695cf7fc",
-          "url": "https://static.crates.io/crates/candid_derive/0.10.40/download"
+          "sha256": "48fb0884cb905b01bc3e7566e3d01f33cace6779b76384f70aea8552cef6a942",
+          "url": "https://static.crates.io/crates/candid_derive/0.10.41/download"
         }
       },
       "targets": [
@@ -10483,9 +10483,9 @@
           }
         }
       ],
-      "version": "0.10.40"
+      "version": "0.10.41"
     },
-    "candid_parser 0.1.4": {
+    "candid_parser 0.4.2": {
       "build_script_attrs": {
         "deps": [
           {
@@ -10501,94 +10501,7 @@
             "target": "anyhow"
           },
           {
-            "id": "candid 0.10.40",
-            "target": "candid"
-          },
-          {
-            "id": "codespan-reporting 0.11.1",
-            "target": "codespan_reporting"
-          },
-          {
-            "id": "convert_case 0.6.0",
-            "target": "convert_case"
-          },
-          {
-            "id": "hex 0.4.3",
-            "target": "hex"
-          },
-          {
-            "id": "lalrpop-util 0.20.2",
-            "target": "lalrpop_util"
-          },
-          {
-            "id": "logos 0.13.0",
-            "target": "logos"
-          },
-          {
-            "id": "num-bigint 0.4.8",
-            "target": "num_bigint"
-          },
-          {
-            "id": "pretty 0.12.5",
-            "target": "pretty"
-          },
-          {
-            "id": "thiserror 1.0.69",
-            "target": "thiserror"
-          }
-        ],
-        "edition": "2021",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "candid_parser",
-      "license": "Apache-2.0",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "name": "candid_parser",
-      "package_url": "https://github.com/dfinity/candid",
-      "repository": {
-        "Http": {
-          "sha256": "48a3da76f989cd350b7342c64c6c6008341bb6186f6832ef04e56dc50ba0fd76",
-          "url": "https://static.crates.io/crates/candid_parser/0.1.4/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "candid_parser",
-            "crate_root": "src/lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "0.1.4"
-    },
-    "candid_parser 0.4.1": {
-      "build_script_attrs": {
-        "deps": [
-          {
-            "id": "lalrpop 0.20.2",
-            "target": "lalrpop"
-          }
-        ]
-      },
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "anyhow 1.0.104",
-            "target": "anyhow"
-          },
-          {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -10651,8 +10564,8 @@
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "sha256": "b4d1368a4edc90c239b652b675a99fb21e5ce600c7ef3da082a3fcdb07bd1e1f",
-          "url": "https://static.crates.io/crates/candid_parser/0.4.1/download"
+          "sha256": "0869423fd06018874025dcde34b6c094cf679faa9d552ba2cbbb1d7b62177aa4",
+          "url": "https://static.crates.io/crates/candid_parser/0.4.2/download"
         }
       },
       "targets": [
@@ -10669,7 +10582,7 @@
           }
         }
       ],
-      "version": "0.4.1"
+      "version": "0.4.2"
     },
     "canlog 0.2.0": {
       "common_attrs": {
@@ -10678,7 +10591,7 @@
         ],
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -17649,11 +17562,11 @@
             "target": "canbench_rs"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
-            "id": "candid_parser 0.1.4",
+            "id": "candid_parser 0.4.2",
             "target": "candid_parser"
           },
           {
@@ -18003,11 +17916,11 @@
             "target": "ic_principal"
           },
           {
-            "id": "icrc1-test-env 0.1.1",
+            "id": "icrc1-test-env 0.2.0",
             "target": "icrc1_test_env"
           },
           {
-            "id": "icrc1-test-suite 0.1.1",
+            "id": "icrc1-test-suite 0.2.0",
             "target": "icrc1_test_suite"
           },
           {
@@ -18035,7 +17948,7 @@
             "target": "insta"
           },
           {
-            "id": "intmap 1.1.0",
+            "id": "intmap 3.1.3",
             "target": "intmap"
           },
           {
@@ -20928,7 +20841,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -20988,7 +20901,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -26015,7 +25928,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.40",
+              "id": "candid 0.10.41",
               "target": "candid"
             },
             {
@@ -26245,7 +26158,7 @@
             "target": "bytes"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -26580,7 +26493,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -26659,7 +26572,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -26719,7 +26632,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -26793,7 +26706,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -26842,7 +26755,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -26906,7 +26819,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27001,7 +26914,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27051,7 +26964,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27169,7 +27082,7 @@
             "target": "cached"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27288,7 +27201,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27334,7 +27247,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27385,7 +27298,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27572,7 +27485,7 @@
             "target": "bytes"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27787,7 +27700,7 @@
             "target": "base64"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27853,7 +27766,7 @@
             "target": "bytes"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27978,7 +27891,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28019,7 +27932,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28061,7 +27974,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28103,7 +28016,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28213,7 +28126,7 @@
             "target": "base64"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28450,7 +28363,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28496,7 +28409,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28570,7 +28483,7 @@
         ],
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28725,7 +28638,7 @@
             "target": "anyhow"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28849,11 +28762,11 @@
             "target": "anyhow"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
-            "id": "candid_parser 0.4.1",
+            "id": "candid_parser 0.4.2",
             "target": "candid_parser"
           },
           {
@@ -28929,7 +28842,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -29130,7 +29043,7 @@
       ],
       "version": "0.1.5"
     },
-    "icrc1-test-env 0.1.1": {
+    "icrc1-test-env 0.2.0": {
       "common_attrs": {
         "deps": [
           {
@@ -29138,7 +29051,7 @@
             "target": "anyhow"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -29167,12 +29080,9 @@
       "name": "icrc1-test-env",
       "package_url": "https://github.com/dfinity/ICRC-1",
       "repository": {
-        "Git": {
-          "commitish": {
-            "Rev": "26a80d777e079644cd69e883e18dad1a201f5b1a"
-          },
-          "remote": "https://github.com/dfinity/ICRC-1",
-          "strip_prefix": "test/env"
+        "Http": {
+          "sha256": "434895e78ad887188e8f9c4beda993a3a18aacea7892ddd9797b7266ec7b60c5",
+          "url": "https://static.crates.io/crates/icrc1-test-env/0.2.0/download"
         }
       },
       "targets": [
@@ -29183,9 +29093,9 @@
           }
         }
       ],
-      "version": "0.1.1"
+      "version": "0.2.0"
     },
-    "icrc1-test-suite 0.1.1": {
+    "icrc1-test-suite 0.2.0": {
       "common_attrs": {
         "deps": [
           {
@@ -29193,7 +29103,7 @@
             "target": "anyhow"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -29201,7 +29111,7 @@
             "target": "futures"
           },
           {
-            "id": "icrc1-test-env 0.1.1",
+            "id": "icrc1-test-env 0.2.0",
             "target": "icrc1_test_env"
           }
         ],
@@ -29216,12 +29126,9 @@
       "name": "icrc1-test-suite",
       "package_url": "https://github.com/dfinity/ICRC-1",
       "repository": {
-        "Git": {
-          "commitish": {
-            "Rev": "26a80d777e079644cd69e883e18dad1a201f5b1a"
-          },
-          "remote": "https://github.com/dfinity/ICRC-1",
-          "strip_prefix": "test/suite"
+        "Http": {
+          "sha256": "2e544e494fc0560be38838cf0bd1505ade364fc712d57e93559cee06629dea13",
+          "url": "https://static.crates.io/crates/icrc1-test-suite/0.2.0/download"
         }
       },
       "targets": [
@@ -29232,7 +29139,7 @@
           }
         }
       ],
-      "version": "0.1.1"
+      "version": "0.2.0"
     },
     "icu_collections 2.4.0": {
       "common_attrs": {
@@ -30491,7 +30398,7 @@
       ],
       "version": "0.8.5"
     },
-    "intmap 1.1.0": {
+    "intmap 3.1.3": {
       "common_attrs": {
         "crate_features": [
           "serde"
@@ -30502,7 +30409,7 @@
             "target": "serde"
           }
         ],
-        "edition": "2018"
+        "edition": "2021"
       },
       "library_target_name": "intmap",
       "license": "MIT",
@@ -30514,8 +30421,8 @@
       "package_url": "https://github.com/JesperAxelsson/rust-intmap",
       "repository": {
         "Http": {
-          "sha256": "b357564d111300f8a33b79e06795235529a627a1f7078d2b1db7f7dcdf032874",
-          "url": "https://static.crates.io/crates/intmap/1.1.0/download"
+          "sha256": "a2e611826a1868311677fdcdfbec9e8621d104c732d080f546a854530232f0ee",
+          "url": "https://static.crates.io/crates/intmap/3.1.3/download"
         }
       },
       "targets": [
@@ -30526,7 +30433,7 @@
           }
         }
       ],
-      "version": "1.1.0"
+      "version": "3.1.3"
     },
     "iocuddle 0.1.1": {
       "common_attrs": {
@@ -34319,46 +34226,6 @@
       ],
       "version": "0.4.35"
     },
-    "logos 0.13.0": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "export_derive",
-          "logos-derive",
-          "std"
-        ],
-        "edition": "2018",
-        "proc_macro_deps": [
-          {
-            "id": "logos-derive 0.13.0",
-            "target": "logos_derive"
-          }
-        ]
-      },
-      "library_target_name": "logos",
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "logos",
-      "package_url": "https://github.com/maciejhirsz/logos",
-      "repository": {
-        "Http": {
-          "sha256": "c000ca4d908ff18ac99b93a062cb8958d331c3220719c52e77cb19cc6ac5d2c1",
-          "url": "https://static.crates.io/crates/logos/0.13.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "logos",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.13.0"
-    },
     "logos 0.14.4": {
       "common_attrs": {
         "crate_features": [
@@ -34399,60 +34266,6 @@
         }
       ],
       "version": "0.14.4"
-    },
-    "logos-codegen 0.13.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "beef 0.5.2",
-            "target": "beef"
-          },
-          {
-            "id": "fnv 1.0.7",
-            "target": "fnv"
-          },
-          {
-            "id": "proc-macro2 1.0.107",
-            "target": "proc_macro2"
-          },
-          {
-            "id": "quote 1.0.47",
-            "target": "quote"
-          },
-          {
-            "id": "regex-syntax 0.6.29",
-            "target": "regex_syntax"
-          },
-          {
-            "id": "syn 2.0.119",
-            "target": "syn"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "logos_codegen",
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "logos-codegen",
-      "package_url": "https://github.com/maciejhirsz/logos",
-      "repository": {
-        "Http": {
-          "sha256": "dc487311295e0002e452025d6b580b77bb17286de87b57138f3b5db711cded68",
-          "url": "https://static.crates.io/crates/logos-codegen/0.13.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "logos_codegen",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.13.0"
     },
     "logos-codegen 0.14.4": {
       "common_attrs": {
@@ -34512,40 +34325,6 @@
         }
       ],
       "version": "0.14.4"
-    },
-    "logos-derive 0.13.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "logos-codegen 0.13.0",
-            "target": "logos_codegen"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "logos_derive",
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "logos-derive",
-      "package_url": "https://github.com/maciejhirsz/logos",
-      "repository": {
-        "Http": {
-          "sha256": "dbfc0d229f1f42d790440136d941afd806bc9e949e2bcb8faa813b0f00d1267e",
-          "url": "https://static.crates.io/crates/logos-derive/0.13.0/download"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "logos_derive",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.13.0"
     },
     "logos-derive 0.14.4": {
       "common_attrs": {
@@ -46060,46 +45839,6 @@
         }
       ],
       "version": "0.1.9"
-    },
-    "regex-syntax 0.6.29": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "unicode",
-          "unicode-age",
-          "unicode-bool",
-          "unicode-case",
-          "unicode-gencat",
-          "unicode-perl",
-          "unicode-script",
-          "unicode-segment"
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "regex_syntax",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "regex-syntax",
-      "package_url": "https://github.com/rust-lang/regex",
-      "repository": {
-        "Http": {
-          "sha256": "f162c6dd7b008981e4d40210aca20b4bd0f9b60ca9271061b07f78537722f2e1",
-          "url": "https://static.crates.io/crates/regex-syntax/0.6.29/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "regex_syntax",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.6.29"
     },
     "regex-syntax 0.8.12": {
       "common_attrs": {
@@ -66766,8 +66505,8 @@
     "build-info-build 0.0.45",
     "bytes 1.12.2",
     "canbench-rs 0.7.0",
-    "candid 0.10.40",
-    "candid_parser 0.1.4",
+    "candid 0.10.41",
+    "candid_parser 0.4.2",
     "cargo_metadata 0.23.1",
     "cc 1.11.2",
     "cfg-if 1.0.5",
@@ -66856,8 +66595,8 @@
     "ic0 1.2.0",
     "ic_bls12_381 0.10.1",
     "ic_principal 0.1.5",
-    "icrc1-test-env 0.1.1",
-    "icrc1-test-suite 0.1.1",
+    "icrc1-test-env 0.2.0",
+    "icrc1-test-suite 0.2.0",
     "idna 1.1.0",
     "indexmap 2.14.2",
     "indicatif 0.18.6",
@@ -66865,7 +66604,7 @@
     "inferno 0.12.8",
     "inotify 0.11.5",
     "insta 1.49.0",
-    "intmap 1.1.0",
+    "intmap 3.1.3",
     "ipnet 2.12.2",
     "itertools 0.12.1",
     "json5 0.4.1",
