@@ -782,16 +782,31 @@ impl Step for UploadStateAndRestartStep {
             // then simply `mv` the new state to the upload directory. No
             // rsync is needed, and thus no checkpoint copying.
             let backup_path = self.work_dir.join(OLD_IC_STATE);
-            info!(
-                self.logger,
-                "Moving original state into {}...",
-                backup_path.display()
-            );
-            let mut cmd_backup_state = Command::new("sudo");
-            cmd_backup_state.arg("mv");
-            cmd_backup_state.arg(&ic_state_path);
-            cmd_backup_state.arg(backup_path);
-            confirm_exec_cmd(&mut cmd_backup_state, log)?;
+            // If an earlier run of this step was interrupted after backing up
+            // the original state, there is no state to back up anymore, and
+            // the backup must be kept.
+            if ic_state_path
+                .try_exists()
+                .map_err(|e| RecoveryError::file_error(&ic_state_path, e))?
+            {
+                info!(
+                    self.logger,
+                    "Moving original state into {}...",
+                    backup_path.display()
+                );
+                let mut cmd_backup_state = Command::new("sudo");
+                cmd_backup_state.arg("mv");
+                cmd_backup_state.arg(&ic_state_path);
+                cmd_backup_state.arg(backup_path);
+                confirm_exec_cmd(&mut cmd_backup_state, log)?;
+            } else {
+                info!(
+                    self.logger,
+                    "No state found in {}, so it was already moved into {}",
+                    ic_state_path.display(),
+                    backup_path.display()
+                );
+            }
 
             info!(self.logger, "Moving state locally...");
             let mut mv_to_target = Command::new("sudo");
