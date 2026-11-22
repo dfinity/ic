@@ -388,9 +388,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 const MIN_MAINNET_NEXT_UNALLOCATED_CANISTER_INDEX: u64 = 0xa00_0000;
 
 // The registry canister backfills the `CanisterIdAllocation` from the full history of the routing
-// table when it is upgraded. If the backfill underestimated it, new subnets could be assigned the
-// canister IDs of deleted subnets again, and the registry invariants would not notice (reused
-// ranges lie below the underestimated value). So check it against mainnet history.
+// table when it is upgraded.
 fn check_canister_id_allocation_covers_mainnet_history(state_machine: &StateMachine) {
     let response = registry_get_value(state_machine, make_canister_id_allocation_key().as_bytes());
     let Some(high_capacity_registry_get_value_response::Content::Value(bytes)) = response.content
