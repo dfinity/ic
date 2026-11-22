@@ -484,6 +484,8 @@ mod tests {
                 PbRoutingTable::from(shard).encode_to_vec(),
             );
         }
+        // The bomb lies here: the table maxes out at 0x2ff,
+        // so this needs to be at least 0x300.
         insert_canister_id_allocation_to_snapshot(0x200, &mut snapshot);
 
         // Step 2: Run the code under test.
