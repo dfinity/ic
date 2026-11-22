@@ -782,13 +782,36 @@ impl Step for UploadStateAndRestartStep {
             // then simply `mv` the new state to the upload directory. No
             // rsync is needed, and thus no checkpoint copying.
             let backup_path = self.work_dir.join(OLD_IC_STATE);
-            // If an earlier run of this step was interrupted after backing up
-            // the original state, there is no state to back up anymore, and
-            // the backup must be kept.
-            if ic_state_path
-                .try_exists()
-                .map_err(|e| RecoveryError::file_error(&ic_state_path, e))?
-            {
+            let exists = |path: &Path| {
+                path.try_exists()
+                    .map_err(|e| RecoveryError::file_error(path, e))
+            };
+            // An existing backup was made by an earlier run of this step, so it
+            // holds the original state and must be kept. A state found next to
+            // it was then installed by that earlier run and is replaced. This
+            // requires that `work_dir` is not reused across recoveries: a backup
+            // left there by another recovery would make this step delete the
+            // node's state without backing it up.
+            if exists(&backup_path)? {
+                if exists(&ic_state_path)? {
+                    info!(
+                        self.logger,
+                        "Original state already moved into {}, removing the state installed by an \
+                         earlier run from {}...",
+                        backup_path.display(),
+                        ic_state_path.display()
+                    );
+                    let mut cmd_remove_state = Command::new("sudo");
+                    cmd_remove_state.arg("rm").arg("-rf").arg(&ic_state_path);
+                    confirm_exec_cmd(&mut cmd_remove_state, log)?;
+                } else {
+                    info!(
+                        self.logger,
+                        "Original state already moved into {}",
+                        backup_path.display()
+                    );
+                }
+            } else if exists(&ic_state_path)? {
                 info!(
                     self.logger,
                     "Moving original state into {}...",
@@ -797,14 +820,13 @@ impl Step for UploadStateAndRestartStep {
                 let mut cmd_backup_state = Command::new("sudo");
                 cmd_backup_state.arg("mv");
                 cmd_backup_state.arg(&ic_state_path);
-                cmd_backup_state.arg(backup_path);
+                cmd_backup_state.arg(&backup_path);
                 confirm_exec_cmd(&mut cmd_backup_state, log)?;
             } else {
                 info!(
                     self.logger,
-                    "No state found in {}, so it was already moved into {}",
-                    ic_state_path.display(),
-                    backup_path.display()
+                    "No state found in {}, so there is nothing to back up",
+                    ic_state_path.display()
                 );
             }
 
