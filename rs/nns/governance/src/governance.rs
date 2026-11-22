@@ -4774,58 +4774,30 @@ impl Governance {
     /// Validates the proposal in the MakeProposal command of a ManageNeuron proposal (the "nested"
     /// proposal). Returns an InvalidProposal error unless all of the following hold:
     ///
-    ///     1. The nested proposal is a ManageNeuron proposal.
-    ///     2. Its command is not MakeProposal (i.e. there is at most one level of nesting).
-    ///     3. It does not have a self describing action.
-    ///     4. It is valid on its own (see validate_proposal).
+    ///     1. If the nested proposal is a ManageNeuron proposal, its command is not MakeProposal
+    ///        (i.e. there is at most one level of nesting).
+    ///     2. It is valid on its own (see validate_proposal).
     ///
     /// (The size of the nested proposal is limited by MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX,
     /// which is checked by the caller.)
     ///
-    /// This does NOT check whether the neuron that would make the nested proposal (the neuron
-    /// targeted by the enclosing proposal) is a followee of the neuron targeted by the nested
-    /// proposal on the NeuronManagement topic: this validation happens before the caller is
-    /// authorized, so the result would disclose (private) followees to anyone. Instead, that is
-    /// checked (after authorization) when the nested proposal is actually made, i.e. when the
-    /// enclosing proposal is executed.
-    ///
-    /// Nested proposals let a group of neurons manage many neurons through one intermediate
-    /// neuron. Suppose that neuron D follows neurons A, B, and C on the NeuronManagement topic,
-    /// and that neurons E1, ..., En follow D on that topic. Then A, B, and C can make a
-    /// ManageNeuron proposal for D whose command is MakeProposal, and whose nested proposal is a
-    /// ManageNeuron proposal for some Ei. Once adopted, D makes the nested proposal (and votes to
-    /// adopt it). Changing the members of the group only requires changing the followees of D,
-    /// rather than the followees of each Ei.
+    /// If the nested proposal is a ManageNeuron proposal, this does NOT check whether the neuron
+    /// that would make it (the neuron targeted by the enclosing proposal) is a followee of the
+    /// neuron targeted by the nested proposal on the NeuronManagement topic: this validation
+    /// happens before the caller is authorized, so the result would disclose (private) followees
+    /// to anyone. Instead, that is checked (after authorization) when the nested proposal is
+    /// actually made, i.e. when the enclosing proposal is executed.
     fn validate_nested_make_proposal(
         &self,
         nested_proposal: &Proposal,
     ) -> Result<(), GovernanceError> {
-        let invalid_proposal_error =
-            |message: &str| GovernanceError::new_with_message(ErrorType::InvalidProposal, message);
-
-        // The nested proposal must manage another neuron.
-        let Some(Action::ManageNeuron(nested_manage_neuron)) = &nested_proposal.action else {
-            return Err(invalid_proposal_error(
-                "When a ManageNeuron proposal is to make (another) proposal, \
-                 the second proposal must be (another) ManageNeuron proposal.",
-            ));
-        };
-
-        // However, the other neuron must not make a THIRD proposal.
-        if let Some(Command::MakeProposal(_)) = &nested_manage_neuron.command {
-            return Err(invalid_proposal_error(
+        if let Some(Action::ManageNeuron(nested_manage_neuron)) = &nested_proposal.action
+            && let Some(Command::MakeProposal(_)) = &nested_manage_neuron.command
+        {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
                 "A proposal made through a ManageNeuron proposal cannot itself \
                  make a third proposal.",
-            ));
-        }
-
-        // The self_describing_action field is written only by Governance itself, when it makes
-        // a proposal; it is not set when converting from the API type. Therefore, this is a
-        // "belt and suspenders" check.
-        if nested_proposal.self_describing_action.is_some() {
-            return Err(invalid_proposal_error(
-                "A proposal made through a ManageNeuron proposal must not specify a \
-                 self_describing_action.",
             ));
         }
 

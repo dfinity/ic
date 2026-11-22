@@ -233,11 +233,21 @@ impl ValidProposalAction {
         &self,
         env: Arc<dyn Environment>,
     ) -> SelfDescribingProposalAction {
+        // ExecuteNnsFunction is the only case where we need to call `canister_metadata` to get
+        // the candid file of an external canister, and hence it's the only one with `await`.
+        if let ValidProposalAction::ExecuteNnsFunction(execute_nns_function) = self {
+            return execute_nns_function.to_self_describing_action(env).await;
+        }
+
+        self.to_self_describing_without_canister_calls()
+    }
+
+    /// Like `to_self_describing`, but without calling other canisters. The only difference is that
+    /// the payload of an ExecuteNnsFunction is not described (i.e. its value is None).
+    pub fn to_self_describing_without_canister_calls(&self) -> SelfDescribingProposalAction {
         match self {
-            // ExecuteNnsFunction is the only case where we need to call `canister_metadata` to get
-            // the candid file of an external canister, and hence it's the only one with `await`.
             ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
-                execute_nns_function.to_self_describing_action(env).await
+                execute_nns_function.to_self_describing_action_without_payload()
             }
 
             ValidProposalAction::Motion(motion) => {

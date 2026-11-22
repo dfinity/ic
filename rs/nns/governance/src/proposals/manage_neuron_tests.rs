@@ -7,6 +7,7 @@ use crate::pb::v1::{
         IncreaseDissolveDelay, Merge, RemoveHotKey, SetDissolveTimestamp, Spawn, Split,
         StakeMaturity, claim_or_refresh, configure::Operation, disburse::Amount, set_following,
     },
+    proposal::Action,
 };
 
 use ic_base_types::PrincipalId;
@@ -227,7 +228,7 @@ fn test_command_make_proposal_to_self_describing() {
                 "summary".to_string() => SelfDescribingValue::from("Vote yes on proposal 42."),
                 "url".to_string() => SelfDescribingValue::from("https://forum.dfinity.org"),
                 "action".to_string() => SelfDescribingValue::Map(hashmap! {
-                    "ManageNeuron".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "Manage Neuron".to_string() => SelfDescribingValue::Map(hashmap! {
                         "neuron_id".to_string() => SelfDescribingValue::from(5_u64),
                         "command".to_string() => SelfDescribingValue::Map(hashmap! {
                             "RegisterVote".to_string() => SelfDescribingValue::Map(hashmap! {
