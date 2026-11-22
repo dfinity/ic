@@ -10,12 +10,15 @@
 use crate::{common::LOG_PREFIX, registry::Registry, storage::with_chunks};
 use ic_protobuf::registry::routing_table::v1::CanisterIdAllocation;
 use ic_protobuf::types::v1 as pb_types;
-use ic_registry_canister_chunkify::dechunkify_registry_value;
+use ic_registry_canister_chunkify::decode_high_capacity_registry_value;
 use ic_registry_keys::{
     CANISTER_RANGES_PREFIX, make_canister_id_allocation_key, make_routing_table_record_key,
 };
 use ic_registry_routing_table::canister_id_into_u64;
-use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
+use ic_registry_transport::{
+    pb::v1::{HighCapacityRegistryValue, RegistryMutation},
+    upsert,
+};
 use ic_types::CanisterId;
 use prost::Message;
 
@@ -64,40 +67,14 @@ impl Registry {
                 if value.version > version {
                     break;
                 }
-                // A value without content holds no routing table, hence no ranges to account for.
-                let Some(content) = value.content.clone() else {
-                    continue;
-                };
-                // Large values live in the chunk store, so they are reassembled first. `None` means
-                // that the key was deleted in this version, so this version holds no ranges either
-                // (the ranges it held before are accounted for by the earlier versions).
-                let Some(bytes) = with_chunks(|chunks| dechunkify_registry_value(content, chunks))
-                else {
-                    continue;
-                };
 
-                let routing_table = LegacyCompatibleRoutingTable::decode(bytes.as_slice())
-                    .unwrap_or_else(|err| {
-                        panic!(
-                            "Unable to decode version {} of routing table key {}: {err}",
-                            value.version,
-                            String::from_utf8_lossy(key),
-                        )
-                    });
-                for entry in routing_table.entries {
-                    // An entry without a range assigns no canister IDs to its subnet, so there is
-                    // nothing to account for.
-                    let Some(range) = entry.range else {
-                        continue;
-                    };
-                    let end = range.try_get_end_canister_index().unwrap_or_else(|err| {
-                        panic!(
-                            "Invalid range end in version {} of routing table key {}: {err}",
-                            value.version,
-                            String::from_utf8_lossy(key),
-                        )
-                    });
-                    next_unallocated_canister_index = next_unallocated_canister_index.max(end + 1);
+                let max_end = get_canister_id_range_ends_or_panic(value, /* for errors */ key)
+                    .into_iter()
+                    .max();
+
+                if let Some(max_end) = max_end {
+                    next_unallocated_canister_index =
+                        next_unallocated_canister_index.max(max_end + 1);
                 }
             }
         }
@@ -146,6 +123,38 @@ impl LegacyCompatibleCanisterIdRange {
             CanisterId::try_from(end_canister_id).map_err(|err| err.to_string())?;
         Ok(canister_id_into_u64(end_canister_id))
     }
+}
+
+/// Returns the (inclusive) end of each canister ID range in `value`, a version of the routing table
+/// stored under `key` (a shard or the legacy single-key routing table), in any encoding that the
+/// registry has ever stored. `key` is only used in panic messages.
+///
+/// Returns no ends if `value` deletes `key`: that version holds no ranges (the ranges held before
+/// are in the earlier versions).
+///
+/// Panics if `value` cannot be decoded, or if a range end is not a valid canister ID.
+fn get_canister_id_range_ends_or_panic(value: &HighCapacityRegistryValue, key: &[u8]) -> Vec<u64> {
+    let Some(routing_table) = with_chunks(|chunks| {
+        decode_high_capacity_registry_value::<LegacyCompatibleRoutingTable, _>(value, chunks)
+    }) else {
+        return vec![];
+    };
+
+    routing_table
+        .entries
+        .into_iter()
+        // An entry without a range assigns no canister IDs to its subnet.
+        .filter_map(|entry| entry.range)
+        .map(|range| {
+            range.try_get_end_canister_index().unwrap_or_else(|err| {
+                panic!(
+                    "Invalid range end in version {} of routing table key {}: {err}",
+                    value.version,
+                    String::from_utf8_lossy(key),
+                )
+            })
+        })
+        .collect::<Vec<u64>>()
 }
 
 /// Returns the mutation that sets the `CanisterIdAllocation` to `next_unallocated_canister_index`.
