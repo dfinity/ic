@@ -76,7 +76,7 @@ impl Registry {
                     continue;
                 };
 
-                let routing_table = HistoricalRoutingTable::decode(bytes.as_slice())
+                let routing_table = LegacyCompatibleRoutingTable::decode(bytes.as_slice())
                     .unwrap_or_else(|err| {
                         panic!(
                             "Unable to decode version {} of routing table key {}: {err}",
@@ -106,26 +106,28 @@ impl Registry {
     }
 }
 
-/// The part of `pb::RoutingTable` needed to find the end of each range, in every encoding that the
-/// registry has ever stored.
+/// The part of `pb::RoutingTable` needed to find the end of each range. Unlike `pb::RoutingTable`,
+/// this decodes routing tables in every encoding that the registry has ever stored, current or
+/// legacy.
 ///
 /// Today, `CanisterIdRange` encodes its end as a `CanisterId` (field 4). Very old versions encoded
 /// it as a plain `uint64` canister index instead (field 2, now reserved). `pb::RoutingTable` drops
-/// field 2 when decoding, so the history is decoded with these messages instead, which keep both.
+/// field 2 when decoding, so routing tables are decoded with these messages instead, which keep
+/// both.
 #[derive(Clone, PartialEq, prost::Message)]
-struct HistoricalRoutingTable {
+struct LegacyCompatibleRoutingTable {
     #[prost(message, repeated, tag = "1")]
-    entries: Vec<HistoricalRoutingTableEntry>,
+    entries: Vec<LegacyCompatibleRoutingTableEntry>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
-struct HistoricalRoutingTableEntry {
+struct LegacyCompatibleRoutingTableEntry {
     #[prost(message, optional, tag = "1")]
-    range: Option<HistoricalCanisterIdRange>,
+    range: Option<LegacyCompatibleCanisterIdRange>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
-struct HistoricalCanisterIdRange {
+struct LegacyCompatibleCanisterIdRange {
     /// The end in the very old encoding. As in proto3, 0 is not encoded, so `None` means 0.
     #[prost(uint64, optional, tag = "2")]
     legacy_end: Option<u64>,
@@ -134,7 +136,7 @@ struct HistoricalCanisterIdRange {
     end_canister_id: Option<pb_types::CanisterId>,
 }
 
-impl HistoricalCanisterIdRange {
+impl LegacyCompatibleCanisterIdRange {
     /// Returns the canister index of the (inclusive) end of this range, in either encoding.
     fn try_get_end_canister_index(self) -> Result<u64, String> {
         let Some(end_canister_id) = self.end_canister_id else {

@@ -202,9 +202,9 @@ fn test_compute_next_unallocated_canister_index_from_history_includes_legacy_uin
     // very old encoding where range ends were plain u64 canister indices. Today's
     // `pb::RoutingTable` would not see this range at all.
     let mut registry = Registry::new();
-    let legacy_routing_table = HistoricalRoutingTable {
-        entries: vec![HistoricalRoutingTableEntry {
-            range: Some(HistoricalCanisterIdRange {
+    let legacy_routing_table = LegacyCompatibleRoutingTable {
+        entries: vec![LegacyCompatibleRoutingTableEntry {
+            range: Some(LegacyCompatibleCanisterIdRange {
                 legacy_end: Some(7 * N - 1),
                 end_canister_id: None,
             }),
