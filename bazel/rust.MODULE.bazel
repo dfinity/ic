@@ -602,11 +602,12 @@ crate.spec(
 crate.spec(
     default_features = False,
     features = [
-        "p384",
+        "nistp",
+        "aes",
         "alloc",
     ],
     package = "hpke",
-    version = "^0.13",
+    version = "^0.15.1",
 )
 crate.spec(
     package = "humantime",
@@ -1194,16 +1195,8 @@ crate.spec(
 crate.spec(
     default_features = False,
     features = [
-        "os_rng",
-    ],
-    package = "rand",
-    package_alias = "rand_0_9",
-    version = "^0.9.3",
-)
-crate.spec(
-    default_features = False,
-    features = [
         "std_rng",
+        "sys_rng",
     ],
     package = "rand",
     package_alias = "rand_0_10",
@@ -1216,8 +1209,8 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "rand_chacha",
-    package_alias = "rand_chacha_0_9",
-    version = "^0.9.0",
+    package_alias = "rand_chacha_0_10",
+    version = "^0.10.0",
 )
 crate.spec(
     package = "rand_distr",
