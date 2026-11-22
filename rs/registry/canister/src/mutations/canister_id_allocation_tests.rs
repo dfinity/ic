@@ -196,17 +196,25 @@ fn test_compute_next_unallocated_canister_index_from_history_without_routing_tab
 fn test_compute_next_unallocated_canister_index_from_history_includes_legacy_routing_table() {
     // Step 1: Prepare the world: the legacy single-key routing table held a range that is not in
     // any shard, and has since been deleted.
-    let mut registry = Registry::new();
+
+    // Step 1.1: Monolithic/legacy RoutingTable with one canister range/subnet.
     let mut legacy_routing_table = RoutingTable::new();
     legacy_routing_table
         .insert(new_canister_id_range(0, 5 * N - 1), subnet_test_id(1))
         .unwrap();
+
+    // Step 1.2: Directly populate new Registry with legacy_routing_table.
+    let mut registry = Registry::new();
     let legacy_key = make_routing_table_record_key();
     registry.apply_mutations_for_test(vec![insert(
         &legacy_key,
         pb::RoutingTable::from(legacy_routing_table).encode_to_vec(),
     )]);
+
+    // Step 1.3: In a subsequent mutation, delete the whole routing table from registry.
     registry.apply_mutations_for_test(vec![delete(&legacy_key)]);
+
+    // Step 1.4: Add a second subnet.
     add_subnet(&mut registry, subnet_test_id(2));
 
     // Step 2: Run the code under test.
