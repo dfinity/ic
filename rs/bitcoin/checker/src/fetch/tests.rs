@@ -203,7 +203,7 @@ fn test_try_fetch_tx() {
     let txid_1 = mock_txid(1);
     let txid_2 = mock_txid(2);
     let from_tx = |tx: &bitcoin::Transaction| {
-        TransactionCheckData::from_transaction(&env.config().btc_network(), tx.clone()).unwrap()
+        TransactionCheckData::from_transaction(&env.config().btc_network(), tx.clone())
     };
 
     // case Fetched
@@ -213,22 +213,28 @@ fn test_try_fetch_tx() {
     });
     state::set_fetch_status(txid_0, fetched_0.clone());
     assert!(matches!(
-        env.try_fetch_tx(txid_0),
+        env.try_fetch_tx(txid_0, |_| ()),
         TryFetchResult::Fetched(_)
     ));
 
     // case Pending
     state::set_fetch_status(txid_1, FetchTxStatus::PendingOutcall);
-    assert!(matches!(env.try_fetch_tx(txid_1), TryFetchResult::Pending));
+    assert!(matches!(
+        env.try_fetch_tx(txid_1, |_| ()),
+        TryFetchResult::Pending
+    ));
 
     // case HighLoad
     env.high_load = true;
-    assert!(matches!(env.try_fetch_tx(txid_2), TryFetchResult::HighLoad));
+    assert!(matches!(
+        env.try_fetch_tx(txid_2, |_| ()),
+        TryFetchResult::HighLoad
+    ));
     env.high_load = false;
 
     // case NotEnoughCycles
     assert!(matches!(
-        MockEnv::new(0).try_fetch_tx(txid_2),
+        MockEnv::new(0).try_fetch_tx(txid_2, |_| ()),
         TryFetchResult::NotEnoughCycles
     ));
 
@@ -236,7 +242,7 @@ fn test_try_fetch_tx() {
     let available = env.cycles_available();
     assert!(state::get_fetch_status(txid_2).is_none());
     assert!(matches!(
-        env.try_fetch_tx(mock_txid(2)),
+        env.try_fetch_tx(mock_txid(2), |_| ()),
         TryFetchResult::ToFetch(_)
     ));
     assert_eq!(
@@ -253,7 +259,7 @@ async fn test_fetch_tx() {
     let txid_1 = mock_txid(1);
     let txid_2 = mock_txid(2);
     let from_tx = |tx: &bitcoin::Transaction| {
-        TransactionCheckData::from_transaction(&env.config().btc_network(), tx.clone()).unwrap()
+        TransactionCheckData::from_transaction(&env.config().btc_network(), tx.clone())
     };
 
     // case Fetched
@@ -305,6 +311,50 @@ async fn test_fetch_tx() {
     ));
 }
 
+#[test]
+fn should_check_every_address_of_an_input() {
+    let good_address = Address::from_str("12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S")
+        .unwrap()
+        .assume_checked();
+    let bad_address = Address::from_str(blocklist::BTC_ADDRESS_BLOCKLIST[0])
+        .unwrap()
+        .assume_checked();
+    let tx = TransactionCheckData::from_transaction(
+        &BtcNetwork::Mainnet,
+        mock_transaction_with_inputs(vec![(mock_txid(1), 0), (mock_txid(2), 0)]),
+    );
+    let fetched = |input_addresses| FetchedTx {
+        tx: tx.clone(),
+        input_addresses,
+    };
+
+    // An input with several addresses (e.g. a spent bare multisig output) is
+    // blocked if any one of them is blocked.
+    assert!(matches!(
+        check_for_blocked_input_addresses(&fetched(vec![
+            Some(vec![good_address.clone()]),
+            Some(vec![good_address.clone(), bad_address.clone()]),
+        ])),
+        Err(CheckTxInputsError::BlockedInputAddresses(blocked))
+            if blocked == vec![bad_address.to_string()]
+    ));
+
+    // An input without any address to check does not block the transaction.
+    assert!(
+        check_for_blocked_input_addresses(&fetched(vec![
+            Some(vec![good_address.clone()]),
+            Some(vec![]),
+        ]))
+        .is_ok()
+    );
+
+    // An input whose addresses are not known yet must still be fetched.
+    assert!(matches!(
+        check_for_blocked_input_addresses(&fetched(vec![Some(vec![good_address]), None])),
+        Err(CheckTxInputsError::MissingInputAddresses)
+    ));
+}
+
 #[tokio::test]
 async fn test_check_fetched() {
     let mut env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
@@ -322,14 +372,13 @@ async fn test_check_fetched() {
     let tx_1 = mock_transaction_with_outputs(1);
     let tx_2 = mock_transaction_with_outputs(2);
     let network = env.config().btc_network();
-    let from_tx = |tx: &bitcoin::Transaction| {
-        TransactionCheckData::from_transaction(&network, tx.clone()).unwrap()
-    };
+    let from_tx =
+        |tx: &bitcoin::Transaction| TransactionCheckData::from_transaction(&network, tx.clone());
 
     // case Passed
     let fetched = FetchedTx {
         tx: from_tx(&tx_0),
-        input_addresses: vec![Some(good_address.clone())],
+        input_addresses: vec![Some(vec![good_address.clone()])],
     };
     state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
     assert!(matches!(
@@ -342,7 +391,7 @@ async fn test_check_fetched() {
     // case Failed
     let fetched = FetchedTx {
         tx: from_tx(&tx_0),
-        input_addresses: vec![Some(good_address.clone()), Some(bad_address)],
+        input_addresses: vec![Some(vec![good_address.clone()]), Some(vec![bad_address])],
     };
     state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
     assert!(matches!(
@@ -356,7 +405,7 @@ async fn test_check_fetched() {
     env.high_load = true;
     let fetched = FetchedTx {
         tx: from_tx(&tx_0),
-        input_addresses: vec![Some(good_address), None],
+        input_addresses: vec![Some(vec![good_address]), None],
     };
     state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
     assert!(matches!(
@@ -547,8 +596,7 @@ async fn test_check_fetched() {
         remaining_cycles - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES)
     );
 
-    // case Error: "Tx .. vout .. has no address ...". It should never happen
-    // unless blockdata is corrupted.
+    // case Error: the spent output has an unsupported script.
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
     let fetched = FetchedTx {
         tx: from_tx(&tx_0),
@@ -563,6 +611,116 @@ async fn test_check_fetched() {
         env.check_fetched(txid_0, &fetched).await,
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
             CheckTransactionIrrecoverableError::InvalidTransaction(err)
-        )) if err.contains("has no address")
+        )) if err.contains("has an unsupported script")
+    ));
+    env.assert_get_tx_call(txid_1, INITIAL_MAX_RESPONSE_BYTES);
+    env.assert_get_tx_call(txid_2, INITIAL_MAX_RESPONSE_BYTES);
+    // Checking again looks up the spent output in the cached transaction, with the same result.
+    assert!(matches!(
+        env.check_fetched(txid_0, &fetched).await,
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
+            CheckTransactionIrrecoverableError::InvalidTransaction(err)
+        )) if err.contains("has an unsupported script")
+    ));
+    env.assert_no_more_get_tx_call();
+
+    // case Error: the spent output does not exist. It should never happen
+    // unless blockdata is corrupted.
+    let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
+    let fetched = FetchedTx {
+        tx: from_tx(&tx_0),
+        input_addresses: vec![None, None],
+    };
+    state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    state::clear_fetch_status(txid_1);
+    state::clear_fetch_status(txid_2);
+    env.expect_get_tx_with_reply(Ok(tx_1.clone()));
+    env.expect_get_tx_with_reply(Ok(mock_transaction_with_outputs(1)));
+    assert!(matches!(
+        env.check_fetched(txid_0, &fetched).await,
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
+            CheckTransactionIrrecoverableError::InvalidTransaction(err)
+        )) if err.contains("has no vout 1")
+    ));
+    env.assert_get_tx_call(txid_1, INITIAL_MAX_RESPONSE_BYTES);
+    env.assert_get_tx_call(txid_2, INITIAL_MAX_RESPONSE_BYTES);
+    // Checking again looks up the spent output in the cached transaction, with the same result.
+    assert!(matches!(
+        env.check_fetched(txid_0, &fetched).await,
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
+            CheckTransactionIrrecoverableError::InvalidTransaction(err)
+        )) if err.contains("has no vout 1")
+    ));
+    env.assert_no_more_get_tx_call();
+}
+
+#[tokio::test]
+async fn should_check_input_spending_p2pk_output() {
+    let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
+    let public_key = bitcoin::PublicKey::from_str(
+        "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    )
+    .unwrap();
+    let txid_0 = mock_txid(10);
+    let txid_1 = mock_txid(11);
+    let mut tx_1 = mock_transaction();
+    tx_1.output = vec![TxOut {
+        value: Amount::ONE_SAT,
+        script_pubkey: ScriptBuf::new_p2pk(&public_key),
+    }];
+    let tx_0 = mock_transaction_with_inputs(vec![(txid_1, 0)]);
+    let fetched = FetchedTx::new(TransactionCheckData::from_transaction(
+        &env.config().btc_network(),
+        tx_0,
+    ));
+    state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    env.expect_get_tx_with_reply(Ok(tx_1));
+
+    assert!(matches!(
+        env.check_fetched(txid_0, &fetched).await,
+        CheckTransactionResponse::Passed
+    ));
+    env.assert_get_tx_call(txid_1, INITIAL_MAX_RESPONSE_BYTES);
+    env.assert_no_more_get_tx_call();
+    match state::get_fetch_status(txid_0) {
+        Some(FetchTxStatus::Fetched(fetched)) => assert_eq!(
+            fetched.input_addresses,
+            vec![Some(state::public_key_addresses(
+                &public_key.to_bytes(),
+                bitcoin::Network::Bitcoin
+            ))]
+        ),
+        status => panic!("unexpected status {status:?}"),
+    }
+}
+
+#[tokio::test]
+async fn should_not_pass_input_spending_blocked_p2pkh_script_with_appended_op_nop() {
+    let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
+    let blocked_address = Address::from_str(blocklist::BTC_ADDRESS_BLOCKLIST[0])
+        .unwrap()
+        .assume_checked();
+    let txid_0 = mock_txid(20);
+    let txid_1 = mock_txid(21);
+    let mut tx_1 = mock_transaction();
+    tx_1.output = vec![TxOut {
+        value: Amount::ONE_SAT,
+        script_pubkey: bitcoin::script::Builder::from(blocked_address.script_pubkey().to_bytes())
+            .push_opcode(bitcoin::opcodes::all::OP_NOP)
+            .into_script(),
+    }];
+    let tx_0 = mock_transaction_with_inputs(vec![(txid_1, 0)]);
+    let fetched = FetchedTx::new(TransactionCheckData::from_transaction(
+        &env.config().btc_network(),
+        tx_0,
+    ));
+    state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    env.expect_get_tx_with_reply(Ok(tx_1));
+
+    assert!(matches!(
+        env.check_fetched(txid_0, &fetched).await,
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
+            CheckTransactionIrrecoverableError::InvalidTransaction(err)
+        )) if err.contains("has an unsupported script")
     ));
 }

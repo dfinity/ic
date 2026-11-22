@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-
-RUST_ANALYZER_INTERNALS_DO_NOT_USE='this is unstable' $(rustc --print sysroot)/libexec/rust-analyzer-proc-macro-srv

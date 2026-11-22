@@ -533,7 +533,7 @@ fn compute_manifest(
         log,
         CURRENT_STATE_SYNC_VERSION,
         &last_checkpoint_layout,
-        1024,
+        4096,
         None,
         RehashManifest::No,
     )

@@ -15,8 +15,8 @@ use ic_cdk::call::{Call, CallFailed};
 use ic_cdk::futures::spawn_017_compat;
 use ic_cdk::{query, update};
 use ic_management_canister_types_private::{
-    CanisterHttpResponsePayload, FlexibleCanisterHttpRequestArgs, HttpHeader, Payload,
-    TransformArgs,
+    BoundedHttpHeaders, CanisterHttpResponsePayload, FlexibleCanisterHttpRequestArgs, HttpHeader,
+    Payload, TransformArgs,
 };
 use proxy_canister::{
     FlexibleRemoteHttpRequest, FlexibleResponseWithRefundedCycles, RejectionCode,
@@ -169,8 +169,8 @@ async fn send_request_with_refund_callback(
             let decoded: CanisterHttpResponsePayload = candid::utils::decode_one(&raw_response)
                 .expect("Failed to decode CanisterHttpResponsePayload");
             let mut response_headers = vec![];
-            for header in decoded.headers {
-                response_headers.push((header.name, header.value));
+            for header in decoded.headers.get() {
+                response_headers.push((header.name.clone(), header.value.clone()));
             }
             let response = RemoteHttpResponse::new(
                 decoded.status,
@@ -234,8 +234,9 @@ async fn send_bounded_wait_request(
         decoded.status,
         decoded
             .headers
-            .into_iter()
-            .map(|header| (header.name, header.value))
+            .get()
+            .iter()
+            .map(|header| (header.name.clone(), header.value.clone()))
             .collect(),
         String::from_utf8_lossy(&decoded.body).to_string(),
     ))
@@ -267,7 +268,7 @@ fn cycle_balance() -> u128 {
 fn transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
     let (response, _) = (raw.response, raw.context);
     let mut transformed = response;
-    transformed.headers = vec![];
+    transformed.headers = BoundedHttpHeaders::new(vec![]);
     transformed
 }
 
@@ -275,7 +276,7 @@ fn transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
 fn deterministic_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
     let (response, _) = (raw.response, raw.context);
     let mut transformed = response;
-    transformed.headers = vec![];
+    transformed.headers = BoundedHttpHeaders::new(vec![]);
     transformed.body = "deterministic".as_bytes().to_vec();
     transformed
 }
@@ -286,14 +287,14 @@ fn transform_with_context(raw: TransformArgs) -> CanisterHttpResponsePayload {
     let mut context = context;
     let mut transformed = response;
     transformed.body.append(&mut context);
-    transformed.headers = vec![];
+    transformed.headers = BoundedHttpHeaders::new(vec![]);
     transformed
 }
 
 fn test_transform_(raw: TransformArgs) -> CanisterHttpResponsePayload {
     let (response, context) = (raw.response, raw.context);
     let mut transformed = response;
-    transformed.headers = vec![
+    transformed.headers = BoundedHttpHeaders::new(vec![
         HttpHeader {
             name: "hello".to_string(),
             value: "bonjour".to_string(),
@@ -302,7 +303,7 @@ fn test_transform_(raw: TransformArgs) -> CanisterHttpResponsePayload {
             name: "caller".to_string(),
             value: msg_caller().to_string(),
         },
-    ];
+    ]);
     transformed.body = context;
     transformed.status = 202;
     transformed
@@ -322,7 +323,7 @@ fn test_composite_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
 fn bloat_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
     let (response, _) = (raw.response, raw.context);
     let mut transformed = response;
-    transformed.headers = vec![];
+    transformed.headers = BoundedHttpHeaders::new(vec![]);
     // TODO: size_of<CanisterHttpResponsePayload> = 64, so not exactly sure why 50 does it..
     let overhead = 50;
     // Return response that is bigger than allowed limit.
@@ -336,7 +337,7 @@ fn bloat_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
 fn very_large_but_allowed_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
     let (response, _) = (raw.response, raw.context);
     let mut transformed = response;
-    transformed.headers = vec![];
+    transformed.headers = BoundedHttpHeaders::new(vec![]);
     let overhead = 50;
     // Return response that is exactly equal to the allowed limit.
     transformed.body = vec![0; MAX_TRANSFORM_SIZE - overhead];
@@ -350,7 +351,7 @@ fn data_certificate_in_transform(_raw: TransformArgs) -> CanisterHttpResponsePay
     CanisterHttpResponsePayload {
         status: 200,
         body: vec![],
-        headers: vec![
+        headers: BoundedHttpHeaders::new(vec![
             HttpHeader {
                 name: "data_certificate_present".to_string(),
                 value: data_certificate_present.to_string(),
@@ -359,7 +360,7 @@ fn data_certificate_in_transform(_raw: TransformArgs) -> CanisterHttpResponsePay
                 name: "in_replicated_execution".to_string(),
                 value: in_replicated_execution().to_string(),
             },
-        ],
+        ]),
     }
 }
 
@@ -375,10 +376,10 @@ mod proxy_canister_test {
         let raw_response = CanisterHttpResponsePayload {
             status: 200,
             body: "homepage".as_bytes().to_vec(),
-            headers: vec![HttpHeader {
+            headers: BoundedHttpHeaders::new(vec![HttpHeader {
                 name: "date".to_string(),
                 value: "Fri, 03 Jun 2022 16:23:43 GMT".to_string(),
-            }],
+            }]),
         };
         let sanitized = transform(TransformArgs {
             response: raw_response,
@@ -386,7 +387,7 @@ mod proxy_canister_test {
         });
         let sanitized_body = std::str::from_utf8(&sanitized.body).unwrap();
         println!("Sanitized body is: {sanitized_body}");
-        assert!(sanitized.headers.is_empty());
+        assert!(sanitized.headers.get().is_empty());
         assert_eq!(sanitized_body, "homepage");
     }
 
@@ -397,7 +398,7 @@ mod proxy_canister_test {
         let raw = TransformArgs {
             response: CanisterHttpResponsePayload {
                 status: 200,
-                headers: vec![],
+                headers: BoundedHttpHeaders::new(vec![]),
                 body: response.as_bytes().to_vec(),
             },
             context: context.as_bytes().to_vec(),

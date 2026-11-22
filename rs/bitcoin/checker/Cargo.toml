@@ -27,8 +27,10 @@ ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-cdk = { workspace = true }
 ic-cdk-management-canister = { workspace = true }
+ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
 ic-management-canister-types = { workspace = true }
 ic-metrics-encoder = { workspace = true }
+ic-secp256k1 = { path = "../../../packages/ic-secp256k1" }
 ic-stable-structures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

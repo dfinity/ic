@@ -459,7 +459,7 @@ impl ChainKeyPayloadBuilderImpl {
         let (_, inputs) = build_signature_inputs(id, context)?;
         match inputs {
             ThresholdSigInputs::VetKd(inputs) => {
-                let reply = VetKdDeriveKeyResult::decode(&data)?;
+                let reply = decode_canonical::<VetKdDeriveKeyResult>(&data)?;
                 let encrypted_key = VetKdEncryptedKey {
                     encrypted_key: reply.encrypted_key,
                 };
@@ -468,7 +468,7 @@ impl ChainKeyPayloadBuilderImpl {
                     .map_err(ChainKeyAgreementValidationError::VetKd)
             }
             ThresholdSigInputs::Ecdsa(inputs) => {
-                let reply = SignWithECDSAReply::decode(&data)?;
+                let reply = decode_canonical::<SignWithECDSAReply>(&data)?;
                 let signature = ThresholdEcdsaCombinedSignature {
                     signature: reply.signature,
                 };
@@ -480,7 +480,7 @@ impl ChainKeyPayloadBuilderImpl {
                 .map_err(ChainKeyAgreementValidationError::Ecdsa)
             }
             ThresholdSigInputs::Schnorr(inputs) => {
-                let reply = SignWithSchnorrReply::decode(&data)?;
+                let reply = decode_canonical::<SignWithSchnorrReply>(&data)?;
                 let signature = ThresholdSchnorrCombinedSignature {
                     signature: reply.signature,
                 };
@@ -608,6 +608,20 @@ impl IntoMessages<Vec<ConsensusResponse>> for ChainKeyPayloadBuilderImpl {
             })
             .collect()
     }
+}
+
+/// Decode the reply in `data` and check that `data` is byte-for-byte the encoding of the decoded
+/// reply, i.e., exactly what an honest block maker produces in `combine_shares`.
+fn decode_canonical<'a, T: Payload<'a>>(
+    data: &'a [u8],
+) -> Result<T, ChainKeyAgreementValidationError> {
+    let reply = T::decode(data)?;
+    if reply.encode() != data {
+        return Err(ChainKeyAgreementValidationError::DecodingError(
+            "Reply is not canonically encoded".to_string(),
+        ));
+    }
+    Ok(reply)
 }
 
 /// Reject the given context if
@@ -1449,6 +1463,73 @@ mod tests {
                 }
             },
         )
+    }
+
+    #[test]
+    fn test_reject_non_canonically_encoded_agreements() {
+        let config = make_chain_key_config();
+        let contexts = make_contexts(&config);
+
+        test_payload_builder(Some(config), contexts.clone(), vec![], |builder| {
+            let proposal_context = ProposalContext {
+                proposer: node_test_id(0),
+                validation_context: &VALIDATION_CONTEXT,
+            };
+
+            for (&id, context) in &contexts {
+                // The canonical encoding is accepted (the test crypto accepts any signature).
+                let payload = as_bytes(BTreeMap::from([(id, fake_agreement_for_context(context))]));
+                let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
+                assert_matches!(validation, Ok(()));
+
+                // Encoding the same reply followed by an additional argument still decodes to
+                // the same reply, but must be rejected because it is not the canonical encoding.
+                let bytes = vec![0xDE; 64];
+                let padding = vec![0xAB_u8; 32];
+                let data = match &context.args {
+                    ThresholdArguments::Ecdsa(_) => {
+                        let reply = SignWithECDSAReply {
+                            signature: bytes.clone(),
+                        };
+                        let data = candid::encode_args((&reply, &padding)).unwrap();
+                        assert_eq!(SignWithECDSAReply::decode(&data).unwrap().signature, bytes);
+                        data
+                    }
+                    ThresholdArguments::Schnorr(_) => {
+                        let reply = SignWithSchnorrReply {
+                            signature: bytes.clone(),
+                        };
+                        let data = candid::encode_args((&reply, &padding)).unwrap();
+                        assert_eq!(
+                            SignWithSchnorrReply::decode(&data).unwrap().signature,
+                            bytes
+                        );
+                        data
+                    }
+                    ThresholdArguments::VetKd(_) => {
+                        let reply = VetKdDeriveKeyResult {
+                            encrypted_key: bytes.clone(),
+                        };
+                        let data = candid::encode_args((&reply, &padding)).unwrap();
+                        assert_eq!(
+                            VetKdDeriveKeyResult::decode(&data).unwrap().encrypted_key,
+                            bytes
+                        );
+                        data
+                    }
+                };
+                let payload = as_bytes(BTreeMap::from([(id, ChainKeyAgreement::Success(data))]));
+                let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
+                assert_matches!(
+                    validation.unwrap_err(),
+                    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
+                        InvalidChainKeyPayloadReason::InvalidChainKeyAgreement(
+                            ChainKeyAgreementValidationError::DecodingError(_)
+                        )
+                    ))
+                );
+            }
+        })
     }
 
     #[test]

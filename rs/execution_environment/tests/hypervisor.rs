@@ -16,9 +16,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, MessageMemoryUsage};
 use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
-    CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Payload, ReplicationCounts, SchnorrAlgorithm,
-    SchnorrKeyId, TakeCanisterSnapshotArgs, VetKdCurve, VetKdKeyId,
+    BoundedHttpHeaders, CanisterChange, CanisterHttpResponsePayload, CanisterStatusType,
+    CanisterUpgradeOptions, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Payload, ReplicationCounts,
+    SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -5568,7 +5568,7 @@ fn canister_system_query_transform_http_response() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let canister_http_response = CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: vec![0, 1, 2],
     };
     let payload = Encode!(&canister_http_response).unwrap();

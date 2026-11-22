@@ -130,7 +130,9 @@ jobs:
             bazel run :rustfmt
             bazel run :gazelle
 
-            git add --all
+            # Not MODULE.bazel.lock: the bazel commands above update only the parts of an outdated one
+            # that they evaluate. The Bazel Lockfile job (bazel-lockfile.yml) updates all of it.
+            git add --all -- ':!MODULE.bazel.lock'
             git status
             if ! git diff --cached --quiet; then
                 # There are some changes staged. Only commit and push them when the PR's
@@ -226,6 +228,10 @@ jobs:
           # Update the cargo lockfile, if necessary
           cargo update --workspace
 
+          # Bazel refuses to run with a MODULE.bazel.lock that isn't valid JSON, like one with a committed
+          # merge conflict. The Bazel Lockfile job regenerates it, and this job doesn't commit it.
+          jq -e . MODULE.bazel.lock >/dev/null 2>&1 || rm -f MODULE.bazel.lock
+
           # Repin the bazel crates, if necessary
           ./bin/bazel-pin.sh
 
@@ -253,6 +259,31 @@ jobs:
           fi
 
           exit "${EXIT_STATUS}"
+
+  bazel-lockfile:
+    name: Bazel Lockfile
+    # After Lock Generate: `bazel mod deps` evaluates the crate extension, which fails while
+    # Cargo.Bazel.*.lock is outdated, and a push of Lock Generate cancels this run anyway.
+    needs: [lock-generate]
+    uses: ./.github/workflows/bazel-lockfile.yml
+    permissions:
+      contents: read
+      pull-requests: read
+    # Not `secrets: inherit`: only the bot's key, which ci-kickoff-manual.yml passes only for a head
+    # branch in this repository.
+    secrets:
+      PR_CREATION_BOT_PRIVATE_KEY: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
+    with:
+      mode: update
+      # The head of the pull request, which the bot pushes onto (on pull_request, inputs.commit-sha is
+      # the test merge commit).
+      commit-sha: ${{ case(github.event_name == 'pull_request', github.event.pull_request.head.sha, inputs.commit-sha) }}
+      head-ref: ${{ inputs.head-ref }}
+      head-repo: ${{ inputs.head-repo }}
+      # Every ci-kickoff-manual.yml run: it runs on master, whose runs commit the cache volume of the cached
+      # runner profile (see bazel-test-all in ci-main.yml), whatever repository the head branch lives in.
+      # Also a head branch in a fork, or in a deleted one.
+      untrusted-code: ${{ (github.event_name != 'pull_request' || inputs.head-repo != github.repository) && 'true' || 'false' }}
 
   generate-config-fixtures:
     name: Generate Config Fixtures

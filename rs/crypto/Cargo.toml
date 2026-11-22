@@ -92,7 +92,6 @@ maplit = { workspace = true }
 proptest = { workspace = true }
 prost = { workspace = true }
 rsa = { workspace = true }
-sha2 = { workspace = true }
 
 [[bench]]
 name = "basic_sig"

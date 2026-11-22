@@ -1861,7 +1861,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
         let body = response
             .bytes()
             .await
-            .expect("failed to convert a response to bytes")
+            .context("failed to read the body of the status response")?
             .to_vec();
         if status.is_client_error() || status.is_server_error() {
             bail!(
@@ -1870,11 +1870,10 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
             );
         }
 
-        let cbor_response = serde_cbor::from_slice(&body).expect("response is not encoded as cbor");
-        Ok(
-            serde_cbor::value::from_value::<HttpStatusResponse>(cbor_response)
-                .expect("failed to deserialize a response to HttpStatusResponse"),
-        )
+        let cbor_response =
+            serde_cbor::from_slice(&body).context("the status response is not encoded as CBOR")?;
+        serde_cbor::value::from_value::<HttpStatusResponse>(cbor_response)
+            .context("failed to deserialize the status response to HttpStatusResponse")
     }
 
     /// The status-endpoint reports `healthy`.

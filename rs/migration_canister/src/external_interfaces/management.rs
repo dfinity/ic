@@ -1,4 +1,4 @@
-use std::convert::Infallible;
+use std::{convert::Infallible, time::Duration};
 
 use candid::{CandidType, Principal, Reserved};
 use ic_cdk::{
@@ -20,6 +20,7 @@ use crate::{ValidationError, processing::ProcessingResult};
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct CanisterSettings {
     pub controllers: Option<Vec<Principal>>,
+    pub memory_allocation: Option<candid::Nat>,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -28,14 +29,22 @@ struct UpdateSettingsArgs {
     pub settings: CanisterSettings,
 }
 
-/// This is a success if the call is a success
-/// and a fatal failure otherwise.
-/// We never retry this due to potential data races.
-pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResult<(), String> {
+/// Makes the migration canister the only controller of the given canister and,
+/// if `memory_allocation` is not `None`, sets its memory allocation in the same call.
+///
+/// This is a success if this attempt succeeds and a fatal failure if this attempt definitely
+/// had no effect. If its outcome is unknown (its response might have been dropped), this function
+/// returns no progress so that the call is retried. A fatal failure does not rule out an earlier
+/// attempt having taken effect (see `controller_recovery`).
+pub async fn set_exclusive_controller(
+    canister_id: Principal,
+    memory_allocation: Option<u64>,
+) -> ProcessingResult<(), String> {
     let args = UpdateSettingsArgs {
         canister_id,
         settings: CanisterSettings {
             controllers: Some(vec![canister_self()]),
+            memory_allocation: memory_allocation.map(candid::Nat::from),
         },
     };
     match Call::bounded_wait(Principal::management_canister(), "update_settings")
@@ -43,15 +52,34 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
         .await
     {
         Ok(_) => ProcessingResult::Success(()),
-        Err(e) => {
+        Err(ref e) => {
             println!("Call `update_settings` for {} failed: {:?}", canister_id, e);
-            ProcessingResult::FatalFailure(format!(
-                "Failed to set the migration canister as the exclusive controller of canister {canister_id}: {e}",
-            ))
+            let no_effect = match e {
+                // The call has not even been enqueued.
+                CallFailed::InsufficientLiquidCycleBalance(_)
+                | CallFailed::CallPerformFailed(_) => true,
+                // A call rejected with a recognized reject code other than `SysUnknown`
+                // has been rejected without taking effect. In particular, `SysUnknown`
+                // (and an unrecognized reject code) means that the outcome of the call
+                // is unknown, i.e., the call might have taken effect.
+                CallFailed::CallRejected(e) => {
+                    !matches!(e.reject_code(), Ok(RejectCode::SysUnknown) | Err(_))
+                }
+            };
+            if no_effect {
+                ProcessingResult::FatalFailure(format!(
+                    "Failed to set the migration canister as the exclusive controller of canister {canister_id}: {e}",
+                ))
+            } else {
+                ProcessingResult::NoProgress
+            }
         }
     }
 }
 
+/// Sets the controllers of the given canister and, if `memory_allocation` is not `None`,
+/// its memory allocation in the same call (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`).
+///
 /// This is a success if the call is a success
 /// and a fatal failure if the canister does not exist.
 /// Otherwise, this function returns no progress.
@@ -60,12 +88,14 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
 pub async fn set_controllers(
     canister_id: Principal,
     controllers: Vec<Principal>,
+    memory_allocation: Option<u64>,
     subnet_id: Principal,
 ) -> ProcessingResult<(), ()> {
     let args = UpdateSettingsArgs {
         canister_id,
         settings: CanisterSettings {
             controllers: Some(controllers),
+            memory_allocation: memory_allocation.map(candid::Nat::from),
         },
     };
     match Call::bounded_wait(subnet_id, "update_settings")
@@ -98,14 +128,61 @@ struct CanisterStatusArgs {
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct MemoryMetrics {
+    pub canister_history_size: candid::Nat,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct CanisterStatusResponse {
     pub status: CanisterStatusType,
     pub ready_for_migration: bool,
     pub version: u64,
     pub settings: DefiniteCanisterSettingsArgs,
+    pub memory_size: candid::Nat,
+    pub memory_metrics: MemoryMetrics,
     pub cycles: candid::Nat,
     pub freezing_threshold: candid::Nat,
     pub reserved_cycles: candid::Nat,
+    pub idle_cycles_burned_per_day: candid::Nat,
+}
+
+impl CanisterStatusResponse {
+    /// Returns the cycles balance the canister needs so that, after spending
+    /// `spent_cycles`, its balance stays at or above its freezing threshold for
+    /// (at least) the given `duration`, assuming that the canister keeps burning
+    /// cycles at its current idle rate.
+    ///
+    /// Reserved cycles are conservatively ignored, i.e., this function might
+    /// overestimate the required balance of a canister whose reserved cycles
+    /// would actually cover part of its idle consumption.
+    pub fn required_cycles(&self, spent_cycles: u64, duration: Duration) -> candid::Nat {
+        const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
+        let freezing_threshold_cycles = self.idle_cycles_burned_per_day.clone()
+            * (self.settings.freezing_threshold.clone() + duration.as_secs())
+            / SECONDS_PER_DAY;
+        freezing_threshold_cycles + spent_cycles
+    }
+
+    /// The canister's memory usage in bytes (saturating at `u64::MAX`).
+    pub fn memory_usage(&self) -> u64 {
+        u64::try_from(&self.memory_size.0).unwrap_or(u64::MAX)
+    }
+
+    /// The canister's memory usage in bytes excluding its canister history
+    /// (saturating at `u64::MAX`). Only the canister history of a canister under
+    /// the exclusive control of the migration canister is expected to grow
+    /// (see `MEMORY_RESERVED_FOR_CANISTER_HISTORY`).
+    pub fn memory_usage_excluding_canister_history(&self) -> u64 {
+        self.memory_usage().saturating_sub(
+            u64::try_from(&self.memory_metrics.canister_history_size.0).unwrap_or(u64::MAX),
+        )
+    }
+
+    /// The canister's memory allocation in bytes (saturating at `u64::MAX`);
+    /// `0` means that the canister's memory growth is best-effort.
+    pub fn memory_allocation(&self) -> u64 {
+        u64::try_from(&self.settings.memory_allocation.0).unwrap_or(u64::MAX)
+    }
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
@@ -122,6 +199,7 @@ pub enum CanisterStatusType {
 pub struct DefiniteCanisterSettingsArgs {
     pub controller: Principal,
     pub controllers: Vec<Principal>,
+    pub memory_allocation: candid::Nat,
     pub freezing_threshold: candid::Nat,
     pub reserved_cycles_limit: candid::Nat,
 }

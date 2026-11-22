@@ -344,7 +344,7 @@ fn canister_is_stopped_if_timeout_occurs_and_ready_to_stop() {
     {
         let response = CanisterHttpResponsePayload {
             status: 200,
-            headers: vec![],
+            headers: BoundedHttpHeaders::new(vec![]),
             body: vec![],
         };
 
@@ -1059,7 +1059,7 @@ fn cooling_down_subnet_only_executes_subnet_messages() {
     // loopback stream, whence it is inducted in the next round).
     let response = CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: vec![],
     };
     test.execute_payload(PayloadBuilder::new().http_response(CallbackId::from(0), &response));

@@ -11,7 +11,7 @@ use serde::Serialize;
 ///   context : blob;
 /// }
 /// ```
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct TransformArgs {
     pub response: CanisterHttpResponsePayload,
     #[serde(with = "serde_bytes")]
@@ -501,10 +501,10 @@ pub enum HttpMethod {
 ///   body : blob;
 /// }
 /// ```
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterHttpResponsePayload {
     pub status: u128,
-    pub headers: Vec<HttpHeader>,
+    pub headers: BoundedHttpHeaders,
     #[serde(with = "serde_bytes")]
     pub body: Vec<u8>,
 }
@@ -519,7 +519,7 @@ impl Payload<'_> for CanisterHttpResponsePayload {}
 ///   err: flexible_http_request_err;
 /// };
 /// ```
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum FlexibleHttpRequestResult {
     #[serde(rename = "ok")]
     Ok(Vec<CanisterHttpResponsePayload>),
