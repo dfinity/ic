@@ -1,6 +1,9 @@
 use duration_string::DurationString;
 use regex;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::pki_types::{
+    CertificateDer, PrivateKeyDer,
+    pem::{self, PemObject},
+};
 use serde;
 use serde::Deserialize;
 use serde::Deserializer;
@@ -8,7 +11,6 @@ use serde::de::Error;
 use serde_yaml::{self};
 use std::collections::HashMap;
 use std::fmt;
-use std::io::Cursor;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -77,11 +79,16 @@ impl TryFrom<&ListenOn> for Protocol {
                     return Err(Self::Error::KeyFileReadError(err));
                 }
 
-                let mut certs_cursor: Cursor<Vec<u8>> = Cursor::new(certdata.unwrap());
                 let certs_parsed: Vec<CertificateDer<'static>> =
-                    match rustls_pemfile::certs(&mut certs_cursor).collect::<Result<Vec<_>, _>>() {
+                    match CertificateDer::pem_slice_iter(&certdata.unwrap())
+                        .collect::<Result<Vec<_>, _>>()
+                    {
                         Ok(certs) => certs,
-                        Err(err) => return Err(Self::Error::CertificateFileReadError(err)),
+                        Err(err) => {
+                            return Err(Self::Error::CertificateFileReadError(
+                                std::io::Error::new(std::io::ErrorKind::InvalidData, err),
+                            ));
+                        }
                     };
                 if certs_parsed.is_empty() {
                     return Err(Self::Error::CertificateFileReadError(
@@ -92,10 +99,9 @@ impl TryFrom<&ListenOn> for Protocol {
                     ));
                 }
 
-                let mut key_cursor = Cursor::new(keydata.unwrap());
-                let key = match rustls_pemfile::private_key(&mut key_cursor) {
-                    Ok(Some(key)) => key,
-                    Ok(None) => {
+                let key = match PrivateKeyDer::from_pem_slice(&keydata.unwrap()) {
+                    Ok(key) => key,
+                    Err(pem::Error::NoItemsFound) => {
                         return Err(Self::Error::KeyFileReadError(std::io::Error::other(
                             format!(
                                 "{} contains no private key",
@@ -103,7 +109,12 @@ impl TryFrom<&ListenOn> for Protocol {
                             ),
                         )));
                     }
-                    Err(err) => return Err(Self::Error::KeyFileReadError(err)),
+                    Err(err) => {
+                        return Err(Self::Error::KeyFileReadError(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            err,
+                        )));
+                    }
                 };
 
                 Ok(Self::Https {
