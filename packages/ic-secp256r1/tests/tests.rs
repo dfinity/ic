@@ -506,7 +506,7 @@ SRX0gAHGwZEgbRHaxgEPtpUyCnHhHL/VUmSB6GgerMzD6LzDY6qt
         Err(KeyDecodingError::InvalidKeyEncoding(e)) => {
             assert_eq!(
                 format!("{e:?}"),
-                "\"PublicKey(OidUnknown { oid: ObjectIdentifier(1.2.840.10045.3.1.7) })\""
+                "\"PublicKey(OidUnknown { oid: ObjectIdentifier(1.3.132.0.10) })\""
             );
         }
         Err(e) => panic!("Unexpected error {e:?}"),
@@ -525,7 +525,7 @@ KZh4l7SeYvLtL818ibSx/IXoUHNp4/gMp+x2sxwA/mtWO5PdPg7ksg==
         Err(KeyDecodingError::InvalidKeyEncoding(e)) => {
             assert_eq!(
                 format!("{e:?}"),
-                "\"OidUnknown { oid: ObjectIdentifier(1.2.840.10045.3.1.7) }\""
+                "\"OidUnknown { oid: ObjectIdentifier(1.3.132.0.10) }\""
             );
         }
         Err(e) => panic!("Unexpected error {e:?}"),
