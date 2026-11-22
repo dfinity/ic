@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "be6f371b68aa78b040538a1326c8108c514a2c627b61bec5f3413e27b7697aa3",
+  "checksum": "2710c38bdcec015182a29ac9938288008f50c00b8ea5c9e0da97995219f0bf9c",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18073,7 +18073,7 @@
             "target": "netdev"
           },
           {
-            "id": "nftables 0.4.1",
+            "id": "nftables 0.6.3",
             "target": "nftables"
           },
           {
@@ -36327,9 +36327,13 @@
       ],
       "version": "1.0.6"
     },
-    "nftables 0.4.1": {
+    "nftables 0.6.3": {
       "common_attrs": {
         "deps": [
+          {
+            "id": "schemars 1.2.3",
+            "target": "schemars"
+          },
           {
             "id": "serde 1.0.229",
             "target": "serde"
@@ -36343,18 +36347,18 @@
             "target": "serde_path_to_error"
           },
           {
-            "id": "strum 0.26.3",
+            "id": "strum 0.27.2",
             "target": "strum"
           },
           {
-            "id": "thiserror 1.0.69",
+            "id": "thiserror 2.0.21",
             "target": "thiserror"
           }
         ],
         "edition": "2021",
         "proc_macro_deps": [
           {
-            "id": "strum_macros 0.26.4",
+            "id": "strum_macros 0.27.2",
             "target": "strum_macros"
           }
         ]
@@ -36367,11 +36371,11 @@
         "MIT"
       ],
       "name": "nftables",
-      "package_url": "https://github.com/namib-project/nftables-rs",
+      "package_url": "https://github.com/nftables-rs/nftables-rs",
       "repository": {
         "Http": {
-          "sha256": "3b5081f5cae4d24af558828494371be6672d02a693e9b4cbca4a0cbae5443e6f",
-          "url": "https://static.crates.io/crates/nftables/0.4.1/download"
+          "sha256": "3c57e7343eed9e9330e084eef12651b15be3c8ed7825915a0ffa33736b852bed",
+          "url": "https://static.crates.io/crates/nftables/0.6.3/download"
         }
       },
       "targets": [
@@ -36382,7 +36386,7 @@
           }
         }
       ],
-      "version": "0.4.1"
+      "version": "0.6.3"
     },
     "nix 0.29.0": {
       "build_script_attrs": {
@@ -49027,6 +49031,12 @@
     },
     "schemars 1.2.3": {
       "common_attrs": {
+        "crate_features": [
+          "default",
+          "derive",
+          "schemars_derive",
+          "std"
+        ],
         "deps": [
           {
             "id": "dyn-clone 1.0.20",
@@ -49045,7 +49055,13 @@
             "target": "serde_json"
           }
         ],
-        "edition": "2021"
+        "edition": "2021",
+        "proc_macro_deps": [
+          {
+            "id": "schemars_derive 1.2.3",
+            "target": "schemars_derive"
+          }
+        ]
       },
       "library_target_name": "schemars",
       "license": "MIT",
@@ -49116,6 +49132,52 @@
         }
       ],
       "version": "0.8.22"
+    },
+    "schemars_derive 1.2.3": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "proc-macro2 1.0.107",
+            "target": "proc_macro2"
+          },
+          {
+            "id": "quote 1.0.47",
+            "target": "quote"
+          },
+          {
+            "id": "serde_derive_internals 0.30.0",
+            "target": "serde_derive_internals"
+          },
+          {
+            "id": "syn 3.0.10",
+            "target": "syn"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "schemars_derive",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "schemars_derive",
+      "package_url": "https://github.com/GREsau/schemars",
+      "repository": {
+        "Http": {
+          "sha256": "e1c3a92094fa7d61aa124645844facb6b554dfc797136d0f5fd1f890e2bffc69",
+          "url": "https://static.crates.io/crates/schemars_derive/1.2.3/download"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "schemars_derive",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.2.3"
     },
     "scoped-tls 1.0.1": {
       "common_attrs": {
@@ -50441,6 +50503,49 @@
         }
       ],
       "version": "0.29.1"
+    },
+    "serde_derive_internals 0.30.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "proc-macro2 1.0.107",
+            "target": "proc_macro2"
+          },
+          {
+            "id": "quote 1.0.47",
+            "target": "quote"
+          },
+          {
+            "id": "syn 3.0.10",
+            "target": "syn"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "serde_derive_internals",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "serde_derive_internals",
+      "package_url": "https://github.com/serde-rs/serde",
+      "repository": {
+        "Http": {
+          "sha256": "f852137cce035d6a4df67ccce505ff6b3e9fd3a10e3e52b24dc71e650bb1a9bd",
+          "url": "https://static.crates.io/crates/serde_derive_internals/0.30.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "serde_derive_internals",
+            "crate_root": "lib.rs"
+          }
+        }
+      ],
+      "version": "0.30.0"
     },
     "serde_json 1.0.154": {
       "build_script_attrs": {},
@@ -66683,7 +66788,7 @@
     "moka 0.12.16",
     "more-asserts 0.3.1",
     "netdev 0.47.0",
-    "nftables 0.4.1",
+    "nftables 0.6.3",
     "nix 0.32.0",
     "num-bigint 0.4.8",
     "num-bigint-dig 0.9.1",

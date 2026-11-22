@@ -799,7 +799,7 @@ mockall = "0.15.0"
 mockito = { version = "1.6.1", default-features = false }
 more-asserts = "0.3.1"
 netdev = "0.47.0"
-nftables = "0.4.1"
+nftables = "0.6.3"
 nix = { version = "0.32.0", features = [
     "fs",
     "ioctl",

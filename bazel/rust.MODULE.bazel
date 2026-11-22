@@ -976,7 +976,7 @@ crate.spec(
 )
 crate.spec(
     package = "nftables",
-    version = "^0.4.1",
+    version = "^0.6.3",
 )
 crate.spec(
     features = [
