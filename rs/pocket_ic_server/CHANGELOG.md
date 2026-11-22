@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A flexible HTTP outcall delivers responses up to 2,031,616 bytes (2 MiB − 64 KiB) in total rather than 2 MiB:
   it delivers fewer than `max_responses` responses where more would exceed that, and fails with `responses_too_large`
   once the smallest responses that would have to be delivered exceed it.
+- `sign_with_ecdsa` derives the RFC 6979 nonce from the message hash reduced modulo the group order of the key's curve,
+  as RFC 6979 specifies. For a `message_hash` whose value is at least that order, the signature therefore differs
+  from the one returned before (and still verifies); this concerns both secp256k1 and secp256r1 keys.
 
 ### Fixed
 - Requests to the bitcoin and dogecoin adapters (fetching blocks and sending transactions) time out after 1 s instead of 50 ms,
