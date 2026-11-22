@@ -46,8 +46,8 @@ use ic_nns_governance::{
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS, dissolve_delay_bonus_multiplier,
     governance::{
         Environment, Governance, HeapGrowthPotential, INITIAL_NEURON_DISSOLVE_DELAY,
-        MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NEURON_CREATION_SPIKE,
-        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, NESTED_PROPOSAL_SUMMARY_BYTES_MAX,
+        MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX, MAX_NEURON_AGE_FOR_AGE_BONUS,
+        MAX_NEURON_CREATION_SPIKE, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
         PROPOSAL_MOTION_TEXT_BYTES_MAX, REWARD_DISTRIBUTION_PERIOD_SECONDS,
         WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS, get_node_provider_reward,
         max_dissolve_delay_seconds,
@@ -3182,7 +3182,7 @@ async fn test_invalid_nested_manage_neuron_proposals() {
                 ..valid_nested_proposal.clone()
             },
             ErrorType::InvalidProposal,
-            "can only make another ManageNeuron proposal",
+            "must be (another) ManageNeuron proposal",
         ),
         (
             "two levels of nesting",
@@ -3190,16 +3190,16 @@ async fn test_invalid_nested_manage_neuron_proposals() {
                 valid_nested_proposal.clone(),
             ))),
             ErrorType::InvalidProposal,
-            "at most one level of nesting",
+            "cannot itself make a third proposal",
         ),
         (
-            "summary too long",
+            "too large",
             Proposal {
-                summary: "x".repeat(NESTED_PROPOSAL_SUMMARY_BYTES_MAX + 1),
+                summary: "x".repeat(MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX),
                 ..valid_nested_proposal.clone()
             },
             ErrorType::InvalidProposal,
-            "summary",
+            "protobuf encoded",
         ),
         (
             "self describing action",
@@ -3348,12 +3348,11 @@ async fn test_disallow_large_manage_neuron_proposals() {
             },
         )
         .await;
-    // Only (small) ManageNeuron proposals can be made through a ManageNeuron proposal.
     assert_matches!(
         result,
         Err(GovernanceError { error_type, error_message })
         if error_type == ErrorType::InvalidProposal as i32
-            && error_message.contains("can only make another ManageNeuron proposal")
+            && error_message.contains("must be (another) ManageNeuron proposal")
     );
 
     // Sanity check: disburse maturity should be allowed.
