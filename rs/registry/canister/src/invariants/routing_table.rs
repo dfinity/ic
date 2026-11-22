@@ -123,6 +123,7 @@ pub(crate) fn check_canister_id_allocation_invariants(
         })?
         .next_unallocated_canister_index;
 
+    // Enforce monotonic.
     if let Some(previous) = previous_next_unallocated_canister_index
         && next_unallocated_canister_index < previous
     {
