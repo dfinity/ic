@@ -19,6 +19,55 @@ fn test_rng() -> ChaCha20Rng {
     test_rng_with_seed(seed)
 }
 
+/// The order n of the secp256k1 group, big-endian (SEC 2, section 2.4.1)
+const SECP256K1_ORDER: [u8; 32] =
+    hex!("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
+
+/// Returns a - b, for 32-byte big-endian integers a >= b
+fn sub_be(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
+    use num_bigint::BigUint;
+    let diff = (BigUint::from_bytes_be(a) - BigUint::from_bytes_be(b)).to_bytes_be();
+    let mut result = [0_u8; 32];
+    result[32 - diff.len()..].copy_from_slice(&diff);
+    result
+}
+
+/// An RNG that hands out a fixed byte sequence through `fill_bytes` and
+/// counts the bytes handed out. Its other methods panic.
+struct ScriptedRng {
+    bytes: Vec<u8>,
+    consumed: usize,
+}
+
+impl ScriptedRng {
+    fn new(bytes: Vec<u8>) -> Self {
+        Self { bytes, consumed: 0 }
+    }
+}
+
+impl rand::RngCore for ScriptedRng {
+    fn next_u32(&mut self) -> u32 {
+        panic!("ScriptedRng hands out bytes only through fill_bytes")
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        panic!("ScriptedRng hands out bytes only through fill_bytes")
+    }
+
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        let end = self.consumed + dest.len();
+        assert!(end <= self.bytes.len(), "ScriptedRng ran out of bytes");
+        dest.copy_from_slice(&self.bytes[self.consumed..end]);
+        self.consumed = end;
+    }
+
+    fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), rand::Error> {
+        panic!("ScriptedRng hands out bytes only through fill_bytes")
+    }
+}
+
+impl rand::CryptoRng for ScriptedRng {}
+
 #[test]
 fn should_pass_wycheproof_ecdsa_secp256k1_verification_tests() -> Result<(), KeyDecodingError> {
     use wycheproof::ecdsa::*;
@@ -154,6 +203,29 @@ fn should_use_rfc6979_nonces_for_ecdsa_signature_generation() {
 }
 
 #[test]
+fn should_sign_a_digest_of_at_least_the_group_order_like_its_reduction() {
+    // ECDSA uses the digest modulo the group order n, and RFC 6979 derives
+    // the nonce from bits2octets(digest), which reduces the digest modulo n
+    // too (RFC 6979, section 2.3.4). So a digest of at least n gets the same
+    // signature as its reduction.
+    let sk = PrivateKey::deserialize_sec1(&hex!(
+        "8f44c8e5da21a3e2933fbf732519a604891b4731f19045f078e6ce57893c1f2a"
+    ))
+    .expect("Valid key");
+    let pk = sk.public_key();
+
+    let digest = [0xff_u8; 32];
+    // n > 2^255, so subtracting n once reduces a 32-byte value modulo n
+    let reduced = sub_be(&digest, &SECP256K1_ORDER);
+
+    let sig = sk.sign_digest_with_ecdsa(&digest);
+    let reduced_sig = sk.sign_digest_with_ecdsa(&reduced);
+    assert_eq!(sig, reduced_sig);
+    assert!(pk.verify_ecdsa_signature_prehashed(&digest, &sig));
+    assert!(pk.verify_ecdsa_signature_prehashed(&reduced, &reduced_sig));
+}
+
+#[test]
 fn should_reject_short_x_when_deserializing_private_key() {
     for short_len in 0..31 {
         let short_x = vec![42; short_len];
@@ -189,6 +261,27 @@ fn generate_from_seed_is_stable() {
     for (seed, expected_key) in tests {
         let sk = PrivateKey::generate_from_seed(&hex::decode(seed).unwrap());
         assert_eq!(hex::encode(sk.serialize_sec1()), expected_key);
+    }
+}
+
+#[test]
+fn generate_using_rng_draws_32_bytes_until_they_encode_a_scalar_in_range() {
+    // generate_using_rng draws 32 bytes at a time with fill_bytes until they
+    // encode a scalar in [1, n), where n is the group order. So an RNG in a
+    // given state always yields the same key and is left in the same state.
+    let n_minus_1 = hex!("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140");
+    let mut one = [0_u8; 32];
+    one[31] = 1;
+
+    for valid in [n_minus_1, one] {
+        // 0 and n are rejected and `valid` is accepted, so the bytes after
+        // it are never drawn
+        let mut rng = ScriptedRng::new([[0_u8; 32], SECP256K1_ORDER, valid, [0x42; 32]].concat());
+
+        let sk = PrivateKey::generate_using_rng(&mut rng);
+
+        assert_eq!(sk.serialize_sec1(), valid);
+        assert_eq!(rng.consumed, 96);
     }
 }
 
