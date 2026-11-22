@@ -4748,14 +4748,6 @@ impl Governance {
     /// authorized, so the result would disclose (private) followees to anyone. Instead, that is
     /// checked (after authorization) when the nested proposal is actually made, i.e. when the
     /// enclosing proposal is executed.
-    ///
-    /// Nested proposals let a group of neurons manage many neurons through one intermediate
-    /// neuron. Suppose that neuron D follows neurons A, B, and C on the NeuronManagement topic,
-    /// and that neurons E1, ..., En follow D on that topic. Then A, B, and C can make a
-    /// ManageNeuron proposal for D whose command is MakeProposal, and whose nested proposal is a
-    /// ManageNeuron proposal for some Ei. Once adopted, D makes the nested proposal (and votes to
-    /// adopt it). Changing the members of the group only requires changing the followees of D,
-    /// rather than the followees of each Ei.
     fn validate_nested_make_proposal(
         &self,
         nested_proposal: &Proposal,
