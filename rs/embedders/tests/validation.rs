@@ -1065,6 +1065,109 @@ fn can_validate_module_with_out_of_range_function_name() {
     assert_eq!(names, vec!["f0"]);
 }
 
+/// The module `(module (func (param i32 i64)) (func))` followed by a `name`
+/// section made of the given subsections, each given as its id and payload.
+fn module_with_name_subsections(subsections: &[(u8, &[u8])]) -> BinaryEncodedWasm {
+    use wasm_encoder::{Encode, Section};
+
+    let mut wasm = wat::parse_str("(module (func (param i32 i64)) (func))").unwrap();
+    let mut data = vec![];
+    for (id, payload) in subsections {
+        data.push(*id);
+        payload.encode(&mut data);
+    }
+    wasm_encoder::CustomSection {
+        name: Cow::Borrowed("name"),
+        data: Cow::Owned(data),
+    }
+    .append_to(&mut wasm);
+    BinaryEncodedWasm::new(wasm)
+}
+
+/// The payloads of a function-name subsection (id 1) naming both functions of
+/// `module_with_name_subsections` and of a local-name subsection (id 2) naming
+/// the parameters of function 0.
+fn function_and_local_names() -> (Vec<u8>, Vec<u8>) {
+    use wasm_encoder::Encode;
+
+    let mut function_names = wasm_encoder::NameMap::new();
+    function_names.append(0, "f0");
+    function_names.append(1, "f1");
+    let mut locals = wasm_encoder::NameMap::new();
+    locals.append(0, "x");
+    locals.append(1, "y");
+    let mut local_names = wasm_encoder::IndirectNameMap::new();
+    local_names.append(0, &locals);
+    let (mut function_payload, mut local_payload) = (vec![], vec![]);
+    function_names.encode(&mut function_payload);
+    local_names.encode(&mut local_payload);
+    (function_payload, local_payload)
+}
+
+fn assert_same_validation_and_instrumentation(
+    wasm: &BinaryEncodedWasm,
+    expected: &BinaryEncodedWasm,
+) {
+    let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
+    let (details, output) = validate_and_instrument_for_testing(&embedder, wasm).unwrap();
+    let (expected_details, expected_output) =
+        validate_and_instrument_for_testing(&embedder, expected).unwrap();
+    assert_eq!(details, expected_details);
+    assert_eq!(
+        output.exported_functions,
+        expected_output.exported_functions
+    );
+    assert_eq!(output.data, expected_output.data);
+    assert_eq!(output.binary.as_slice(), expected_output.binary.as_slice());
+    assert_eq!(output.compilation_cost, expected_output.compilation_cost);
+}
+
+// Validation and instrumentation ignore the `name` subsections 12 (parameter
+// names of function types) and 13 (parameter names of tag types), even if a
+// name in them is not valid UTF-8.
+#[test]
+fn can_validate_module_with_non_utf8_parameter_name() {
+    let (function_names, local_names) = function_and_local_names();
+    // Names parameter 0 of type 0 with the byte 0xff, which is not UTF-8.
+    let parameter_names = [1, 0, 1, 0, 1, 0xff];
+    let expected = module_with_name_subsections(&[(1, &function_names), (2, &local_names)]);
+    for id in [12, 13] {
+        assert_same_validation_and_instrumentation(
+            &module_with_name_subsections(&[
+                (1, &function_names),
+                (2, &local_names),
+                (id, &parameter_names),
+            ]),
+            &expected,
+        );
+    }
+}
+
+#[test]
+fn parameter_names_do_not_change_validation_and_instrumentation() {
+    use wasm_encoder::Encode;
+
+    let (function_names, local_names) = function_and_local_names();
+    let mut names = wasm_encoder::NameMap::new();
+    names.append(0, "a");
+    names.append(1, "b");
+    let mut parameter_names = wasm_encoder::IndirectNameMap::new();
+    // Names the two parameters of type 0.
+    parameter_names.append(0, &names);
+    let mut payload = vec![];
+    parameter_names.encode(&mut payload);
+
+    let expected = module_with_name_subsections(&[(1, &function_names), (2, &local_names)]);
+    for ids in [vec![12], vec![13], vec![12, 13]] {
+        let mut subsections = vec![(1, &function_names[..]), (2, &local_names[..])];
+        subsections.extend(ids.into_iter().map(|id| (id, &payload[..])));
+        assert_same_validation_and_instrumentation(
+            &module_with_name_subsections(&subsections),
+            &expected,
+        );
+    }
+}
+
 #[test]
 fn can_reject_module_with_custom_sections_too_big() {
     let content = vec![0, 1, 6, 5, 6, 7, 4, 6];

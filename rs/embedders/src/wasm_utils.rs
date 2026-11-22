@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::{BTreeSet, HashMap},
     time::Instant,
 };
@@ -16,7 +17,8 @@ use ic_wasm_types::{BinaryEncodedWasm, WasmInstrumentationError};
 use serde::{Deserialize, Serialize};
 
 use self::{
-    instrumentation::instrument, validation::has_wasm64_memory, validation::validate_wasm_binary,
+    instrumentation::instrument, name_section::remove_parameter_name_subsections,
+    validation::has_wasm64_memory, validation::validate_wasm_binary,
 };
 use crate::wasmtime_embedder::StoreData;
 use crate::{CompilationResult, WasmtimeEmbedder, serialized_module::SerializedModule};
@@ -24,6 +26,7 @@ use wasmtime::InstancePre;
 
 pub mod decoding;
 pub mod instrumentation;
+mod name_section;
 mod system_api_replacements;
 pub mod validation;
 
@@ -210,7 +213,11 @@ fn validate_and_instrument(
     wasm: &BinaryEncodedWasm,
     config: &EmbeddersConfig,
 ) -> HypervisorResult<(WasmValidationDetails, InstrumentationOutput)> {
-    let (wasm_validation_details, module) = validate_wasm_binary(wasm, config)?;
+    let wasm = match remove_parameter_name_subsections(wasm.as_slice()) {
+        Cow::Borrowed(_) => Cow::Borrowed(wasm),
+        Cow::Owned(stripped) => Cow::Owned(BinaryEncodedWasm::new(stripped)),
+    };
+    let (wasm_validation_details, module) = validate_wasm_binary(&wasm, config)?;
     // Instrumentation bytemap depends on the Wasm memory size, so for larger heaps we need
     // to pass in the corresponding Wasm64 heap memory size.
     let max_wasm_memory_size = if has_wasm64_memory(&module) {
