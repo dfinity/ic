@@ -101,10 +101,6 @@ pub(crate) fn check_canister_migrations_invariants(
 ///   mutations being checked, if it was present.
 /// * If present, every range in `routing_table` (the routing table in `snapshot`) ends below it,
 ///   i.e., every canister ID hosted by a subnet has been accounted for as allocated.
-///
-/// While it is absent (and was absent before), there is nothing to check: it has simply not been
-/// written yet, neither by the post-upgrade backfill (`backfill_canister_id_allocation`) nor by an
-/// allocation of canister IDs to a new subnet.
 pub(crate) fn check_canister_id_allocation_invariants(
     snapshot: &RegistrySnapshot,
     routing_table: &RoutingTable,
