@@ -235,7 +235,8 @@ fn test_compute_next_unallocated_canister_index_from_history_includes_legacy_uin
     // Step 1: Prepare the world: a deleted version of the legacy single-key routing table, in the
     // very old encoding where range ends were plain u64 canister indices. Today's
     // `pb::RoutingTable` would not see this range at all.
-    let mut registry = Registry::new();
+
+    // Step 1.1: Initial RoutingTable using the legacy schema.
     let legacy_routing_table = LegacyCompatibleRoutingTable {
         entries: vec![LegacyCompatibleRoutingTableEntry {
             range: Some(LegacyCompatibleCanisterIdRange {
@@ -245,6 +246,10 @@ fn test_compute_next_unallocated_canister_index_from_history_includes_legacy_uin
         }],
     }
     .encode_to_vec();
+
+    // Step 1.2: Verify that when encoding from LegacyCompatibleRoutingTable,
+    // and decoding back to the current RoutingTable, we see no end
+    // in the one range therein.
     assert_eq!(
         pb::RoutingTable::decode(legacy_routing_table.as_slice())
             .unwrap()
@@ -255,8 +260,13 @@ fn test_compute_next_unallocated_canister_index_from_history_includes_legacy_uin
             .end_canister_id,
         None
     );
+
+    // Step 1.3: Directly insert legacy_routing_table into fresh Registry.
+    let mut registry = Registry::new();
     let legacy_key = make_routing_table_record_key();
     registry.apply_mutations_for_test(vec![insert(&legacy_key, legacy_routing_table)]);
+
+    // Step 1.4: Delete the entire routing table from registry.
     registry.apply_mutations_for_test(vec![delete(&legacy_key)]);
 
     // Step 2: Run the code under test.
