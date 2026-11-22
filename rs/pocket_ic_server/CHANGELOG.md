@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so that sending a transaction through the bitcoin or dogecoin canister is much less likely to fail spuriously on a loaded machine.
 - A PocketIC instance no longer becomes permanently busy after the machine running the PocketIC server
   was suspended or hibernated.
+- Stopping an HTTPS gateway (`https_config`) also closes its connections that are still in the TLS handshake,
+  instead of keeping them open until the handshake completes or times out after 10 s.
 
 
 
