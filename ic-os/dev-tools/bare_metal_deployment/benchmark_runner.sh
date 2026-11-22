@@ -37,23 +37,37 @@ mkdir -p /var/lib/ic/data/benchmark
 { time bash -c 'for i in {1..16}; do dd if=/dev/zero of=/var/lib/ic/data/benchmark/out_${i} bs=1M count=1000 oflag=direct & done ; wait'; } 2>results/small-dds.log
 { time bash -c 'for i in {1..16}; do dd of=/dev/null if=/var/lib/ic/data/benchmark/out_${i} bs=1M count=1000 iflag=direct & done ; wait'; } 2>results/small-dds-read.log
 
-touch /tmp/diag-sampling
-(
-    set +x
-    while [ -e /tmp/diag-sampling ]; do
-        echo "T $(date +%s.%N)"
-        grep -E ' (vd[a-z]+|dm-[0-9]+) ' /proc/diskstats
-        grep '^cpu ' /proc/stat
-        sleep 1
-    done
-) >results/zz-diag-diskstats-write.log 2>&1 &
-sampler=$!
+# Samples /proc/diskstats of every layer and /proc/stat's CPU line every second into
+# results/zz-diag-diskstats-$1.log (headed `== $1`) until /tmp/diag-sampling is removed.
+sample() {
+    touch /tmp/diag-sampling
+    (
+        set +x
+        echo "== $1"
+        while [ -e /tmp/diag-sampling ]; do
+            echo "T $(date +%s.%N)"
+            grep -E ' (vd[a-z]+|dm-[0-9]+) ' /proc/diskstats
+            grep '^cpu ' /proc/stat
+            sleep 1
+        done
+    ) >results/zz-diag-diskstats-"$1".log 2>&1 &
+}
+sample write
 (set +x && sleep 10 && top -b -H -n 2 -d 5 -w 160 -o %CPU | awk '/^top -/ { n++ } n == 2' | head -45) >results/zz-diag-top-write.log 2>&1 &
 fio --filename=/var/lib/ic/data/benchmark/testfile --io_size=10GB --size=60GB --direct=1 --buffered=0 --invalidate 1 --norandommap --random_generator=lfsr --rw=write --bs=4m --ioengine=libaio --iodepth=32 --numjobs=16 --group_reporting --name=throughput-sw-job --eta-newline=1 >results/fio.log
 rm -f /tmp/diag-sampling
-wait "$sampler"
 wait
+sample read
 fio --filename=/var/lib/ic/data/benchmark/testfile --io_size=10GB --size=60GB --direct=1 --buffered=0 --invalidate 1 --norandommap --random_generator=lfsr --rw=read --bs=4m --ioengine=libaio --iodepth=32 --numjobs=16 --group_reporting --name=throughput-sw-job --eta-newline=1 >results/fio-read.log
+rm -f /tmp/diag-sampling
+wait
+# Whether the read right after the write is slowed by the drives still absorbing that write: the
+# same read again after 2 minutes idle.
+sleep 120
+sample read2
+fio --filename=/var/lib/ic/data/benchmark/testfile --io_size=10GB --size=60GB --direct=1 --buffered=0 --invalidate 1 --norandommap --random_generator=lfsr --rw=read --bs=4m --ioengine=libaio --iodepth=32 --numjobs=16 --group_reporting --name=throughput-sw-job2 >results/zz-diag-fio-read2.log
+rm -f /tmp/diag-sampling
+wait
 
 # Write sweep, 15 s per point: overwriting the 60 GB test file in place (no allocation), then new
 # files per job (allocating and extending, as the first write of the test file does), then a raw
