@@ -35,14 +35,26 @@ impl Registry {
     /// registry through mutations), in which case this is computed from the full history of the
     /// routing table instead.
     pub(crate) fn get_next_unallocated_canister_index(&self, version: u64) -> u64 {
-        let key = make_canister_id_allocation_key();
-        let Some(registry_value) = self.get(key.as_bytes(), version) else {
-            return self.compute_next_unallocated_canister_index_from_history(version);
-        };
+        self.get_stored_next_unallocated_canister_index_or_panic(version)
+            .unwrap_or_else(|| self.compute_next_unallocated_canister_index_from_history(version))
+    }
 
-        CanisterIdAllocation::decode(registry_value.value.as_slice())
-            .unwrap_or_else(|err| panic!("Unable to decode the CanisterIdAllocation: {err}"))
-            .next_unallocated_canister_index
+    /// Returns the `next_unallocated_canister_index` of the `CanisterIdAllocation` as of
+    /// `version`, or `None` if there is no `CanisterIdAllocation` (unlike
+    /// `get_next_unallocated_canister_index`, this does not fall back to the routing table
+    /// history).
+    ///
+    /// Panics if the `CanisterIdAllocation` cannot be decoded. That cannot happen, since it passed
+    /// the invariant checks when it was written.
+    pub(crate) fn get_stored_next_unallocated_canister_index_or_panic(
+        &self,
+        version: u64,
+    ) -> Option<u64> {
+        let registry_value = self.get(make_canister_id_allocation_key().as_bytes(), version)?;
+
+        let canister_id_allocation = CanisterIdAllocation::decode(registry_value.value.as_slice())
+            .unwrap_or_else(|err| panic!("Unable to decode the CanisterIdAllocation: {err}"));
+        Some(canister_id_allocation.next_unallocated_canister_index)
     }
 
     /// Returns one past the largest canister ID range end in any version (up to and including

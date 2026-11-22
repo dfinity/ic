@@ -26,13 +26,10 @@ use crate::{
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_nervous_system_string::clamp_debug_len;
-use ic_protobuf::registry::routing_table::v1::CanisterIdAllocation;
 use ic_registry_canister_chunkify::dechunkify;
-use ic_registry_keys::make_canister_id_allocation_key;
 use ic_registry_transport::pb::v1::{
     RegistryMutation, high_capacity_registry_value, registry_mutation::Type,
 };
-use prost::Message;
 
 impl Registry {
     pub fn check_changelog_version_invariants(&self) {
@@ -110,7 +107,7 @@ impl Registry {
                 result = result.and(check_canister_id_allocation_invariants(
                     &snapshot,
                     &routing_table,
-                    self.get_latest_next_unallocated_canister_index_or_panic(),
+                    self.get_stored_next_unallocated_canister_index_or_panic(self.latest_version()),
                 ));
             }
             Err(err) => result = result.and(Err(err)),
@@ -149,25 +146,6 @@ impl Registry {
                 LOG_PREFIX, e.msg
             );
         }
-    }
-
-    /// Returns the `next_unallocated_canister_index` of the `CanisterIdAllocation` in the latest
-    /// version, i.e., before the mutations being checked, or `None` if there is no
-    /// `CanisterIdAllocation`.
-    ///
-    /// Panics if it cannot be decoded. That cannot happen, since it passed the invariant checks
-    /// when it was written.
-    fn get_latest_next_unallocated_canister_index_or_panic(&self) -> Option<u64> {
-        let registry_value = self.get(
-            make_canister_id_allocation_key().as_bytes(),
-            self.latest_version(),
-        )?;
-
-        let canister_id_allocation = CanisterIdAllocation::decode(registry_value.value.as_slice())
-            .unwrap_or_else(|err| {
-                panic!("Unable to decode the stored CanisterIdAllocation: {err}")
-            });
-        Some(canister_id_allocation.next_unallocated_canister_index)
     }
 
     fn take_latest_snapshot_with_mutations(
