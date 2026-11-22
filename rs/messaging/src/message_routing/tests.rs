@@ -784,8 +784,12 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             => Valid(vec![other_subnet_id]),
         };
         let mut routing_table = RoutingTable::new();
-        let next_unallocated_canister_index =
-            routing_table_insert_subnet(&mut routing_table, own_subnet_id, 0).unwrap();
+        let next_unallocated_canister_index = routing_table_insert_subnet(
+            &mut routing_table,
+            own_subnet_id,
+            /* next_unallocated_canister_index = */ 0,
+        )
+        .unwrap();
         routing_table_insert_subnet(
             &mut routing_table,
             other_subnet_id,
@@ -2271,8 +2275,12 @@ fn process_batch_updates_subnet_metrics() {
             => Valid(vec![other_subnet_id]),
         };
         let mut routing_table = RoutingTable::new();
-        let next_unallocated_canister_index =
-            routing_table_insert_subnet(&mut routing_table, own_subnet_id, 0).unwrap();
+        let next_unallocated_canister_index = routing_table_insert_subnet(
+            &mut routing_table,
+            own_subnet_id,
+            /* next_unallocated_canister_index = */ 0,
+        )
+        .unwrap();
         routing_table_insert_subnet(
             &mut routing_table,
             other_subnet_id,
