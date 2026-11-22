@@ -439,22 +439,28 @@ mod tests {
 
     #[test]
     fn test_routing_table_beyond_canister_id_allocation_fails_invariants_check() {
-        let mut snapshot = new_snapshot_with_routing_table_up_to_0x1ff();
-        insert_canister_id_allocation_to_snapshot(0x1ff, &mut snapshot);
+        // The routing table ends at 0x1ff, so every value up to (and including) 0x1ff is too low.
+        for next_unallocated_canister_index in [0, 1, 2, 0xff, 0x100, 0x101, 0x1fe, 0x1ff] {
+            let mut snapshot = new_snapshot_with_routing_table_up_to_0x1ff();
+            insert_canister_id_allocation_to_snapshot(
+                next_unallocated_canister_index,
+                &mut snapshot,
+            );
 
-        let error = check_canister_id_allocation_invariants(
-            &snapshot,
-            &get_routing_table(&snapshot),
-            /* previous_next_unallocated_canister_index = */ None,
-        )
-        .unwrap_err();
+            let error = check_canister_id_allocation_invariants(
+                &snapshot,
+                &get_routing_table(&snapshot),
+                /* previous_next_unallocated_canister_index = */ None,
+            )
+            .unwrap_err();
 
-        assert!(error.msg.contains("at or above"), "{}", error.msg);
-        assert!(
-            error.msg.contains(&subnet_test_id(2).to_string()),
-            "{}",
-            error.msg
-        );
+            assert!(error.msg.contains("at or above"), "{}", error.msg);
+            assert!(
+                error.msg.contains(&subnet_test_id(2).to_string()),
+                "{}",
+                error.msg
+            );
+        }
     }
 
     #[test]
