@@ -178,6 +178,34 @@ fn test_sign_prehash_works_with_any_size_input_gte_16() {
 }
 
 #[test]
+fn should_reject_digests_shorter_than_16_bytes() {
+    let rng = &mut test_rng();
+
+    let sk = PrivateKey::generate_using_rng(rng);
+    let pk = sk.public_key();
+
+    for len in (0..=17).chain([32]) {
+        let bytes = rng.r#gen::<[u8; 32]>();
+        let digest = &bytes[..len];
+        let mut zero_prefixed = [0_u8; 32];
+        zero_prefixed[32 - len..].copy_from_slice(digest);
+
+        let sig = sk
+            .sign_digest(&zero_prefixed)
+            .expect("a 32-byte digest can be signed");
+        assert!(pk.verify_signature_prehashed(&zero_prefixed, &sig));
+
+        if len < 16 {
+            assert_eq!(sk.sign_digest(digest), None, "len = {len}");
+            assert!(!pk.verify_signature_prehashed(digest, &sig), "len = {len}");
+        } else {
+            assert_eq!(sk.sign_digest(digest), Some(sig), "len = {len}");
+            assert!(pk.verify_signature_prehashed(digest, &sig), "len = {len}");
+        }
+    }
+}
+
+#[test]
 fn should_serialization_and_deserialization_round_trip_for_public_keys()
 -> Result<(), KeyDecodingError> {
     let rng = &mut test_rng();

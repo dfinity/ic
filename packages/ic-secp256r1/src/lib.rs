@@ -492,9 +492,11 @@ impl PrivateKey {
     }
 
     /// Sign a message digest
+    ///
+    /// Returns None if the digest is shorter than 16 bytes
     pub fn sign_digest(&self, digest: &[u8]) -> Option<[u8; 64]> {
         if digest.len() < 16 {
-            // p256 arbitrarily rejects digests that are < 128 bits
+            // This crate does not sign digests shorter than 128 bits
             return None;
         }
 
@@ -773,8 +775,15 @@ impl PublicKey {
     }
 
     /// Verify a (message digest,signature) pair
+    ///
+    /// Returns false if the digest is shorter than 16 bytes
     pub fn verify_signature_prehashed(&self, digest: &[u8], signature: &[u8]) -> bool {
         use p256::ecdsa::signature::hazmat::PrehashVerifier;
+
+        if digest.len() < 16 {
+            // This crate rejects digests shorter than 128 bits, as in `PrivateKey::sign_digest`
+            return false;
+        }
 
         if let Ok(sig) = Signature::deserialize(signature) {
             self.key.verify_prehash(digest, sig.inner()).is_ok()

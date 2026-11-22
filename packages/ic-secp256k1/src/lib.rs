@@ -491,8 +491,8 @@ impl PrivateKey {
     /// The signature is normalized (using the minimum-s approach of BitCoin)
     pub fn sign_digest_with_ecdsa(&self, digest: &[u8]) -> [u8; 64] {
         if digest.len() < 16 {
-            // k256 arbitrarily rejects digests that are < 128 bits
-            // handle this by prefixing with a sufficient number of zero bytes
+            // This crate signs a digest shorter than 128 bits by prefixing
+            // it with zero bytes to 32 bytes
             let mut zdigest = [0_u8; 32];
             let z_prefix_len = zdigest.len() - digest.len();
             zdigest[z_prefix_len..].copy_from_slice(digest);
@@ -1094,7 +1094,8 @@ impl PublicKey {
     /// with the secret key associated with this `PublicKey`.
     ///
     /// # Errors
-    /// See [`RecoveryError`] for details.
+    /// See [`RecoveryError`] for details. A digest shorter than 16 bytes
+    /// is rejected with [`RecoveryError::WrongParameters`].
     pub fn try_recovery_from_digest(
         &self,
         digest: &[u8],
@@ -1102,6 +1103,14 @@ impl PublicKey {
     ) -> Result<RecoveryId, RecoveryError> {
         let signature = k256::ecdsa::Signature::from_slice(signature)
             .map_err(|e| RecoveryError::SignatureParseError(e.to_string()))?;
+
+        if digest.len() < 16 {
+            // Unlike signing and verification, recovery does not extend
+            // digests shorter than 128 bits but rejects them
+            return Err(RecoveryError::WrongParameters(
+                k256::ecdsa::Error::new().to_string(),
+            ));
+        }
 
         let ecdsa = k256::ecdsa::VerifyingKey::from(&self.key);
 
