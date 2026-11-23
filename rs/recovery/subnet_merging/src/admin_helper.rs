@@ -7,6 +7,7 @@ use std::time::SystemTime;
 const SUBNET_ARG: &str = "subnet";
 const SOURCE_SUBNET_ARG: &str = "source-subnet";
 const DESTINATION_SUBNET_ARG: &str = "destination-subnet";
+const SUBNET_ID_ARG: &str = "subnet-id";
 
 /// Propose to label the subnet as "cooling down".
 pub(crate) fn get_propose_to_cool_down_subnet_command(
@@ -48,6 +49,30 @@ pub(crate) fn get_propose_to_merge_subnets_command(
         )
         .add_argument(SOURCE_SUBNET_ARG, source_subnet_id)
         .add_argument(DESTINATION_SUBNET_ARG, destination_subnet_id);
+
+    admin_helper.add_proposer_args(&mut ic_admin);
+
+    ic_admin
+}
+
+/// Propose to delete the subnet that was merged away and that hosts no canister
+/// ID range anymore.
+pub(crate) fn get_propose_to_delete_subnet_command(
+    admin_helper: &AdminHelper,
+    subnet_id: SubnetId,
+) -> IcAdmin {
+    let mut ic_admin = admin_helper.get_ic_admin_cmd_base();
+
+    ic_admin
+        .add_positional_argument("propose-to-delete-subnet")
+        .add_argument(
+            SUMMARY_ARG,
+            quote(format!(
+                "Delete subnet {subnet_id}, which was merged into another subnet and hosts no \
+                 canister id range anymore",
+            )),
+        )
+        .add_argument(SUBNET_ID_ARG, subnet_id);
 
     admin_helper.add_proposer_args(&mut ic_admin);
 
@@ -133,6 +158,25 @@ mod tests {
             --summary \"Merge subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe into subnet mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\" \
             --source-subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             --destination-subnet mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe \
+            --test-neuron-proposer"
+        );
+    }
+
+    #[test]
+    fn get_propose_to_delete_subnet_command_test() {
+        let result = get_propose_to_delete_subnet_command(
+            &fake_admin_helper(),
+            subnet_id_from_str(FAKE_SUBNET_ID_1),
+        )
+        .join(" ");
+
+        assert_eq!(
+            result,
+            "/fake/ic/admin/dir/ic-admin \
+            --nns-url \"https://fake_nns_url.com:8080/\" \
+            propose-to-delete-subnet \
+            --summary \"Delete subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe, which was merged into another subnet and hosts no canister id range anymore\" \
+            --subnet-id gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             --test-neuron-proposer"
         );
     }

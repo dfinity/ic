@@ -977,3 +977,42 @@ impl Step for WaitForRecoveryCupStep {
         Recovery::wait_for_recovery_cup(&self.logger, self.node_ip, height, state_hash)
     }
 }
+
+/// Waits until every subnet other than the source subnet has reached the
+/// registry version recorded by `CheckRoutingTableStep`, i.e. routes the
+/// canisters that used to be hosted by the source subnet to the destination
+/// subnet. Only then may the source subnet be deleted.
+pub(crate) struct CheckRegistryVersionOnAllSubnetsStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) registry_helper: RegistryHelper,
+    pub(crate) layout: Layout,
+    pub(crate) timeout: Duration,
+    pub(crate) poll_interval: Duration,
+    pub(crate) logger: Logger,
+}
+
+impl Step for CheckRegistryVersionOnAllSubnetsStep {
+    fn descr(&self) -> String {
+        format!(
+            "Wait until every subnet other than {} has reached the registry version the merge \
+             created, i.e. routes the canisters that used to be hosted by it to the destination \
+             subnet.",
+            self.source_subnet_id,
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let registry_version = self
+            .layout
+            .read_merge_registry_version(self.source_subnet_id)?;
+
+        readiness::await_registry_version_on_all_subnets(
+            &self.registry_helper,
+            self.source_subnet_id,
+            registry_version,
+            self.timeout,
+            self.poll_interval,
+            &self.logger,
+        )
+    }
+}

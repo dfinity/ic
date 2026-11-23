@@ -1,11 +1,15 @@
 use crate::{
-    admin_helper::{get_propose_to_cool_down_subnet_command, get_propose_to_merge_subnets_command},
+    admin_helper::{
+        get_propose_to_cool_down_subnet_command, get_propose_to_delete_subnet_command,
+        get_propose_to_merge_subnets_command,
+    },
     layout::Layout,
     steps::{
-        CheckCoolingDownStep, CheckMergeReadinessStep, CheckRoutingTableStep,
-        ComputeExpectedMergedManifestStep, DownloadStateStep, MergeStatesStep,
-        ProposeRecoveryCupStep, RestartDestinationReplicaStep, StopReplicaAtHaltingCheckpointStep,
-        UploadMergedStateStep, ValidateCupStep, WaitForHaltingCupStep, WaitForRecoveryCupStep,
+        CheckCoolingDownStep, CheckMergeReadinessStep, CheckRegistryVersionOnAllSubnetsStep,
+        CheckRoutingTableStep, ComputeExpectedMergedManifestStep, DownloadStateStep,
+        MergeStatesStep, ProposeRecoveryCupStep, RestartDestinationReplicaStep,
+        StopReplicaAtHaltingCheckpointStep, UploadMergedStateStep, ValidateCupStep,
+        WaitForHaltingCupStep, WaitForRecoveryCupStep,
     },
     utils::ensure_default_initial_dkg_subnet_is_not_merged,
 };
@@ -118,6 +122,13 @@ pub enum StepType {
     WaitForCupOnDestinationSubnet,
     /// Submit a proposal to unhalt the destination subnet.
     UnhaltDestinationSubnet,
+    /// Wait until every subnet other than the source subnet has reached the
+    /// registry version recorded by `CheckRegistryForRoutingTableEntry`.
+    CheckRegistryVersionOnAllSubnets,
+    /// Submit a proposal to delete the source subnet.
+    DeleteSourceSubnet,
+    /// Delete the working directory of the tool.
+    Cleanup,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -749,7 +760,15 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             | StepType::MergeSubnets
             | StepType::CheckRegistryForRoutingTableEntry
             | StepType::ProposeCupForDestinationSubnet
-            | StepType::UnhaltDestinationSubnet => {}
+            | StepType::UnhaltDestinationSubnet
+            | StepType::CheckRegistryVersionOnAllSubnets => {}
+            StepType::DeleteSourceSubnet => print_url_and_ask_for_confirmation(
+                &self.logger,
+                self.dashboard_url(),
+                "Please check the dashboard to see if it is safe to delete the subnet that was \
+                 merged away",
+            ),
+            StepType::Cleanup => {}
         }
     }
 
@@ -872,6 +891,24 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             .into(),
             StepType::WaitForCupOnDestinationSubnet => self.wait_for_recovery_cup_step()?.into(),
             StepType::UnhaltDestinationSubnet => self.unhalt_destination_subnet_step().into(),
+            StepType::CheckRegistryVersionOnAllSubnets => CheckRegistryVersionOnAllSubnetsStep {
+                source_subnet_id: self.params.source_subnet_id,
+                registry_helper: self.recovery.registry_helper.clone(),
+                layout: self.layout.clone(),
+                timeout: Duration::from_secs(self.params.registry_timeout_secs),
+                poll_interval: Duration::from_secs(self.params.poll_interval_secs),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
+            StepType::DeleteSourceSubnet => AdminStep {
+                logger: self.recovery.logger.clone(),
+                ic_admin_cmd: get_propose_to_delete_subnet_command(
+                    &self.recovery.admin_helper,
+                    self.params.source_subnet_id,
+                ),
+            }
+            .into(),
+            StepType::Cleanup => self.recovery.get_cleanup_step().into(),
         };
 
         Ok(step)
