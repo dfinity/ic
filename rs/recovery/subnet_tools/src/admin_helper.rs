@@ -52,9 +52,7 @@ pub fn get_halt_subnet_at_cup_height_command(
 
 /// Propose to unhalt the subnet, i.e. to set its `is_halted` flag to `false`.
 ///
-/// Leaves every other field of the subnet record unchanged, unlike
-/// `propose-to-bring-subnet-back-online-after-repairs`, which also clears the
-/// subnet's SSH keys and recalled replica versions.
+/// Leaves every other field of the subnet record unchanged.
 pub fn get_unhalt_subnet_command(admin_helper: &AdminHelper, subnet_id: SubnetId) -> IcAdmin {
     let mut ic_admin = admin_helper.get_ic_admin_cmd_base();
 
