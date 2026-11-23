@@ -5,11 +5,12 @@ use crate::{
     payload_builder::{
         parse::{PayloadMessage, bytes_to_payload},
         utils::{
-            FlexibleFindResult, RefundedNodes, ResponseShareSigInput, find_async_receipts,
-            find_flexible_result, find_fully_replicated_response, find_non_flexible_out_of_cycles,
-            find_non_replicated_response, group_shares_by_callback_id,
-            grouped_shares_meet_divergence_criteria, response_share_sig_inputs,
-            validate_flexible_response_with_proof, validate_response_share,
+            FlexibleFindResult, PayloadBudget, RefundedNodes, ResponseShareSigInput,
+            find_async_receipts, find_flexible_result, find_fully_replicated_response,
+            find_non_flexible_out_of_cycles, find_non_replicated_response,
+            group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
+            response_share_sig_inputs, validate_flexible_response_with_proof,
+            validate_response_share,
         },
     },
 };
@@ -43,7 +44,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
+    Height, NodeId, NumBytes, RegistryVersion, SubnetId,
     batch::{
         CanisterHttpAsyncSpent, CanisterHttpInitialSpent, CanisterHttpPayload, CanisterHttpSpent,
         ConsensusResponse, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
@@ -151,7 +152,8 @@ impl CanisterHttpPayloadBuilderImpl {
         &self,
         validation_context: &ValidationContext,
         past_payloads: PastPayloads,
-        max_payload_size: NumBytes,
+        memory_limit: NumBytes,
+        wire_limit: NumBytes,
     ) -> Vec<PayloadMessage> {
         let state = match self
             .state_reader
@@ -179,7 +181,7 @@ impl CanisterHttpPayloadBuilderImpl {
         let delivered_canister_http_request_contexts =
             &subnet_call_context_manager.delivered_canister_http_request_contexts;
 
-        let mut accumulated_size = 0;
+        let mut budget = PayloadBudget::new(memory_limit, wire_limit);
         let mut responses_included = 0;
 
         let mut messages = vec![];
@@ -222,24 +224,14 @@ impl CanisterHttpPayloadBuilderImpl {
                     // Because timeouts are very cheap to verify, they are
                     // not counted as responses (so that they are irrelevant
                     // for the CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK limit.
-                    if matches!(request.replication, Replication::Flexible { .. }) {
-                        let error = FlexibleCanisterHttpError::Timeout {
+                    let timeout = if matches!(request.replication, Replication::Flexible { .. }) {
+                        PayloadMessage::FlexibleError(FlexibleCanisterHttpError::Timeout {
                             callback_id: *callback_id,
-                        };
-                        let candidate_size = error.count_bytes();
-                        let size = NumBytes::new((accumulated_size + candidate_size) as u64);
-                        if size < max_payload_size {
-                            messages.push(PayloadMessage::FlexibleError(error));
-                            accumulated_size += candidate_size;
-                        }
+                        })
                     } else {
-                        let candidate_size = callback_id.count_bytes();
-                        let size = NumBytes::new((accumulated_size + candidate_size) as u64);
-                        if size < max_payload_size {
-                            messages.push(PayloadMessage::Timeout(*callback_id));
-                            accumulated_size += candidate_size;
-                        }
-                    }
+                        PayloadMessage::Timeout(*callback_id)
+                    };
+                    budget.try_push(&mut messages, timeout);
                     let groups = shares_by_callback_id.get(callback_id);
                     let (groups, success, reject) = groups.map_or((0, 0, 0), |groups| {
                         let (mut success, mut reject) = (0, 0);
@@ -298,12 +290,14 @@ impl CanisterHttpPayloadBuilderImpl {
                             &self.log,
                             &self.metrics,
                         ) {
-                            let candidate_size = candidate.count_bytes();
-                            let size = NumBytes::new((accumulated_size + candidate_size) as u64);
-                            if size < max_payload_size {
-                                messages.push(PayloadMessage::Response(candidate.into_response()));
+                            // Checks the size before cloning the response.
+                            if budget.fits(candidate.payload_size())
+                                && budget.try_push(
+                                    &mut messages,
+                                    PayloadMessage::Response(candidate.into_response()),
+                                )
+                            {
                                 responses_included += 1;
-                                accumulated_size += candidate_size;
                             }
                         } else if grouped_shares_meet_divergence_criteria(
                             grouped_shares,
@@ -316,12 +310,10 @@ impl CanisterHttpPayloadBuilderImpl {
                                     .map(|share| (*share).clone())
                                     .collect(),
                             };
-                            let divergence_size = divergence.count_bytes();
-                            let size = NumBytes::new((accumulated_size + divergence_size) as u64);
-                            if size < max_payload_size {
-                                messages.push(PayloadMessage::Divergence(divergence));
+                            if budget
+                                .try_push(&mut messages, PayloadMessage::Divergence(divergence))
+                            {
                                 responses_included += 1;
-                                accumulated_size += divergence_size;
                             }
                         } else if let Some(error) = find_non_flexible_out_of_cycles(
                             *callback_id,
@@ -329,14 +321,10 @@ impl CanisterHttpPayloadBuilderImpl {
                             &BTreeSet::from_iter(committee),
                             threshold,
                             request,
-                        ) {
-                            let error_size = error.count_bytes();
-                            let size = NumBytes::new((accumulated_size + error_size) as u64);
-                            if size < max_payload_size {
-                                messages.push(PayloadMessage::OutOfCycles(error));
-                                responses_included += 1;
-                                accumulated_size += error_size;
-                            }
+                        ) && budget
+                            .try_push(&mut messages, PayloadMessage::OutOfCycles(error))
+                        {
+                            responses_included += 1;
                         }
                     }
                     Replication::NonReplicated(designated_node_id) => {
@@ -348,12 +336,14 @@ impl CanisterHttpPayloadBuilderImpl {
                             &self.log,
                             &self.metrics,
                         ) {
-                            let candidate_size = candidate.count_bytes();
-                            let size = NumBytes::new((accumulated_size + candidate_size) as u64);
-                            if size < max_payload_size {
-                                messages.push(PayloadMessage::Response(candidate.into_response()));
+                            // Checks the size before cloning the response.
+                            if budget.fits(candidate.payload_size())
+                                && budget.try_push(
+                                    &mut messages,
+                                    PayloadMessage::Response(candidate.into_response()),
+                                )
+                            {
                                 responses_included += 1;
-                                accumulated_size += candidate_size;
                             }
                         } else if let Some(error) = find_non_flexible_out_of_cycles(
                             *callback_id,
@@ -363,14 +353,10 @@ impl CanisterHttpPayloadBuilderImpl {
                             &BTreeSet::from([*designated_node_id]),
                             /* threshold = */ 1,
                             request,
-                        ) {
-                            let error_size = error.count_bytes();
-                            let size = NumBytes::new((accumulated_size + error_size) as u64);
-                            if size < max_payload_size {
-                                messages.push(PayloadMessage::OutOfCycles(error));
-                                responses_included += 1;
-                                accumulated_size += error_size;
-                            }
+                        ) && budget
+                            .try_push(&mut messages, PayloadMessage::OutOfCycles(error))
+                        {
+                            responses_included += 1;
                         }
                     }
                     Replication::Flexible {
@@ -383,24 +369,22 @@ impl CanisterHttpPayloadBuilderImpl {
                         committee,
                         *min_responses,
                         *max_responses,
-                        accumulated_size,
-                        max_payload_size,
+                        &budget,
                         request,
                         &*pool_access,
                     ) {
-                        FlexibleFindResult::OkResponses(group, group_size) => {
-                            // Note: budget tracking w.r.t. `max_payload_size`
-                            // is done directly in `find_flexible_result`.
-                            messages.push(PayloadMessage::FlexibleResponses(group));
-                            responses_included += 1;
-                            accumulated_size += group_size;
-                        }
-                        FlexibleFindResult::Error(error, error_size) => {
-                            let size = NumBytes::new((accumulated_size + error_size) as u64);
-                            if size < max_payload_size {
-                                messages.push(PayloadMessage::FlexibleError(error));
+                        FlexibleFindResult::OkResponses(group) => {
+                            // `find_flexible_result` only returns a group that fits.
+                            if budget
+                                .try_push(&mut messages, PayloadMessage::FlexibleResponses(group))
+                            {
                                 responses_included += 1;
-                                accumulated_size += error_size;
+                            }
+                        }
+                        FlexibleFindResult::Error(error) => {
+                            if budget.try_push(&mut messages, PayloadMessage::FlexibleError(error))
+                            {
+                                responses_included += 1;
                             }
                         }
                         FlexibleFindResult::Pending => {}
@@ -433,15 +417,12 @@ impl CanisterHttpPayloadBuilderImpl {
                 // according to the certified state or any past payload above it.
                 let already_refunded = RefundedNodes::new(*callback_id, request, &refunded_nodes);
                 for share in find_async_receipts(grouped_shares, &committee, &already_refunded) {
-                    let share_size = share.count_bytes();
-                    let size = NumBytes::new((accumulated_size + share_size) as u64);
-                    if size >= max_payload_size {
+                    if !budget.try_push(&mut messages, PayloadMessage::AsyncReceipt(share.clone()))
+                    {
                         // All receipts are of (about) the same size, so once one does not
                         // fit, stop early to avoid iterating through all delivered contexts.
                         break 'delivered_contexts;
                     }
-                    messages.push(PayloadMessage::AsyncReceipt(share.clone()));
-                    accumulated_size += share_size;
                 }
             }
         }
@@ -1236,13 +1217,13 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             Ok(true) => (),
         }
 
-        let max_size = std::cmp::min(
-            max_size,
-            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
-        );
+        // `max_size` limits the payload on the wire, from which response contents are
+        // stripped, so it is limited in memory separately.
+        let memory_limit = NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64);
         let past_payloads = parse::parse_past_payloads(past_payloads, &self.log);
-        let messages = self.get_canister_http_payload_impl(context, past_payloads, max_size);
-        parse::messages_to_bytes(messages, max_size)
+        let messages =
+            self.get_canister_http_payload_impl(context, past_payloads, memory_limit, max_size);
+        parse::messages_to_bytes(messages, memory_limit)
     }
 
     fn validate_payload(
@@ -1287,6 +1268,10 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             proposal_context.validation_context,
             past_payloads,
         )
+    }
+
+    fn wire_size(&self, payload: &[u8]) -> NumBytes {
+        parse::wire_size(payload)
     }
 }
 

@@ -30,6 +30,24 @@ pub const MAX_CANISTER_HTTP_PAYLOAD_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
 pub const MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE: usize =
     MAX_CANISTER_HTTP_PAYLOAD_SIZE - 64 * 1024;
 
+/// The smallest response content that P2P strips from block proposals sent to peers.
+pub const MIN_STRIPPED_CONTENT_BYTES: usize = 64;
+
+/// The bytes that declaring one stripped response content costs in a stripped block
+/// proposal.
+pub const STRIPPED_RESPONSE_DECLARATION_BYTES: usize = 36;
+
+/// The bytes that stripping saves on a response with the given content, net of
+/// declaring it, estimated by the content's [`CountBytes`].
+pub fn stripping_savings(content: &CanisterHttpResponseContent) -> usize {
+    let size = content.count_bytes();
+    if size >= MIN_STRIPPED_CONTENT_BYTES {
+        size - STRIPPED_RESPONSE_DECLARATION_BYTES
+    } else {
+        0
+    }
+}
+
 /// Payload that contains CanisterHttpPayload messages.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]

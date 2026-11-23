@@ -1,3 +1,4 @@
+use crate::payload_builder::utils::PayloadSize;
 use ic_interfaces::batch_payload::PastPayload;
 use ic_logger::{ReplicaLogger, error};
 use ic_protobuf::{
@@ -133,6 +134,55 @@ pub(crate) fn messages_to_bytes(
         messages.into_iter().map(CanisterHttpResponseMessage::from),
         max_size,
     )
+}
+
+/// The messages of the payload, one message type after the other.
+pub(crate) fn payload_to_messages(
+    payload: CanisterHttpPayload,
+) -> impl Iterator<Item = PayloadMessage> {
+    let CanisterHttpPayload {
+        timeouts,
+        divergence_responses,
+        out_of_cycles,
+        responses,
+        flexible_responses,
+        flexible_errors,
+        async_receipts,
+    } = payload;
+
+    timeouts
+        .into_iter()
+        .map(PayloadMessage::Timeout)
+        .chain(
+            divergence_responses
+                .into_iter()
+                .map(PayloadMessage::Divergence),
+        )
+        .chain(responses.into_iter().map(PayloadMessage::Response))
+        .chain(
+            flexible_responses
+                .into_iter()
+                .map(PayloadMessage::FlexibleResponses),
+        )
+        .chain(
+            flexible_errors
+                .into_iter()
+                .map(PayloadMessage::FlexibleError),
+        )
+        .chain(out_of_cycles.into_iter().map(PayloadMessage::OutOfCycles))
+        .chain(async_receipts.into_iter().map(PayloadMessage::AsyncReceipt))
+}
+
+/// The estimated size of a valid payload in a block proposal sent to peers: the sum of
+/// the [`PayloadSize`] estimates of its messages, as the payload builder adds them up.
+pub(crate) fn wire_size(data: &[u8]) -> NumBytes {
+    let size = match bytes_to_payload(data) {
+        Ok(payload) => payload_to_messages(payload)
+            .map(|message| PayloadSize::of(&message).wire())
+            .sum(),
+        Err(_) => data.len(),
+    };
+    NumBytes::new(size as u64)
 }
 
 /// Relevant data of payloads between the certified height and the block being built.

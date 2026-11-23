@@ -256,7 +256,6 @@ impl BatchPayloadSectionBuilder {
                     &past_payloads,
                     proposal_context.validation_context,
                 );
-                let size = NumBytes::new(canister_http.len() as u64);
 
                 // Check validation as safety measure
                 match builder.validate_payload(
@@ -266,6 +265,7 @@ impl BatchPayloadSectionBuilder {
                     &past_payloads,
                 ) {
                     Ok(()) => {
+                        let size = builder.wire_size(&canister_http);
                         payload.canister_http = canister_http;
                         size
                     }
@@ -472,7 +472,7 @@ impl BatchPayloadSectionBuilder {
                     &past_payloads,
                 )?;
 
-                Ok(NumBytes::new(payload.canister_http.len() as u64))
+                Ok(builder.wire_size(&payload.canister_http))
             }
             Self::QueryStats(builder) => {
                 let past_payloads: Vec<PastPayload> =
