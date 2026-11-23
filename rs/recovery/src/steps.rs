@@ -51,15 +51,12 @@ pub const CMD_STOP_REPLICA: &str = "\
 /// as at boot, it must not run while the crypto vault is running. Always attempt to start
 /// the vault and ic-replica even if `setup-permissions` fails.
 ///
-/// The final status check determines the command's exit status. A separately retryable restart
-/// can return `first_restart_error` instead, after all commands have run.
+/// The final status check determines the command's exit status.
 pub const CMD_RESTART_REPLICA: &str = r#"
-first_restart_error=0
 run_systemctl() {
     sudo systemctl "$@" && return 0
     status=$?
     printf 'sudo systemctl %s failed with exit status %s\n' "$*" "$status" >&2
-    if [ "$first_restart_error" -eq 0 ]; then first_restart_error=$status; fi
     return "$status"
 }
 run_systemctl restart setup-permissions
@@ -69,11 +66,9 @@ run_systemctl status ic-replica
 "#;
 
 /// Stop the replica and vault before each restart attempt. A previous attempt may have
-/// started them even if setting permissions failed. Report the first failure to the caller.
+/// started them even if setting permissions failed.
 pub fn stop_and_restart_replica_command() -> String {
-    format!(
-        "(set -x; {CMD_STOP_REPLICA}) || exit $?\n{CMD_RESTART_REPLICA}\nexit \"$first_restart_error\""
-    )
+    format!("(set -x; {CMD_STOP_REPLICA}) || exit $?\n{CMD_RESTART_REPLICA}")
 }
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
@@ -1311,8 +1306,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn restart_reports_the_first_failure_and_retries_only_the_service_commands() {
-        for (setup, status, expected) in [(42, 0, 42), (0, 0, 0), (42, 17, 42), (0, 17, 17)] {
+    fn restart_reports_failures_and_exits_with_the_status_check() {
+        for (setup, status, expected) in [(42, 0, 0), (0, 0, 0), (42, 17, 17), (0, 17, 17)] {
             let script = format!(
                 r#"sudo() {{
     echo "$*"
