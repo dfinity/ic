@@ -38,11 +38,11 @@ guest_memory() {
 
 echo "-------------------- TEE probe --------------------"
 guest_memory
-# Until (nearly) nothing is left unaccepted, or for at most 15 minutes.
-for i in $(seq 1 60); do
-    left=$(curl -sk --max-time 60 "https://[${guest}]:9100/metrics" | python3 -c "${PY}" | sed -n 's/^MemFree - free lists: \([0-9.]*\) GiB$/\1/p')
-    echo "$(date -u +%FT%TZ) MemFree - free lists: ${left} GiB"
-    case ${left} in 0.* | 1.*) break ;; esac
+# Every 15 s for 20 minutes: acceptance (down to the service's 16 GiB), then whether the guest
+# stays up with the memory free.
+for i in $(seq 1 80); do
+    m=$(curl -sk --max-time 60 "https://[${guest}]:9100/metrics" | python3 -c "${PY}")
+    echo "$(date -u +%FT%TZ) $(echo "${m}" | grep -E '^(MemFree - free lists|free lists|uptime)' | paste -sd ';')"
     sleep 15
 done
 guest_memory
