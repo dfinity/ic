@@ -49,8 +49,9 @@ pub enum SubCommand {
     SimulateRetentionPolicy {
         /// The ID of the target subnet
         subnet_id: ClapSubnetId,
-        /// A rule of the retention policy to simulate: keep one state every PERIOD_DAYS days,
-        /// until they are older than TIME_TO_LIVE_DAYS days. Can be repeated.
+        /// A rule of the retention policy to simulate: keep the oldest state of every
+        /// PERIOD_DAYS-day window overlapping the last TIME_TO_LIVE_DAYS days. A period of 0 keeps
+        /// every state of the last TIME_TO_LIVE_DAYS days. Can be repeated.
         #[clap(
             long = "rule",
             value_name = "PERIOD_DAYS:TIME_TO_LIVE_DAYS",

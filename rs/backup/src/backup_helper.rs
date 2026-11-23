@@ -1229,6 +1229,8 @@ pub(crate) fn collect_cold_stored_states(
             dir_name
                 .parse::<u64>()
                 .ok()
+                // `dir_name.parse::<u64>()` also accepts a string like "042"/"+42". Ensure the
+                // parsed number serializes back to the same string to delete the correct directory.
                 .filter(|height| height.to_string() == dir_name)
         }) else {
             warn!(log, "Skipping {:?}: not a state directory", entry.path());
@@ -1557,11 +1559,15 @@ mod tests {
 
         assert_eq!(
             deleted_heights,
-            (1..=78).chain(80..=88).chain(90..=98).collect()
+            (0..=69)
+                .chain(71..=79)
+                .chain(81..=89)
+                .chain(91..=99)
+                .collect::<BTreeSet<_>>()
         );
         assert_eq!(
             collect_and_sort_dir_entries(&states_dir),
-            vec!["0", "100", "1000", "79", "89", "99", "lost+found"]
+            vec!["100", "1000", "70", "80", "90", "lost+found"]
         );
         assert!(
             !backup_helper
@@ -1594,7 +1600,11 @@ mod tests {
 
         assert_eq!(
             heights_to_delete,
-            (1..=78).chain(80..=88).chain(90..=98).collect()
+            (0..=69)
+                .chain(71..=79)
+                .chain(81..=89)
+                .chain(91..=99)
+                .collect::<BTreeSet<_>>()
         );
         assert_eq!(
             collect_and_sort_dir_entries(&backup_helper.cold_storage_states_dir()).len(),

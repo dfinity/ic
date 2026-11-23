@@ -668,14 +668,14 @@ mod tests {
             no_op_logger().inner_logger.root,
             fake_config_path,
             SubnetId::from(PrincipalId::from_str(FAKE_SUBNET_ID).unwrap()),
-            // Keep one state every 10 days, for 10 days.
+            // Keep the oldest state of every 10-day window of the last 10 days.
             vec![RetentionRule {
                 period_days: 10,
                 time_to_live_days: 10,
             }],
         );
 
-        assert_eq!(heights_to_delete, (1..=98).collect());
+        assert_eq!(heights_to_delete, (0..=89).chain(91..=99).collect());
         // The simulation must not delete anything.
         for day in 0..=100 {
             assert!(states_dir.join(day.to_string()).exists());
