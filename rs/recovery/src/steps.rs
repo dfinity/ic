@@ -1305,43 +1305,91 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn restart_reports_failures_and_exits_with_the_status_check() {
-        for (setup, status, expected) in [(42, 0, 0), (0, 0, 0), (42, 17, 17), (0, 17, 17)] {
-            let script = format!(
-                r#"sudo() {{
+    /// What [stop_and_restart_replica_command] runs with `sudo`, in order.
+    const STOP_AND_RESTART_COMMANDS: [&str; 6] = [
+        "systemctl stop ic-replica",
+        "systemctl stop ic-crypto-csp.socket ic-crypto-csp.service",
+        "systemctl restart setup-permissions",
+        "systemctl start ic-crypto-csp.socket ic-crypto-csp.service",
+        "systemctl start ic-replica",
+        "systemctl status ic-replica",
+    ];
+
+    /// Runs [stop_and_restart_replica_command] with a `sudo` that prints the command it is
+    /// given to stdout instead of running it, and fails with the given exit status for each
+    /// command in `failures`. Returns the exit status, stdout and stderr.
+    fn run_stop_and_restart(failures: &[(&str, i32)]) -> (Option<i32>, String, String) {
+        let failures: String = failures
+            .iter()
+            .map(|(command, status)| format!("        \"{command}\") return {status} ;;\n"))
+            .collect();
+        let script = format!(
+            r#"sudo() {{
     echo "$*"
-    case "$2" in
-        restart) return {setup} ;;
-        status) return {status} ;;
-    esac
+    case "$*" in
+{failures}    esac
 }}
 {}"#,
-                stop_and_restart_replica_command()
-            );
-            let output = Command::new("sh").arg("-c").arg(script).output().unwrap();
-            assert_eq!(output.status.code(), Some(expected));
+            stop_and_restart_replica_command()
+        );
+        let output = Command::new("sh").arg("-c").arg(script).output().unwrap();
+        (
+            output.status.code(),
+            String::from_utf8(output.stdout).unwrap(),
+            String::from_utf8(output.stderr).unwrap(),
+        )
+    }
+
+    #[test]
+    fn restart_reports_failures_and_exits_with_the_status_check() {
+        let [_, _, setup, start_vault, start_replica, status] = STOP_AND_RESTART_COMMANDS;
+        for (failures, expected) in [
+            (vec![], 0),
+            (vec![(setup, 42)], 0),
+            (vec![(start_vault, 43)], 0),
+            (vec![(start_replica, 44)], 0),
+            (vec![(status, 17)], 17),
+            (
+                vec![
+                    (setup, 42),
+                    (start_vault, 43),
+                    (start_replica, 44),
+                    (status, 17),
+                ],
+                17,
+            ),
+        ] {
+            let (exit_status, commands, errors) = run_stop_and_restart(&failures);
+            assert_eq!(exit_status, Some(expected), "{failures:?}");
+            // Every command runs, whichever of them fail.
             assert_eq!(
-                String::from_utf8(output.stdout)
-                    .unwrap()
-                    .lines()
-                    .collect::<Vec<_>>(),
-                [
-                    "systemctl stop ic-replica",
-                    "systemctl stop ic-crypto-csp.socket ic-crypto-csp.service",
-                    "systemctl restart setup-permissions",
-                    "systemctl start ic-crypto-csp.socket ic-crypto-csp.service",
-                    "systemctl start ic-replica",
-                    "systemctl status ic-replica",
-                ]
+                commands.lines().collect::<Vec<_>>(),
+                STOP_AND_RESTART_COMMANDS,
+                "{failures:?}"
             );
-            if setup != 0 {
-                let errors = String::from_utf8(output.stderr).unwrap();
+            for (command, status) in failures {
                 assert!(
-                    errors.contains("restart setup-permissions failed with exit status 42"),
+                    errors.contains(&format!("sudo {command} failed with exit status {status}")),
                     "{errors}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn restart_is_not_attempted_if_stopping_fails() {
+        let [stop_replica, stop_vault, ..] = STOP_AND_RESTART_COMMANDS;
+        for (failed, status, commands_run) in [(stop_replica, 5, 1), (stop_vault, 6, 2)] {
+            let (exit_status, commands, errors) = run_stop_and_restart(&[(failed, status)]);
+            assert_eq!(exit_status, Some(status), "{failed}");
+            // Nothing runs after the stop command that fails.
+            assert_eq!(
+                commands.lines().collect::<Vec<_>>(),
+                STOP_AND_RESTART_COMMANDS[..commands_run],
+                "{failed}"
+            );
+            // The trace of the stop commands shows the one that failed.
+            assert!(errors.contains(&format!("sudo {failed}")), "{errors}");
         }
     }
 
