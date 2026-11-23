@@ -940,8 +940,8 @@ slotmap = "1.0.7"
 socket2 = { version = "0.6.5", features = ["all"] }
 ssh2 = "0.9.7"
 static_assertions = "1.1.0"
-strum = { version = "0.26.3", features = ["derive"] }
-strum_macros = "0.26.4"
+strum = { version = "0.28.0", features = ["derive"] }
+strum_macros = "0.28.0"
 subtle = "2.6.1"
 syn = { version = "3.0.10", features = ["fold", "full"] }
 sys-mount = "3.0"

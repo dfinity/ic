@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - In ICRC-21 consent messages, the memo is shown as text only if it cannot alter how the rest of the message is displayed, and as hex otherwise, labeled `Memo (hex)`. In `GenericDisplayMessage` consent messages, that means printable ASCII without backticks. In `FieldsDisplayMessage` consent messages, it means valid UTF-8 without control characters, line or paragraph separators, or bidirectional formatting characters. Before, any valid UTF-8 memo was shown as text, so a memo containing backticks or line breaks could add Markdown to a `GenericDisplayMessage` consent message. Memos that are not valid UTF-8 were already shown as hex, but without the `(hex)` label.
 - `build_icrc21_consent_info` decodes the `arg` of the consent message request with a Candid skipping quota of 10,000, the same quota the `ic_cdk` endpoint macros apply to the endpoints being described.
+- Bumped `strum` and `strum_macros` to v0.28. `icrc21::lib::Icrc21Function` implements `IntoEnumIterator` of strum v0.28, and the error type of its `FromStr` and `TryFrom<&str>` implementations is strum v0.28's `ParseError`, so code that uses these through strum v0.26 has to use strum v0.28 too. This is a breaking change.
 
 ### Fixed
 - ICRC-21 consent messages for `icrc2_approve` show the approval expiration correctly for UTC offsets beyond ±9:06. An offset outside the range supported by the `time` crate is reported as an invalid UTC offset.
