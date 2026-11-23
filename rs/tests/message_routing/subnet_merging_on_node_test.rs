@@ -9,8 +9,9 @@ way operators run `ic-recovery` on a node, i.e. with its directory in
 downloads their states (the one of its own node locally), merges them on the
 node, reroutes the canister ID ranges, proposes the recovery CUP of the
 destination subnet at the merged state, replaces the state of its own node
-with the merged state, from which the replica on the node then starts, and
-waits until its own node reports the recovery CUP.
+with the merged state, from which the replica on the node then starts, waits
+until its own node reports the recovery CUP, and unhalts the destination
+subnet.
 
 The subnet that is merged away is called `S`, and the Application subnet it is
 merged into is called `D`.
@@ -20,19 +21,19 @@ Runbook::
    and install the NNS canisters.
 1. Install a universal canister on each of `S` and `D`.
 2. Run the subnet merging tool on a node of `D`, over SSH, with all its steps
-   but `UnhaltDestinationSubnet` and without prompts: it downloads the state of
-   `S` from a node of `S` over SSH and the state of `D` locally, merges them on
-   the node, replaces the state of its own node with the merged state, and
-   waits until its own node reports the recovery CUP. `D` stays halted, so that
-   the node still holds only the merged checkpoint when step 4 checks it.
+   and without prompts: it downloads the state of `S` from a node of `S` over
+   SSH and the state of `D` locally, merges them on the node, replaces the
+   state of its own node with the merged state, waits until its own node
+   reports the recovery CUP, and unhalts `D`.
 3. Check that the merged state on the node of `D` is a single checkpoint
    holding the canisters of both `S` and `D`, and that the registry holds the
    recovery CUP of `D` at the height of that checkpoint.
-4. Check that the node of `D` holds exactly the merged checkpoint, that all
-   files of the state of the node are owned by the replica, and that the
-   replica started from that checkpoint.
+4. Check that the node of `D` holds no checkpoint below the merged checkpoint,
+   that all files of the state of the node are owned by the replica, and that
+   the replica runs at or above the height of the merged checkpoint. `D` is
+   unhalted by then, so the replica may have created newer checkpoints.
 
-Success:: The tool completes its steps on the node of `D`, the recovery
+Success:: The tool completes all its steps on the node of `D`, the recovery
 CUP of `D` is at the merged state it assembled there, and the replica on that
 node runs on the merged state.
 
@@ -229,14 +230,13 @@ pub fn test(env: TestEnv) {
     ));
     info!(
         logger,
-        "Step 4 done: the replica on {} owns its state and started from the merged checkpoint {merged_checkpoint}",
+        "Step 4 done: the replica on {} owns its state and runs on the merged state of checkpoint {merged_checkpoint}",
         d_node.get_ip_addr()
     );
 }
 
 /// Step 2: run the subnet merging tool on `d_node`, with `s_node` as the node
-/// of `S`, through all its steps but `UnhaltDestinationSubnet` and without
-/// prompts.
+/// of `S`, through all its steps and without prompts.
 fn run_tool_on_node(
     env: &TestEnv,
     s_node: &IcNodeSnapshot,
@@ -286,7 +286,6 @@ fn run_tool_on_node(
          --admin-key-file {ADMIN_KEY_REMOTE_PATH} \
          --test \
          --skip-prompts \
-         --skip UnhaltDestinationSubnet \
          --source-subnet-id {s_subnet_id} \
          --destination-subnet-id {d_subnet_id} \
          --source-node {s_node_ip} \
@@ -312,7 +311,7 @@ fn run_tool_on_node(
 
     info!(
         logger,
-        "Step 2 done: the subnet merging tool ran through its steps on node {d_node_ip}"
+        "Step 2 done: the subnet merging tool ran through all its steps on node {d_node_ip}"
     );
 }
 
