@@ -1163,12 +1163,12 @@ async fn check_subnets_halted(context: &Context<'_>) {
 
     for subnet in subnets {
         let subnet_id = subnet.subnet_id;
-        // The tool has checked that the download node serves the CUP the subnet
-        // halts at, and no CUP follows that one.
-        let download_node = merge_node(subnet);
-        let halting_height = get_node_metrics(logger, &download_node)
+        // The tool has checked that this node serves the CUP the subnet halts
+        // at, and no CUP follows that one.
+        let node_ip = merge_node(subnet);
+        let halting_height = get_node_metrics(logger, &node_ip)
             .await
-            .unwrap_or_else(|| panic!("failed to get the metrics of node {download_node}"))
+            .unwrap_or_else(|| panic!("failed to get the metrics of node {node_ip}"))
             .catch_up_package_height;
         info!(
             logger,
