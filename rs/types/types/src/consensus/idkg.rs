@@ -1907,41 +1907,40 @@ impl From<&IDkgPayload> for pb::IDkgPayload {
 impl TryFrom<pb::IDkgPayload> for IDkgPayload {
     type Error = ProxyDecodeError;
     fn try_from(payload: pb::IDkgPayload) -> Result<Self, Self::Error> {
-        let key_transcripts =
-            crate::try_collect_map(payload.key_transcripts.into_iter().map(|proto| {
-                let key_transcript = MasterKeyTranscript::try_from(proto)?;
-                Ok((key_transcript.key_id(), key_transcript))
-            }))?;
+        let key_transcripts = crate::try_collect_map(payload.key_transcripts, |proto| {
+            let key_transcript = MasterKeyTranscript::try_from(proto)?;
+            Ok((key_transcript.key_id(), key_transcript))
+        })?;
 
         // available_pre_signatures
-        let available_pre_signatures =
-            crate::try_collect_map(payload.available_pre_signatures.into_iter().map(
-                |available_pre_signature| {
-                    let pre_signature: PreSignatureRef = try_from_option_field(
-                        available_pre_signature.pre_signature,
-                        "IDkgPayload::available_pre_signature::pre_signature",
-                    )?;
-                    Ok((
-                        PreSigId(available_pre_signature.pre_signature_id),
-                        pre_signature,
-                    ))
-                },
-            ))?;
+        let available_pre_signatures = crate::try_collect_map(
+            payload.available_pre_signatures,
+            |available_pre_signature| {
+                let pre_signature: PreSignatureRef = try_from_option_field(
+                    available_pre_signature.pre_signature,
+                    "IDkgPayload::available_pre_signature::pre_signature",
+                )?;
+                Ok((
+                    PreSigId(available_pre_signature.pre_signature_id),
+                    pre_signature,
+                ))
+            },
+        )?;
 
         // pre_signatures_in_creation
-        let pre_signatures_in_creation =
-            crate::try_collect_map(payload.pre_signatures_in_creation.into_iter().map(
-                |pre_signature_in_creation| {
-                    let pre_signature: PreSignatureInCreation = try_from_option_field(
-                        pre_signature_in_creation.pre_signature,
-                        "IDkgPayload::pre_signature_in_creation::pre_signature",
-                    )?;
-                    Ok((
-                        PreSigId(pre_signature_in_creation.pre_signature_id),
-                        pre_signature,
-                    ))
-                },
-            ))?;
+        let pre_signatures_in_creation = crate::try_collect_map(
+            payload.pre_signatures_in_creation,
+            |pre_signature_in_creation| {
+                let pre_signature: PreSignatureInCreation = try_from_option_field(
+                    pre_signature_in_creation.pre_signature,
+                    "IDkgPayload::pre_signature_in_creation::pre_signature",
+                )?;
+                Ok((
+                    PreSigId(pre_signature_in_creation.pre_signature_id),
+                    pre_signature,
+                ))
+            },
+        )?;
 
         let next_unused_transcript_id: IDkgTranscriptId = try_from_option_field(
             payload.next_unused_transcript_id,
@@ -1954,51 +1953,44 @@ impl TryFrom<pb::IDkgPayload> for IDkgPayload {
         };
 
         // idkg_transcripts
-        let idkg_transcripts =
-            crate::try_collect_map(payload.idkg_transcripts.into_iter().map(|proto| {
-                let transcript: IDkgTranscript = proto.try_into().map_err(|err| {
-                    ProxyDecodeError::Other(format!(
-                        "IDkgPayload:: Failed to convert transcript: {err:?}"
-                    ))
-                })?;
-                Ok((transcript.transcript_id, transcript))
-            }))?;
+        let idkg_transcripts = crate::try_collect_map(payload.idkg_transcripts, |proto| {
+            let transcript: IDkgTranscript = proto.try_into().map_err(|err| {
+                ProxyDecodeError::Other(format!(
+                    "IDkgPayload:: Failed to convert transcript: {err:?}"
+                ))
+            })?;
+            Ok((transcript.transcript_id, transcript))
+        })?;
 
         // ongoing_xnet_reshares
         let ongoing_xnet_reshares =
-            crate::try_collect_map(payload.ongoing_xnet_reshares.into_iter().map(|reshare| {
+            crate::try_collect_map(payload.ongoing_xnet_reshares, |reshare| {
                 let request: IDkgReshareRequest =
                     try_from_option_field(reshare.request, "IDkgPayload::reshare::request")?;
                 let transcript: ReshareOfUnmaskedParams =
                     try_from_option_field(reshare.transcript, "IDkgPayload::reshare::transcript")?;
                 Ok((request, transcript))
-            }))?;
+            })?;
 
         // xnet_reshare_agreements
-        let xnet_reshare_agreements = crate::try_collect_map(
-            payload
-                .xnet_reshare_agreements
-                .into_iter()
-                .map(|agreement| {
-                    let request: IDkgReshareRequest = try_from_option_field(
-                        agreement.request,
-                        "IDkgPayload::agreement::request",
-                    )?;
+        let xnet_reshare_agreements =
+            crate::try_collect_map(payload.xnet_reshare_agreements, |agreement| {
+                let request: IDkgReshareRequest =
+                    try_from_option_field(agreement.request, "IDkgPayload::agreement::request")?;
 
-                    let completed = match agreement.initial_dealings {
-                        Some(response) => {
-                            let unreported = response.try_into().map_err(|err| {
-                                ProxyDecodeError::Other(format!(
-                                    "IDkgPayload:: failed to convert initial dealing: {err:?}"
-                                ))
-                            })?;
-                            CompletedReshareRequest::Unreported(unreported)
-                        }
-                        None => CompletedReshareRequest::ReportedToExecution,
-                    };
-                    Ok((request, completed))
-                }),
-        )?;
+                let completed = match agreement.initial_dealings {
+                    Some(response) => {
+                        let unreported = response.try_into().map_err(|err| {
+                            ProxyDecodeError::Other(format!(
+                                "IDkgPayload:: failed to convert initial dealing: {err:?}"
+                            ))
+                        })?;
+                        CompletedReshareRequest::Unreported(unreported)
+                    }
+                    None => CompletedReshareRequest::ReportedToExecution,
+                };
+                Ok((request, completed))
+            })?;
 
         Ok(Self {
             available_pre_signatures,

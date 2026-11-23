@@ -283,11 +283,8 @@ impl TryFrom<&pb::NiDkgTranscript> for NiDkgTranscript {
             threshold: NiDkgThreshold::new(NumberOfNodes::from(summary.threshold))
                 .map_err(|e| ProxyDecodeError::Other(format!("threshold error {e:?}")))?,
             committee: NiDkgReceivers::new(crate::try_collect_set(
-                summary
-                    .committee
-                    .iter()
-                    .cloned()
-                    .map(crate::node_id_try_from_protobuf),
+                summary.committee.iter().cloned(),
+                crate::node_id_try_from_protobuf,
             )?)
             .map_err(|e| ProxyDecodeError::Other(format!("{e:?}")))?,
             registry_version: RegistryVersion::from(summary.registry_version),

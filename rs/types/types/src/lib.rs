@@ -182,13 +182,14 @@ pub fn node_id_try_from_protobuf(value: pb::NodeId) -> Result<NodeId, ProxyDecod
     Ok(NodeId::from(principal_id))
 }
 
-/// Collects decoded protobuf entries into a map, rejecting a key that repeats an earlier one.
-pub(crate) fn try_collect_map<K: Ord + fmt::Debug, V>(
-    entries: impl IntoIterator<Item = Result<(K, V), ProxyDecodeError>>,
+/// Decodes protobuf entries into a map, rejecting a key that repeats an earlier one.
+pub(crate) fn try_collect_map<I: IntoIterator, K: Ord + fmt::Debug, V>(
+    entries: I,
+    mut decode: impl FnMut(I::Item) -> Result<(K, V), ProxyDecodeError>,
 ) -> Result<BTreeMap<K, V>, ProxyDecodeError> {
     let mut map = BTreeMap::new();
     for entry in entries {
-        let (key, value) = entry?;
+        let (key, value) = decode(entry)?;
         match map.entry(key) {
             btree_map::Entry::Vacant(entry) => {
                 entry.insert(value);
@@ -199,13 +200,14 @@ pub(crate) fn try_collect_map<K: Ord + fmt::Debug, V>(
     Ok(map)
 }
 
-/// Collects decoded protobuf items into a set, rejecting an item that repeats an earlier one.
-pub(crate) fn try_collect_set<T: Ord + fmt::Debug>(
-    items: impl IntoIterator<Item = Result<T, ProxyDecodeError>>,
+/// Decodes protobuf items into a set, rejecting an item that repeats an earlier one.
+pub(crate) fn try_collect_set<I: IntoIterator, T: Ord + fmt::Debug>(
+    items: I,
+    mut decode: impl FnMut(I::Item) -> Result<T, ProxyDecodeError>,
 ) -> Result<BTreeSet<T>, ProxyDecodeError> {
     let mut set = BTreeSet::new();
     for item in items {
-        if let Some(item) = set.replace(item?) {
+        if let Some(item) = set.replace(decode(item)?) {
             return Err(duplicate_entry(&item));
         }
     }
@@ -606,31 +608,34 @@ mod tests {
     #[test]
     fn try_collect_map_requires_distinct_keys() {
         assert_eq!(
-            try_collect_map([Ok((1, 'a')), Ok((2, 'b'))]).unwrap(),
+            try_collect_map([(1, 'a'), (2, 'b')], Ok).unwrap(),
             BTreeMap::from([(1, 'a'), (2, 'b')])
         );
         assert_matches!(
-            try_collect_map([Ok((1, 'a')), Ok((2, 'b')), Ok((1, 'c'))]),
+            try_collect_map([(1, 'a'), (2, 'b'), (1, 'c')], Ok),
             Err(ProxyDecodeError::DuplicateEntry { key, .. }) if key == "1"
         );
         assert_matches!(
-            try_collect_map([Ok((1, 'a')), Err(ProxyDecodeError::MissingField("value"))]),
+            try_collect_map([(1, 'a'), (2, 'b')], |(key, value)| match key {
+                1 => Ok((key, value)),
+                _ => Err(ProxyDecodeError::MissingField("value")),
+            }),
             Err(ProxyDecodeError::MissingField("value"))
         );
     }
 
     #[test]
     fn try_collect_set_requires_distinct_items() {
-        assert_eq!(
-            try_collect_set([Ok(1), Ok(2)]).unwrap(),
-            BTreeSet::from([1, 2])
-        );
+        assert_eq!(try_collect_set([1, 2], Ok).unwrap(), BTreeSet::from([1, 2]));
         assert_matches!(
-            try_collect_set([Ok(1), Ok(2), Ok(1)]),
+            try_collect_set([1, 2, 1], Ok),
             Err(ProxyDecodeError::DuplicateEntry { key, .. }) if key == "1"
         );
         assert_matches!(
-            try_collect_set([Ok(1), Err(ProxyDecodeError::MissingField("item"))]),
+            try_collect_set([1, 2], |item| match item {
+                1 => Ok(item),
+                _ => Err(ProxyDecodeError::MissingField("item")),
+            }),
             Err(ProxyDecodeError::MissingField("item"))
         );
     }

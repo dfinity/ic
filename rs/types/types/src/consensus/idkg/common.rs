@@ -308,12 +308,8 @@ impl From<&IDkgTranscriptAttributes> for pb::IDkgTranscriptAttributes {
 impl TryFrom<pb::IDkgTranscriptAttributes> for IDkgTranscriptAttributes {
     type Error = ProxyDecodeError;
     fn try_from(attributes: pb::IDkgTranscriptAttributes) -> Result<Self, Self::Error> {
-        let receivers = crate::try_collect_set(
-            attributes
-                .receivers
-                .into_iter()
-                .map(crate::node_id_try_from_protobuf),
-        )?;
+        let receivers =
+            crate::try_collect_set(attributes.receivers, crate::node_id_try_from_protobuf)?;
         Ok(IDkgTranscriptAttributes::new(
             receivers,
             AlgorithmId::from(attributes.algorithm_id),
@@ -878,19 +874,9 @@ impl TryFrom<pb::IDkgTranscriptParamsRef> for IDkgTranscriptParamsRef {
             "IDkgTranscriptParamsRef::transcript_id",
         )?;
 
-        let dealers = crate::try_collect_set(
-            params
-                .dealers
-                .into_iter()
-                .map(crate::node_id_try_from_protobuf),
-        )?;
+        let dealers = crate::try_collect_set(params.dealers, crate::node_id_try_from_protobuf)?;
 
-        let receivers = crate::try_collect_set(
-            params
-                .receivers
-                .into_iter()
-                .map(crate::node_id_try_from_protobuf),
-        )?;
+        let receivers = crate::try_collect_set(params.receivers, crate::node_id_try_from_protobuf)?;
 
         let operation_ref = try_from_option_field(
             params.operation_type_ref,

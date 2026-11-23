@@ -469,10 +469,10 @@ impl From<&DkgSummary> for pb::Summary {
 fn build_tagged_transcripts_map(
     transcripts: &[pb::NiDkgTranscript],
 ) -> Result<BTreeMap<NiDkgTag, NiDkgTranscript>, ProxyDecodeError> {
-    crate::try_collect_map(transcripts.iter().map(|transcript_pb| {
+    crate::try_collect_map(transcripts, |transcript_pb| {
         let transcript = NiDkgTranscript::try_from(transcript_pb)?;
         Ok((transcript.dkg_id.dkg_tag.clone(), transcript))
-    }))
+    })
 }
 
 fn build_transcripts_vec_from_pb(
@@ -503,7 +503,7 @@ fn build_transcripts_vec_from_pb(
 fn build_remote_dkg_attempts_map(
     vec: &[pb::RemoteDkgAttemptCount],
 ) -> Result<BTreeMap<NiDkgTargetId, RemoteDkgAttempts>, ProxyDecodeError> {
-    crate::try_collect_map(vec.iter().map(|item| {
+    crate::try_collect_map(vec, |item| {
         let mut id = [0_u8; NiDkgTargetId::SIZE];
         // Safely convert the received slice to a fixed-size slice.
         let mut v = Vec::<u8>::new();
@@ -515,7 +515,7 @@ fn build_remote_dkg_attempts_map(
             NiDkgTargetId::new(id),
             RemoteDkgAttempts::from(item.attempt_no),
         ))
-    }))
+    })
 }
 
 fn build_transcript_result(
@@ -600,12 +600,9 @@ impl TryFrom<pb::Summary> for DkgSummary {
     fn try_from(summary: pb::Summary) -> Result<Self, Self::Error> {
         Ok(Self {
             registry_version: RegistryVersion::from(summary.registry_version),
-            configs: crate::try_collect_map(
-                summary
-                    .configs
-                    .into_iter()
-                    .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id.clone(), c))),
-            )?,
+            configs: crate::try_collect_map(summary.configs, |config| {
+                NiDkgConfig::try_from(config).map(|c| (c.dkg_id.clone(), c))
+            })?,
             current_transcripts: build_tagged_transcripts_map(&summary.current_transcripts)?,
             next_transcripts: build_tagged_transcripts_map(&summary.next_transcripts)?,
             interval_length: Height::from(summary.interval_length),
