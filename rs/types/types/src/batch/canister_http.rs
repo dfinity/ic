@@ -21,7 +21,7 @@ use ic_protobuf::{
 };
 use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, convert::TryFrom};
+use std::convert::TryFrom;
 
 pub const MAX_CANISTER_HTTP_PAYLOAD_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
 
@@ -389,25 +389,20 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
             .ok_or(ProxyDecodeError::MissingField("response"))?;
         let id = CanisterHttpRequestId::new(response.id);
 
-        let mut signatures = BTreeMap::new();
-        for signature in payload.signatures {
+        let signatures = crate::decode_map(payload.signatures, |signature| {
             let signer = NodeId::from(PrincipalId::try_from(signature.signer)?);
             let payment_receipt = try_from_option_field(
                 signature.payment_receipt,
                 "CanisterHttpResponseSignature::payment_receipt",
             )?;
-            let signature = CanisterHttpResponseSignature {
-                payment_receipt,
-                signature: BasicSigOf::new(BasicSig(signature.signature)),
-            };
-            if signatures.insert(signer, signature).is_some() {
-                return Err(ProxyDecodeError::DuplicateEntry {
-                    key: format!("{signer:?}"),
-                    v1: String::new(),
-                    v2: String::new(),
-                });
-            }
-        }
+            Ok((
+                signer,
+                CanisterHttpResponseSignature {
+                    payment_receipt,
+                    signature: BasicSigOf::new(BasicSig(signature.signature)),
+                },
+            ))
+        })?;
 
         Ok(CanisterHttpResponseWithConsensus {
             content: CanisterHttpResponse {
@@ -845,6 +840,7 @@ mod tests {
     use crate::exhaustive::ExhaustiveSet;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_types_cycles::Cycles;
+    use std::collections::BTreeMap;
 
     /// Tests that a roundtrip of protobuf conversions for `CanisterHttpResponse`
     /// works correctly.
