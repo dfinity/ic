@@ -620,6 +620,7 @@ fn can_validate_too_many_total_exports() {
     );
 }
 
+#[test]
 fn reject_too_many_imports() {
     let num_imports = MAX_NUMBER_IMPORTS + 1;
     let mut wat = String::from("(module\n");
