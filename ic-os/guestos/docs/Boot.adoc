@@ -169,7 +169,9 @@ upgrades:
   the keys are never stored there nor read from there. They are kept in the
   SEV-encrypted store partition (+/var/lib/ic/data/ssh_host_keys+), which is
   carried across upgrades. The Upgrade VM does not open the store and uses
-  ephemeral keys.
+  ephemeral keys. As +/var/lib/ic/data+ is owned by +ic-replica+, the keys
+  there are only used if they are in a private, root-owned directory (see
+  +/opt/ic/bin/key-dir.sh+); otherwise they are regenerated.
 
 == Set up node exporter keys
 

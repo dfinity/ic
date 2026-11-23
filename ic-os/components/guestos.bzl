@@ -73,6 +73,7 @@ def component_files(mode):
         # misc
         Label("misc/config/config-guestos.sh"): "/opt/ic/bin/config.sh",
         Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
+        Label("misc/key-dir.sh"): "/opt/ic/bin/key-dir.sh",
         Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
         Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
         Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",

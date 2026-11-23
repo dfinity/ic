@@ -3,6 +3,8 @@ Description=Generate node_exporter TLS key pair on first boot
 RequiresMountsFor=/boot/config
 # In GuestOS with TEE, the key pair is kept in the encrypted store, if mounted.
 After=var-lib-ic-data.mount
+# bootstrap-ic-node.service may chown the store recursively to ic-replica.
+After=bootstrap-ic-node.service
 Before=node_exporter.service
 
 [Install]
