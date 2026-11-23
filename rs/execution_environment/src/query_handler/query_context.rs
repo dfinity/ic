@@ -91,6 +91,7 @@ fn wasm_query_method(
 
 /// Executes a single user query along with its outgoing query calls.
 pub(super) struct QueryContext {
+    // Shared so that we don't need to clone and reset its `every_n_seconds` rate limits.
     log: Arc<ReplicaLogger>,
     hypervisor: Arc<Hypervisor>,
     canister_manager: Arc<CanisterManager>,
