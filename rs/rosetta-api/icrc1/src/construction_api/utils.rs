@@ -3,6 +3,7 @@ use super::types::{
 };
 use crate::common::constants::{
     CANISTER_METHOD_ARGS_SKIPPING_QUOTA, MAX_CANISTER_METHOD_ARGS_BYTES,
+    MAX_ENVELOPES_PER_TRANSACTION, MAX_PUBLIC_KEY_BYTES, MAX_SIGNATURE_BYTES,
 };
 use crate::common::utils::utils::{
     icrc1_operation_to_rosetta_core_operations, rosetta_core_operations_to_icrc1_operation,
@@ -370,12 +371,19 @@ pub fn handle_construction_combine(
     unsigned_transaction: UnsignedTransaction,
     signatures: Vec<Signature>,
 ) -> anyhow::Result<ConstructionCombineResponse> {
-    if unsigned_transaction.envelope_contents.len() != signatures.len() {
+    let num_envelopes = unsigned_transaction.envelope_contents.len();
+    if num_envelopes > MAX_ENVELOPES_PER_TRANSACTION {
+        bail!(
+            "The number of envelopes must not exceed {MAX_ENVELOPES_PER_TRANSACTION}: got {num_envelopes}"
+        );
+    }
+    if num_envelopes != signatures.len() {
         bail!("Number of signatures does not match number of envelopes");
     }
 
     let mut request_id_to_signature = std::collections::HashMap::new();
     for signature in &signatures {
+        validate_signature_size(signature)?;
         if request_id_to_signature.contains_key(&signature.signing_payload.hex_bytes) {
             bail!("Duplicate request_id found in signatures: {:?}", signature);
         }
@@ -383,10 +391,16 @@ pub fn handle_construction_combine(
         request_id_to_signature.insert(signature.signing_payload.hex_bytes.clone(), signature);
     }
 
+    // The envelopes have distinct request ids, and there are as many envelopes as signatures, so
+    // every signature is used exactly once.
+    let mut request_ids = HashSet::with_capacity(num_envelopes);
     let mut envelopes = vec![];
     for envelope_content in &unsigned_transaction.envelope_contents {
         if matches!(envelope_content, EnvelopeContent::Call { .. }) {
             let request_id = build_signable_payload(envelope_content);
+            if !request_ids.insert(request_id.clone()) {
+                bail!("A transaction must not contain repeated envelopes");
+            }
             let signature = request_id_to_signature
                 .get(&request_id)
                 .context("Failed to find signature for request id")?;
@@ -408,6 +422,17 @@ pub fn handle_construction_combine(
     Ok(ConstructionCombineResponse {
         signed_transaction: hex::encode(serde_cbor::to_vec(&SignedTransaction { envelopes })?),
     })
+}
+
+/// Validates the size of a signature and its public key before they are copied into an envelope.
+fn validate_signature_size(signature: &Signature) -> anyhow::Result<()> {
+    if signature.hex_bytes.len() > 2 * MAX_SIGNATURE_BYTES {
+        bail!("A signature must not be larger than {MAX_SIGNATURE_BYTES} bytes");
+    }
+    if signature.public_key.hex_bytes.len() > 2 * MAX_PUBLIC_KEY_BYTES {
+        bail!("A public key must not be larger than {MAX_PUBLIC_KEY_BYTES} bytes");
+    }
+    Ok(())
 }
 
 fn build_payloads_from_call_envelope_content(
