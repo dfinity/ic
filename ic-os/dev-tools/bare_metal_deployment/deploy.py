@@ -5,6 +5,7 @@ import configparser
 import functools
 import os
 import re
+import shlex
 import site
 import subprocess
 import sys
@@ -565,6 +566,19 @@ def deploy_server(
                 log.info("*** Deployment SUCCESS!")
                 return OperationResult(bmc_info, success=True)
             time.sleep(timeout_secs)
+        # Validation only, not for merging: HostOS's view of a GuestOS that never came up.
+        remote = (
+            "sudo journalctl -u guestos.service -o short-iso --no-pager | tail -n 100; "
+            "sudo virsh list --all; "
+            'for f in /var/log/libvirt/qemu/*.log; do echo "== $f"; sudo tail -n 150 "$f"; done; '
+            "sudo dmesg | grep -i -E 'sev|snp|rmp|ccp' | tail -n 40; free -g"
+        )
+        key_part = f"-i {file_share_ssh_key}" if file_share_ssh_key else ""
+        invoke.run(
+            "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30 "
+            f"{key_part} admin@{bmc_info.hostos_ipv6_address} {shlex.quote(remote)}",
+            warn=True,
+        )
         raise Exception("Could not successfully verify connectivity to node.")
 
     except DeploymentError as e:
