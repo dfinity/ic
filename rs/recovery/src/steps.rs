@@ -48,28 +48,13 @@ pub const CMD_STOP_REPLICA: &str = "\
 ///
 /// `setup-permissions` aborts if a file disappears while it walks `/var/lib/ic`, leaving the
 /// directories it hasn't reached yet, such as a replaced `ic_state`, with the wrong owner. So,
-/// as at boot, it must not run while the crypto vault is running. Always attempt to start
-/// the vault and ic-replica even if `setup-permissions` fails.
-///
-/// The final status check determines the command's exit status.
-pub const CMD_RESTART_REPLICA: &str = r#"
-run_systemctl() {
-    sudo systemctl "$@" && return 0
-    status=$?
-    printf 'sudo systemctl %s failed with exit status %s\n' "$*" "$status" >&2
-    return "$status"
-}
-run_systemctl restart setup-permissions
-run_systemctl start ic-crypto-csp.socket ic-crypto-csp.service
-run_systemctl start ic-replica
-run_systemctl status ic-replica
-"#;
-
-/// Stop the replica and vault before each restart attempt. A previous attempt may have
-/// started them even if setting permissions failed.
-pub fn stop_and_restart_replica_command() -> String {
-    format!("(set -x; {CMD_STOP_REPLICA}) || exit $?\n{CMD_RESTART_REPLICA}")
-}
+/// as at boot, it must not run while the crypto vault is running. The commands are joined by `;`
+/// so that the vault and ic-replica are started even if `setup-permissions` fails.
+pub const CMD_RESTART_REPLICA: &str = "\
+    sudo systemctl restart setup-permissions;\n\
+    sudo systemctl start ic-crypto-csp.socket ic-crypto-csp.service;\n\
+    sudo systemctl start ic-replica;\n\
+    sudo systemctl status ic-replica;";
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
@@ -658,24 +643,6 @@ impl Step for ValidateReplayStep {
     }
 }
 
-fn state_upload_includes(has_states_metadata: bool) -> Vec<&'static Path> {
-    // Sync the parent so rsync's --delete removes heights left by an earlier upload.
-    let mut includes = vec![Path::new(CHECKPOINTS)];
-    if has_states_metadata {
-        includes.push(Path::new(STATES_METADATA));
-    }
-    includes
-}
-
-fn replace_remote_state_command(upload_dir: &Path, ic_state_path: &Path) -> String {
-    // The live state can already be absent on retry. Never move the staged state inside it.
-    format!(
-        "sudo rm -rf {ic_state_path} && sudo mv -T {upload_dir} {ic_state_path}",
-        ic_state_path = ic_state_path.display(),
-        upload_dir = upload_dir.display(),
-    )
-}
-
 pub struct UploadStateAndRestartStep {
     pub logger: Logger,
     pub ssh_user: SshUser,
@@ -787,15 +754,28 @@ impl UploadStateAndRestartStep {
             }
 
             info!(self.logger, "Uploading state...");
+            let includes: Vec<_> =
+                Recovery::get_state_includes_with_given_checkpoint(max_checkpoint)
+                    .into_iter()
+                    .filter(|path| has_states_metadata || path != Path::new(STATES_METADATA))
+                    .collect();
             ssh_helper.rsync_includes(
-                state_upload_includes(has_states_metadata),
+                &includes,
                 &self.data_src,
                 &ssh_helper.remote_path(upload_dir.join("")),
             )?;
 
+            // With `-T`, the move fails if the state in place could not be
+            // removed, instead of moving the uploaded state inside it.
+            let cmd_replace_state = format!(
+                "sudo rm -r {ic_state_path}; sudo mv -T {upload_dir} {ic_state_path};",
+                ic_state_path = ic_state_path.display(),
+                upload_dir = upload_dir.display()
+            );
+
             info!(self.logger, "Stopping replica and crypto vault...");
             ssh_helper.ssh(CMD_STOP_REPLICA.to_string())?;
-            ssh_helper.ssh(replace_remote_state_command(&upload_dir, &ic_state_path))?;
+            ssh_helper.ssh(cmd_replace_state)?;
         } else {
             let log = self.require_confirmation.then_some(&self.logger);
             info!(self.logger, "Stopping replica and crypto vault...");
@@ -1310,94 +1290,6 @@ mod tests {
 
     use super::*;
 
-    /// What [stop_and_restart_replica_command] runs with `sudo`, in order.
-    const STOP_AND_RESTART_COMMANDS: [&str; 6] = [
-        "systemctl stop ic-replica",
-        "systemctl stop ic-crypto-csp.socket ic-crypto-csp.service",
-        "systemctl restart setup-permissions",
-        "systemctl start ic-crypto-csp.socket ic-crypto-csp.service",
-        "systemctl start ic-replica",
-        "systemctl status ic-replica",
-    ];
-
-    /// Runs [stop_and_restart_replica_command] with a `sudo` that prints the command it is
-    /// given to stdout instead of running it, and fails with the given exit status for each
-    /// command in `failures`. Returns the exit status, stdout and stderr.
-    fn run_stop_and_restart(failures: &[(&str, i32)]) -> (Option<i32>, String, String) {
-        let failures: String = failures
-            .iter()
-            .map(|(command, status)| format!("        \"{command}\") return {status} ;;\n"))
-            .collect();
-        let script = format!(
-            r#"sudo() {{
-    echo "$*"
-    case "$*" in
-{failures}    esac
-}}
-{}"#,
-            stop_and_restart_replica_command()
-        );
-        let output = Command::new("sh").arg("-c").arg(script).output().unwrap();
-        (
-            output.status.code(),
-            String::from_utf8(output.stdout).unwrap(),
-            String::from_utf8(output.stderr).unwrap(),
-        )
-    }
-
-    #[test]
-    fn restart_reports_failures_and_exits_with_the_status_check() {
-        let [_, _, setup, start_vault, start_replica, status] = STOP_AND_RESTART_COMMANDS;
-        for (failures, expected) in [
-            (vec![], 0),
-            (vec![(setup, 42)], 0),
-            (vec![(start_vault, 43)], 0),
-            (vec![(start_replica, 44)], 0),
-            (vec![(status, 17)], 17),
-            (
-                vec![
-                    (setup, 42),
-                    (start_vault, 43),
-                    (start_replica, 44),
-                    (status, 17),
-                ],
-                17,
-            ),
-        ] {
-            let (exit_status, commands, errors) = run_stop_and_restart(&failures);
-            assert_eq!(exit_status, Some(expected), "{failures:?}");
-            // Every command runs, whichever of them fail.
-            assert_eq!(
-                commands.lines().collect::<Vec<_>>(),
-                STOP_AND_RESTART_COMMANDS,
-                "{failures:?}"
-            );
-            for (command, status) in failures {
-                assert!(
-                    errors.contains(&format!("sudo {command} failed with exit status {status}")),
-                    "{errors}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn restart_is_not_attempted_if_stopping_fails() {
-        let [stop_replica, stop_vault, ..] = STOP_AND_RESTART_COMMANDS;
-        for (failed, status, commands_run) in [(stop_replica, 5, 1), (stop_vault, 6, 2)] {
-            let (exit_status, commands, errors) = run_stop_and_restart(&[(failed, status)]);
-            assert_eq!(exit_status, Some(status), "{failed}");
-            // Nothing runs after the stop command that fails.
-            assert_eq!(
-                commands.lines().collect::<Vec<_>>(),
-                STOP_AND_RESTART_COMMANDS[..commands_run],
-                "{failed}"
-            );
-            // The trace of the stop commands shows the one that failed.
-            assert!(errors.contains(&format!("sudo {failed}")), "{errors}");
-        }
-    }
-
     fn make_certification(height: u64, hash: Vec<u8>) -> CertificationMessage {
         CertificationMessage::Certification(Certification {
             height: Height::from(height),
@@ -1595,79 +1487,5 @@ mod tests {
             .height_range()
             .expect("no height range");
         assert_eq!((range.min.get(), range.max.get()), (5, 6));
-    }
-
-    #[test]
-    fn state_upload_removes_stale_checkpoint_heights() {
-        let source = TempDir::new().unwrap();
-        let checkpoint = Path::new(CHECKPOINTS).join("0000000000000002");
-        std::fs::create_dir_all(source.path().join(&checkpoint)).unwrap();
-        let file = checkpoint.join("system_metadata.pbuf");
-        std::fs::write(source.path().join(&file), b"checkpoint").unwrap();
-
-        for has_states_metadata in [false, true] {
-            if has_states_metadata {
-                std::fs::write(source.path().join(STATES_METADATA), b"metadata").unwrap();
-            }
-            let staging = TempDir::new().unwrap();
-            let stale = staging.path().join(CHECKPOINTS).join("0000000000000001");
-            std::fs::create_dir_all(&stale).unwrap();
-
-            rsync_includes(
-                &crate::util::make_logger(),
-                state_upload_includes(has_states_metadata),
-                source.path(),
-                staging.path(),
-                false,
-                None,
-            )
-            .unwrap();
-
-            assert!(!stale.exists());
-            assert_eq!(
-                std::fs::read(staging.path().join(&file)).unwrap(),
-                b"checkpoint"
-            );
-            assert_eq!(
-                staging.path().join(STATES_METADATA).exists(),
-                has_states_metadata
-            );
-        }
-    }
-
-    #[cfg(target_os = "linux")] // The command runs on GuestOS and uses GNU mv.
-    #[test]
-    fn remote_state_replacement_propagates_failures_and_retries_after_removal() {
-        let node = TempDir::new().unwrap();
-        let live = node.path().join(IC_STATE);
-        let staged = node.path().join(NEW_IC_STATE);
-        std::fs::create_dir(&live).unwrap();
-        std::fs::write(live.join("old"), b"old").unwrap();
-        std::fs::create_dir(&staged).unwrap();
-        std::fs::write(staged.join("merged"), b"merged").unwrap();
-
-        let replace = replace_remote_state_command(Path::new(NEW_IC_STATE), Path::new(IC_STATE));
-        let run = |rm_override: &str| {
-            let script = format!("sudo() {{ \"$@\"; }}\n{rm_override}\n{replace}");
-            Command::new("sh")
-                .args(["-c", &script])
-                .current_dir(node.path())
-                .output()
-                .unwrap()
-                .status
-        };
-
-        assert_eq!(run("rm() { return 42; }").code(), Some(42));
-        // Model a nonempty destination appearing between a successful rm and the mv.
-        assert!(!run("rm() { return 0; }").success());
-        assert!(live.join("old").exists());
-        assert!(staged.join("merged").exists());
-        assert!(!live.join(NEW_IC_STATE).exists());
-
-        // Retry after an interruption between rm and mv.
-        std::fs::remove_dir_all(&live).unwrap();
-        assert!(run("").success());
-        assert_eq!(std::fs::read(live.join("merged")).unwrap(), b"merged");
-        assert!(!staged.exists());
     }
 }

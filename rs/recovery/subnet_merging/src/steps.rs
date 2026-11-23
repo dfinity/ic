@@ -19,8 +19,8 @@ use ic_recovery::{
     file_sync_helper::{create_dir, remove_dir},
     registry_helper::RegistryHelper,
     steps::{
-        AdminStep, CMD_STOP_REPLICA, CopyLocalIcStateStep, DownloadIcDataStep, Step,
-        UploadStateAndRestartStep, stop_and_restart_replica_command,
+        AdminStep, CMD_RESTART_REPLICA, CMD_STOP_REPLICA, CopyLocalIcStateStep, DownloadIcDataStep,
+        Step, UploadStateAndRestartStep,
     },
     util::{CheckpointHeight, DataLocation, ExecutionMode, SshUser, block_on},
 };
@@ -906,7 +906,11 @@ impl Step for UploadMergedStateStep {
     }
 }
 
-/// Restart the destination replica on the installed merged state.
+/// Restarts the replica of the node of the destination subnet on the installed
+/// merged state.
+///
+/// The replica and its crypto vault are stopped first, as an earlier run of
+/// this step may have started them, and the restart expects them stopped.
 pub(crate) struct RestartDestinationReplicaStep {
     pub(crate) node: ExecutionMode,
     pub(crate) require_confirmation: bool,
@@ -923,10 +927,11 @@ impl Step for RestartDestinationReplicaStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        self.node.execute(
-            stop_and_restart_replica_command(),
-            self.require_confirmation.then_some(&self.logger),
-        )?;
+        let confirmation_logger = self.require_confirmation.then_some(&self.logger);
+        self.node
+            .execute(CMD_STOP_REPLICA.to_string(), confirmation_logger)?;
+        self.node
+            .execute(CMD_RESTART_REPLICA.to_string(), confirmation_logger)?;
         Ok(())
     }
 }
