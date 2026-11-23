@@ -45,7 +45,9 @@ pub fn crypt_name(partition: Partition) -> &'static str {
 pub(crate) fn activate_flags(partition: Partition) -> CryptActivate {
     match partition {
         Partition::Var => CryptActivate::empty(),
-        Partition::Store => CryptActivate::ALLOW_DISCARDS,
+        // Reads are decrypted where they complete, rather than queued to dm-crypt's workers, behind
+        // the encryption of the writes they also do.
+        Partition::Store => CryptActivate::ALLOW_DISCARDS | CryptActivate::NO_READ_WORKQUEUE,
     }
 }
 
