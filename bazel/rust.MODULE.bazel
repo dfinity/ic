@@ -1098,10 +1098,6 @@ crate.spec(
     version = "^0.5.0",
 )
 crate.spec(
-    package = "pkcs8",
-    version = "^0.10.2",
-)
-crate.spec(
     default_features = False,
     features = [
         "criterion",
@@ -1294,12 +1290,13 @@ crate.spec(
     version = "^0.2.0",
 )
 crate.spec(
+    default_features = False,
     features = [
-        "sha2",
-        "getrandom",
+        "encoding",
+        "pkcs1v15",
     ],
     package = "rsa",
-    version = "^0.9.10",
+    version = "^0.10.0",
 )
 crate.spec(
     default_features = False,
@@ -1475,7 +1472,7 @@ crate.spec(
 )
 crate.spec(
     package = "signature",
-    version = "^2.2.0",
+    version = "^3.0.0",
 )
 crate.spec(
     package = "simple_asn1",
@@ -1872,10 +1869,9 @@ crate.spec(
 crate.spec(
     features = [
         "builder",
-        "hazmat",
     ],
     package = "x509-cert",
-    version = "^0.2.5",
+    version = "^0.3.0",
 )
 crate.spec(
     package = "x509-parser",

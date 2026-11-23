@@ -837,7 +837,6 @@ paste = "1.0.15"
 pem = { version = "4.0.0", default-features = false, features = ["std"] }
 pin-project-lite = "^0.2"
 ping = "0.5.0"
-pkcs8 = "0.10.2"
 pprof = { git = "https://github.com/dfinity/pprof-rs", rev = "9159b45ecc3540d7fc44c6a6e70a173676cfa771", default-features = false, features = [
     "criterion",
     "flamegraph",
@@ -883,7 +882,7 @@ reqwest = { version = "0.13", default-features = false, features = [
 ] }
 rgb = "^0.8.37"
 rolling-file = "0.2.0"
-rsa = { version = "0.9.10", features = ["sha2", "getrandom"] }
+rsa = { version = "0.10.0", default-features = false, features = ["encoding", "pkcs1v15"] }
 rstest = { version = "0.28.0", default-features = false }
 rusqlite = { version = "0.42.0", features = ["fallible_uint"] }
 rust_decimal = { version = "^1.42", default-features = false, features = [
@@ -926,7 +925,7 @@ sev = { version = "7.1", default-features = false, features = [
 sha2 = "0.10.9"
 sha3 = "0.10.8"
 signal-hook = "0.4.6"
-signature = "2.2.0"
+signature = "3.0.0"
 simple_asn1 = "0.6.2"
 slog = { version = "2.7.0", features = [
     "max_level_trace",
@@ -1018,7 +1017,7 @@ wat = "~1.254.0"
 webpki-roots = "1.0.6"
 wirm = { version = "5.2.0", features = ["parallel"] }
 wycheproof = { version = "0.7", default-features = false }
-x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
+x509-cert = { version = "0.3.0", features = ["builder"] }
 x509-parser = { version = "0.18.1" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
 zstd = "0.14.4"

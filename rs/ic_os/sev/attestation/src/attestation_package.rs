@@ -336,17 +336,17 @@ pub(crate) fn verify_sev_attestation_report_signature(
         ));
     };
 
-    let Ok(ark) = Certificate::from_pem(ark_pem.as_bytes()) else {
+    let Some(ark) = certificate_from_pem(ark_pem) else {
         return Err(VerificationError::invalid_certificate_chain(
             "Failed to parse ARK",
         ));
     };
-    let Ok(ask) = Certificate::from_pem(ask_pem.as_bytes()) else {
+    let Some(ask) = certificate_from_pem(ask_pem) else {
         return Err(VerificationError::invalid_certificate_chain(
             "Failed to parse ASK",
         ));
     };
-    let Ok(vcek) = Certificate::from_pem(vcek_pem.as_bytes()) else {
+    let Some(vcek) = certificate_from_pem(vcek_pem) else {
         return Err(VerificationError::invalid_certificate_chain(
             "Failed to parse VCEK",
         ));
@@ -386,6 +386,22 @@ pub(crate) fn verify_sev_attestation_report_signature(
         .map_err(VerificationError::invalid_signature)?;
 
     Ok(())
+}
+
+/// The largest PEM-encoded certificate accepted in a certificate chain: several times the size
+/// of AMD's ARK and ASK certificates, which are about 2.3 KB in PEM.
+const MAX_CERTIFICATE_PEM_LEN: usize = 8 * 1024;
+
+/// Parses a PEM-encoded X.509 certificate.
+fn certificate_from_pem(pem: &str) -> Option<Certificate> {
+    if pem.len() > MAX_CERTIFICATE_PEM_LEN {
+        return None;
+    }
+    let (label, der) = der::pem::decode_vec(pem.as_bytes()).ok()?;
+    if label != "CERTIFICATE" {
+        return None;
+    }
+    Certificate::from_der(&der).ok()
 }
 
 fn expected_root_certificate(

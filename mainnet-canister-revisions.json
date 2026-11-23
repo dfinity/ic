@@ -104,8 +104,8 @@
     "sha256": "0327f3833c4a61b1d23820bc2564e233ecfa623a770d5e25d5fd81dd652ab376"
   },
   "nns_dapp_test": {
-    "sha256": "ba7d77012001485459173bd3a468672033a0731bfdf987e0a704a1d2ffde832a",
-    "tag": "proposal-144655"
+    "sha256": "d97c60ec551c07a20d818910091e6f2f1bd9d182989a6007727297026225afc9",
+    "tag": "proposal-144872"
   },
   "node-rewards": {
     "rev": "0e0e15dbf24b6a0d9a1b7bba459d087eb5cd7125",
