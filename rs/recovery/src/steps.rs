@@ -659,6 +659,15 @@ fn unused_backup_path(work_dir: &Path) -> RecoveryResult<PathBuf> {
     Ok(backup_path)
 }
 
+fn state_upload_includes(has_states_metadata: bool) -> Vec<&'static Path> {
+    // Sync the parent so rsync's --delete removes heights left by an earlier upload.
+    let mut includes = vec![Path::new(CHECKPOINTS)];
+    if has_states_metadata {
+        includes.push(Path::new(STATES_METADATA));
+    }
+    includes
+}
+
 pub struct UploadStateAndRestartStep {
     pub logger: Logger,
     pub ssh_user: SshUser,
@@ -750,17 +759,13 @@ impl Step for UploadStateAndRestartStep {
             );
             ssh_helper.ssh(cmd_create_and_copy_checkpoint_dir)?;
 
-            // The source has exactly one checkpoint. Sync the parent so rsync's
-            // --delete also removes other heights left in staging by an earlier upload.
-            let mut includes = vec![Path::new(CHECKPOINTS)];
             // The states metadata is only a cache that the state manager
             // rebuilds if it is missing, so it is uploaded only if present.
             // If it is absent, any copy left in the upload directory by an
             // interrupted upload is removed. This is a command of its own, so
             // that a failure stops the upload.
-            if self.data_src.join(STATES_METADATA).exists() {
-                includes.push(Path::new(STATES_METADATA));
-            } else {
+            let has_states_metadata = self.data_src.join(STATES_METADATA).exists();
+            if !has_states_metadata {
                 info!(
                     self.logger,
                     "Removing stale states metadata from the remote upload directory..."
@@ -773,7 +778,7 @@ impl Step for UploadStateAndRestartStep {
 
             info!(self.logger, "Uploading state...");
             ssh_helper.rsync_includes(
-                &includes,
+                state_upload_includes(has_states_metadata),
                 &self.data_src,
                 &ssh_helper.remote_path(upload_dir.join("")),
             )?;
@@ -795,11 +800,7 @@ impl Step for UploadStateAndRestartStep {
 
             // For local recoveries we first move the state found in place to a
             // backup, and then simply `mv` the new state to the upload
-            // directory. No rsync is needed, and thus no checkpoint copying.
-            //
-            // The step never deletes a state it finds in place, as it can't
-            // tell whose it is: when the step is run again, it may be the state
-            // an earlier run installed, or still the original one.
+            // directory.
             if path_exists(&ic_state_path)? {
                 let backup_path = unused_backup_path(&self.work_dir)?;
                 info!(
@@ -1492,6 +1493,44 @@ mod tests {
             .height_range()
             .expect("no height range");
         assert_eq!((range.min.get(), range.max.get()), (5, 6));
+    }
+
+    #[test]
+    fn state_upload_removes_stale_checkpoint_heights() {
+        let source = TempDir::new().unwrap();
+        let checkpoint = Path::new(CHECKPOINTS).join("0000000000000002");
+        std::fs::create_dir_all(source.path().join(&checkpoint)).unwrap();
+        let file = checkpoint.join("system_metadata.pbuf");
+        std::fs::write(source.path().join(&file), b"checkpoint").unwrap();
+
+        for has_states_metadata in [false, true] {
+            if has_states_metadata {
+                std::fs::write(source.path().join(STATES_METADATA), b"metadata").unwrap();
+            }
+            let staging = TempDir::new().unwrap();
+            let stale = staging.path().join(CHECKPOINTS).join("0000000000000001");
+            std::fs::create_dir_all(&stale).unwrap();
+
+            rsync_includes(
+                &crate::util::make_logger(),
+                state_upload_includes(has_states_metadata),
+                source.path(),
+                staging.path(),
+                false,
+                None,
+            )
+            .unwrap();
+
+            assert!(!stale.exists());
+            assert_eq!(
+                std::fs::read(staging.path().join(&file)).unwrap(),
+                b"checkpoint"
+            );
+            assert_eq!(
+                staging.path().join(STATES_METADATA).exists(),
+                has_states_metadata
+            );
+        }
     }
 
     #[test]

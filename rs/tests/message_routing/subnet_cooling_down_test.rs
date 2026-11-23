@@ -148,9 +148,7 @@ Runbook::
 
    Recovering a subnet that was instructed to halt at its next CUP replaces
    that instruction with a plain halt, so also check that `D` is halted.
-21. Create a stale checkpoint directory in the upload staging area on the node
-   of `D`, as an interrupted upload at a different height could leave behind.
-   Execute `UploadStateToDestinationSubnet`, which uploads the merged state to `D`'s
+21. Execute `UploadStateToDestinationSubnet`, which uploads the merged state to `D`'s
    node, replacing the state directory holding the checkpoint it halted at, and
    starts its replica back up.
 22. After `UploadStateToDestinationSubnet`: check that the checkpoints directory
@@ -176,8 +174,7 @@ use ic_agent::Agent;
 use ic_agent::agent::RejectCode;
 use ic_protobuf::registry::subnet::v1::catch_up_package_contents::CupType;
 use ic_recovery::{
-    CHECKPOINTS, IC_DATA_PATH, IC_STATE, NEW_IC_STATE, RECOVERY_DIRECTORY_NAME, RecoveryArgs,
-    get_node_metrics,
+    CHECKPOINTS, IC_STATE, RECOVERY_DIRECTORY_NAME, RecoveryArgs, get_node_metrics,
     registry_helper::{RegistryHelper, RegistryPollingStrategy},
     util::DataLocation,
 };
@@ -786,13 +783,6 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
                     "Step 19 done: the recovery CUP of subnet D at the merged state is proposed"
                 );
                 check_recovery_cup_contents(env, context);
-
-                // Step 22 checks that this older height is gone after the upload.
-                merge_node_snapshot(&context.d_subnet)
-                    .block_on_bash_script(&format!(
-                        "sudo mkdir -p {IC_DATA_PATH}/{NEW_IC_STATE}/{CHECKPOINTS}/0000000000000001"
-                    ))
-                    .expect("failed to stage a stale checkpoint on the destination node");
             }
             StepType::UploadStateToDestinationSubnet => {
                 info!(
