@@ -5,9 +5,9 @@ Goal:: Ensure that an upgrade with a wrong hash can be fixed by downloading the 
 Runbook::
 . Setup an IC with 4-node NNS.
 . Initiate upgrade on the replicas with a wrong hash.
-. Prove subnet is stuck - "wrong SHA" log message and inability to create a canister.
-. On 3/4 of nodes download the proper image via done providers admin SSH access.
-. Restart the orchestrator on those nodes.
+. Prove subnet is stuck - every node logs a "wrong SHA" message and the certified state stops advancing.
+. On 3/4 of nodes download the proper image via node providers admin SSH access.
+. Restart the orchestrator on those nodes and wait until they run the target version.
 
 Success:: The subnet is unstuck as we can write a message to it.
 
@@ -91,15 +91,26 @@ fn test(test_env: TestEnv) {
     info!(logger, "Upgrade started");
 
     for nns_node in test_env.topology_snapshot().root_subnet().nodes() {
-        assert!(
-            JournalStreamer::new(nns_node.block_on_ssh_session().unwrap())
-                .follow()
-                .max_lines(1)
-                .contains("FileHashMismatchError")
-                .unwrap_or_default(),
-            "No hash mismatch error in the logs of node {}",
-            nns_node.node_id
+        let journal = JournalStreamer::new(
+            nns_node
+                .block_on_ssh_session()
+                .expect("Failed to establish SSH session"),
         );
+        ic_system_test_driver::retry_with_msg!(
+            format!(
+                "check for FileHashMismatchError in the logs of node {}",
+                nns_node.node_id
+            ),
+            logger.clone(),
+            secs(300),
+            secs(5),
+            || match journal.contains("FileHashMismatchError") {
+                Ok(true) => Ok(()),
+                Ok(false) => bail!("No hash mismatch error in the logs yet"),
+                Err(err) => bail!("No hash mismatch error in the logs yet: {err:#}"),
+            }
+        )
+        .expect("No hash mismatch error in the logs");
     }
 
     info!(logger, "Check that system does not make progress");
@@ -135,14 +146,33 @@ fn test(test_env: TestEnv) {
         sudo chown --reference=. image.bin
         "#,
     );
-    for n in &nodes {
-        let s = n
-            .block_on_ssh_session()
-            .expect("Failed to establish SSH session");
-        if let Err(err) = execute_bash_command(&s, command.clone()) {
-            panic!("{}", err)
+    let command = &command;
+    std::thread::scope(|scope| {
+        let downloads: Vec<_> = nodes
+            .iter()
+            .map(|node| {
+                scope.spawn(move || {
+                    let session = node.block_on_ssh_session().map_err(|err| {
+                        format!(
+                            "Failed to establish SSH session to {}: {err:#}",
+                            node.get_ip_addr()
+                        )
+                    })?;
+                    execute_bash_command(&session, command.clone()).map_err(|err| {
+                        format!(
+                            "Failed to download the image on {}: {err}",
+                            node.get_ip_addr()
+                        )
+                    })
+                })
+            })
+            .collect();
+        for download in downloads {
+            if let Err(err) = download.join().expect("Download thread panicked") {
+                panic!("{}", err)
+            }
         }
-    }
+    });
 
     info!(logger, "Starting orchestrator...");
     for n in &nodes {
@@ -158,7 +188,7 @@ fn test(test_env: TestEnv) {
             format!("check if all 3 nodes have version {}", target_version),
             test_env.logger(),
             secs(1800),
-            secs(60),
+            secs(10),
             || match get_assigned_replica_version(n) {
                 Ok(current_version) => {
                     info!(

@@ -59,6 +59,10 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
         self.by_key.is_empty()
     }
 
+    pub fn len(&self) -> usize {
+        self.by_key.len()
+    }
+
     pub fn try_insert(
         &mut self,
         key: Key,

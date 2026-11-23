@@ -307,12 +307,17 @@ impl CanisterCreationRecord {
 /// record {
 ///   mode : variant {install; reinstall; upgrade};
 ///   module_hash : blob;
+///   args_hash : opt blob;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterCodeDeploymentRecord {
     mode: CanisterInstallMode,
     module_hash: [u8; HASH_LENGTH],
+    /// SHA-256 hash of the init/post-upgrade argument of `install_code`.
+    /// `None` for entries recorded before `args_hash` started being recorded
+    /// in canister history.
+    args_hash: Option<[u8; HASH_LENGTH]>,
 }
 
 impl CanisterCodeDeploymentRecord {
@@ -321,6 +326,9 @@ impl CanisterCodeDeploymentRecord {
     }
     pub fn module_hash(&self) -> [u8; HASH_LENGTH] {
         self.module_hash
+    }
+    pub fn args_hash(&self) -> Option<[u8; HASH_LENGTH]> {
+        self.args_hash
     }
 }
 
@@ -495,6 +503,7 @@ impl RenameToRecord {
 ///   code_deployment : record {
 ///     mode : variant {install; reinstall; upgrade};
 ///     module_hash : blob;
+///     args_hash : opt blob;
 ///   };
 ///   controllers_change : record {
 ///     controllers : vec principal;
@@ -557,10 +566,12 @@ impl CanisterChangeDetails {
     pub fn code_deployment(
         mode: CanisterInstallMode,
         module_hash: [u8; HASH_LENGTH],
+        args_hash: Option<[u8; HASH_LENGTH]>,
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterCodeDeployment(CanisterCodeDeploymentRecord {
             mode,
             module_hash,
+            args_hash,
         })
     }
 
@@ -916,6 +927,7 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                     pb_canister_state_bits::CanisterCodeDeployment {
                         module_hash: canister_code_deployment.module_hash.to_vec(),
                         mode: (&canister_code_deployment.mode).into(),
+                        args_hash: canister_code_deployment.args_hash.map(|hash| hash.to_vec()),
                     },
                 )
             }
@@ -1030,8 +1042,16 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                 })?;
 
                 let module_hash = try_decode_hash(canister_code_deployment.module_hash)?;
+                let args_hash = match canister_code_deployment.args_hash {
+                    Some(bytes) => Some(try_decode_hash(bytes)?),
+                    None => None,
+                };
 
-                Ok(CanisterChangeDetails::code_deployment(mode, module_hash))
+                Ok(CanisterChangeDetails::code_deployment(
+                    mode,
+                    module_hash,
+                    args_hash,
+                ))
             }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterControllersChange(
                 canister_controllers_change,
@@ -2874,25 +2894,22 @@ impl SetupInitialDKGResponse {
 
 /// Types of curves that can be used for ECDSA signing.
 /// ```text
-/// variant { secp256k1; }
+/// variant { secp256k1; secp256r1; }
 /// ```
+///
+/// Must not implement `Hash`. `derive(Hash)` omitted the discriminant while
+/// there was one variant, so deriving now moves the `payload_hash` of every
+/// block naming an ECDSA key and old replicas reject it. A marker byte belongs
+/// in the enclosing type, which knows what follows it: see
+/// `impl Hash for EcdsaKeyId`.
 #[derive(
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    Debug,
-    CandidType,
-    Deserialize,
-    EnumIter,
-    Serialize,
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, EnumIter, Serialize,
 )]
 pub enum EcdsaCurve {
     #[serde(rename = "secp256k1")]
     Secp256k1,
+    #[serde(rename = "secp256r1")]
+    Secp256r1,
 }
 
 impl TryFrom<u32> for EcdsaCurve {
@@ -2901,6 +2918,7 @@ impl TryFrom<u32> for EcdsaCurve {
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(EcdsaCurve::Secp256k1),
+            1 => Ok(EcdsaCurve::Secp256r1),
             _ => Err(format!(
                 "{value} is not a recognized EcdsaCurve variant identifier."
             )),
@@ -2912,6 +2930,7 @@ impl From<&EcdsaCurve> for pb_types::EcdsaCurve {
     fn from(item: &EcdsaCurve) -> Self {
         match item {
             EcdsaCurve::Secp256k1 => pb_types::EcdsaCurve::Secp256k1,
+            EcdsaCurve::Secp256r1 => pb_types::EcdsaCurve::Secp256r1,
         }
     }
 }
@@ -2922,6 +2941,7 @@ impl TryFrom<pb_types::EcdsaCurve> for EcdsaCurve {
     fn try_from(item: pb_types::EcdsaCurve) -> Result<Self, Self::Error> {
         match item {
             pb_types::EcdsaCurve::Secp256k1 => Ok(EcdsaCurve::Secp256k1),
+            pb_types::EcdsaCurve::Secp256r1 => Ok(EcdsaCurve::Secp256r1),
             pb_types::EcdsaCurve::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "EcdsaCurve",
                 err: format!("Unable to convert {item:?} to an EcdsaCurve"),
@@ -2942,6 +2962,7 @@ impl FromStr for EcdsaCurve {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "secp256k1" => Ok(Self::Secp256k1),
+            "secp256r1" => Ok(Self::Secp256r1),
             _ => Err(format!("{s} is not a recognized ECDSA curve")),
         }
     }
@@ -2953,12 +2974,27 @@ impl FromStr for EcdsaCurve {
 /// ```text
 /// record { curve : ecdsa_curve; name : text}
 /// ```
-#[derive(
-    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
-)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
 pub struct EcdsaKeyId {
     pub curve: EcdsaCurve,
     pub name: String,
+}
+
+/// `EcdsaCurve` cannot implement `Hash`; see the note there. `Secp256k1` writes
+/// nothing, matching the old derive, so existing key hashes are unchanged, and
+/// `0xfe` never begins a UTF-8 sequence so `name` cannot forge it. The
+/// destructuring and `&str` binding make a new field or a non-text `name` fail
+/// to compile rather than void that.
+impl Hash for EcdsaKeyId {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let Self { curve, name } = self;
+        let name: &str = name.as_str();
+        match curve {
+            EcdsaCurve::Secp256k1 => {}
+            EcdsaCurve::Secp256r1 => 0xfe_u8.hash(state),
+        }
+        name.hash(state);
+    }
 }
 
 impl From<&EcdsaKeyId> for pb_types::EcdsaKeyId {
@@ -3820,17 +3856,19 @@ impl Payload<'_> for SubnetMetricsArgs {}
 ///     canister_state_bytes : nat;
 ///     consumed_cycles_total : nat;
 ///     update_transactions_total : nat;
+///     million_round_instructions_total : nat;
 /// }
 /// ```
 ///
 /// Freshness: only `block_height` is current as of the block in which the call is
-/// executed. The other four are read from `SystemMetadata::subnet_metrics`, which is
+/// executed. The other five are read from `SystemMetadata::subnet_metrics`, which is
 /// written at the *end* of a round, so they are as of the end of the previous round
 /// — except `canister_state_bytes`, which message routing recomputes only every 10
 /// rounds (summing it over every canister is expensive and it need not be exact),
 /// so it can be up to ten rounds stale and reads as `0` for the first rounds after
-/// the subnet is created. These are the same values, with the same staleness, that
-/// `read_state` serves at `/subnet/<subnet_id>/metrics`.
+/// the subnet is created. All but `million_round_instructions_total` are the same
+/// values, with the same staleness, that `read_state` serves at
+/// `/subnet/<subnet_id>/metrics`; that field has no `read_state` counterpart.
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
 pub struct SubnetMetricsResponse {
     pub block_height: candid::Nat,
@@ -3838,6 +3876,7 @@ pub struct SubnetMetricsResponse {
     pub canister_state_bytes: candid::Nat,
     pub consumed_cycles_total: candid::Nat,
     pub update_transactions_total: candid::Nat,
+    pub million_round_instructions_total: candid::Nat,
 }
 
 impl Payload<'_> for SubnetMetricsResponse {}
@@ -5278,8 +5317,46 @@ mod tests {
         for curve in EcdsaCurve::iter() {
             match curve {
                 EcdsaCurve::Secp256k1 => assert_eq!(EcdsaCurve::try_from(0).unwrap(), curve),
+                EcdsaCurve::Secp256r1 => assert_eq!(EcdsaCurve::try_from(1).unwrap(), curve),
             }
         }
+    }
+
+    #[test]
+    fn ecdsa_key_id_hash_is_stable_and_unforgeable() {
+        #[derive(Default)]
+        struct Recorder(Vec<u8>);
+        impl Hasher for Recorder {
+            fn write(&mut self, bytes: &[u8]) {
+                self.0.extend_from_slice(bytes);
+            }
+            fn finish(&self) -> u64 {
+                0
+            }
+        }
+        fn stream<T: Hash>(value: &T) -> Vec<u8> {
+            let mut recorder = Recorder::default();
+            value.hash(&mut recorder);
+            recorder.0
+        }
+        let key_id = |curve, name: &str| EcdsaKeyId {
+            curve,
+            name: name.to_string(),
+        };
+
+        // Every `payload_hash` naming an ECDSA key depends on this.
+        assert_eq!(
+            stream(&key_id(EcdsaCurve::Secp256k1, "key_1")),
+            stream(&"key_1")
+        );
+
+        // A name cannot forge the secp256r1 marker.
+        let secp256r1 = stream(&key_id(EcdsaCurve::Secp256r1, "key_1"));
+        assert_ne!(secp256r1, stream(&key_id(EcdsaCurve::Secp256k1, "key_1")));
+        assert_ne!(
+            secp256r1,
+            stream(&key_id(EcdsaCurve::Secp256k1, "\u{fe}key_1"))
+        );
     }
 
     #[test]

@@ -46,7 +46,6 @@ rust_library(
         "//rs/sns/swap",
         # TODO[NNS1-2282]
         "//rs/types/base_types",
-        "//rs/types/management_canister_types",
         "@crate_index//:candid",
         "@crate_index//:comparable",
         "@crate_index//:futures",
@@ -82,7 +81,6 @@ rust_canister(
         "//rs/sns/swap",
         # TODO[NNS1-2282]
         "//rs/types/base_types",
-        "//rs/types/management_canister_types",
         "@crate_index//:build-info",
         "@crate_index//:candid",
         "@crate_index//:comparable",
@@ -142,7 +140,6 @@ rust_test(
         "//rs/sns/swap",
         # TODO[NNS1-2282]
         "//rs/types/base_types",
-        "//rs/types/management_canister_types",
         "@crate_index//:build-info",
         "@crate_index//:candid",
         "@crate_index//:candid_parser",
@@ -184,7 +181,6 @@ rust_test(
         "//rs/sns/swap",
         # TODO[NNS1-2282]
         "//rs/types/base_types",
-        "//rs/types/management_canister_types",
         "@crate_index//:build-info",
         "@crate_index//:candid",
         "@crate_index//:candid_parser",

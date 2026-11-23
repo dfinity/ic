@@ -588,6 +588,24 @@ impl PayloadBuilder {
         self
     }
 
+    /// Executes `then` on a fresh stack if the blob on top of the stack equals
+    /// `data`.
+    pub fn if_eq<P: AsRef<[u8]>>(mut self, data: P, then: PayloadBuilder) -> Self {
+        self = self.push_bytes(data.as_ref());
+        self = self.push_bytes(&then.build());
+        self.0.push(Ops::IfEq as u8);
+        self
+    }
+
+    /// Executes `then` on a fresh stack if the blob on top of the stack does
+    /// not equal `data`.
+    pub fn if_neq<P: AsRef<[u8]>>(mut self, data: P, then: PayloadBuilder) -> Self {
+        self = self.push_bytes(data.as_ref());
+        self = self.push_bytes(&then.build());
+        self.0.push(Ops::IfNeq as u8);
+        self
+    }
+
     pub fn accept_cycles<Cycles: Into<u128>>(mut self, cycles: Cycles) -> Self {
         let (amount_high, amount_low) = cycles_into_parts(cycles.into());
         self = self.push_int64(amount_high);
@@ -609,6 +627,17 @@ impl PayloadBuilder {
         self = self.push_int64(amount_high);
         self = self.push_int64(amount_low);
         self.0.push(Ops::CyclesBurn128 as u8);
+        self
+    }
+
+    /// Burns all the liquid cycles balance of the canister.
+    ///
+    /// The exact amount to burn is determined at run time via the system API
+    /// `ic0.canister_liquid_cycle_balance128` and then burned via
+    /// `ic0.cycles_burn128`. The amount of burned cycles is pushed as a blob
+    /// onto the stack.
+    pub fn cycles_burn_liquid_balance(mut self) -> Self {
+        self.0.push(Ops::CyclesBurnLiquidBalance as u8);
         self
     }
 

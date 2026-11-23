@@ -200,8 +200,9 @@ fn check_default_initial_dkg_subnet_invariant(
 ) -> Result<(), InvariantCheckError> {
     let Some(subnet_id_proto) = get_value_from_snapshot::<SubnetIdProto>(
         snapshot,
-        make_default_initial_dkg_subnet_id_key(),
-    ) else {
+        &make_default_initial_dkg_subnet_id_key(),
+    )?
+    else {
         return Ok(());
     };
 

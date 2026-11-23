@@ -523,6 +523,7 @@ impl TryFrom<Request> for ic_types::messages::Request {
             method_payload: request.method_payload,
             metadata: request.metadata.into(),
             deadline: CoarseTime::from_secs_since_unix_epoch(request.deadline),
+            effective_canister_id: None,
         })
     }
 }
@@ -737,11 +738,18 @@ impl
         // `consumed_cycles_total_v28`, which double counts the cycles consumed
         // by deleted canisters and does not account for non-deleted canisters.
         //
-        // Starting with `V29`, the reported total is the stored
+        // In `V29`, the reported total is the stored
         // `SubnetMetrics::consumed_cycles_total_including_canisters`, which no
         // longer double counts deleted canisters and does account for the existing
-        // ones.
-        let consumed_cycles_total = if certification_version >= CertificationVersion::V29 {
+        // ones (as the sum of their `CanisterMetrics::consumed_cycles` gauges).
+        //
+        // Starting with `V30`, the reported total is the stored
+        // `SubnetMetrics::consumed_cycles_total_including_canisters_monotonic`,
+        // which accounts for the existing canisters as the sum of their monotonic
+        // `CanisterMetrics::consumed_cycles_monotonic` instead.
+        let consumed_cycles_total = if certification_version >= CertificationVersion::V30 {
+            metrics.consumed_cycles_total_including_canisters_monotonic()
+        } else if certification_version >= CertificationVersion::V29 {
             metrics.consumed_cycles_total_including_canisters()
         } else {
             metrics.consumed_cycles_total_v28()

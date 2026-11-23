@@ -21,13 +21,15 @@ expression: out
   (global (;0;) (mut i64) i64.const 0)
   (global (;1;) (mut i64) i64.const 0)
   (global (;2;) (mut i64) i64.const 0)
+  (global (;3;) (mut i64) i64.const 0)
   (export "compute" (func $compute))
   (export "stable_memory" (memory 0))
   (export "stable_bytemap_memory" (memory 1))
   (export "canister counter_instructions" (global 0))
   (export "canister counter_dirty_pages" (global 1))
   (export "canister counter_accessed_pages" (global 2))
-  (func $compute (;5;) (type 0) (param i64) (result i64)
+  (export "canister heap_page_budget" (global 3))
+  (func $compute (;5;) (type 0) (param $count i64) (result i64)
     global.get 0
     i64.const 7
     i64.sub
@@ -38,7 +40,7 @@ expression: out
     if ;; label = @1
       call 0
     end
-    local.get 0
+    local.get $count
     i64.const 1
     i64.and
     i32.wrap_i64
@@ -47,10 +49,10 @@ expression: out
       i64.const 8
       i64.sub
       global.set 0
-      local.get 0
+      local.get $count
       i64.const -1
       i64.mul
-      local.tee 0
+      local.tee $count
       i64.const -50
       i64.lt_s
       if ;; label = @2
@@ -58,33 +60,33 @@ expression: out
         i64.const 4
         i64.sub
         global.set 0
-        local.get 0
+        local.get $count
         i64.const 100
         i64.mul
-        local.set 0
+        local.set $count
       else
         global.get 0
         i64.const 6
         i64.sub
         global.set 0
-        local.get 0
+        local.get $count
         i64.const -111
         i64.add
-        local.set 0
-        local.get 0
-        local.set 0
+        local.set $count
+        local.get $count
+        local.set $count
       end
     else
       global.get 0
       i64.const 10
       i64.sub
       global.set 0
-      local.get 0
+      local.get $count
       i64.const 1
       i64.add
       i64.const 2
       i64.mul
-      local.tee 0
+      local.tee $count
       i64.const 50
       i64.lt_s
       if ;; label = @2
@@ -92,28 +94,28 @@ expression: out
         i64.const 4
         i64.sub
         global.set 0
-        local.get 0
+        local.get $count
         i64.const 100
         i64.mul
-        local.set 0
+        local.set $count
       else
         global.get 0
         i64.const 6
         i64.sub
         global.set 0
-        local.get 0
+        local.get $count
         i64.const 111
         i64.add
-        local.set 0
-        local.get 0
-        local.set 0
+        local.set $count
+        local.get $count
+        local.set $count
       end
     end
     global.get 0
     i64.const 1
     i64.sub
     global.set 0
-    local.get 0
+    local.get $count
   )
   (func (;6;) (type 0) (param i64) (result i64)
     (local i64)

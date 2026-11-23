@@ -9,10 +9,12 @@ use ic_management_canister_types::{
     SchnorrKeyId as SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
 };
 use ic_management_canister_types_private::{
-    BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload,
+    BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, DerivationPath,
+    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
     FlexibleCanisterHttpRequestArgs, FlexibleHttpGlobalError, FlexibleHttpRequestErr,
     FlexibleHttpRequestResult, HttpMethod, HttpRequestResourceReport,
-    PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts, TransformContext, TransformFunc,
+    PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts, SignWithECDSAArgs, SignWithECDSAReply,
+    TransformContext, TransformFunc,
 };
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 use ic_transport_types::{CallResponse, Envelope};
@@ -1306,6 +1308,64 @@ fn test_ecdsa() {
         let sig = k256::ecdsa::Signature::try_from(ecdsa_signature.as_slice()).unwrap();
         pk.verify_prehash(&message_hash, &sig).unwrap();
     }
+
+    // The test canister's `ecdsa_public_key` and `sign_with_ecdsa` endpoints only
+    // support secp256k1 because the published `ic-cdk-management-canister` has no
+    // other curve yet, so we call the management canister through `proxy_call`.
+    let call_management_canister = |method: &str, args: Vec<u8>, cycles: u128| {
+        let reply = pic
+            .update_call(
+                canister,
+                Principal::anonymous(),
+                "proxy_call",
+                proxy_call_arg(method, args, cycles),
+            )
+            .unwrap();
+        let result: Result<ByteBuf, (RejectionCode, String)> = decode_one(&reply).unwrap();
+        result.unwrap().into_vec()
+    };
+    let derivation_path = DerivationPath::new(vec![ByteBuf::from(b"my message".to_vec())]);
+    for name in ["key_1", "test_key_1", "dfx_test_key"] {
+        use p256::ecdsa::signature::hazmat::PrehashVerifier;
+
+        let key_id = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256r1,
+            name: name.to_string(),
+        };
+
+        // We get the ECDSA public key.
+        let args = ECDSAPublicKeyArgs {
+            canister_id: None,
+            derivation_path: derivation_path.clone(),
+            key_id: key_id.clone(),
+        };
+        let reply = call_management_canister("ecdsa_public_key", Encode!(&args).unwrap(), 0);
+        let ecdsa_public_key = Decode!(&reply, ECDSAPublicKeyResponse).unwrap();
+        let pk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&ecdsa_public_key.public_key).unwrap();
+
+        // We sign several message hashes because only about half of all signatures
+        // need their `s` normalized.
+        for message_hash in [[0; 32], [1; 32], [2; 32], [3; 32]] {
+            let args = SignWithECDSAArgs {
+                message_hash,
+                derivation_path: derivation_path.clone(),
+                key_id: key_id.clone(),
+            };
+            // We attach the same fee as the test canister's `sign_with_ecdsa` endpoint.
+            let fee = if name == "key_1" {
+                26_153_846_153
+            } else {
+                10_000_000_000
+            };
+            let reply = call_management_canister("sign_with_ecdsa", Encode!(&args).unwrap(), fee);
+            let ecdsa_signature = Decode!(&reply, SignWithECDSAReply).unwrap().signature;
+
+            // We verify the ECDSA signature, which the IC returns with `s` normalized.
+            let sig = p256::ecdsa::Signature::from_slice(&ecdsa_signature).unwrap();
+            pk.verify_prehash(&message_hash, &sig).unwrap();
+            assert!(sig.normalize_s().is_none(), "{name}: `s` is not normalized");
+        }
+    }
 }
 
 #[test]
@@ -2328,7 +2388,7 @@ fn test_canister_http_transform() {
         for payload in outcome.payloads(&label) {
             // The transform function clears the response headers and replaces the
             // body with its transform context.
-            assert!(payload.headers.is_empty(), "{label}");
+            assert!(payload.headers.get().is_empty(), "{label}");
             assert_eq!(payload.body, context, "{label}");
         }
     }
@@ -2560,8 +2620,8 @@ fn test_flexible_canister_http_fire_and_forget() {
     }
 }
 
-/// Once the responses that would have to be delivered no longer fit into a block,
-/// a flexible outcall fails with `ResponsesTooLarge`.
+/// Once the responses that would have to be delivered exceed the 2 MiB − 64 KiB
+/// that one flexible outcall delivers, the outcall fails with `ResponsesTooLarge`.
 #[test]
 fn test_flexible_canister_http_responses_too_large() {
     let pic = flexible_outcalls_pic();
@@ -2576,9 +2636,9 @@ fn test_flexible_canister_http_responses_too_large() {
 
     // Both responses are well below the 2 MB cap on a single response
     // (`MAX_CANISTER_HTTP_RESPONSE_BYTES`), but the two of them together exceed the
-    // 2 MiB a block has for HTTP outcall responses
-    // (`MAX_CANISTER_HTTP_PAYLOAD_SIZE`), and both of them have to be delivered
-    // (`min_responses == 2`).
+    // 2 MiB − 64 KiB a block delivers for one flexible outcall
+    // (`MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE`), and both of them have to be
+    // delivered (`min_responses == 2`).
     let body = vec![b'x'; 1_100_000];
     mock_committee(&pic, &request, vec![reply(&body); 2]);
 
@@ -2591,7 +2651,7 @@ fn test_flexible_canister_http_responses_too_large() {
     // details report the size of every response the committee was seen to produce.
     assert!(
         err.message.starts_with(
-            "Responses too large: need at least 2 OK responses to fit within 2097152 bytes"
+            "Responses too large: need at least 2 OK responses to fit within 2031616 bytes"
         ),
         "unexpected message {:?}",
         err.message

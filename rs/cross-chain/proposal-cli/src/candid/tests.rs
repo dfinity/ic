@@ -40,6 +40,7 @@ fn should_parse_constructor_parameters() {
             || canister == TargetCanister::IcpArchive4
             //canister lives outside the monorepo
             || canister == TargetCanister::EvmRpc
+            || canister == TargetCanister::CkSolMinter
             || canister == TargetCanister::CyclesLedger
             || canister == TargetCanister::ExchangeRateCanister
             || canister == TargetCanister::SolRpc
@@ -74,6 +75,8 @@ fn should_parse_constructor_parameters() {
                 | (TargetCanister::CkEthIndex, "(opt IndexArg)")
                 | (TargetCanister::CkEthLedger, "(LedgerArg)")
                 | (TargetCanister::CkEthMinter, "(MinterArg)")
+                | (TargetCanister::CkSolIndex, "(opt IndexArg)")
+                | (TargetCanister::CkSolLedger, "(LedgerArg)")
                 | (TargetCanister::CyclesIndex, "(opt IndexArg)")
                 | (TargetCanister::IcpIndex, "(opt IndexArg)")
                 | (TargetCanister::IcpLedger, "(LedgerCanisterPayload)")

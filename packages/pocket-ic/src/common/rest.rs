@@ -420,7 +420,7 @@ pub struct BlobId(
 
 impl std::fmt::Display for BlobId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "BlobId{{{}}}", hex::encode(self.0.clone()))
+        write!(f, "BlobId{{{}}}", hex::encode(&self.0))
     }
 }
 
@@ -1004,11 +1004,9 @@ impl ExtendedSubnetConfigSet {
             }
         }
         // canisters on the SNS subnet
-        for (flag, icp_feature_str) in [(sns, "sns")] {
-            if flag.is_some() {
-                check_empty_subnet(&self.sns, "SNS", icp_feature_str)?;
-                self.sns = Some(self.sns.unwrap_or_default());
-            }
+        if sns.is_some() {
+            check_empty_subnet(&self.sns, "SNS", "sns")?;
+            self.sns = Some(self.sns.unwrap_or_default());
         }
         // canisters on the Bitcoin subnet
         for (flag, icp_feature_str) in [(bitcoin, "bitcoin"), (dogecoin, "dogecoin")] {
@@ -1431,8 +1429,8 @@ pub struct MockFlexibleCanisterHttpResponse {
     /// - more than `total_requests - min_responses` rejects — i.e. so
     ///   many that `min_responses` replies can no longer be reached — deliver a
     ///   `too_many_rejects` error naming the rejecting nodes;
-    /// - if the smallest replies that would have to be delivered together do not
-    ///   fit into the 2 MiB a block has for HTTP outcall responses, a
+    /// - if the smallest replies that would have to be delivered together exceed
+    ///   the 2 MiB − 64 KiB a block delivers for one flexible outcall, a
     ///   `responses_too_large` error (each response may still be within the 2 MB
     ///   cap on a single one);
     /// - if what the nodes left unspent of their per-replica cycles allowances no

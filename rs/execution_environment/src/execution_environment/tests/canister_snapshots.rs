@@ -1,4 +1,4 @@
-use crate::units::MIB;
+use crate::units::{KIB, MIB};
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Reserved};
 use ic_base_types::NumBytes;
@@ -488,6 +488,25 @@ fn grow_stable_memory(
     assert_eq!(result, WasmResult::Reply(vec![]));
 }
 
+/// Writes `length` bytes of non-zero data to the start of the canister's stable memory.
+fn fill_stable_memory(test: &mut ExecutionTest, canister_id: CanisterId, length: u64) {
+    // The universal canister builds each fill in its heap, so fill in chunks to keep the
+    // number of heap pages it touches small.
+    const CHUNK: u64 = 16 * KIB;
+    let mut payload = wasm();
+    for offset in (0..length).step_by(CHUNK as usize) {
+        payload = payload.stable64_fill(offset, 0xff, CHUNK.min(length - offset));
+    }
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            payload.push_bytes(&[]).append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
 #[test]
 fn canister_snapshot_reserves_cycles_difference() {
     cycles_reserved_for_app_and_verified_app_subnets(|subnet_type| {
@@ -747,9 +766,13 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
     const THRESHOLD: u64 = CAPACITY / 2;
     const WASM_PAGE_SIZE: u64 = 65_536;
     const NUM_PAGES: u64 = 2_400;
+    const STABLE_DATA: u64 = MIB;
 
+    // Taking a snapshot adds the canister's modified pages to its heap delta debit: the
+    // `STABLE_DATA` bytes written below plus the universal canister's own pages. So the
+    // first snapshot succeeds and brings the debit above the limit.
     let mut test = ExecutionTestBuilder::new()
-        .with_heap_delta_rate_limit(NumBytes::new(80_000))
+        .with_heap_delta_rate_limit(NumBytes::new(STABLE_DATA))
         .with_subnet_execution_memory(CAPACITY)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD)
@@ -767,6 +790,7 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
 
     // Increase memory usage.
     grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE, NUM_PAGES);
+    fill_stable_memory(&mut test, canister_id, STABLE_DATA);
 
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs =
@@ -1469,6 +1493,9 @@ fn load_canister_snapshot_does_not_work_when_sender_does_not_control_originating
     );
 
     let initial_canister_state = test.canister_state(canister_id_2).clone();
+    let controllers_1 = &test.canister_state(canister_id_1).system_state.controllers;
+    assert_eq!(controllers_1.len(), 1);
+    let controller_1 = *controllers_1.first().unwrap();
 
     // Loading a snapshot belonging to `canister_id_1` into `canister_id_2` fails because
     // the controller of `canister_id_2` does not control `canister_id_1`.
@@ -1477,12 +1504,14 @@ fn load_canister_snapshot_does_not_work_when_sender_does_not_control_originating
     let error = test
         .subnet_message("load_canister_snapshot", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+    assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
     let message = format!(
-        "Only a controller of the canister that snapshot {} belongs to can load it on canister {}. Sender: {}",
-        snapshot_id, canister_id_2, test.user_id().get()
-    )
-    .to_string();
+        "Only the controllers of the canister {canister_id_1} can load its snapshot {snapshot_id} into the canister {canister_id_2}.\n\
+        Canister's controllers: {}\n\
+        Sender's ID: {}",
+        controller_1,
+        test.user_id().get()
+    );
     assert!(error.description().contains(&message));
     assert_eq!(
         initial_canister_state,
@@ -1497,9 +1526,14 @@ fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
     const THRESHOLD: u64 = CAPACITY / 2;
     const WASM_PAGE_SIZE: u64 = 65_536;
     const NUM_PAGES: u64 = 2_400;
+    const STABLE_DATA: u64 = MIB;
 
+    // Taking or loading a snapshot adds the canister's modified pages to its heap delta
+    // debit: the `STABLE_DATA` bytes written below plus the universal canister's own pages,
+    // which are far fewer than `STABLE_DATA / 2`. So the limit allows taking the snapshot
+    // and loading it once, but not loading it a second time.
     let mut test = ExecutionTestBuilder::new()
-        .with_heap_delta_rate_limit(NumBytes::new(150_000))
+        .with_heap_delta_rate_limit(NumBytes::new(STABLE_DATA * 3 / 2))
         .with_subnet_execution_memory(CAPACITY)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD)
@@ -1517,6 +1551,7 @@ fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
 
     // Increase memory usage.
     grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE, NUM_PAGES);
+    fill_stable_memory(&mut test, canister_id, STABLE_DATA);
 
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs =
@@ -2444,6 +2479,13 @@ fn read_canister_snapshot_metadata_fails_invalid_controller() {
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+    assert!(
+        error.description().contains(&format!(
+            "Caller {} is not allowed to call read_canister_snapshot_metadata",
+            user_test_id(42).get()
+        )),
+        "{error}"
+    );
 }
 
 fn read_canister_snapshot_data(

@@ -15,7 +15,6 @@ path = "src/main.rs"
 
 # Workspace-based.
 clap = { workspace = true }
-hex = { workspace = true }
 
 # Path-based.
 ic-base-types = { path = "../../../types/base_types" }

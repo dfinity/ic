@@ -13,8 +13,9 @@ def _validate(json_path, versions):
     download URLs built from them by //bazel:mainnet-icos-images.bzl, they end up in
     the `ENV_DEPS__*_IMG_URL` and `ENV_DEPS__*_IMG_HASH` env vars of system tests (see
     rs/tests/configure_icos.bzl), which the Farm backend uses to fetch and verify
-    images itself -- a path that never passes through repository_ctx.download. The
-    JSON reaches master without human review, so none of it is trusted input.
+    images itself -- a path that never passes through the build-time download
+    genrules of //bazel:mainnet-icos-images.bzl. The JSON reaches master without
+    human review, so none of it is trusted input.
 
     Args:
       json_path: the label of the JSON file, for error messages.

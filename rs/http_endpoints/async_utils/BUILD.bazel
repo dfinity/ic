@@ -14,7 +14,6 @@ rust_library(
         "@crate_index//:futures",
         "@crate_index//:futures-util",
         "@crate_index//:hyper",
-        "@crate_index//:slog",
         "@crate_index//:tokio",
         "@crate_index//:tonic",
     ],
@@ -25,7 +24,6 @@ rust_test(
     crate = ":async_utils",
     deps = [
         # Keep sorted.
-        "@crate_index//:rand",
     ],
 )
 

@@ -37,6 +37,9 @@ table ip filter {
   chain INPUT {
     type filter hook input priority filter; policy drop;
     iif "lo" accept
+    # Mitigation for CVE-2026-98432: drop IPv4 packets carrying IP options (IHL > 5).
+    # TODO: remove once IC-OS ships an Ubuntu kernel with the CVE-2026-98432 fix.
+    ip hdrlength != 5 counter drop
     ct state { invalid } drop
     ct state { established, related } accept
     icmp type $icmp_v4_types_accept accept
@@ -51,6 +54,8 @@ table ip filter {
 
   chain OUTPUT {
     type filter hook output priority filter; policy drop;
+    meta skuid upgrade-proxy ip daddr 127.0.0.1 tcp dport 19301 accept comment "Allow the upgrade proxy to reach itself."
+    meta skuid upgrade-proxy ct state { new } reject comment "Block all IPv4 egress from the upgrade proxy."
     oif "lo" accept
     ct state { invalid } drop
     ct state { established, related } accept
@@ -146,7 +151,7 @@ table ip6 filter {
     ip6 saddr @dfinity_dcs ct state { new } tcp dport { 22, 9100, 19531, 19100 } accept
     ip6 saddr @telemetry_clients ct state { new } tcp dport { 9100, 19531, 19100 } accept
     ip6 saddr @node_providers ct state { new } tcp dport { 22, 9100, 19531 } accept
-    ip6 saddr @local_prefix ct state { new } tcp dport { 9100, 19531, 19100 } accept
+    ip6 saddr @local_prefix ct state { new } tcp dport { 9100, 19531, 19100, 19300 } accept
     tcp dport { 42372 } goto metrics_proxy
   }
 
@@ -156,6 +161,8 @@ table ip6 filter {
 
   chain OUTPUT {
     type filter hook output priority filter; policy drop;
+    meta skuid upgrade-proxy fib daddr type local ct state { new } reject comment "Block upgrade proxy access to this host's own addresses."
+    meta skuid upgrade-proxy ip6 daddr { fe80::/10, fc00::/7, {{ ipv6_prefix }} } ct state { new } reject comment "Block upgrade proxy access to link-local, ULA and the local prefix."
     oif "lo" accept
     ct state { invalid } drop
     ct state { established, related } accept

@@ -15,6 +15,16 @@ message CertificationContent {
   bytes hash = 2;
 }
 
+// Certification of state tree root hash, as included in stream slices: minus the
+// `height` and `height_witness` that the signature does not cover.
+message SignedCertificationContent {
+  reserved 1, 4;
+  reserved "height", "height_witness";
+
+  CertificationContent content = 2;
+  types.v1.ThresholdSignature signature = 3;
+}
+
 // Certification of state tree root hash.
 message Certification {
   uint64 height = 1;

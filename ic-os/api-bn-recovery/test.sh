@@ -5,10 +5,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IC_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CONTAINER_NAME="api-bn-test-$$"
 IMAGE_NAME="api-boundary-node"
 IMAGE_TAG="test"
 MAX_WAIT=300 # 5 minutes for registry sync + replica discovery
+SMOKE_TEST_TARGET="//rs/boundary_node/smoke_test:ic-boundary-smoke-test"
+SMOKE_TEST_BIN="${IC_ROOT}/bazel-bin/rs/boundary_node/smoke_test/ic-boundary-smoke-test"
 
 # Use docker if available, fall back to podman
 if command -v docker &>/dev/null; then
@@ -36,6 +39,9 @@ fi
 # ─── Build ───
 echo "=== Building image ==="
 IMAGE_NAME="$IMAGE_NAME" IMAGE_TAG="$IMAGE_TAG" "${SCRIPT_DIR}/build.sh"
+
+echo "=== Building smoke test client ==="
+(cd "$IC_ROOT" && bazel build "$SMOKE_TEST_TARGET")
 
 # ─── Run ───
 echo "=== Starting container ==="
@@ -72,13 +78,12 @@ while true; do
 done
 
 # ─── Test canister query ───
+# The client verifies the reply against the IC mainnet root key built into it.
 echo "=== Testing canister query ==="
-RESULT=$(dfx canister --network http://localhost:8080 call ryjl3-tyaaa-aaaaa-aaaba-cai name --query 2>&1)
-
-if echo "$RESULT" | grep -q "Internet Computer"; then
-    echo "PASS: $RESULT"
-    exit 0
+if "$SMOKE_TEST_BIN" --url http://localhost:8080; then
+    echo "PASS"
 else
-    echo "FAIL: Unexpected response: $RESULT"
+    echo "FAIL: Canister query through the API boundary node failed."
+    $CONTAINER_CMD logs "$CONTAINER_NAME" 2>&1 | tail -30
     exit 1
 fi

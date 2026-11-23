@@ -4773,6 +4773,11 @@ impl From<bool> for SelfDescribingValue {
 pub struct SelfDescribingProposalAction {
     pub type_name: Option<String>,
     pub type_description: Option<String>,
+
+    /// May be absent, e.g. when the proposal's payload could not be converted,
+    /// or the result would be excessively large. In that case, type_name and
+    /// type_description are still populated, and the full proposal (including
+    /// action) can still be obtained via get_proposal_info.
     pub value: Option<SelfDescribingValue>,
 }
 

@@ -1,4 +1,6 @@
+mod builder;
 pub mod hash;
+pub mod merge;
 pub mod split;
 
 #[cfg(test)]
@@ -27,7 +29,6 @@ use ic_state_layout::{
     BIN_FILE, CANISTER_FILE, CheckpointLayout, OVERLAY, QUEUES_FILE, ReadOnly, SNAPSHOT_FILE,
     STATE_SYNC_CHECKPOINT_MARKER, UNVERIFIED_CHECKPOINT_MARKER, WASM_FILE,
 };
-use ic_sys::mmap::ScopedMmap;
 use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash, state_sync::StateSyncVersion};
 use ic_utils::thread::parallel_map;
 use rand::{Rng, SeedableRng};
@@ -35,14 +36,24 @@ use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::OsStr;
 use std::fmt;
+use std::fs::File;
 use std::ops::Range;
+use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Mutex};
 
 /// When computing a manifest, we recompute the hash of every
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and
 /// have a hash computed earlier by this replica process.
 const REHASH_EVERY_NTH_CHUNK: u64 = 10;
+
+/// Chunks of a file are hashed in spans of up to this many consecutive chunks
+/// (256 MiB at the default chunk size): the units of work the threads take,
+/// each read in order through one file descriptor, so that large files are
+/// split across threads while being opened once per span. Where the file system
+/// doesn't support `O_DIRECT` (see `open_for_hashing`), reading in order also
+/// keeps the kernel's read-ahead going.
+const MANIFEST_SPAN_CHUNKS: usize = 256;
 
 /// During the downloading phase of state sync, We group certain files together
 /// which have filenames ending with `FILE_TO_GROUP`.
@@ -238,7 +249,8 @@ pub struct BaseManifestInfo {
     pub(crate) base_checkpoint: CheckpointLayout<ReadOnly>,
 }
 
-/// File types for which we collect size metrics.
+/// File types for which we collect size metrics: whole file names (e.g.
+/// `CANISTER_FILE`) or extensions (e.g. `OVERLAY`).
 /// Files that don't match any of these types will be categorized as "other" as a fallback.
 /// This helps evaluate whether the current file grouping selection and threshold is optimal.
 pub(crate) const FILE_TYPES_TO_OBSERVE_SIZE: &[&str] = &[
@@ -264,9 +276,10 @@ pub(crate) fn observe_file_sizes(
         .collect();
 
     for file_info in new_manifest.file_table.iter() {
+        let path = &file_info.relative_path;
         let file_type = FILE_TYPES_TO_OBSERVE_SIZE
             .iter()
-            .find(|&&file_type| file_info.relative_path.ends_with(file_type))
+            .find(|&&t| [path.file_name(), path.extension()].contains(&Some(OsStr::new(t))))
             .unwrap_or(&"other");
 
         metrics
@@ -353,8 +366,57 @@ fn uses_chunk_size(manifest: &Manifest, max_chunk_size: u32) -> bool {
     })
 }
 
+/// Alignment of the buffers, offsets and lengths of `O_DIRECT` reads: at least
+/// the logical block size of the disk the state is on.
+const DIRECT_IO_ALIGN: usize = 4096;
+
+// The chunks of the manifests computed in production can be read with
+// `O_DIRECT` (see `build_chunk_table_parallel`).
+const _: () = assert!((DEFAULT_CHUNK_SIZE as usize).is_multiple_of(DIRECT_IO_ALIGN));
+
+/// A `DIRECT_IO_ALIGN`-aligned block of an `AlignedBuffer`.
+#[derive(Clone, Copy)]
+#[repr(C, align(4096))]
+struct AlignedBlock([u8; DIRECT_IO_ALIGN]);
+
+/// A `DIRECT_IO_ALIGN`-aligned buffer for `O_DIRECT` reads. It grows to the
+/// largest size asked for and never shrinks.
+struct AlignedBuffer(Vec<AlignedBlock>);
+
+impl AlignedBuffer {
+    /// Returns a buffer of `len` bytes rounded up to `DIRECT_IO_ALIGN`, so that
+    /// `get` up to that length does not reallocate.
+    fn with_capacity(len: usize) -> Self {
+        Self(vec![
+            AlignedBlock([0; DIRECT_IO_ALIGN]);
+            len.div_ceil(DIRECT_IO_ALIGN)
+        ])
+    }
+
+    /// Returns the buffer's first `len` bytes rounded up to `DIRECT_IO_ALIGN`,
+    /// growing it if smaller.
+    fn get(&mut self, len: usize) -> &mut [u8] {
+        let blocks = len.div_ceil(DIRECT_IO_ALIGN);
+        if self.0.len() < blocks {
+            self.0.resize(blocks, AlignedBlock([0; DIRECT_IO_ALIGN]));
+        }
+        // SAFETY: `AlignedBlock` is a byte array without padding, so the first
+        // `blocks` blocks are `blocks * DIRECT_IO_ALIGN` initialized bytes,
+        // borrowed mutably for the slice's lifetime.
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                self.0.as_mut_ptr().cast::<u8>(),
+                blocks * DIRECT_IO_ALIGN,
+            )
+        }
+    }
+}
+
 /// Computes file_table and chunk_table of a manifest using a parallel algorithm.
 /// All the parallel work is spawned in the specified thread pool.
+///
+/// Panics if `max_chunk_size` isn't a multiple of `DIRECT_IO_ALIGN`: most
+/// chunks are read with `O_DIRECT` (see `read_chunk`).
 fn build_chunk_table_parallel(
     thread_pool: &mut scoped_threadpool::Pool,
     metrics: &ManifestMetrics,
@@ -365,6 +427,10 @@ fn build_chunk_table_parallel(
     chunk_actions: Vec<ChunkAction>,
     version: StateSyncVersion,
 ) -> (Vec<FileInfo>, Vec<ChunkInfo>) {
+    assert!(
+        (max_chunk_size as usize).is_multiple_of(DIRECT_IO_ALIGN),
+        "chunk size {max_chunk_size} isn't a multiple of {DIRECT_IO_ALIGN}"
+    );
     // Build a chunk table and file table filled with blank hashes.
     let mut chunk_table: Vec<ChunkInfo> = {
         let mut chunks = Vec::with_capacity(chunk_actions.len());
@@ -395,84 +461,46 @@ fn build_chunk_table_parallel(
         })
         .collect();
 
-    // We cache the files that are currently being hashed to avoid opening them
-    // individually for each chunk. The values in the cache are weak references,
-    // so the last thread that has a strong reference will release the value
-    // and close the corresponding file.
-    // This way we keep the number of files opened at the same time
-    // low (it doesn't exceed the number of the threads).
-    let file_cache: Arc<Mutex<HashMap<u32, Weak<ScopedMmap>>>> =
-        Arc::new(Mutex::new(HashMap::new()));
+    let mut chunks: Vec<ChunkToHash> = chunk_table
+        .iter_mut()
+        .zip(&chunk_actions)
+        .enumerate()
+        .map(|(index, (info, action))| ChunkToHash {
+            index,
+            info,
+            action,
+        })
+        .collect();
+    // Spans are queued round-robin across files (every file's first span, then
+    // every file's second span, and so on), so that concurrent tasks rarely read
+    // the same file. Sorting them by offset does that, as every file's n-th span
+    // starts at the same offset.
+    let mut spans = Vec::new();
+    for file_chunks in chunks.chunk_by_mut(|a, b| a.info.file_index == b.info.file_index) {
+        spans.extend(file_chunks.chunks_mut(MANIFEST_SPAN_CHUNKS));
+    }
+    spans.sort_by_key(|span| (span[0].info.offset, span[0].index));
 
-    // Compute real chunk hashes in parallel.
+    // Compute real chunk hashes in parallel: a task per thread, each taking the
+    // next span until none are left, and reading chunks into a buffer of its own.
     // NB. We must populate hashes of all the chunks in a file before we compute
     // file hashes.
+    let tasks = thread_pool.thread_count();
+    let spans = Mutex::new(spans.into_iter());
+    let file_table_ref = &file_table;
     thread_pool.scoped(|scope| {
-        for (chunk_idx, chunk_info) in chunk_table.iter_mut().enumerate() {
-            let chunk_action = chunk_actions[chunk_idx].clone();
-            let file_path = root.join(&file_table[chunk_info.file_index as usize].relative_path);
-            let file_size = file_table[chunk_info.file_index as usize].size_bytes;
-            let file_cache = Arc::clone(&file_cache);
+        for _ in 0..tasks {
+            let spans = &spans;
             scope.execute(move || {
-                let recompute_chunk_hash = || {
-                    let mmap: Arc<ScopedMmap> = if file_size > max_chunk_size as u64 {
-                        // We only use the file cache if there is more than one chunk in the file,
-                        // otherwise the synchronization cost is unnecessary.
-                        let mut cache = file_cache.lock().unwrap();
-                        match cache.get(&chunk_info.file_index).and_then(Weak::upgrade) {
-                            Some(mmap) => mmap,
-                            None => {
-                                let mmap = Arc::new(
-                                    ScopedMmap::from_path(&file_path)
-                                        .unwrap_or_else(|e| fatal!(log, "failed to mmap file {}: {}", file_path.display(), e)),
-                                );
-                                cache.insert(chunk_info.file_index, Arc::downgrade(&mmap));
-                                mmap
-                            }
-                        }
-                    } else {
-                        Arc::new(
-                            ScopedMmap::from_path(&file_path)
-                                .unwrap_or_else(|e| fatal!(log, "failed to mmap file {}: {}", file_path.display(), e))
-                        )
-                    };
-                    let data = mmap.as_slice();
-
-                    let mut hasher = chunk_hasher();
-                    let chunk_start = chunk_info.offset as usize;
-                    let chunk_end = chunk_start + chunk_info.size_bytes as usize;
-                    hasher.write(&data[chunk_start..chunk_end]);
-                    hasher.finish()
-                };
-
-                chunk_info.hash = match chunk_action {
-                    ChunkAction::Recompute => {
-                        metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_HASHED]).inc_by(chunk_info.size_bytes as u64);
-                        recompute_chunk_hash()
-                    },
-                    ChunkAction::RecomputeAndCompare(precomputed_hash) => {
-                        metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_HASHED_AND_COMPARED]).inc_by(chunk_info.size_bytes as u64);
-
-                        let recomputed_hash = recompute_chunk_hash();
-                        if recomputed_hash != precomputed_hash {
-                            metrics.reused_chunk_hash_error_count.inc();
-                            error!(
-                                log,
-                                "{}: Hash mismatch in chunk with index {} in file {}, recomputed hash {:?}, reused hash {:?}",
-                                CRITICAL_ERROR_REUSED_CHUNK_HASH,
-                                chunk_idx,
-                                file_path.display(),
-                                chunk_info.hash,
-                                precomputed_hash
-                            );
-                        }
-                        recomputed_hash
-                    }
-                    ChunkAction::UseHash(precomputed_hash) => {
-                        metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_REUSED]).inc_by(chunk_info.size_bytes as u64);
-                        precomputed_hash
-                    },
-                };
+                let mut buffer = AlignedBuffer::with_capacity(max_chunk_size as usize);
+                loop {
+                    // Not in a `while let`, which would hold the lock while hashing.
+                    let next = spans.lock().unwrap().next();
+                    let Some(span) = next else { break };
+                    let file_path =
+                        root.join(&file_table_ref[span[0].info.file_index as usize].relative_path);
+                    hash_span(metrics, log, &file_path, span, &mut buffer);
+                }
             });
         }
     });
@@ -489,6 +517,134 @@ fn build_chunk_table_parallel(
     }
 
     (file_table, chunk_table)
+}
+
+/// A chunk to hash: its index in the chunk table, its entry there, and what to
+/// do with it.
+struct ChunkToHash<'a> {
+    index: usize,
+    info: &'a mut ChunkInfo,
+    action: &'a ChunkAction,
+}
+
+/// Sets the hashes of `span`, consecutive chunks of the file at `file_path`, as
+/// their actions say. Opens the file once (see `open_for_hashing`), for the
+/// first chunk it reads, and reads the chunks to hash in order, into `buffer`.
+fn hash_span(
+    metrics: &ManifestMetrics,
+    log: &ReplicaLogger,
+    file_path: &Path,
+    span: &mut [ChunkToHash],
+    buffer: &mut AlignedBuffer,
+) {
+    let mut file = None;
+    for chunk in span {
+        let (offset, size_bytes) = (chunk.info.offset, chunk.info.size_bytes);
+        let mut recompute_chunk_hash = || {
+            let file = file.get_or_insert_with(|| {
+                open_for_hashing(file_path).unwrap_or_else(|e| {
+                    fatal!(log, "failed to open file {}: {}", file_path.display(), e)
+                })
+            });
+            let bytes = read_chunk(file, buffer, offset, size_bytes as usize).unwrap_or_else(|e| {
+                fatal!(log, "failed to read file {}: {}", file_path.display(), e)
+            });
+            let mut hasher = chunk_hasher();
+            hasher.write(bytes);
+            hasher.finish()
+        };
+
+        chunk.info.hash = match chunk.action {
+            ChunkAction::Recompute => {
+                metrics
+                    .chunk_bytes
+                    .with_label_values(&[LABEL_VALUE_HASHED])
+                    .inc_by(size_bytes as u64);
+                recompute_chunk_hash()
+            }
+            ChunkAction::RecomputeAndCompare(precomputed_hash) => {
+                metrics
+                    .chunk_bytes
+                    .with_label_values(&[LABEL_VALUE_HASHED_AND_COMPARED])
+                    .inc_by(size_bytes as u64);
+
+                let recomputed_hash = recompute_chunk_hash();
+                if recomputed_hash != *precomputed_hash {
+                    metrics.reused_chunk_hash_error_count.inc();
+                    error!(
+                        log,
+                        "{}: Hash mismatch in chunk with index {} in file {}, recomputed hash {:?}, reused hash {:?}",
+                        CRITICAL_ERROR_REUSED_CHUNK_HASH,
+                        chunk.index,
+                        file_path.display(),
+                        recomputed_hash,
+                        precomputed_hash
+                    );
+                }
+                recomputed_hash
+            }
+            ChunkAction::UseHash(precomputed_hash) => {
+                metrics
+                    .chunk_bytes
+                    .with_label_values(&[LABEL_VALUE_REUSED])
+                    .inc_by(size_bytes as u64);
+                *precomputed_hash
+            }
+        };
+    }
+}
+
+/// Opens the file at `path` for reading its chunks with `O_DIRECT`, bypassing
+/// the page cache: a manifest reads each chunk it hashes once, hundreds of GB
+/// per checkpoint on a large subnet, which through the page cache would evict
+/// the pages execution uses.
+///
+/// Opens protobufs buffered, though: nearly all were just written through the
+/// page cache, by the checkpoint being hashed, so they're still cached, and
+/// `O_DIRECT` would instead write back those still dirty, then read them all
+/// from disk. Also opens the file buffered if the file system doesn't support
+/// `O_DIRECT`, or the OS has none (only Linux does).
+fn open_for_hashing(path: &Path) -> std::io::Result<File> {
+    if path.extension() == Some(OsStr::new("pbuf")) {
+        return File::open(path);
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(nix::libc::O_DIRECT);
+    }
+    match options.open(path) {
+        Err(e) if e.raw_os_error() == Some(nix::libc::EINVAL) => File::open(path),
+        result => result,
+    }
+}
+
+/// Reads the `len` bytes at `offset` of `file`, opened by `open_for_hashing`,
+/// into `buffer` and returns them. `O_DIRECT` reads whole blocks, at offsets
+/// that are multiples of `DIRECT_IO_ALIGN`, as chunk offsets are: this reads
+/// `len` rounded up to `DIRECT_IO_ALIGN` and ignores the bytes past `len`; at
+/// the end of the file, the read returns just the bytes up to it.
+///
+/// Returns `Err` if the file ends before `offset + len`, or a read fails.
+fn read_chunk<'a>(
+    file: &File,
+    buffer: &'a mut AlignedBuffer,
+    offset: u64,
+    len: usize,
+) -> std::io::Result<&'a [u8]> {
+    let buf = buffer.get(len);
+    let mut got = 0;
+    while got < len {
+        match file.read_at(&mut buf[got..], offset + got as u64) {
+            Ok(0) => return Err(std::io::ErrorKind::UnexpectedEof.into()),
+            Ok(n) => got += n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(&buf[..len])
 }
 
 /// Build a chunk table from the file table.
@@ -592,7 +748,8 @@ fn build_chunk_table_sequential(
             });
         };
 
-        let mmap = ScopedMmap::from_path(root.join(&relative_path)).expect("failed to open file");
+        let mmap = ic_sys::mmap::ScopedMmap::from_path(root.join(&relative_path))
+            .expect("failed to open file");
         let data = mmap.as_slice();
         compute_file_chunk_hashes(data);
     }
@@ -670,9 +827,12 @@ fn files_with_sizes(
     let mut paths_to_process = vec![relative_path];
     while !paths_to_process.is_empty() {
         let mut next_paths = Vec::new();
-        for entry in parallel_map(thread_pool, paths_to_process.into_iter(), |relative_path| {
-            file_with_size_or_dir(root, relative_path.to_path_buf())
-        }) {
+        for entry in parallel_map(
+            thread_pool,
+            paths_to_process.into_iter(),
+            1,
+            |relative_path| file_with_size_or_dir(root, relative_path.to_path_buf()),
+        ) {
             match entry? {
                 FileWithSizeOrDir::File(file) => files.push(file),
                 FileWithSizeOrDir::Dir(mut paths) => next_paths.append(&mut paths),
@@ -819,6 +979,7 @@ fn files_with_same_inodes(
     parallel_map(
         thread_pool,
         files.iter(),
+        1,
         |FileWithSize(relative_path, _size_bytes)| {
             use std::os::unix::fs::MetadataExt;
             let new_path = checkpoint.raw_path().join(relative_path);
@@ -864,6 +1025,9 @@ pub enum RehashManifest {
 }
 
 /// Computes manifest for the checkpoint located at `checkpoint_root_path`.
+///
+/// Panics if `max_chunk_size` isn't a multiple of `DIRECT_IO_ALIGN` (see
+/// `build_chunk_table_parallel`).
 pub fn compute_manifest(
     thread_pool: &mut scoped_threadpool::Pool,
     metrics: &ManifestMetrics,

@@ -37,18 +37,39 @@ const SSH_ACCESS_BACKOFF: Duration = Duration::from_secs(5);
 pub fn generate_key_strings() -> (String, String) {
     // Our keys are Ed25519, and not RSA. Once we figure out a direct way to encode
     // an Ed25519 private key the SSH way, we might consider switching to it.
-    let rsa = rsa::RsaPrivateKey::new(&mut rand::thread_rng(), 1024).expect("RSA keygen failed");
+    let rsa = rsa::PrivateKey::new(&mut RandCore10(&mut rand::thread_rng()), 1024)
+        .expect("RSA keygen failed");
     use rsa::traits::PublicKeyParts;
-    let e = rsa.e();
-    let n = rsa.n();
 
     let private_key = private_key_to_pem_string(&rsa);
-    let public_key = public_key_to_string(e.to_bytes_be(), n.to_bytes_be());
+    let public_key = public_key_to_string(rsa.e_bytes().into_vec(), rsa.n_bytes().into_vec());
 
     (private_key, public_key)
 }
 
-fn private_key_to_pem_string(rsa: &rsa::RsaPrivateKey) -> String {
+/// Makes a rand 0.8 RNG usable as the rand_core 0.10 RNG that `rsa` takes.
+struct RandCore10<'a, R>(&'a mut R);
+
+impl<R: rand::RngCore> rsa::rand_core::TryRng for RandCore10<'_, R> {
+    type Error = std::convert::Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        Ok(self.0.next_u32())
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        Ok(self.0.next_u64())
+    }
+
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
+        self.0.fill_bytes(dst);
+        Ok(())
+    }
+}
+
+impl<R: rand::RngCore + rand::CryptoRng> rsa::rand_core::TryCryptoRng for RandCore10<'_, R> {}
+
+fn private_key_to_pem_string(rsa: &rsa::PrivateKey) -> String {
     use rsa::pkcs1::EncodeRsaPrivateKey;
     rsa.to_pkcs1_pem(rsa::pkcs1::LineEnding::CRLF)
         .unwrap()
@@ -402,6 +423,14 @@ pub fn execute_bash_command(sess: &Session, command: String) -> Result<String, S
     channel
         .read_to_string(&mut out)
         .map_err(|e| format!("Failed to read from the channel: {e}"))?;
+    // The server may send the exit status after its EOF but always before closing the channel.
+    // Wait for the close, as otherwise exit_status() may return its default of 0.
+    // Unread stderr stays buffered, so the error branches below can still read it.
+    channel.wait_close().map_err(|e| {
+        format!(
+            "Error in: {command}\nFailed to wait for the channel to close: {e}\nstdout: \n{out}"
+        )
+    })?;
     let mut err_str = String::new();
     match channel.exit_status() {
         Ok(status) => match status {

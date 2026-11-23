@@ -364,29 +364,50 @@ fn generate_rsa_key_and_sig<R: Rng + CryptoRng>(
     use ic_crypto_internal_basic_sig_rsa_pkcs1 as basic_sig_rsa;
     use ic_crypto_sha2::Sha256;
     use rsa::traits::PublicKeyParts;
-    use rsa::{Pkcs1v15Sign, RsaPrivateKey};
+    use rsa::{Pkcs1v15Sign, PrivateKey};
 
     let bitlength = 2048; // minimum allowed
 
-    let priv_key = RsaPrivateKey::new(rng, bitlength).expect("failed to generate RSA key");
+    let priv_key =
+        PrivateKey::new(&mut RandCore10(rng), bitlength).expect("failed to generate RSA key");
 
-    let pub_key_bytes = basic_sig_rsa::RsaPublicKey::from_components(
-        &priv_key.to_public_key().e().to_bytes_be(),
-        &priv_key.to_public_key().n().to_bytes_be(),
-    )
-    .expect("failed to convert RSA key to internal type for serialization")
-    .as_der()
-    .to_vec();
+    let pub_key_bytes =
+        basic_sig_rsa::RsaPublicKey::from_components(&priv_key.e_bytes(), &priv_key.n_bytes())
+            .expect("failed to convert RSA key to internal type for serialization")
+            .as_der()
+            .to_vec();
 
     let signature = priv_key
         .sign(
-            Pkcs1v15Sign::new::<sha2::Sha256>(),
+            Pkcs1v15Sign::new::<rsa::sha2::Sha256>(),
             &Sha256::hash(bytes_to_sign),
         )
         .expect("failed signing with RSA key");
 
     (signature, pub_key_bytes)
 }
+
+/// Makes a rand 0.8 RNG usable as the rand_core 0.10 RNG that `rsa` takes.
+struct RandCore10<'a, R>(&'a mut R);
+
+impl<R: RngCore> rsa::rand_core::TryRng for RandCore10<'_, R> {
+    type Error = std::convert::Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        Ok(self.0.next_u32())
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        Ok(self.0.next_u64())
+    }
+
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
+        self.0.fill_bytes(dst);
+        Ok(())
+    }
+}
+
+impl<R: RngCore + CryptoRng> rsa::rand_core::TryCryptoRng for RandCore10<'_, R> {}
 
 fn random_signable_message_of_size<R: Rng + CryptoRng>(
     bytes_size: usize,

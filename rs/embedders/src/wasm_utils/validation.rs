@@ -3,7 +3,7 @@
 
 use super::{Complexity, WasmImportsDetails, WasmValidationDetails};
 
-use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::embedders::{Config as EmbeddersConfig, MAX_FUNCTIONS};
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
@@ -21,8 +21,8 @@ use crate::wasmtime_embedder::{
 use crate::{
     MAX_WASM_STACK_SIZE, MIN_GUARD_REGION_SIZE,
     wasm_utils::instrumentation::{
-        ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME, WasmMemoryType,
-        main_memory_type,
+        ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+        HEAP_PAGE_BUDGET_GLOBAL_NAME, WasmMemoryType, main_memory_type,
     },
 };
 use wirm::{
@@ -42,11 +42,12 @@ use crate::WASM_PAGE_SIZE;
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests
-pub const RESERVED_SYMBOLS: [&str; 6] = [
+pub const RESERVED_SYMBOLS: [&str; 7] = [
     "canister counter_instructions",
     "canister_start",
     DIRTY_PAGES_COUNTER_GLOBAL_NAME,
     ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
+    HEAP_PAGE_BUDGET_GLOBAL_NAME,
     STABLE_MEMORY_NAME,
     STABLE_BYTEMAP_MEMORY_NAME,
 ];
@@ -68,6 +69,15 @@ pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
 pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 12 * 1024 * 1024;
 pub const MAX_WASM_FUNCTION_NAME_LENGTH: usize = 1024 * 1024;
 pub const MAX_WASM_FUNCTION_NUM_LOCALS: usize = 10_000;
+/// Maximum number of custom sections in the raw module, including sections that
+/// are not `icp:` metadata. `max_custom_sections` is the interface-spec limit on
+/// `icp:public` / `icp:private` metadata.
+pub const MAX_RAW_CUSTOM_SECTIONS: usize = 1024;
+/// Maximum number of imports (of any kind) allowed in a Wasm module.
+///
+/// A canister may only import the fixed set of `ic0` system-API functions (<80)
+/// plus `env.memory` and `env.table`.
+pub const MAX_NUMBER_IMPORTS: usize = 200;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -1127,14 +1137,18 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
 fn validate_export_section(
     module: &Module,
     max_number_exported_functions: usize,
+    max_number_exports: usize,
     max_sum_exported_function_name_lengths: usize,
 ) -> Result<(), WasmValidationError> {
     if !module.exports.is_empty() {
         let mut seen_funcs: HashSet<&str> = HashSet::new();
         let valid_exported_functions = get_valid_exported_functions();
         let mut number_exported_functions = 0;
+        let mut number_exports = 0;
         let mut sum_exported_function_name_lengths = 0;
         for export in module.exports.iter() {
+            // Count every export, regardless of kind.
+            number_exports += 1;
             // Verify that the exported symbol's name isn't reserved.
             if RESERVED_SYMBOLS.contains(&export.name.as_str()) {
                 return Err(WasmValidationError::InvalidExportSection(format!(
@@ -1172,10 +1186,7 @@ fn validate_export_section(
                     }
                 }
                 if let Some(valid_signature) = valid_exported_functions.get(func_name) {
-                    let fn_id = module
-                        .exports
-                        .get_func_by_name(export.name.clone())
-                        .unwrap();
+                    let fn_id = FunctionID(export.index);
                     let type_id = module.functions.get_type_id(fn_id);
                     let ty = module.types.get(type_id).unwrap();
                     let Types::FuncType {
@@ -1201,6 +1212,13 @@ fn validate_export_section(
             return Err(WasmValidationError::TooManyExports {
                 defined: number_exported_functions,
                 allowed: max_number_exported_functions,
+            });
+        }
+
+        if number_exports > max_number_exports {
+            return Err(WasmValidationError::TooManyTotalExports {
+                defined: number_exports,
+                allowed: max_number_exports,
             });
         }
 
@@ -1800,32 +1818,115 @@ fn can_compile(
     })
 }
 
-fn check_code_section_size(wasm: &BinaryEncodedWasm) -> Result<NumBytes, WasmValidationError> {
-    let parser = wasmparser::Parser::new(0);
-    let payloads = parser.parse_all(wasm.as_slice());
-    for payload in payloads {
-        if let wasmparser::Payload::CodeSectionStart {
-            count: _,
-            range: _,
-            size,
-        } = payload.map_err(|e| {
-            WasmValidationError::DecodingError(format!("Error finding code section: {e}"))
-        })? {
-            if size > MAX_CODE_SECTION_SIZE_IN_BYTES {
-                return Err(WasmValidationError::CodeSectionTooLarge {
-                    size,
-                    allowed: MAX_CODE_SECTION_SIZE_IN_BYTES,
-                });
-            } else {
-                return Ok(NumBytes::from(size as u64));
+/// Streams the module once, before Wasmtime or Wirm parse it.
+///
+/// Counts every custom section and rejects the module once the count exceeds
+/// [`MAX_RAW_CUSTOM_SECTIONS`]. Also records the code-section size and rejects an oversized
+/// code section. The code section body is skipped rather than parsed.
+fn check_custom_sections_and_code_size(
+    wasm: &BinaryEncodedWasm,
+) -> Result<NumBytes, WasmValidationError> {
+    let mut parser = wasmparser::Parser::new(0);
+    let mut data = wasm.as_slice();
+    let mut custom_sections: usize = 0;
+    // Running total of function-name entries across every name section in the module.
+    let mut name_section_entries: usize = 0;
+    let mut code_section_size = NumBytes::from(0);
+    let mut seen_code_section = false;
+    loop {
+        let payload = match parser.parse(data, true) {
+            Ok(wasmparser::Chunk::Parsed { consumed, payload }) => {
+                data = &data[consumed..];
+                payload
             }
+            // `eof` is true, so the parser never asks for more bytes.
+            Ok(wasmparser::Chunk::NeedMoreData(_)) => unreachable!(),
+            Err(err) => {
+                // Structural errors will be reported by Wasmtime. Modules
+                // that Wasmtime accepts also parse here, so this still counts
+                // every custom section of a module that will be materialized.
+                if seen_code_section {
+                    return Ok(code_section_size);
+                }
+                return Err(WasmValidationError::DecodingError(format!(
+                    "Error finding code section: {err}"
+                )));
+            }
+        };
+        match payload {
+            // Reject component model feature.
+            wasmparser::Payload::Version { encoding, .. }
+                if encoding != wasmparser::Encoding::Module =>
+            {
+                return Ok(code_section_size);
+            }
+            wasmparser::Payload::CustomSection(reader) => {
+                custom_sections += 1;
+                if custom_sections > MAX_RAW_CUSTOM_SECTIONS {
+                    return Err(WasmValidationError::TooManyCustomSections {
+                        defined: custom_sections,
+                        allowed: MAX_RAW_CUSTOM_SECTIONS,
+                    });
+                }
+                // Bound the function name subsections of the name section(s).
+                // A well-formed module has a single name section naming each
+                // function at most once, so the module-wide total cannot
+                // legitimately exceed the function limit.
+                if let wasmparser::KnownCustom::Name(name_reader) = reader.as_known() {
+                    for subsection in name_reader {
+                        // A malformed name section is reported later by Wasmtime.
+                        let Ok(subsection) = subsection else { break };
+                        if let wasmparser::Name::Function(map) = subsection {
+                            name_section_entries =
+                                name_section_entries.saturating_add(map.count() as usize);
+                            if name_section_entries > MAX_FUNCTIONS {
+                                return Err(WasmValidationError::TooManyNameSectionEntries {
+                                    allowed: MAX_FUNCTIONS,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            wasmparser::Payload::ImportSection(reader) => {
+                // Bound the number of imports.
+                let num_imports = reader.count() as usize;
+                if num_imports > MAX_NUMBER_IMPORTS {
+                    return Err(WasmValidationError::TooManyImports {
+                        allowed: MAX_NUMBER_IMPORTS,
+                    });
+                }
+            }
+            wasmparser::Payload::CodeSectionStart { size, .. } => {
+                if !seen_code_section {
+                    if size > MAX_CODE_SECTION_SIZE_IN_BYTES {
+                        return Err(WasmValidationError::CodeSectionTooLarge {
+                            size,
+                            allowed: MAX_CODE_SECTION_SIZE_IN_BYTES,
+                        });
+                    }
+                    code_section_size = NumBytes::from(size as u64);
+                    seen_code_section = true;
+                }
+                // `size` is the unread body. Skip it so each function is not parsed.
+                parser.skip_section();
+                let size = size as usize;
+                if data.len() < size {
+                    // The declared body does not fit. Wasmtime reports the
+                    // malformed module; no further section can follow it.
+                    return Ok(code_section_size);
+                }
+                data = &data[size..];
+            }
+            wasmparser::Payload::End(_) => break,
+            _ => {}
         }
     }
-    Ok(NumBytes::from(0))
+    Ok(code_section_size)
 }
 
 /// Validates a Wasm binary against the requirements of the interface spec
-/// defined in https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-module.
+/// defined in https://docs.internetcomputer.org/references/ic-interface-spec/canister-interface/.
 ///
 /// It constructs a module by parsing the input Wasm binary and then calls into
 /// more specific methods that validate different sections of the Wasm binary.
@@ -1843,7 +1944,7 @@ pub(super) fn validate_wasm_binary<'a>(
     wasm: &'a BinaryEncodedWasm,
     config: &EmbeddersConfig,
 ) -> Result<(WasmValidationDetails, Module<'a>), WasmValidationError> {
-    let code_section_size = check_code_section_size(wasm)?;
+    let code_section_size = check_custom_sections_and_code_size(wasm)?;
     can_compile(wasm, config)?;
     let module = Module::parse(wasm.as_slice(), false, false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{err}")))?;
@@ -1851,6 +1952,7 @@ pub(super) fn validate_wasm_binary<'a>(
     validate_export_section(
         &module,
         config.max_number_exported_functions,
+        config.max_number_exports,
         config.max_sum_exported_function_name_lengths,
     )?;
     validate_table_section(&module)?;

@@ -9,8 +9,8 @@ use ic_interfaces::{
         CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool, ResponseVisibility,
     },
     p2p::consensus::{
-        ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
-        ValidatedPoolReader,
+        ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, InitialBroadcastSource, MutablePool,
+        UnvalidatedArtifact, ValidatedPoolReader,
     },
 };
 use ic_logger::{ReplicaLogger, info, warn};
@@ -101,8 +101,8 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
     fn get_response_content_by_hash(
         &self,
         hash: &CryptoHashOf<CanisterHttpResponse>,
-    ) -> Option<CanisterHttpResponse> {
-        self.content.get(hash).cloned()
+    ) -> Option<&CanisterHttpResponse> {
+        self.content.get(hash)
     }
 
     fn lookup_validated(
@@ -218,7 +218,9 @@ impl ValidatedPoolReader<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl 
             response,
         })
     }
+}
 
+impl InitialBroadcastSource<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {
     fn get_all_for_initial_broadcast(
         &self,
     ) -> Box<dyn Iterator<Item = CanisterHttpResponseArtifact> + '_> {
@@ -357,7 +359,7 @@ mod tests {
         assert_eq!(share, pool.lookup_validated(&id).unwrap());
         assert_eq!(share, pool.get(&id).unwrap().share);
         assert_eq!(
-            response,
+            &response,
             pool.get_response_content_by_hash(&content_hash).unwrap()
         );
 
@@ -403,7 +405,7 @@ mod tests {
         // A pulled non-fully-replicated artifact carries the full response.
         assert_eq!(pool.get(&id).unwrap(), expected_artifact);
         assert_eq!(
-            response,
+            &response,
             pool.get_response_content_by_hash(&content_hash).unwrap()
         );
     }
@@ -439,7 +441,7 @@ mod tests {
         // The response is still retained, until the purge pass drops it.
         assert_eq!(
             pool.get_response_content_by_hash(&content_hash),
-            Some(response)
+            Some(&response)
         );
     }
 
@@ -560,7 +562,7 @@ mod tests {
         assert!(pool.get(&id).unwrap().response.is_none());
         assert_eq!(
             pool.get_response_content_by_hash(&content_hash),
-            Some(response)
+            Some(&response)
         );
     }
 

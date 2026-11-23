@@ -17,8 +17,6 @@ ic-metrics = { path = "../../monitoring/metrics" }
 ic-quic-transport = { path = "../quic_transport" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 prometheus = { workspace = true }
-serde = { workspace = true }
-slog = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]

@@ -80,5 +80,9 @@ guest_vm_type="$(jq -r ".guest_vm_type" /run/config/config.json)"
 if [[ "$guest_vm_type" = null ]]; then
     guest_vm_type=default
 fi
+if [[ ! "$guest_vm_type" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    info "Unexpected guest_vm_type: '$guest_vm_type'"
+    exit 1
+fi
 mkdir -p "/run/config/guest_vm_type"
 touch "/run/config/guest_vm_type/$guest_vm_type"

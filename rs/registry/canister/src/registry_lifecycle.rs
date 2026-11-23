@@ -1,15 +1,12 @@
 use crate::certification::recertify_registry;
-use crate::common::key_family::get_key_family_iter;
 use crate::mutations::node_management::common::find_subnet_for_node;
 use crate::{pb::v1::RegistryCanisterStableStorage, registry::Registry};
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_keys::{
-    REPLICA_VERSION_KEY_PREFIX, make_node_operator_record_key, make_node_record_key,
-    make_replica_version_key, make_subnet_list_record_key,
+    make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
 };
 use ic_registry_transport::{pb::v1::RegistryMutation, update};
 use ic_types::NodeId;
@@ -42,12 +39,6 @@ pub fn canister_post_upgrade(
         }
 
         let mutations = convert_type1dot1_nodes_to_type4dot5(registry);
-        if !mutations.is_empty() {
-            registry.maybe_apply_mutation_internal(mutations);
-            total_batches += 1;
-        }
-
-        let mutations = add_version_id_to_replica_versions(registry);
         if !mutations.is_empty() {
             registry.maybe_apply_mutation_internal(mutations);
             total_batches += 1;
@@ -370,36 +361,6 @@ fn convert_type1dot1_nodes_to_type4dot5(registry: &Registry) -> Vec<RegistryMuta
 
         node_record.node_reward_type = Some(NodeRewardType::Type4dot5 as i32);
         mutations.push(update(node_key, node_record.encode_to_vec()));
-    }
-
-    mutations
-}
-
-/// Backfill a new `replica_version_id` field on `ReplicaVersionRecord`s.
-/// This ID is also used in the registry key. Adding it to the record is more
-/// convenient, as only a `ReplicaVersionRecord` needs to be passed around.
-fn add_version_id_to_replica_versions(registry: &Registry) -> Vec<RegistryMutation> {
-    let mut mutations = Vec::new();
-
-    for (id, mut version) in
-        get_key_family_iter::<ReplicaVersionRecord>(registry, REPLICA_VERSION_KEY_PREFIX)
-    {
-        if version.replica_version_id.is_some() {
-            continue;
-        }
-
-        version.replica_version_id = Some(id.clone());
-        mutations.push(update(
-            make_replica_version_key(id),
-            version.encode_to_vec(),
-        ))
-    }
-
-    if mutations.len() > 10 {
-        ic_cdk::println!(
-            "Trying to update ReplicaVersionRecords generated too many mutations. Aborting."
-        );
-        return Vec::new();
     }
 
     mutations

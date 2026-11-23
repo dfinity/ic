@@ -6,7 +6,7 @@ use ic_btc_checker::{
     CheckAddressArgs, CheckAddressResponse, CheckArg, CheckMode, CheckTransactionArgs,
     CheckTransactionIrrecoverableError, CheckTransactionQueryArgs, CheckTransactionQueryResponse,
     CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus,
-    CheckTransactionStrArgs, RETRY_MAX_RESPONSE_BYTES, blocklist::is_blocked,
+    CheckTransactionStrArgs, RETRY_MAX_RESPONSE_BYTES, blocklist, blocklist::is_blocked,
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
@@ -191,6 +191,7 @@ fn init(arg: Option<CheckArg>) {
             ic_cdk::trap("cannot init canister state without init args");
         }
     }
+    blocklist::init();
 }
 
 #[ic_cdk::post_upgrade]
@@ -216,6 +217,7 @@ fn post_upgrade(arg: Option<CheckArg>) {
         }
         _ => (), // config remains unchanged if no upgrade argument is specified
     }
+    blocklist::init();
 }
 
 #[ic_cdk::query(hidden = true)]
@@ -539,7 +541,7 @@ pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
         CheckMode::AcceptAll => CheckTransactionResponse::Passed,
         CheckMode::RejectAll => CheckTransactionResponse::Failed(Vec::new()),
         CheckMode::Normal => {
-            match env.try_fetch_tx(txid) {
+            match env.try_fetch_tx(txid, state::FetchedTx::clone) {
                 TryFetchResult::Pending => CheckTransactionRetriable::Pending.into(),
                 TryFetchResult::HighLoad => CheckTransactionRetriable::HighLoad.into(),
                 TryFetchResult::NotEnoughCycles => CheckTransactionStatus::NotEnoughCycles.into(),

@@ -16,13 +16,15 @@ use ic_interfaces::{
         ConsensusTime, HeightIndexedPool, HeightRange, Mutations, PoolSection,
         PurgeableArtifactType, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
-    p2p::consensus::{ArtifactTransmit, ArtifactTransmits, MutablePool, ValidatedPoolReader},
+    p2p::consensus::{
+        ArtifactTransmit, ArtifactTransmits, InitialBroadcastSource, MutablePool,
+        ValidatedPoolReader,
+    },
     time_source::TimeSource,
 };
 use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
-use ic_types::crypto::CryptoHashOf;
 use ic_types::{Height, SubnetId, Time, artifact::ConsensusMessageId, consensus::*};
 use ic_types::{NodeId, ReplicaVersion};
 use prometheus::{Histogram, IntCounter, IntGauge, histogram_opts, labels, opts};
@@ -281,7 +283,7 @@ pub struct ConsensusPoolImpl {
     /// Block instants are recorded upon entering the validated pool. Instants
     /// below height h are purged whenever all validated or unvalidated
     /// artifacts are also purged below that height.
-    block_instants: HeightIndexedInstants<CryptoHashOf<Block>>,
+    block_instants: HeightIndexedInstants<HashedBlock>,
     /// Message instants are recorded upon entering the unvalidated pool.
     /// Currently the only messages we record are notarizations, random beacons
     /// and CUPs. Instants below height h are purged whenever all validated or
@@ -396,7 +398,7 @@ impl ConsensusPool for UncachedConsensusPoolImpl {
         ))
     }
 
-    fn block_instant(&self, _hash: &CryptoHashOf<Block>) -> Option<Instant> {
+    fn block_instant(&self, _block: &HashedBlock) -> Option<Instant> {
         // The uncached consensus pool is only used temporarily for genesis init.
         // We are not inserting new artifacts in this pool, so we don't have any
         // recorded instants at this point.
@@ -637,9 +639,7 @@ impl ConsensusPoolImpl {
         let now = self.time_source.get_instant();
         let msg = &artifact.msg;
         if let ConsensusMessage::BlockProposal(bp) = msg {
-            let hash = bp.content.get_hash().clone();
-            self.block_instants
-                .insert(&hash, now, bp.content.get_value().height);
+            self.block_instants.insert(&bp.content, now);
         }
         self.record_instant_unvalidated(msg);
     }
@@ -655,8 +655,7 @@ impl ConsensusPoolImpl {
                 | ConsensusMessage::RandomBeacon(_)
                 | ConsensusMessage::CatchUpPackage(_)
         ) {
-            let id = msg.get_id();
-            self.message_instants.insert(&id, now, id.height);
+            self.message_instants.insert(&msg.get_id(), now);
         }
     }
 }
@@ -686,8 +685,8 @@ impl ConsensusPool for ConsensusPoolImpl {
         ))
     }
 
-    fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
-        self.block_instants.get(hash).copied()
+    fn block_instant(&self, block: &HashedBlock) -> Option<Instant> {
+        self.block_instants.get(block).copied()
     }
 
     fn message_instant(&self, id: &ConsensusMessageId) -> Option<Instant> {
@@ -843,11 +842,15 @@ fn is_latency_sensitive(msg: &ConsensusMessage) -> bool {
     }
 }
 
+/// The interface the P2P layer uses to read from the validated pool.
+/// Returned block proposals are guaranteed to be fully loaded.
 impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
     fn get(&self, id: &ConsensusMessageId) -> Option<ConsensusMessage> {
-        self.validated.get(id)
+        self.validated.get(id).inspect(ConsensusMessage::load)
     }
+}
 
+impl InitialBroadcastSource<ConsensusMessage> for ConsensusPoolImpl {
     fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
         let node_id = self.node_id;
         let max_catch_up_height = self
@@ -960,6 +963,10 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
                     min: max_catch_up_height,
                     max: max_catch_up_height,
                 })
+                // Do not broadcast unsigned (i.e. genesis or recovery) CUPs: peers would consider
+                // them invalid, as they have no signature. Instead, each peer obtains such a CUP
+                // from its own orchestrator, which creates it from the registry.
+                .filter(|x| x.is_signed())
                 .map(|x| x.into_message())
                 .chain(
                     self.validated
@@ -1036,7 +1043,8 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
                         })
                         .map(|x| x.into_message()),
                 )
-                .chain(random_tape_iterator),
+                .chain(random_tape_iterator)
+                .inspect(ConsensusMessage::load),
         )
     }
 }
@@ -1063,7 +1071,9 @@ mod tests {
         artifact::IdentifiableArtifact,
         batch::ValidationContext,
         consensus::{BlockProposal, RandomBeacon, dkg::DkgSummary},
-        crypto::{CryptoHash, CryptoHashOf, crypto_hash},
+        crypto::{
+            CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, crypto_hash,
+        },
         time::UNIX_EPOCH,
     };
     use prost::Message;
@@ -1360,6 +1370,55 @@ mod tests {
         });
     }
 
+    /// p2p hands out the block proposals it gets from the pool after letting go of the
+    /// lock on it, by which time the block, payload included, may have been purged. So
+    /// it has to get them with their payload already loaded.
+    #[test]
+    fn test_block_proposals_for_peers_come_with_their_payload() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let mut pool = new_from_cup_without_bytes(
+                node_test_id(0),
+                subnet_test_id(0),
+                make_genesis(DkgSummary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+                time_source.clone(),
+            );
+            let block_proposal =
+                BlockProposal::fake(fake_block(Height::from(1), Rank(0)), node_test_id(0));
+            let message = block_proposal.clone().into_message();
+            let id = message.get_id();
+            pool.apply(vec![ChangeAction::AddToValidated(
+                ValidatedConsensusArtifact {
+                    msg: message.clone(),
+                    timestamp: time_source.get_relative_time(),
+                },
+            )]);
+
+            let served = ValidatedPoolReader::get(&pool, &id).expect("The proposal is in the pool");
+            let broadcast: Vec<_> = pool
+                .get_all_for_initial_broadcast()
+                .filter(|message| message.get_id() == id)
+                .collect();
+            assert_eq!(broadcast.len(), 1);
+
+            pool.apply(vec![ChangeAction::RemoveFromValidated(message)]);
+            assert!(ValidatedPoolReader::get(&pool, &id).is_none());
+
+            for message in std::iter::once(served).chain(broadcast) {
+                let ConsensusMessage::BlockProposal(proposal) = message else {
+                    panic!("Expected a block proposal, got {message:?}");
+                };
+                assert_eq!(
+                    proposal.as_ref().payload.as_ref(),
+                    block_proposal.as_ref().payload.as_ref()
+                );
+            }
+        });
+    }
+
     #[test]
     fn test_get_all_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -1461,25 +1520,25 @@ mod tests {
                     ]);
                 }
             }
-            messages.push(
-                CatchUpPackage::fake(CatchUpContent::new(
-                    HashedBlock::new(
-                        crypto_hash,
-                        fake_block(Height::from(height_offset), Rank(0)),
-                    ),
-                    HashedRandomBeacon::new(
-                        crypto_hash,
-                        RandomBeacon::fake(RandomBeaconContent {
-                            version: test_replica_version(),
-                            height: Height::from(height_offset),
-                            parent: CryptoHashOf::from(CryptoHash(vec![])),
-                        }),
-                    ),
-                    CryptoHashOf::from(CryptoHash(vec![])),
-                    None,
-                ))
-                .into_message(),
-            );
+            let mut cup = CatchUpPackage::fake(CatchUpContent::new(
+                HashedBlock::new(
+                    crypto_hash,
+                    fake_block(Height::from(height_offset), Rank(0)),
+                ),
+                HashedRandomBeacon::new(
+                    crypto_hash,
+                    RandomBeacon::fake(RandomBeaconContent {
+                        version: test_replica_version(),
+                        height: Height::from(height_offset),
+                        parent: CryptoHashOf::from(CryptoHash(vec![])),
+                    }),
+                ),
+                CryptoHashOf::from(CryptoHash(vec![])),
+                None,
+            ));
+            // Sign the CUP, as unsigned CUPs are not broadcast
+            cup.signature.signature = CombinedThresholdSigOf::new(CombinedThresholdSig(vec![1]));
+            messages.push(cup.into_message());
 
             pool.apply(
                 messages
@@ -1517,6 +1576,43 @@ mod tests {
                 1 + 15 * 4 + 5 * 4 + 20 * 5
             );
         });
+    }
+
+    /// The CUP that the pool is initialized with is broadcast on startup only if it is signed, as
+    /// peers would consider unsigned (i.e. genesis or recovery) CUPs invalid.
+    #[test]
+    fn test_initial_broadcast_includes_cup_only_if_signed() {
+        for is_signed in [false, true] {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                let mut cup = make_genesis(DkgSummary::fake());
+                if is_signed {
+                    cup.signature.signature =
+                        CombinedThresholdSigOf::new(CombinedThresholdSig(vec![1]));
+                }
+                assert_eq!(cup.is_signed(), is_signed);
+                let pool = new_from_cup_without_bytes(
+                    node_test_id(0),
+                    subnet_test_id(0),
+                    cup.clone(),
+                    pool_config,
+                    MetricsRegistry::new(),
+                    no_op_logger(),
+                    FastForwardTimeSource::new(),
+                );
+
+                let broadcast_cups: Vec<_> = pool
+                    .get_all_for_initial_broadcast()
+                    .filter(|m| matches!(m, ConsensusMessage::CatchUpPackage(_)))
+                    .collect();
+
+                let expected_cups = if is_signed {
+                    vec![cup.into_message()]
+                } else {
+                    vec![]
+                };
+                assert_eq!(broadcast_cups, expected_cups, "is_signed: {is_signed}");
+            });
+        }
     }
 
     #[test]

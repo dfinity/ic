@@ -148,7 +148,8 @@ pub mod chain_key_initialization {
 }
 /// Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
 /// a CUP with no dependencies on previous CUPs or blocks). Such CUP materials can be used to
-/// construct the genesis CUP or a recovery CUP in the event of a subnet stall.
+/// construct the genesis CUP, a recovery CUP in the event of a subnet stall, or a post-split CUP
+/// when the subnet is split in two.
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct CatchUpPackageContents {
     /// Initial non-interactive low-threshold DKG transcript
@@ -159,18 +160,6 @@ pub struct CatchUpPackageContents {
     #[prost(message, optional, tag = "2")]
     pub initial_ni_dkg_transcript_high_threshold:
         ::core::option::Option<InitialNiDkgTranscriptRecord>,
-    /// The blockchain height that the CUP should have
-    /// TODO(CON-1671): deprecate this field in favor of `cup_type`
-    #[prost(uint64, tag = "3")]
-    pub height: u64,
-    /// Block time for the CUP's block
-    /// TODO(CON-1671): deprecate this field in favor of `cup_type`
-    #[prost(uint64, tag = "4")]
-    pub time: u64,
-    /// The hash of the state that the subnet should use
-    /// TODO(CON-1671): deprecate this field in favor of `cup_type`
-    #[prost(bytes = "vec", tag = "5")]
-    pub state_hash: ::prost::alloc::vec::Vec<u8>,
     /// A uri from which data to replace the registry local store should be downloaded
     #[prost(message, optional, tag = "6")]
     pub registry_store_uri: ::core::option::Option<RegistryStoreUri>,
@@ -203,11 +192,7 @@ pub mod catch_up_package_contents {
 #[derive(
     serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq, Hash, ::prost::Message,
 )]
-pub struct GenesisArgs {
-    /// Initial height of the subnet
-    #[prost(uint64, tag = "1")]
-    pub height: u64,
-}
+pub struct GenesisArgs {}
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RecoveryArgs {
     /// The blockchain height that the CUP should have

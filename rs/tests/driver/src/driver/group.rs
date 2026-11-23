@@ -54,6 +54,14 @@ const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 m
 const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
 pub const MAX_RUNTIME_THREADS: usize = 16;
 
+/// Returns the number of CPUs available to this process, falling back to 1
+/// if it cannot be determined.
+pub fn available_parallelism() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+}
+
 const REPORT_TASK_NAME: &str = "report";
 const SETUP_TASK_NAME: &str = "setup";
 const TEARDOWN_TASK_NAME: &str = "teardown";
@@ -1289,7 +1297,7 @@ impl SystemTestGroup {
         // create the runtime that lives until this variable is dropped.
         // Note: having only a runtime handle does not guarantee that the runtime is alive.
         let runtime: Runtime = {
-            let cpus = num_cpus::get();
+            let cpus = available_parallelism();
             info!(group_ctx.log(), "Number of CPUs {}", cpus);
             let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
             info!(

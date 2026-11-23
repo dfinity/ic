@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/dfinity/ic-dev@sha256:d3f34b2a4259f0f4ec75e58464a8f9785a5db57da9a3bfa6bad9332a04f9e6e5",
+  "image": "ghcr.io/dfinity/ic-dev@sha256:3c6a840c38cc5dfebbdb589a677057eaebb79e76cdec6fe2b5901dde45fddf1a",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
@@ -29,7 +29,7 @@
   // The install base and the repository cache stay shared under the same
   // output_user_root, and bazel/bazel_clean.sh removes the rc file with the
   // rest of ~/.cache/bazel.
-  "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/bazel/devcontainer ~/.cache/cargo ~/.claude ~/.local/share/fish /tmp/ict_testnets && touch ~/.zsh_history ~/.bash_history && echo 'startup --output_base=/home/ubuntu/.cache/bazel/_bazel_ubuntu/devcontainer-${devcontainerId}' > ~/.cache/bazel/devcontainer/${devcontainerId}.bazelrc",
+  "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/bazel/devcontainer ~/.cache/cargo ~/.claude ~/.config ~/.local/share/fish /tmp/ict_testnets && touch ~/.zsh_history ~/.bash_history && echo 'startup --output_base=/home/ubuntu/.cache/bazel/_bazel_ubuntu/devcontainer-${devcontainerId}' > ~/.cache/bazel/devcontainer/${devcontainerId}.bazelrc",
   // Array form so that a checkout path with spaces cannot break it.
   "postStartCommand": [
     "${containerWorkspaceFolder}/ci/container/init.sh"
@@ -68,6 +68,11 @@
     {
       "source": "${localEnv:HOME}/.claude",
       "target": "/home/ubuntu/.claude",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.config",
+      "target": "/home/ubuntu/.config",
       "type": "bind"
     },
     {

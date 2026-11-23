@@ -242,7 +242,7 @@ unsafe impl LinearMemory for WasmtimeMemory {
         let new_pages = new_size / WASM_PAGE_SIZE as usize;
         match self
             .used
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |prev_pages| {
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |prev_pages| {
                 if new_pages <= prev_pages {
                     None
                 } else {

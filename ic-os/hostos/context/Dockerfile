@@ -104,7 +104,8 @@ RUN systemctl disable \
     apt-daily-upgrade.service \
     apt-daily-upgrade.timer \
     motd-news.service \
-    motd-news.timer
+    motd-news.timer \
+    nginx.service
 
 # ------ HOSTOS WORK ---------------------------------------------
 
@@ -185,6 +186,9 @@ RUN addgroup node_exporter && \
 RUN adduser --system --disabled-password --home /var/lib/metrics-proxy --group --no-create-home metrics-proxy && \
     usermod -a -G node_exporter metrics-proxy
 
+# User for the nginx upgrade-proxy service.
+RUN adduser --system --disabled-password --home /var/lib/ic/upgrade-proxy --group --no-create-home upgrade-proxy
+
 # ------ INSTALL SCRIPTS -----------------------------------------
 
 # Install IC binaries and other data late -- this means everything above
@@ -196,9 +200,15 @@ RUN chown root:root /opt
 RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
-    chmod 0755 /opt/ic/bin/rbash/bash && \
+    chmod 0755 /opt/ic/bin/rbash/* && \
     chmod 0644 /opt/ic/share/*
 
+RUN cd /opt/ic/bin/rbash && \
+    for f in $(grep -v '^#' /opt/ic/share/rbash-shadow.list); do \
+        b="${f##*/}"; \
+        case "$b" in bash | *\**) continue ;; esac; \
+        ln -sf deny "$b"; \
+    done
 
 # ------ DEV VARIANT ---------------------------------------------
 

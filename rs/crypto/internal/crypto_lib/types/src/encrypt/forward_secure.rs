@@ -190,7 +190,7 @@ pub mod groth20_bls12_381 {
         pub fn is_empty(&self) -> bool {
             self.ciphertext_chunks.is_empty()
         }
-        pub fn iter(&self) -> impl Iterator<Item = (NodeIndex, &[G1Bytes; NUM_CHUNKS])> + '_ {
+        pub fn iter(&self) -> impl Iterator<Item = (NodeIndex, &[G1Bytes; NUM_CHUNKS])> {
             (0_u32..).zip(&self.ciphertext_chunks)
         }
         pub fn get(&self, node_index: NodeIndex) -> Option<&[G1Bytes; NUM_CHUNKS]> {

@@ -9,10 +9,8 @@ documentation.workspace = true
 [dependencies]
 salt-sharing-api = { path = "../api" }
 ic-nervous-system-integration-tests = { path = "../../../nervous_system/integration_tests" }
-ic-base-types = { path = "../../../types/base_types" }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-management-canister-types = { workspace = true }
-assert_matches = { workspace = true }
 candid = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
@@ -22,7 +20,6 @@ chrono = { workspace = true }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-nns-constants = { path = "../../../nns/constants" }
-ic-registry-keys = { path = "../../../registry/keys" }
 ic-registry-transport = { path = "../../../registry/transport" }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-nns-test-utils = { path = "../../../nns/test_utils" }

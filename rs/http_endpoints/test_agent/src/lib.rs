@@ -5,7 +5,8 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-        HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, SignedIngress,
+        HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, RawSignedSenderInfo,
+        SignedIngress,
     },
     time::current_time,
 };
@@ -78,6 +79,7 @@ pub struct IngressMessage {
     effective_canister_id: PrincipalId,
     ingress_expiry: u64,
     method_name: String,
+    sender_info: Option<RawSignedSenderInfo>,
 }
 
 impl Default for IngressMessage {
@@ -87,6 +89,7 @@ impl Default for IngressMessage {
             effective_canister_id: PrincipalId::default(),
             ingress_expiry: (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch(),
             method_name: METHOD_NAME.to_string(),
+            sender_info: None,
         }
     }
 }
@@ -109,6 +112,10 @@ impl IngressMessage {
         self.method_name = method_name;
         self
     }
+    pub fn with_sender_info(mut self, sender_info: RawSignedSenderInfo) -> Self {
+        self.sender_info = Some(sender_info);
+        self
+    }
 
     fn envelope(&self) -> HttpRequestEnvelope<HttpCallContent> {
         let call_content = HttpCallContent::Call {
@@ -119,7 +126,7 @@ impl IngressMessage {
                 arg: Blob(ARG),
                 sender: Blob(SENDER.into_vec()),
                 nonce: None,
-                sender_info: None,
+                sender_info: self.sender_info.clone(),
             },
         };
 
@@ -206,6 +213,7 @@ pub struct Query {
     method_name: String,
     subnet_id: Option<PrincipalId>,
     version: query::Version,
+    sender_info: Option<RawSignedSenderInfo>,
 }
 
 impl Query {
@@ -220,6 +228,7 @@ impl Query {
             method_name: METHOD_NAME.to_string(),
             subnet_id: None,
             version,
+            sender_info: None,
         }
     }
 
@@ -230,6 +239,7 @@ impl Query {
             method_name: "list_canisters".to_string(),
             subnet_id: Some(subnet_id),
             version: query::Version::SubnetV3,
+            sender_info: None,
         }
     }
 
@@ -240,6 +250,11 @@ impl Query {
 
     pub fn with_method_name(mut self, method_name: String) -> Self {
         self.method_name = method_name;
+        self
+    }
+
+    pub fn with_sender_info(mut self, sender_info: RawSignedSenderInfo) -> Self {
+        self.sender_info = Some(sender_info);
         self
     }
 
@@ -254,7 +269,7 @@ impl Query {
                 sender: Blob(SENDER.into_vec()),
                 ingress_expiry,
                 nonce: None,
-                sender_info: None,
+                sender_info: self.sender_info,
             },
         };
 
@@ -291,13 +306,18 @@ impl Query {
     }
 }
 
-pub struct CanisterReadState {
+/// A `read_state` request to the endpoint of a canister or of a subnet.
+pub struct ReadState {
     paths: Vec<Path>,
-    effective_canister_id: PrincipalId,
+    /// The effective canister ID for `read_state::Target::Canister`, or the subnet ID for
+    /// `read_state::Target::Subnet`.
+    effective_principal_id: PrincipalId,
+    target: read_state::Target,
     version: read_state::Version,
 }
 
-impl CanisterReadState {
+impl ReadState {
+    /// A request to `/api/<version>/canister/<effective_canister_id>/read_state`.
     pub fn new(
         paths: Vec<Path>,
         effective_canister_id: PrincipalId,
@@ -305,7 +325,22 @@ impl CanisterReadState {
     ) -> Self {
         Self {
             paths,
-            effective_canister_id,
+            effective_principal_id: effective_canister_id,
+            target: read_state::Target::Canister,
+            version,
+        }
+    }
+
+    /// A request to `/api/<version>/subnet/<subnet_id>/read_state`.
+    pub fn new_subnet(
+        paths: Vec<Path>,
+        subnet_id: PrincipalId,
+        version: read_state::Version,
+    ) -> Self {
+        Self {
+            paths,
+            effective_principal_id: subnet_id,
+            target: read_state::Target::Subnet,
             version,
         }
     }
@@ -341,10 +376,14 @@ impl CanisterReadState {
             read_state::Version::V2 => "v2",
             read_state::Version::V3 => "v3",
         };
+        let target_str = match self.target {
+            read_state::Target::Canister => "canister",
+            read_state::Target::Subnet => "subnet",
+        };
 
         url.set_path(&format!(
-            "api/{version_str}/canister/{}/read_state",
-            self.effective_canister_id
+            "api/{version_str}/{target_str}/{}/read_state",
+            self.effective_principal_id
         ));
 
         let client = reqwest::Client::builder()

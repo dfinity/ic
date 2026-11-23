@@ -31,7 +31,8 @@ pub fn query_stats_config(env: TestEnv) {
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_unit_delay(Duration::from_millis(200))
+                // Must exceed the clock skew between nodes, up to ~2s in local system-tests.
+                .with_unit_delay(Duration::from_secs(2))
                 .with_initial_notary_delay(Duration::from_millis(200))
                 .with_dkg_interval_length(Height::from(99))
                 .with_random_height()

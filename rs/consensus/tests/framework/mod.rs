@@ -31,7 +31,7 @@ use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_test_utilities_consensus::make_genesis;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_types::{
-    NodeId, RegistryVersion, SubnetId,
+    Height, NodeId, RegistryVersion, SubnetId,
     consensus::CatchUpPackage,
     crypto::{
         KeyPurpose,
@@ -215,6 +215,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
         .expect("Failed to retreive the DKG transcripts from registry");
     let summary = get_dkg_summary_from_cup_contents(
         cup_contents.value.expect("Missing CUP contents"),
+        Height::from(0),
         subnet_id,
         &*registry_client,
         version,

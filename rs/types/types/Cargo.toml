@@ -28,7 +28,6 @@ ic-validate-eq = { path = "../../utils/validate_eq" }
 ic-validate-eq-derive = { path = "../../utils/validate_eq_derive" }
 maplit = { workspace = true }
 more-asserts = { workspace = true }
-once_cell = { workspace = true }
 phantom_newtype = { path = "../../phantom_newtype" }
 prost = { workspace = true }
 rand = { workspace = true }

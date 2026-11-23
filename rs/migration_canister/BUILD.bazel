@@ -65,9 +65,12 @@ rust_test(
     ],
     deps = [
         # Keep sorted.
+        "//rs/config",
         "//rs/limits",
         "//rs/nns/constants",
         "//rs/rust_canisters/dfn_http_metrics",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
         "@crate_index//:candid",
         "@crate_index//:candid_parser",
         "@crate_index//:futures",
@@ -106,6 +109,9 @@ rust_test(
     exec_properties = {"test.cpu": "16"},
     proc_macro_deps = [
         "@crate_index//:strum_macros",
+    ],
+    tags = [
+        "long_test",  # The P90 duration was over 8 minutes in the month up to 2026-09-17.
     ],
     deps = [
         # Keep sorted

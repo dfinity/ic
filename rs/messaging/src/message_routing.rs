@@ -36,6 +36,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
 use ic_replicated_state::{
     DroppedMessageMetrics, NetworkTopology, OwnSubnetInfo, ReplicatedState, SubnetTopology,
+    UpgradePermitMetrics,
 };
 use ic_types::batch::{Batch, BatchContent, BatchSummary};
 use ic_types::crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey};
@@ -109,12 +110,14 @@ const METRIC_TIMED_OUT_MESSAGES_TOTAL: &str = "mr_timed_out_messages_total";
 const METRIC_TIMED_OUT_CALLBACKS_TOTAL: &str = "mr_timed_out_callbacks_total";
 const METRIC_SHED_MESSAGES_TOTAL: &str = "mr_shed_messages_total";
 const METRIC_SHED_MESSAGE_BYTES_TOTAL: &str = "mr_shed_message_bytes_total";
+const METRIC_UPGRADE_PERMIT_UNEXPECTED_RETURN_COUNT: &str =
+    "mr_upgrade_permit_unexpected_return_count";
+const METRIC_UPGRADE_PERMIT_EXPIRED_COUNT: &str = "mr_upgrade_permit_expired_count";
 const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
 const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
 const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
 const BLOCKS_NOT_PROPOSED_BY_BLOCKMAKER_TOTAL: &str = "mr_blocks_not_proposed_by_blockmaker_total";
 const METRIC_NEXT_CHECKPOINT_HEIGHT: &str = "mr_next_checkpoint_height";
-const METRIC_REMOTE_CERTIFIED_HEIGHTS: &str = "mr_remote_certified_heights";
 
 const METRIC_SUBNET_INFO: &str = "mr_subnet_info";
 const METRIC_SUBNET_SIZE: &str = "mr_subnet_size";
@@ -305,8 +308,6 @@ pub(crate) struct MessageRoutingMetrics {
     pub(crate) induct_batch_latency: Histogram,
     /// Batch processing durations.
     process_batch_duration: Histogram,
-    /// Most recently seen certified height, per remote subnet
-    pub(crate) remote_certified_heights: IntGaugeVec,
     /// Batch processing phase durations, by phase.
     process_batch_phase_duration: HistogramVec,
     /// Number of timed out messages.
@@ -317,6 +318,11 @@ pub(crate) struct MessageRoutingMetrics {
     shed_messages_total: IntCounterVec,
     /// Byte size of shed best-effort messages.
     shed_message_bytes_total: IntCounterVec,
+    /// Number of upgrade permits that have been returned, without first being authorized.
+    upgrade_permit_unexpected_return_count: IntCounter,
+    /// Number of upgrade permits that have expired, either from membership
+    /// changes, or for taking too long.
+    upgrade_permit_expired_count: IntCounter,
     /// Height at which the subnet last split (if during the lifetime of this
     /// replica process; otherwise zero).
     subnet_split_height: IntGaugeVec,
@@ -419,11 +425,6 @@ impl MessageRoutingMetrics {
                 decimal_buckets(-3, 1),
                 &["phase"],
             ),
-            remote_certified_heights: metrics_registry.int_gauge_vec(
-                METRIC_REMOTE_CERTIFIED_HEIGHTS,
-                "Most recently observed remote subnet certified heights.",
-                &[LABEL_REMOTE],
-            ),
             timed_out_messages_total: metrics_registry.int_counter_vec(
                 METRIC_TIMED_OUT_MESSAGES_TOTAL,
                 "Count of timed out messages, by kind, context and class.",
@@ -442,6 +443,14 @@ impl MessageRoutingMetrics {
                 METRIC_SHED_MESSAGE_BYTES_TOTAL,
                 "Total byte size of shed best-effort messages, by kind and context.",
                 &[LABEL_KIND, LABEL_CONTEXT],
+            ),
+            upgrade_permit_unexpected_return_count: metrics_registry.int_counter(
+                METRIC_UPGRADE_PERMIT_UNEXPECTED_RETURN_COUNT,
+                "Number of upgrade permits that have been returned, without first being authorized.",
+            ),
+            upgrade_permit_expired_count: metrics_registry.int_counter(
+                METRIC_UPGRADE_PERMIT_EXPIRED_COUNT,
+                "Number of upgrade permits that have expired, either from membership changes, or for taking too long.",
             ),
             subnet_split_height: metrics_registry.int_gauge_vec(
                 METRIC_SUBNET_SPLIT_HEIGHT,
@@ -594,6 +603,16 @@ impl DroppedMessageMetrics for MessageRoutingMetrics {
     }
 }
 
+impl UpgradePermitMetrics for MessageRoutingMetrics {
+    fn observe_unexpected_permit_return(&self) {
+        self.upgrade_permit_unexpected_return_count.inc();
+    }
+
+    fn observe_expired_permit(&self) {
+        self.upgrade_permit_expired_count.inc();
+    }
+}
+
 /// Implementation of the `MessageRouting` trait.
 pub struct MessageRoutingImpl {
     last_seen_batch: RwLock<Height>,
@@ -713,7 +732,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             vsr,
             stream_handler,
             certified_stream_store,
-            metrics.clone(),
             log.clone(),
         ));
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(

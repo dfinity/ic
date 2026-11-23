@@ -1,0 +1,4 @@
+#!/bin/sh
+
+echo "${0##*/}: is not available in the limited console." >&2
+exit 127

@@ -195,7 +195,7 @@ impl IngressManager {
         // in order to be consistent with expiry_range, which imposes
         // a precondition that all messages processed here are in range.
         if let Err(err) = self.request_validator.validate_request(
-            ingress_object.signed_ingress.as_ref(),
+            ingress_object.signed_ingress().as_ref(),
             consensus_time,
             &self.registry_root_of_trust_provider(registry_version),
         ) {

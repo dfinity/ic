@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use itertools::Itertools;
-use pcre2::bytes::Regex;
+use regex::bytes::Regex;
 use std::fs;
 use std::fs::File;
 use std::io::{self, Seek, SeekFrom, Write};
@@ -334,7 +334,6 @@ impl FileContexts {
             .find_map(|(pattern, label)| {
                 pattern
                     .is_match(target.to_str()?.as_bytes())
-                    .ok()?
                     .then_some(label.as_str())
             })
             .context("no matching context")

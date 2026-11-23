@@ -11,10 +11,12 @@
 //! logs to ElasticSearch, the `nodes/` files are what the
 //! `assert_no_unallowed_log_patterns` teardown scans
 //! (`crate::driver::unallowed_log_patterns`). Targets matching an
-//! `--exclude-logs` pattern are skipped, streams resume from the last cursor
-//! after transient failures, and on the Local backend IC node streams bind to a
-//! dedicated per-group source address to avoid exhausting the GuestOS
-//! per-source firewall connection budget.
+//! `--exclude-logs` pattern are skipped, streams reconnect from their last
+//! cursor when a connection ends or fails (TCP keepalive bounds a stalled read,
+//! see `KEEPALIVE_*`), skipping the record re-emitted at the checkpoint, and on
+//! the Local backend IC node streams bind to a dedicated per-group source
+//! address to avoid exhausting the GuestOS per-source firewall connection
+//! budget.
 
 use crate::driver::{
     constants::{COLOCATE_CONTAINER_NAME, GROUP_SETUP_DIR},
@@ -27,27 +29,40 @@ use crate::driver::{
     universal_vm::UNIVERSAL_VMS_DIR,
 };
 use anyhow::{Context, Result};
+use nix::sys::socket::{setsockopt, sockopt};
 use regex::Regex;
 use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
-use slog::{Logger, debug, error, info, warn};
+use slog::{Logger, debug, info, warn};
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::io::Write;
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::TcpSocket,
+    net::{TcpSocket, TcpStream},
     runtime::Runtime,
 };
 use walkdir::WalkDir;
 
 pub(crate) const LOGS_STREAM_TASK_NAME: &str = "logs_stream";
 
+/// The port of systemd-journal-gatewayd on IC nodes and universal VMs.
+const JOURNAL_GATEWAYD_PORT: u16 = 19531;
 const RETRY_DELAY_JOURNALD_STREAM: Duration = Duration::from_secs(5);
 const RETRY_DELAY_DISCOVER_TARGETS: Duration = Duration::from_secs(5);
+/// TCP keepalive of the streaming sockets: a dead peer (no FIN/RST) fails the
+/// read within `KEEPALIVE_IDLE + KEEPALIVE_COUNT * KEEPALIVE_INTERVAL` = 30 s.
+const KEEPALIVE_IDLE: Duration = Duration::from_secs(15);
+const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
+const KEEPALIVE_COUNT: u32 = 3;
+/// Bounds the connect (SYN) phase, which keepalive does not cover.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+/// A failure that repeats with the same text is logged again every this many
+/// attempts, so a stream that never recovers stays visible.
+const REPEATED_FAILURE_LOG_EVERY: u32 = 60;
 
 /// `<group_dir>/journald_logs`: the persisted journald records, one JSON Lines
 /// file per streamed target (see [`JournalFileSink`]).
@@ -274,7 +289,12 @@ fn process_discovered(
             );
             // The task starts, but the handle is never joined.
             rt.spawn(stream_journald_with_retries(
-                logger, label, value, bind_addr, log_path,
+                logger,
+                label,
+                SocketAddr::new(IpAddr::V6(value), JOURNAL_GATEWAYD_PORT),
+                bind_addr,
+                log_path,
+                RETRY_DELAY_JOURNALD_STREAM,
             ));
             value
         });
@@ -482,38 +502,86 @@ impl JournalFileSink {
     }
 }
 
+/// Per-target streaming state shared by the retry loop and its connections.
+#[derive(Default)]
+struct StreamState {
+    cursor: Cursor,
+    /// Records delivered by the current connection, the skipped checkpoint
+    /// record excluded.
+    records: u64,
+    /// When the last record was received, if any.
+    last_record_at: Option<Instant>,
+    /// Set once a connection ends or fails, cleared when records flow again.
+    outage: Option<Outage>,
+}
+
+struct Outage {
+    /// Connections attempted since the outage started.
+    attempts: u32,
+}
+
+/// Streams the journald of `addr` forever: whenever a connection ends or fails,
+/// a new one is opened after `retry_delay`, resuming from the last cursor.
 async fn stream_journald_with_retries(
-    logger: slog::Logger,
+    logger: Logger,
     label: String,
-    ipv6: Ipv6Addr,
+    addr: SocketAddr,
     bind_addr: Option<Ipv6Addr>,
     log_path: PathBuf,
+    retry_delay: Duration,
 ) {
-    // Start streaming Journald from the very beginning, which corresponds to the cursor="".
-    let mut cursor = Cursor::Start;
+    let mut state = StreamState::default();
+    // The last failure that was logged; a repeat of it is logged only every
+    // `REPEATED_FAILURE_LOG_EVERY` attempts.
+    let mut last_err: Option<String> = None;
     loop {
-        // In normal scenarios, i.e. without errors/interrupts, the function below should never return.
-        // In case it returns unexpectedly, we restart reading logs from the checkpoint cursor.
-        let (cursor_next, result) =
-            stream_journald_from_cursor(&logger, &label, ipv6, cursor, bind_addr, &log_path).await;
-        cursor = cursor_next;
-        if let Err(err) = result {
-            error!(
-                logger,
-                "Streaming Journald for {label} with ipv6={ipv6} failed with: {err}"
-            );
+        state.records = 0;
+        let result =
+            stream_journald_from_cursor(&logger, &label, addr, bind_addr, &log_path, &mut state)
+                .await;
+        if state.records > 0 {
+            // The connection was healthy for a while: a later failure, even with
+            // the same text as the last one, is a new outage worth a line.
+            last_err = None;
         }
-        // Should we stop reading Journald here?
-        warn!(
-            logger,
-            "All entries of Journald are read to completion. Streaming Journald will start again in {} sec ...",
-            RETRY_DELAY_JOURNALD_STREAM.as_secs()
-        );
-        tokio::time::sleep(RETRY_DELAY_JOURNALD_STREAM).await;
+        let outage = state.outage.get_or_insert(Outage { attempts: 0 });
+        outage.attempts += 1;
+        let from = match state.cursor {
+            Cursor::Start => "the beginning",
+            Cursor::Position(_) => "the last cursor",
+        };
+        let delay = retry_delay.as_secs();
+        match result {
+            Ok(()) => {
+                warn!(
+                    logger,
+                    "Journald stream of [{label}] ended: peer closed the connection after {} record(s); reconnecting from {from} in {delay}s",
+                    state.records
+                );
+                last_err = None;
+            }
+            Err(err) => {
+                let err = format!("{err:#}");
+                if last_err.as_deref() != Some(err.as_str())
+                    || outage.attempts.is_multiple_of(REPEATED_FAILURE_LOG_EVERY)
+                {
+                    warn!(
+                        logger,
+                        "Journald stream of [{label}] failed after {} record(s): {err}; reconnecting from {from} every {delay}s until it succeeds",
+                        state.records
+                    );
+                    last_err = Some(err);
+                }
+            }
+        }
+        tokio::time::sleep(retry_delay).await;
     }
 }
 
+/// `Start` is the empty cursor, i.e. the beginning of the journal.
+#[derive(Default)]
 enum Cursor {
+    #[default]
     Start,
     Position(String),
 }
@@ -527,23 +595,52 @@ impl std::fmt::Display for Cursor {
     }
 }
 
-macro_rules! unwrap_or_return {
-    ( $val1:expr_2021, $val2:expr_2021 ) => {
-        match $val2 {
-            Ok(x) => x,
-            Err(x) => return ($val1, Err(x.into())),
-        }
-    };
+/// Connects to the journald gateway at `addr` with TCP keepalive enabled,
+/// binding the socket to `bind_addr` first when given.
+async fn connect_journald(addr: SocketAddr, bind_addr: Option<Ipv6Addr>) -> Result<TcpStream> {
+    let socket = TcpSocket::new_v6()?;
+    configure_keepalive(&socket).context("configuring TCP keepalive")?;
+    // Bind the stream to its dedicated source address (when set) so it does not
+    // share the management address' per-source firewall connection budget; see
+    // `LocalBackend::group_logs_ipv6`. Port 0 lets the kernel pick an ephemeral
+    // source port.
+    if let Some(bind_addr) = bind_addr {
+        socket
+            .bind(SocketAddr::new(bind_addr.into(), 0))
+            .with_context(|| format!("binding to {bind_addr}"))?;
+    }
+    tokio::time::timeout(CONNECT_TIMEOUT, socket.connect(addr))
+        .await
+        .map_err(|_| anyhow::anyhow!("timed out after {}s", CONNECT_TIMEOUT.as_secs()))
+        .and_then(|result| result.map_err(anyhow::Error::from))
+        .with_context(|| format!("connecting to {addr}"))
 }
 
+fn configure_keepalive(socket: &TcpSocket) -> nix::Result<()> {
+    setsockopt(socket, sockopt::KeepAlive, &true)?;
+    setsockopt(
+        socket,
+        sockopt::TcpKeepIdle,
+        &(KEEPALIVE_IDLE.as_secs() as u32),
+    )?;
+    setsockopt(
+        socket,
+        sockopt::TcpKeepInterval,
+        &(KEEPALIVE_INTERVAL.as_secs() as u32),
+    )?;
+    setsockopt(socket, sockopt::TcpKeepCount, &KEEPALIVE_COUNT)
+}
+
+/// One connection: streams records from `state.cursor` (advanced as records
+/// arrive) until the peer closes the connection (`Ok`) or it fails (`Err`).
 async fn stream_journald_from_cursor(
     logger: &Logger,
     label: &str,
-    ipv6: Ipv6Addr,
-    mut cursor: Cursor,
+    addr: SocketAddr,
     bind_addr: Option<Ipv6Addr>,
     log_path: &Path,
-) -> (Cursor, anyhow::Result<()>) {
+    state: &mut StreamState,
+) -> Result<()> {
     // Persist the records of this connection to disk. Persistence must never
     // break the pre-existing streaming to stdout, so an open failure only
     // disables it until the next reconnect re-opens the file.
@@ -558,48 +655,41 @@ async fn stream_journald_from_cursor(
             None
         }
     };
-    let socket_addr = std::net::SocketAddr::new(ipv6.into(), 19531);
-    let socket = unwrap_or_return!(cursor, TcpSocket::new_v6());
-    // Bind the stream to its dedicated source address (when set) so it does not
-    // share the management address' per-source firewall connection budget; see
-    // `LocalBackend::group_logs_ipv6`. Port 0 lets the kernel pick an ephemeral
-    // source port.
-    if let Some(bind_addr) = bind_addr {
-        unwrap_or_return!(
-            cursor,
-            socket.bind(std::net::SocketAddr::new(bind_addr.into(), 0))
-        );
-    }
-    let mut stream = unwrap_or_return!(cursor, socket.connect(socket_addr).await);
-    unwrap_or_return!(
-        cursor,
-        stream.write_all(b"GET /entries?follow HTTP/1.1\n").await
-    );
-    unwrap_or_return!(
-        cursor,
-        stream.write_all(b"Accept: application/json\n").await
-    );
-    unwrap_or_return!(
-        cursor,
-        stream
-            .write_all(format!("Host: {ipv6}:19531\n").as_bytes())
-            .await
-    );
-    // Note that `entries=<cursor>` is inclusive, so a reconnect re-emits the
-    // record at the checkpoint cursor (to stdout and to the file); consumers of
-    // the persisted files de-duplicate by `__CURSOR`.
-    unwrap_or_return!(
-        cursor,
-        stream
-            .write_all(format!("Range: entries={cursor}\n\r\n\r").as_bytes())
-            .await
-    );
-    let buf_reader = BufReader::new(stream);
-    let mut lines = buf_reader.lines();
-    while let Some(line) = unwrap_or_return!(cursor, lines.next_line().await) {
+    let mut stream = connect_journald(addr, bind_addr).await?;
+    stream.write_all(b"GET /entries?follow HTTP/1.1\n").await?;
+    stream.write_all(b"Accept: application/json\n").await?;
+    stream
+        .write_all(format!("Host: {}:{}\n", addr.ip(), addr.port()).as_bytes())
+        .await?;
+    stream
+        .write_all(format!("Range: entries={}\n\r\n\r", state.cursor).as_bytes())
+        .await?;
+    let mut lines = BufReader::new(stream).lines();
+    while let Some(line) = lines.next_line().await? {
         let Ok(record) = serde_json::from_str::<JournalRecord>(&line) else {
             continue;
         };
+        // `entries=<cursor>` is inclusive: skip the re-emitted checkpoint record.
+        if state.records == 0
+            && let Cursor::Position(checkpoint) = &state.cursor
+            && *checkpoint == record.cursor
+        {
+            continue;
+        }
+        if let Some(outage) = state.outage.take() {
+            match state.last_record_at {
+                Some(last_record_at) => info!(
+                    logger,
+                    "Journald stream of [{label}] resumed after {} attempt(s), {}s after its last record",
+                    outage.attempts,
+                    last_record_at.elapsed().as_secs()
+                ),
+                None => info!(
+                    logger,
+                    "Journald stream of [{label}] started after {} attempt(s)", outage.attempts
+                ),
+            }
+        }
         if let Some(s) = sink.as_mut()
             && let Err(err) = s.append(&record)
         {
@@ -613,15 +703,20 @@ async fn stream_journald_from_cursor(
             sink = None;
         }
         println!("[{label}] {record}");
-        // We update the cursor value, so that in case function errors, journald entries can be streamed from this checkpoint.
-        cursor = Cursor::Position(record.cursor);
+        state.records += 1;
+        state.last_record_at = Some(Instant::now());
+        state.cursor = Cursor::Position(record.cursor);
     }
-    (cursor, Ok(()))
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nix::sys::socket::getsockopt;
+    use slog::o;
+    use std::io::{BufRead, Read};
+    use std::sync::mpsc::{Sender, channel};
 
     const GATEWAYD_RECORD: &str = r#"{"__CURSOR":"s=abc;i=1","__REALTIME_TIMESTAMP":"1700000000123456","__MONOTONIC_TIMESTAMP":"12345","_BOOT_ID":"b","_HOSTNAME":"guestos","PRIORITY":"6","_SYSTEMD_UNIT":"ic-replica.service","_COMM":"replica","SYSLOG_IDENTIFIER":"orchestrator","MESSAGE":"hello"}"#;
 
@@ -749,5 +844,104 @@ mod tests {
             journald_log_path(&journald_uvm_logs_dir(group_dir), "my vm/1"),
             PathBuf::from("/g/journald_logs/uvms/my-vm-1.jsonl")
         );
+    }
+
+    #[test]
+    fn connect_journald_enables_keepalive() {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let listener = tokio::net::TcpListener::bind("[::1]:0").await.unwrap();
+            let stream = connect_journald(listener.local_addr().unwrap(), None)
+                .await
+                .unwrap();
+            assert!(getsockopt(&stream, sockopt::KeepAlive).unwrap());
+            assert_eq!(
+                getsockopt(&stream, sockopt::TcpKeepIdle).unwrap(),
+                KEEPALIVE_IDLE.as_secs() as u32
+            );
+            assert_eq!(
+                getsockopt(&stream, sockopt::TcpKeepInterval).unwrap(),
+                KEEPALIVE_INTERVAL.as_secs() as u32
+            );
+            assert_eq!(
+                getsockopt(&stream, sockopt::TcpKeepCount).unwrap(),
+                KEEPALIVE_COUNT
+            );
+        });
+    }
+
+    /// A gatewayd stand-in on `[::1]`: per connection it reads the request up to
+    /// the `Range` header, reports the requested cursor on `ranges`, writes the
+    /// scripted response and closes the connection, except for the last script
+    /// entry, which it holds open like a real `follow` stream.
+    fn spawn_fake_gatewayd(scripts: &'static [&'static str], ranges: Sender<String>) -> SocketAddr {
+        let listener = std::net::TcpListener::bind("[::1]:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let last = scripts.len() - 1;
+            for (i, script) in scripts.iter().enumerate() {
+                let (stream, _) = listener.accept().unwrap();
+                let mut reader = std::io::BufReader::new(stream);
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    if reader.read_line(&mut line).unwrap() == 0 {
+                        return;
+                    }
+                    if let Some(range) = line.trim().strip_prefix("Range: entries=") {
+                        ranges.send(range.to_string()).unwrap();
+                        break;
+                    }
+                }
+                let mut stream = reader.into_inner();
+                stream.write_all(script.as_bytes()).unwrap();
+                if i == last {
+                    let _ = stream.read_to_end(&mut Vec::new());
+                }
+            }
+        });
+        addr
+    }
+
+    #[test]
+    fn stream_reconnects_from_last_cursor_without_duplicates() {
+        let dir = tempfile::tempdir().unwrap();
+        let log_path = dir.path().join("n1.jsonl");
+        let (ranges_tx, ranges) = channel();
+        let addr = spawn_fake_gatewayd(
+            &[
+                "HTTP/1.1 200 OK\r\n\r\n{\"__CURSOR\":\"c1\",\"MESSAGE\":\"m1\"}\n{\"__CURSOR\":\"c2\",\"MESSAGE\":\"m2\"}\n",
+                // The reconnect re-emits the checkpoint record `c2`.
+                "HTTP/1.1 200 OK\r\n\r\n{\"__CURSOR\":\"c2\",\"MESSAGE\":\"m2\"}\n{\"__CURSOR\":\"c3\",\"MESSAGE\":\"m3\"}\n",
+            ],
+            ranges_tx,
+        );
+        let rt = Runtime::new().unwrap();
+        rt.spawn(stream_journald_with_retries(
+            Logger::root(slog::Discard, o!()),
+            "node=n1".to_string(),
+            addr,
+            None,
+            log_path.clone(),
+            Duration::from_millis(10),
+        ));
+        let next_range = || ranges.recv_timeout(Duration::from_secs(30)).unwrap();
+        assert_eq!(next_range(), "");
+        assert_eq!(next_range(), "c2");
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let messages = loop {
+            let contents = std::fs::read_to_string(&log_path).unwrap_or_default();
+            // Lines are appended concurrently; a torn last line is simply not ready yet.
+            let messages: Vec<String> = contents
+                .lines()
+                .filter_map(|line| serde_json::from_str::<JournalRecord>(line).ok())
+                .map(|record| record.message)
+                .collect();
+            if messages.len() >= 3 || Instant::now() > deadline {
+                break messages;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        };
+        assert_eq!(messages, vec!["m1", "m2", "m3"]);
     }
 }

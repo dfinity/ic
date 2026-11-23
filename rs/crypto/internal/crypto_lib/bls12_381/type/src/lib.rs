@@ -1860,24 +1860,24 @@ macro_rules! declare_mul2_impl_for {
 }
 
 /*
-* This macro dispatches a multi-scalar multiplication to different
-* algorithms, depending on the size of the problem.
-*
-* - Problems of size 1 are handled using trivial multiplication.
-* - Problems of size 2 are handled using the (constant time) mul2 implementation
-* - Problems larger than 2 but smaller than $naive_cutoff are done using
-*   a simple loop
-* - Problems larger than the naive cutoff, but smaller than w3_cutoff, are
-*   handled using 3-bit Pippenger
-* - Any larger problems are dispatched to 4-bit Pippenger
-*
-* For any fixed group, regardless of the number of elements (n), or the window
-* size (w), Pippenger's uses effectively a constant number of doublings. (255 in
-* the case of BLS12-381.) However the number of additions it uses varies, and
-* this depends upon both n, w, and the average Hamming weight of the scalar.
-* A randomized simulation demonstrates that it is only when n > 61 that the number
-* of additions for w=4 is typically smaller than for w=3.
-*/
+ * This macro dispatches a multi-scalar multiplication to different
+ * algorithms, depending on the size of the problem.
+ *
+ * - Problems of size 1 are handled using trivial multiplication.
+ * - Problems of size 2 are handled using the (constant time) mul2 implementation
+ * - Problems larger than 2 but smaller than $naive_cutoff are done using
+ *   a simple loop
+ * - Problems larger than the naive cutoff, but smaller than w3_cutoff, are
+ *   handled using 3-bit Pippenger
+ * - Any larger problems are dispatched to 4-bit Pippenger
+ *
+ * For any fixed group, regardless of the number of elements (n), or the window
+ * size (w), Pippenger's uses effectively a constant number of doublings. (255 in
+ * the case of BLS12-381.) However the number of additions it uses varies, and
+ * this depends upon both n, w, and the average Hamming weight of the scalar.
+ * A randomized simulation demonstrates that it is only when n > 61 that the number
+ * of additions for w=4 is typically smaller than for w=3.
+ */
 macro_rules! declare_muln_vartime_dispatch_for {
     ( $typ:ty, $naive_cutoff:expr_2021, $w3_cutoff:expr_2021 ) => {
         impl $typ {
@@ -1963,9 +1963,9 @@ macro_rules! declare_muln_vartime_dispatch_for {
 }
 
 /*
-* This is exactly the same as the declare_muln_vartime_dispatch_for macro above
-* except that it takes as input points in affine rather than projective form.
-*/
+ * This is exactly the same as the declare_muln_vartime_dispatch_for macro above
+ * except that it takes as input points in affine rather than projective form.
+ */
 macro_rules! declare_muln_affine_vartime_dispatch_for {
     ( $proj:ty, $affine:ty, $naive_cutoff:expr_2021, $w3_cutoff:expr_2021 ) => {
         impl $proj {

@@ -32,8 +32,10 @@ use std::sync::Arc;
 use std::{path::PathBuf, process, time::Duration};
 use tokio::{net::TcpListener, sync::Mutex as AsyncMutex};
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
+use tower_http::request_id::{
+    MakeRequestUuid, PropagateRequestIdLayer, RequestId, SetRequestIdLayer,
+};
 use tower_http::trace::TraceLayer;
-use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{Instrument, level_filters::LevelFilter};
 use tracing::{Level, Span, debug, error, error_span, info, warn};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -91,17 +93,15 @@ type FnTraceLayer =
     TraceLayer<SharedClassifier<ServerErrorsAsFailures>, fn(&Request<Body>) -> Span>;
 
 fn add_request_span() -> FnTraceLayer {
-    // See tower-request-id crate and the example at
-    // https://github.com/imbolc/tower-request-id/blob/fe372479a56bd540784b87812d4d78473e43c6d4/examples/logging.rs
-
     // Let's create a tracing span for each request
     TraceLayer::new_for_http().make_span_with(|request: &Request<Body>| {
-        // We get the request id from the extensions
+        // We get the request id from the extensions, where SetRequestIdLayer
+        // (see below) put it.
         let request_id = request
             .extensions()
             .get::<RequestId>()
-            .map(ToString::to_string)
-            .unwrap_or_else(|| "unknown".into());
+            .and_then(|request_id| request_id.header_value().to_str().ok())
+            .unwrap_or("unknown");
         // And then we put it along with other information into the `request` span
         error_span!(
             "request",
@@ -384,10 +384,14 @@ async fn main() -> Result<()> {
         // This layer creates a span for each http request and attaches
         // the request_id, HTTP Method and path to it.
         .layer(add_request_span())
-        // This layer creates a new id for each request and puts it into the
-        // request extensions. Note that it should be added after the
-        // Trace layer.
-        .layer(RequestIdLayer)
+        // This layer copies the request id into the `x-request-id` header of
+        // the response.
+        .layer(PropagateRequestIdLayer::x_request_id())
+        // This layer creates a new (UUID) id for each request (unless the
+        // request already carries an `x-request-id` header) and puts it into
+        // the request extensions. Note that it should be added after the
+        // Trace layer, so that it runs before it.
+        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .with_state(token_app_states.clone());
 
     let rosetta_url = format!("0.0.0.0:{}", get_port(config.port, &config.port_file));

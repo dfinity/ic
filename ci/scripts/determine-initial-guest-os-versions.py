@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, TypedDict, cast
@@ -14,6 +15,15 @@ NNS_SUBNET_ID = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe
 # Keep in sync with subnet_type_as_string() in
 # rs/canonical_state/src/lazy_tree_conversion.rs .
 CLOUD_ENGINE_SUBNET_TYPE = "cloud_engine"
+
+# The versions printed by main() become the job matrix of the guest-os-qualification
+# job in .github/workflows/release-testing.yml and end up on the command line of that
+# job. They are read from the rollout dashboard and the public dashboard API, neither
+# of which is part of this repository, so a value that is not exactly a git commit id
+# must never be printed: main() fails instead, and no matrix is produced. This mirrors
+# COMMIT_ID_PATTERN in ci/src/mainnet_revisions/mainnet_revisions.py, which reads the
+# same public dashboard.
+COMMIT_ID_PATTERN = re.compile(r"\A[0-9a-f]{40}\Z")
 
 # Key definitions
 EXECUTED_TIMESTAMP_SECONDS = "executed_timestamp_seconds"
@@ -101,6 +111,11 @@ def eprint(*args, **kwargs):
 def eprint_fmt(str, *args):
     return  # remove me to get some real action
     print((str % args) if args else str, file=sys.stderr)
+
+
+def check_commit_id(value, what: str):
+    if not isinstance(value, str) or not COMMIT_ID_PATTERN.match(value):
+        raise ValueError(f"{what} must be a 40-character lowercase hex git commit id, got {value!r}")
 
 
 def request_json(url: str) -> Any:
@@ -263,6 +278,10 @@ def main():
             # An active rollout should target every non-cloud-engine subnet, so
             # a missing entry means something is wrong.
             raise RuntimeError("Non-cloud-engine subnet %s has no entry in the rollout dashboard data" % subnet_id)
+
+    # Every version that is printed below must have passed this check (see COMMIT_ID_PATTERN).
+    for version in versions:
+        check_commit_id(version, "Version to qualify from")
 
     unique_versions = sorted(versions)
     if not unique_versions:

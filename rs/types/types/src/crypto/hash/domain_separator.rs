@@ -16,6 +16,8 @@ pub enum DomainSeparator {
     BlockMetadata,
     BlockMetadataProposal,
     EquivocationProof,
+    UpgradeAuthorizationContent,
+    UpgradeAuthorizationShare,
     InmemoryPayload,
     RandomBeaconContent,
     RandomBeacon,
@@ -61,6 +63,7 @@ pub enum DomainSeparator {
     CanisterHttpResponse,
     CryptoHashOfCanisterHttpResponseMetadata,
     CanisterHttpResponseShare,
+    StrippedMessageIds,
 }
 
 impl DomainSeparator {
@@ -80,6 +83,8 @@ impl DomainSeparator {
             DomainSeparator::BlockMetadata => "block_metadata_domain",
             DomainSeparator::BlockMetadataProposal => "block_metadata_proposal_domain",
             DomainSeparator::EquivocationProof => "equivocation_proof_domain",
+            DomainSeparator::UpgradeAuthorizationContent => "upgrade_authorization_content_domain",
+            DomainSeparator::UpgradeAuthorizationShare => "upgrade_authorization_share_domain",
             DomainSeparator::InmemoryPayload => "inmemory_payload_domain",
             DomainSeparator::RandomBeaconContent => "random_beacon_content_domain",
             DomainSeparator::RandomBeacon => "random_beacon_domain",
@@ -127,6 +132,7 @@ impl DomainSeparator {
                 "ic-crypto-hash-of-canister-http-response-metadata-domain"
             }
             DomainSeparator::CanisterHttpResponseShare => "ic-canister-http-response-share-domain",
+            DomainSeparator::StrippedMessageIds => "ic-stripped-message-ids-domain",
         }
     }
 }
@@ -194,6 +200,14 @@ fn domain_separators_are_stable() {
         ("BlockMetadata", "block_metadata_domain"),
         ("BlockMetadataProposal", "block_metadata_proposal_domain"),
         ("EquivocationProof", "equivocation_proof_domain"),
+        (
+            "UpgradeAuthorizationContent",
+            "upgrade_authorization_content_domain",
+        ),
+        (
+            "UpgradeAuthorizationShare",
+            "upgrade_authorization_share_domain",
+        ),
         ("InmemoryPayload", "inmemory_payload_domain"),
         ("RandomBeaconContent", "random_beacon_content_domain"),
         ("RandomBeacon", "random_beacon_domain"),
@@ -253,6 +267,7 @@ fn domain_separators_are_stable() {
             "CanisterHttpResponseShare",
             "ic-canister-http-response-share-domain",
         ),
+        ("StrippedMessageIds", "ic-stripped-message-ids-domain"),
     ];
 
     // Build a map from variant name to expected domain string

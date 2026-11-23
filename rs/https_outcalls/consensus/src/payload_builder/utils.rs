@@ -1,3 +1,4 @@
+use ic_crypto_sha2::Sha256;
 use ic_https_outcalls_pricing::fees::{
     flexible_initial_spent, min_flexible_consensus_cost, min_non_flexible_consensus_cost,
     non_flexible_initial_spent,
@@ -8,13 +9,12 @@ use ic_types::{
     CountBytes, NodeId, NumBytes, RegistryVersion,
     batch::{
         CanisterHttpOutOfCycles, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
-        FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
+        FlexibleCanisterHttpResponses, MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE,
     },
     canister_http::{
-        CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceipt,
-        CanisterHttpResponseShare, CanisterHttpResponseSignature,
-        CanisterHttpResponseWithConsensus, PricingVersion,
+        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseMetadata,
+        CanisterHttpResponseProof, CanisterHttpResponseReceipt, CanisterHttpResponseShare,
+        CanisterHttpResponseSignature, CanisterHttpResponseWithConsensus, PricingVersion,
     },
     crypto::{Signed, crypto_hash},
     messages::CallbackId,
@@ -84,43 +84,38 @@ pub(crate) fn check_metadata_matches_content(
     Ok(())
 }
 
-/// Enforces the per-replica spend limit from the request context: the amount
-/// the replica claims to have `spent` in the payment receipt must never exceed
-/// the maximum returned by [`CanisterHttpRequestContext::max_http_outcall_spend`].
-///
-/// On charging subnets this is the `per_replica_allowance`. Free subnets charge
-/// nothing, so their spend (used only for cost accounting) may exceed the (zero)
-/// allowance, but may never exceed [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
-pub(crate) fn check_spent_within_limit(
-    receipt: &CanisterHttpPaymentReceipt,
+/// Enforces what a signed `receipt` may claim for the request `context`: a spend of at
+/// most [`CanisterHttpRequestContext::max_http_outcall_spend`], a content size of at most
+/// [`CanisterHttpRequestContext::max_http_outcall_content_size`], and a content hash as
+/// long as a SHA-256 digest.
+pub(crate) fn check_receipt_bounds(
+    receipt: &CanisterHttpResponseReceipt,
     context: &CanisterHttpRequestContext,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
+    let spent = receipt.spent();
     let limit = context.max_http_outcall_spend();
-    if receipt.spent > limit {
-        return Err(InvalidCanisterHttpPayloadReason::SpentExceedsLimit {
-            spent: receipt.spent,
-            limit,
-        });
+    if spent > limit {
+        return Err(InvalidCanisterHttpPayloadReason::SpentExceedsLimit { spent, limit });
     }
-    Ok(())
-}
 
-/// Enforces the response size limit from the request context: the `content_size`
-/// the signed metadata claims must never exceed the maximum returned by
-/// [`CanisterHttpRequestContext::max_http_outcall_content_size`].
-pub(crate) fn check_content_size_within_limit(
-    metadata: &CanisterHttpResponseMetadata,
-    callback_id: CallbackId,
-    context: &CanisterHttpRequestContext,
-) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    let limit = context.max_http_outcall_content_size(metadata.is_reject);
-    if metadata.content_size as u64 > limit {
+    let content_size = receipt.content_size();
+    let limit = context.max_http_outcall_content_size(receipt.is_reject());
+    if content_size as u64 > limit {
         return Err(InvalidCanisterHttpPayloadReason::ContentSizeExceedsLimit {
-            callback_id,
-            content_size: metadata.content_size,
+            callback_id: receipt.id(),
+            content_size,
             limit,
         });
     }
+
+    let length = receipt.content_hash().get_ref().0.len();
+    if length != Sha256::DIGEST_LEN {
+        return Err(InvalidCanisterHttpPayloadReason::InvalidContentHashLength {
+            callback_id: receipt.id(),
+            length,
+        });
+    }
+
     Ok(())
 }
 
@@ -151,7 +146,7 @@ fn per_replica_consensus_allowance(context: &CanisterHttpRequestContext) -> Cons
 /// i.e. the sum of their [per-replica allowances](per_replica_consensus_allowance).
 ///
 /// Unlike the per-replica spends, which are bounded individually by
-/// [`check_spent_within_limit`], the collective spend also contains the consensus
+/// [`check_receipt_bounds`], the collective spend also contains the consensus
 /// cost of putting the response into a block. That cost is only covered if the
 /// contributing replicas left enough of their allowances unspent, which is what
 /// this check ensures.
@@ -388,10 +383,11 @@ pub(crate) fn find_async_receipts<'a>(
 /// Reconstructs, for every signer of an aggregated proof, the
 /// [`CanisterHttpResponseShare`] that signer actually signed: the shared
 /// [`CanisterHttpResponseMetadata`] combined with that signer's own
-/// [`CanisterHttpPaymentReceipt`], paired with that signer's basic signature.
+/// [`CanisterHttpPaymentReceipt`](ic_types::canister_http::CanisterHttpPaymentReceipt), paired
+/// with that signer's basic signature.
 pub(crate) fn reconstruct_individual_shares(
     proof: &CanisterHttpResponseProof,
-) -> impl Iterator<Item = CanisterHttpResponseShare> + '_ {
+) -> impl Iterator<Item = CanisterHttpResponseShare> {
     proof.signatures.iter().map(|(signer, sig)| Signed {
         content: CanisterHttpResponseReceipt {
             metadata: proof.metadata.clone(),
@@ -464,7 +460,7 @@ pub(crate) fn validate_flexible_response_with_proof(
 /// `committee` the request was assigned to.
 ///
 /// Checks callback-id consistency, duplicate signers, committee membership, the
-/// per-replica spend limit, and the response size limit.
+/// per-replica spend limit, the response size limit, and the content hash length.
 ///
 /// **NOTE**: The signature is not verified. Callers are expected to
 /// batch-verify the signatures of all shares in the surrounding group via
@@ -483,8 +479,7 @@ pub(crate) fn validate_response_share(
         });
     }
 
-    check_spent_within_limit(&share.content.payment_receipt, context)?;
-    check_content_size_within_limit(&share.content.metadata, callback_id, context)?;
+    check_receipt_bounds(&share.content, context)?;
 
     let signer = share.signature.signer;
     if !seen_signers.insert(signer) {
@@ -600,8 +595,7 @@ pub(crate) fn group_shares_by_callback_id<
 ///
 /// Iterates over response shares grouped by metadata, looking for one
 /// where at least `threshold` distinct replicas produced the same
-/// response hash. If found, returns the assembled
-/// [`CanisterHttpResponseWithConsensus`].
+/// response hash. If found, returns the assembled [`NonFlexibleCandidate`].
 ///
 /// A response is only returned once the signing replicas left enough of their
 /// allowances unspent to cover the consensus cost of putting it into a block
@@ -609,14 +603,14 @@ pub(crate) fn group_shares_by_callback_id<
 /// further shares have arrived, each of which contributes another allowance.
 /// If no further shares can be received that would add enough allowance, we
 /// will generate an out-of-cycles error instead (see [`check_flexible_out_of_cycles`]).
-pub(crate) fn find_fully_replicated_response(
+pub(crate) fn find_fully_replicated_response<'a>(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     threshold: usize,
     context: &CanisterHttpRequestContext,
-    pool_access: &dyn CanisterHttpPool,
+    pool_access: &'a dyn CanisterHttpPool,
     log: &ReplicaLogger,
     metrics: &CanisterHttpPayloadBuilderMetrics,
-) -> Option<CanisterHttpResponseWithConsensus> {
+) -> Option<NonFlexibleCandidate<'a>> {
     grouped_shares.iter().find_map(|(metadata, shares)| {
         let signers: BTreeSet<_> = shares.iter().map(|share| share.signature.signer).collect();
         if signers.len() < threshold {
@@ -631,19 +625,19 @@ pub(crate) fn find_fully_replicated_response(
 /// Finds a non-replicated HTTP outcall response from the designated node.
 ///
 /// Looks through the grouped shares for one signed by `designated_node_id`.
-/// If found, returns the assembled [`CanisterHttpResponseWithConsensus`].
+/// If found, returns the assembled [`NonFlexibleCandidate`].
 ///
 /// As for fully-replicated responses, the response is held back while its
 /// collective spend exceeds the designated replica's allowance. In that case,
 /// we will generate an out-of-cycles error instead (see [`check_flexible_out_of_cycles`]).
-pub(crate) fn find_non_replicated_response(
+pub(crate) fn find_non_replicated_response<'a>(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     designated_node_id: &NodeId,
     context: &CanisterHttpRequestContext,
-    pool_access: &dyn CanisterHttpPool,
+    pool_access: &'a dyn CanisterHttpPool,
     log: &ReplicaLogger,
     metrics: &CanisterHttpPayloadBuilderMetrics,
-) -> Option<CanisterHttpResponseWithConsensus> {
+) -> Option<NonFlexibleCandidate<'a>> {
     grouped_shares.iter().find_map(|(metadata, shares)| {
         let correct_share = shares
             .iter()
@@ -654,17 +648,50 @@ pub(crate) fn find_non_replicated_response(
     })
 }
 
-/// Assembles a [`CanisterHttpResponseWithConsensus`] from `content` and `proof`,
-/// computing the collective initial spend of the proof's signers. Returns `None`
-/// if that spend exceeds their collective allowance, in which case the response
-/// must not be delivered yet.
-fn assemble_non_flexible_response(
-    content: CanisterHttpResponse,
+/// A fully- or non-replicated response ready for delivery, whose content is still
+/// borrowed from the pool, so that it is only cloned once it is known to fit into
+/// the payload.
+pub(crate) struct NonFlexibleCandidate<'a> {
+    content: &'a CanisterHttpResponse,
+    proof: CanisterHttpResponseProof,
+    initial_spent: Cycles,
+}
+
+impl NonFlexibleCandidate<'_> {
+    /// The [`CountBytes`] of the response returned by [`Self::into_response`].
+    pub(crate) fn count_bytes(&self) -> usize {
+        let Self {
+            content,
+            proof,
+            initial_spent,
+        } = self;
+        proof.count_bytes() + content.count_bytes() + size_of_val(initial_spent)
+    }
+
+    /// Clones the borrowed content into an owned [`CanisterHttpResponseWithConsensus`].
+    pub(crate) fn into_response(self) -> CanisterHttpResponseWithConsensus {
+        let size = self.count_bytes();
+        let response = CanisterHttpResponseWithConsensus {
+            content: self.content.clone(),
+            proof: self.proof,
+            initial_spent: self.initial_spent,
+        };
+        debug_assert_eq!(response.count_bytes(), size);
+        response
+    }
+}
+
+/// Assembles a [`NonFlexibleCandidate`] from `content` and `proof`, computing the
+/// collective initial spend of the proof's signers. Returns `None` if that spend
+/// exceeds their collective allowance, in which case the response must not be
+/// delivered yet.
+fn assemble_non_flexible_response<'a>(
+    content: &'a CanisterHttpResponse,
     proof: CanisterHttpResponseProof,
     context: &CanisterHttpRequestContext,
     log: &ReplicaLogger,
     metrics: &CanisterHttpPayloadBuilderMetrics,
-) -> Option<CanisterHttpResponseWithConsensus> {
+) -> Option<NonFlexibleCandidate<'a>> {
     let initial_spent = non_flexible_initial_spent(&proof, context.subnet_size);
     check_initial_spent_within_limit(
         initial_spent,
@@ -674,7 +701,7 @@ fn assemble_non_flexible_response(
         Some((log, metrics)),
     )
     .ok()?;
-    Some(CanisterHttpResponseWithConsensus {
+    Some(NonFlexibleCandidate {
         content,
         proof,
         initial_spent,
@@ -696,7 +723,7 @@ pub(crate) enum FlexibleFindResult {
 /// produced, its signed receipt, and the number of payload bytes that delivering
 /// that response takes.
 struct FlexibleCandidate<'a> {
-    response: CanisterHttpResponse,
+    response: &'a CanisterHttpResponse,
     share: &'a CanisterHttpResponseShare,
     size: usize,
 }
@@ -712,7 +739,7 @@ struct FlexibleCandidate<'a> {
 /// - **TooManyRejects**: more nodes returned rejects than the slack
 ///   allows (`committee.len() - min_responses`).
 /// - **ResponsesTooLarge**: even the smallest `min_responses` many OK responses
-///   (approximated by `count_bytes()`) exceed [`MAX_CANISTER_HTTP_PAYLOAD_SIZE`].
+///   (approximated by `count_bytes()`) exceed [`MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE`].
 /// - **OutOfCycles**: delivering a response can never be paid for again (see
 ///   [`check_flexible_out_of_cycles`]).
 /// - **Pending**: not enough data to decide yet.
@@ -722,7 +749,7 @@ struct FlexibleCandidate<'a> {
 /// shares](FlexibleCanisterHttpResponses::extra_shares) as needed to cover their
 /// consensus cost (see [`fund_flexible_selection`]).
 ///
-/// The cloning of the share is only done when building the [`FlexibleCanisterHttpResponses`] result.
+/// Shares and responses are only cloned for the items of the returned result.
 pub(crate) fn find_flexible_result(
     callback_id: CallbackId,
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
@@ -752,7 +779,7 @@ pub(crate) fn find_flexible_result(
             };
             all_shares.push(share);
             let candidate = FlexibleCandidate {
-                size: FlexibleCanisterHttpResponseWithProof::count_bytes(&response, share),
+                size: FlexibleCanisterHttpResponseWithProof::count_bytes(response, share),
                 response,
                 share,
             };
@@ -829,7 +856,7 @@ pub(crate) fn find_flexible_result(
         }
     }
 
-    // 3. Even the smallest OK responses exceed the absolute payload limit?
+    // 3. Even the smallest OK responses exceed the limit on a group's responses?
     // Unseen responses could still submit small OK responses, so we account for them.
     let num_unseen = committee.len().saturating_sub(all_shares.len());
     let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
@@ -840,7 +867,7 @@ pub(crate) fn find_flexible_result(
             .map(|candidate| candidate.size)
             .sum();
 
-        if smallest_content_sum > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
+        if smallest_content_sum > MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE {
             let all_seen_shares: Vec<_> = ok_candidates
                 .iter()
                 .chain(reject_candidates.iter())
@@ -890,7 +917,7 @@ fn into_responses_with_proof(
         .into_iter()
         .take(selected)
         .map(|candidate| FlexibleCanisterHttpResponseWithProof {
-            response: candidate.response,
+            response: candidate.response.clone(),
             proof: candidate.share.clone(),
         })
         .collect()
@@ -907,8 +934,9 @@ struct FlexibleSelection<'a> {
 
 /// Returns how many (up to `max_to_select`) of `candidates` to include in the payload, and
 /// which extra shares of `all_shares` to fund them with. Returns `None` if even the smallest
-/// `min_to_select` responses do not fit into what is left of the block, or if the committee's
-/// unspent allowance can not cover their cost.
+/// `min_to_select` responses exceed [`MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE`] or do not fit
+/// into what is left of the block, or if the committee's unspent allowance can not cover their
+/// cost.
 ///
 /// `candidates` must be ordered smallest-response-first and `all_shares` smallest-spend-first,
 /// each holding at most one share per committee member.
@@ -926,10 +954,15 @@ fn select_flexible_responses<'a>(
     let max_to_select = max_to_select.min(candidates.len());
 
     // Start with as many candidates as possible (up to `max_to_select`). Check whether the
-    // current selection is funded (potentially by adding extra shares) and fits into the
-    // block. If not, give up the largest response and try again with one fewer.
+    // current selection is within the limit, is funded (potentially by adding extra shares)
+    // and fits into the block. If not, give up the largest response and try again with one
+    // fewer.
     for selected in (min_to_select..=max_to_select).rev() {
         let selected = &candidates[..selected];
+        let responses_size: usize = selected.iter().map(|candidate| candidate.size).sum();
+        if responses_size > MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE {
+            continue;
+        }
         // Compute the cost of the current selection without any extra shares.
         let selected_spend = flexible_initial_spent(
             selected.iter().map(|candidate| candidate.share),
@@ -954,10 +987,7 @@ fn select_flexible_responses<'a>(
             continue;
         };
         let size = FlexibleCanisterHttpResponses::base_count_bytes()
-            + selected
-                .iter()
-                .map(|candidate| candidate.size)
-                .sum::<usize>()
+            + responses_size
             + extra_shares
                 .iter()
                 .map(|share| share.count_bytes())
@@ -1022,30 +1052,42 @@ mod tests {
     use ic_types::{
         CanisterId, NumberOfNodes,
         canister_http::{
-            CANDID_OVERHEAD_RESERVE_BYTES, CanisterHttpMethod, CanisterHttpReject,
-            MAX_CANISTER_HTTP_RESPONSE_BYTES, MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET,
-            MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, PricingVersion, RefundStatus, Replication,
+            CANDID_OVERHEAD_RESERVE_BYTES, CanisterHttpMethod, CanisterHttpPaymentReceipt,
+            CanisterHttpReject, MAX_CANISTER_HTTP_RESPONSE_BYTES,
+            MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET, MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES,
+            PricingVersion, RefundStatus, Replication,
         },
         crypto::{CryptoHash, CryptoHashOf},
         messages::{NO_DEADLINE, Request},
         time::UNIX_EPOCH,
     };
     use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+    use std::sync::Arc;
 
-    fn receipt(spent: u128) -> CanisterHttpPaymentReceipt {
-        CanisterHttpPaymentReceipt {
-            spent: Cycles::new(spent),
+    /// A receipt claiming to have spent `spent` cycles, within all other bounds.
+    fn receipt(spent: u128) -> CanisterHttpResponseReceipt {
+        CanisterHttpResponseReceipt {
+            metadata: CanisterHttpResponseMetadata {
+                id: CallbackId::from(1),
+                content_hash: CryptoHashOf::new(CryptoHash(vec![0; Sha256::DIGEST_LEN])),
+                content_size: 0,
+                is_reject: false,
+                replica_version: test_replica_version(),
+            },
+            payment_receipt: CanisterHttpPaymentReceipt {
+                spent: Cycles::new(spent),
+            },
         }
     }
 
     /// Builds a minimal request context pinning the given cost schedule and
-    /// per-replica allowance — the only fields [`check_spent_within_limit`] reads.
+    /// per-replica allowance.
     fn context(
         cost_schedule: CanisterCyclesCostSchedule,
         per_replica_allowance: Cycles,
     ) -> CanisterHttpRequestContext {
         CanisterHttpRequestContext {
-            request: Request {
+            request: Arc::new(Request {
                 receiver: CanisterId::from_u64(1),
                 sender: CanisterId::from_u64(1),
                 sender_reply_callback: CallbackId::from(1),
@@ -1054,10 +1096,11 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
-            },
+                effective_canister_id: None,
+            }),
             url: String::new(),
             max_response_bytes: None,
-            headers: vec![],
+            headers: Arc::new(vec![]),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,
@@ -1077,7 +1120,7 @@ mod tests {
     #[test]
     fn spent_within_allowance_is_accepted_when_charging() {
         assert!(
-            check_spent_within_limit(
+            check_receipt_bounds(
                 &receipt(50),
                 &context(CanisterCyclesCostSchedule::Normal, Cycles::new(100)),
             )
@@ -1088,7 +1131,7 @@ mod tests {
     #[test]
     fn spent_exceeding_allowance_is_rejected_when_charging() {
         assert!(matches!(
-            check_spent_within_limit(
+            check_receipt_bounds(
                 &receipt(101),
                 &context(CanisterCyclesCostSchedule::Normal, Cycles::new(100)),
             ),
@@ -1101,7 +1144,7 @@ mod tests {
         // A zero allowance on a charging subnet (e.g. the caller paid exactly the
         // base fee) must still reject any nonzero spend.
         assert!(matches!(
-            check_spent_within_limit(
+            check_receipt_bounds(
                 &receipt(1),
                 &context(CanisterCyclesCostSchedule::Normal, Cycles::zero()),
             ),
@@ -1115,7 +1158,7 @@ mod tests {
         // accounting; nothing is charged. It is bounded only by the free-subnet
         // maximum, which the spend here stays well below.
         assert!(
-            check_spent_within_limit(
+            check_receipt_bounds(
                 &receipt(1_000_000),
                 &context(CanisterCyclesCostSchedule::Free, Cycles::zero()),
             )
@@ -1127,7 +1170,7 @@ mod tests {
     fn spent_at_free_subnet_maximum_is_accepted() {
         // A spend exactly at the free-subnet maximum is still accepted.
         assert!(
-            check_spent_within_limit(
+            check_receipt_bounds(
                 &receipt(MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get()),
                 &context(CanisterCyclesCostSchedule::Free, Cycles::zero()),
             )
@@ -1141,15 +1184,10 @@ mod tests {
         is_reject: bool,
         context: &CanisterHttpRequestContext,
     ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-        let callback_id = CallbackId::from(1);
-        let metadata = CanisterHttpResponseMetadata {
-            id: callback_id,
-            content_hash: CryptoHashOf::new(CryptoHash(vec![])),
-            content_size,
-            is_reject,
-            replica_version: test_replica_version(),
-        };
-        check_content_size_within_limit(&metadata, callback_id, context)
+        let mut receipt = receipt(0);
+        receipt.metadata.content_size = content_size;
+        receipt.metadata.is_reject = is_reject;
+        check_receipt_bounds(&receipt, context)
     }
 
     #[test]
@@ -1202,7 +1240,7 @@ mod tests {
         // Free subnets may exceed their (zero) allowance, but not the free-subnet
         // maximum: the spend is bounded rather than unbounded.
         assert!(matches!(
-            check_spent_within_limit(
+            check_receipt_bounds(
                 &receipt(MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get() + 1),
                 &context(CanisterCyclesCostSchedule::Free, Cycles::zero()),
             ),

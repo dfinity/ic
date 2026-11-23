@@ -29,6 +29,5 @@ ic-types = { path = "../../../types/types" }
 ic-types-cycles = { path = "../../../types/cycles" }
 ic-wasm-types = { path = "../../../types/wasm_types" }
 lazy_static = { workspace = true }
-tempfile = { workspace = true }
 tokio = { workspace = true }
 wat = { workspace = true }

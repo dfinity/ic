@@ -936,6 +936,55 @@ fn test_from_checkpoint() {
     assert_eq!(s.next_idx(), TEST_NEXT_IDX);
 }
 
+/// Returns a store loaded from the page map of a store holding one record,
+/// logged at `timestamp`.
+fn loaded_store_with_one_record(timestamp: u64) -> LogMemoryStore {
+    let mut s = LogMemoryStore::new();
+    s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
+    let mut delta = CanisterLog::default_delta();
+    delta.add_record(timestamp, b"a".to_vec());
+    s.append_delta_log(&mut delta);
+    LogMemoryStore::from_checkpoint(s.maybe_page_map().cloned(), s.next_idx())
+}
+
+#[test]
+fn test_first_timestamp_filled_on_first_use_after_loading() {
+    let loaded = loaded_store_with_one_record(1_000_000_000);
+    // Loading doesn't read the ring buffer.
+    assert_eq!(loaded.first_timestamp_cache.get(), None);
+
+    // Filled through a clone, it's there for the original too.
+    let clone = loaded.clone();
+    assert_eq!(clone.first_timestamp(), Some(1_000_000_000));
+    assert_eq!(
+        loaded.first_timestamp_cache.get(),
+        Some(&Some(1_000_000_000))
+    );
+}
+
+#[test]
+fn test_fill_caches_reads_the_header_and_first_timestamp() {
+    let loaded = loaded_store_with_one_record(1_000_000_000);
+    assert_eq!(loaded.header_cache.get(), None);
+    assert_eq!(loaded.first_timestamp_cache.get(), None);
+
+    loaded.fill_caches();
+    assert!(matches!(loaded.header_cache.get(), Some(Some(_))));
+    assert_eq!(
+        loaded.first_timestamp_cache.get(),
+        Some(&Some(1_000_000_000))
+    );
+}
+
+#[test]
+fn test_mutating_a_clone_leaves_the_first_timestamp_of_the_others() {
+    let loaded = loaded_store_with_one_record(1_000_000_000);
+    let mut clone = loaded.clone();
+    clone.clear();
+    assert_eq!(clone.first_timestamp(), None);
+    assert_eq!(loaded.first_timestamp(), Some(1_000_000_000));
+}
+
 #[test]
 fn test_next_idx_preserved_after_deallocate() {
     let log_size = 4096;
@@ -974,28 +1023,32 @@ fn test_next_idx_preserved_when_appending_empty_delta_log() {
     assert_eq!(store.next_idx(), next_idx);
 }
 
-fn assert_memory_usage_for_limit(limit: usize) {
-    let mut s = LogMemoryStore::new();
-    s.resize_for_testing(limit);
-    assert_eq!(
-        s.memory_usage_for_limit(NumBytes::new(limit as u64)).get() as usize,
-        s.memory_usage(),
-    );
-}
-
 #[test]
-fn memory_usage_for_limit_zero_limit() {
-    assert_memory_usage_for_limit(0);
-}
+fn test_append_delta_log_drains_delta_log() {
+    for log_memory_limit in [0, TEST_LOG_MEMORY_LIMIT] {
+        let mut store = LogMemoryStore::new();
+        store.resize_for_testing(log_memory_limit);
 
-#[test]
-fn memory_usage_for_limit_at_minimum() {
-    assert_memory_usage_for_limit(EXPECTED_DATA_CAPACITY_MIN);
-}
+        let mut delta = CanisterLog::new_delta_with_next_index(TEST_NEXT_IDX, 4096);
+        delta.add_record(1001, b"a".to_vec());
+        delta.add_record(1002, b"b".to_vec());
+        let byte_capacity = delta.byte_capacity();
 
-#[test]
-fn memory_usage_for_limit_above_minimum() {
-    assert_memory_usage_for_limit(TEST_LOG_MEMORY_LIMIT);
+        store.append_delta_log(&mut delta);
+
+        // The records are removed, but the next index and capacity are kept.
+        assert!(delta.is_empty());
+        assert_eq!(delta.bytes_used(), 0);
+        assert_eq!(delta.next_idx(), TEST_NEXT_IDX + 2);
+        assert_eq!(delta.byte_capacity(), byte_capacity);
+        assert_eq!(store.next_idx(), TEST_NEXT_IDX + 2);
+
+        // Appending the drained delta log again has no effect.
+        let records = store.records(None);
+        store.append_delta_log(&mut delta);
+        assert_eq!(store.records(None), records);
+        assert_eq!(store.next_idx(), TEST_NEXT_IDX + 2);
+    }
 }
 
 #[test]

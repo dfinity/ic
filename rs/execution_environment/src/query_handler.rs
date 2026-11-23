@@ -14,6 +14,7 @@ use crate::{
     CanisterManager,
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
+    receiver_exists,
 };
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
@@ -219,7 +220,7 @@ impl InternalHttpQueryHandler {
         let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled
             && enable_query_stats_tracking
         {
-            Some(self.local_query_execution_stats.as_ref())
+            Some(Arc::clone(&self.local_query_execution_stats))
         } else {
             None
         };
@@ -237,7 +238,7 @@ impl InternalHttpQueryHandler {
             let state = state.get_ref().as_ref();
             if let Some(result) =
                 self.query_cache
-                    .get_valid_result(&key, state, query_stats_collector)
+                    .get_valid_result(&key, state, query_stats_collector.as_deref())
             {
                 return result;
             }
@@ -282,8 +283,8 @@ impl InternalHttpQueryHandler {
         };
         let mut context = query_context::QueryContext::new(
             &self.log,
-            self.hypervisor.as_ref(),
-            self.canister_manager.as_ref(),
+            Arc::clone(&self.hypervisor),
+            Arc::clone(&self.canister_manager),
             self.own_subnet_type,
             // For composite queries, the set of evaluated canisters is not known in advance,
             // so the whole state is needed to capture later the state of the call graph.
@@ -301,7 +302,7 @@ impl InternalHttpQueryHandler {
             self.config.instruction_overhead_per_query_call,
             self.config.composite_queries,
             query.receiver,
-            &self.metrics,
+            self.metrics.clone(),
             query_stats_collector,
             Arc::clone(&self.cycles_account_manager),
             instruction_observation,
@@ -415,13 +416,18 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
         let state_reader = Arc::clone(&self.state_reader);
         let (tx, rx) = oneshot::channel();
         let canister_id = query.receiver;
+        let latest_state = state_reader.get_latest_state();
+        if let Err(err) = receiver_exists(latest_state.get_ref(), canister_id) {
+            let time = latest_state.get_ref().metadata.batch_time;
+            return Box::pin(async move { Ok(Ok((Err(err), time))) });
+        }
         let latest_certified_height_pre_schedule = state_reader.latest_certified_height();
         let http_query_handler_metrics = Arc::clone(&self.metrics);
         let enable_query_stats_tracking = self.enable_query_stats_tracking;
         self.query_scheduler.push(canister_id, move || {
             let start = std::time::Instant::now();
             if !tx.is_closed() {
-                // We managed to upgrade the weak pointer, so the query was not cancelled.
+                // The caller hasn't dropped the call, so the query was not cancelled.
                 // Canceling the query after this point will have no effect: the query will
                 // be executed anyway. That is fine because the execution will take O(ms).
 
@@ -498,6 +504,7 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
             query,
             instruction_observation,
             max_instructions,
+            start: transform_start,
         }: TransformExecutionInput,
     ) -> Self::Future {
         let internal = Arc::clone(&self.internal);
@@ -509,10 +516,9 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
         let enable_query_stats_tracking = self.enable_query_stats_tracking;
         self.query_scheduler.push(canister_id, move || {
             let start = std::time::Instant::now();
-            if !tx.is_closed() {
-                // We managed to upgrade the weak pointer, so the query was not cancelled.
-                // Canceling the query after this point will have no effect: the query will
-                // be executed anyway. That is fine because the execution will take O(ms).
+            if !tx.is_closed() && transform_start.claim() {
+                // The client neither dropped the call nor gave up on the transform, and now it
+                // waits for the transform to finish.
 
                 // Retrieving the state must be done here in the query handler, and should be immediately used.
                 // Otherwise, retrieving the state in the Query service in `http_endpoints` can lead to queries being queued up,

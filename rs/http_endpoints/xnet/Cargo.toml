@@ -8,12 +8,15 @@ documentation.workspace = true
 
 [dependencies]
 axum = { workspace = true }
+bytes = { workspace = true }
+http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-config = { path = "../../config" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
+ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-logger = { path = "../../monitoring/logger" }
@@ -24,8 +27,8 @@ ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-slog = { workspace = true }
 tokio = { workspace = true }
+tokio-io-timeout = { workspace = true }
 tokio-rustls = { workspace = true }
 tower = { workspace = true }
 url = { workspace = true }
@@ -43,5 +46,4 @@ ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 maplit = { workspace = true }
-prost = { workspace = true }
 reqwest = { workspace = true }

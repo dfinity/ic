@@ -79,11 +79,10 @@ pub fn decode_wasm(
     match encoding {
         WasmEncoding::Wasm => Ok(BinaryEncodedWasm::new_shared(module)),
         WasmEncoding::Gzip => {
-            let decoder = libflate::gzip::Decoder::new(module_bytes).map_err(|e| {
-                WasmValidationError::DecodingError(format!(
-                    "failed to decode compressed Wasm module: {e}"
-                ))
-            })?;
+            // Note that the gzip header is only parsed (and validated) lazily
+            // while reading, so header errors surface from `read_to_end`
+            // below.
+            let decoder = flate2::read::GzDecoder::new(module_bytes);
 
             let mut buf = Vec::with_capacity(uncompressed_size);
             // We cannot trust that the uncompressed size is set correctly.

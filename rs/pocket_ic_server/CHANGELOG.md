@@ -11,6 +11,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+- In queries made through `/instances/<instance_id>/read/query`, the NNS delegation in the data certificate available
+  to the canister only contains the canister ranges at `/subnet/<subnet_id>/canister_ranges` (the `/canister_ranges`
+  subtree is pruned), as on the `/api/v2` query endpoint.
+- A flexible HTTP outcall delivers responses up to 2,031,616 bytes (2 MiB − 64 KiB) in total rather than 2 MiB:
+  it delivers fewer than `max_responses` responses where more would exceed that, and fails with `responses_too_large`
+  once the smallest responses that would have to be delivered exceed it.
+
+### Fixed
+- Requests to the bitcoin and dogecoin adapters (fetching blocks and sending transactions) time out after 1 s instead of 50 ms,
+  so that sending a transaction through the bitcoin or dogecoin canister is much less likely to fail spuriously on a loaded machine.
+- A PocketIC instance no longer becomes permanently busy after the machine running the PocketIC server
+  was suspended or hibernated.
+
+
+
+## 16.1.0 - 2026-10-08
+
+### Added
+- Threshold ECDSA keys over the curve secp256r1: the PocketIC II and fiduciary subnets hold such a key with name `key_1`
+  and the PocketIC test threshold keys subnet holds such keys with names `test_key_1` and `dfx_test_key`.
+
 
 
 ## 16.0.0 - 2026-09-01

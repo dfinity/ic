@@ -20,8 +20,8 @@ The following Python script can be used to run some frequently asked queries
 (use `--verbose` to log the queries):
 
 ```
-$ bazel run //ci/githubstats:query -- --help
-usage: bazel run //ci/githubstats:query -- [-h] {top,last} ...
+$ bazel --quiet run //ci/githubstats:query -- --help
+usage: bazel --quiet run //ci/githubstats:query -- [-h] {top,last} ...
 
 positional arguments:
   {top,last}

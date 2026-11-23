@@ -1,10 +1,10 @@
 use crate::logs::WARN;
 use crate::state::{
     FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
-    TransactionCheckData,
+    SpentOutputError, TransactionCheckData,
 };
 use crate::{Config, providers, state};
-use bitcoin::Transaction;
+use bitcoin::{Address, Transaction};
 use futures::future::try_join_all;
 use ic_btc_checker::{
     CheckTransactionIrrecoverableError, CheckTransactionQueryResponse, CheckTransactionResponse,
@@ -39,11 +39,11 @@ pub enum FetchResult {
     Fetched(FetchedTx),
 }
 
-pub enum TryFetchResult<F> {
+pub enum TryFetchResult<T, F> {
     Pending,
     HighLoad,
     NotEnoughCycles,
-    Fetched(FetchedTx),
+    Fetched(T),
     ToFetch(F),
 }
 
@@ -62,33 +62,39 @@ pub trait FetchEnv {
     fn cycles_accept(&self, cycles: u128) -> u128;
 
     /// Try to fetch a transaction given its txid:
-    /// - If it is already available, return `Fetched`.
+    /// - If it is already available, return `Fetched` with the result of applying
+    ///   `on_fetched` to it, without cloning the cache entry.
     /// - If it is already pending, return `Pending`.
     /// - If it is pending retry or not found, return a future that calls `fetch_tx`.
     /// - Or return other conditions like `HighLoad` or `Error`.
-    fn try_fetch_tx(
+    fn try_fetch_tx<T>(
         &self,
         txid: Txid,
-    ) -> TryFetchResult<impl futures::Future<Output = Result<FetchResult, Infallible>>> {
-        let (provider, max_response_bytes) = match state::get_fetch_status(txid) {
-            None => (
-                providers::next_provider(self.config().btc_network()),
+        on_fetched: impl FnOnce(&FetchedTx) -> T,
+    ) -> TryFetchResult<T, impl futures::Future<Output = Result<FetchResult, Infallible>>> {
+        let btc_network = self.config().btc_network();
+        let to_fetch = state::with_fetch_status(txid, |status| match status {
+            None => Ok((
+                providers::next_provider(btc_network),
                 INITIAL_MAX_RESPONSE_BYTES,
-            ),
+            )),
             Some(FetchTxStatus::PendingRetry {
                 max_response_bytes, ..
-            }) => (
-                providers::next_provider(self.config().btc_network()),
-                max_response_bytes,
-            ),
-            Some(FetchTxStatus::PendingOutcall) => return TryFetchResult::Pending,
-            Some(FetchTxStatus::Error(err)) => (
+            }) => Ok((providers::next_provider(btc_network), *max_response_bytes)),
+            Some(FetchTxStatus::PendingOutcall) => Err(TryFetchResult::Pending),
+            Some(FetchTxStatus::Error(err)) => Ok((
                 // An FetchTxStatus error can be retried with another provider
                 err.provider.next(),
                 // The next provider can use the same max_response_bytes
                 err.max_response_bytes,
-            ),
-            Some(FetchTxStatus::Fetched(fetched)) => return TryFetchResult::Fetched(fetched),
+            )),
+            Some(FetchTxStatus::Fetched(fetched)) => {
+                Err(TryFetchResult::Fetched(on_fetched(fetched)))
+            }
+        });
+        let (provider, max_response_bytes) = match to_fetch {
+            Ok(to_fetch) => to_fetch,
+            Err(result) => return result,
         };
         let guard = match self.new_fetch_guard(txid) {
             Ok(guard) => guard,
@@ -121,29 +127,12 @@ pub trait FetchEnv {
     ) -> Result<FetchResult, Infallible> {
         match self.http_get_tx(&provider, txid, max_response_bytes).await {
             Ok(tx) => {
-                let input_addresses = tx.input.iter().map(|_| None).collect();
-                match TransactionCheckData::from_transaction(provider.btc_network(), tx.clone()) {
-                    Ok(tx) => {
-                        let fetched = FetchedTx {
-                            tx,
-                            input_addresses,
-                        };
-                        state::set_fetch_status(txid, FetchTxStatus::Fetched(fetched.clone()));
-                        Ok(FetchResult::Fetched(fetched))
-                    }
-                    Err(err) => {
-                        let err = HttpGetTxError::TxEncoding(err.to_string());
-                        state::set_fetch_status(
-                            txid,
-                            FetchTxStatus::Error(FetchTxStatusError {
-                                provider,
-                                max_response_bytes,
-                                error: err.clone(),
-                            }),
-                        );
-                        Ok(FetchResult::Error(err))
-                    }
-                }
+                let fetched = FetchedTx::new(TransactionCheckData::from_transaction(
+                    provider.btc_network(),
+                    tx,
+                ));
+                state::set_fetch_status(txid, FetchTxStatus::Fetched(fetched.clone()));
+                Ok(FetchResult::Fetched(fetched))
             }
             Err(HttpGetTxError::ResponseTooLarge)
                 if max_response_bytes < RETRY_MAX_RESPONSE_BYTES =>
@@ -194,34 +183,38 @@ pub trait FetchEnv {
         let mut high_load = false;
         let mut not_enough_cycles = false;
         for (index, input) in fetched.tx.inputs.iter().enumerate() {
-            if fetched.input_addresses[index].is_none() {
-                use TryFetchResult::*;
-                match self.try_fetch_tx(input.txid) {
-                    ToFetch(do_fetch) => {
-                        jobs.push((index, input.txid, input.vout));
-                        futures.push(do_fetch)
-                    }
-                    Fetched(fetched) => {
-                        if let Some(address) = &fetched.tx.outputs[input.vout as usize] {
-                            state::set_fetched_address(txid, index, address.clone());
-                        } else {
-                            // This error shouldn't happen unless blockdata is corrupted.
-                            let msg = format!(
-                                "Tx {} vout {} has no address, but is vin {} of tx {}",
-                                input.txid, input.vout, index, txid
-                            );
-                            log!(WARN, "{msg}");
-                            return CheckTransactionIrrecoverableError::InvalidTransaction(msg)
-                                .into();
-                        }
-                    }
-                    Pending => {}
-                    HighLoad => {
-                        high_load = true;
-                    }
-                    NotEnoughCycles => {
-                        not_enough_cycles = true;
-                    }
+            if fetched.input_addresses[index].is_some() {
+                continue;
+            }
+            // If the input transaction is already fetched, only the addresses of the spent
+            // output are cloned, not the whole cache entry.
+            use TryFetchResult::*;
+            let spent_output = match self.try_fetch_tx(input.txid, |fetched| {
+                fetched
+                    .tx
+                    .spent_output_addresses(input.vout)
+                    .map(<[Address]>::to_vec)
+            }) {
+                Fetched(spent_output) => spent_output,
+                ToFetch(do_fetch) => {
+                    jobs.push((index, input.txid, input.vout));
+                    futures.push(do_fetch);
+                    continue;
+                }
+                Pending => continue,
+                HighLoad => {
+                    high_load = true;
+                    continue;
+                }
+                NotEnoughCycles => {
+                    not_enough_cycles = true;
+                    continue;
+                }
+            };
+            match spent_output {
+                Ok(addresses) => state::set_fetched_addresses(txid, index, addresses),
+                Err(err) => {
+                    return invalid_spent_output(err, input.txid, input.vout, index, txid).into();
                 }
             }
         }
@@ -243,20 +236,13 @@ pub trait FetchEnv {
         for (i, result) in fetch_results.into_iter().enumerate() {
             let (index, input_txid, vout) = jobs[i];
             match result {
-                FetchResult::Fetched(fetched) => {
-                    if let Some(address) = &fetched.tx.outputs[vout as usize] {
-                        state::set_fetched_address(txid, index, address.clone());
-                    } else {
-                        // This error shouldn't happen unless blockdata is corrupted.
-                        let msg = format!(
-                            "Tx {input_txid} vout {vout} has no address, but is vin {index} of tx {txid}"
-                        );
-                        log!(WARN, "{msg}");
-                        error = Some(
-                            CheckTransactionIrrecoverableError::InvalidTransaction(msg).into(),
-                        );
+                FetchResult::Fetched(fetched) => match fetched.tx.spent_output_addresses(vout) {
+                    Ok(addresses) => state::set_fetched_addresses(txid, index, addresses.to_vec()),
+                    Err(err) => {
+                        error =
+                            Some(invalid_spent_output(err, input_txid, vout, index, txid).into())
                     }
-                }
+                },
                 FetchResult::Error(err) => error = Some(err.into_response(input_txid)),
                 FetchResult::RetryWithBiggerBuffer => (),
             }
@@ -271,6 +257,28 @@ pub trait FetchEnv {
             CheckTransactionRetriable::Pending.into()
         }
     }
+}
+
+/// Error for an input `index` of `txid` that spends an output `vout` of `input_txid`
+/// whose addresses are not available.
+fn invalid_spent_output(
+    err: SpentOutputError,
+    input_txid: Txid,
+    vout: u32,
+    index: usize,
+    txid: Txid,
+) -> CheckTransactionIrrecoverableError {
+    let msg = match err {
+        // This shouldn't happen unless blockdata is corrupted.
+        SpentOutputError::MissingOutput => {
+            format!("Tx {input_txid} has no vout {vout}, but it is vin {index} of tx {txid}")
+        }
+        SpentOutputError::UnsupportedScript => format!(
+            "Tx {input_txid} vout {vout} has an unsupported script, but it is vin {index} of tx {txid}"
+        ),
+    };
+    log!(WARN, "{msg}");
+    CheckTransactionIrrecoverableError::InvalidTransaction(msg)
 }
 
 #[derive(Debug, Clone)]
@@ -310,6 +318,7 @@ pub fn check_for_blocked_input_addresses(fetched: &FetchedTx) -> Result<(), Chec
     let blocked: Vec<String> = fetched
         .input_addresses
         .iter()
+        .flatten()
         .flatten()
         .filter(|address| is_blocked(address))
         .map(|address| address.to_string())

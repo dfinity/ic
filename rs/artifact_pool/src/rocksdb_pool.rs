@@ -4,7 +4,6 @@ use crate::consensus_pool::{
 };
 use crate::rocksdb_iterator::{StandaloneIterator, StandaloneSnapshot};
 use bincode::{deserialize, serialize};
-use byteorder::{BigEndian, ReadBytesExt};
 use ic_config::artifact_pool::RocksDBConfig;
 use ic_interfaces::consensus_pool::{
     HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedArtifact,
@@ -17,14 +16,12 @@ use ic_types::consensus::{BlockPayload, DataPayload, HasHash};
 use ic_types::{
     Height, Time,
     artifact::{CertificationMessageId, ConsensusMessageId},
-    batch::BatchPayload,
     consensus::{
         BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ConsensusMessageHash,
         ConsensusMessageHashable, EquivocationProof, Finalization, FinalizationShare, HasHeight,
         Notarization, NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape,
         RandomTapeShare,
         certification::{Certification, CertificationMessage, CertificationShare},
-        dkg::DkgDataPayload,
     },
     crypto::CryptoHashable,
 };
@@ -430,11 +427,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                                 block.payload.get_hash().clone(),
                                 block.payload.payload_type(),
                                 Box::new(move || {
-                                    BlockPayload::Data(DataPayload {
-                                        batch: BatchPayload::default(),
-                                        dkg: DkgDataPayload::new_empty(start_height),
-                                        idkg: None,
-                                    })
+                                    BlockPayload::Data(DataPayload::new_empty(start_height))
                                 }),
                             );
                             artifact.msg = proposal.into_message();
@@ -971,9 +964,9 @@ fn make_key(height: u64, hash: &[u8]) -> Vec<u8> {
 
 /// Decomposes 'key' into a height (u64) and a hash (Vec<u8>, 32 bytes).
 fn decompose_key(key: &[u8]) -> (u64, Vec<u8>) {
-    let (mut height, hash) = key.split_at(HASH_POS);
+    let (height, hash) = key.split_at(HASH_POS);
     (
-        check_not_none_uw!(height.read_u64::<BigEndian>()),
+        u64::from_be_bytes(check_not_none_uw!(height.try_into())),
         hash.to_vec(),
     )
 }

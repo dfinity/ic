@@ -2,6 +2,7 @@ use assert_matches::assert_matches;
 use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, VetKdCurve};
 
 use super::*;
+use crate::CountBytes;
 
 #[test]
 fn should_convert_ni_dkg_id_to_proto() {
@@ -297,4 +298,26 @@ fn should_return_error_if_dealer_subnet_id_invalid_when_parsing_proto() {
             invalid_principal_length
         ))
     );
+}
+
+#[test]
+fn should_count_bytes_of_key_name() {
+    let id = |dkg_tag| NiDkgId {
+        start_block_height: Height::new(7),
+        dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(42)),
+        dkg_tag,
+        target_subnet: NiDkgTargetSubnet::Local,
+    };
+    let key_tag = |name: String| {
+        NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name,
+        }))
+    };
+    let size = std::mem::size_of::<NiDkgId>();
+
+    assert_eq!(id(NiDkgTag::LowThreshold).count_bytes(), size);
+    assert_eq!(id(NiDkgTag::HighThreshold).count_bytes(), size);
+    assert_eq!(id(key_tag(String::new())).count_bytes(), size);
+    assert_eq!(id(key_tag("k".repeat(100))).count_bytes(), size + 100);
 }

@@ -950,12 +950,13 @@ impl Blocks {
                             }
                             false // continue
                         }),
-                    );
+                    )?;
 
                     let result = conn.execute(sql, []);
 
-                    conn.progress_handler(0, None::<fn() -> bool>);
+                    let cleared = conn.progress_handler(0, None::<fn() -> bool>);
                     result?;
+                    cleared?;
 
                     if num_blocks > 0 {
                         info!("Finished creating index '{}'", name);

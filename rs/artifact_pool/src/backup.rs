@@ -602,13 +602,6 @@ impl BackupArtifact {
     /// Each artifact will be stored separately used the following path:
     ///
     /// <subnet_id>/<replica_version>/<(height / N) * N>/height/<artifact_specific_name>.bin
-    ///
-    /// Note that the artifact specific name must contain all parameters to be
-    /// differentiated not only across other artifacts of the same replica, but also
-    /// across artifacts from all replicas. E.g., since we use multi-signatures for
-    /// notarizations and finalizations, these artifacts can be created in different
-    /// ways on different replicas, so we need to put their hashes into the artifact
-    /// name.
     pub fn file_location(&self, path: &Path) -> (PathBuf, String) {
         // Create a subdirectory for the height
         let (height, file_name) = match self {

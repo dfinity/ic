@@ -581,7 +581,7 @@ impl PageMap {
     }
 
     /// Returns the iterator over host pages managed by this `PageMap`.
-    pub fn host_pages_iter(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> + '_ {
+    pub fn host_pages_iter(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> {
         (0..self.num_host_pages()).map(move |i| {
             let idx = PageIndex::from(i as u64);
             (idx, self.get_page(idx))
@@ -589,7 +589,7 @@ impl PageMap {
     }
 
     /// Returns the iterator over delta pages in this `PageMap`
-    pub fn delta_pages_iter(&self) -> impl Iterator<Item = (&PageIndex, &PageBytes)> + '_ {
+    pub fn delta_pages_iter(&self) -> impl Iterator<Item = (&PageIndex, &PageBytes)> {
         self.page_delta
             .iter()
             .map(|(index, page)| (index, page.contents()))
@@ -794,6 +794,11 @@ impl PageMap {
     /// Whether there are any unflushed deltas
     pub fn unflushed_delta_is_empty(&self) -> bool {
         self.unflushed_delta.is_empty()
+    }
+
+    /// Returns the number of pages in the unflushed delta.
+    pub fn num_unflushed_delta_pages(&self) -> usize {
+        self.unflushed_delta.len()
     }
 
     /// Whether the page map is consistent with tip (i.e. is based on a checkpoint

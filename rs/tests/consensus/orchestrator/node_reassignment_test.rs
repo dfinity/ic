@@ -140,8 +140,8 @@ fn test(env: TestEnv) {
     // Wait until the nodes become unassigned.
     node1.await_status_is_unavailable().unwrap();
     node2.await_status_is_unavailable().unwrap();
-    assert_node_is_unassigned(&node1, log);
-    assert_node_is_unassigned(&node2, log);
+    assert_node_is_unassigned(&node1, /*expected_fstrim_count=*/ 1, log);
+    assert_node_is_unassigned(&node2, /*expected_fstrim_count=*/ 1, log);
 
     block_on(add_nodes_to_subnet(
         node3.get_public_url(),
@@ -263,8 +263,8 @@ fn test(env: TestEnv) {
     // Wait until the nodes become unassigned.
     node1.await_status_is_unavailable().unwrap();
     node2.await_status_is_unavailable().unwrap();
-    assert_node_is_unassigned(&node1, log);
-    assert_node_is_unassigned(&node2, log);
+    assert_node_is_unassigned(&node1, /*expected_fstrim_count=*/ 2, log);
+    assert_node_is_unassigned(&node2, /*expected_fstrim_count=*/ 2, log);
 
     // Assert nodes are assigned before the are removed
     assert_node_is_assigned(&node3, log);
@@ -293,8 +293,8 @@ fn test(env: TestEnv) {
     node2.await_status_is_healthy().unwrap();
     node3.await_status_is_unavailable().unwrap();
     node4.await_status_is_unavailable().unwrap();
-    assert_node_is_unassigned(&node3, log);
-    assert_node_is_unassigned(&node4, log);
+    assert_node_is_unassigned(&node3, /*expected_fstrim_count=*/ 1, log);
+    assert_node_is_unassigned(&node4, /*expected_fstrim_count=*/ 1, log);
     assert!(can_read_msg_with_retries(
         log,
         &node1.get_public_url(),

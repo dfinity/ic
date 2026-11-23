@@ -92,6 +92,8 @@ pub struct KeyDerParsingError {
 /// * `KeyDerParsingError` if:
 ///   - `pk_der` is malformed ASN.1
 ///   - `pk_der` is *not* the expected ASN.1 structure
+///   - `pk_der` exceeds [`MAX_DER_NESTING_DEPTH`], [`MAX_DER_ELEMENTS`] or
+///     [`MAX_OID_OCTETS`], or uses the high-tag-number form
 pub fn algo_id_and_public_key_bytes_from_der(
     der: &[u8],
 ) -> Result<(PkixAlgorithmIdentifier, Vec<u8>), KeyDerParsingError> {
@@ -103,6 +105,16 @@ pub fn algo_id_and_public_key_bytes_from_der(
 /// DER-encoded key.
 pub const MAX_DER_NESTING_DEPTH: usize = 4;
 
+/// The maximum number of ASN.1 elements in a DER-encoded key. A
+/// SubjectPublicKeyInfo has at most 5.
+pub const MAX_DER_ELEMENTS: usize = 16;
+
+/// The maximum content length in octets of an OBJECT IDENTIFIER in a
+/// DER-encoded key. Those of supported algorithms have at most 10.
+pub const MAX_OID_OCTETS: usize = 64;
+
+const HIGH_TAG_NUMBER_FORM: u8 = 0x1f;
+const OBJECT_IDENTIFIER_TAG_NUMBER: u8 = 0x06;
 const SEQUENCE_TAG_NUMBER: u8 = 0x10;
 const SET_TAG_NUMBER: u8 = 0x11;
 
@@ -110,16 +122,14 @@ const INCOMPLETE_ELEMENT: &str = "DER ends in the middle of an element";
 const LENGTH_TOO_LARGE: &str = "DER element length is too large";
 
 /// Parser for DER-encoded keys.
-struct KeyDerParser {
-    key_der: Vec<u8>,
+struct KeyDerParser<'a> {
+    key_der: &'a [u8],
 }
 
-impl KeyDerParser {
+impl<'a> KeyDerParser<'a> {
     /// Creates a new helper, for the given DER-encoded key.
-    pub fn new(key_der: &[u8]) -> Self {
-        Self {
-            key_der: Vec::from(key_der),
-        }
+    pub fn new(key_der: &'a [u8]) -> Self {
+        Self { key_der }
     }
 
     /// Parses the DER key of this parser as a public key, and returns the
@@ -241,13 +251,14 @@ impl KeyDerParser {
         }
     }
 
-    /// Returns an error if `der` nests ASN.1 elements more than
-    /// [`MAX_DER_NESTING_DEPTH`] levels deep, or if its tag-length headers
-    /// cannot be walked from start to end.
-    fn check_der_nesting_depth(der: &[u8]) -> Result<(), KeyDerParsingError> {
+    /// Returns an error if `der` exceeds [`MAX_DER_NESTING_DEPTH`],
+    /// [`MAX_DER_ELEMENTS`] or [`MAX_OID_OCTETS`], uses the high-tag-number
+    /// form, or if its tag-length headers cannot be walked from start to end.
+    fn check_der_limits(der: &[u8]) -> Result<(), KeyDerParsingError> {
         // Exclusive end offsets of the elements that are currently open; their
         // number is the current nesting depth.
         let mut open_elements_end: Vec<usize> = Vec::new();
+        let mut num_elements = 0;
         let mut index = 0;
         while index < der.len() {
             while let Some(&end) = open_elements_end.last() {
@@ -258,29 +269,29 @@ impl KeyDerParser {
                 }
             }
 
-            // Identifier octets: skip the high-tag-number form if present.
+            num_elements += 1;
+            if num_elements > MAX_DER_ELEMENTS {
+                return Err(Self::parsing_error(&format!(
+                    "DER number of elements exceeds the maximum of {MAX_DER_ELEMENTS}"
+                )));
+            }
+
             let first_identifier_octet = der[index];
             let universal_class = first_identifier_octet & 0xc0 == 0;
             let constructed = first_identifier_octet & 0x20 != 0;
             let tag_number = first_identifier_octet & 0x1f;
-            let high_tag_number_form = tag_number == 0x1f;
-            index += 1;
-            if high_tag_number_form {
-                while let Some(octet) = der.get(index)
-                    && octet & 0x80 != 0
-                {
-                    index += 1;
-                }
-                index += 1;
+            // Supported keys use only low tag numbers.
+            if tag_number == HIGH_TAG_NUMBER_FORM {
+                return Err(Self::parsing_error(
+                    "DER uses the high-tag-number form, which is not supported",
+                ));
             }
+            index += 1;
 
             // SEQUENCEs and SETs hold other elements whatever their
             // constructed bit says; elements of the other classes hold other
-            // elements when it is set. The high-tag-number form can encode the
-            // SEQUENCE and SET tag numbers, so it is counted as well.
-            let container = if high_tag_number_form {
-                true
-            } else if universal_class {
+            // elements when it is set.
+            let container = if universal_class {
                 tag_number == SEQUENCE_TAG_NUMBER || tag_number == SET_TAG_NUMBER
             } else {
                 constructed
@@ -316,6 +327,14 @@ impl KeyDerParser {
             if content_end > der.len() {
                 return Err(Self::parsing_error(INCOMPLETE_ELEMENT));
             }
+            if universal_class
+                && tag_number == OBJECT_IDENTIFIER_TAG_NUMBER
+                && content_length > MAX_OID_OCTETS
+            {
+                return Err(Self::parsing_error(&format!(
+                    "DER OBJECT IDENTIFIER length exceeds the maximum of {MAX_OID_OCTETS}"
+                )));
+            }
             if container {
                 if open_elements_end.len() + 1 > MAX_DER_NESTING_DEPTH {
                     return Err(Self::parsing_error(&format!(
@@ -332,8 +351,8 @@ impl KeyDerParser {
 
     /// parses the entire DER-string provided upon construction.
     fn parse_pk(&self) -> Result<Vec<ASN1Block>, KeyDerParsingError> {
-        Self::check_der_nesting_depth(&self.key_der)?;
-        simple_asn1::from_der(&self.key_der)
+        Self::check_der_limits(self.key_der)?;
+        simple_asn1::from_der(self.key_der)
             .map_err(|e| Self::parsing_error(&format!("Error in DER encoding: {e}")))
     }
 

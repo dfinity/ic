@@ -21,6 +21,7 @@ use ic_interfaces::messaging::{
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types_private::CanisterStatusType;
+use ic_nns_delegation_reader::StateForDelegationVerification;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::RoutingTable;
@@ -32,7 +33,7 @@ use ic_types::{
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::{IngressState, IngressStatus},
     messages::{
-        CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, SubnetMessage,
+        CallbackId, Ingress, MessageId, Refund, Request, RequestOrResponse, Response, SubnetMessage,
     },
     time::CoarseTime,
 };
@@ -492,9 +493,10 @@ impl ReplicatedState {
         // just loaded. A running replica gets the same value from
         // `Self::refresh_consumed_cycles`, so the canonical state tree at
         // `/subnet/<subnet_id>/metrics` hashes identically across a restart.
-        metadata
-            .subnet_metrics
-            .refresh_consumed_cycles(canister_states.total_consumed_cycles());
+        metadata.subnet_metrics.refresh_consumed_cycles(
+            canister_states.total_consumed_cycles(),
+            canister_states.total_consumed_cycles_monotonic(),
+        );
 
         Self {
             canister_states,
@@ -695,15 +697,19 @@ impl ReplicatedState {
 
     /// Refreshes
     /// [`crate::metadata_state::SubnetMetrics::consumed_cycles_total_including_canisters`]
-    /// from the current canister states. The total is derived, not persisted;
-    /// [`Self::new_from_checkpoint`] derives it the same way.
+    /// and
+    /// [`crate::metadata_state::SubnetMetrics::consumed_cycles_total_including_canisters_monotonic`]
+    /// from the current canister states. The totals are derived, not persisted;
+    /// [`Self::new_from_checkpoint`] derives them the same way.
     ///
     /// `O(|hot canisters|)`.
     pub fn refresh_consumed_cycles(&mut self) {
         let consumed_by_canisters = self.canister_states.total_consumed_cycles();
+        let consumed_by_canisters_monotonic =
+            self.canister_states.total_consumed_cycles_monotonic();
         self.metadata
             .subnet_metrics
-            .refresh_consumed_cycles(consumed_by_canisters);
+            .refresh_consumed_cycles(consumed_by_canisters, consumed_by_canisters_monotonic);
     }
 
     /// Re-establishes strict hot / cold partitioning of canister states (see
@@ -1081,23 +1087,27 @@ impl ReplicatedState {
             None => {
                 let subnet_id = self.metadata.own_subnet_id.get_ref();
                 if receiver.get_ref() == subnet_id {
-                    match &msg {
-                        RequestOrResponse::Request(_) => push_input(
-                            &mut self.subnet_queues,
-                            msg,
-                            subnet_available_guaranteed_response_memory,
-                            own_subnet_type,
-                            input_queue_type,
-                        )
-                        // Requests are never silently dropped.
-                        .map(|_| true),
+                    match msg {
+                        RequestOrResponse::Request(mut request) => {
+                            // Cache the effective canister ID, unless already cached.
+                            Request::cache_effective_canister_id(&mut request);
+                            push_input(
+                                &mut self.subnet_queues,
+                                RequestOrResponse::Request(request),
+                                subnet_available_guaranteed_response_memory,
+                                own_subnet_type,
+                                input_queue_type,
+                            )
+                            // Requests are never silently dropped.
+                            .map(|_| true)
+                        }
 
                         RequestOrResponse::Response(response) => Err((
                             StateError::non_matching_response(
                                 "Management canister does not accept canister responses",
-                                response,
+                                &response,
                             ),
-                            msg,
+                            RequestOrResponse::Response(response),
                         )),
                     }
                 } else {
@@ -1204,7 +1214,7 @@ impl ReplicatedState {
     /// message. Calling `next` will consume the message and remove it from the
     /// state. All messages that have not been explicitly consumed will remain
     /// in the state.
-    pub fn output_into_iter(&mut self) -> impl PeekableOutputIterator + '_ {
+    pub fn output_into_iter(&mut self) -> impl PeekableOutputIterator {
         let time = self.metadata.time();
 
         OutputIterator::new(
@@ -1994,6 +2004,20 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
         assert!(self.metadata.streams.is_empty());
 
         *Arc::make_mut(&mut self.metadata.streams) = streams;
+    }
+}
+
+impl StateForDelegationVerification for ReplicatedState {
+    fn routing_table(&self) -> &RoutingTable {
+        self.metadata.network_topology.routing_table()
+    }
+
+    fn subnet_public_key(&self, subnet_id: SubnetId) -> Option<&[u8]> {
+        self.metadata
+            .network_topology
+            .subnets()
+            .get(&subnet_id)
+            .map(|subnet_topology| subnet_topology.public_key.as_slice())
     }
 }
 

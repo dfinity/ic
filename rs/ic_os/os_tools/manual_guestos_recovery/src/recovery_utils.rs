@@ -18,13 +18,39 @@ impl RecoveryUpgraderCommand {
     }
 
     pub fn to_shell_string(&self) -> String {
-        let escaped_args: Vec<String> = self
-            .args
-            .iter()
-            .map(|arg| shell_escape::escape(arg.as_str().into()).to_string())
-            .collect();
+        let escaped_args: Vec<String> = self.args.iter().map(|arg| shell_escape(arg)).collect();
         format!("sudo {RECOVERY_LAUNCHER_PATH} {}", escaped_args.join(" "))
     }
+}
+
+/// Escapes `arg` for use as a single word in a POSIX shell command line.
+///
+/// Arguments consisting only of `[A-Za-z0-9_=/,.+-]` are returned unchanged; anything else
+/// (including the empty string) is wrapped in single quotes, with embedded `'` (and `!`, which
+/// is special in interactive bash history expansion) written as `'\''` / `'\!'`.
+fn shell_escape(arg: &str) -> String {
+    fn is_safe(ch: char) -> bool {
+        ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '=' | '/' | ',' | '.' | '+')
+    }
+
+    if !arg.is_empty() && arg.chars().all(is_safe) {
+        return arg.to_string();
+    }
+
+    let mut escaped = String::with_capacity(arg.len() + 2);
+    escaped.push('\'');
+    for ch in arg.chars() {
+        match ch {
+            '\'' | '!' => {
+                escaped.push_str("'\\");
+                escaped.push(ch);
+                escaped.push('\'');
+            }
+            _ => escaped.push(ch),
+        }
+    }
+    escaped.push('\'');
+    escaped
 }
 
 pub fn build_recovery_upgrader_command(mode: &str, args: &[String]) -> RecoveryUpgraderCommand {
@@ -82,6 +108,35 @@ pub fn build_recovery_upgrader_run_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shell_escape_leaves_safe_arguments_untouched() {
+        let safe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_=/,.+";
+        assert_eq!(shell_escape(safe), safe);
+        assert_eq!(shell_escape("mode=prep"), "mode=prep");
+        assert_eq!(shell_escape("/opt/ic/bin/x.sh"), "/opt/ic/bin/x.sh");
+    }
+
+    #[test]
+    fn shell_escape_quotes_unsafe_arguments() {
+        assert_eq!(shell_escape(""), "''");
+        assert_eq!(shell_escape("a b"), "'a b'");
+        assert_eq!(shell_escape("a:b@c"), "'a:b@c'");
+        assert_eq!(shell_escape("$HOME"), "'$HOME'");
+        assert_eq!(shell_escape("it's"), r"'it'\''s'");
+        assert_eq!(shell_escape("wow!"), r"'wow'\!''");
+        assert_eq!(shell_escape("`rm -rf /`"), "'`rm -rf /`'");
+        assert_eq!(shell_escape("a;b|c&d"), "'a;b|c&d'");
+    }
+
+    #[test]
+    fn shell_string_escapes_arguments() {
+        let command = build_recovery_upgrader_command("prep", &["version=a b".to_string()]);
+        assert_eq!(
+            command.to_shell_string(),
+            format!("sudo {RECOVERY_LAUNCHER_PATH} mode=prep 'version=a b'")
+        );
+    }
 
     #[test]
     fn prep_command_includes_target_boot_alternative_and_empty_recovery_hash_prefix() {

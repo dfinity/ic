@@ -17,8 +17,8 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     Height, RegistryVersion, SubnetId,
     consensus::{
-        BlockProposal, CatchUpPackage, ConsensusMessage, ConsensusMessageHashable, Finalization,
-        HasHeight, Notarization, RandomBeacon, RandomTape,
+        BlockProposal, CatchUpPackage, ConsensusMessage, ConsensusMessageHash,
+        ConsensusMessageHashable, Finalization, HasHeight, Notarization, RandomBeacon, RandomTape,
     },
     time::UNIX_EPOCH,
 };
@@ -65,18 +65,19 @@ pub(crate) fn rename_file(original_file: &Path) {
 
 /// All possible exits from the deserialization loop of the artifacts. All
 /// exits except for `Done` require for the upper layers to catch up.
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ExitPoint {
     /// CUPHeightWasFinalized(h) indicates that we processed all artifacts
-    /// (except CUPs) up to  height h, which is the first height that finalizes
-    /// the last seen CUP. This means we are now ready to insert the CUP at
-    /// height h.
+    /// (except CUPs) up to a height that finalizes the last seen CUP at
+    /// height h. This means we are now ready to insert the CUP at height h.
     CUPHeightWasFinalized(Height),
     /// All artifacts up to the height with a newer registry version were
     /// restored. The height payload corresponds to the height of a first
     /// block with a validation context referencing a newer version than
     /// locally known.
     NewerRegistryVersion(RegistryVersion),
-    /// Can't proceed because artifact validation failed after the given height.
+    /// Can't proceed because artifact validation failed at or after the
+    /// given height.
     ValidationIncomplete(Height),
 }
 
@@ -229,6 +230,10 @@ where
 /// Deserializes consensus artifacts, reading them from the backup spool height
 /// by height and inserting them into the consensus pool. It stops at certain
 /// points which require the execution state to catch up.
+///
+/// `observed_files` holds the files of the artifacts inserted into the pool that weren't validated
+/// yet, by artifact hash. Only random tapes may stay in there across heights (see below), and the
+/// caller keeps it across calls so that their files are still known after resuming.
 // TODO(CON-1494): change the return type of this function. Most variants of ExitPoint
 // are not result of errors.
 pub(crate) fn deserialize_consensus_artifacts(
@@ -240,6 +245,7 @@ pub(crate) fn deserialize_consensus_artifacts(
     validator: &ReplayValidator,
     dkg_manager: &mut DkgKeyManager,
     invalid_artifacts: &mut Vec<InvalidArtifact>,
+    observed_files: &mut HashMap<ConsensusMessageHash, PathBuf>,
 ) -> Result<(), ExitPoint> {
     let time_source = validator.get_timesource();
     let mut last_cup_height: Option<Height> = None;
@@ -273,7 +279,6 @@ pub(crate) fn deserialize_consensus_artifacts(
         }
 
         let mut artifacts = Vec::new();
-        let mut expected = HashMap::new();
 
         if height_artifacts.proposals.is_empty() {
             println!(
@@ -288,12 +293,9 @@ pub(crate) fn deserialize_consensus_artifacts(
             .expect("Cannot retrieve the registry version from the pool");
         let last_finalized_height = pool_reader.get_finalized_height();
 
-        let mut finalized_block_hash = None;
         // We should never insert more than one finalization, because it breaks a lot of
         // invariants of the pool.
         if let Some(file_name) = &height_artifacts.finalizations.first() {
-            // Save the hash of the finalized block proposal.
-            finalized_block_hash = file_name.split('_').nth(1);
             let file = path.join(file_name);
             let finalization = read_artifact_if_correct_height::<Finalization, pb::Finalization>(
                 &file,
@@ -315,8 +317,7 @@ pub(crate) fn deserialize_consensus_artifacts(
                 rename_file(&file);
             } else {
                 let message = finalization.into_message();
-                expected.insert(message.get_cm_hash(), file);
-                artifacts.push(message);
+                artifacts.push((message, file));
             }
         }
 
@@ -352,8 +353,7 @@ pub(crate) fn deserialize_consensus_artifacts(
             }
 
             let message = proposal.into_message();
-            expected.insert(message.get_cm_hash(), file);
-            artifacts.push(message);
+            artifacts.push((message, file));
         }
 
         // Insert the random beacon and the random tape.
@@ -369,7 +369,7 @@ pub(crate) fn deserialize_consensus_artifacts(
             "random beacon",
             height,
         )?;
-        artifacts.push(rb.into_message());
+        artifacts.push((rb.into_message(), rb_path));
 
         let rt_path = path.join("random_tape.bin");
         if !rt_path.exists() {
@@ -383,7 +383,7 @@ pub(crate) fn deserialize_consensus_artifacts(
             "random tape",
             height,
         )?;
-        artifacts.push(rt.into_message());
+        artifacts.push((rt.into_message(), rt_path));
 
         // Insert the finalized notarization.
         if let Some(file_name) = height_artifacts.notarizations.first() {
@@ -394,11 +394,11 @@ pub(crate) fn deserialize_consensus_artifacts(
                 height,
             )?;
             let message = not.into_message();
-            expected.insert(message.get_cm_hash(), file);
-            artifacts.push(message);
+            artifacts.push((message, file));
         }
 
-        artifacts.into_iter().for_each(|message| {
+        artifacts.into_iter().for_each(|(message, file)| {
+            observed_files.insert(message.get_cm_hash(), file);
             pool.insert(UnvalidatedArtifact {
                 message,
                 peer_id: validator.replica_cfg.node_id,
@@ -408,56 +408,68 @@ pub(crate) fn deserialize_consensus_artifacts(
 
         // If we are adding a new finalization this round, artifacts should be validated
         // up until the new height, else we stay at the last finalized height
-        let target_height = if finalized_block_hash.is_some() {
+        let target_height = if !height_artifacts.finalizations.is_empty() {
             height
         } else {
             last_finalized_height
         };
         // call validator, which moves artifacts to validated or removes invalid
-        let (mut invalid, failure_after_height) =
-            match validator.validate(pool, &mut expected, dkg_manager, target_height) {
-                Ok(artifacts) => (artifacts, None),
-                Err(ReplayError::ValidationIncomplete(h, artifacts)) => (artifacts, Some(h)),
-                Err(other) => {
-                    println!("Unexpected failure during validation: {other:?}");
-                    (Vec::new(), Some(last_finalized_height))
-                }
-            };
+        let (mut invalid, validated) = validator.validate(pool, dkg_manager);
+        let new_finalized_height = PoolReader::new(pool).get_finalized_height();
+        println!("Validated artifacts up to new finalized height: {new_finalized_height}");
+
+        observed_files.retain(|hash, _| !validated.contains(hash));
+
         for i in &invalid {
-            match i.get_file_name() {
-                Some(name) => {
-                    let artifact_path = path.join(name);
-                    assert!(
-                        artifact_path.exists(),
-                        "Path to invalid artifact doesn't exist."
+            match observed_files.remove(&i.id.hash) {
+                Some(artifact_path) => {
+                    println!(
+                        "Invalid artifact detected: {artifact_path:?}, reason: {}",
+                        i.message
                     );
-                    println!("Invalid artifact detected: {:?}", artifact_path);
                     rename_file(&artifact_path);
-                    return Err(ExitPoint::ValidationIncomplete(height));
                 }
                 None => println!("Failed to get path for invalid artifact: {i:?}"),
             }
         }
-        invalid_artifacts.append(&mut invalid);
 
-        // All the artifacts that we expect to be validated and hence removed from the collection.
-        // If they weren't we remove them here and hopefully rsync the correct ones next time.
-        for (_, artifact_path) in expected {
+        // If any artifact that we expect to be validated is not, we remove it here and hopefully
+        // rsync the correct ones next time.
+        // Exception for the random tape: even though there is a random tape at that height, it
+        // could legitimately stay unvalidated because the validator only validates tapes up to
+        // `finalized_height + 1`. Thus, if there were no finalizations at that height nor at the
+        // previous height, the tape at the current height would be left unvalidated. Though do not
+        // worry: the tape is still in the unvalidated pool and will be validated as soon as a
+        // later finalization is found (or reported as invalid otherwise, in which case we keep
+        // its file to rename it).
+        for (_, artifact_path) in observed_files
+            .extract_if(|hash, _| !matches!(hash, ConsensusMessageHash::RandomTape(..)))
+        {
             println!("Artifact couldn't be validated: {artifact_path:?}");
             rename_file(&artifact_path);
         }
 
-        if let Some(height) = failure_after_height {
-            return Err(ExitPoint::ValidationIncomplete(height));
+        // An invalid random tape may be from a height below the current one.
+        if let Some(failed_height) = invalid.iter().map(|i| i.id.height).min() {
+            invalid_artifacts.append(&mut invalid);
+            return Err(ExitPoint::ValidationIncomplete(failed_height));
         }
 
-        // If we just inserted a height_artifacts, which finalizes the last seen CUP
-        // height, we need to deliver all batches before we insert the cup.
+        if new_finalized_height < target_height {
+            // `new_finalized_height` was finalized so `new_finalized_height + 1` or above failed
+            return Err(ExitPoint::ValidationIncomplete(
+                new_finalized_height.increment(),
+            ));
+        }
+
+        // If the validated artifacts finalize the last seen CUP height, we need to deliver all
+        // batches before we insert the cup.
         if let Some(cup_height) = last_cup_height
-            && height >= cup_height
-            && !height_artifacts.finalizations.is_empty()
+            && new_finalized_height >= cup_height
         {
-            println!("Found a CUP at height {cup_height:?}, finalized at height {height:?}");
+            println!(
+                "Found a CUP at height {cup_height:?}, finalized at height {new_finalized_height:?}"
+            );
             return Err(ExitPoint::CUPHeightWasFinalized(cup_height));
         }
     }
@@ -465,4 +477,437 @@ pub(crate) fn deserialize_consensus_artifacts(
 
 fn deserialization_error(file: &Path, err: ProxyDecodeError) -> String {
     format!("Couldn't deserialize artifact {file:?}: {err}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_config::{Config, artifact_pool::ArtifactPoolConfig};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
+    use ic_interfaces::{consensus_pool::ConsensusPool, time_source::SysTimeSource};
+    use ic_logger::replica_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
+    use ic_test_utilities_consensus::fake::FakeVerifier;
+    use ic_test_utilities_types::ids::node_test_id;
+    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
+    use tempfile::TempDir;
+
+    const DKG_INTERVAL_LENGTH: u64 = 9;
+    /// The first CUP above genesis is at the first DKG summary height.
+    const CUP_HEIGHT: u64 = DKG_INTERVAL_LENGTH + 1;
+    /// The spool covers two CUPs, at heights 10 and 20, and some heights above them.
+    const TOP_HEIGHT: u64 = 2 * CUP_HEIGHT + 5;
+
+    /// The backup spool of a single-node test subnet that finalized `TOP_HEIGHT` heights.
+    struct Spool {
+        deps: Dependencies,
+        genesis_cup: pb::CatchUpPackage,
+        dir: TempDir,
+        _pool_dir: TempDir,
+    }
+
+    impl Spool {
+        fn new() -> Self {
+            let pool_dir = tempfile::tempdir().unwrap();
+            let mut deps = DependenciesBuilder::new(
+                ArtifactPoolConfig::new(pool_dir.path().to_path_buf()),
+                /*nodes=*/ 1,
+            )
+            .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+            .build();
+            let genesis_cup = deps.pool.get_cache().cup_as_protobuf();
+            deps.state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(Height::from(0));
+            deps.message_routing
+                .get_mut()
+                .expect_expected_batch_height()
+                .return_const(Height::from(1));
+            for _ in 0..TOP_HEIGHT {
+                deps.pool
+                    .prepare_round()
+                    .with_certified_height(Height::from(1))
+                    .advance();
+            }
+
+            let dir = tempfile::tempdir().unwrap();
+            let validated = deps.pool.validated();
+            for height in (1..=TOP_HEIGHT).map(Height::from) {
+                let height_dir = cup_file_name(dir.path(), height)
+                    .parent()
+                    .unwrap()
+                    .to_path_buf();
+                fs::create_dir_all(&height_dir).unwrap();
+                let write = |name: &str, artifact: Vec<u8>| {
+                    fs::write(height_dir.join(name), artifact).unwrap()
+                };
+                // Fake signatures have no signers, but the validator requires a quorum of them.
+                let mut finalization = validated
+                    .finalization()
+                    .get_by_height(height)
+                    .next()
+                    .unwrap();
+                finalization.signature.signers = vec![node_test_id(0)];
+                write(
+                    "finalization.bin",
+                    pb::Finalization::from(finalization).encode_to_vec(),
+                );
+                let mut notarization = validated
+                    .notarization()
+                    .get_by_height(height)
+                    .next()
+                    .unwrap();
+                notarization.signature.signers = vec![node_test_id(0)];
+                write(
+                    "notarization.bin",
+                    pb::Notarization::from(notarization).encode_to_vec(),
+                );
+                let proposal = validated
+                    .block_proposal()
+                    .get_by_height(height)
+                    .next()
+                    .unwrap();
+                write(
+                    "block_proposal.bin",
+                    pb::BlockProposal::from(proposal).encode_to_vec(),
+                );
+                let beacon = validated
+                    .random_beacon()
+                    .get_by_height(height)
+                    .next()
+                    .unwrap();
+                write(
+                    "random_beacon.bin",
+                    pb::RandomBeacon::from(beacon).encode_to_vec(),
+                );
+                let tape = validated
+                    .random_tape()
+                    .get_by_height(height)
+                    .next()
+                    .unwrap();
+                write(
+                    "random_tape.bin",
+                    pb::RandomTape::from(tape).encode_to_vec(),
+                );
+                if let Some(cup) = validated.catch_up_package().get_by_height(height).next() {
+                    write(
+                        "catch_up_package.bin",
+                        pb::CatchUpPackage::from(cup).encode_to_vec(),
+                    );
+                }
+            }
+            Self {
+                deps,
+                genesis_cup,
+                dir,
+                _pool_dir: pool_dir,
+            }
+        }
+
+        fn file(&self, height: u64, file_name: &str) -> PathBuf {
+            cup_file_name(self.dir.path(), Height::from(height)).with_file_name(file_name)
+        }
+
+        fn remove(&self, height: u64, file_name: &str) {
+            fs::remove_file(self.file(height, file_name)).unwrap();
+        }
+
+        fn replace(&self, height: u64, file_name: &str, artifact: impl Message) {
+            fs::write(self.file(height, file_name), artifact.encode_to_vec()).unwrap();
+        }
+
+        /// Returns the files of the spool that the restore renamed, sorted.
+        fn renamed_files(&self) -> Vec<PathBuf> {
+            fn walk(dir: &Path, files: &mut Vec<PathBuf>) {
+                for entry in fs::read_dir(dir).unwrap() {
+                    let path = entry.unwrap().path();
+                    if path.is_dir() {
+                        walk(&path, files);
+                    } else if path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.starts_with("invalid_"))
+                    {
+                        files.push(path);
+                    }
+                }
+            }
+            let mut files = Vec::new();
+            walk(self.dir.path(), &mut files);
+            files.sort();
+            files
+        }
+
+        /// Deserializes the spool from height 1 into a fresh pool the way `restore_from_backup`
+        /// does: after every `CUPHeightWasFinalized` exit, the CUP is inserted and the
+        /// deserialization resumed. Returns every exit with the finalized height of the pool at
+        /// that point.
+        fn restore(&self) -> Vec<(Result<(), ExitPoint>, Height)> {
+            let replica_config = &self.deps.replica_config;
+            let (cfg, _cfg_dir) = Config::temp_config();
+            let pool_dir = tempfile::tempdir().unwrap();
+            let mut pool = ConsensusPoolImpl::new(
+                replica_config.node_id,
+                replica_config.subnet_id,
+                replica_config.replica_version(),
+                self.genesis_cup.clone(),
+                ArtifactPoolConfig::new(pool_dir.path().to_path_buf()),
+                MetricsRegistry::new(),
+                no_op_logger(),
+                Arc::new(SysTimeSource::new()),
+            );
+            let validator = ReplayValidator::new(
+                cfg,
+                replica_config.subnet_id,
+                replica_config.platform_version.clone(),
+                self.deps.crypto.clone(),
+                self.deps.crypto.clone(),
+                Arc::new(FakeVerifier::new()),
+                pool.get_cache(),
+                self.deps.registry.clone(),
+                self.deps.state_manager.clone(),
+                self.deps.message_routing.clone(),
+                no_op_logger(),
+            );
+            let mut dkg_manager = validator.new_key_manager(&PoolReader::new(&pool));
+            let mut height_to_batches =
+                heights_to_artifacts_metadata(self.dir.path(), Height::from(1)).unwrap();
+            let mut invalid_artifacts = Vec::new();
+            let mut observed_files = HashMap::new();
+            let mut exits = Vec::new();
+            loop {
+                let result = deserialize_consensus_artifacts(
+                    self.deps.registry.clone(),
+                    self.deps.crypto.clone(),
+                    &mut pool,
+                    &mut height_to_batches,
+                    replica_config.subnet_id,
+                    &validator,
+                    &mut dkg_manager,
+                    &mut invalid_artifacts,
+                    &mut observed_files,
+                );
+                let finalized_height = PoolReader::new(&pool).get_finalized_height();
+                let cup_height = match &result {
+                    Err(ExitPoint::CUPHeightWasFinalized(cup_height)) => Some(*cup_height),
+                    _ => None,
+                };
+                exits.push((result, finalized_height));
+                let Some(cup_height) = cup_height else {
+                    return exits;
+                };
+                // `restore_from_backup` verifies the inserted CUP against the state at its height,
+                // which it obtains by delivering the batches up to there. So the CUP height must be
+                // finalized by now, or the wait for that state would never end.
+                assert!(
+                    finalized_height >= cup_height,
+                    "CUP height {cup_height} reported as finalized at finalized height {finalized_height}"
+                );
+                insert_cup_at_height(&mut pool, self.dir.path(), cup_height).unwrap();
+            }
+        }
+    }
+
+    /// The exits of the restore of a spool in which all heights can be validated.
+    fn complete_restore() -> Vec<(Result<(), ExitPoint>, Height)> {
+        let cup = |height: u64| Err(ExitPoint::CUPHeightWasFinalized(Height::from(height)));
+        vec![
+            // CUP heights are reported as finalized once the pool finalized them
+            (cup(CUP_HEIGHT), Height::from(CUP_HEIGHT)),
+            (cup(2 * CUP_HEIGHT), Height::from(2 * CUP_HEIGHT)),
+            (Ok(()), Height::from(TOP_HEIGHT)),
+        ]
+    }
+
+    #[test]
+    fn valid_spool_is_restored_without_renaming_files() {
+        let spool = Spool::new();
+        assert_eq!(spool.restore(), complete_restore());
+        assert_eq!(spool.renamed_files(), Vec::<PathBuf>::new());
+    }
+
+    /// Without finalizations at two consecutive heights, the random tape at the second one stays
+    /// unvalidated until the next finalization. Its file must not be renamed in the meantime.
+    #[test]
+    fn random_tape_waiting_for_a_later_finalization_is_not_renamed() {
+        const HEIGHT: u64 = CUP_HEIGHT / 2;
+        let spool = Spool::new();
+        spool.remove(HEIGHT - 1, "finalization.bin");
+        spool.remove(HEIGHT, "finalization.bin");
+
+        assert_eq!(spool.restore(), complete_restore());
+        assert_eq!(spool.renamed_files(), Vec::<PathBuf>::new());
+    }
+
+    /// The restore renames the files of the artifacts that couldn't be validated and leaves the
+    /// validated ones alone. Without its notarization, neither the block proposal nor the
+    /// finalization of a height get validated, unlike its random beacon and tape.
+    #[test]
+    fn artifacts_that_could_not_be_validated_are_renamed() {
+        const HEIGHT: u64 = CUP_HEIGHT / 2;
+        let spool = Spool::new();
+        spool.remove(HEIGHT, "notarization.bin");
+
+        let results: Vec<_> = spool
+            .restore()
+            .into_iter()
+            .map(|(result, _)| result)
+            .collect();
+
+        assert_eq!(
+            results,
+            vec![Err(ExitPoint::ValidationIncomplete(Height::from(HEIGHT)))]
+        );
+        assert_eq!(
+            spool.renamed_files(),
+            vec![
+                spool.file(HEIGHT, "invalid_block_proposal.bin"),
+                spool.file(HEIGHT, "invalid_finalization.bin"),
+            ]
+        );
+    }
+
+    /// `ic-backup` syncs new heights into the spool while a restore may be listing it, so the
+    /// listing can contain the finalization of a CUP height before its notarization has arrived,
+    /// or lack the notarization of a height below the CUP. The restore cannot validate that
+    /// finalization, so it must stop there instead of reporting the CUP height as finalized.
+    #[test]
+    fn cup_height_is_not_reported_as_finalized_without_a_notarization() {
+        for missing_notarization in [CUP_HEIGHT, CUP_HEIGHT - 1] {
+            let spool = Spool::new();
+            spool.remove(missing_notarization, "notarization.bin");
+            let failed_height = Height::from(missing_notarization);
+            assert_eq!(
+                spool.restore(),
+                vec![(
+                    Err(ExitPoint::ValidationIncomplete(failed_height)),
+                    failed_height.decrement(),
+                )]
+            );
+        }
+    }
+
+    /// Replaces the artifact in the given file of the spool at the given height with an invalid
+    /// one, which only the validator can tell apart from a valid one.
+    fn replace_with_invalid_artifact(spool: &Spool, height: u64, file_name: &str) {
+        let validated = spool.deps.pool.validated();
+        let h = Height::from(height);
+        match file_name {
+            "block_proposal.bin" => {
+                let mut proposal = validated.block_proposal().get_by_height(h).next().unwrap();
+                // Only the single node of the subnet is a block maker.
+                proposal.signature.signer = node_test_id(1);
+                spool.replace(height, file_name, pb::BlockProposal::from(proposal));
+            }
+            // The fake signatures of the test pool have no signers, so they lack a quorum.
+            "notarization.bin" => {
+                let notarization = validated.notarization().get_by_height(h).next().unwrap();
+                spool.replace(height, file_name, pb::Notarization::from(notarization));
+            }
+            "finalization.bin" => {
+                let finalization = validated.finalization().get_by_height(h).next().unwrap();
+                spool.replace(height, file_name, pb::Finalization::from(finalization));
+            }
+            // Random beacons and tapes must be signed by the low-threshold DKG instance.
+            "random_beacon.bin" => {
+                let mut beacon = validated.random_beacon().get_by_height(h).next().unwrap();
+                beacon.signature.signer.dkg_tag = NiDkgTag::HighThreshold;
+                spool.replace(height, file_name, pb::RandomBeacon::from(beacon));
+            }
+            "random_tape.bin" => {
+                let mut tape = validated.random_tape().get_by_height(h).next().unwrap();
+                tape.signature.signer.dkg_tag = NiDkgTag::HighThreshold;
+                spool.replace(height, file_name, pb::RandomTape::from(tape));
+            }
+            _ => panic!("Unexpected file name {file_name}"),
+        }
+    }
+
+    fn assert_renamed(spool: &Spool, height: u64, file_name: &str) {
+        assert!(
+            !spool.file(height, file_name).exists()
+                && spool.file(height, &format!("invalid_{file_name}")).exists(),
+            "{file_name} at height {height} was not renamed"
+        );
+    }
+
+    /// The restore renames the file of an artifact that the validator rejects as invalid, so that
+    /// the next rsync replaces it, and stops at its height.
+    #[test]
+    fn invalid_artifacts_are_renamed() {
+        const HEIGHT: u64 = CUP_HEIGHT / 2;
+        for file_name in [
+            "block_proposal.bin",
+            "notarization.bin",
+            "finalization.bin",
+            "random_beacon.bin",
+            "random_tape.bin",
+        ] {
+            let spool = Spool::new();
+            replace_with_invalid_artifact(&spool, HEIGHT, file_name);
+
+            let results: Vec<_> = spool
+                .restore()
+                .into_iter()
+                .map(|(result, _)| result)
+                .collect();
+
+            assert_eq!(
+                results,
+                vec![Err(ExitPoint::ValidationIncomplete(Height::from(HEIGHT)))],
+                "{file_name}"
+            );
+            assert_renamed(&spool, HEIGHT, file_name);
+        }
+    }
+
+    /// The validator only validates random tapes up to the height above the finalized one. So if
+    /// there are no finalizations at two consecutive heights, the tape at the second one is only
+    /// validated along with the next finalization. If that tape is invalid, its file must still be
+    /// renamed, and the restore must report its height as the one that failed.
+    #[test]
+    fn invalid_random_tape_validated_at_a_later_height_is_renamed() {
+        const HEIGHT: u64 = CUP_HEIGHT / 2;
+        let spool = Spool::new();
+        spool.remove(HEIGHT - 1, "finalization.bin");
+        spool.remove(HEIGHT, "finalization.bin");
+        replace_with_invalid_artifact(&spool, HEIGHT, "random_tape.bin");
+
+        let results: Vec<_> = spool
+            .restore()
+            .into_iter()
+            .map(|(result, _)| result)
+            .collect();
+
+        assert_eq!(
+            results,
+            vec![Err(ExitPoint::ValidationIncomplete(Height::from(HEIGHT)))]
+        );
+        assert_renamed(&spool, HEIGHT, "random_tape.bin");
+        // The valid tape at the height at which the invalid one was found is left alone.
+        assert!(spool.file(HEIGHT + 1, "random_tape.bin").exists());
+    }
+
+    /// All the invalid artifacts found at a height are renamed.
+    #[test]
+    fn all_invalid_artifacts_of_a_height_are_renamed() {
+        const HEIGHT: u64 = CUP_HEIGHT / 2;
+        let spool = Spool::new();
+        replace_with_invalid_artifact(&spool, HEIGHT, "block_proposal.bin");
+        replace_with_invalid_artifact(&spool, HEIGHT, "random_tape.bin");
+
+        let results: Vec<_> = spool
+            .restore()
+            .into_iter()
+            .map(|(result, _)| result)
+            .collect();
+
+        assert_eq!(
+            results,
+            vec![Err(ExitPoint::ValidationIncomplete(Height::from(HEIGHT)))]
+        );
+        assert_renamed(&spool, HEIGHT, "block_proposal.bin");
+        assert_renamed(&spool, HEIGHT, "random_tape.bin");
+    }
 }

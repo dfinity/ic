@@ -2,7 +2,12 @@ use crate::{
     BtcNetwork, CheckMode,
     providers::{Provider, parse_authorization_header_from_url},
 };
-use bitcoin::{Address, Transaction};
+use bitcoin::{
+    Address, PubkeyHash, Script, ScriptBuf, Transaction, WPubkeyHash,
+    hashes::Hash,
+    opcodes::all::{OP_CHECKMULTISIG, OP_CHECKSIG, OP_PUSHNUM_1, OP_PUSHNUM_16, OP_PUSHNUM_NEG1},
+    script::Instruction,
+};
 use ic_btc_interface::Txid;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{Cell, DefaultMemoryImpl, Storable, storable::Bound};
@@ -62,11 +67,21 @@ pub struct FetchTxStatusError {
 /// a list of `input_addresses` (matching the number of inputs)
 /// that is initialized as `None`. Once a corresponding input
 /// transaction is fetched (see function `check_fetched`), its
-/// input address will be computed and filled in.
+/// input addresses will be computed and filled in.
 #[derive(Clone, Debug)]
 pub struct FetchedTx {
     pub tx: TransactionCheckData,
-    pub input_addresses: Vec<Option<Address>>,
+    pub input_addresses: Vec<Option<Vec<Address>>>,
+}
+
+impl FetchedTx {
+    pub fn new(tx: TransactionCheckData) -> Self {
+        let input_addresses = vec![None; tx.inputs.len()];
+        Self {
+            tx,
+            input_addresses,
+        }
+    }
 }
 
 /// Instead of storing the full transaction data, we only
@@ -75,7 +90,18 @@ pub struct FetchedTx {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TransactionCheckData {
     pub inputs: Vec<PreviousOutput>,
-    pub outputs: Vec<Option<Address>>,
+    /// The addresses to check for each output, or `None` if its script is not supported,
+    /// see [`output_addresses`].
+    pub outputs: Vec<Option<Vec<Address>>>,
+}
+
+/// Reason why the addresses of a spent output are not available.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SpentOutputError {
+    /// The transaction has no output with the given index.
+    MissingOutput,
+    /// The script of the output is not supported, see [`output_addresses`].
+    UnsupportedScript,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -85,10 +111,8 @@ pub struct PreviousOutput {
 }
 
 impl TransactionCheckData {
-    pub fn from_transaction(
-        btc_network: &BtcNetwork,
-        tx: Transaction,
-    ) -> Result<Self, bitcoin::address::FromScriptError> {
+    pub fn from_transaction(btc_network: &BtcNetwork, tx: Transaction) -> Self {
+        let network = bitcoin::Network::from(btc_network.clone());
         let inputs = tx
             .input
             .iter()
@@ -97,20 +121,155 @@ impl TransactionCheckData {
                 vout: input.previous_output.vout,
             })
             .collect();
-        let mut outputs = Vec::new();
-        for output in tx.output.iter() {
-            // Some outputs do not have addresses. These outputs will never be
-            // inputs of other transactions, so it is okay to treat them as `None`.
-            outputs.push(
-                Address::from_script(
-                    &output.script_pubkey,
-                    bitcoin::Network::from(btc_network.clone()),
-                )
-                .ok(),
-            )
-        }
-        Ok(Self { inputs, outputs })
+        let outputs = tx
+            .output
+            .iter()
+            .map(|output| output_addresses(&output.script_pubkey, network))
+            .collect();
+        Self { inputs, outputs }
     }
+
+    /// Return the addresses to check when the output `vout` is spent.
+    pub fn spent_output_addresses(&self, vout: u32) -> Result<&[Address], SpentOutputError> {
+        match self.outputs.get(vout as usize) {
+            Some(Some(addresses)) => Ok(addresses),
+            Some(None) => Err(SpentOutputError::UnsupportedScript),
+            None => Err(SpentOutputError::MissingOutput),
+        }
+    }
+}
+
+/// Return the addresses to check when the output with the given `script_pubkey` is spent:
+/// - If the script has a standard address (P2PKH, P2SH, or a witness program), return it.
+/// - If the script is P2PK (`<key> OP_CHECKSIG`) or bare multisig
+///   (`<m> <key_1> ... <key_n> <n> OP_CHECKMULTISIG`), return the addresses of each of its
+///   public keys, see [`public_key_addresses`]. Pushes that are not valid public keys are
+///   skipped, since they cannot be used to spend the output.
+/// - Otherwise, the script is not supported and `None` is returned, so that spending such
+///   an output does not pass the check.
+///
+/// Note that, by design, not every address that a public key could be spent from is derived:
+/// in particular, neither its single-key Taproot address (BIP-86) nor the P2WPKH address of
+/// its uncompressed encoding are checked.
+pub fn output_addresses(script_pubkey: &Script, network: bitcoin::Network) -> Option<Vec<Address>> {
+    if let Ok(address) = Address::from_script(script_pubkey, network) {
+        return Some(vec![address]);
+    }
+    let mut addresses = vec![];
+    for key in script_public_keys(script_pubkey)? {
+        for address in public_key_addresses(key, network) {
+            if !addresses.contains(&address) {
+                addresses.push(address);
+            }
+        }
+    }
+    Some(addresses)
+}
+
+/// Maximum number of public keys of a bare multisig script, see `MAX_PUBKEYS_PER_MULTISIG`
+/// in Bitcoin Core.
+const MAX_PUBKEYS_PER_MULTISIG: i64 = 20;
+
+/// Maximum size of a number on the script stack, see `CScriptNum::nDefaultMaxNumSize`
+/// in Bitcoin Core.
+const MAX_SCRIPT_NUM_SIZE: usize = 4;
+
+/// Return the pushes of the public keys of a P2PK or bare multisig script, or `None`
+/// if the script is neither.
+fn script_public_keys(script: &Script) -> Option<Vec<&[u8]>> {
+    let instructions: Vec<Instruction> = script.instructions().collect::<Result<_, _>>().ok()?;
+    match instructions.as_slice() {
+        [Instruction::PushBytes(key), Instruction::Op(OP_CHECKSIG)] => Some(vec![key.as_bytes()]),
+        [m, keys @ .., n, Instruction::Op(OP_CHECKMULTISIG)] => {
+            let (m, n) = (script_num(m)?, script_num(n)?);
+            if n != keys.len() as i64 || n > MAX_PUBKEYS_PER_MULTISIG || m < 1 || m > n {
+                return None;
+            }
+            keys.iter()
+                .map(|key| match key {
+                    Instruction::PushBytes(key) => Some(key.as_bytes()),
+                    Instruction::Op(_) => None,
+                })
+                .collect()
+        }
+        _ => None,
+    }
+}
+
+/// Decode an instruction that pushes a number onto the stack, accepting the same
+/// (possibly non-minimal) encodings as script execution without the `MINIMALDATA` flag.
+fn script_num(instruction: &Instruction) -> Option<i64> {
+    match instruction {
+        Instruction::Op(op) => match op.to_u8() {
+            n if n == OP_PUSHNUM_NEG1.to_u8() => Some(-1),
+            n if (OP_PUSHNUM_1.to_u8()..=OP_PUSHNUM_16.to_u8()).contains(&n) => {
+                Some(i64::from(n - OP_PUSHNUM_1.to_u8() + 1))
+            }
+            _ => None,
+        },
+        Instruction::PushBytes(bytes) => {
+            let bytes = bytes.as_bytes();
+            if bytes.len() > MAX_SCRIPT_NUM_SIZE {
+                return None;
+            }
+            let Some((&last, _)) = bytes.split_last() else {
+                return Some(0);
+            };
+            let mut magnitude = 0_i64;
+            for (i, byte) in bytes.iter().enumerate() {
+                let byte = if i == bytes.len() - 1 {
+                    byte & 0x7f
+                } else {
+                    *byte
+                };
+                magnitude |= i64::from(byte) << (8 * i);
+            }
+            Some(if last & 0x80 != 0 {
+                -magnitude
+            } else {
+                magnitude
+            })
+        }
+    }
+}
+
+/// Return the addresses of the given public key that are checked when an output locked to it
+/// is spent: the P2PKH addresses of its compressed and uncompressed encodings, and the
+/// P2WPKH and P2SH-P2WPKH addresses of its compressed encoding.
+///
+/// The key may be in any encoding accepted by script execution without the `STRICTENC` flag,
+/// i.e. compressed, uncompressed, or hybrid (an uncompressed key prefixed with `0x06` if its
+/// y-coordinate is even, or `0x07` if it is odd).
+/// If it is not a valid public key in one of these encodings, it cannot be used to spend an
+/// output and no address is returned.
+pub fn public_key_addresses(key: &[u8], network: bitcoin::Network) -> Vec<Address> {
+    // Only accept the encodings accepted by libsecp256k1, since other SEC1 encodings (e.g.
+    // the compact encoding `0x05 || x`) are accepted by `deserialize_sec1`.
+    let sec1 = match (key.len(), key.first()) {
+        (33, Some(0x02 | 0x03)) | (65, Some(0x04)) => key.to_vec(),
+        (65, Some(&prefix @ (0x06 | 0x07))) => {
+            // Like libsecp256k1, reject a hybrid key whose prefix does not match the parity
+            // of its y-coordinate.
+            let is_y_odd = key[64] & 1 == 1;
+            if is_y_odd != (prefix == 0x07) {
+                return vec![];
+            }
+            [&[0x04], &key[1..]].concat()
+        }
+        _ => return vec![],
+    };
+    let Ok(public_key) = ic_secp256k1::PublicKey::deserialize_sec1(&sec1) else {
+        return vec![];
+    };
+    let compressed = PubkeyHash::hash(&public_key.serialize_sec1(true));
+    let uncompressed = PubkeyHash::hash(&public_key.serialize_sec1(false));
+    let p2wpkh = ScriptBuf::new_p2wpkh(&WPubkeyHash::from_byte_array(compressed.to_byte_array()));
+    vec![
+        Address::p2pkh(compressed, network),
+        Address::p2pkh(uncompressed, network),
+        Address::from_script(&p2wpkh, network).expect("BUG: P2WPKH script has an address"),
+        Address::p2sh(&p2wpkh, network).expect("BUG: P2WPKH script is not too large for P2SH"),
+    ]
 }
 
 // Max number of concurrent http outcalls.
@@ -191,7 +350,7 @@ impl<T> FetchTxCache<T> {
         self.created.retain(|(id, _)| *id != txid);
     }
 
-    pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = (Txid, Timestamp, &T)> + '_ {
+    pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = (Txid, Timestamp, &T)> {
         self.created
             .iter()
             .map(|(txid, timestamp)| (*txid, *timestamp, self.status.get(txid).unwrap()))
@@ -221,13 +380,19 @@ pub fn clear_fetch_status(txid: Txid) {
     FETCH_TX_CACHE.with(|cache| cache.borrow_mut().clear_status(txid))
 }
 
-/// Set the address at the given `index` in the `Fetched` status of the given `txid`.
+/// Apply `f` to the status of `txid` under a borrow of the cache, so that e.g. only the
+/// needed parts of a `Fetched` status are cloned instead of the whole cache entry.
+pub fn with_fetch_status<R>(txid: Txid, f: impl FnOnce(Option<&FetchTxStatus>) -> R) -> R {
+    FETCH_TX_CACHE.with(|cache| f(cache.borrow().get_status(txid)))
+}
+
+/// Set the addresses of the input at the given `index` in the `Fetched` status of the given `txid`.
 /// Pre-condition: the status of `txid` is `Fetched`, and `index` is within bounds.
-pub fn set_fetched_address(txid: Txid, index: usize, address: Address) {
+pub fn set_fetched_addresses(txid: Txid, index: usize, addresses: Vec<Address>) {
     FETCH_TX_CACHE.with(|s| {
         s.borrow_mut().status.entry(txid).and_modify(|status| {
             if let FetchTxStatus::Fetched(fetched) = status {
-                fetched.input_addresses[index] = Some(address);
+                fetched.input_addresses[index] = Some(addresses);
             };
         });
     })

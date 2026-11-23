@@ -112,10 +112,7 @@ impl Registry {
                 response.high_threshold_transcript_record,
             ),
             chain_key_initializations,
-            cup_type: Some(CupType::Genesis(GenesisArgs { height: 0 })),
-            height: 0,
-            time: 0,
-            state_hash: vec![],
+            cup_type: Some(CupType::Genesis(GenesisArgs {})),
             registry_store_uri: None,
             ecdsa_initializations: vec![],
         };

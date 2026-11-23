@@ -1,10 +1,12 @@
 use std::{fs::read_to_string, io::Write, str::FromStr};
 
 use candid::Encode;
-use ic_management_canister_types_private::{CanisterHttpResponsePayload, HttpMethod};
+use ic_management_canister_types_private::{
+    BoundedHttpHeaders, CanisterHttpResponsePayload, HttpMethod,
+};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_machine_tests::{StateMachine, two_subnets_simple};
-use ic_subnet_splitting::post_split_estimations::{LoadEstimates, StateSizeEstimates};
+use ic_subnet_splitting::post_split_estimations::PostSplitEstimations;
 use ic_test_utilities_logger::with_test_logger;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::CanisterId;
@@ -54,8 +56,14 @@ fn load_metrics_e2e_test() {
                 .unwrap()
                 .path();
         let load_samples_baseline_path = dir.path().join("load_samples_baseline.csv");
-        ic_state_tool::commands::canister_metrics::get(checkpoint_dir, &load_samples_baseline_path)
-            .expect("Should compute canister metrics for a valid checkpoint");
+        let communication_samples_baseline_path =
+            dir.path().join("communication_samples_baseline.csv");
+        ic_state_tool::commands::canister_metrics::get(
+            checkpoint_dir,
+            &load_samples_baseline_path,
+            &communication_samples_baseline_path,
+        )
+        .expect("Should compute canister metrics for a valid checkpoint");
 
         info!(logger, "Setting up state machines");
         set_up(
@@ -90,16 +98,13 @@ fn load_metrics_e2e_test() {
             "Using `state-tool` to extract the canister metrics from the replicated state."
         );
         let load_samples_path = dir.path().join("load_samples.csv");
-        ic_state_tool::commands::canister_metrics::get(checkpoint_dir.clone(), &load_samples_path)
-            .expect("Should compute canister metrics for a valid checkpoint");
-        let communication_samples_path = dir.path().join("comm_samples.csv");
-        // TODO(CON-1569): use actual connectivity metrics
-        {
-            let communication_data = include_str!("../test_data/fake_communication_sample.csv");
-            let mut communication_samples_file =
-                std::fs::File::create(&communication_samples_path).unwrap();
-            write!(communication_samples_file, "{communication_data}").unwrap();
-        }
+        let communication_samples_path = dir.path().join("communication_samples.csv");
+        ic_state_tool::commands::canister_metrics::get(
+            checkpoint_dir.clone(),
+            &load_samples_path,
+            &communication_samples_path,
+        )
+        .expect("Should compute canister metrics for a valid checkpoint");
 
         info!(
             logger,
@@ -117,6 +122,10 @@ fn load_metrics_e2e_test() {
             .args([
                 "--communication-data-path",
                 &communication_samples_path.display().to_string(),
+            ])
+            .args([
+                "--communication-baseline-data-path",
+                &communication_samples_baseline_path.display().to_string(),
             ])
             .args(["--output-path", &split_output_path.display().to_string()])
             .args(["--load-type", "instructions_executed"])
@@ -136,31 +145,38 @@ fn load_metrics_e2e_test() {
             .lines()
             .map(|line| CanisterIdRange::from_str(line).expect("Not a valid CanisterIdRange"))
             .collect();
+        // With at most `MAX_CUTS` cuts, the canisters, ordered by ID, form at most `MAX_CUTS + 1`
+        // segments, which alternate between the two subnets. The `split-finder` reports the
+        // segments of one of the subnets, so at most `MAX_CUTS / 2 + 1` ranges.
+        let max_ranges = MAX_CUTS / 2 + 1;
         assert!(
-            canister_id_ranges.len() <= MAX_CUTS.div_ceil(2),
-            "The split-finder script should have produced at most {MAX_CUTS} because we \
-            passed {MAX_CUTS} as the `--max-cuts` argument"
+            canister_id_ranges.len() <= max_ranges,
+            "The split-finder script should have produced at most {max_ranges} canister ranges \
+            because we passed {MAX_CUTS} as the `--max-cuts` argument, but it produced {}: \
+            {canister_id_ranges:?}",
+            canister_id_ranges.len(),
         );
 
         // And finally use the `subnet-splitting-tool` to estimate the loads on each subnet after a
         // split.
-        let (
-            StateSizeEstimates { states_sizes_bytes },
-            LoadEstimates {
-                canisters_installed,
-                instructions_executed,
-                ingress_messages_executed,
-                remote_subnet_messages_executed_lower_bound,
-                local_subnet_messages_executed_upper_bound,
-                http_outcalls_executed,
-                heartbeats_and_global_timers_executed,
-            },
-        ) = dbg!(
+        let PostSplitEstimations {
+            states_sizes_bytes,
+            canisters_installed,
+            instructions_executed,
+            ingress_messages_executed,
+            remote_subnet_messages_executed_lower_bound,
+            local_subnet_messages_executed_upper_bound,
+            http_outcalls_executed,
+            heartbeats_and_global_timers_executed,
+            canisters_with_broken_local_connections_lower_bound: broken_connections,
+        } = dbg!(
             ic_subnet_splitting::post_split_estimations::estimate(
                 canister_id_ranges,
                 manifest_path,
                 load_samples_path,
                 load_samples_baseline_path,
+                communication_samples_path,
+                communication_samples_baseline_path,
             )
             .expect("Should succeed given valid inputs")
         );
@@ -206,36 +222,51 @@ fn load_metrics_e2e_test() {
             states_sizes_bytes
                 .source
                 .min(states_sizes_bytes.destination),
-            3693264,
+            2588742,
             0.1
         );
         assert_near!(
             states_sizes_bytes
                 .source
                 .max(states_sizes_bytes.destination),
-            5539880,
+            6368233,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .min(instructions_executed.destination),
-            144321167,
+            144130832,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .max(instructions_executed.destination),
-            145740365,
+            144605505,
             0.1
         );
-        assert_eq_oriented!(canisters_installed, 8, 12);
-        assert_eq_oriented!(ingress_messages_executed, 15, 24);
-        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 4, 6);
-        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 11, 17);
-        assert_eq_oriented!(http_outcalls_executed, 4, 6);
-        assert_eq_oriented!(heartbeats_and_global_timers_executed, 368, 326);
+        assert_eq_oriented!(canisters_installed, 15, 5);
+        assert_eq_oriented!(ingress_messages_executed, 25, 14);
+        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 5, 5);
+        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 20, 8);
+        assert_eq_oriented!(http_outcalls_executed, 10, 0);
+        assert_eq_oriented!(heartbeats_and_global_timers_executed, 315, 379);
+        let canisters_with_broken_local_connections =
+            broken_connections.map(|connections| connections.len() as u64);
+        assert_eq_oriented!(canisters_with_broken_local_connections, 1, 1);
+        // Each universal canister sends a single request to the one created before it, so every
+        // connection broken by the split carries exactly one request.
+        for (sender, receivers) in broken_connections
+            .source
+            .iter()
+            .chain(broken_connections.destination.iter())
+        {
+            assert!(
+                receivers.values().all(|&requests_sent| requests_sent == 1),
+                "{sender} should have sent a single request to each receiver, got {receivers:?}"
+            );
+        }
         // A single split cannot report some metrics in the original orientation and others in the
         // swapped one, so require all the orientation-sensitive metrics to agree on one labeling.
         assert!(
@@ -323,7 +354,7 @@ fn set_up(
         state_machine.execute_round();
         state_machine.handle_http_call("unused", |_| CanisterHttpResponsePayload {
             status: 200,
-            headers: vec![],
+            headers: BoundedHttpHeaders::new(vec![]),
             body: vec![],
         });
         state_machine

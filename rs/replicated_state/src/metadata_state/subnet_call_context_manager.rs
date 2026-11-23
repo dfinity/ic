@@ -33,7 +33,8 @@ const MESSAGE_HASH_SIZE: usize = 32;
 const NONCE_SIZE: usize = 32;
 
 /// How long a `CanisterHttpRequestContext` whose response was already delivered
-/// to execution is retained before being removed.
+/// to execution is retained at most before being removed; it is removed earlier
+/// once all replicas assigned to its request have reported their spend.
 pub const DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub enum SubnetCallContext {
@@ -223,7 +224,8 @@ pub struct SubnetCallContextManager {
     pub sign_with_threshold_contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
     /// `CanisterHttpRequestContext`s whose responses have already been delivered to execution.
-    /// They are kept here such that asynchronous refunds may continue to be processed.
+    /// They are kept here such that asynchronous refunds may continue to be processed, until
+    /// all replicas assigned to the request have been accounted for, or they time out.
     pub delivered_canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
     pub reshare_chain_key_contexts: BTreeMap<CallbackId, ReshareChainKeyContext>,
     pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,
@@ -642,7 +644,7 @@ impl ThresholdArguments {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SignWithThresholdContext {
-    pub request: Request,
+    pub request: Arc<Request>,
     pub args: ThresholdArguments,
     pub derivation_path: Arc<Vec<Vec<u8>>>,
     pub batch_time: Time,

@@ -8,11 +8,13 @@ use crate::canister_state::canister_snapshots::CanisterSnapshots;
 use crate::canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata};
 use crate::canister_state::system_state::testing::{OutputRequestBuilder, SystemStateTesting};
 use crate::canister_state::system_state::{
-    CallContextManager, CanisterHistory, CanisterStatus, MAX_CANISTER_HISTORY_CHANGES,
+    CallContextManager, CanisterHistory, CanisterStatus, ConnectionMetrics, LruConnectionMetrics,
+    MAX_CONNECTION_METRICS_ENTRIES, OutstandingPrepayments,
 };
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
+use ic_limits::MAX_CANISTER_HISTORY_CHANGES;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
@@ -1057,7 +1059,7 @@ fn outstanding_prepayments_of_open_callbacks() {
     let system_state = &mut fixture.canister_state.system_state;
     assert_eq!(
         system_state.outstanding_prepayments(),
-        Some(NominalCycles::zero())
+        Some(OutstandingPrepayments::default())
     );
 
     // `SystemStateTesting::with_callback` prepays 42 for the response execution, 84
@@ -1066,16 +1068,20 @@ fn outstanding_prepayments_of_open_callbacks() {
     // the transmission of both the request and the response, so the response
     // transmission prepayment is not counted on top of it; it is the fallback for
     // legacy callbacks only, see
-    // `execute_response_of_legacy_callback_settles_the_outstanding_prepayments`. The
-    // same two are what an aborted response execution carries, see
-    // `checkpoint_round_backfills_consumed_cycles_monotonic_of_aborted_response_execution`.
+    // `execute_response_of_legacy_callback_settles_the_outstanding_prepayments`.
+    //
+    // The response execution prepayment is outstanding for `Instructions`, the call
+    // transmission one for `RequestAndResponseTransmission`.
     fixture.make_callback(NO_DEADLINE);
     assert_eq!(
         fixture
             .canister_state
             .system_state
             .outstanding_prepayments(),
-        Some(NominalCycles::new(42 + 168))
+        Some(OutstandingPrepayments {
+            instructions: NominalCycles::new(42),
+            transmission: NominalCycles::new(168),
+        })
     );
 
     fixture.make_callback(SOME_DEADLINE);
@@ -1084,7 +1090,10 @@ fn outstanding_prepayments_of_open_callbacks() {
             .canister_state
             .system_state
             .outstanding_prepayments(),
-        Some(NominalCycles::new(2 * (42 + 168)))
+        Some(OutstandingPrepayments {
+            instructions: NominalCycles::new(2 * 42),
+            transmission: NominalCycles::new(2 * 168),
+        })
     );
 }
 
@@ -1110,7 +1119,10 @@ fn outstanding_prepayments_of_paused_and_aborted_executions() {
             .canister_state
             .system_state
             .outstanding_prepayments(),
-        Some(prepaid.nominal())
+        Some(OutstandingPrepayments {
+            instructions: prepaid.nominal(),
+            ..Default::default()
+        })
     );
 
     let mut fixture = CanisterStateFixture::new();
@@ -1131,11 +1143,10 @@ fn outstanding_prepayments_of_paused_and_aborted_executions() {
     );
 }
 
-/// Backfilling the monotonic amount from the gauge is exact, thanks to the
-/// invariant that the gauge exceeds it by exactly the outstanding prepayments. And
-/// it is idempotent, so it can be redone in every checkpoint round.
+/// A gauge exceeds its monotonic counterpart by exactly the prepayments outstanding
+/// for it. Covers the scalar total and the by-use-case map alike.
 #[test]
-fn migrate_consumed_cycles_to_monotonic_is_exact_and_idempotent() {
+fn consumed_cycles_monotonic_is_the_gauge_net_of_outstanding_prepayments() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let mut fixture = CanisterStateFixture::new();
     let system_state = &mut fixture.canister_state.system_state;
@@ -1147,72 +1158,73 @@ fn migrate_consumed_cycles_to_monotonic_is_exact_and_idempotent() {
     system_state.consume_cycles(final_charge);
     system_state.consume_cycles(prepaid);
     system_state.refund_cycles(prepaid, refund);
-    let settled = final_charge.nominal() + (prepaid - refund).nominal();
 
-    // ...plus an outstanding prepayment for a call that has not been responded to.
-    let outstanding = CompoundCycles::<Instructions>::new(Cycles::new(42), cost_schedule).nominal()
-        + CompoundCycles::<RequestAndResponseTransmission>::new(Cycles::new(168), cost_schedule)
-            .nominal();
-    system_state.consume_cycles(CompoundCycles::<Instructions>::new(
-        Cycles::new(42),
-        cost_schedule,
-    ));
-    system_state.consume_cycles(CompoundCycles::<RequestAndResponseTransmission>::new(
-        Cycles::new(168),
-        cost_schedule,
-    ));
+    // ...plus an outstanding prepayment for a call that has not been responded to,
+    // in both refundable use cases.
+    let outstanding_instructions =
+        CompoundCycles::<Instructions>::new(Cycles::new(42), cost_schedule);
+    let outstanding_transmission =
+        CompoundCycles::<RequestAndResponseTransmission>::new(Cycles::new(168), cost_schedule);
+    system_state.consume_cycles(outstanding_instructions);
+    system_state.consume_cycles(outstanding_transmission);
     fixture.make_callback(NO_DEADLINE);
     let system_state = &mut fixture.canister_state.system_state;
 
+    // What is settled, per use case and in total.
+    let settled_memory = final_charge.nominal();
+    let settled_instructions = (prepaid - refund).nominal();
+    let settled = settled_memory + settled_instructions;
+    let outstanding = OutstandingPrepayments {
+        instructions: outstanding_instructions.nominal(),
+        transmission: outstanding_transmission.nominal(),
+    };
+
+    /// Asserts that the monotonic amounts are exactly what was settled.
+    fn assert_settled(
+        system_state: &SystemState,
+        settled: NominalCycles,
+        settled_memory: NominalCycles,
+        settled_instructions: NominalCycles,
+    ) {
+        let metrics = system_state.canister_metrics();
+        assert_eq!(metrics.consumed_cycles_monotonic(), settled);
+        assert_eq!(
+            metrics.consumed_cycles_by_use_cases_monotonic(),
+            &BTreeMap::from([
+                (CyclesUseCase::Memory, settled_memory),
+                (CyclesUseCase::Instructions, settled_instructions),
+                // Nothing of the outstanding transmission prepayment is settled, but
+                // the entry is there: it was created when the prepayment was made.
+                (
+                    CyclesUseCase::RequestAndResponseTransmission,
+                    NominalCycles::zero()
+                ),
+            ])
+        );
+    }
+
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
-        settled + outstanding
+        settled + outstanding.total()
     );
     assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        settled
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases(),
+        &BTreeMap::from([
+            (CyclesUseCase::Memory, settled_memory),
+            (
+                CyclesUseCase::Instructions,
+                settled_instructions + outstanding.instructions
+            ),
+            (
+                CyclesUseCase::RequestAndResponseTransmission,
+                outstanding.transmission
+            ),
+        ])
     );
     assert_eq!(system_state.outstanding_prepayments(), Some(outstanding));
-
-    // Pretend the canister was loaded from a checkpoint predating the field.
-    system_state.reset_consumed_cycles_monotonic();
-    system_state.migrate_consumed_cycles_to_monotonic();
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        settled
-    );
-
-    // Redoing it changes nothing.
-    system_state.migrate_consumed_cycles_to_monotonic();
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        settled
-    );
-}
-
-/// A canister with a paused execution cannot be backfilled, as the prepayment of the
-/// paused execution is not part of the replicated state.
-#[test]
-fn migrate_consumed_cycles_to_monotonic_skips_paused_execution() {
-    let mut fixture = CanisterStateFixture::new();
-    let system_state = &mut fixture.canister_state.system_state;
-    system_state.consume_cycles(CompoundCycles::<MemoryUseCase>::new(
-        Cycles::new(500),
-        CanisterCyclesCostSchedule::Normal,
-    ));
-    system_state
-        .task_queue
-        .enqueue(ExecutionTask::PausedExecution {
-            id: PausedExecutionId(0),
-            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
-        });
-
-    system_state.reset_consumed_cycles_monotonic();
-    system_state.migrate_consumed_cycles_to_monotonic();
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        NominalCycles::zero()
-    );
+    assert_settled(system_state, settled, settled_memory, settled_instructions);
 }
 
 #[test]
@@ -1760,7 +1772,10 @@ fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
     // still zero.
     assert_eq!(
         system_state.outstanding_prepayments(),
-        Some(prepaid.nominal())
+        Some(OutstandingPrepayments {
+            instructions: prepaid.nominal(),
+            ..Default::default()
+        })
     );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
@@ -1794,7 +1809,7 @@ fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
     );
     assert_eq!(
         system_state.outstanding_prepayments(),
-        Some(NominalCycles::zero())
+        Some(OutstandingPrepayments::default())
     );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles_monotonic(),
@@ -1844,4 +1859,86 @@ fn reverts_stopping_status_after_split() {
     canister_state.drop_in_progress_management_calls_after_split();
 
     assert_eq!(expected_state, canister_state);
+}
+
+#[test]
+fn lru_connection_metrics_evicts_entries_in_correct_order() {
+    let connection_metrics = |nanos, count| ConnectionMetrics {
+        last_access_timestamp: Time::from_nanos_since_unix_epoch(nanos),
+        count,
+    };
+    // Least recently accessed: evicted first
+    let oldest_sender = canister_test_id(56);
+    // Accessed recently with fewer messages: evicted second
+    let light_sender_id = canister_test_id(99);
+    // Accessed recently with more messages: the one with the lower ID is evicted.
+    let heavy_sender_low_id = canister_test_id(10);
+    let heavy_sender_high_id = canister_test_id(102);
+
+    let mut metrics_per_sender = BTreeMap::from([
+        (oldest_sender, connection_metrics(0, 1_000)),
+        (light_sender_id, connection_metrics(1, 1)),
+        (heavy_sender_low_id, connection_metrics(1, 2)),
+        (heavy_sender_high_id, connection_metrics(1, 2)),
+    ]);
+    // Most recently accessed entries, filling the map up to three entries over capacity.
+    for i in metrics_per_sender.len()..(MAX_CONNECTION_METRICS_ENTRIES + 3) {
+        metrics_per_sender.insert(canister_test_id(1000 + i as u64), connection_metrics(2, 1));
+    }
+
+    // Entries are evicted by access timestamp, then count, then canister ID.
+    let mut expected = metrics_per_sender.clone();
+    expected.remove(&oldest_sender);
+    expected.remove(&light_sender_id);
+    expected.remove(&heavy_sender_low_id);
+    assert_eq!(expected.len(), MAX_CONNECTION_METRICS_ENTRIES);
+
+    // Recording the messages one by one: entries are evicted as soon as the map overflows.
+    let mut from_increments = LruConnectionMetrics::default();
+    for (sender, metrics) in &metrics_per_sender {
+        for _ in 0..metrics.count {
+            from_increments.increment(*sender, metrics.last_access_timestamp);
+        }
+    }
+    assert_eq!(from_increments.get(), &expected);
+
+    // Loading all the same entries at once, e.g. from a checkpoint.
+    let from_new = LruConnectionMetrics::new(metrics_per_sender);
+    assert_eq!(from_new.get(), &expected);
+
+    assert_eq!(from_new, from_increments);
+}
+
+#[test]
+fn lru_connection_metrics_increment_refreshes_eviction_order() {
+    let t0 = Time::from_nanos_since_unix_epoch(0);
+    let t1 = Time::from_nanos_since_unix_epoch(1);
+    let mut metrics = LruConnectionMetrics::default();
+    for i in 0..MAX_CONNECTION_METRICS_ENTRIES as u64 {
+        metrics.increment(canister_test_id(i), t0);
+    }
+
+    // Accessing sender 0 again makes it the most recently accessed entry...
+    metrics.increment(canister_test_id(0), t1);
+    // ...so a new sender evicts sender 1 instead: the oldest entry with the lowest count and,
+    // among those, the lowest canister ID.
+    let new_sender = canister_test_id(MAX_CONNECTION_METRICS_ENTRIES as u64);
+    metrics.increment(new_sender, t1);
+
+    assert_eq!(metrics.get().len(), MAX_CONNECTION_METRICS_ENTRIES);
+    assert!(!metrics.get().contains_key(&canister_test_id(1)));
+    assert_eq!(
+        metrics.get()[&canister_test_id(0)],
+        ConnectionMetrics {
+            last_access_timestamp: t1,
+            count: 2,
+        }
+    );
+    assert_eq!(
+        metrics.get()[&new_sender],
+        ConnectionMetrics {
+            last_access_timestamp: t1,
+            count: 1,
+        }
+    );
 }

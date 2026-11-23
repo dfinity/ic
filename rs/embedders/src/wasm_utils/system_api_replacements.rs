@@ -13,12 +13,18 @@
 
 use crate::{
     InternalErrorCode, WASM_PAGE_SIZE,
-    wasm_utils::instrumentation::{InjectedCounters, InjectedFunctions, WasmMemoryType},
+    wasm_utils::instrumentation::{
+        InjectedCounters, InjectedFunctions, WasmMemoryType, heap_page_limit_check,
+    },
     wasmtime_embedder::system_api_complexity::overhead_native,
 };
 use ic_interfaces::execution_environment::StableMemoryApi;
 use ic_sys::PAGE_SIZE;
-use wirm::{DataType, ir::types::Instructions, wasmparser::BlockType};
+use wirm::{
+    DataType,
+    ir::types::Instructions,
+    wasmparser::{BlockType, MemArgTarget},
+};
 
 use ic_types::NumBytes;
 
@@ -38,6 +44,7 @@ fn make_body(
         locals,
         instructions: Instructions::new(instructions_with_offsets, 0, false),
         name: None,
+        local_names: None,
     }
 }
 
@@ -60,6 +67,22 @@ pub(super) fn replacement_functions(
     let dirty_pages_counter_index = injected_counters.dirty_pages_counter;
     let accessed_pages_counter_index = injected_counters.accessed_pages_counter;
     let decr_instruction_counter_fn = injected_counters.decr_instruction_counter_fn;
+    // The heap page limit check for a copy between the heap range
+    // `[addr, addr + len)` and stable memory, with `addr` and `len` in locals
+    // of type `operand_type`. Nothing is emitted if the heap page limit is
+    // disabled, i.e. if its slow path was not imported.
+    let check_heap_range = |addr: u32, len: u32, operand_type: DataType| match injected_functions
+        .check_heap_bulk_access
+    {
+        Some(check_heap_bulk_access_fn) => heap_page_limit_check(
+            (addr, operand_type),
+            None,
+            (len, operand_type),
+            injected_counters.heap_page_budget,
+            check_heap_bulk_access_fn,
+        ),
+        None => Vec::new(),
+    };
 
     use wirm::wasmparser::Operator::*;
     let page_size_shift = PAGE_SIZE.trailing_zeros() as i32;
@@ -418,7 +441,8 @@ pub(super) fn replacement_functions(
                                 offset: 0,
                                 // We assume the bytemap for stable memory is always
                                 // inserted directly after the stable memory.
-                                memory: stable_memory_index + 1,
+                                target: MemArgTarget::Memory(stable_memory_index + 1),
+                                ordering: None,
                             },
                         },
                         I32Const { value: 2 }, // READ_BIT
@@ -430,7 +454,8 @@ pub(super) fn replacement_functions(
                                 offset: 0,
                                 // We assume the bytemap for stable memory is always
                                 // inserted directly after the stable memory.
-                                memory: stable_memory_index + 1,
+                                target: MemArgTarget::Memory(stable_memory_index + 1),
+                                ordering: None,
                             },
                         },
                         LocalGet {
@@ -448,6 +473,11 @@ pub(super) fn replacement_functions(
                         BrIf { relative_depth: 0 },
                         End, // end loop
                         End, // end if
+                    ]
+                    .into_iter()
+                    // The copy writes to the heap range [dst, dst + len).
+                    .chain(check_heap_range(DST, LEN, DataType::I32))
+                    .chain([
                         // perform the copy, calling API if it's the first access.
                         LocalGet {
                             local_index: SHOULD_CALL_READ_API,
@@ -485,7 +515,8 @@ pub(super) fn replacement_functions(
                         GlobalSet {
                             global_index: accessed_pages_counter_index,
                         },
-                    ],
+                    ])
+                    .collect(),
                 )
             }),
         ),
@@ -503,17 +534,6 @@ pub(super) fn replacement_functions(
                 make_body(
                     vec![(5, DataType::I32)], // src on bytemap, src + len on bytemap, accessed page cnt, mark bytemap iterator, should call first read api
                     vec![
-                        // Decrement instruction counter by the size of the copy
-                        // and fixed overhead.
-                        LocalGet { local_index: LEN },
-                        I64Const {
-                            value: overhead_native::STABLE64_READ.get() as i64,
-                        },
-                        I64Add,
-                        Call {
-                            function_index: decr_instruction_counter_fn,
-                        },
-                        Drop,
                         // if size is 0 we return
                         // (correctness of the code that follows depends on the size being > 0)
                         // note that we won't return errors if addresses are out of bounds
@@ -597,6 +617,20 @@ pub(super) fn replacement_functions(
                             function_index: injected_functions.internal_trap,
                         },
                         End,
+                        // Decrement instruction counter by the size of the copy
+                        // and fixed overhead. This is done after the bounds
+                        // checks above so that `len` is known to fit in a heap
+                        // address, which guarantees `len + overhead` cannot
+                        // overflow or wrap to a negative i64.
+                        LocalGet { local_index: LEN },
+                        I64Const {
+                            value: overhead_native::STABLE64_READ.get() as i64,
+                        },
+                        I64Add,
+                        Call {
+                            function_index: decr_instruction_counter_fn,
+                        },
+                        Drop,
                         // src
                         LocalGet { local_index: SRC },
                         I64Const {
@@ -695,7 +729,8 @@ pub(super) fn replacement_functions(
                                 offset: 0,
                                 // We assume the bytemap for stable memory is always
                                 // inserted directly after the stable memory.
-                                memory: stable_memory_index + 1,
+                                target: MemArgTarget::Memory(stable_memory_index + 1),
+                                ordering: None,
                             },
                         },
                         I32Const { value: 2 }, // READ_BIT
@@ -707,7 +742,8 @@ pub(super) fn replacement_functions(
                                 offset: 0,
                                 // We assume the bytemap for stable memory is always
                                 // inserted directly after the stable memory.
-                                memory: stable_memory_index + 1,
+                                target: MemArgTarget::Memory(stable_memory_index + 1),
+                                ordering: None,
                             },
                         },
                         LocalGet {
@@ -725,6 +761,11 @@ pub(super) fn replacement_functions(
                         BrIf { relative_depth: 0 },
                         End, // end loop
                         End, // end if
+                    ]
+                    .into_iter()
+                    // The copy writes to the heap range [dst, dst + len).
+                    .chain(check_heap_range(DST, LEN, DataType::I64))
+                    .chain([
                         // perform the copy, calling API if it's the first access.
                         LocalGet {
                             local_index: SHOULD_CALL_READ_API,
@@ -760,7 +801,8 @@ pub(super) fn replacement_functions(
                         GlobalSet {
                             global_index: accessed_pages_counter_index,
                         },
-                    ],
+                    ])
+                    .collect(),
                 )
             }),
         ),
@@ -930,6 +972,11 @@ pub(super) fn replacement_functions(
                         MemoryFill {
                             mem: stable_memory_bytemap_index,
                         },
+                    ]
+                    .into_iter()
+                    // The copy reads from the heap range [src, src + len).
+                    .chain(check_heap_range(SRC, LEN, DataType::I32))
+                    .chain([
                         // copy memory contents
                         LocalGet { local_index: DST },
                         I64ExtendI32U,
@@ -961,7 +1008,8 @@ pub(super) fn replacement_functions(
                         GlobalSet {
                             global_index: accessed_pages_counter_index,
                         },
-                    ],
+                    ])
+                    .collect(),
                 )
             }),
         ),
@@ -978,17 +1026,6 @@ pub(super) fn replacement_functions(
                 make_body(
                     vec![(4, DataType::I32)], // dst on bytemap, dst + len on bytemap, dirty page cnt, accessed page cnt
                     vec![
-                        // Decrement instruction counter by the size of the copy
-                        // and fixed overhead.
-                        LocalGet { local_index: LEN },
-                        I64Const {
-                            value: overhead_native::STABLE64_WRITE.get() as i64,
-                        },
-                        I64Add,
-                        Call {
-                            function_index: decr_instruction_counter_fn,
-                        },
-                        Drop,
                         // if size is 0 we return
                         // (correctness of the code that follows depends on the size being > 0)
                         // note that we won't return errors if addresses are out of bounds
@@ -1072,6 +1109,20 @@ pub(super) fn replacement_functions(
                             function_index: injected_functions.internal_trap,
                         },
                         End,
+                        // Decrement instruction counter by the size of the copy
+                        // and fixed overhead. This is done after the bounds
+                        // checks above so that `len` is known to fit in a heap
+                        // address, which guarantees `len + overhead` cannot
+                        // overflow or wrap to a negative i64.
+                        LocalGet { local_index: LEN },
+                        I64Const {
+                            value: overhead_native::STABLE64_WRITE.get() as i64,
+                        },
+                        I64Add,
+                        Call {
+                            function_index: decr_instruction_counter_fn,
+                        },
+                        Drop,
                         LocalGet { local_index: DST },
                         I64Const {
                             value: page_size_shift as i64,
@@ -1158,6 +1209,11 @@ pub(super) fn replacement_functions(
                         MemoryFill {
                             mem: stable_memory_bytemap_index,
                         },
+                    ]
+                    .into_iter()
+                    // The copy reads from the heap range [src, src + len).
+                    .chain(check_heap_range(SRC, LEN, DataType::I64))
+                    .chain([
                         // copy memory contents
                         LocalGet { local_index: DST },
                         LocalGet { local_index: SRC },
@@ -1190,7 +1246,8 @@ pub(super) fn replacement_functions(
                         GlobalSet {
                             global_index: accessed_pages_counter_index,
                         },
-                    ],
+                    ])
+                    .collect(),
                 )
             }),
         ),

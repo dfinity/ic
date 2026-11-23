@@ -65,7 +65,8 @@ fn test_motion_proposal_execution() {
                 .with_nervous_system_parameters(system_params.clone())
                 .build();
 
-            let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+            let sns_canisters =
+                SnsCanisters::set_up_with_test_governance(&runtime, sns_init_payload).await;
 
             let neuron_id = sns_canisters
                 .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
@@ -1453,7 +1454,8 @@ fn test_proposal_rejection() {
             .with_nervous_system_parameters(params.clone())
             .build();
 
-        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+        let sns_canisters =
+            SnsCanisters::set_up_with_test_governance(&runtime, sns_init_payload).await;
 
         // Stake and claim a neuron for the proposer
         sns_canisters
@@ -1574,7 +1576,8 @@ fn test_proposal_garbage_collection() {
             .with_nervous_system_parameters(params.clone())
             .build();
 
-        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+        let sns_canisters =
+            SnsCanisters::set_up_with_test_governance(&runtime, sns_init_payload).await;
 
         // Stake and claim a neuron for the user
         sns_canisters
@@ -1697,7 +1700,8 @@ fn test_change_voting_rewards_round_duration() {
             .build();
         let total_token_supply_e8s = 2 * alloc.get_e8s();
 
-        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+        let sns_canisters =
+            SnsCanisters::set_up_with_test_governance(&runtime, sns_init_payload).await;
 
         // Stake and claim a neuron for the proposer
         sns_canisters
@@ -1984,7 +1988,8 @@ fn test_intermittent_proposal_submission() {
             .with_nervous_system_parameters(params.clone())
             .build();
 
-        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+        let sns_canisters =
+            SnsCanisters::set_up_with_test_governance(&runtime, sns_init_payload).await;
 
         // Stake and claim a neuron for the proposer
         sns_canisters

@@ -190,17 +190,22 @@ enum Opt {
         path: PathBuf,
     },
 
-    /// Extracts canister metrics from the replicated state and prints them in CSV format to the
-    /// specified file.
+    /// Extracts canister metrics from the replicated state and writes them in CSV format to two
+    /// files: per-canister load metrics to `--canister-load-output` and canister-to-canister
+    /// connection counts to `--canister-connections-output`.
     #[clap(name = "canister_metrics")]
     CanisterMetrics {
         /// Path to a checkpoint.
         #[clap(long = "checkpoint")]
         path: PathBuf,
 
-        /// Output path.
+        /// Canister load output path.
         #[clap(long)]
-        output: PathBuf,
+        canister_load_output: PathBuf,
+
+        /// Canister connections output path.
+        #[clap(long)]
+        canister_connections_output: PathBuf,
     },
 }
 
@@ -320,7 +325,15 @@ pub(crate) fn main_inner(args: Vec<String>) {
             &mut std::io::stdout(),
         ),
         Opt::ParseOverlay { path } => commands::parse_overlay::do_parse_overlay(path),
-        Opt::CanisterMetrics { path, output } => commands::canister_metrics::get(path, &output),
+        Opt::CanisterMetrics {
+            path,
+            canister_load_output,
+            canister_connections_output,
+        } => commands::canister_metrics::get(
+            path,
+            &canister_load_output,
+            &canister_connections_output,
+        ),
     };
 
     if let Err(e) = result {

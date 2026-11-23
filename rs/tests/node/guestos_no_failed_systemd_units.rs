@@ -78,10 +78,62 @@ fn check_no_failed_systemd_units(env: TestEnv) {
     info!(logger, "No failed systemd units found on any GuestOS node.");
 }
 
+/// Assert that the kernel took `oops=panic panic=10 softlockup_panic=1
+/// watchdog_thresh=60` from the command line
+/// (ic-os/bootloader/guestos_boot_args.template): a GuestOS that hits a kernel
+/// Oops, panic or soft lockup must reboot instead of hanging. Shares this
+/// group's single node to avoid a dedicated target.
+fn check_kernel_panic_params(env: TestEnv) {
+    let logger = env.logger();
+    for node in env.topology_snapshot().subnets().flat_map(|s| s.nodes()) {
+        node.await_can_login_as_admin_via_ssh()
+            .expect("Failed to establish SSH session to GuestOS node");
+        let out = node
+            .block_on_bash_script(
+                "cat /proc/cmdline; cd /proc/sys/kernel && \
+                 cat panic_on_oops panic softlockup_panic watchdog_thresh soft_watchdog",
+            )
+            .expect("Failed to read the kernel cmdline and panic/lockup sysctls on GuestOS node");
+        info!(
+            logger,
+            "Node {}: kernel cmdline and panic/lockup sysctls:\n{}", node.node_id, out
+        );
+        let mut lines = out.lines();
+        let cmdline: Vec<&str> = lines
+            .next()
+            .unwrap_or_default()
+            .split_whitespace()
+            .collect();
+        for param in [
+            "oops=panic",
+            "panic=10",
+            "softlockup_panic=1",
+            "watchdog_thresh=60",
+        ] {
+            assert!(
+                cmdline.contains(&param),
+                "Node {} did not boot with {param}:\n{}",
+                node.node_id,
+                out
+            );
+        }
+        // kernel.panic_on_oops, kernel.panic, kernel.softlockup_panic, kernel.watchdog_thresh and
+        // kernel.soft_watchdog (the soft-lockup detector is enabled), in the order read above.
+        assert_eq!(
+            lines.collect::<Vec<_>>(),
+            ["1", "10", "1", "60", "1"],
+            "Node {}: unexpected panic/lockup sysctls:\n{}",
+            node.node_id,
+            out
+        );
+    }
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(check_no_failed_systemd_units))
+        .add_test(systest!(check_kernel_panic_params))
         .execute_from_args()?;
 
     Ok(())

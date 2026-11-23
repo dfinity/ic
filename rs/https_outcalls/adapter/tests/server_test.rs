@@ -22,10 +22,15 @@ mod test {
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use once_cell::sync::OnceCell;
     use rstest::rstest;
     use rustls::ServerConfig;
-    use std::{convert::TryFrom, env, io::Write, path::Path, sync::Arc};
+    use std::{
+        convert::TryFrom,
+        env,
+        io::Write,
+        path::Path,
+        sync::{Arc, OnceLock},
+    };
     use tempfile::TempDir;
     use tokio::net::{TcpSocket, UnixStream};
     use tokio_rustls::TlsAcceptor;
@@ -113,7 +118,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     // This is a oncecell because we don't want each test to call
     // `generate_certs` and generate a race on the SSL_CERT_FILE
     // environment variable and the cert/key file.
-    static CERT_INIT: OnceCell<TempDir> = OnceCell::new();
+    static CERT_INIT: OnceLock<TempDir> = OnceLock::new();
 
     fn generate_certs() -> TempDir {
         let dir = tempfile::tempdir().unwrap();

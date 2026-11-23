@@ -234,7 +234,7 @@ async fn serve_file(
         }
     };
 
-    let body = Body::from_stream(ReaderStream::new(file));
+    let body = Body::from_stream(ReaderStream::with_capacity(file, 1 << 20));
     info!(
         state.logger,
         "{SERVE_FILES_TASK_NAME}: serving '{sha256}' ('{}') ({len} bytes) to {peer}",

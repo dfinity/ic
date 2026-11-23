@@ -16,6 +16,7 @@ use crate::numeric::{
 use crate::runtime::CanisterRuntime;
 use crate::state::automatic_deposits::{AutomaticDeposits, RegisterDepositError, ScanProgress};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
+use crate::state::sweep_observations::SweepObservations;
 use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
 use crate::state::transactions::{
     Erc20WithdrawalRequest, SweepRequest, TransactionCallData, WithdrawalRequest,
@@ -39,6 +40,8 @@ pub mod audit;
 pub mod automatic_deposits;
 pub mod eth_logs_scraping;
 pub mod event;
+pub mod receipt_fetch;
+pub mod sweep_observations;
 pub mod sweeper_funding;
 pub mod transactions;
 
@@ -133,6 +136,10 @@ pub struct State {
 
     /// Burn-first accounting for sweeper fee funding.
     pub sweeper_funding: SweeperFundingAccounting,
+
+    /// What the sweep pipeline's chain reads looked like since the last upgrade. Not event-sourced,
+    /// so it is deliberately left out of [`Self::is_equivalent_to`].
+    pub sweep_observations: SweepObservations,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -371,7 +378,7 @@ impl State {
             })
     }
 
-    pub fn supported_ck_erc20_tokens(&self) -> impl Iterator<Item = CkErc20Token> + '_ {
+    pub fn supported_ck_erc20_tokens(&self) -> impl Iterator<Item = CkErc20Token> {
         self.ckerc20_tokens
             .iter()
             .map(|(ledger_id, erc20_address, symbol)| CkErc20Token {

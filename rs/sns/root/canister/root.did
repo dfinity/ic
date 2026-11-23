@@ -231,6 +231,47 @@ type GetTimersResponse = record {
   timers : opt Timers;
 };
 
+type TakeCanisterSnapshotRequest = record {
+  canister_id : principal;
+  replace_snapshot : opt blob;
+};
+
+type TakeCanisterSnapshotResponse = variant {
+  Ok : TakeCanisterSnapshotOk;
+  Err : TakeCanisterSnapshotError;
+};
+
+type TakeCanisterSnapshotOk = record {
+  id : blob;
+  taken_at_timestamp : nat64;
+  total_size : nat64;
+};
+
+type TakeCanisterSnapshotError = record {
+  code : opt int32;
+  description : text;
+};
+
+type LoadCanisterSnapshotRequest = record {
+  canister_id : principal;
+  snapshot_id : blob;
+};
+
+type LoadCanisterSnapshotResponse = variant {
+  Ok : LoadCanisterSnapshotOk;
+  Err : LoadCanisterSnapshotError;
+};
+
+type LoadCanisterSnapshotOk = record {
+  // This intentionally left empty. It is nevertheless here for
+  // a) consistency, and b) in case of future expansion.
+};
+
+type LoadCanisterSnapshotError = record {
+  code : opt int32;
+  description : text;
+};
+
 service : (SnsRootCanister) -> {
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
   change_canister : (ChangeCanisterRequest) -> ();
@@ -240,6 +281,9 @@ service : (SnsRootCanister) -> {
       GetSnsCanistersSummaryResponse,
     );
   list_sns_canisters : (record {}) -> (ListSnsCanistersResponse) query;
+  load_canister_snapshot : (LoadCanisterSnapshotRequest) -> (
+      LoadCanisterSnapshotResponse,
+    );
   manage_dapp_canister_settings : (ManageDappCanisterSettingsRequest) -> (
       ManageDappCanisterSettingsResponse,
     );
@@ -248,6 +292,9 @@ service : (SnsRootCanister) -> {
   register_dapp_canisters : (RegisterDappCanistersRequest) -> (record {});
   set_dapp_controllers : (SetDappControllersRequest) -> (
       SetDappControllersResponse,
+    );
+  take_canister_snapshot : (TakeCanisterSnapshotRequest) -> (
+      TakeCanisterSnapshotResponse,
     );
   reset_timers : (record {}) -> (record {});
   get_timers : (record {}) -> (GetTimersResponse) query;

@@ -17,14 +17,14 @@
     // Configuration of IPv4 networking (provided at first boot)
     // =========================================================
     initial_ipv4_config: {
-        public_address: "{{ ipv4_address }}",
-        public_gateway: "{{ ipv4_gateway }}",
+        public_address: {{ ipv4_address|json }},
+        public_gateway: {{ ipv4_gateway|json }},
     },
 
     // ============================================
     // Configuration of the domain name
     // ============================================
-    domain: "{{ domain_name }}",
+    domain: {{ domain_name|json }},
 
     // ============================================
     // Configuration of registry client
@@ -111,7 +111,7 @@
     // ==================================
 
     tracing: {
-        jaeger_addr: "{{ jaeger_addr }}",
+        jaeger_addr: {{ jaeger_addr|json }},
     },
 
     // ====================================
@@ -213,6 +213,9 @@ table filter {\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
+    # Mitigation for CVE-2026-98432: drop IPv4 packets carrying IP options (IHL > 5).\n\
+    # TODO: remove once IC-OS ships an Ubuntu kernel with the CVE-2026-98432 fix.\n\
+    ip hdrlength != 5 counter drop\n\
     ct state new add @rate_limit { ip saddr limit rate over 1000/minute burst 500 packets } counter name rate_limit_v4_counter drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
@@ -300,6 +303,7 @@ table ip6 filter {\n\
   chain OUTPUT {\n\
     type filter hook output priority 0; policy accept;\n\
     meta skuid ic-http-adapter fib daddr type local ct state { new } tcp dport { 1-19999 } reject # Block restricted local addresses ic-http-adapter HTTPS access\n\
+    meta skuid ic-http-adapter ip6 daddr { hostos } ct state { new } tcp dport { 19300 } reject # Block ic-http-adapter access to the HostOS upgrade proxy\n\
     meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2602:fb2b:110::/48, 2602:fb2b:100::/48, 2602:fb2b:120::/48, 2600:3007:4401::/48 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
     <<IPv6_OUTBOUND_RULES>>\n\
   }\n\
@@ -367,6 +371,9 @@ table filter {\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
+    # Mitigation for CVE-2026-98432: drop IPv4 packets carrying IP options (IHL > 5).\n\
+    # TODO: remove once IC-OS ships an Ubuntu kernel with the CVE-2026-98432 fix.\n\
+    ip hdrlength != 5 counter drop\n\
     ct state new add @rate_limit { ip saddr limit rate over 1000/minute burst 500 packets } counter name rate_limit_v4_counter drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
@@ -377,7 +384,7 @@ table filter {\n\
     <<IPv4_UDP_RULES>>\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\
-    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport 80 accept\n\
+    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport { 80, 443 } accept\n\
     log prefix \"Drop - default policy: \"\n\
   }\n\
 \n\
@@ -441,7 +448,7 @@ table ip6 filter {\n\
 {%- endif %}
     # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS\n\
     ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept\n\
-    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport 80 accept\n\
+    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport { 80, 443 } accept\n\
     # Custom templated rules\n\
     <<IPv6_TCP_RULES>>\n\
     <<IPv6_UDP_RULES>>\n\
@@ -455,6 +462,7 @@ table ip6 filter {\n\
   chain OUTPUT {\n\
     type filter hook output priority 0; policy accept;\n\
     meta skuid ic-http-adapter fib daddr type local ct state { new } tcp dport { 1-19999 } reject # Block restricted local addresses ic-http-adapter HTTPS access\n\
+    meta skuid ic-http-adapter ip6 daddr { hostos } ct state { new } tcp dport { 19300 } reject # Block ic-http-adapter access to the HostOS upgrade proxy\n\
     meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2602:fb2b:110::/48, 2602:fb2b:100::/48, 2602:fb2b:120::/48, 2600:3007:4401::/48 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
     <<IPv6_OUTBOUND_RULES>>\n\
   }\n\
@@ -520,6 +528,9 @@ table filter {\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
+    # Mitigation for CVE-2026-98432: drop IPv4 packets carrying IP options (IHL > 5).\n\
+    # TODO: remove once IC-OS ships an Ubuntu kernel with the CVE-2026-98432 fix.\n\
+    ip hdrlength != 5 counter drop\n\
     ip saddr @blackhole drop\n\
     ct state new add @rate_limit { ip saddr limit rate over 2000/minute burst 1000 packets } counter name rate_limit_v4_counter drop\n\
     #  Notes about the rule below:\n\
@@ -605,6 +616,8 @@ table ip6 filter {\n\
     ct state invalid drop\n\
     ct state { established, related } accept\n\
     ct state new tcp dport { 53, 80, 443, 4460, 8080 } accept\n\
+    # Only BNs default to a drop policy, so we need to open up access to use the upgrade proxy\n\
+    ip6 daddr { hostos } ct state new tcp dport 19300 accept\n\
     ct state new udp dport { 53, 123 } accept\n\
   }\n\
 }\n",
@@ -635,10 +648,14 @@ table ip6 filter {\n\
     },
 
     registration: {
-        node_reward_type: "{{ node_reward_type }}",
-        nns_url: "{{ nns_urls }}",
+        node_reward_type: {{ node_reward_type|json }},
+        nns_url: {{ nns_urls|json }},
         nns_pub_key_pem: "/run/config/nns_public_key.pem",
         node_operator_pem: "/var/lib/ic/data/node_operator_private_key.pem"
+    },
+
+    cloud_engine: {
+        engine_management_canister_id: {{ engine_management_canister_id }},
     },
 
     malicious_behavior: {{ malicious_behavior }},

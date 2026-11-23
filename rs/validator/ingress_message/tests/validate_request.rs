@@ -1993,6 +1993,7 @@ fn max_ingress_expiry_at(current_time: Time) -> Time {
 mod sender_info {
     use super::*;
     use ic_types::messages::{RawSignedSenderInfo, SenderInfoContent};
+    use ic_validator::MAXIMUM_NUMBER_OF_BYTES_IN_SENDER_INFO;
     use ic_validator_http_request_test_utils::AuthenticationScheme::Direct;
     use ic_validator_http_request_test_utils::DirectAuthenticationScheme::CanisterSignature;
 
@@ -2046,6 +2047,51 @@ mod sender_info {
             .with_sender_info(sender_info)
             .build();
         assert_eq!(verifier.validate_request(&request), Ok(()));
+    }
+
+    /// Validates an update call and a query, both carrying a validly signed
+    /// sender info with an `info` payload of the given size, and returns the
+    /// validation results for the update call and the query (in that order).
+    fn validate_update_and_query_with_sender_info_of_size(
+        num_bytes: usize,
+    ) -> [Result<(), RequestValidationError>; 2] {
+        let (builder, signer, sender_info) = valid_sender_info_setup(vec![42; num_bytes]);
+        let verifier = builder.build();
+        let update_request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(Direct(CanisterSignature(signer.clone())))
+            .with_sender_info(sender_info.clone())
+            .build();
+        let query_request = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(Direct(CanisterSignature(signer)))
+            .with_sender_info(sender_info)
+            .build();
+        [
+            verifier.validate_request(&update_request),
+            verifier.validate_request(&query_request),
+        ]
+    }
+
+    #[test]
+    fn should_accept_sender_info_of_maximum_size() {
+        for result in validate_update_and_query_with_sender_info_of_size(
+            MAXIMUM_NUMBER_OF_BYTES_IN_SENDER_INFO,
+        ) {
+            assert_eq!(result, Ok(()));
+        }
+    }
+
+    #[test]
+    fn should_reject_validly_signed_sender_info_exceeding_maximum_size() {
+        for result in validate_update_and_query_with_sender_info_of_size(
+            MAXIMUM_NUMBER_OF_BYTES_IN_SENDER_INFO + 1,
+        ) {
+            assert_matches!(
+                result,
+                Err(RequestValidationError::InvalidSenderInfo(msg)) if msg.contains("too big")
+            );
+        }
     }
 
     #[test]

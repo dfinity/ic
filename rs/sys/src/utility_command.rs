@@ -263,6 +263,6 @@ impl std::fmt::Display for UtilityCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "`{}", self.program)?;
         self.args.iter().try_for_each(|a| write!(f, " {a}"))?;
-        write!(f, "` input: {}", hex::encode(self.input.clone()))
+        write!(f, "` input: {}", hex::encode(&self.input))
     }
 }

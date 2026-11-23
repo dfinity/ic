@@ -8,7 +8,6 @@ rust_library(
     crate_name = "ic_crypto_temp_crypto",
     proc_macro_deps = [
         # Keep sorted.
-        "@crate_index//:async-trait",
     ],
     version = "0.9.0",
     deps = [
@@ -45,7 +44,6 @@ rust_test(
     crate = ":temp_crypto",
     proc_macro_deps = [
         # Keep sorted.
-        "@crate_index//:async-trait",
     ],
     deps = [
         # Keep sorted.
@@ -81,7 +79,6 @@ rust_test_suite(
     srcs = glob(["tests/**"]),
     proc_macro_deps = [
         # Keep sorted.
-        "@crate_index//:async-trait",
     ],
     deps = [
         # Keep sorted.

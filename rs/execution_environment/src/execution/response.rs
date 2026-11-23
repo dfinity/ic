@@ -7,12 +7,14 @@ use ic_base_types::CanisterId;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use more_asserts::debug_assert_le;
 
-use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
+use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
     wasm_executor::{
         CanisterStateChanges, PausedWasmExecution, WasmExecutionResult, wasm_execution_error,
     },
-    wasmtime_embedder::system_api::{ApiType, ExecutionParameters},
+    wasmtime_embedder::system_api::{
+        ApiType, ExecutionParameters, sandbox_safe_system_state::append_canister_log,
+    },
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
@@ -20,6 +22,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{ReplicaLogger, error, info};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
+use ic_types::canister_log::CanisterLog;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,
@@ -115,6 +118,7 @@ struct PausedResponseHelper {
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
     executed_wasm_instructions: NumInstructions,
+    response_callback_log: CanisterLog,
 }
 
 /// A helper that implements and keeps track of response execution steps.
@@ -150,6 +154,12 @@ struct ResponseHelper {
     /// limits correspondingly, so that the next Wasm execution (the cleanup
     /// callback) starts counting from zero.
     executed_wasm_instructions: NumInstructions,
+    /// The canister log records of the response callback.
+    ///
+    /// They are only used if the response callback fails: they are persisted
+    /// in `canister` before the cleanup callback is executed and replayed on
+    /// the clean canister state when resuming the cleanup callback.
+    response_callback_log: CanisterLog,
     applied_subnet_memory_reservation: NumBytes,
     deallocation_sender: DeallocationSender,
 }
@@ -219,6 +229,7 @@ impl ResponseHelper {
             initial_cycles_balance,
             response_sender,
             executed_wasm_instructions: NumInstructions::new(0),
+            response_callback_log: CanisterLog::default_delta(),
             applied_subnet_memory_reservation: NumBytes::new(0),
             deallocation_sender: deallocation_sender.clone(),
         };
@@ -385,6 +396,7 @@ impl ResponseHelper {
             response_sender: self.response_sender,
             executed_wasm_instructions: self.executed_wasm_instructions
                 + slice_executed_instructions,
+            response_callback_log: self.response_callback_log,
         }
     }
 
@@ -428,9 +440,18 @@ impl ResponseHelper {
             initial_cycles_balance: clean_canister.system_state.balance(),
             response_sender: paused.response_sender,
             executed_wasm_instructions: paused.executed_wasm_instructions,
+            response_callback_log: paused.response_callback_log,
             applied_subnet_memory_reservation: NumBytes::new(0),
             deallocation_sender: deallocation_sender.clone(),
         };
+
+        // Replay persisting the canister log of the failed response callback:
+        // the clean canister state does not contain it.
+        helper
+            .canister
+            .system_state
+            .log_memory_store
+            .append_delta_log(&mut helper.response_callback_log.clone());
 
         helper.apply_subnet_memory_reservation(round_limits);
 
@@ -485,13 +506,26 @@ impl ResponseHelper {
     fn handle_wasm_execution_of_response_callback(
         mut self,
         mut output: WasmExecutionOutput,
-        canister_state_changes: CanisterStateChanges,
+        mut canister_state_changes: CanisterStateChanges,
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: &ResourceSaturation,
         reserved_cleanup_instructions: NumInstructions,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
+        // Canister logs are persisted even if the other changes are not.
+        // If the response callback fails, its canister log must also be
+        // replayed when resuming a paused cleanup callback.
+        self.response_callback_log = canister_state_changes
+            .system_state_modifications
+            .take_canister_log();
+        append_canister_log(
+            &mut self.response_callback_log.clone(),
+            &mut self.canister.system_state,
+            round.hypervisor.metrics(),
+        );
+
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -541,6 +575,10 @@ impl ResponseHelper {
             &mut self.canister.system_state,
             &mut output,
             round_limits,
+            round.cycles_account_manager,
+            original.subnet_cycles_config,
+            subnet_memory_saturation,
+            original.call_origin.get_principal(),
             round.time,
             &round.network_topology,
             round.hypervisor.subnet_id(),
@@ -575,13 +613,19 @@ impl ResponseHelper {
     fn handle_wasm_execution_of_cleanup_callback(
         mut self,
         mut output: WasmExecutionOutput,
-        canister_state_changes: CanisterStateChanges,
+        mut canister_state_changes: CanisterStateChanges,
         callback_err: HypervisorError,
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: &ResourceSaturation,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
+        // Canister logs are persisted even if the other changes are not.
+        canister_state_changes
+            .system_state_modifications
+            .apply_canister_log(&mut self.canister.system_state, round.hypervisor.metrics());
+
         // Apply the state changes of the cleanup callback first, and only then
         // charge the ingress induction cycles debit.
         //
@@ -599,6 +643,10 @@ impl ResponseHelper {
             &mut self.canister.system_state,
             &mut output,
             round_limits,
+            round.cycles_account_manager,
+            original.subnet_cycles_config,
+            subnet_memory_saturation,
+            original.call_origin.get_principal(),
             round.time,
             &round.network_topology,
             round.hypervisor.subnet_id(),
@@ -855,6 +903,7 @@ impl PausedExecution for PausedResponseExecution {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
         _subnet_size: usize,
         call_tree_metrics: &dyn CallTreeMetrics,
         deallocation_sender: &DeallocationSender,
@@ -907,11 +956,19 @@ impl PausedExecution for PausedResponseExecution {
                 (helper, result)
             }
         };
+        // The subnet memory usage might have changed while the execution was
+        // paused. Use the current saturation for storage reservation, both when
+        // finishing this execution and for subsequent Wasm executions (e.g., the
+        // cleanup callback).
+        let execution_parameters = ExecutionParameters {
+            subnet_memory_saturation,
+            ..self.execution_parameters
+        };
         process_response_result(
             result,
             clean_canister,
             helper,
-            self.execution_parameters,
+            execution_parameters,
             self.reserved_cleanup_instructions,
             self.original,
             round,
@@ -977,6 +1034,7 @@ impl PausedExecution for PausedCleanupExecution {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
         _subnet_size: usize,
         call_tree_metrics: &dyn CallTreeMetrics,
         deallocation_sender: &DeallocationSender,
@@ -993,6 +1051,8 @@ impl PausedExecution for PausedCleanupExecution {
         //
         // Note that we don't apply changes from the response callback execution
         // because the cleanup callback runs only if the response callback fails.
+        // The only exception is the canister log of the failed response
+        // callback which is replayed by `ResponseHelper::resume()`.
         let executed_wasm_instructions = self.helper.executed_wasm_instructions;
         let (helper, result) = match ResponseHelper::resume(
             self.helper,
@@ -1032,11 +1092,18 @@ impl PausedExecution for PausedCleanupExecution {
                 (helper, result)
             }
         };
+        // The subnet memory usage might have changed while the cleanup callback
+        // was paused. Use the current saturation for storage reservation when
+        // finishing the cleanup callback.
+        let execution_parameters = ExecutionParameters {
+            subnet_memory_saturation,
+            ..self.execution_parameters
+        };
         process_cleanup_result(
             result,
             clean_canister,
             helper,
-            self.execution_parameters,
+            execution_parameters,
             self.callback_err,
             self.original,
             round,
@@ -1351,8 +1418,10 @@ fn process_response_result(
             }
         }
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
+            // The Wasm execution ran with the message limit reduced by the
+            // instructions reserved for the cleanup callback.
             let instructions_used =
-                original.message_instruction_limit - output.num_instructions_left;
+                execution_parameters.instruction_limits.message() - output.num_instructions_left;
             if instructions_used >= execution_parameters.instruction_limits.slice() {
                 info!(
                     round.log,
@@ -1371,6 +1440,7 @@ fn process_response_result(
                 &original,
                 &round,
                 round_limits,
+                &execution_parameters.subnet_memory_saturation,
                 reserved_cleanup_instructions,
                 call_tree_metrics,
             ) {
@@ -1472,6 +1542,7 @@ fn process_cleanup_result(
                 &original,
                 &round,
                 round_limits,
+                &execution_parameters.subnet_memory_saturation,
                 call_tree_metrics,
             )
         }

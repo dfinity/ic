@@ -5,5 +5,10 @@
 mod reader;
 mod validation;
 
-pub use reader::{CanisterRangesFilter, NNSDelegationBuilder, NNSDelegationReader};
-pub use validation::{CanisterRangesCheck, DelegationValidationError, DelegationVerificationError};
+pub use reader::{
+    CanisterRangesFilter, NNSDelegationBuilder, NNSDelegationReader, NNSDelegationSnapshot,
+};
+pub use validation::{
+    CanisterRangesCheck, DelegationValidationError, DelegationVerificationError,
+    StateForDelegationVerification,
+};

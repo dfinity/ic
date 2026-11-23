@@ -1,33 +1,62 @@
 //! Tests for the RosettaRequestHandler.
 
 use crate::{
+    convert,
     errors::{ApiError, Details},
     ledger_client::LedgerAccess,
-    models::NetworkRequest,
+    models::{
+        AccountBalanceRequest, BlockRequest, BlockTransactionRequest, CallRequest,
+        ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata, NetworkRequest,
+        ObjectMap, PartialBlockIdentifier, PublicKey, QueryBlockRangeRequest,
+        QueryBlockRangeResponse, SearchTransactionsRequest,
+    },
+    request::Request,
     request_handler::RosettaRequestHandler,
+    request_types::{AddHotKey, Follow, PublicKeyOrPrincipal, Stake, StartDissolve},
 };
 use async_trait::async_trait;
-use ic_ledger_canister_blocks_synchronizer::blocks::{Blocks, RosettaBlocksMode};
+use futures::{FutureExt, TryFutureExt, future::LocalBoxFuture};
+use ic_ledger_canister_blocks_synchronizer::blocks::{
+    Blocks, HashedBlock, RosettaBlocksMode, RosettaDbConfig,
+};
+use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::Scribe;
+use ic_ledger_core::block::BlockType;
 use ic_nns_governance_api::{KnownNeuron, ProposalInfo, manage_neuron::NeuronIdOrSubaccount};
-use ic_types::CanisterId;
-use icp_ledger::TransferFee;
+use ic_types::{CanisterId, PrincipalId};
+use icp_ledger::{
+    AccountIdentifier, Block, DEFAULT_TRANSFER_FEE, Memo, Operation, TimeStamp, Tokens, TransferFee,
+};
 use rosetta_core::metrics::RosettaMetrics;
 use std::{
     ops::Deref,
     str::FromStr,
-    sync::{Arc, atomic::AtomicBool},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration, Instant},
 };
+#[allow(clippy::disallowed_types)]
+use tokio::sync::RwLock;
 
 /// A minimal mock ledger for testing the request handler.
-/// Only implements enough to test `network_status` behavior.
+/// Only implements enough to test `network_status` and the endpoints that read blocks.
+#[allow(clippy::disallowed_types)]
 struct MockLedger {
+    blockchain: RwLock<Blocks>,
     canister_id: CanisterId,
     governance_canister_id: CanisterId,
 }
 
+#[allow(clippy::disallowed_types)]
 impl MockLedger {
     fn new() -> Self {
+        Self::new_with_blocks(Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap())
+    }
+
+    fn new_with_blocks(blockchain: Blocks) -> Self {
         Self {
+            blockchain: RwLock::new(blockchain),
             canister_id: CanisterId::unchecked_from_principal(
                 ic_types::PrincipalId::from_str("5v3p4-iyaaa-aaaaa-qaaaa-cai").unwrap(),
             ),
@@ -39,7 +68,7 @@ impl MockLedger {
 #[async_trait]
 impl LedgerAccess for MockLedger {
     async fn read_blocks<'a>(&'a self) -> Box<dyn Deref<Target = Blocks> + 'a> {
-        unimplemented!("Not needed for this test")
+        Box::new(self.blockchain.read().await)
     }
 
     async fn sync_blocks(&self, _stopped: Arc<AtomicBool>) -> Result<(), ApiError> {
@@ -95,8 +124,9 @@ impl LedgerAccess for MockLedger {
         unimplemented!("Not needed for this test")
     }
 
+    // Like `LedgerClient`, read the mode under the blockchain lock.
     async fn rosetta_blocks_mode(&self) -> RosettaBlocksMode {
-        RosettaBlocksMode::Disabled
+        self.blockchain.read().await.rosetta_blocks_mode
     }
 }
 
@@ -105,7 +135,7 @@ impl LedgerAccess for MockLedger {
 async fn test_network_status_returns_error_during_initial_sync() {
     let ledger = Arc::new(MockLedger::new());
     let canister_id = ledger.ledger_canister_id();
-    let canister_id_str = hex::encode(canister_id.get().into_vec());
+    let canister_id_str = hex::encode(canister_id.get_ref().as_slice());
 
     let initial_sync_complete = Arc::new(AtomicBool::new(false));
     let req_handler = RosettaRequestHandler::new(
@@ -360,4 +390,912 @@ pub(super) mod construction {
 
         (operations, unsigned_transaction, signed_transaction)
     }
+}
+
+/// Test that the endpoints that read blocks return the retriable error of `/network/status`
+/// until the initial sync is complete, before they read the blocks: they answer even while the
+/// blockchain is write-locked.
+#[tokio::test]
+async fn test_endpoints_that_read_blocks_return_error_during_initial_sync() {
+    let ledger_blocks = make_ledger_blocks(&[1, 2]);
+    let mut blockchain = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
+    sync(&mut blockchain, &ledger_blocks);
+    let ledger = Arc::new(MockLedger::new_with_blocks(blockchain));
+    let initial_sync_complete = Arc::new(AtomicBool::new(false));
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        ledger.clone(),
+        Arc::clone(&initial_sync_complete),
+    );
+    let still_syncing = ApiError::NotAvailableOffline(
+        true,
+        Details::from(
+            "The node is still syncing the blocks from the ledger canister. \
+             Please wait until the initial sync is complete."
+                .to_string(),
+        ),
+    );
+
+    {
+        let _writer = ledger.blockchain.write().await;
+        for (endpoint, request) in requests_that_read_blocks(&req_handler, &ledger_blocks) {
+            assert_eq!(
+                request.now_or_never(),
+                Some(Err(still_syncing.clone())),
+                "{endpoint} during the initial sync"
+            );
+        }
+    }
+
+    initial_sync_complete.store(true, Ordering::Relaxed);
+    for (endpoint, request) in requests_that_read_blocks(&req_handler, &ledger_blocks) {
+        if let Err(err) = request.await {
+            panic!("{endpoint} failed after the initial sync: {err:?}");
+        }
+    }
+}
+
+/// Test that during the initial sync, the request checks that come before the first block read
+/// still return their own errors, and so do the `/call` methods that don't read blocks.
+#[tokio::test]
+async fn test_invalid_requests_get_their_own_errors_during_initial_sync() {
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        Arc::new(MockLedger::new()),
+        Arc::new(AtomicBool::new(false)),
+    );
+    let network_identifier = req_handler.network_id();
+
+    let mut account = convert::to_model_account_identifier(&AccountIdentifier::new(
+        PrincipalId::new_anonymous(),
+        None,
+    ));
+    account.address = "not an account".to_string();
+    let result = req_handler
+        .account_balance(
+            AccountBalanceRequest::builder(network_identifier.clone(), account).build(),
+        )
+        .await;
+    assert!(
+        matches!(result, Err(ApiError::InvalidAccountId(false, _))),
+        "{result:?}"
+    );
+
+    let result = req_handler
+        .call(CallRequest::new(
+            network_identifier.clone(),
+            "query_block_range".to_string(),
+            ObjectMap::new(),
+        ))
+        .await;
+    assert!(
+        matches!(result, Err(ApiError::InternalError(false, _))),
+        "{result:?}"
+    );
+
+    let result = req_handler
+        .call(CallRequest::new(
+            network_identifier.clone(),
+            "unsupported_method".to_string(),
+            ObjectMap::new(),
+        ))
+        .await;
+    assert!(
+        matches!(result, Err(ApiError::InvalidRequest(false, _))),
+        "{result:?}"
+    );
+
+    let mut search_transactions_request =
+        SearchTransactionsRequest::builder(network_identifier).build();
+    search_transactions_request.success = Some(true);
+    let result = req_handler
+        .search_transactions(search_transactions_request)
+        .await;
+    assert!(
+        matches!(result, Err(ApiError::InvalidRequest(false, _))),
+        "{result:?}"
+    );
+}
+
+/// Returns a request to each endpoint that reads blocks, for a store with the given ledger
+/// blocks, which mint to the anonymous principal.
+fn requests_that_read_blocks<'a>(
+    req_handler: &'a RosettaRequestHandler,
+    ledger_blocks: &[HashedBlock],
+) -> Vec<(&'static str, LocalBoxFuture<'a, Result<(), ApiError>>)> {
+    let tip = ledger_blocks.last().unwrap();
+    let network_identifier = req_handler.network_id();
+    let account = convert::to_model_account_identifier(&AccountIdentifier::new(
+        PrincipalId::new_anonymous(),
+        None,
+    ));
+    let transaction_identifier = convert::hashed_block_to_rosetta_core_transaction(tip, "ICP")
+        .unwrap()
+        .transaction_identifier;
+    vec![
+        (
+            "/account/balance",
+            req_handler
+                .account_balance(
+                    AccountBalanceRequest::builder(network_identifier.clone(), account).build(),
+                )
+                .map_ok(|_| ())
+                .boxed_local(),
+        ),
+        (
+            "/block",
+            block(req_handler, Some(tip.index), None)
+                .map_ok(|_| ())
+                .boxed_local(),
+        ),
+        (
+            "/block/transaction",
+            req_handler
+                .block_transaction(BlockTransactionRequest::new(
+                    network_identifier.clone(),
+                    convert::block_id(tip).unwrap(),
+                    transaction_identifier,
+                ))
+                .map_ok(|_| ())
+                .boxed_local(),
+        ),
+        (
+            "/call query_block_range",
+            query_block_range(req_handler, tip.index, 1)
+                .map_ok(|_| ())
+                .boxed_local(),
+        ),
+        (
+            "/network/status",
+            req_handler
+                .network_status(NetworkRequest {
+                    network_identifier: network_identifier.clone(),
+                    metadata: None,
+                })
+                .map_ok(|_| ())
+                .boxed_local(),
+        ),
+        (
+            "/search/transactions",
+            req_handler
+                .search_transactions(SearchTransactionsRequest::builder(network_identifier).build())
+                .map_ok(|_| ())
+                .boxed_local(),
+        ),
+    ]
+}
+
+/// Test that requests reading blocks don't deadlock with a writer of the blockchain, like the
+/// sync thread. Tokio's `RwLock` is write-preferring, so a handler that read-locks the
+/// blockchain while holding a read lock on it waits for a queued writer, which waits for the
+/// handler.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_requests_do_not_deadlock_with_concurrent_writer() {
+    assert_requests_do_not_deadlock_with_concurrent_writer(RosettaDbConfig::default_disabled())
+        .await;
+}
+
+/// Like `test_requests_do_not_deadlock_with_concurrent_writer`, but with Rosetta blocks, which
+/// `/block` returns for index 1.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_requests_do_not_deadlock_with_concurrent_writer_in_rosetta_blocks_mode() {
+    assert_requests_do_not_deadlock_with_concurrent_writer(RosettaDbConfig::default_enabled())
+        .await;
+}
+
+async fn assert_requests_do_not_deadlock_with_concurrent_writer(config: RosettaDbConfig) {
+    let mut blockchain = Blocks::new_in_memory(config).unwrap();
+    sync(
+        &mut blockchain,
+        &Vec::from(Scribe::new_with_sample_data(2, 0).blockchain),
+    );
+    let ledger = Arc::new(MockLedger::new_with_blocks(blockchain));
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        ledger.clone(),
+        Arc::new(AtomicBool::new(true)),
+    );
+
+    let writer = tokio::spawn(async move {
+        loop {
+            drop(ledger.blockchain.write().await);
+            tokio::task::yield_now().await;
+        }
+    });
+    let block_request = BlockRequest {
+        network_identifier: req_handler.network_id(),
+        block_identifier: PartialBlockIdentifier {
+            index: Some(1),
+            hash: None,
+        },
+    };
+    let query_block_range_request = CallRequest::new(
+        req_handler.network_id(),
+        "query_block_range".to_string(),
+        ObjectMap::try_from(QueryBlockRangeRequest {
+            highest_block_index: 1,
+            number_of_blocks: 2,
+        })
+        .unwrap(),
+    );
+    let search_transactions_request =
+        SearchTransactionsRequest::builder(req_handler.network_id()).build();
+    let result = tokio::time::timeout(Duration::from_secs(30), async {
+        let start = Instant::now();
+        while start.elapsed() < Duration::from_secs(1) {
+            req_handler.block(block_request.clone()).await.unwrap();
+            req_handler
+                .call(query_block_range_request.clone())
+                .await
+                .unwrap();
+            req_handler
+                .search_transactions(search_transactions_request.clone())
+                .await
+                .unwrap();
+        }
+    })
+    .await;
+    writer.abort();
+    assert!(
+        result.is_ok(),
+        "request handler deadlocked with a concurrent writer"
+    );
+}
+
+/// Returns ledger blocks with the given timestamps in seconds, each with a
+/// different transaction, so that consecutive blocks with the same timestamp
+/// end up in the same Rosetta block.
+fn make_ledger_blocks(timestamps_secs: &[u64]) -> Vec<HashedBlock> {
+    let mut blocks: Vec<HashedBlock> = vec![];
+    for (index, timestamp_secs) in timestamps_secs.iter().enumerate() {
+        let parent_hash = blocks.last().map(|hb| hb.hash);
+        let timestamp = TimeStamp::from_nanos_since_unix_epoch(timestamp_secs * 1_000_000_000);
+        let block = Block::new(
+            parent_hash,
+            Operation::Mint {
+                to: AccountIdentifier::new(PrincipalId::new_anonymous(), None),
+                amount: Tokens::from_e8s(index as u64 + 1),
+            },
+            Memo(index as u64),
+            timestamp,
+            timestamp,
+            DEFAULT_TRANSFER_FEE,
+        )
+        .unwrap();
+        blocks.push(HashedBlock::hash_block(
+            block.encode(),
+            parent_hash,
+            index as u64,
+            timestamp,
+        ));
+    }
+    blocks
+}
+
+/// Stores `ledger_blocks`, verifies them and makes their Rosetta blocks, like
+/// a sync does.
+fn sync(blockchain: &mut Blocks, ledger_blocks: &[HashedBlock]) {
+    for hb in ledger_blocks {
+        blockchain.push(hb).unwrap();
+    }
+    let tip_index = ledger_blocks.last().unwrap().index;
+    blockchain.set_hashed_block_to_verified(&tip_index).unwrap();
+    blockchain
+        .make_rosetta_blocks_if_enabled(tip_index)
+        .unwrap();
+}
+
+fn handler(blockchain: Blocks) -> RosettaRequestHandler {
+    RosettaRequestHandler::new_with_default_blockchain(
+        Arc::new(MockLedger::new_with_blocks(blockchain)),
+        Arc::new(AtomicBool::new(true)),
+    )
+}
+
+async fn query_block_range(
+    req_handler: &RosettaRequestHandler,
+    highest_block_index: u64,
+    number_of_blocks: u64,
+) -> Result<QueryBlockRangeResponse, ApiError> {
+    let response = req_handler
+        .call(CallRequest::new(
+            req_handler.network_id(),
+            "query_block_range".to_string(),
+            ObjectMap::try_from(QueryBlockRangeRequest {
+                highest_block_index,
+                number_of_blocks,
+            })
+            .unwrap(),
+        ))
+        .await?;
+    Ok(QueryBlockRangeResponse::try_from(response.result).unwrap())
+}
+
+async fn block(
+    req_handler: &RosettaRequestHandler,
+    index: Option<u64>,
+    hash: Option<String>,
+) -> Result<rosetta_core::objects::Block, ApiError> {
+    let response = req_handler
+        .block(BlockRequest {
+            network_identifier: req_handler.network_id(),
+            block_identifier: PartialBlockIdentifier { index, hash },
+        })
+        .await?;
+    Ok(response.block.unwrap())
+}
+
+/// Asserts that the endpoints that return ledger blocks give every ledger block
+/// the previous ledger block as parent, by checking that they return the same
+/// as with Rosetta blocks disabled.
+async fn assert_ledger_blocks_have_ledger_parents(
+    req_handler: &RosettaRequestHandler,
+    ledger_blocks: &[HashedBlock],
+) {
+    let mut blockchain = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
+    sync(&mut blockchain, ledger_blocks);
+    let without_rosetta_blocks = handler(blockchain);
+
+    let num_blocks = ledger_blocks.len() as u64;
+    let block_range = query_block_range(req_handler, num_blocks - 1, num_blocks)
+        .await
+        .unwrap();
+    assert_eq!(
+        block_range.blocks[0].parent_block_identifier,
+        block_range.blocks[0].block_identifier
+    );
+    for pair in block_range.blocks.windows(2) {
+        assert_eq!(pair[1].parent_block_identifier, pair[0].block_identifier);
+    }
+    for highest_block_index in 0..num_blocks {
+        assert_eq!(
+            query_block_range(req_handler, highest_block_index, num_blocks)
+                .await
+                .unwrap(),
+            query_block_range(&without_rosetta_blocks, highest_block_index, num_blocks)
+                .await
+                .unwrap()
+        );
+    }
+
+    let search_request = SearchTransactionsRequest::builder(req_handler.network_id()).build();
+    assert_eq!(
+        req_handler
+            .search_transactions(search_request.clone())
+            .await
+            .unwrap(),
+        without_rosetta_blocks
+            .search_transactions(search_request)
+            .await
+            .unwrap()
+    );
+
+    for hb in ledger_blocks {
+        let hash = convert::block_id(hb).unwrap().hash;
+        assert_eq!(
+            block(req_handler, None, Some(hash.clone())).await.unwrap(),
+            block(&without_rosetta_blocks, None, Some(hash))
+                .await
+                .unwrap()
+        );
+    }
+}
+
+/// Test that in Rosetta blocks mode the endpoints that return ledger blocks give
+/// them the previous ledger block as parent, instead of looking the parent up
+/// among the Rosetta blocks.
+#[tokio::test]
+async fn test_ledger_blocks_have_ledger_parents_in_rosetta_blocks_mode() {
+    let ledger_blocks = make_ledger_blocks(&[1, 1, 1, 2, 2, 2]);
+    let mut blockchain = Blocks::new_in_memory(RosettaDbConfig::default_enabled()).unwrap();
+    sync(&mut blockchain, &ledger_blocks);
+    // Rosetta block 0 holds ledger blocks 0 to 2 and Rosetta block 1 holds
+    // ledger blocks 3 to 5.
+    assert_eq!(
+        blockchain.rosetta_blocks_mode,
+        RosettaBlocksMode::Enabled {
+            first_rosetta_block_index: 0
+        }
+    );
+    assert_eq!(
+        blockchain.get_highest_rosetta_block_index().unwrap(),
+        Some(1)
+    );
+    assert_eq!(
+        Vec::from_iter(
+            blockchain
+                .get_rosetta_block(0)
+                .unwrap()
+                .transactions
+                .into_keys()
+        ),
+        vec![0, 1, 2]
+    );
+    let req_handler = handler(blockchain);
+
+    assert_ledger_blocks_have_ledger_parents(&req_handler, &ledger_blocks).await;
+
+    let rosetta_block_0 = block(&req_handler, Some(0), None).await.unwrap();
+    let rosetta_block_1 = block(&req_handler, Some(1), None).await.unwrap();
+    assert_eq!(
+        rosetta_block_0.parent_block_identifier,
+        rosetta_block_0.block_identifier
+    );
+    assert_eq!(
+        rosetta_block_1.parent_block_identifier,
+        rosetta_block_0.block_identifier
+    );
+}
+
+/// Like `test_ledger_blocks_have_ledger_parents_in_rosetta_blocks_mode`, but
+/// with Rosetta blocks enabled on a store that already holds ledger blocks, so
+/// that the first Rosetta block's parent is a ledger block.
+#[tokio::test]
+async fn test_ledger_blocks_have_ledger_parents_after_the_first_rosetta_block() {
+    let ledger_blocks = make_ledger_blocks(&[1, 2, 3, 3, 4, 4]);
+    let store_dir = tempfile::tempdir().unwrap();
+    sync(
+        &mut Blocks::new_persistent(store_dir.path(), RosettaDbConfig::default_disabled()).unwrap(),
+        &ledger_blocks[..2],
+    );
+    let mut blockchain =
+        Blocks::new_persistent(store_dir.path(), RosettaDbConfig::default_enabled()).unwrap();
+    sync(&mut blockchain, &ledger_blocks[2..]);
+    // Rosetta block 2 holds ledger blocks 2 and 3 and Rosetta block 3 holds
+    // ledger blocks 4 and 5.
+    assert_eq!(
+        blockchain.rosetta_blocks_mode,
+        RosettaBlocksMode::Enabled {
+            first_rosetta_block_index: 2
+        }
+    );
+    assert_eq!(
+        blockchain.get_highest_rosetta_block_index().unwrap(),
+        Some(3)
+    );
+    assert_eq!(
+        Vec::from_iter(
+            blockchain
+                .get_rosetta_block(2)
+                .unwrap()
+                .transactions
+                .into_keys()
+        ),
+        vec![2, 3]
+    );
+    let req_handler = handler(blockchain);
+
+    assert_ledger_blocks_have_ledger_parents(&req_handler, &ledger_blocks).await;
+
+    let rosetta_block_2 = block(&req_handler, Some(2), None).await.unwrap();
+    let rosetta_block_3 = block(&req_handler, Some(3), None).await.unwrap();
+    assert_eq!(
+        rosetta_block_2.parent_block_identifier,
+        convert::block_id(&ledger_blocks[1]).unwrap()
+    );
+    assert_eq!(
+        rosetta_block_3.parent_block_identifier,
+        rosetta_block_2.block_identifier
+    );
+}
+
+/// Test that `/search/transactions` finds the transactions of the oldest block
+/// of a pruned store, whose parent the store no longer holds.
+#[tokio::test]
+async fn test_search_transactions_in_pruned_store() {
+    let ledger_blocks = Vec::from(Scribe::new_with_sample_data(10, 0).blockchain);
+    let mut blockchain = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
+    sync(&mut blockchain, &ledger_blocks);
+    // Keeps block 0 and blocks 5 to 9.
+    blockchain.prune(&ledger_blocks[5]).unwrap();
+    let req_handler = handler(blockchain);
+
+    let response = req_handler
+        .search_transactions(SearchTransactionsRequest::builder(req_handler.network_id()).build())
+        .await
+        .unwrap();
+    assert_eq!(
+        Vec::from_iter(
+            response
+                .transactions
+                .iter()
+                .map(|tx| tx.block_identifier.index)
+        ),
+        vec![9, 8, 7, 6, 5, 0]
+    );
+    assert_eq!(response.next_offset, None);
+}
+
+const MAX_INGRESS_WINDOW_NANOS: u64 = 24 * 60 * 60 * 1_000_000_000;
+
+fn construction_payloads_with_max_ingress_window(
+    req_handler: &RosettaRequestHandler,
+    requests: &[Request],
+    public_key: PublicKey,
+) -> Result<crate::models::ConstructionPayloadsResponse, ApiError> {
+    let ingress_start = ic_types::time::current_time().as_nanos_since_unix_epoch();
+    let metadata = ConstructionPayloadsRequestMetadata {
+        memo: None,
+        ingress_start: Some(ingress_start),
+        ingress_end: Some(ingress_start + MAX_INGRESS_WINDOW_NANOS),
+        created_at_time: None,
+    };
+    req_handler.construction_payloads(ConstructionPayloadsRequest {
+        network_identifier: req_handler.network_id(),
+        operations: Request::requests_to_operations(requests, "ICP").unwrap(),
+        metadata: Some(metadata.try_into().unwrap()),
+        public_keys: Some(vec![public_key]),
+    })
+}
+
+fn stake_requests(account: AccountIdentifier, count: u64) -> Vec<Request> {
+    (0..count)
+        .map(|neuron_index| {
+            Request::Stake(Stake {
+                account,
+                neuron_index,
+            })
+        })
+        .collect()
+}
+
+fn assert_exceeds_max_signing_payloads(result: Result<impl std::fmt::Debug, ApiError>) {
+    match result {
+        Err(ApiError::InvalidRequest(false, details)) => assert!(
+            format!("{details:?}").contains("must not exceed"),
+            "unexpected error details: {details:?}"
+        ),
+        other => panic!("expected an invalid request error, got {other:?}"),
+    }
+}
+
+/// A request with far more STAKE operations than the limit allows and the
+/// maximum ingress window is rejected without building its signing payloads.
+#[test]
+fn should_reject_request_exceeding_max_signing_payloads() {
+    let (account, _, public_key, _) = ic_rosetta_test_utils::make_user_ed25519(1);
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        Arc::new(MockLedger::new()),
+        Arc::new(AtomicBool::new(true)),
+    );
+
+    let result = construction_payloads_with_max_ingress_window(
+        &req_handler,
+        &stake_requests(account, 30_000),
+        public_key,
+    );
+
+    assert_exceeds_max_signing_payloads(result);
+}
+
+/// Just above the limit: 5 requests over the maximum ingress window are
+/// rejected.
+#[test]
+fn should_reject_request_just_above_max_signing_payloads() {
+    let (account, _, public_key, _) = ic_rosetta_test_utils::make_user_ed25519(1);
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        Arc::new(MockLedger::new()),
+        Arc::new(AtomicBool::new(true)),
+    );
+
+    let result = construction_payloads_with_max_ingress_window(
+        &req_handler,
+        &stake_requests(account, 5),
+        public_key,
+    );
+
+    assert_exceeds_max_signing_payloads(result);
+}
+
+/// A realistic neuron workflow of 4 requests, the most allowed over the
+/// maximum ingress window.
+fn neuron_workflow(account: AccountIdentifier, hot_key: PrincipalId) -> Vec<Request> {
+    let neuron_index = 0;
+    vec![
+        Request::Transfer(Operation::Transfer {
+            from: account,
+            to: AccountIdentifier::from_hex(
+                "42a3eb61d549dc9fe6429ce2361ec60a569b8befe43eb15a3fc5c88516711bc5",
+            )
+            .unwrap(),
+            spender: None,
+            amount: Tokens::from_e8s(100_000_000),
+            fee: DEFAULT_TRANSFER_FEE,
+        }),
+        Request::Stake(Stake {
+            account,
+            neuron_index,
+        }),
+        Request::AddHotKey(AddHotKey {
+            account,
+            neuron_index,
+            key: PublicKeyOrPrincipal::Principal(hot_key),
+        }),
+        Request::StartDissolve(StartDissolve {
+            account,
+            neuron_index,
+        }),
+    ]
+}
+
+/// A realistic neuron workflow with the maximum ingress window is accepted.
+#[test]
+fn should_accept_neuron_workflow_with_max_ingress_window() {
+    let (account, _, public_key, _) = ic_rosetta_test_utils::make_user_ed25519(1);
+    let (_, _, _, hot_key) = ic_rosetta_test_utils::make_user_ed25519(2);
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        Arc::new(MockLedger::new()),
+        Arc::new(AtomicBool::new(true)),
+    );
+    let requests = neuron_workflow(account, hot_key);
+
+    let response =
+        construction_payloads_with_max_ingress_window(&req_handler, &requests, public_key)
+            .expect("a realistic neuron workflow should be accepted");
+
+    // One update and one read state payload per request and ingress expiry.
+    assert_eq!(response.payloads.len(), requests.len() * 720 * 2);
+}
+
+fn follow_request(
+    account: AccountIdentifier,
+    controller: PrincipalId,
+    followees: usize,
+) -> Request {
+    Request::Follow(Follow {
+        account,
+        topic: 0,
+        followees: vec![u64::MAX; followees],
+        controller: Some(controller),
+        neuron_index: u64::MAX,
+    })
+}
+
+fn assert_invalid_request_containing(
+    result: Result<impl std::fmt::Debug, ApiError>,
+    expected: &str,
+) {
+    match result {
+        Err(ApiError::InvalidRequest(false, details)) => assert!(
+            format!("{details:?}").contains(expected),
+            "unexpected error details: {details:?}"
+        ),
+        other => panic!("expected an invalid request error, got {other:?}"),
+    }
+}
+
+/// The largest requests Rosetta builds, governance `manage_neuron` calls such
+/// as a FOLLOW with the maximum number of followees accepted by governance,
+/// are accepted with the maximum ingress window.
+#[test]
+fn should_accept_largest_requests_with_max_ingress_window() {
+    let (account, _, public_key, _) = ic_rosetta_test_utils::make_user_ed25519(1);
+    let (_, _, _, hot_key) = ic_rosetta_test_utils::make_user_ed25519(2);
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        Arc::new(MockLedger::new()),
+        Arc::new(AtomicBool::new(true)),
+    );
+    let requests = vec![
+        follow_request(account, hot_key, 15),
+        Request::AddHotKey(AddHotKey {
+            account,
+            neuron_index: u64::MAX,
+            key: PublicKeyOrPrincipal::Principal(hot_key),
+        }),
+    ];
+
+    construction_payloads_with_max_ingress_window(&req_handler, &requests, public_key)
+        .expect("the largest legitimate requests should be accepted");
+}
+
+/// A request whose canister call argument exceeds the size limit is rejected
+/// before its signing payloads are built.
+#[test]
+fn should_reject_request_with_oversized_arg() {
+    let (account, _, public_key, _) = ic_rosetta_test_utils::make_user_ed25519(1);
+    let (_, _, _, hot_key) = ic_rosetta_test_utils::make_user_ed25519(2);
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        Arc::new(MockLedger::new()),
+        Arc::new(AtomicBool::new(true)),
+    );
+
+    let result = construction_payloads_with_max_ingress_window(
+        &req_handler,
+        &[follow_request(account, hot_key, 1_000)],
+        public_key,
+    );
+
+    assert_invalid_request_containing(result, "must not be larger than");
+}
+
+fn construction_combine_with(
+    req_handler: &RosettaRequestHandler,
+    unsigned_transaction: crate::models::UnsignedTransaction,
+    signatures: Vec<crate::models::Signature>,
+) -> Result<crate::models::ConstructionCombineResponse, ApiError> {
+    req_handler.construction_combine(crate::models::ConstructionCombineRequest {
+        network_identifier: req_handler.network_id(),
+        unsigned_transaction: unsigned_transaction.to_string(),
+        signatures,
+    })
+}
+
+/// `/construction/combine` applies the same limits as `/construction/payloads`
+/// to a client-supplied unsigned transaction and its signatures before
+/// building any envelopes.
+#[test]
+fn should_reject_combine_exceeding_limits() {
+    use std::str::FromStr;
+
+    let (account, _, public_key, _) = ic_rosetta_test_utils::make_user_ed25519(1);
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        Arc::new(MockLedger::new()),
+        Arc::new(AtomicBool::new(true)),
+    );
+    let response = construction_payloads_with_max_ingress_window(
+        &req_handler,
+        &stake_requests(account, 1),
+        public_key.clone(),
+    )
+    .unwrap();
+    let unsigned_transaction =
+        crate::models::UnsignedTransaction::from_str(&response.unsigned_transaction).unwrap();
+    let ingress_expiry = unsigned_transaction.ingress_expiries[0];
+
+    let mut too_many_pairs = unsigned_transaction.clone();
+    too_many_pairs.ingress_expiries = (0..4 * 720 + 1).collect();
+    assert_exceeds_max_signing_payloads(construction_combine_with(
+        &req_handler,
+        too_many_pairs,
+        vec![],
+    ));
+
+    let mut oversized_arg = unsigned_transaction.clone();
+    oversized_arg.updates[0].1.arg = ic_types::messages::Blob(vec![0; 4 * 1024 + 1]);
+    assert_invalid_request_containing(
+        construction_combine_with(&req_handler, oversized_arg, vec![]),
+        "must not be larger than",
+    );
+
+    let mut oversized_nonce = unsigned_transaction.clone();
+    oversized_nonce.updates[0].1.nonce = Some(ic_types::messages::Blob(vec![0; 4 * 1024 + 1]));
+    assert_invalid_request_containing(
+        construction_combine_with(&req_handler, oversized_nonce, vec![]),
+        "must not be larger than",
+    );
+
+    let mut repeated_expiries = unsigned_transaction.clone();
+    repeated_expiries.ingress_expiries = vec![ingress_expiry; 2];
+    assert_invalid_request_containing(
+        construction_combine_with(&req_handler, repeated_expiries, vec![]),
+        "strictly increasing",
+    );
+
+    let mut repeated_updates = unsigned_transaction.clone();
+    repeated_updates
+        .updates
+        .push(repeated_updates.updates[0].clone());
+    assert_invalid_request_containing(
+        construction_combine_with(&req_handler, repeated_updates, vec![]),
+        "repeated canister updates",
+    );
+
+    // Combine overwrites the ingress expiry of each update, so updates that
+    // differ only in their ingress expiry are repeated updates too.
+    let mut updates_differing_in_expiry = unsigned_transaction.clone();
+    let mut update = updates_differing_in_expiry.updates[0].clone();
+    update.1.ingress_expiry = ingress_expiry;
+    updates_differing_in_expiry.updates.push(update);
+    assert_invalid_request_containing(
+        construction_combine_with(&req_handler, updates_differing_in_expiry, vec![]),
+        "repeated canister updates",
+    );
+
+    let mut decreasing_expiries = unsigned_transaction.clone();
+    decreasing_expiries.ingress_expiries = vec![ingress_expiry, ingress_expiry - 1];
+    assert_invalid_request_containing(
+        construction_combine_with(&req_handler, decreasing_expiries, vec![]),
+        "strictly increasing",
+    );
+
+    let signature = crate::models::Signature {
+        signing_payload: response.payloads[0].clone(),
+        public_key: public_key.clone(),
+        signature_type: crate::models::SignatureType::Ed25519,
+        hex_bytes: hex::encode([0_u8; 64]),
+    };
+
+    let mut oversized_signature = signature.clone();
+    oversized_signature.hex_bytes = hex::encode([0_u8; 65]);
+    assert_invalid_request_containing(
+        construction_combine_with(
+            &req_handler,
+            unsigned_transaction.clone(),
+            vec![oversized_signature],
+        ),
+        "signature must not be larger than",
+    );
+
+    let mut oversized_public_key = signature;
+    oversized_public_key.public_key.hex_bytes = hex::encode([0_u8; 66]);
+    assert_invalid_request_containing(
+        construction_combine_with(
+            &req_handler,
+            unsigned_transaction,
+            vec![oversized_public_key],
+        ),
+        "public key must not be larger than",
+    );
+}
+
+/// A transaction with repeated requests is rejected, since the requests would
+/// result in identical canister updates.
+#[test]
+fn should_reject_payloads_with_repeated_requests() {
+    let (account, _, public_key, _) = ic_rosetta_test_utils::make_user_ed25519(1);
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        Arc::new(MockLedger::new()),
+        Arc::new(AtomicBool::new(true)),
+    );
+    let stake = Request::Stake(Stake {
+        account,
+        neuron_index: 0,
+    });
+
+    let result = construction_payloads_with_max_ingress_window(
+        &req_handler,
+        &[stake.clone(), stake],
+        public_key,
+    );
+
+    assert_invalid_request_containing(result, "repeated canister updates");
+}
+
+/// The combine request for a neuron workflow of 4 requests over the maximum
+/// ingress window, i.e. at the pair limit, signed for every signing payload
+/// with an uncompressed secp256k1 public key (the largest supported key
+/// encoding), fits in the 4 MiB request body limit of the Rosetta server, and
+/// is combined.
+#[test]
+fn should_combine_neuron_workflow_over_max_ingress_window() {
+    const MAX_REQUEST_BODY_BYTES: usize = 4 * 1024 * 1024;
+
+    let (account, _, public_key, _) = ic_rosetta_test_utils::make_user_ecdsa_secp256k1(1);
+    assert_eq!(
+        public_key.hex_bytes.len(),
+        2 * 65,
+        "expected an uncompressed key"
+    );
+    let (_, _, _, hot_key) = ic_rosetta_test_utils::make_user_ed25519(2);
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        Arc::new(MockLedger::new()),
+        Arc::new(AtomicBool::new(true)),
+    );
+    let response = construction_payloads_with_max_ingress_window(
+        &req_handler,
+        &neuron_workflow(account, hot_key),
+        public_key.clone(),
+    )
+    .unwrap();
+    let signatures: Vec<_> = response
+        .payloads
+        .iter()
+        .map(|payload| crate::models::Signature {
+            signing_payload: payload.clone(),
+            public_key: public_key.clone(),
+            signature_type: crate::models::SignatureType::Ecdsa,
+            hex_bytes: hex::encode([0_u8; 64]),
+        })
+        .collect();
+    let request = crate::models::ConstructionCombineRequest {
+        network_identifier: req_handler.network_id(),
+        unsigned_transaction: response.unsigned_transaction,
+        signatures,
+    };
+
+    let request_len = serde_json::to_vec(&request).unwrap().len();
+    assert!(
+        request_len <= MAX_REQUEST_BODY_BYTES,
+        "combine request of {request_len} bytes exceeds the request body limit"
+    );
+    req_handler
+        .construction_combine(request)
+        .expect("the largest transaction should be combined");
 }

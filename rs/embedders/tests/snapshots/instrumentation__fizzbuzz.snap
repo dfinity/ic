@@ -24,6 +24,7 @@ expression: out
   (global (;0;) (mut i64) i64.const 0)
   (global (;1;) (mut i64) i64.const 0)
   (global (;2;) (mut i64) i64.const 0)
+  (global (;3;) (mut i64) i64.const 0)
   (export "fizzbuzz" (func 6))
   (export "memory" (memory 0))
   (export "stable_memory" (memory 1))
@@ -31,8 +32,9 @@ expression: out
   (export "canister counter_instructions" (global 0))
   (export "canister counter_dirty_pages" (global 1))
   (export "canister counter_accessed_pages" (global 2))
-  (func (;6;) (type 1) (param i32)
-    (local i32 i32 i32)
+  (export "canister heap_page_budget" (global 3))
+  (func (;6;) (type 1) (param $max i32)
+    (local $c i32) (local $tmp i32) (local $adr i32)
     global.get 0
     i64.const 7
     i64.sub
@@ -44,11 +46,11 @@ expression: out
       call 1
     end
     i32.const 1
-    local.set 1
-    local.get 0
+    local.set $c
+    local.get $max
     i32.const 1
     i32.add
-    local.set 0
+    local.set $max
     loop ;; label = @1
       global.get 0
       i64.const 15
@@ -60,7 +62,7 @@ expression: out
       if ;; label = @2
         call 1
       end
-      local.get 1
+      local.get $c
       i32.const 3
       i32.rem_u
       i32.eqz
@@ -69,7 +71,7 @@ expression: out
         i64.const 15
         i64.sub
         global.set 0
-        local.get 1
+        local.get $c
         i32.const 5
         i32.rem_u
         i32.eqz
@@ -95,7 +97,7 @@ expression: out
         i64.const 15
         i64.sub
         global.set 0
-        local.get 1
+        local.get $c
         i32.const 5
         i32.rem_u
         i32.eqz
@@ -113,10 +115,10 @@ expression: out
           i64.sub
           global.set 0
           i32.const 16
-          local.set 3
-          local.get 1
-          local.set 2
-          local.get 1
+          local.set $adr
+          local.get $c
+          local.set $tmp
+          local.get $c
           i32.const 9
           i32.gt_u
           if ;; label = @4
@@ -124,31 +126,31 @@ expression: out
             i64.const 20
             i64.sub
             global.set 0
-            local.get 3
-            local.get 2
+            local.get $adr
+            local.get $tmp
             i32.const 10
             i32.div_u
             i32.const 48
             i32.add
             i32.store
-            local.get 3
+            local.get $adr
             i32.const 1
             i32.add
-            local.set 3
+            local.set $adr
           end
           global.get 0
           i64.const 25
           i64.sub
           global.set 0
-          local.get 3
-          local.get 2
+          local.get $adr
+          local.get $tmp
           i32.const 10
           i32.rem_u
           i32.const 48
           i32.add
           i32.store
           i32.const 16
-          local.get 3
+          local.get $adr
           i32.const 15
           i32.sub
           call $println
@@ -158,12 +160,12 @@ expression: out
       i64.const 9
       i64.sub
       global.set 0
-      local.get 1
+      local.get $c
       i32.const 1
       i32.add
-      local.set 1
-      local.get 1
-      local.get 0
+      local.set $c
+      local.get $c
+      local.get $max
       i32.lt_u
       br_if 0 (;@1;)
     end

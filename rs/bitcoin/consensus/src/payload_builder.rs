@@ -19,7 +19,7 @@ use ic_interfaces::{
     consensus::{self, PayloadValidationError},
     self_validating_payload::{
         InvalidSelfValidatingPayloadReason, SelfValidatingPayloadBuilder,
-        SelfValidatingPayloadValidationError,
+        SelfValidatingPayloadValidationError, SelfValidatingPayloadValidationFailure,
     },
     validation::ValidationError,
 };
@@ -235,12 +235,54 @@ impl BitcoinPayloadBuilder {
         &self,
         payload: &SelfValidatingPayload,
         validation_context: &ValidationContext,
+        past_callback_ids: BTreeSet<u64>,
     ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
         let since = Instant::now();
 
         // An empty block is always valid.
         if *payload == SelfValidatingPayload::default() {
             return Ok(0.into());
+        }
+
+        // Every response must answer a request of the matching type that is pending
+        // in the state at the certified height, and must do so only once.
+        let state = self
+            .state_manager
+            .get_state_at(validation_context.certified_height)
+            .map_err(|_| {
+                ValidationError::ValidationFailed(
+                    SelfValidatingPayloadValidationFailure::StateUnavailable,
+                )
+            })?
+            .take();
+        let subnet_call_context_manager = &state.metadata.subnet_call_context_manager;
+        let mut delivered_ids = past_callback_ids;
+        for response in payload.get() {
+            let callback_id = CallbackId::from(response.callback_id);
+            let is_pending = match &response.response {
+                BitcoinAdapterResponseWrapper::GetSuccessorsResponse(_)
+                | BitcoinAdapterResponseWrapper::GetSuccessorsReject(_) => {
+                    subnet_call_context_manager
+                        .bitcoin_get_successors_contexts
+                        .contains_key(&callback_id)
+                }
+                BitcoinAdapterResponseWrapper::SendTransactionResponse(_)
+                | BitcoinAdapterResponseWrapper::SendTransactionReject(_) => {
+                    subnet_call_context_manager
+                        .bitcoin_send_transaction_internal_contexts
+                        .contains_key(&callback_id)
+                }
+            };
+            if !is_pending {
+                return Err(ValidationError::InvalidArtifact(
+                    InvalidSelfValidatingPayloadReason::NonMatchingResponse(callback_id),
+                ));
+            }
+            if !delivered_ids.insert(response.callback_id) {
+                return Err(ValidationError::InvalidArtifact(
+                    InvalidSelfValidatingPayloadReason::DuplicateResponse(callback_id),
+                ));
+            }
         }
 
         self.metrics
@@ -261,15 +303,9 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
     ) -> (SelfValidatingPayload, NumBytes) {
         let since = Instant::now();
 
-        let past_callback_ids: BTreeSet<u64> = past_payloads
-            .iter()
-            .flat_map(|x| x.get())
-            .map(|x| x.callback_id)
-            .collect();
-
         let payload = match self.get_self_validating_payload_impl(
             validation_context,
-            past_callback_ids,
+            past_callback_ids(past_payloads),
             byte_limit,
             priority,
         ) {
@@ -295,10 +331,23 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
         &self,
         payload: &SelfValidatingPayload,
         validation_context: &ValidationContext,
-        _past_payloads: &[&SelfValidatingPayload],
+        past_payloads: &[&SelfValidatingPayload],
     ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
-        self.validate_self_validating_payload_impl(payload, validation_context)
+        self.validate_self_validating_payload_impl(
+            payload,
+            validation_context,
+            past_callback_ids(past_payloads),
+        )
     }
+}
+
+// Returns the callback IDs of all responses in `past_payloads`.
+fn past_callback_ids(past_payloads: &[&SelfValidatingPayload]) -> BTreeSet<u64> {
+    past_payloads
+        .iter()
+        .flat_map(|x| x.get())
+        .map(|x| x.callback_id)
+        .collect()
 }
 
 // Returns an iterator that iterates through the bitcoin requests in the state.
@@ -379,6 +428,7 @@ impl BatchPayloadBuilder for BitcoinPayloadBuilder {
         let _ = self.validate_self_validating_payload_impl(
             &SelfValidatingPayload::new(payload),
             proposal_context.validation_context,
+            delivered_ids,
         )?;
 
         if raw_payload_len as u64 > MAX_BITCOIN_PAYLOAD_IN_BYTES {

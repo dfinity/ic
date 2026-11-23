@@ -9,12 +9,17 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added a new `NnsFunction` variant `MergeSubnets`, which proposes to merge a
-  subnet into another subnet: in the routing table, reassigns all canister
-  ranges hosted by the source subnet to the destination subnet. The source
-  subnet is not deleted.
-
 ## Changed
+
+* Limit decoded `payload` of `ExecuteNnsFunction` proposals. If the result is
+  too large, the `self_describing_action.value` field is left blank. This never
+  stops proposal creation.
+
+* In `self_describing_action`, the `type_name` and `type_description` subfields
+  are now ALWAYS populated, even when there is a failure while trying to
+  populate the `value` field (e.g. due to not being able to fetch the callee's
+  Candid interface). Previously, the whole `self_describing_action` field was
+  left empty.
 
 ## Deprecated
 

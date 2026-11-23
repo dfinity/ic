@@ -88,6 +88,11 @@ pub enum WasmValidationError {
         defined: usize,
         allowed: usize,
     },
+    /// There are too many exports of any kind defined in the module.
+    TooManyTotalExports {
+        defined: usize,
+        allowed: usize,
+    },
     /// The total length of exported function names is too large.
     ExportedNamesTooLong {
         total_length: usize,
@@ -109,6 +114,14 @@ pub enum WasmValidationError {
     /// Module contains too many functions.
     TooManyFunctions {
         defined: usize,
+        allowed: usize,
+    },
+    /// Module contains too many imports.
+    TooManyImports {
+        allowed: usize,
+    },
+    /// The name custom section names too many functions.
+    TooManyNameSectionEntries {
         allowed: usize,
     },
     /// Module contains too many custom sections.
@@ -196,6 +209,12 @@ impl std::fmt::Display for WasmValidationError {
                     `canister_composite_query <name>` is {defined} which exceeds {allowed}."
                 )
             }
+            Self::TooManyTotalExports { defined, allowed } => {
+                write!(
+                    f,
+                    "The total number of exported items is {defined} which exceeds {allowed}."
+                )
+            }
             Self::ExportedNamesTooLong {
                 total_length,
                 allowed,
@@ -229,6 +248,14 @@ impl std::fmt::Display for WasmValidationError {
                 f,
                 "Wasm module defined {defined} \
                     functions which exceeds the maximum number allowed {allowed}.",
+            ),
+            Self::TooManyImports { allowed } => write!(
+                f,
+                "Wasm module has more imports than the maximum number allowed {allowed}.",
+            ),
+            Self::TooManyNameSectionEntries { allowed } => write!(
+                f,
+                "The name section names more functions than the maximum number allowed {allowed}.",
             ),
             Self::TooManyCustomSections { defined, allowed } => write!(
                 f,
@@ -325,6 +352,10 @@ impl AsErrorHelp for WasmValidationError {
                 suggestion: "Try combining multiple endpoints into a single endpoint.".to_string(),
                 doc_link: doc_ref("wasm-module-exports-too-many-methods"),
             },
+            WasmValidationError::TooManyTotalExports { .. } => ErrorHelp::UserError {
+                suggestion: "Try reducing the number of exported items.".to_string(),
+                doc_link: doc_ref("wasm-module-exports-too-many-methods"),
+            },
             WasmValidationError::ExportedNamesTooLong { .. } => ErrorHelp::UserError {
                 suggestion: "Try using shorter method names.".to_string(),
                 doc_link: doc_ref("wasm-module-sum-of-exported-name-lengths-too-large"),
@@ -332,6 +363,15 @@ impl AsErrorHelp for WasmValidationError {
             WasmValidationError::TooManyFunctions { .. } => ErrorHelp::UserError {
                 suggestion: "Try spliting this canister into multiple canisters.".to_string(),
                 doc_link: doc_ref("wasm-module-too-many-functions"),
+            },
+            WasmValidationError::TooManyImports { .. } => ErrorHelp::UserError {
+                suggestion: "Try reducing the number of imported functions.".to_string(),
+                doc_link: doc_ref("wasm-module-imports-too-many"),
+            },
+            WasmValidationError::TooManyNameSectionEntries { .. } => ErrorHelp::UserError {
+                suggestion: "Try stripping the name section (debug symbols) from the module."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-name-section-too-many-entries"),
             },
             WasmValidationError::TooManyGlobals { .. } => ErrorHelp::UserError {
                 suggestion: "Try collecting multiple globals into a single \

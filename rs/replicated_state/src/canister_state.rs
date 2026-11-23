@@ -677,13 +677,7 @@ impl CanisterState {
 
     /// Adds a canister change to canister history.
     ///
-    /// The additional canister history increases the canister's memory usage, which
-    /// the caller is responsible for accounting for in the subnet available
-    /// execution memory (and the canister's cycles). Callers typically record the
-    /// change and then pass the memory usage *including* it to
-    /// `cycles_and_memory_usage_checks_and_updates`; callers that update the subnet
-    /// available execution memory directly can instead read the change in
-    /// `memory_allocated_bytes()` across this call.
+    /// The additional canister history increases the canister's memory usage.
     pub fn add_canister_change(
         &mut self,
         timestamp_nanos: Time,

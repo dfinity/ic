@@ -9,13 +9,12 @@ use ic_consensus_certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_execution_environment::ExecutionServices;
 use ic_http_endpoints_xnet::XNetEndpoint;
-use ic_https_outcalls_adapter_client::setup_canister_http_client;
+use ic_https_outcalls_adapter_client::{setup_canister_http_channel, setup_canister_http_client};
 use ic_interfaces::{
     execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
     time_source::SysTimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, info};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
@@ -24,7 +23,7 @@ use ic_pprof::Pprof;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replica_setup_ic_network::setup_consensus_and_p2p;
-use ic_replicated_state::{ReplicatedState, metrics::ReplicatedStateInvariants};
+use ic_replicated_state::metrics::ReplicatedStateInvariants;
 use ic_state_manager::{StateManagerImpl, state_sync::StateSync};
 use ic_tracing::ReloadHandles;
 use ic_types::{
@@ -73,8 +72,8 @@ pub fn construct_ic_stack(
     catch_up_package: Option<pb::CatchUpPackage>,
     tracing_handle: ReloadHandles,
 ) -> std::io::Result<(
-    // TODO: remove next three return values since they are used only in tests
-    Arc<dyn StateReader<State = ReplicatedState>>,
+    Arc<StateManagerImpl>,
+    // TODO: remove next two return values since they are used only in tests
     QueryExecutionService,
     Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
@@ -236,15 +235,6 @@ pub fn construct_ic_stack(
             config.malicious_behavior.malicious_flags.clone(),
         )
     };
-    let xnet_endpoint = XNetEndpoint::new(
-        rt_handle_xnet.clone(),
-        Arc::clone(&certified_stream_store),
-        Arc::clone(&crypto) as Arc<_>,
-        registry.clone(),
-        config.message_routing,
-        metrics_registry,
-        log.clone(),
-    );
     // Use XNet runtime to spawn XNet client threads.
     let xnet_payload_builder = Arc::new(XNetPayloadBuilderImpl::new(
         Arc::clone(&state_manager) as Arc<_>,
@@ -254,9 +244,20 @@ pub fn construct_ic_stack(
         rt_handle_xnet.clone(),
         node_id,
         subnet_id,
+        max_certified_height_rx.clone(),
         metrics_registry,
         log.clone(),
     ));
+    let xnet_endpoint = XNetEndpoint::new(
+        rt_handle_xnet.clone(),
+        Arc::clone(&certified_stream_store),
+        xnet_payload_builder.advert_handler(),
+        Arc::clone(&crypto) as Arc<_>,
+        registry.clone(),
+        config.message_routing,
+        metrics_registry,
+        log.clone(),
+    );
     // ---------- PAYLOAD BUILDERS WITHOUT ARTIFACT POOL FOLLOW -----------
     let query_stats_payload_builder = execution_services
         .query_stats_payload_builder
@@ -303,12 +304,19 @@ pub fn construct_ic_stack(
     );
 
     // ---------- HTTPS OUTCALLS PAYLOAD BUILDER DEPS FOLLOW ----------
-    let canister_http_adapter_client = setup_canister_http_client(
+    let canister_http_channel = setup_canister_http_channel(
         rt_handle_main.clone(),
         metrics_registry,
-        config.adapters_config,
+        &config.adapters_config,
+        log,
+    );
+
+    let canister_http_adapter_client = setup_canister_http_client(
+        rt_handle_main.clone(),
+        canister_http_channel,
         execution_services.transform_execution_service,
         max_canister_http_requests_in_flight,
+        metrics_registry,
         log.clone(),
     );
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------

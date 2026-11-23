@@ -47,11 +47,8 @@ use ssh2::Session;
 fn verify_content(ssh_session: &Session, remote_file_path: &str, expected_b64: &str) -> Result<()> {
     // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
     // we read their base64 encoding and compare those.
-    let actual_b64 = execute_bash_command(
-        ssh_session,
-        format!("base64 {remote_file_path} | tr -d '\\n'"),
-    )
-    .map_err(|e| anyhow!(e))?;
+    let actual_b64 = execute_bash_command(ssh_session, format!("base64 -w0 {remote_file_path}"))
+        .map_err(|e| anyhow!(e))?;
     ensure!(
         actual_b64 == expected_b64,
         "Unexpected content in {}: (base-64 encoded) {}",
@@ -174,19 +171,43 @@ pub fn test(env: TestEnv) {
 
     let ssh_session = node.block_on_ssh_session().unwrap();
 
+    // The recovery engine runs concurrently with this test, so wait for it to finish before
+    // verifying anything. Until then it might not have placed the artifacts or setup their
+    // permissions correctly yet.
+    retry_with_msg!(
+        "wait for guestos-recovery-engine.service to finish",
+        log.clone(),
+        secs(120),
+        secs(5),
+        || {
+            let state = execute_bash_command(
+                &ssh_session,
+                "systemctl show --property=ActiveState --value guestos-recovery-engine.service"
+                    .to_string(),
+            )
+            .map_err(|e| anyhow!(e))?;
+            let state = state.trim();
+            ensure!(
+                // The unit ends up "failed" rather than "active" here, even after a successful recovery,
+                // because this test runs the GuestOS without a HostOS, so the engine's final
+                // `vsock_guest notify` fails.
+                matches!(state, "active" | "failed"),
+                "guestos-recovery-engine.service has not finished yet (ActiveState={state:?})"
+            );
+            Ok(())
+        }
+    )
+    .unwrap();
+
     //
     // Verify contents
     //
 
-    // We retry multiple times the first time because the files being overwritten by the recovery
-    // engine and this read are racing against each other.
-    retry_with_msg!("verify CUP", log.clone(), secs(30), secs(5), || {
-        verify_content(
-            &ssh_session,
-            "/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb",
-            &expected_cup_b64,
-        )
-    })
+    verify_content(
+        &ssh_session,
+        "/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb",
+        &expected_cup_b64,
+    )
     .unwrap();
 
     verify_content(

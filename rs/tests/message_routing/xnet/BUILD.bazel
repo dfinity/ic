@@ -50,6 +50,7 @@ system_test_nns(
         "colocate",
         "system_test_large",
     ],
+    test_timeout = "eternal",
     vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -146,6 +147,7 @@ system_test(
     deps = [
         # Keep sorted.
         "//rs/config",
+        "//rs/interfaces/registry",
         "//rs/nns/constants",
         "//rs/registry/canister",
         "//rs/registry/subnet_type",

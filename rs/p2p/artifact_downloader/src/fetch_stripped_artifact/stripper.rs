@@ -1,19 +1,21 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    artifact::IdentifiableArtifact,
+    NodeIndex,
+    artifact::{IdentifiableArtifact, IngressMessageId},
     batch::{BatchPayload, IngressPayload},
     consensus::{
-        ConsensusMessage, DataPayload,
-        idkg::{IDkgObject, IDkgPayload},
+        ConsensusMessage, DataPayload, StrippedMessageIds,
+        idkg::{IDkgArtifactId, IDkgObject, IDkgPayload},
     },
+    crypto::{CryptoHashOf, crypto_hash},
+    messages::SignedRequestBytes,
 };
 
-use crate::fetch_stripped_artifact::types::stripped::StrippedIDkgDealings;
+use crate::fetch_stripped_artifact::canister_http::strip_responses;
 
-use super::types::{
-    SignedIngressId,
-    stripped::{MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedIngressPayload},
-};
+use super::types::stripped::{MaybeStrippedConsensusMessage, StrippedBlockProposal};
 
 /// Provides functionality for stripping objects of given information.
 ///
@@ -43,8 +45,11 @@ impl Strippable for ConsensusMessage {
                     ..
                 } = block_proposal.content.as_ref().payload.as_ref().as_data();
 
-                let stripped_ingress_payload = ingress.strip();
-                let stripped_idkg_dealings = idkg.strip();
+                let mut stripped_message_ids = StrippedMessageIds {
+                    ingress_messages: ingress.strip(),
+                    idkg_dealings: idkg.strip(),
+                    canister_http_responses: BTreeSet::new(),
+                };
 
                 let mut proto = pb::BlockProposal::from(block_proposal);
 
@@ -59,13 +64,19 @@ impl Strippable for ConsensusMessage {
                             }
                         }
                     }
+                    // Remove the content of the canister HTTP responses, naming the ones removed.
+                    if let Some((pruned, stripped)) =
+                        strip_responses(&block.canister_http_payload_bytes)
+                    {
+                        block.canister_http_payload_bytes = pruned;
+                        stripped_message_ids.canister_http_responses = stripped;
+                    }
                 }
 
                 MaybeStrippedConsensusMessage::StrippedBlockProposal(StrippedBlockProposal {
                     pruned_block_proposal_proto: proto,
                     unstripped_consensus_message_id,
-                    stripped_ingress_payload,
-                    stripped_idkg_dealings,
+                    stripped_message_ids,
                 })
             }
             msg => MaybeStrippedConsensusMessage::Unstripped(msg),
@@ -74,38 +85,33 @@ impl Strippable for ConsensusMessage {
 }
 
 impl Strippable for &IngressPayload {
-    type Output = StrippedIngressPayload;
+    type Output = BTreeMap<IngressMessageId, CryptoHashOf<SignedRequestBytes>>;
 
     fn strip(self) -> Self::Output {
-        let ingress_messages = self
-            .iter_serialized()
-            .map(|(id, bytes)| SignedIngressId::new(id.clone(), bytes))
-            .collect();
-
-        StrippedIngressPayload { ingress_messages }
+        self.iter_serialized()
+            .map(|(id, bytes)| (id.clone(), crypto_hash(bytes)))
+            .collect()
     }
 }
 
 impl Strippable for &Option<IDkgPayload> {
-    type Output = StrippedIDkgDealings;
+    type Output = BTreeSet<(NodeIndex, IDkgArtifactId)>;
 
     fn strip(self) -> Self::Output {
-        let stripped_dealings = if let Some(idkg) = self {
-            idkg.idkg_transcripts
-                .values()
-                .flat_map(|transcript| {
-                    transcript.verified_dealings.iter().map(
-                        |(dealer_index, batch_signed_dealing)| {
-                            (*dealer_index, batch_signed_dealing.content.message_id())
-                        },
-                    )
-                })
-                .collect::<Vec<_>>()
-        } else {
-            Vec::new()
+        let Some(idkg) = self else {
+            return BTreeSet::new();
         };
-
-        StrippedIDkgDealings { stripped_dealings }
+        idkg.idkg_transcripts
+            .values()
+            .flat_map(|transcript| {
+                transcript
+                    .verified_dealings
+                    .iter()
+                    .map(|(dealer_index, batch_signed_dealing)| {
+                        (*dealer_index, batch_signed_dealing.content.message_id())
+                    })
+            })
+            .collect()
     }
 }
 

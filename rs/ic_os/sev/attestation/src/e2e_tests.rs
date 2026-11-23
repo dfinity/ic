@@ -3,8 +3,8 @@ use crate::attestation_package::{
 };
 use crate::custom_data::{DerEncodedCustomData, EncodeSevCustomData, SevCustomDataNamespace};
 use crate::{
-    SevAttestationPackage, SevCertificateChain, VerificationErrorDescription,
-    VerificationErrorDetail,
+    LAUNCH_MEASUREMENT_LEN, SevAttestationPackage, SevCertificateChain,
+    VerificationErrorDescription, VerificationErrorDetail,
 };
 use attestation_testing::attestation_report::{
     AttestationReportBuilder, FakeAttestationReportSigner,
@@ -13,7 +13,7 @@ use sev::firmware::guest::GuestPolicy;
 use sev::parser::ByteParser;
 
 const CHIP_ID: [u8; 64] = [3; 64];
-const MEASUREMENT: [u8; 48] = [42; 48];
+const MEASUREMENT: [u8; LAUNCH_MEASUREMENT_LEN] = [42; LAUNCH_MEASUREMENT_LEN];
 
 #[derive(der::Sequence, Debug)]
 struct FooCustomData {
@@ -176,7 +176,7 @@ fn test_invalid_measurement() {
         SevRootCertificateVerification::TestOnlySkipVerification,
     )
     .unwrap()
-    .verify_measurement(&[[0; 48]]) // Different from MEASUREMENT
+    .verify_measurement(&[[0; LAUNCH_MEASUREMENT_LEN]]) // Different from MEASUREMENT
     .expect_err("Verification should fail due to invalid measurement")
     .detail
     .unwrap();

@@ -124,6 +124,7 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
         maybe_parallel_map(
             &mut thread_pool,
             checkpoint_layout.all_existing_pagemaps()?.into_iter(),
+            1,
             |pm| validate(pm),
         )
         .into_iter()
@@ -132,6 +133,7 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
         maybe_parallel_map(
             &mut thread_pool,
             checkpoint_layout.all_existing_wasm_files()?.into_iter(),
+            1,
             |wasm_file| try_mmap_wasm_file(wasm_file),
         )
         .into_iter()
@@ -510,8 +512,8 @@ impl CheckpointLoader {
                 .or_default()
                 .push(snapshot_id);
         }
-        let results = maybe_parallel_map(thread_pool, canister_ids.iter(), |canister_id| {
-            load_canister_state_from_checkpoint(
+        let results = maybe_parallel_map(thread_pool, canister_ids.iter(), 1, |canister_id| {
+            let (canister_state, durations) = load_canister_state_from_checkpoint(
                 &self.checkpoint_layout,
                 canister_id,
                 snapshot_ids_per_canister
@@ -520,7 +522,13 @@ impl CheckpointLoader {
                     .unwrap_or_default(),
                 Arc::clone(&self.fd_factory),
                 &self.metrics,
-            )
+            )?;
+
+            // Fill the log store's caches in parallel: `ReplicatedState::new_from_checkpoint`
+            // sequentially reads every cold canister's header (for its memory usage), and the
+            // retention metric requires every store's first timestamp.
+            canister_state.system_state.log_memory_store.fill_caches();
+            Ok::<_, CheckpointError>((canister_state, durations))
         });
 
         for result in results.into_iter() {
@@ -563,7 +571,7 @@ impl CheckpointLoader {
                 .or_default()
                 .push(snapshot_id);
         }
-        maybe_parallel_map(thread_pool, ref_canister_ids.iter(), |canister_id| {
+        maybe_parallel_map(thread_pool, ref_canister_ids.iter(), 1, |canister_id| {
             load_canister_state_from_checkpoint(
                 &self.checkpoint_layout,
                 canister_id,
@@ -829,6 +837,7 @@ pub fn load_canister_state(
             canister_state_bits.http_outcalls_executed,
             canister_state_bits.heartbeats_and_global_timers_executed,
         ),
+        canister_state_bits.connection_metrics,
     );
 
     let starting_time = Instant::now();

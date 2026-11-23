@@ -161,6 +161,12 @@ mod wycheproof {
     use crate::verify;
     use std::convert::TryInto;
 
+    /// Wycheproof Ed25519 test cases that are invalid under RFC 8032 but valid
+    /// under ZIP215, which ic-ed25519 (and so `verify`) follows. Test case 151
+    /// encodes R as y = 1 with the sign bit of x set, a non-canonical encoding
+    /// of the point (0, 1) that ZIP215 accepts.
+    const WYCHEPROOF_ED25519_VALID_UNDER_ZIP215: [usize; 1] = [151];
+
     #[test]
     fn should_pass_wycheproof_test_vectors() {
         let test_set = wycheproof::eddsa::TestSet::load(wycheproof::eddsa::TestName::Ed25519)
@@ -191,10 +197,20 @@ mod wycheproof {
                         .expect("Unexpected signature size"),
                 );
 
-                if test.result == wycheproof::TestResult::Valid {
-                    assert!(verify(&test_sig, &test.msg, &pk).is_ok());
+                if test.result == wycheproof::TestResult::Valid
+                    || WYCHEPROOF_ED25519_VALID_UNDER_ZIP215.contains(&test.tc_id)
+                {
+                    assert!(
+                        verify(&test_sig, &test.msg, &pk).is_ok(),
+                        "test case {} was rejected",
+                        test.tc_id
+                    );
                 } else {
-                    assert!(verify(&test_sig, &test.msg, &pk).is_err());
+                    assert!(
+                        verify(&test_sig, &test.msg, &pk).is_err(),
+                        "test case {} was accepted",
+                        test.tc_id
+                    );
                 }
             }
         }

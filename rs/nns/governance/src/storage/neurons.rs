@@ -439,7 +439,7 @@ where
         self.main.len().min(usize::MAX as u64) as usize
     }
 
-    pub fn range_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
+    pub fn range_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron>
     where
         R: RangeBounds<NeuronId> + Clone,
     {
@@ -451,7 +451,7 @@ where
         &self,
         range: R,
         sections: NeuronSections,
-    ) -> impl Iterator<Item = Neuron> + '_
+    ) -> impl Iterator<Item = Neuron>
     where
         R: RangeBounds<NeuronId> + Clone,
     {

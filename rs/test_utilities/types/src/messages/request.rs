@@ -5,6 +5,7 @@ use ic_types::{
     time::CoarseTime,
 };
 use ic_types_cycles::Cycles;
+use std::sync::Arc;
 
 pub struct RequestBuilder {
     request: Request,
@@ -24,6 +25,7 @@ impl Default for RequestBuilder {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
+                effective_canister_id: None,
             },
         }
     }
@@ -87,5 +89,10 @@ impl RequestBuilder {
     /// Returns the built `Request`.
     pub fn build(self) -> Request {
         self.request
+    }
+
+    /// Returns the built `Request`, wrapped in an `Arc`.
+    pub fn build_arc(self) -> Arc<Request> {
+        Arc::new(self.request)
     }
 }

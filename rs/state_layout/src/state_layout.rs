@@ -14,11 +14,13 @@ use ic_replicated_state::{
     CanisterStatus, ExportedFunctions, NumWasmPages,
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
-        system_state::{CanisterHistory, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata},
+        system_state::{
+            CanisterHistory, ConnectionMetrics, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata,
+        },
     },
     page_map::{Shard, StorageLayout, StorageResult},
 };
-use ic_sys::{fs::sync_path, mmap::ScopedMmap};
+use ic_sys::fs::sync_path;
 use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, ExecutionRound, Height, MemoryAllocation,
     NumInstructions, PrincipalId, SnapshotId, Time, batch::TotalQueryStats,
@@ -31,7 +33,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{From, TryFrom, identity};
 use std::ffi::OsStr;
 use std::fs::OpenOptions;
-use std::io::{Error, Write};
+use std::io::{Error, Read, Write};
 
 /// Result of marking files readonly, containing counts for monitoring
 #[derive(Clone, Debug)]
@@ -140,6 +142,7 @@ impl<T> WritePolicy for RwPolicy<'_, T> {}
 
 pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CheckpointStatus {
     /// Locally created checkpoint that has been fully verified.
     Verified,
@@ -200,6 +203,7 @@ pub struct CanisterStateBits {
     pub canister_creation_timestamp_nanos: Option<u64>,
     pub consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     pub consumed_cycles_by_use_cases_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
+    pub connection_metrics: BTreeMap<CanisterId, ConnectionMetrics>,
     pub instructions_executed: NumInstructions,
     pub ingress_messages_executed: u64,
     pub remote_subnet_messages_executed: u64,
@@ -1938,13 +1942,15 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     ///
     /// This is the canonical method for determining checkpoint status.
     /// Other methods should use this function rather than checking markers directly.
+    ///
+    /// `ExecutionMode::checkpoint_status` in `ic-recovery` duplicates this logic
+    /// with shell commands, as it also checks checkpoints on remote nodes; keep
+    /// the two in sync.
     pub fn checkpoint_status(&self) -> CheckpointStatus {
         if self.state_sync_checkpoint_marker().exists() {
-            // Checkpoints with state sync marker are always unverified. Therefore both markers should be present.
-            // For defensive programming, we treat it as unverified even if the unverified marker
-            // is accidentally missing, since the presence of a state sync marker alone indicates
-            // the checkpoint should never be considered verified.
-            debug_assert!(self.unverified_checkpoint_marker().exists());
+            // The state sync marker alone makes the checkpoint unverified. The unverified marker is
+            // normally present too, but is removed first, so a concurrent reader could observe only the
+            // state sync marker: let's thus not check that the unverified marker also exists.
             return CheckpointStatus::UnverifiedStateSync;
         }
         if self.unverified_checkpoint_marker().exists() {
@@ -1997,7 +2003,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
         let files_traversed = paths.len();
 
-        let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
+        let results = maybe_parallel_map(&mut thread_pool, paths.iter(), 1, |p| {
             match mark_readonly_if_file(p) {
                 Ok(was_made_readonly) => {
                     #[cfg(not(target_os = "linux"))]
@@ -2744,13 +2750,18 @@ where
         }
     }
 
-    fn deserialize_file(&self, f: std::fs::File) -> Result<T, LayoutError> {
-        let mmap = ScopedMmap::mmap_file_readonly(f).map_err(|io_err| LayoutError::IoError {
-            path: self.path.clone(),
-            message: "failed to mmap a file".to_string(),
-            io_err,
-        })?;
-        self.deserialize_buffer(mmap.as_slice())
+    fn deserialize_file(&self, mut f: std::fs::File) -> Result<T, LayoutError> {
+        // Read rather than map: unmapping flushes the mapping from the TLB of every
+        // CPU the replica's threads run on, which costs far more than copying a small
+        // file, and a checkpoint has several protobufs per canister.
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf)
+            .map_err(|io_err| LayoutError::IoError {
+                path: self.path.clone(),
+                message: "failed to read a file".to_string(),
+                io_err,
+            })?;
+        self.deserialize_buffer(&buf)
     }
 
     fn deserialize_buffer(&self, buf: &[u8]) -> Result<T, LayoutError> {
@@ -2882,6 +2893,11 @@ impl<T> WasmFile<T>
 where
     T: WritePolicy,
 {
+    /// Writes `wasm` to the file, replacing any existing one, and marks it readonly.
+    ///
+    /// Does not sync the file to disk: as with protobufs, the checkpoint's sync in
+    /// `finalize_and_remove_unverified_marker` makes it durable before the checkpoint is
+    /// marked verified.
     pub fn serialize(&self, wasm: &CanisterModule) -> Result<(), LayoutError> {
         // If there already exists a wasm file, delete it first to avoid writing hardlinked/readonly files.
         self.try_delete_file()?;
@@ -2897,12 +2913,6 @@ where
         file.flush().map_err(|err| LayoutError::IoError {
             path: self.path.clone(),
             message: "failed to flush wasm binary to disk".to_string(),
-            io_err: err,
-        })?;
-
-        file.sync_all().map_err(|err| LayoutError::IoError {
-            path: self.path.clone(),
-            message: "failed to sync wasm binary to disk".to_string(),
             io_err: err,
         })?;
 
@@ -2992,6 +3002,7 @@ fn dir_list_recursive(
         let next_paths_to_iterate = maybe_parallel_map(
             thread_pool,
             paths_to_iterate.iter(),
+            1,
             |path| -> std::io::Result<Vec<PathBuf>> {
                 let metadata = path.metadata()?;
                 if metadata.is_dir() {
@@ -3019,6 +3030,12 @@ enum FSync {
     Yes,
     No,
 }
+
+/// How many consecutive files of a copy plan (grouped by directory) each thread
+/// takes at a time. Threads linking into the same directory at once serialize on
+/// its lock; chunks this large keep them in different directories, yet are
+/// small enough that the last few don't leave the other threads idle for long.
+const HARDLINK_CHUNK_SIZE: usize = 256;
 
 /// Recursively copies `src` to `dst` using the given permission policy for
 /// files. If a thread-pool is provided then files are copied in parallel.
@@ -3061,6 +3078,7 @@ where
     let results = maybe_parallel_map(
         &mut thread_pool,
         copy_plan.create_and_sync_dir.iter(),
+        1,
         |op| {
             // We keep directories writeable to make sure we can rename
             // them or delete the files.
@@ -3071,6 +3089,7 @@ where
     let results = maybe_parallel_map(
         &mut thread_pool,
         copy_plan.copy_and_sync_file.iter(),
+        HARDLINK_CHUNK_SIZE,
         |op| copy_checkpoint_file(log, metrics, &op.src, &op.dst, fsync),
     );
     results.into_iter().try_for_each(identity)?;
@@ -3078,6 +3097,7 @@ where
         let results = maybe_parallel_map(
             &mut thread_pool,
             copy_plan.create_and_sync_dir.iter(),
+            1,
             |op| sync_path(&op.dst),
         );
         results.into_iter().try_for_each(identity)?;

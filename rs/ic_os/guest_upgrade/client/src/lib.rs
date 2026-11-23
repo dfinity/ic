@@ -1,4 +1,8 @@
-use crate::tls::SkipServerCertificateCheck;
+use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
 use anyhow::{Context, Error, Result, anyhow, bail};
 use attestation::SevAttestationPackage;
 use attestation::attestation_package::{
@@ -13,11 +17,7 @@ use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
 use http::Uri;
 use hyper_rustls::{HttpsConnectorBuilder, MaybeHttpsStream};
 use hyper_util::rt::TokioIo;
-use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
-use ic_interfaces_registry::RegistryClient;
-use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_client_helpers::replica_version::ReplicaVersionRegistry;
-use ic_registry_nns_data_provider_wrappers::CertifiedNnsDataProvider;
+use ic_types::ReplicaVersion;
 use rcgen::CertifiedKey;
 use rustls::ClientConfig;
 use rustls::pki_types::PrivateKeyDer;
@@ -25,10 +25,6 @@ use rustls::version::TLS13;
 use sev::firmware::guest::AttestationReport;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
-use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use tokio::net::TcpStream;
 use tonic::transport::{Channel, Endpoint};
 use tower::{Service, service_fn};
@@ -36,9 +32,11 @@ use x509_parser::certificate::X509Certificate;
 use x509_parser::nom::AsBytes;
 use x509_parser::prelude::FromDer;
 
-mod tls;
+use crate::elected_measurements::ElectedMeasurementsSource;
+use crate::tls::SkipServerCertificateCheck;
 
-const NNS_PUBLIC_KEY_PATH: &str = "/run/config/nns_public_key.pem";
+pub mod elected_measurements;
+mod tls;
 
 type ServiceClientType = DiskEncryptionKeyExchangeServiceClient<Channel>;
 
@@ -99,7 +97,7 @@ impl DiskCryptoOps for DefaultDiskCryptoOps {
 pub struct DiskEncryptionKeyExchangeClientAgent {
     guestos_config: GuestOSConfig,
     sev_firmware: Box<dyn SevGuestFirmware>,
-    nns_registry_client: Arc<dyn RegistryClient>,
+    elected_measurements_source: Arc<dyn ElectedMeasurementsSource>,
     store_device_path: PathBuf,
     store_luks_header_path: PathBuf,
     server_port: u16,
@@ -115,7 +113,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
         guestos_config: GuestOSConfig,
         sev_root_certificate_verification: SevRootCertificateVerification,
         sev_firmware: Box<dyn SevGuestFirmware>,
-        nns_registry_client: Arc<dyn RegistryClient>,
+        elected_measurements_source: Arc<dyn ElectedMeasurementsSource>,
         crypto_ops: Arc<dyn DiskCryptoOps>,
         store_device_path: PathBuf,
         store_luks_header_path: PathBuf,
@@ -124,7 +122,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
         DiskEncryptionKeyExchangeClientAgent {
             guestos_config,
             sev_firmware,
-            nns_registry_client,
+            elected_measurements_source,
             store_device_path,
             store_luks_header_path,
             server_port,
@@ -150,6 +148,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
             peer_guest_vm_address, self.server_port
         ))
         .context("Could not parse URL")?;
+
         println!("Connecting to server at {server_uri}");
         let (mut upgrade_service_client, server_public_key_der) = self
             .create_upgrade_service_client(server_uri.clone(), my_certificate)
@@ -166,12 +165,14 @@ impl DiskEncryptionKeyExchangeClientAgent {
             self.sev_firmware.as_mut(),
         ) {
             Ok(()) => {
-                println!(
+                let note = format!(
                     "{} can be opened with our derived key, no need to run exchange",
                     self.store_device_path.display()
                 );
-                Ok(())
+                println!("{note}");
+                Ok(note)
             }
+
             Err(err) => {
                 println!("Running the key exchange because the disk cannot be opened: {err:#}");
                 self.retrieve_disk_encryption_data(
@@ -184,28 +185,36 @@ impl DiskEncryptionKeyExchangeClientAgent {
             }
         };
 
+        let debug_info = match &retrieve_status {
+            Ok(note) => note.clone(),
+            Err(err) => format!("{err:?}"),
+        };
+
         let _ignored = upgrade_service_client
             .signal_status(SignalStatusRequest {
                 success: Some(retrieve_status.is_ok()),
-                debug_info: retrieve_status.as_ref().err().map(|e| format!("{e:?}")),
+                debug_info: Some(debug_info),
             })
             .await;
 
-        retrieve_status
+        retrieve_status.map(|_note| ())
     }
 
+    /// Retrieves and adopts the Store key and LUKS header from the server.
+    /// Returns a note on how the server was verified.
     async fn retrieve_disk_encryption_data(
         &mut self,
         upgrade_service_client: &mut ServiceClientType,
         my_public_key_der: &[u8],
         server_public_key_der: &[u8],
-    ) -> Result<()> {
+    ) -> Result<String> {
         let custom_data = GetDiskEncryptionKeyTokenCustomData {
             client_tls_public_key: OctetStringRef::new(my_public_key_der)
                 .expect("Could not encode public key"),
             server_tls_public_key: OctetStringRef::new(server_public_key_der)
                 .expect("Could not encode server public key"),
         };
+
         let my_attestation_package = generate_attestation_package(
             self.sev_firmware.as_mut(),
             self.guestos_config
@@ -230,20 +239,16 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .sev_attestation_package
             .context("Server attestation report is missing")?;
 
-        let registry_version = self.nns_registry_client.get_latest_version();
-        let elected_measurements = self
-            .nns_registry_client
-            .get_guest_launch_measurements(registry_version)
-            .map_err(|e| anyhow!("Failed to get elected measurements from registry: {e}"))?;
-
-        verify_server_attestation_package(
-            server_attestation_package,
-            &my_attestation_report,
-            &custom_data,
-            elected_measurements,
-            self.sev_root_certificate_verification,
-        )
-        .context("Failed to verify the server's attestation package")?;
+        let verification_note = self
+            .verify_server(
+                server_attestation_package,
+                disk_encryption_data.guestos_version,
+                &my_attestation_report,
+                &custom_data,
+            )
+            .await
+            .context("Failed to verify the server's attestation package")?;
+        println!("{verification_note}");
 
         let disk_encryption_key = disk_encryption_data
             .key
@@ -255,7 +260,94 @@ impl DiskEncryptionKeyExchangeClientAgent {
 
         self.adopt_store_artifacts(disk_encryption_key, luks_header)?;
 
-        Ok(())
+        Ok(verification_note)
+    }
+
+    /// Verifies the server's attestation package and returns a note on how it was verified.
+    ///
+    /// Everything except the server's launch measurement is verified first, since no elected
+    /// measurements can fix a failure there. The launch measurement is then checked against the
+    /// elected measurements of the GuestOS version that the server reports.
+    /// If the measurements of the reported version cannot be fetched or do not include the
+    /// server's measurement, we fall back to the old approach of checking against all elected
+    /// GuestOS versions.
+    async fn verify_server(
+        &self,
+        server_attestation_package: SevAttestationPackage,
+        server_guestos_version: Option<String>,
+        my_attestation_report: &AttestationReport,
+        custom_data: &GetDiskEncryptionKeyTokenCustomData<'_>,
+    ) -> Result<String> {
+        let server_attestation_package = verify_server_attestation_package_except_measurement(
+            server_attestation_package,
+            my_attestation_report,
+            custom_data,
+            self.sev_root_certificate_verification,
+        )?;
+
+        let version_verification = async {
+            let server_guestos_version =
+                server_guestos_version.context("Server did not report its GuestOS version")?;
+
+            let server_guestos_version = ReplicaVersion::try_from(server_guestos_version)
+                .context("Server reported an invalid GuestOS version")?;
+
+            let elected_measurements = self
+                .elected_measurements_source
+                .get_version_measurements(&server_guestos_version)
+                .await?;
+
+            verify_server_measurement(
+                &server_attestation_package,
+                my_attestation_report,
+                elected_measurements,
+            )?;
+
+            Ok::<_, Error>(server_guestos_version)
+        };
+
+        let version_verification_error = match version_verification.await {
+            Ok(server_guestos_version) => {
+                return Ok(format!(
+                    "Verified the server against the elected measurements of \
+                    GuestOS version {server_guestos_version}"
+                ));
+            }
+            Err(err) => err,
+        };
+
+        println!(
+            "Could not verify the server against the GuestOS version it reported, \
+            falling back to all elected GuestOS versions: {version_verification_error:#}"
+        );
+
+        let elected_measurements = self
+            .elected_measurements_source
+            .get_all_elected_measurements()
+            .await
+            .with_context(|| {
+                format!(
+                    "Verification against the reported GuestOS version failed first: \
+                     {version_verification_error:#}, then getting all elected measurements failed"
+                )
+            })?;
+
+        verify_server_measurement(
+            &server_attestation_package,
+            my_attestation_report,
+            elected_measurements,
+        )
+        .with_context(|| {
+            format!(
+                "Verification against the reported GuestOS version failed first: \
+                 {version_verification_error:#}, now it also failed against all elected measurements"
+            )
+        })?;
+
+        Ok(format!(
+            "Verified the server against all elected GuestOS versions. Verification against the \
+             reported GuestOS version failed: {version_verification_error:#}"
+        ))
     }
 
     /// Copies the received Store LUKS header to our Var partition and re-keys it: the old
@@ -350,12 +442,30 @@ impl DiskEncryptionKeyExchangeClientAgent {
     }
 }
 
-pub fn verify_server_attestation_package(
+/// Verifies everything in the server's attestation package except its launch measurement, which
+/// is checked separately by `verify_server_measurement`.
+pub fn verify_server_attestation_package_except_measurement(
     server_attestation_package: SevAttestationPackage,
     my_attestation_report: &AttestationReport,
     custom_data: &GetDiskEncryptionKeyTokenCustomData<'_>,
-    mut elected_measurements: Vec<Vec<u8>>,
     sev_root_certificate_verification: SevRootCertificateVerification,
+) -> Result<ParsedSevAttestationPackage> {
+    ParsedSevAttestationPackage::parse(
+        server_attestation_package,
+        sev_root_certificate_verification,
+    )
+    .verify_custom_data(custom_data)
+    .verify_chip_id(&[my_attestation_report.chip_id])
+    .verify_guest_policy()
+    .context("Server attestation report verification failed")
+}
+
+/// Verifies that the launch measurement of the server's attestation package, otherwise verified
+/// by `verify_server_attestation_package_except_measurement`, is one of `elected_measurements`.
+pub fn verify_server_measurement(
+    server_attestation_package: &ParsedSevAttestationPackage,
+    my_attestation_report: &AttestationReport,
+    mut elected_measurements: Vec<Vec<u8>>,
 ) -> Result<()> {
     // Our own launch measurement is not eligible: without this check, an attacker
     // occupying the server endpoint could reflect our own attestation package back to us.
@@ -363,15 +473,9 @@ pub fn verify_server_attestation_package(
         measurement.as_slice() != my_attestation_report.measurement.as_slice()
     });
 
-    ParsedSevAttestationPackage::parse(
-        server_attestation_package,
-        sev_root_certificate_verification,
-    )
-    .verify_measurement(&elected_measurements)
-    .verify_custom_data(custom_data)
-    .verify_chip_id(&[my_attestation_report.chip_id])
-    .verify_guest_policy()
-    .context("Server attestation report verification failed")?;
+    server_attestation_package
+        .verify_measurement(&elected_measurements)
+        .context("Server attestation report verification failed")?;
 
     Ok(())
 }
@@ -405,21 +509,4 @@ fn extract_server_public_key_der(conn: &MaybeHttpsStream<TokioIo<TcpStream>>) ->
     .to_vec();
 
     Ok(public_key_der)
-}
-
-pub fn create_nns_registry_client(guestos_config: &GuestOSConfig) -> Result<RegistryClientImpl> {
-    let nns_public_key = parse_threshold_sig_key_from_pem_file(Path::new(NNS_PUBLIC_KEY_PATH))
-        .context("Cannot read NNS public key")?;
-
-    let client = RegistryClientImpl::new(
-        Arc::new(CertifiedNnsDataProvider::new(
-            tokio::runtime::Handle::current(),
-            guestos_config.icos_settings.nns_urls.clone(),
-            nns_public_key,
-        )),
-        /*metrics_registry=*/ None,
-    );
-    client.try_polling_latest_version(usize::MAX)?;
-
-    Ok(client)
 }

@@ -3,12 +3,11 @@
         "RA_LOG": "info"
     },
     "rust-analyzer.procMacro.enable": true,
-    "rust-analyzer.procMacro.server": ".vscode/proc-macro-srv-wrapper",
     "[bazel]": {
         "editor.defaultFormatter": "StackBuild.bazel-stack-vscode",
         "editor.formatOnSave": true
     },
-    "bazel.buildifierExecutable": "@buildifier",
+    "bazel.buildifier.executable": "@buildifier_prebuilt//:buildifier",
     "cSpell.words": [
         "blockmaker",
         "blockmakers",

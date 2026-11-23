@@ -37,6 +37,7 @@ use ic_utils::thread::parallel_map;
 use ic_utils_thread::JoinOnDrop;
 use ic_wasm_types::{CanisterModule, ModuleLoadingStatus};
 use prometheus::HistogramTimer;
+use std::cmp::Reverse;
 use std::collections::BTreeSet;
 use std::convert::identity;
 use std::ops::Deref;
@@ -465,9 +466,18 @@ pub(crate) fn spawn_tip_thread(
                                 );
                             });
 
+                            // Largest deltas first, so that `parallel_map` starts them right
+                            // away.
+                            let mut pagemaps = pagemaps;
+                            pagemaps.sort_by_cached_key(|p| {
+                                Reverse(p.page_map.as_ref().map_or(0, |page_map| {
+                                    page_map.num_unflushed_delta_pages()
+                                }))
+                            });
                             parallel_map(
                                 &mut thread_pool,
                                 pagemaps.into_iter(),
+                                1,
                                 |PageMapToFlush {
                                      page_map_type,
                                      truncate,
@@ -992,6 +1002,7 @@ fn merge_candidates_and_storage_info(
         parallel_map(
             thread_pool,
             pagemaptypes.iter(),
+            1,
             |page_map_type| -> StorageResult<(Vec<MergeCandidate>, StorageInfo)> {
                 let mut storage_info = StorageInfo {
                     disk_size: 0,
@@ -1199,8 +1210,14 @@ fn merge(
         .with_label_values(&["storage"])
         .observe(merges_by_storage as f64);
 
-    parallel_map(thread_pool, scheduled_merges.iter(), |m| {
-        m.apply(&metrics.storage_metrics)
+    // Largest first, so that `parallel_map` starts them right away.
+    scheduled_merges.sort_by_key(|m| Reverse(m.write_size_bytes()));
+    parallel_map(thread_pool, scheduled_merges.iter(), 1, |m| {
+        m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
+            // A failed merge may have removed its input files from the tip and left a partial
+            // output behind, so the next checkpoint would include a corrupt `PageMap`.
+            fatal!(log, "Failed to merge PageMap files: {}", err);
+        })
     });
 }
 
@@ -1259,7 +1276,7 @@ fn serialize_protos_to_checkpoint_readwrite(
         query_stats: state.query_stats().as_query_stats(),
     })?;
 
-    let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
+    let results = parallel_map(thread_pool, state.canisters_iter(), 1, |canister_state| {
         serialize_canister_protos_to_checkpoint_readwrite(canister_state, checkpoint_readwrite)?;
         for canister_snapshot in canister_state.canister_snapshots.iter() {
             serialize_snapshot_protos_to_checkpoint_readwrite(
@@ -1293,7 +1310,7 @@ fn serialize_wasm_binaries(
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<(), CheckpointError> {
-    parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
+    parallel_map(thread_pool, state.canisters_iter(), 1, |canister_state| {
         serialize_canister_wasm_binary(canister_state, tip)?;
         for (snapshot_id, snapshot) in canister_state.canister_snapshots.iter() {
             serialize_snapshot_wasm_binary(snapshot_id, snapshot, tip)?;
@@ -1492,6 +1509,12 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             http_outcalls_executed: load_metrics_bits.http_outcalls_executed(),
             heartbeats_and_global_timers_executed: load_metrics_bits
                 .heartbeats_and_global_timers_executed(),
+            connection_metrics: canister_state
+                .system_state
+                .canister_metrics()
+                .connection_metrics()
+                .get()
+                .clone(),
         }
         .into(),
     )?;
@@ -1788,15 +1811,20 @@ fn publish_bundled_manifest(
     height: Height,
     bundled_manifest: crate::BundledManifest,
 ) {
-    if !matches!(
-        state_layout.checkpoint_status(height),
-        Ok(CheckpointStatus::Verified),
-    ) {
-        fatal!(
+    match state_layout.checkpoint_status(height) {
+        Ok(CheckpointStatus::Verified) => {}
+        Err(LayoutError::NotFound(_)) => {
+            warn!(
+                log,
+                "Not publishing manifest for already removed checkpoint @{}", height
+            );
+            return;
+        }
+        _ => fatal!(
             log,
             "Trying to publish manifest for unverified checkpoint @{}",
             height
-        );
+        ),
     }
 
     let mut states = states.write();
@@ -1831,6 +1859,45 @@ mod test {
                 metrics,
                 MaliciousFlags::default(),
             );
+        });
+    }
+
+    #[test]
+    fn publish_bundled_manifest_for_removed_checkpoint_is_noop() {
+        with_test_replica_logger(|log| {
+            let tmp = tmpdir("checkpoint");
+            let root = tmp.path().to_path_buf();
+            let metrics_registry = MetricsRegistry::new();
+            let layout = StateLayout::try_new(log.clone(), root, &metrics_registry).unwrap();
+            let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
+            let states = parking_lot::RwLock::new(SharedState {
+                certifications_metadata: Default::default(),
+                certifications: Default::default(),
+                states_metadata: Default::default(),
+                snapshots: Default::default(),
+                last_advertised: Height::new(0),
+                fetch_state: None,
+                tip_height: Height::new(0),
+                tip: None,
+            });
+            let bundled_manifest =
+                compute_bundled_manifest(crate::state_sync::types::Manifest::new(
+                    ic_types::state_sync::CURRENT_STATE_SYNC_VERSION,
+                    vec![],
+                    vec![],
+                ));
+
+            publish_bundled_manifest(
+                &log,
+                &metrics,
+                &layout,
+                &states,
+                &Arc::new(Mutex::new(())),
+                Height::new(1),
+                bundled_manifest,
+            );
+
+            assert!(states.read().states_metadata.is_empty());
         });
     }
 }

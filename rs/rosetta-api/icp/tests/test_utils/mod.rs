@@ -248,7 +248,7 @@ impl LedgerAccess for TestLedger {
     }
 
     async fn rosetta_blocks_mode(&self) -> RosettaBlocksMode {
-        RosettaBlocksMode::Disabled
+        self.blockchain.read().await.rosetta_blocks_mode
     }
 }
 

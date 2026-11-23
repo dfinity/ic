@@ -423,15 +423,15 @@ impl CyclesMintingLimiterSelector {
 }
 
 // Helper to print messages in yellow
-fn print<S: std::convert::AsRef<str>>(s: S)
-where
-    yansi::Paint<S>: std::string::ToString,
-{
+fn print<S: std::convert::AsRef<str>>(s: S) {
+    // ANSI escape sequences: set foreground color to yellow, then reset.
+    let s = format!("\x1b[33m{}\x1b[0m", s.as_ref());
+
     #[cfg(target_arch = "wasm32")]
-    ic_cdk::api::debug_print(yansi::Paint::yellow(s).to_string());
+    ic_cdk::api::debug_print(s);
 
     #[cfg(not(target_arch = "wasm32"))]
-    println!("{}", yansi::Paint::yellow(s).to_string());
+    println!("{s}");
 }
 
 fn main() {}

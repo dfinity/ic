@@ -9,7 +9,6 @@ documentation.workspace = true
 [dependencies]
 dfn_candid = { path = "../dfn_candid" }
 dfn_core = { path = "../dfn_core" }
-dfn_http = { path = "../dfn_http" }
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-metrics-encoder = { workspace = true }
 serde_bytes = { workspace = true }

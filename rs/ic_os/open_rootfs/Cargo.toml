@@ -12,12 +12,9 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
-ic-certificate-verification = { workspace = true }
-ic-certification = { workspace = true }
 pem = { workspace = true }
 rand = { workspace = true }
 sev = { workspace = true }
-serde_cbor = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 
@@ -29,7 +26,6 @@ config_types = { path = "../config/types" }
 ic_device = { path = "../device" }
 ic_os_logging = { path = "../logging" }
 ic-nns-common = { path = "../../nns/common" }
-ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 linux_kernel_command_line = { path = "../linux_kernel_command_line" }
 sev_guest = { path = "../sev/guest" }

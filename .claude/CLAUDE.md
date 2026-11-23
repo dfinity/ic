@@ -5,13 +5,32 @@ Inside the dev container (`ci/container/container-run.sh` or the VS Code
 devcontainer) the checkout is mounted at the same absolute path as on the host
 (canonical, i.e. with symlinks resolved) and is the working directory.
 
-Never manually edit `ci/container/TAG`. It is bumped only by the
+Never manually edit `ci/container/TAG`, `ci/container/ic-dev.digest` or
+`ci/container/ic-build.digest`. They are written only by the
 `container-autobuild.yml` GitHub Actions workflow, which builds the new
-dev-container image and pushes it to the registry *before* the tag change
-takes effect. Hand-editing it points the tag at an image that was never built
-or published, breaking CI for everyone. If the dev container image genuinely
-needs to change (e.g. `ci/container/Dockerfile` was edited), let that workflow
-bump `TAG` — don't do it in your commit.
+dev-container image and pushes it to the registry *before* the new tag and
+digests take effect. A hand-edited `TAG` names an image that was never built or
+published, and a hand-edited `.digest` names content the registry does not
+serve, so `container-run.sh` refuses to run; either way CI breaks for everyone.
+If the dev container image genuinely needs to change (e.g.
+`ci/container/Dockerfile` was edited), let that workflow bump `TAG` and the
+digests — don't do it in your commit.
+
+# Code Comments
+
+In general, focus comments on the code as it CURRENTLY stands.
+
+Assume that the reader is NOT familiar with:
+
+- the way the code used to be
+- bugs that have been fixed
+
+In rare cases, the most efficient way for the reader to understand the present
+is to tell them about the past. Other than that, do not dredge up the past.
+
+Do not mention dangerous alternative ways to implement a similar effect unless
+the alternatives are particularly attractive. That is, the dangerous alternative
+somehow SEEMS right, AND the right way SEEMS wrong and/or inconvenient.
 
 # Rust
 

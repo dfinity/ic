@@ -9,6 +9,7 @@ use std::{
 
 use anyhow::{Context, Result, anyhow};
 use ic_crypto_sha2::Sha256;
+use ic_nns_constants::MIGRATION_CANISTER_ID;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -42,7 +43,7 @@ const PROMETHEUS_VM_NAME: &str = "prometheus";
 /// Following through to the "Upload UVM images to S3" job and copying the <SHA256-HASH> from the line:
 /// upload: ../../../../../nix/store/...-nixos-disk-image-out-refs-discarded/nixos.img.zst to s3://dfinity-download/farm/prometheus-vm/<SHA256-HASH>/x86_64-linux/prometheus-vm.img.zst
 const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
-    "6dc09a214f1975ce55a42a560b67b44ac58a61b52e3c3e9cf03dc2d7fbdd5f02";
+    "fde6f2a624bdbf7e40fc47a5cadb96a7d007364744bd6fe6e322d142912d584e";
 
 fn get_default_prometheus_vm_img_url() -> String {
     format!(
@@ -82,6 +83,7 @@ const BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET: &str =
     "bitcoin_watchdog_testnet_canister.json";
 const DOGECOIN_MAINNET_CANISTER_PROMETHEUS_TARGET: &str = "dogecoin_mainnet_canister.json";
 const DOGECOIN_TESTNET_CANISTER_PROMETHEUS_TARGET: &str = "dogecoin_testnet_canister.json";
+const MIGRATION_CANISTER_PROMETHEUS_TARGET: &str = "migration_canister.json";
 const IC_GATEWAY_PROMETHEUS_TARGET: &str = "ic_gateways.json";
 const IC_BOUNDARY_PROMETHEUS_TARGET: &str = "ic_boundary.json";
 const NESTED_HOSTS_PROMETHEUS_TARGET: &str = "nested_hosts.json";
@@ -480,6 +482,7 @@ impl HasPrometheus for TestEnv {
             target_json_files.push(BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET);
             target_json_files.push(DOGECOIN_MAINNET_CANISTER_PROMETHEUS_TARGET);
             target_json_files.push(DOGECOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
+            target_json_files.push(MIGRATION_CANISTER_PROMETHEUS_TARGET);
         }
 
         // Hash the contents of the scraping target JSON files and exit early if nothing changed compared to the last time we synced.
@@ -603,6 +606,8 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
         .join(DOGECOIN_MAINNET_CANISTER_PROMETHEUS_TARGET);
     let dogecoin_testnet_canister_scraping_target_path = Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR)
         .join(DOGECOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
+    let migration_canister_scraping_target_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(MIGRATION_CANISTER_PROMETHEUS_TARGET);
     let scrape_interval_str: String = format!("{}s", scrape_interval.as_secs());
     let prometheus_config = json!({
         "global": {"scrape_interval": scrape_interval_str},
@@ -710,6 +715,16 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
                 "follow_redirects": true,
                 "enable_http2": true,
                 "file_sd_configs": [{"files": [dogecoin_testnet_canister_scraping_target_path]}],
+            },
+            {
+                "job_name": "migration-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "honor_timestamps": true,
+                "metrics_path": "/metrics",
+                "scheme": "https",
+                "follow_redirects": true,
+                "enable_http2": true,
+                "file_sd_configs": [{"files": [migration_canister_scraping_target_path]}],
             },
         ],
     });
@@ -877,7 +892,8 @@ fn sync_prometheus_config_dir(
                 ]),
             }],
         )?;
-        // Bitcoin and Dogecoin canisters
+        // Bitcoin, Dogecoin and migration canisters
+        let migration_canister_id = MIGRATION_CANISTER_ID.to_string();
         for (prometheus_target, canister_id) in [
             (
                 BITCOIN_MAINNET_CANISTER_PROMETHEUS_TARGET,
@@ -902,6 +918,10 @@ fn sync_prometheus_config_dir(
             (
                 DOGECOIN_TESTNET_CANISTER_PROMETHEUS_TARGET,
                 "hd7hi-kqaaa-aaaan-aaaea-cai",
+            ),
+            (
+                MIGRATION_CANISTER_PROMETHEUS_TARGET,
+                migration_canister_id.as_str(),
             ),
         ] {
             serde_json::to_writer(

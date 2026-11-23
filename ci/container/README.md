@@ -73,9 +73,18 @@ What the container sees:
 
 - The checkout (`git rev-parse --show-toplevel`) is bind-mounted at **the same absolute path as on the host** (canonical, i.e. with symlinks resolved) and is the working directory. Host paths therefore stay valid inside the container, and so do the absolute `gitdir:` pointers of linked git worktrees (`git worktree add`), whose main `.git` directory is bind-mounted at its host path as well. Nothing is mounted at `/ic`.
 - The container user matches the host uid: `ubuntu` (1000, home `/home/ubuntu`) or `buildifier` (1001, home `/home/buildifier`). Any other uid falls back to `root` with a warning; files created by the container are then root-owned.
-- `~/.cache` (or the directory given with `-c`/`--cache-dir`) is mounted at the container user's `~/.cache`. It holds bazel's output_user_root (output bases, install base, repository cache) and persists across containers. `~/.aws`, `~/.ssh` and `~/.claude` are mounted into the container user's home too, and the ssh agent socket is forwarded if one is running.
+- `~/.cache` (or the directory given with `-c`/`--cache-dir`) is mounted at the container user's `~/.cache`. It holds bazel's output_user_root (output bases, install base, repository cache) and persists across containers. `~/.aws`, `~/.ssh`, `~/.claude` and `~/.config` are mounted into the container user's home too, and the ssh agent socket is forwarded if one is running.
+- Since `~/.config` is shared, `gh` uses the host's login. If the host keeps the gh token in a system keyring, `~/.config/gh/hosts.yml` has no token; run `gh auth login --insecure-storage` on the host. Every other host tool config under `~/.config` applies in the container as well, including `~/.config/containers/`, which reconfigures the rootless podman that ic-os image builds run.
 - On a devenv, `~/.gitconfig` and the shell history files are mounted as well and `CARGO_TARGET_DIR` is set to `~/.cache/cargo`.
 - Extra `podman run`/`docker run` arguments come from `~/.container-run.conf` (see below).
+
+### Image pinning
+
+`container-run.sh` never pulls an image by registry tag: the tags on `ghcr.io/dfinity/ic-dev` and `ghcr.io/dfinity/ic-build` are mutable and can be re-pointed without review. Instead it pulls `ghcr.io/dfinity/<image>@sha256:...` using the digest committed in [ic-dev.digest](ic-dev.digest) / [ic-build.digest](ic-build.digest), which the container runtime verifies against the downloaded content, and starts exactly that reference with `--pull=never`. Like [TAG](TAG), the `.digest` files are written only by the `container-autobuild.yml` workflow, in the same commit that pins the digests in `.devcontainer/` and `.github/workflows/`; [check-image-pins.sh](check-image-pins.sh), run by that workflow before it commits and by the `test-container-run` job of `ci-main.yml` on every run, fails if any of those references disagrees with the `.digest` files. Never edit them by hand: a malformed pin makes the script refuse to run, and a digest the registry does not serve cannot be pulled, so the script refuses as well.
+
+`TAG` is the hash of `Dockerfile`, `init.sh` and `files/*`. If your working tree hashes to something else (you edited one of those files, or the autobuild's bot commit has not landed on your branch yet) no reviewed digest exists for it and the script refuses to run. To build the image locally from your checkout instead (slow, and it needs network), set `CONTAINER_RUN_ALLOW_UNPINNED=1`; an existing local `<image>:<tag>` is then reused. Once the bot commit lands, `git pull` and re-run to get the registry image. The autobuild cannot publish for pull requests from forks, so contributors working on a fork need `CONTAINER_RUN_ALLOW_UNPINNED=1` after touching those files.
+
+By default the script never runs an image that is not verified against the pin: no local build, and no reuse of a cached image when the pinned pull fails (e.g. offline). `CONTAINER_RUN_ALLOW_UNPINNED=1` opts out of that for one run and is announced with a warning; leave it unset when verifying release artifacts.
 
 ### How to use custom config
 
@@ -84,7 +93,6 @@ User can create config `$HOME/.container-run.conf`, with `podman run` arguments,
 ```bash
 PODMAN_RUN_USR_ARGS=(
     --mount type=bind,source=${HOME}/dev,target=/home/ubuntu/dev
-    --mount type=bind,source=${HOME}/.config/fish,target=/home/ubuntu/.config/fish
     -e TESTVARIABLE="something-i-expect"
 )
 ```

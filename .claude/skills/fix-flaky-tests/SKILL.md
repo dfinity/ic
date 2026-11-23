@@ -28,7 +28,7 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
 
     1. Run the following command to get the top 100 tests ordered descendingly by how much percent of their total runs they flaked in the last week, showing only tests which flaked 1% or more of their runs:
        ```
-       bazel run //ci/githubstats:query -- top 100 flaky% --ge 1 --week
+       bazel --quiet run //ci/githubstats:query -- top 100 flaky% --ge 1 --week
        ```
 
     2. Pick the `label` of the top most test which doesn't have an open PR or git commit in the last week mentioning its `<test_name>` which is the part of the `label` after the `:`.
@@ -52,16 +52,17 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
 
 2. Get the last flaky runs of the test named `label` in the last week by running one of the following commands, replacing `<label>` with the label of the test:
 
-   - For most system-tests, which run via Farm, also download their journald logs from ElasticSearch and their console logs from Farm:
+   - For `_farm` system-tests, which run via Farm, also download their journald logs from ElasticSearch and their console logs from Farm. CI Main only runs the `_local` variants, so only the Farm variants of `system_test_large` tests (release-testing) and of the tests the nightly workflows select still run regularly:
      ```
-     bazel run //ci/githubstats:query -- last --flaky --week --download-ic-logs --download-console-logs <label>
+     bazel --quiet run //ci/githubstats:query -- last --flaky --week --download-ic-logs --download-console-logs <label>
      ```
 
    - For `_local` system-tests, i.e. targets matching the regex `//rs/tests/.*_local$`, omit the `--download-ic-logs` and `--download-console-logs` options:
      ```
-     bazel run //ci/githubstats:query -- last --flaky --week <label>
+     bazel --quiet run //ci/githubstats:query -- last --flaky --week <label>
      ```
      These tests use the `Local` backend which doesn't run via Farm and doesn't upload its journald logs to ElasticSearch. Instead the journald and console logs are streamed to the test log itself (the `FAILED.log`/`PASSED.log` files), so there's nothing to download from ElasticSearch or Farm.
+     In CI Main they run on RBE @ Namespace, so their logs come from GitHub artifacts instead of BuildBuddy. GitHub deletes those after 14 days, and downloading them needs `gh` to be logged in (see the prerequisites).
 
    Note the command will print `Downloading logs to: <LOG_DIR>`.
 

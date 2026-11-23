@@ -10,7 +10,6 @@ documentation.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-base64 = { workspace = true }
 candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-icrc1-index-ng = { path = "../../ledger_suite/icrc1/index-ng" }
@@ -25,8 +24,6 @@ ic-sns-governance = { path = "../governance" }
 ic-sns-root = { path = "../root" }
 ic-sns-swap = { path = "../swap" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-isocountry = "0.3.2"
-lazy_static = { workspace = true }
 maplit = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true }

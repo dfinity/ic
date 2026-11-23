@@ -395,8 +395,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             Ok(archive_guard) => {
                 let num_archives = archive_guard
                     .as_ref()
-                    .iter()
-                    .fold(0, |sum, archive| sum + archive.nodes().iter().len());
+                    .map_or(0, |archive| archive.nodes().len());
                 w.encode_counter(
                     "ledger_num_archives",
                     num_archives as f64,

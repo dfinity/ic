@@ -37,8 +37,8 @@ name = "ic-systest-nested-nns-recovery-large-with-mainnet-state"
 path = "nr_large_with_mainnet_state.rs"
 
 [[bin]]
-name = "ic-systest-nested-nns-recovery-local"
-path = "nr_local.rs"
+name = "ic-systest-nested-nns-recovery-locally"
+path = "nr_locally.rs"
 
 [[bin]]
 name = "ic-systest-nested-nns-recovery-no-elect-fix-like-np"

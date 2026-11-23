@@ -14,7 +14,7 @@ use ic_protobuf::{
     },
     types::v1 as pb_types,
 };
-use ic_types::{AccumulatedPriority, ExecutionRound, subnet_id_try_from_protobuf};
+use ic_types::{AccumulatedPriority, ExecutionRound, Height, subnet_id_try_from_protobuf};
 
 impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
     fn from(item: &NetworkTopology) -> Self {
@@ -257,8 +257,6 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
             consumed_cycles_by_deleted_canisters: Some(
                 (&item.consumed_cycles_by_deleted_canisters).into(),
             ),
-            consumed_cycles_http_outcalls: Some((&item.consumed_cycles_http_outcalls).into()),
-            consumed_cycles_ecdsa_outcalls: Some((&item.consumed_cycles_ecdsa_outcalls).into()),
             threshold_signature_agreements: item
                 .threshold_signature_agreements
                 .iter()
@@ -276,18 +274,10 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
                     cycles: Some((&cycles).into()),
                 })
                 .collect(),
-            consumed_cycles_by_use_case_monotonic: item
-                .consumed_cycles_by_use_case_monotonic
-                .clone()
-                .into_iter()
-                .map(|(use_case, cycles)| ConsumedCyclesByUseCase {
-                    use_case: pbCyclesUseCase::from(use_case).into(),
-                    cycles: Some((&cycles).into()),
-                })
-                .collect(),
             num_canisters: Some(item.num_canisters),
             canister_state_bytes: Some(item.canister_state_bytes.get()),
             update_transactions_total: Some(item.update_transactions_total),
+            round_instructions_total: Some(item.round_instructions_total),
         }
     }
 }
@@ -298,19 +288,6 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
         let mut consumed_cycles_by_use_case = BTreeMap::new();
         for x in item.consumed_cycles_by_use_case.into_iter() {
             consumed_cycles_by_use_case.insert(
-                CyclesUseCase::try_from(pbCyclesUseCase::try_from(x.use_case).map_err(|_| {
-                    ProxyDecodeError::ValueOutOfRange {
-                        typ: "CyclesUseCase",
-                        err: format!("Unexpected value of cycles use case: {}", x.use_case),
-                    }
-                })?)?,
-                NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
-            );
-        }
-
-        let mut consumed_cycles_by_use_case_monotonic = BTreeMap::new();
-        for x in item.consumed_cycles_by_use_case_monotonic.into_iter() {
-            consumed_cycles_by_use_case_monotonic.insert(
                 CyclesUseCase::try_from(pbCyclesUseCase::try_from(x.use_case).map_err(|_| {
                     ProxyDecodeError::ValueOutOfRange {
                         typ: "CyclesUseCase",
@@ -337,23 +314,13 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 item.consumed_cycles_by_deleted_canisters,
                 "SubnetMetrics::consumed_cycles_by_deleted_canisters",
             )?,
-            consumed_cycles_http_outcalls: try_from_option_field(
-                item.consumed_cycles_http_outcalls,
-                "SubnetMetrics::consumed_cycles_http_outcalls",
-            )
-            .unwrap_or_else(|_| NominalCycles::zero()),
-            consumed_cycles_ecdsa_outcalls: try_from_option_field(
-                item.consumed_cycles_ecdsa_outcalls,
-                "SubnetMetrics::consumed_cycles_ecdsa_outcalls",
-            )
-            .unwrap_or_else(|_| NominalCycles::zero()),
             threshold_signature_agreements,
             consumed_cycles_by_use_case,
-            consumed_cycles_by_use_case_monotonic,
             // Transient, with no corresponding proto field:
             // `ReplicatedState::new_from_checkpoint` derives it from the canisters
             // it loads.
             consumed_cycles_total_including_canisters: NominalCycles::zero(),
+            consumed_cycles_total_including_canisters_monotonic: NominalCycles::zero(),
             num_canisters: try_from_option_field(
                 item.num_canisters,
                 "SubnetMetrics::num_canisters",
@@ -366,6 +333,9 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 item.update_transactions_total,
                 "SubnetMetrics::update_transactions_total",
             )?,
+            // Absent from every checkpoint written before this field existed, so it
+            // must default rather than fail like its neighbours above.
+            round_instructions_total: item.round_instructions_total.unwrap_or_default(),
         })
     }
 }
@@ -451,7 +421,50 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                     last_full_execution_round: priority.last_full_execution_round.get(),
                 })
                 .collect(),
+            upgrade_state: Some((&item.upgrade_state).into()),
         }
+    }
+}
+
+impl From<&UpgradeState> for pb_metadata::UpgradeState {
+    fn from(item: &UpgradeState) -> Self {
+        Self {
+            unauthorized_upgrade_requests: item
+                .unauthorized_upgrade_requests
+                .iter()
+                .map(
+                    |(node, height)| pb_metadata::upgrade_state::UpgradePermitRequest {
+                        node: Some(node_id_into_protobuf(*node)),
+                        request_height: height.get(),
+                    },
+                )
+                .collect(),
+            rebooting_nodes: item
+                .rebooting_nodes
+                .iter()
+                .map(|node| node_id_into_protobuf(*node))
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::UpgradeState> for UpgradeState {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_metadata::UpgradeState) -> Result<Self, Self::Error> {
+        let mut unauthorized_upgrade_requests = BTreeMap::new();
+        for entry in item.unauthorized_upgrade_requests {
+            let node = node_id_try_from_option(entry.node)?;
+            unauthorized_upgrade_requests.insert(node, Height::from(entry.request_height));
+        }
+        let mut rebooting_nodes = BTreeSet::new();
+        for node in item.rebooting_nodes {
+            rebooting_nodes.insert(node_id_try_from_option(Some(node))?);
+        }
+        Ok(UpgradeState {
+            unauthorized_upgrade_requests,
+            rebooting_nodes,
+        })
     }
 }
 
@@ -623,6 +636,10 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             },
             unflushed_checkpoint_ops: Default::default(),
             subnet_ids_at_last_reject_generation: None,
+            upgrade_state: match item.upgrade_state {
+                Some(upgrade_state) => upgrade_state.try_into()?,
+                None => UpgradeState::default(),
+            },
         })
     }
 }

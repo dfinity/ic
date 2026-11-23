@@ -21,9 +21,9 @@
 //!   only up to its length at open time (a node logging faster than we parse
 //!   must not keep the scan alive), a final line without a trailing newline is
 //!   skipped, unparseable lines are skipped and counted, and matches are
-//!   de-duplicated by `__CURSOR` (a reconnecting stream re-emits the record at
-//!   its cursor). IC nodes excluded from streaming via `--exclude-logs` are not
-//!   scanned.
+//!   de-duplicated by `__CURSOR` (a safety net; the stream itself skips the
+//!   record re-emitted at its checkpoint cursor on reconnect). IC nodes
+//!   excluded from streaming via `--exclude-logs` are not scanned.
 //!
 //! Both sources are matched on the Vector-normalized `MESSAGE`
 //! ([`normalize_message`] reproduces the `to_json` transform of

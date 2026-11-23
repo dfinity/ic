@@ -103,12 +103,54 @@ fn ensure_only_allowed_fields_set_accepts_is_halted() {
 }
 
 #[test]
-fn ensure_only_allowed_fields_set_accepts_subnet_admins_and_is_halted() {
+fn ensure_only_allowed_fields_set_accepts_cooling_down() {
+    for cooling_down in [true, false] {
+        let mut payload = empty_update_payload();
+        payload.cooling_down = Some(cooling_down);
+        ensure_only_allowed_fields_set(&payload)
+            .unwrap_or_else(|e| panic!("cooling_down={cooling_down} payload must be allowed: {e}"));
+    }
+}
+
+#[test]
+fn ensure_only_allowed_fields_set_accepts_all_allowed_fields() {
     let mut payload = empty_update_payload();
     payload.subnet_admins = Some(vec![PrincipalId::new_user_test_id(42)]);
     payload.is_halted = Some(true);
+    payload.cooling_down = Some(true);
     ensure_only_allowed_fields_set(&payload)
-        .expect("subnet_admins + is_halted payload must be allowed");
+        .expect("subnet_admins + is_halted + cooling_down payload must be allowed");
+}
+
+#[test]
+fn ensure_only_allowed_fields_set_accepts_state_limits() {
+    let mut payload = empty_update_payload();
+    payload.resource_limits = Some(ResourceLimitsPb {
+        maximum_state_size: Some(1 << 30),
+        maximum_state_delta: Some(1 << 28),
+        ..Default::default()
+    });
+    ensure_only_allowed_fields_set(&payload).expect("state limits must be allowed");
+}
+
+#[test]
+fn ensure_only_allowed_fields_set_rejects_query_limits() {
+    let mut payload = empty_update_payload();
+    payload.resource_limits = Some(ResourceLimitsPb {
+        maximum_state_size: Some(1 << 30),
+        maximum_query_instructions: Some(1),
+        maximum_query_walltime_seconds: Some(1),
+        ..Default::default()
+    });
+    let err = ensure_only_allowed_fields_set(&payload).expect_err("should reject");
+    assert!(
+        err.contains("resource_limits.maximum_query_instructions"),
+        "error must mention the query limit: {err}"
+    );
+    assert!(
+        err.contains("resource_limits.maximum_query_walltime_seconds"),
+        "error must mention the query limit: {err}"
+    );
 }
 
 #[test]

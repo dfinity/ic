@@ -477,7 +477,7 @@ impl<'a> PayloadAssembler<'a> {
         };
 
         assert!(
-            payload.num_non_timeout_responses()
+            payload.num_limited_responses()
                 <= ic_types::canister_http::CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
             "too many responses for a single block"
         );
@@ -510,10 +510,10 @@ fn request_context(
     subnet_size: NumberOfNodes,
 ) -> CanisterHttpRequestContext {
     CanisterHttpRequestContext {
-        request: RequestBuilder::default().build(),
+        request: RequestBuilder::default().build_arc(),
         url: "https://example.com".to_string(),
         max_response_bytes: None,
-        headers: vec![],
+        headers: Arc::new(vec![]),
         body: None,
         http_method: CanisterHttpMethod::GET,
         transform: None,

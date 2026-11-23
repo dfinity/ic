@@ -1,3 +1,4 @@
+use crate::metrics::{LABEL_CLASS, LABEL_VALUE_BEST_EFFORT, LABEL_VALUE_GUARANTEED_RESPONSE};
 use ic_cycles_account_manager::{
     CRITICAL_ERROR_EXECUTION_CYCLES_REFUND, CRITICAL_ERROR_RESPONSE_CYCLES_REFUND,
 };
@@ -8,19 +9,61 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_types::CanisterId;
-use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES};
+use ic_types::canister_http::{
+    CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, ReplicationKind,
+};
 use ic_types::messages::Response;
 use ic_types_cycles::NominalCycles;
-use prometheus::{Histogram, HistogramVec, IntCounter};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use std::str::FromStr;
+use strum::IntoEnumIterator;
 
 pub const FINISHED_OUTCOME_LABEL: &str = "finished";
 pub const SUBMITTED_OUTCOME_LABEL: &str = "submitted";
 pub const ERROR_OUTCOME_LABEL: &str = "error";
 pub const SUCCESS_STATUS_LABEL: &str = "success";
 
+const HTTP_OUTCALL_PRICING_VERSION_LABEL: &str = "pricing_version";
+const HTTP_OUTCALL_REPLICATION_LABEL: &str = "replication";
+
 pub const CRITICAL_ERROR_CALL_ID_WITHOUT_INSTALL_CODE_CALL: &str =
     "execution_environment_call_id_without_install_code_call";
+
+/// Management canister methods whose derivation paths are observed by
+/// `ExecutionEnvironmentMetrics::observe_derivation_path`.
+const DERIVATION_PATH_METHODS: [ic00::Method; 4] = [
+    ic00::Method::ECDSAPublicKey,
+    ic00::Method::SchnorrPublicKey,
+    ic00::Method::SignWithECDSA,
+    ic00::Method::SignWithSchnorr,
+];
+
+/// Management canister methods whose vetKD contexts are observed by
+/// `ExecutionEnvironmentMetrics::observe_vetkd_context`.
+const VETKD_CONTEXT_METHODS: [ic00::Method; 2] =
+    [ic00::Method::VetKdPublicKey, ic00::Method::VetKdDeriveKey];
+
+/// Returns the `method_name` label value of a management canister method,
+/// e.g., `ic00_ecdsa_public_key`.
+fn method_name_label(method: ic00::Method) -> String {
+    format!("ic00_{method}")
+}
+
+/// Creates a histogram vector with a single `method_name` label and initializes
+/// the time series for the given management canister methods.
+fn method_name_histogram_vec(
+    metrics_registry: &MetricsRegistry,
+    name: &str,
+    help: &str,
+    buckets: Vec<f64>,
+    methods: &[ic00::Method],
+) -> HistogramVec {
+    let histogram = metrics_registry.histogram_vec(name, help, buckets, &["method_name"]);
+    for method in methods {
+        histogram.with_label_values(&[&method_name_label(*method)]);
+    }
+    histogram
+}
 
 /// Metrics used to monitor the performance of the execution environment.
 pub(crate) struct ExecutionEnvironmentMetrics {
@@ -28,6 +71,19 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     pub(crate) canister_log_resize_duration: Histogram,
     pub executions_aborted: IntCounter,
     pub(crate) call_durations: Histogram,
+    /// Number of elements in the derivation path of threshold ECDSA and Schnorr calls
+    /// (see `DERIVATION_PATH_METHODS`), by method name.
+    derivation_path_length: HistogramVec,
+    /// Total number of bytes in the elements of the derivation path of threshold
+    /// ECDSA and Schnorr calls (see `DERIVATION_PATH_METHODS`), by method name.
+    derivation_path_bytes: HistogramVec,
+    /// Number of bytes in the context of vetKD calls (see `VETKD_CONTEXT_METHODS`),
+    /// by method name.
+    vetkd_context_bytes: HistogramVec,
+    /// Number of bytes in the message of `sign_with_schnorr` calls.
+    pub(crate) sign_with_schnorr_message_bytes: Histogram,
+    /// Number of bytes in the input of `vetkd_derive_key` calls.
+    pub(crate) vetkd_derive_key_input_bytes: Histogram,
 
     /// Critical error for responses above the maximum allowed size.
     pub(crate) response_cycles_refund_error: IntCounter,
@@ -79,6 +135,7 @@ pub(crate) struct HttpOutcallMetrics {
     pub(crate) request_size: Histogram,
     pub(crate) max_response_bytes: Histogram,
     pub(crate) payload_size: Histogram,
+    pub(crate) delivered: IntCounterVec,
 }
 
 impl ExecutionEnvironmentMetrics {
@@ -107,6 +164,46 @@ impl ExecutionEnvironmentMetrics {
                 "Call durations, measured as call context age when completed / dropped.",
                 // Buckets: 0s, 0.1s, 0.2s, 0.5s, ..., 5M seconds
                 decimal_buckets_with_zero(-1, 6),
+            ),
+            derivation_path_length: method_name_histogram_vec(
+                metrics_registry,
+                "execution_threshold_derivation_path_length",
+                "Number of elements in the derivation path of threshold ECDSA and Schnorr calls.",
+                // Buckets: 0, 1, 2, 5, ..., 100, 200, 500 (at most 254 elements are allowed).
+                decimal_buckets_with_zero(0, 2),
+                &DERIVATION_PATH_METHODS,
+            ),
+            derivation_path_bytes: method_name_histogram_vec(
+                metrics_registry,
+                "execution_threshold_derivation_path_bytes",
+                "Total number of bytes in the elements of the derivation path of threshold ECDSA and Schnorr calls.",
+                // Buckets: 0B, 1B, 2B, 5B, ..., 10MB, 20MB, 50MB (requests on the same
+                // subnet can be up to 10 MiB).
+                decimal_buckets_with_zero(0, 7),
+                &DERIVATION_PATH_METHODS,
+            ),
+            vetkd_context_bytes: method_name_histogram_vec(
+                metrics_registry,
+                "execution_vetkd_context_bytes",
+                "Number of bytes in the context of vetKD calls.",
+                // Buckets: 0B, 1B, 2B, 5B, ..., 10MB, 20MB, 50MB (requests on the same
+                // subnet can be up to 10 MiB).
+                decimal_buckets_with_zero(0, 7),
+                &VETKD_CONTEXT_METHODS,
+            ),
+            sign_with_schnorr_message_bytes: metrics_registry.histogram(
+                "execution_sign_with_schnorr_message_bytes",
+                "Number of bytes in the message of sign_with_schnorr calls.",
+                // Buckets: 0B, 1B, 2B, 5B, ..., 10MB, 20MB, 50MB (requests on the same
+                // subnet can be up to 10 MiB).
+                decimal_buckets_with_zero(0, 7),
+            ),
+            vetkd_derive_key_input_bytes: metrics_registry.histogram(
+                "execution_vetkd_derive_key_input_bytes",
+                "Number of bytes in the input of vetkd_derive_key calls.",
+                // Buckets: 0B, 1B, 2B, 5B, ..., 10MB, 20MB, 50MB (requests on the same
+                // subnet can be up to 10 MiB).
+                decimal_buckets_with_zero(0, 7),
             ),
             response_cycles_refund_error: metrics_registry
                 .error_counter(CRITICAL_ERROR_RESPONSE_CYCLES_REFUND),
@@ -183,6 +280,31 @@ impl ExecutionEnvironmentMetrics {
                     "Size of HTTP outcall payloads, in bytes.",
                     decimal_buckets_with_zero(0, 6),
                 ),
+                delivered: {
+                    let delivered = metrics_registry.int_counter_vec(
+                        "execution_http_outcalls_delivered_total",
+                        "HTTP outcalls whose response was delivered to the caller, by the \
+                         pricing version, replication kind and call class.",
+                        &[
+                            HTTP_OUTCALL_PRICING_VERSION_LABEL,
+                            HTTP_OUTCALL_REPLICATION_LABEL,
+                            LABEL_CLASS,
+                        ],
+                    );
+                    // Initialize all time series to zero.
+                    for pricing_version in PricingVersion::iter() {
+                        for replication in ReplicationKind::all_as_str() {
+                            for class in [LABEL_VALUE_GUARANTEED_RESPONSE, LABEL_VALUE_BEST_EFFORT] {
+                                delivered.with_label_values(&[
+                                    pricing_version.as_str(),
+                                    replication,
+                                    class,
+                                ]);
+                            }
+                        }
+                    }
+                    delivered
+                },
             },
         }
     }
@@ -229,11 +351,50 @@ impl ExecutionEnvironmentMetrics {
         self.observe_message_with_label(method_name, duration, outcome_label, status_label)
     }
 
-    pub(crate) fn observe_http_outcall_request(
+    /// Observes the number of elements and the total number of bytes
+    /// in the derivation path of a threshold ECDSA or Schnorr call.
+    pub(crate) fn observe_derivation_path(
+        &self,
+        method: ic00::Method,
+        derivation_path: &[Vec<u8>],
+    ) {
+        debug_assert!(DERIVATION_PATH_METHODS.contains(&method));
+        let method_name = method_name_label(method);
+        self.derivation_path_length
+            .with_label_values(&[&method_name])
+            .observe(derivation_path.len() as f64);
+        self.derivation_path_bytes
+            .with_label_values(&[&method_name])
+            .observe(derivation_path.iter().map(Vec::len).sum::<usize>() as f64);
+    }
+
+    /// Observes the number of bytes in the context of a vetKD call.
+    pub(crate) fn observe_vetkd_context(&self, method: ic00::Method, context_bytes: usize) {
+        debug_assert!(VETKD_CONTEXT_METHODS.contains(&method));
+        self.vetkd_context_bytes
+            .with_label_values(&[&method_name_label(method)])
+            .observe(context_bytes as f64);
+    }
+
+    pub(crate) fn observe_http_outcall_delivered(
         &self,
         context: &CanisterHttpRequestContext,
         response: &Response,
     ) {
+        let class = if context.request.is_best_effort() {
+            LABEL_VALUE_BEST_EFFORT
+        } else {
+            LABEL_VALUE_GUARANTEED_RESPONSE
+        };
+        self.http_outcalls_metrics
+            .delivered
+            .with_label_values(&[
+                context.pricing_version.as_str(),
+                context.replication.kind().as_str(),
+                class,
+            ])
+            .inc();
+
         self.http_outcalls_metrics
             .request_size
             .observe(context.variable_parts_size().get() as f64);
@@ -289,7 +450,7 @@ impl ExecutionEnvironmentMetrics {
         outcome_label: String,
         status_label: String,
     ) {
-        let (method_name_label, speed_label) = match ic00::Method::from_str(method_name) {
+        let (method_label, speed_label) = match ic00::Method::from_str(method_name) {
             Ok(method_name) => {
                 let speed_label = match method_name {
                     ic00::Method::CanisterStatus
@@ -349,7 +510,7 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::BitcoinSendTransactionInternal
                     | ic00::Method::BitcoinGetSuccessors => String::from("slow"),
                 };
-                (format!("ic00_{method_name}"), speed_label)
+                (method_name_label(method_name), speed_label)
             }
             Err(_) => (
                 String::from("unknown_method"),
@@ -358,12 +519,7 @@ impl ExecutionEnvironmentMetrics {
         };
 
         self.subnet_messages
-            .with_label_values(&[
-                &method_name_label,
-                &outcome_label,
-                &status_label,
-                &speed_label,
-            ])
+            .with_label_values(&[&method_label, &outcome_label, &status_label, &speed_label])
             .observe(duration);
     }
 

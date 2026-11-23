@@ -446,11 +446,12 @@ fn verify_nonce_neuron_index(
              cannot be verified against it.",
         )
     })?;
-    let signed_neuron_index: u64 = candid::decode_one(nonce.0.as_ref()).map_err(|e| {
-        ApiError::invalid_request(format!(
-            "Could not decode the neuron index from the signed nonce: {e:?}"
-        ))
-    })?;
+    let signed_neuron_index: u64 = crate::convert::decode_canister_method_arg(nonce.0.as_ref())
+        .map_err(|e| {
+            ApiError::invalid_request(format!(
+                "Could not decode the neuron index from the signed nonce: {e:#}"
+            ))
+        })?;
     if signed_neuron_index != neuron_index {
         return Err(mismatch(
             "neuron_index",
@@ -495,10 +496,10 @@ fn verify_method_name(update: &HttpCanisterUpdate, expected: &str) -> Result<(),
 
 fn decode_arg<T>(update: &HttpCanisterUpdate, what: &str) -> Result<T, ApiError>
 where
-    T: for<'a> candid::Deserialize<'a> + candid::CandidType,
+    T: candid::CandidType + serde::de::DeserializeOwned,
 {
-    candid::decode_one(update.arg.0.as_ref())
-        .map_err(|e| ApiError::invalid_request(format!("Could not decode {what} argument: {e:?}")))
+    crate::convert::decode_canister_method_arg(update.arg.0.as_ref())
+        .map_err(|e| ApiError::invalid_request(format!("Could not decode {what} argument: {e:#}")))
 }
 
 fn mismatch(field: &str, displayed: u64, signed: u64, source: &str) -> ApiError {

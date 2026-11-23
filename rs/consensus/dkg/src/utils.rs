@@ -174,9 +174,7 @@ pub(crate) fn vetkd_key_ids_for_subnet(
 }
 
 /// Iterate over all [`NiDkgTag`]s, i.e. high and low threshold as well as all key ids
-pub(crate) fn tags_iter(
-    vet_keys: &[NiDkgMasterPublicKeyId],
-) -> impl Iterator<Item = NiDkgTag> + use<'_> {
+pub(crate) fn tags_iter(vet_keys: &[NiDkgMasterPublicKeyId]) -> impl Iterator<Item = NiDkgTag> {
     // Currently we assume that we run DKGs for all of these tags.
     const TAGS: [NiDkgTag; 2] = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold];
     TAGS.iter()

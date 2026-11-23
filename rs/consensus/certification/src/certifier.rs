@@ -19,7 +19,7 @@ use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CryptoHashOfPartialState, Height,
+    CryptoHashOfPartialState, Height, NodeId,
     artifact::CertificationMessageId,
     consensus::{
         Committee, HasCommittee, HasHeight,
@@ -33,6 +33,9 @@ use ic_types::{
 };
 use prometheus::{Histogram, IntCounter, IntGauge};
 use std::{cell::RefCell, collections::BTreeSet, sync::Arc, time::Instant};
+
+/// How many heights above the finalized height certification artifacts are fetched.
+const LOOK_AHEAD: u64 = 10;
 
 struct CertifierMetrics {
     shares_created: IntCounter,
@@ -78,27 +81,33 @@ impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for C
     // The priority function requires just the height of the artifact to decide if
     // it should be fetched or not: if we already have a full certification at
     // that height or this height is below the CUP height, we're not interested in
-    // any new artifacts at that height. If it is above the CUP height and we do not
-    // have a full certification at that height, we're interested in all artifacts.
+    // any new artifacts at that height. If it is more than `LOOK_AHEAD` heights above
+    // the finalized height, we may want them later. Otherwise, we're interested in all
+    // artifacts at that height.
     fn new_bouncer(&self, certification_pool: &Pool) -> Bouncer<CertificationMessageId> {
         let _timer = self.metrics.update_duration.start_timer();
 
         let certified_heights = certification_pool.certified_heights();
         let cup_height = self.consensus_pool_cache.catch_up_package().height();
+        let max_height =
+            self.consensus_pool_cache.finalized_block().height() + Height::from(LOOK_AHEAD);
         Box::new(move |id| {
             let height = id.height;
             // We drop all artifacts below the CUP height or those for which we have a full
             // certification already.
             if height < cup_height || certified_heights.contains(&height) {
                 BouncerValue::Unwanted
+            } else if height > max_height {
+                BouncerValue::MaybeWantsLater
             } else {
                 BouncerValue::Wants
             }
         })
     }
 
+    // Like consensus, so that deferred artifacts are fetched soon after they're wanted.
     fn refresh_period(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(3)
+        std::time::Duration::from_secs(1)
     }
 }
 
@@ -413,7 +422,7 @@ impl CertifierImpl {
         .map(|signed_cert_tuple| {
             CertificationMessage::Certification(Certification {
                 height: signed_cert_tuple.content.0,
-                height_witness: Some(signed_cert_tuple.content.1),
+                height_witness: signed_cert_tuple.content.1,
                 signed: Signed {
                     content: signed_cert_tuple.content.2,
                     signature: signed_cert_tuple.signature,
@@ -454,10 +463,21 @@ impl CertifierImpl {
                     }
                 }
 
+                // Signers with a validated share, including shares validated in this pass.
+                let mut signers: BTreeSet<NodeId> = certification_pool
+                    .shares_at_height(height)
+                    .map(|share| share.signed.signature.signer)
+                    .collect();
                 Box::new(
                     certification_pool
                         .unvalidated_shares_at_height(height)
-                        .filter_map(move |share| self.validate_share(certification_pool, share))
+                        .filter_map(move |share| {
+                            let change = self.validate_share(&signers, share)?;
+                            if let ChangeAction::MoveToValidated(_) = change {
+                                signers.insert(share.signed.signature.signer);
+                            }
+                            Some(change)
+                        })
                         .chain(cert_change_set),
                 )
             })
@@ -503,10 +523,25 @@ impl CertifierImpl {
             return Some(ChangeAction::HandleInvalid(msg, e));
         }
 
+        // Check that the signer is the expected high threshold DKG.
+        let dkg_id = active_high_threshold_nidkg_id(
+            self.consensus_pool_cache.as_ref(),
+            certification.height,
+        )?;
+        if certification.signed.signature.signer != dkg_id {
+            return Some(ChangeAction::HandleInvalid(
+                msg,
+                format!(
+                    "Unexpected signer {:?} (expected: {:?})",
+                    certification.signed.signature.signer, dkg_id
+                ),
+            ));
+        }
+
         // Verify the certification signature.
         match verifier.validate(
             self.replica_config.subnet_id,
-            certification,
+            &certification.signed,
             registry_version,
         ) {
             Ok(()) => Some(ChangeAction::MoveToValidated(msg)),
@@ -525,7 +560,7 @@ impl CertifierImpl {
 
     fn validate_share(
         &self,
-        certification_pool: &dyn CertificationPool,
+        validated_signers: &BTreeSet<NodeId>,
         share: &CertificationShare,
     ) -> Option<ChangeAction> {
         let msg = CertificationMessage::CertificationShare(share.clone());
@@ -541,11 +576,8 @@ impl CertifierImpl {
 
         // If the share has an invalid content or does not belong to the
         // committee
-        if let Err(e) = validate_height_witness(
-            share.height,
-            &Some(share.height_witness.clone()),
-            &content.hash,
-        ) {
+        if let Err(e) = validate_height_witness(share.height, &share.height_witness, &content.hash)
+        {
             return Some(ChangeAction::HandleInvalid(msg, e));
         }
 
@@ -572,10 +604,7 @@ impl CertifierImpl {
             // The signer is valid.
             Ok(true) => {
                 // If the signer has signed a share before, invalidate the new one.
-                if certification_pool
-                    .shares_at_height(share.height)
-                    .any(|valid_share| signer == valid_share.signed.signature.signer)
-                {
+                if validated_signers.contains(&signer) {
                     return Some(ChangeAction::RemoveFromUnvalidated(msg));
                 }
                 // Verify the signature.
@@ -661,12 +690,9 @@ impl CertifierImpl {
 
 fn validate_height_witness(
     height: Height,
-    height_witness: &Option<Witness>,
+    height_witness: &Witness,
     hash: &CryptoHashOfPartialState,
 ) -> Result<(), String> {
-    let Some(height_witness) = height_witness else {
-        return Err(format!("Missing height witness @{}", height));
-    };
     let labeled_tree = materialize(&state_height_as_tree(&height), None);
     let height_witness_digest = match recompute_digest(&labeled_tree, height_witness) {
         Ok(digest) => CryptoHashOfPartialState::from(CryptoHash(digest.to_vec())),
@@ -712,7 +738,8 @@ mod tests {
             CertificationShare,
         },
         crypto::{
-            CryptoHash, CryptoHashOf,
+            CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf,
+            ThresholdSigShare, ThresholdSigShareOf,
             threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         },
         signature::*,
@@ -770,7 +797,7 @@ mod tests {
         signature.signer = dkg_id;
         to_unvalidated(CertificationMessage::Certification(Certification {
             height,
-            height_witness: Some(Witness::new_for_testing_with_height()),
+            height_witness: Witness::new_for_testing_with_height(),
             signed: Signed { content, signature },
         }))
     }
@@ -895,11 +922,14 @@ mod tests {
                 cert_pool.apply(change_set);
 
                 let bouncer = bouncer_factory.new_bouncer(&cert_pool);
+                let max_height = pool.get_cache().finalized_block().height().get() + LOOK_AHEAD;
                 for (height, prio) in &[
                     (1, BouncerValue::Unwanted),
                     (2, BouncerValue::Wants),
                     (3, BouncerValue::Unwanted),
                     (4, BouncerValue::Wants),
+                    (max_height, BouncerValue::Wants),
+                    (max_height + 1, BouncerValue::MaybeWantsLater),
                 ] {
                     assert_eq!(
                         bouncer(&CertificationMessageId {
@@ -1315,7 +1345,8 @@ mod tests {
                         if let CertificationMessage::Certification(mut cert) =
                             fake_cert_default(Height::from(5)).message
                         {
-                            cert.signed.signature.signer = fake_dkg_id(i);
+                            cert.signed.signature.signature =
+                                CombinedThresholdSigOf::new(CombinedThresholdSig(vec![i]));
                             to_unvalidated(CertificationMessage::Certification(cert))
                         } else {
                             unreachable!("only full certifications are expected")
@@ -1380,9 +1411,8 @@ mod tests {
 
             // a height witness consisting only of the (correct) root hash,
             // i.e., pruned too aggressively
-            cert.height_witness = Some(Witness::new_for_testing(Digest(
-                height_witness_hash.get().0.try_into().unwrap(),
-            )));
+            cert.height_witness =
+                Witness::new_for_testing(Digest(height_witness_hash.get().0.try_into().unwrap()));
 
             assert_eq!(
                 certifier.validate_certification(cert),
@@ -1407,7 +1437,7 @@ mod tests {
             // i.e., not pruned enough
             let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
             let (height_witness, hash) = unpruned_height_witness(&state, height);
-            cert.height_witness = Some(height_witness);
+            cert.height_witness = height_witness;
             cert.signed.content.hash = hash;
 
             assert_eq!(
@@ -1444,6 +1474,44 @@ mod tests {
                     )
                 ))
             );
+        };
+        test_certification_validation(height, test);
+    }
+
+    /// Test that certification validation fails if the signer is not the active high-threshold
+    /// NI-DKG ID.
+    #[test]
+    fn test_invalidate_certificate_with_unexpected_signer() {
+        let height = Height::from(5);
+        let test = |certifier: &CertifierImpl, cert: &mut Certification| {
+            // Signed by the active high-threshold NI-DKG ID.
+            let expected_signer = cert.signed.signature.signer.clone();
+            assert_eq!(
+                certifier.validate_certification(cert),
+                Some(ChangeAction::MoveToValidated(
+                    CertificationMessage::Certification(cert.clone())
+                ))
+            );
+
+            for signer in [
+                fake_dkg_id(1),
+                NiDkgId {
+                    dkg_tag: NiDkgTag::LowThreshold,
+                    ..expected_signer.clone()
+                },
+            ] {
+                cert.signed.signature.signer = signer.clone();
+                assert_eq!(
+                    certifier.validate_certification(cert),
+                    Some(ChangeAction::HandleInvalid(
+                        CertificationMessage::Certification(cert.clone()),
+                        format!(
+                            "Unexpected signer {:?} (expected: {:?})",
+                            signer, expected_signer
+                        )
+                    ))
+                );
+            }
         };
         test_certification_validation(height, test);
     }
@@ -1487,6 +1555,22 @@ mod tests {
                     .chain((0..2).map(move |node_id| fake_share(Height::from(5), node_id))) // not enough
                     .for_each(|x| cert_pool.insert(x));
 
+                // A different share from the same signer, to be validated in the same pass.
+                let share = CertificationShare {
+                    height: Height::from(4),
+                    height_witness: Witness::new_for_testing_with_height(),
+                    signed: Signed {
+                        content: gen_content(Height::from(4)),
+                        signature: ThresholdSignatureShare {
+                            signature: ThresholdSigShareOf::new(ThresholdSigShare(vec![1])),
+                            signer: node_test_id(0),
+                        },
+                    },
+                };
+                cert_pool.insert(to_unvalidated(CertificationMessage::CertificationShare(
+                    share,
+                )));
+
                 // this moves unvalidated shares to validated
                 let state_heights_to_validate: Vec<_> = state_manager
                     .list_state_hashes_to_certify()
@@ -1496,6 +1580,15 @@ mod tests {
                 let change_set =
                     certifier.validate(&cert_pool, state_heights_to_validate.into_iter());
                 cert_pool.apply(change_set);
+
+                // Only one share per signer was validated.
+                assert_eq!(cert_pool.shares_at_height(Height::from(4)).count(), 4);
+                assert_eq!(
+                    cert_pool
+                        .unvalidated_shares_at_height(Height::from(4))
+                        .count(),
+                    0
+                );
 
                 // Let's insert valid shares from the same signer again:
                 cert_pool.insert(fake_share(Height::from(4), 0));
@@ -1574,7 +1667,7 @@ mod tests {
                         .validated
                         .insert(CertificationMessage::Certification(Certification {
                             height: Height::from(height),
-                            height_witness: Some(Witness::new_for_testing_with_height()),
+                            height_witness: Witness::new_for_testing_with_height(),
                             signed: Signed {
                                 content: gen_content(Height::from(height)),
                                 signature: ThresholdSignature::fake(),
@@ -1798,17 +1891,11 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = DependenciesBuilder::new(pool_config.clone(), 4)
+                } = DependenciesBuilder::new(pool_config, 4)
                     .with_dkg_interval_length(TEST_DKG_INTERVAL)
                     .build();
 
                 let metrics_registry = MetricsRegistry::new();
-                let cert_pool = CertificationPoolImpl::new(
-                    replica_config.node_id,
-                    pool_config,
-                    ic_logger::replica_logger::no_op_logger(),
-                    metrics_registry.clone(),
-                );
                 let certifier = CertifierImpl::new(
                     replica_config,
                     registry,
@@ -1832,7 +1919,7 @@ mod tests {
                             },
                         };
 
-                        let result = certifier.validate_share(&cert_pool, &share);
+                        let result = certifier.validate_share(&BTreeSet::new(), &share);
                         if should_skip {
                             assert_eq!(
                                 result, None,
@@ -1881,17 +1968,17 @@ mod tests {
                     log,
                 );
 
+                let cache = pool.get_cache();
                 assert_for_all_subnet_splitting_statuses(
                     &mut pool,
                     |status, should_skip, test_height| {
-                        let content = gen_content(test_height);
-                        let cert = Certification {
-                            height: test_height,
-                            height_witness: Some(Witness::new_for_testing_with_height()),
-                            signed: Signed {
-                                content,
-                                signature: ThresholdSignature::fake(),
-                            },
+                        // Signed by the active high-threshold NI-DKG ID.
+                        let dkg_id = active_high_threshold_nidkg_id(cache.as_ref(), test_height)
+                            .expect("no active high-threshold NI-DKG ID");
+                        let CertificationMessage::Certification(cert) =
+                            fake_cert(test_height, dkg_id).message
+                        else {
+                            unreachable!("only full certifications are expected")
                         };
 
                         let result = certifier.validate_certification(&cert);

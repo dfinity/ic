@@ -469,12 +469,6 @@ pub struct SubnetMetrics {
     #[prost(message, optional, tag = "1")]
     pub consumed_cycles_by_deleted_canisters:
         ::core::option::Option<super::super::super::types::v1::NominalCycles>,
-    #[prost(message, optional, tag = "2")]
-    pub consumed_cycles_http_outcalls:
-        ::core::option::Option<super::super::super::types::v1::NominalCycles>,
-    #[prost(message, optional, tag = "3")]
-    pub consumed_cycles_ecdsa_outcalls:
-        ::core::option::Option<super::super::super::types::v1::NominalCycles>,
     #[prost(message, repeated, tag = "5")]
     pub consumed_cycles_by_use_case:
         ::prost::alloc::vec::Vec<super::super::canister_state_bits::v1::ConsumedCyclesByUseCase>,
@@ -486,9 +480,8 @@ pub struct SubnetMetrics {
     pub update_transactions_total: ::core::option::Option<u64>,
     #[prost(message, repeated, tag = "11")]
     pub threshold_signature_agreements: ::prost::alloc::vec::Vec<ThresholdSignatureAgreementsEntry>,
-    #[prost(message, repeated, tag = "12")]
-    pub consumed_cycles_by_use_case_monotonic:
-        ::prost::alloc::vec::Vec<super::super::canister_state_bits::v1::ConsumedCyclesByUseCase>,
+    #[prost(uint64, optional, tag = "13")]
+    pub round_instructions_total: ::core::option::Option<u64>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BitcoinGetSuccessorsFollowUpResponses {
@@ -622,6 +615,28 @@ pub struct SystemMetadata {
         ::core::option::Option<super::super::super::registry::subnet::v1::ResourceLimits>,
     #[prost(message, repeated, tag = "25")]
     pub subnet_schedule: ::prost::alloc::vec::Vec<CanisterPriority>,
+    /// Phase-2 upgrade permit state: tracks outstanding reboot requests and
+    /// authorized nodes for the rolling GuestOS reboot.
+    #[prost(message, optional, tag = "27")]
+    pub upgrade_state: ::core::option::Option<UpgradeState>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpgradeState {
+    #[prost(message, repeated, tag = "1")]
+    pub unauthorized_upgrade_requests:
+        ::prost::alloc::vec::Vec<upgrade_state::UpgradePermitRequest>,
+    #[prost(message, repeated, tag = "2")]
+    pub rebooting_nodes: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
+}
+/// Nested message and enum types in `UpgradeState`.
+pub mod upgrade_state {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+    pub struct UpgradePermitRequest {
+        #[prost(uint64, tag = "1")]
+        pub request_height: u64,
+        #[prost(message, optional, tag = "2")]
+        pub node: ::core::option::Option<super::super::super::super::types::v1::NodeId>,
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CanisterPriority {

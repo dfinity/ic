@@ -65,7 +65,7 @@ static MAINNET_ROUTING_TABLE: &[u8] = include_bytes!(env!("MAINNET_ROUTING_TABLE
 
 #[derive(Parser)]
 #[clap(name = "pocket-ic-server")]
-#[clap(version = "16.0.0")]
+#[clap(version = "16.1.0")]
 struct Args {
     /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]
@@ -510,7 +510,7 @@ impl Drop for PendingGuard {
             .unwrap()
             .as_nanos() as u64;
         self.min_alive_until
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |min_alive_until| {
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |min_alive_until| {
                 Some(max(min_alive_until, alive_until))
             })
             .unwrap();

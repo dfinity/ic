@@ -3,11 +3,13 @@
 //! networking component, and ensuring that the resulting responses are signed
 //! and eventually make it into consensus.
 use crate::metrics::CanisterHttpPoolManagerMetrics;
-use crate::payload_builder::utils::{check_content_size_within_limit, check_spent_within_limit};
+use crate::payload_builder::utils::{check_metadata_matches_content, check_receipt_bounds};
+use candid::Decode;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
 };
+use ic_https_outcalls_socks_proxy::SocksProxyCache;
 use ic_interfaces::{
     canister_http::*, consensus_pool::ConsensusPoolCache, p2p::consensus::PoolMutationsProducer,
 };
@@ -15,9 +17,8 @@ use ic_interfaces_adapter_client::*;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::*;
+use ic_management_canister_types_private::{CanisterHttpResponsePayload, decoder_config};
 use ic_metrics::MetricsRegistry;
-use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
-use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
@@ -53,7 +54,7 @@ pub struct CanisterHttpPoolManagerImpl {
     crypto: Arc<dyn ConsensusCrypto>,
     membership: Arc<Membership>,
     replica_config: ReplicaConfig,
-    subnet_type: SubnetType,
+    socks_proxy: SocksProxyCache,
     requested_id_cache: RefCell<BTreeSet<CallbackId>>,
     metrics: CanisterHttpPoolManagerMetrics,
     log: ReplicaLogger,
@@ -77,16 +78,22 @@ impl CanisterHttpPoolManagerImpl {
             registry_client.clone(),
             replica_config.subnet_id,
         ));
+        let metrics = CanisterHttpPoolManagerMetrics::new(&metrics_registry);
+        let socks_proxy = SocksProxyCache::new(registry_client.clone(), subnet_type, log.clone())
+            .with_error_observer({
+                let metrics = metrics.clone();
+                Arc::new(move |label: &str| metrics.observe_pool_manager_error(label))
+            });
 
         Self {
             state_reader,
             http_adapter_shim,
             crypto,
             replica_config,
-            subnet_type,
+            socks_proxy,
             membership,
             registry_client,
-            metrics: CanisterHttpPoolManagerMetrics::new(&metrics_registry),
+            metrics,
             log,
             requested_id_cache: RefCell::new(BTreeSet::new()),
         }
@@ -171,62 +178,6 @@ impl CanisterHttpPoolManagerImpl {
             .collect()
     }
 
-    fn get_socks_proxy_addrs(&self) -> Vec<String> {
-        let latest_registry_version = self.registry_client.get_latest_version();
-
-        let allowed_boundary_nodes = match self.subnet_type {
-            SubnetType::System => self
-                .registry_client
-                .get_system_api_boundary_node_ids(latest_registry_version),
-            SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
-                self.registry_client
-                    .get_app_api_boundary_node_ids(latest_registry_version)
-            }
-        };
-
-        let allowed_boundary_nodes = allowed_boundary_nodes.unwrap_or_else(|e| {
-            warn!(self.log, "Failed to get API boundary node IDs: {:?}", e);
-            self.metrics
-                .observe_pool_manager_error("boundary_node_ids_lookup_failed");
-            Vec::new()
-        });
-        let num_boundary_nodes = allowed_boundary_nodes.len();
-
-        let addrs = allowed_boundary_nodes
-            .into_iter()
-            .filter_map(|id| {
-                self.registry_client
-                    .get_node_record(id, latest_registry_version)
-                    .map_err(|e| {
-                        warn!(
-                            self.log,
-                            "Failed to get node record for node ID {:?}: {:?}", id, e
-                        );
-                    })
-                    .ok()
-                    .and_then(|opt_record| {
-                        opt_record.or_else(|| {
-                            warn!(self.log, "No node record found for node ID {:?}", id);
-                            None
-                        })
-                    })
-                    .and_then(|record| {
-                        record.http.or_else(|| {
-                            warn!(self.log, "HTTP information missing for node ID {:?}", id);
-                            None
-                        })
-                    })
-                    .map(|http_info| format!("socks5h://[{0}]:1080", http_info.ip_addr))
-            })
-            .collect::<Vec<String>>();
-
-        if addrs.len() != num_boundary_nodes {
-            self.metrics
-                .observe_pool_manager_error("socks_proxy_addrs_unresolved");
-        }
-        addrs
-    }
-
     /// Returns whether `node_id` belongs to the committee responsible for the
     /// given request, evaluated at the registry version pinned in the request
     /// context.
@@ -300,7 +251,7 @@ impl CanisterHttpPoolManagerImpl {
             .cloned()
             .collect();
 
-        let socks_proxy_addrs = self.get_socks_proxy_addrs();
+        let socks_proxy_addrs = self.socks_proxy.addrs();
 
         for (id, context) in http_requests {
             // Only make a request if this node belongs to the request's committee
@@ -319,7 +270,8 @@ impl CanisterHttpPoolManagerImpl {
                     .send(CanisterHttpRequest {
                         id: *id,
                         context: context.clone(),
-                        socks_proxy_addrs: socks_proxy_addrs.clone(),
+                        socks_proxy_addrs: socks_proxy_addrs.as_ref().clone(),
+                        dispatch_time: state.time(),
                     })
                 {
                     warn!(
@@ -413,11 +365,7 @@ impl CanisterHttpPoolManagerImpl {
                         payment_receipt,
                     };
 
-                    if let Err(err) = check_content_size_within_limit(
-                        &receipt_share.metadata,
-                        response.id,
-                        context,
-                    ) {
+                    if let Err(err) = check_receipt_bounds(&receipt_share, context) {
                         warn!(
                             self.log,
                             "Refusing to sign our own oversized response: {err:?}"
@@ -525,24 +473,8 @@ impl CanisterHttpPoolManagerImpl {
                     },
                 };
 
-                // Invalidate shares whose claimed spent cycles exceed what a
-                // single replica is allowed to consume.
-                if let Err(err) = check_spent_within_limit(&share.content.payment_receipt, context)
-                {
-                    return Some(CanisterHttpChangeAction::HandleInvalid(
-                        share.clone(),
-                        format!("{err:?}"),
-                    ));
-                }
-
-                // Invalidate shares claiming a larger response than an honest replica could have
-                // produced: a success exceeding `max_response_bytes`, or a reject exceeding the
-                // 1KB an error message is truncated to.
-                if let Err(err) = check_content_size_within_limit(
-                    &share.content.metadata,
-                    share.content.id(),
-                    context,
-                ) {
+                // Invalidate shares whose receipt no honest replica would have signed.
+                if let Err(err) = check_receipt_bounds(&share.content, context) {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
                         format!("{err:?}"),
@@ -561,39 +493,25 @@ impl CanisterHttpPoolManagerImpl {
                     Replication::NonReplicated(_) | Replication::Flexible { .. } => {
                         match &artifact.response {
                             Some(response) => {
-                                if response.id != share.content.id() {
+                                if let Err(err) = check_metadata_matches_content(
+                                    &share.content.metadata,
+                                    response,
+                                ) {
                                     return Some(CanisterHttpChangeAction::HandleInvalid(
                                         share.clone(),
-                                        format!(
-                                            "Response is for request ID {} rather than the share's {}",
-                                            response.id,
-                                            share.content.id(),
-                                        ),
+                                        format!("{err:?}"),
                                     ));
                                 }
 
-                                if share.content.content_hash()
-                                    != &ic_types::crypto::crypto_hash(response)
+                                if let Replication::Flexible { .. } = context.replication
+                                    && let CanisterHttpResponseContent::Success(content) =
+                                        &response.content
+                                    && let Err(err) =
+                                        Decode!([decoder_config()]; content, CanisterHttpResponsePayload)
                                 {
                                     return Some(CanisterHttpChangeAction::HandleInvalid(
                                         share.clone(),
-                                        "Content hash does not match the response".to_string(),
-                                    ));
-                                }
-
-                                if share.content.content_size()
-                                    != response.content.count_bytes() as u32
-                                {
-                                    return Some(CanisterHttpChangeAction::HandleInvalid(
-                                        share.clone(),
-                                        "Content size does not match the response".to_string(),
-                                    ));
-                                }
-
-                                if share.content.is_reject() != response.content.is_reject() {
-                                    return Some(CanisterHttpChangeAction::HandleInvalid(
-                                        share.clone(),
-                                        "is_reject does not match the response content".to_string(),
+                                        format!("Response is not a valid http_request_result: {err}"),
                                     ));
                                 }
                             }
@@ -719,20 +637,24 @@ impl<T: CanisterHttpPool> PoolMutationsProducer<T> for CanisterHttpPoolManagerIm
 pub mod test {
     use super::*;
     use assert_matches::assert_matches;
+    use candid::Encode;
     use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_consensus_utils::crypto::SignVerify;
     use ic_error_types::RejectCode;
+    use ic_https_outcalls_socks_proxy::socks_proxy_addr;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_interfaces_state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types_private::BoundedHttpHeaders;
     use ic_metrics::MetricsRegistry;
-    use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
-    use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
-    use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
+    use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
+    use ic_test_utilities_registry::{
+        add_api_boundary_node_records, add_unresolvable_api_boundary_node_records,
+    };
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::CountBytes;
     use ic_types::ReplicaVersion;
@@ -747,7 +669,6 @@ pub mod test {
     use mockall::predicate::*;
     use mockall::*;
     use std::{collections::BTreeMap, str::FromStr};
-    use strum::IntoEnumIterator;
 
     mock! {
         pub NonBlockingChannel<Request: 'static> {
@@ -815,6 +736,29 @@ pub mod test {
         }
     }
 
+    /// The content of a successful flexible response: an `http_request_result`
+    /// of `size` bytes.
+    fn flexible_content(size: usize) -> Vec<u8> {
+        let encode = |body_len| {
+            Encode!(&CanisterHttpResponsePayload {
+                status: 200,
+                headers: BoundedHttpHeaders::new(vec![]),
+                body: vec![0; body_len],
+            })
+            .unwrap()
+        };
+        let content = encode(size - (encode(size).len() - size));
+        assert_eq!(content.len(), size);
+        content
+    }
+
+    fn flexible_canister_http_response(id: u64) -> CanisterHttpResponse {
+        CanisterHttpResponse {
+            id: CallbackId::from(id),
+            content: CanisterHttpResponseContent::Success(flexible_content(100)),
+        }
+    }
+
     fn test_request_context(
         replication: Replication,
         pricing_version: PricingVersion,
@@ -823,10 +767,10 @@ pub mod test {
         CanisterHttpRequestContext {
             request: ic_test_utilities_types::messages::RequestBuilder::new()
                 .sender(requester())
-                .build(),
+                .build_arc(),
             url: "".to_string(),
             max_response_bytes,
-            headers: vec![],
+            headers: Arc::new(vec![]),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,
@@ -1374,7 +1318,7 @@ pub mod test {
 
                     let mut bad_share = share.clone();
                     bad_share.content.metadata.content_hash =
-                        CryptoHashOf::new(CryptoHash(vec![1, 2, 3]));
+                        CryptoHashOf::new(CryptoHash(vec![0xAB; 32]));
 
                     let artifact_with_mismatched_hash = CanisterHttpResponseArtifact {
                         share: bad_share,
@@ -1391,7 +1335,7 @@ pub mod test {
 
                     assert_matches!(
                         &changes[0],
-                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "Content hash does not match the response"
+                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason.starts_with("ContentHashMismatch")
                     );
                 }
 
@@ -1421,7 +1365,7 @@ pub mod test {
 
                     assert_matches!(
                         &changes[0],
-                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "Content size does not match the response"
+                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason.starts_with("ContentSizeMismatch")
                     );
                 }
 
@@ -1450,7 +1394,7 @@ pub mod test {
 
                     assert_matches!(
                         &changes[0],
-                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "is_reject does not match the response content"
+                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason.starts_with("IsRejectMismatch")
                     );
                 }
             })
@@ -2152,6 +2096,99 @@ pub mod test {
     }
 
     #[test]
+    fn test_share_with_content_hash_of_wrong_length_is_invalidated() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
+
+                let peer_id = node_test_id(1);
+                let callback_id = CallbackId::from(0);
+
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            callback_id,
+                            test_request_context(
+                                Replication::FullyReplicated,
+                                PricingVersion::Legacy,
+                                None,
+                            ),
+                        )]))),
+                    ));
+
+                // One byte longer than a SHA-256 digest. A fully replicated share comes
+                // without a response to compare the hash with.
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: callback_id,
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 33])),
+                        content_size: 0,
+                        is_reject: false,
+                        replica_version: replica_config.replica_version().clone(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
+                };
+                let share = Signed {
+                    content: response_metadata.clone(),
+                    signature: crypto
+                        .sign(&response_metadata, peer_id, RegistryVersion::from(1))
+                        .unwrap(),
+                };
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        response: None,
+                    },
+                    peer_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager,
+                    Arc::new(Mutex::new(Box::new(MockNonBlockingChannel::new()))),
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let change_set =
+                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
+
+                let expected_error = format!(
+                    "{:?}",
+                    InvalidCanisterHttpPayloadReason::InvalidContentHashLength {
+                        callback_id,
+                        length: 33,
+                    }
+                );
+                assert_matches!(
+                    &change_set[..],
+                    [CanisterHttpChangeAction::HandleInvalid(_, reason)] => {
+                        assert_eq!(reason, &expected_error);
+                    }
+                );
+            })
+        });
+    }
+
+    #[test]
     fn test_oversized_response_is_not_signed() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
@@ -2771,6 +2808,7 @@ pub mod test {
                         id: CallbackId::from(7),
                         context: request.clone(),
                         socks_proxy_addrs: vec![],
+                        dispatch_time: ic_types::time::UNIX_EPOCH,
                     }))
                     .times(1)
                     .return_const(Ok(()));
@@ -2838,6 +2876,71 @@ pub mod test {
 
                 // Now that there are shares in the pool, we should be able to
                 // call generate_change_set again without send being called.
+                pool_manager.generate_change_set(&canister_http_pool);
+            });
+        });
+    }
+
+    /// A request carries the time of the state it is dispatched from, so that the
+    /// client knows how much of the request's time is left.
+    #[test]
+    pub fn test_request_carries_dispatch_time() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                let request = test_request_context(
+                    Replication::FullyReplicated,
+                    PricingVersion::Legacy,
+                    None,
+                );
+                let dispatch_time = ic_types::Time::from_secs_since_unix_epoch(10).unwrap();
+                shim_mock
+                    .expect_send()
+                    .with(eq(CanisterHttpRequest {
+                        id: CallbackId::from(7),
+                        context: request.clone(),
+                        socks_proxy_addrs: vec![],
+                        dispatch_time,
+                    }))
+                    .times(1)
+                    .return_const(Ok(()));
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let mut state =
+                    state_with_pending_http_calls(BTreeMap::from([(CallbackId::from(7), request)]));
+                state.metadata.batch_time = dispatch_time;
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(Height::from(1), Arc::new(state)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+                let canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
                 pool_manager.generate_change_set(&canister_http_pool);
             });
         });
@@ -2972,7 +3075,7 @@ pub mod test {
                     ));
 
                 // 3. MALICIOUS ARTIFACT: Create a share that is signed by the `wrong_signer_id`.
-                let response = empty_canister_http_response(callback_id.get());
+                let response = flexible_canister_http_response(callback_id.get());
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: callback_id,
@@ -3142,7 +3245,7 @@ pub mod test {
 
                     let mut bad_share = share.clone();
                     bad_share.content.metadata.content_hash =
-                        CryptoHashOf::new(CryptoHash(vec![1, 2, 3]));
+                        CryptoHashOf::new(CryptoHash(vec![0xAB; 32]));
 
                     canister_http_pool.insert(UnvalidatedArtifact {
                         message: CanisterHttpResponseArtifact {
@@ -3159,7 +3262,7 @@ pub mod test {
                     assert_matches!(
                         &changes[0],
                         CanisterHttpChangeAction::HandleInvalid(_, reason)
-                        if reason == "Content hash does not match the response"
+                        if reason.starts_with("ContentHashMismatch")
                     );
                 }
 
@@ -3188,7 +3291,7 @@ pub mod test {
                     assert_matches!(
                         &changes[0],
                         CanisterHttpChangeAction::HandleInvalid(_, reason)
-                        if reason == "Content size does not match the response"
+                        if reason.starts_with("ContentSizeMismatch")
                     );
                 }
 
@@ -3216,7 +3319,7 @@ pub mod test {
                     assert_matches!(
                         &changes[0],
                         CanisterHttpChangeAction::HandleInvalid(_, reason)
-                        if reason == "is_reject does not match the response content"
+                        if reason.starts_with("IsRejectMismatch")
                     );
                 }
 
@@ -3254,8 +3357,60 @@ pub mod test {
                     assert_matches!(
                         &changes[0],
                         CanisterHttpChangeAction::HandleInvalid(_, reason)
-                        if reason.starts_with("Response is for request ID")
+                        if reason.starts_with("InvalidMetadata")
                     );
+                }
+
+                // TEST 6: Flexible artifact's response is not an `http_request_result` -- should
+                // be invalid. One that is gets validated.
+                for (response, valid) in [
+                    (empty_canister_http_response(callback_id.get()), false),
+                    (flexible_canister_http_response(callback_id.get()), true),
+                ] {
+                    let mut canister_http_pool =
+                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                    let receipt = CanisterHttpResponseReceipt {
+                        metadata: CanisterHttpResponseMetadata {
+                            id: callback_id,
+                            content_hash: crypto_hash(&response),
+                            content_size: response.content.count_bytes() as u32,
+                            is_reject: false,
+                            replica_version: replica_config.replica_version().clone(),
+                        },
+                        payment_receipt: CanisterHttpPaymentReceipt::default(),
+                    };
+                    let signature = crypto
+                        .sign(&receipt, committee_member, RegistryVersion::from(1))
+                        .unwrap();
+
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: CanisterHttpResponseArtifact {
+                            share: Signed {
+                                content: receipt,
+                                signature,
+                            },
+                            response: Some(response),
+                        },
+                        peer_id: committee_member,
+                        timestamp: UNIX_EPOCH,
+                    });
+
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
+
+                    if valid {
+                        assert_matches!(
+                            changes.as_slice(),
+                            [CanisterHttpChangeAction::MoveToValidated(..)]
+                        );
+                    } else {
+                        assert_matches!(
+                            changes.as_slice(),
+                            [CanisterHttpChangeAction::HandleInvalid(_, reason)]
+                            if reason.starts_with("Response is not a valid http_request_result")
+                        );
+                    }
                 }
             })
         });
@@ -3385,11 +3540,9 @@ pub mod test {
 
                     let response = CanisterHttpResponse {
                         id: callback_id,
-                        content: CanisterHttpResponseContent::Success(vec![
-                            0;
-                            MAX_CANISTER_HTTP_RESPONSE_BYTES
-                                as usize
-                        ]),
+                        content: CanisterHttpResponseContent::Success(flexible_content(
+                            MAX_CANISTER_HTTP_RESPONSE_BYTES as usize,
+                        )),
                     };
 
                     let response_metadata = CanisterHttpResponseReceipt {
@@ -3686,7 +3839,7 @@ pub mod test {
                 let receipt_share = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
                         content_size: 0,
                         is_reject: false,
                         replica_version: replica_config.replica_version().clone(),
@@ -3743,127 +3896,162 @@ pub mod test {
         });
     }
 
-    /// `get_socks_proxy_addrs` must route the SOCKS proxy through the API
-    /// boundary nodes that match the subnet type: `System` subnets use the
-    /// *system* API boundary nodes, while all other subnet types use the *app*
-    /// API boundary nodes.
+    /// Drives one round of `make_new_requests` and returns the SOCKS proxy
+    /// addresses the pool manager handed to the adapter.
+    fn socks_proxy_addrs_sent_by_pool_manager(
+        deps: Dependencies,
+        subnet_type: SubnetType,
+        metrics_registry: MetricsRegistry,
+        log: ReplicaLogger,
+    ) -> Vec<String> {
+        let Dependencies {
+            pool,
+            replica_config,
+            crypto,
+            state_manager,
+            registry,
+            ..
+        } = deps;
+
+        let request =
+            test_request_context(Replication::FullyReplicated, PricingVersion::Legacy, None);
+        state_manager
+            .get_mut()
+            .expect_get_latest_state()
+            .return_const(Labeled::new(
+                Height::from(1),
+                Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                    CallbackId::from(7),
+                    request,
+                )]))),
+            ));
+
+        let sent = Arc::new(Mutex::new(None));
+        let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+        shim_mock
+            .expect_try_receive()
+            .return_const(Err(TryReceiveError::Empty));
+        #[allow(clippy::result_large_err)]
+        shim_mock.expect_send().times(1).returning({
+            let sent = Arc::clone(&sent);
+            move |request: CanisterHttpRequest| {
+                *sent.lock().unwrap() = Some(request.socks_proxy_addrs);
+                Ok(())
+            }
+        });
+        let shim: Arc<Mutex<CanisterHttpAdapterClient>> = Arc::new(Mutex::new(Box::new(shim_mock)));
+
+        let pool_manager = CanisterHttpPoolManagerImpl::new(
+            state_manager as Arc<_>,
+            shim,
+            crypto,
+            pool.get_cache(),
+            replica_config,
+            subnet_type,
+            Arc::clone(&registry) as Arc<_>,
+            metrics_registry,
+            log,
+        );
+        let canister_http_pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+        pool_manager.generate_change_set(&canister_http_pool);
+
+        let mut addrs = sent
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("the pool manager sent no request to the adapter");
+        addrs.sort();
+        addrs
+    }
+
+    /// The pool manager must proxy through the API boundary nodes that match
+    /// its own subnet type: `System` subnets through the *system* nodes, every
+    /// other subnet type through the *app* ones.
     #[test]
-    fn test_get_socks_proxy_addrs_selects_boundary_nodes_by_subnet_type() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|log| {
-                let Dependencies {
-                    pool,
-                    replica_config,
-                    crypto,
-                    state_manager,
-                    registry,
-                    registry_data_provider,
-                    ..
-                } = DependenciesBuilder::new(pool_config.clone(), 1).build();
+    fn test_pool_manager_sends_socks_proxy_addrs_of_its_subnet_type() {
+        for subnet_type in [SubnetType::System, SubnetType::Application] {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                with_test_replica_logger(|log| {
+                    let deps = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
-                // Register a handful of API boundary nodes, each with a distinct
-                // HTTP endpoint. `get_{system,app}_api_boundary_node_ids` splits the
-                // sorted node IDs in half, so we need several nodes to obtain a
-                // non-empty, disjoint system/app split.
-                let registry_version = RegistryVersion::from(2);
-                let boundary_nodes: Vec<(NodeId, String)> = (1..=4)
-                    .map(|i| (node_test_id(i), format!("2001:db8::{i}")))
-                    .collect();
+                    // `get_{system,app}_api_boundary_node_ids` splits the sorted
+                    // ids in half, so several nodes are needed for a non-empty,
+                    // distinguishable split. They are numbered past the subnet's
+                    // own nodes, whose records must stay untouched.
+                    let registry_version = RegistryVersion::from(2);
+                    let nodes =
+                        add_api_boundary_node_records(&deps.registry_data_provider, 101..=104, 2);
+                    deps.registry.update_to_latest_version();
 
-                for (node_id, ip_addr) in &boundary_nodes {
-                    registry_data_provider
-                        .add(
-                            &make_api_boundary_node_record_key(*node_id),
-                            registry_version,
-                            Some(ApiBoundaryNodeRecord::default()),
-                        )
-                        .unwrap();
-                    registry_data_provider
-                        .add(
-                            &make_node_record_key(*node_id),
-                            registry_version,
-                            Some(NodeRecord {
-                                http: Some(ConnectionEndpoint {
-                                    ip_addr: ip_addr.clone(),
-                                    port: 8080,
-                                }),
-                                ..Default::default()
-                            }),
-                        )
-                        .unwrap();
-                }
-                registry.update_to_latest_version();
-
-                // Derive the SOCKS proxy address that the pool manager is expected to
-                // emit for a given boundary node.
-                let socks_addr = |node_id: &NodeId| {
-                    let ip_addr = &boundary_nodes
-                        .iter()
-                        .find(|(id, _)| id == node_id)
-                        .expect("unknown boundary node id")
-                        .1;
-                    format!("socks5h://[{ip_addr}]:1080")
-                };
-                let expected_system: Vec<String> = registry
-                    .get_system_api_boundary_node_ids(registry_version)
-                    .unwrap()
-                    .iter()
-                    .map(socks_addr)
-                    .collect();
-                let expected_app: Vec<String> = registry
-                    .get_app_api_boundary_node_ids(registry_version)
-                    .unwrap()
-                    .iter()
-                    .map(socks_addr)
-                    .collect();
-
-                // The two sets must be non-empty and disjoint, otherwise the test
-                // could not tell which group of boundary nodes was contacted.
-                assert!(!expected_system.is_empty());
-                assert!(!expected_app.is_empty());
-                assert!(expected_system.iter().all(|a| !expected_app.contains(a)));
-
-                // System subnets contact the system boundary nodes; every other
-                // subnet type contacts the app boundary nodes.
-                let cases = SubnetType::iter()
-                    .map(|subnet_type| {
-                        let expected = match subnet_type {
-                            SubnetType::System => expected_system.clone(),
-                            SubnetType::Application
-                            | SubnetType::VerifiedApplication
-                            | SubnetType::CloudEngine => expected_app.clone(),
-                        };
-                        (subnet_type, expected)
-                    })
-                    .collect::<Vec<_>>();
-
-                for (subnet_type, mut expected) in cases {
-                    let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
-                        Arc::new(Mutex::new(Box::new(MockNonBlockingChannel::<
-                            CanisterHttpRequest,
-                        >::new())));
-
-                    let pool_manager = CanisterHttpPoolManagerImpl::new(
-                        state_manager.clone() as Arc<_>,
-                        shim,
-                        crypto.clone(),
-                        pool.get_cache(),
-                        replica_config.clone(),
-                        subnet_type,
-                        Arc::clone(&registry) as Arc<_>,
-                        MetricsRegistry::new(),
-                        log.clone(),
+                    let addrs_of = |ids: Vec<NodeId>| {
+                        let mut addrs: Vec<String> = ids
+                            .iter()
+                            .map(|node_id| socks_proxy_addr(&nodes[node_id]))
+                            .collect();
+                        addrs.sort();
+                        addrs
+                    };
+                    let expected_system = addrs_of(
+                        deps.registry
+                            .get_system_api_boundary_node_ids(registry_version)
+                            .unwrap(),
                     );
+                    let expected_app = addrs_of(
+                        deps.registry
+                            .get_app_api_boundary_node_ids(registry_version)
+                            .unwrap(),
+                    );
+                    assert_ne!(expected_system, expected_app);
+                    let expected = match subnet_type {
+                        SubnetType::System => expected_system,
+                        SubnetType::Application
+                        | SubnetType::VerifiedApplication
+                        | SubnetType::CloudEngine => expected_app,
+                    };
 
-                    let mut actual = pool_manager.get_socks_proxy_addrs();
-                    actual.sort();
-                    expected.sort();
+                    let actual = socks_proxy_addrs_sent_by_pool_manager(
+                        deps,
+                        subnet_type,
+                        MetricsRegistry::new(),
+                        log,
+                    );
 
                     assert_eq!(
                         actual, expected,
-                        "subnet type {subnet_type:?} contacted the wrong API boundary nodes"
+                        "subnet type {subnet_type:?} used the wrong API boundary nodes"
                     );
-                }
+                })
+            });
+        }
+    }
+
+    /// A boundary node the pool manager cannot resolve is left out of the
+    /// request and reported under the pool manager's own error metric.
+    #[test]
+    fn test_pool_manager_reports_unresolved_socks_proxies() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let deps = DependenciesBuilder::new(pool_config.clone(), 4).build();
+                add_unresolvable_api_boundary_node_records(
+                    &deps.registry_data_provider,
+                    101..=104,
+                    2,
+                );
+                deps.registry.update_to_latest_version();
+
+                let metrics_registry = MetricsRegistry::new();
+                let addrs = socks_proxy_addrs_sent_by_pool_manager(
+                    deps,
+                    SubnetType::Application,
+                    metrics_registry.clone(),
+                    log,
+                );
+
+                assert!(addrs.is_empty());
+                assert_eq!(
+                    metric_vec(&[(&[("type", "socks_proxy_addrs_unresolved")], 1)]),
+                    fetch_int_counter_vec(&metrics_registry, "canister_http_pool_manager_errors")
+                );
             })
         });
     }
@@ -3930,7 +4118,7 @@ pub mod test {
 
                     let mut canister_http_pool =
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-                    let response = empty_canister_http_response(callback_id.get());
+                    let response = flexible_canister_http_response(callback_id.get());
                     let receipt_share = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: callback_id,
@@ -4024,7 +4212,7 @@ pub mod test {
                     let receipt_share = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: callback_id,
-                            content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                            content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
                             content_size: 0,
                             is_reject: false,
                             replica_version: test_replica_version(),

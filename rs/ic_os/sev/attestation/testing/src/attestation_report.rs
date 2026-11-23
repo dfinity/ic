@@ -1,24 +1,30 @@
-use der::EncodePem;
-use der::pem::LineEnding;
+use attestation::LAUNCH_MEASUREMENT_LEN;
 use p384::ecdsa::Signature;
 use p384::ecdsa::signature::Signer;
 use p384::pkcs8::EncodePublicKey;
 use rand::SeedableRng;
-use rsa::RsaPrivateKey;
+use rsa::PrivateKey;
+use rsa::sha2::Sha384;
 use sev::Generation;
 use sev::certs::snp::ecdsa::Signature as AttestationReportSignature;
 use sev::firmware::guest::{AttestationReport, GuestPolicy};
 use sev::firmware::host::TcbVersion;
 use sev::parser::Encoder;
-use sha2::Sha384;
 use std::str::FromStr;
 use std::time::Duration;
-use x509_cert::Certificate;
-use x509_cert::builder::{Builder, CertificateBuilder, Profile};
+use x509_cert::builder::profile::BuilderProfile;
+use x509_cert::builder::{Builder, CertificateBuilder};
+use x509_cert::der::EncodePem;
+use x509_cert::der::pem::LineEnding;
+use x509_cert::ext::pkix::{
+    AuthorityKeyIdentifier, BasicConstraints, KeyUsage, KeyUsages, SubjectKeyIdentifier,
+};
+use x509_cert::ext::{Extension, ToExtension};
 use x509_cert::name::Name;
 use x509_cert::serial_number::SerialNumber;
-use x509_cert::spki::SubjectPublicKeyInfo;
+use x509_cert::spki::SubjectPublicKeyInfoRef;
 use x509_cert::time::Validity;
+use x509_cert::{Certificate, SubjectPublicKeyInfo, TbsCertificate};
 
 pub const DEFAULT_GENERATION: Generation = Generation::Milan;
 
@@ -45,7 +51,7 @@ impl AttestationReportBuilder {
         self
     }
 
-    pub fn with_measurement(mut self, measurement: [u8; 48]) -> Self {
+    pub fn with_measurement(mut self, measurement: [u8; LAUNCH_MEASUREMENT_LEN]) -> Self {
         self.attestation_report
             .measurement
             .copy_from_slice(&measurement);
@@ -110,20 +116,40 @@ impl FakeAttestationReportSigner {
         let mut rng = rand::rngs::StdRng::from_seed(seed);
 
         // ARK - RSA with RSASSA-PSS (root cert)
-        let ark_key = RsaPrivateKey::new(&mut rng, 1024).unwrap();
-        let ark_cert =
-            create_certificate("ARK", ark_key.to_public_key(), ark_key.clone(), None).unwrap();
+        let ark_key = PrivateKey::new(&mut RandCore10(&mut rng), 1024).unwrap();
+        let ark_cert = create_certificate(
+            "ARK",
+            SubjectPublicKeyInfo::from_key(&ark_key.to_public_key()).unwrap(),
+            ark_key.clone(),
+            None,
+            &mut rng,
+        )
+        .unwrap();
 
         // ASK - RSA with RSASSA-PSS (signed by ARK)
         let ask_key = ark_key.clone(); // Reuse the key to save some time
-        let ask_cert =
-            create_certificate("ASK", ask_key.to_public_key(), ark_key, Some(&ark_cert)).unwrap();
+        let ask_cert = create_certificate(
+            "ASK",
+            SubjectPublicKeyInfo::from_key(&ask_key.to_public_key()).unwrap(),
+            ark_key,
+            Some(&ark_cert),
+            &mut rng,
+        )
+        .unwrap();
 
         // VCEK - P384 ECDSA (signed by ASK)
         let vcek_key = p384::ecdsa::SigningKey::random(&mut rng);
-        let vcek_cert =
-            create_certificate("VCEK", *vcek_key.verifying_key(), ask_key, Some(&ask_cert))
-                .unwrap();
+        // p384 implements the spki 0.7 traits and x509-cert takes spki 0.8 types, so the public
+        // key goes through its DER encoding.
+        let vcek_public_key_der = vcek_key.verifying_key().to_public_key_der().unwrap();
+        let vcek_cert = create_certificate(
+            "VCEK",
+            SubjectPublicKeyInfo::try_from(vcek_public_key_der.as_bytes()).unwrap(),
+            ask_key,
+            Some(&ask_cert),
+            &mut rng,
+        )
+        .unwrap();
 
         FakeAttestationReportSigner {
             ark_cert,
@@ -180,33 +206,101 @@ impl Default for FakeAttestationReportSigner {
     }
 }
 
-fn create_certificate(
+fn create_certificate<R: rand::RngCore + rand::CryptoRng>(
     subject: &str,
-    public_key: impl EncodePublicKey,
-    issuer_key: RsaPrivateKey,
+    subject_public_key_info: SubjectPublicKeyInfo,
+    issuer_key: PrivateKey,
     issuer_cert: Option<&Certificate>,
+    rng: &mut R,
 ) -> Result<Certificate, Box<dyn std::error::Error>> {
-    let profile = if let Some(issuer_cert) = issuer_cert {
-        Profile::SubCA {
-            issuer: issuer_cert.tbs_certificate.subject.clone(),
-            path_len_constraint: None,
-        }
-    } else {
-        Profile::Root
+    let profile = CaProfile {
+        subject: Name::from_str(&format!("CN={subject}"))?,
+        issuer: issuer_cert.map(|issuer| issuer.tbs_certificate().subject().clone()),
     };
 
     let cert = CertificateBuilder::new(
         profile,
         SerialNumber::from(1_u32),
         Validity::from_now(Duration::from_secs(86400 * 365))?,
-        Name::from_str(&format!("CN={subject}"))?,
-        SubjectPublicKeyInfo::from_key(public_key)?,
-        &rsa::pss::SigningKey::<Sha384>::new(issuer_key),
+        subject_public_key_info,
     )?
-    .build::<rsa::pss::Signature>()?;
+    .build_with_rng::<_, rsa::pss::Signature, _>(
+        &rsa::pss::SigningKey::<Sha384>::new(issuer_key),
+        &mut RandCore10(rng),
+    )?;
 
     Ok(cert)
 }
+
+/// Profile of the fake ARK, ASK and VCEK certificates. x509-cert's `cabf::Root` profile does not
+/// fit because it requires C, O and CN in the subject, and these certificates only have a CN.
+///
+/// Every certificate gets a subject key identifier, an authority key identifier unless it is
+/// self-signed (`issuer` is `None`), critical basic constraints marking it as a CA without a path
+/// length constraint, and a critical key usage allowing `keyCertSign` and `cRLSign`.
+struct CaProfile {
+    subject: Name,
+    issuer: Option<Name>,
+}
+
+impl BuilderProfile for CaProfile {
+    fn get_issuer(&self, subject: &Name) -> Name {
+        self.issuer.clone().unwrap_or_else(|| subject.clone())
+    }
+
+    fn get_subject(&self) -> Name {
+        self.subject.clone()
+    }
+
+    fn build_extensions(
+        &self,
+        spk: SubjectPublicKeyInfoRef<'_>,
+        issuer_spk: SubjectPublicKeyInfoRef<'_>,
+        tbs: &TbsCertificate,
+    ) -> x509_cert::builder::Result<Vec<Extension>> {
+        let subject = tbs.subject();
+        let ski = SubjectKeyIdentifier::try_from(spk)?;
+
+        let mut extensions: Vec<Extension> = Vec::new();
+        extensions.push(ski.to_extension(subject, &extensions)?);
+        if self.issuer.is_some() {
+            let aki = AuthorityKeyIdentifier::try_from(issuer_spk)?;
+            extensions.push(aki.to_extension(subject, &extensions)?);
+        }
+        let basic_constraints = BasicConstraints {
+            ca: true,
+            path_len_constraint: None,
+        };
+        extensions.push(basic_constraints.to_extension(subject, &extensions)?);
+        let key_usage = KeyUsage(KeyUsages::KeyCertSign | KeyUsages::CRLSign);
+        extensions.push(key_usage.to_extension(subject, &extensions)?);
+
+        Ok(extensions)
+    }
+}
+
+/// Makes a rand 0.8 RNG usable as the rand_core 0.10 RNG that `rsa` and x509-cert's
+/// `Builder::build_with_rng` take.
+struct RandCore10<'a, R>(&'a mut R);
+
+impl<R: rand::RngCore> rsa::rand_core::TryRng for RandCore10<'_, R> {
+    type Error = std::convert::Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        Ok(self.0.next_u32())
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        Ok(self.0.next_u64())
+    }
+
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
+        self.0.fill_bytes(dst);
+        Ok(())
+    }
+}
+
+impl<R: rand::RngCore + rand::CryptoRng> rsa::rand_core::TryCryptoRng for RandCore10<'_, R> {}
 
 fn convert_signature(signature: &Signature) -> AttestationReportSignature {
     let mut r_source = signature.r().to_bytes();

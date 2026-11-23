@@ -31,6 +31,7 @@ use ic_consensus_system_test_utils::{
     rw_message::{
         cert_state_makes_progress_with_retries, install_nns_and_check_progress, store_message,
     },
+    ssh_access::{get_update_subnet_payload_with_keys, update_subnet_record},
     subnet::assert_subnet_is_healthy,
 };
 use ic_recovery::nns_recovery_failover_nodes::{
@@ -55,6 +56,9 @@ use url::Url;
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
+/// Number of registry versions to add to the broken NNS before breaking it, such that the original
+/// registry is at a higher version than the one of the parent NNS, which is more realistic.
+const NUM_REGISTRY_VERSION_BUMPS: usize = 5;
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 
 fn main() -> Result<()> {
@@ -78,7 +82,6 @@ pub fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
     InternetComputer::new()
-        .with_name("restore")
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
@@ -89,14 +92,14 @@ pub fn setup(env: TestEnv) {
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot_by_name("broken"));
-    install_nns_and_check_progress(env.topology_snapshot_by_name("restore"));
+    install_nns_and_check_progress(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
 
     let topo_broken_ic = env.topology_snapshot_by_name("broken");
-    let topo_restore_ic = env.topology_snapshot_by_name("restore");
+    let topo_restore_ic = env.topology_snapshot();
 
     let ic_version = get_guestos_img_version();
     info!(logger, "IC_VERSION_ID: {:?}", ic_version);
@@ -164,6 +167,18 @@ pub fn test(env: TestEnv) {
         msg,
         &logger,
     );
+
+    info!(
+        logger,
+        "Bump the registry version of the NNS subnet {} times", NUM_REGISTRY_VERSION_BUMPS
+    );
+    for _ in 0..NUM_REGISTRY_VERSION_BUMPS {
+        // A no-op update of the subnet record still creates a new registry version.
+        block_on(update_subnet_record(
+            nns_node.get_public_url(),
+            get_update_subnet_payload_with_keys(orig_nns_subnet.subnet_id, None, None),
+        ));
+    }
 
     // Break f+1 nodes
     let f = (SUBNET_SIZE - 1) / 3;

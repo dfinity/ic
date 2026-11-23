@@ -1,8 +1,9 @@
-use std::{backtrace::Backtrace, collections::HashMap, ops::Range, sync::Arc, time::Duration};
+use std::{collections::HashMap, ops::Range, sync::Arc, time::Duration};
 
 use futures::StreamExt;
 use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_p2p_test_utils::{
+    abort_process_on_panic,
     consensus::{TestConsensus, U64Artifact},
     fully_connected_localhost_subnet, start_consensus_manager,
     turmoil::{
@@ -20,12 +21,25 @@ use turmoil::Builder;
 
 const TIMEOUT_DURATION_TRIGGER: Duration = Duration::from_secs(5);
 
+/// How much *simulated* time a simulation may run for before turmoil gives up on
+/// it with "Ran for duration: ... without completing".
+///
+/// `ic_p2p_test_utils::turmoil` paces the simulated clock against the real one,
+/// so this is also a lower bound on how long a test whose `wait_for` condition
+/// never becomes true takes in real time before it fails. It therefore has to
+/// fit inside this target's Bazel timeout (300 s, the `medium` default) with
+/// room to spare, or such a failure surfaces as a bare Bazel timeout instead.
+/// Two minutes is still generous for the passing tests: the longest of them
+/// consumes about 16 s of simulated time, and no single `wait_for` more than
+/// about 5.5 s, dominated by the transport's 5 s connect retry backoff.
+const SIMULATION_DURATION: Duration = Duration::from_secs(120);
+
 #[test]
 fn test_artifact_sent_to_other_peer() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(60 * 60))
+            .simulation_duration(SIMULATION_DURATION)
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -82,7 +96,7 @@ fn test_artifact_in_validated_pool_is_sent_to_peer_joining_subnet() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(60 * 60))
+            .simulation_duration(SIMULATION_DURATION)
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -165,7 +179,7 @@ fn test_flapping_connection_does_not_cause_duplicate_artifact_assemble() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(60 * 60))
+            .simulation_duration(SIMULATION_DURATION)
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -399,13 +413,7 @@ fn load_test(
 /// Small load test with four nodes and overlapping advert Id
 #[test]
 fn test_small_load_test() {
-    // Abort process if a thread panics. This catches detached tokio tasks that panic.
-    // https://github.com/tokio-rs/tokio/issues/4516
-    std::panic::set_hook(Box::new(|info| {
-        let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
-        std::process::abort();
-    }));
+    abort_process_on_panic();
     let load_params = LoadParameters {
         num_peers: 4,
         num_events: 100,
@@ -419,13 +427,7 @@ fn test_small_load_test() {
 /// Large load test with 40 nodes without overlapping id.
 #[test]
 fn test_large_load_test_many_nodes() {
-    // Abort process if a thread panics. This catches detached tokio tasks that panic.
-    // https://github.com/tokio-rs/tokio/issues/4516
-    std::panic::set_hook(Box::new(|info| {
-        let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
-        std::process::abort();
-    }));
+    abort_process_on_panic();
     let load_params = LoadParameters {
         num_peers: 8,
         num_events: 100,
@@ -439,13 +441,7 @@ fn test_large_load_test_many_nodes() {
 /// Load test with 20 nodes and large distribution of Id.
 #[test]
 fn test_load_test_many_ids() {
-    // Abort process if a thread panics. This catches detached tokio tasks that panic.
-    // https://github.com/tokio-rs/tokio/issues/4516
-    std::panic::set_hook(Box::new(|info| {
-        let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
-        std::process::abort();
-    }));
+    abort_process_on_panic();
     let load_params = LoadParameters {
         num_peers: 5,
         num_events: 200,
@@ -459,13 +455,7 @@ fn test_load_test_many_ids() {
 /// Small load test with four nodes and no purging..
 #[test]
 fn test_small_load_test_without_purging() {
-    // Abort process if a thread panics. This catches detached tokio tasks that panic.
-    // https://github.com/tokio-rs/tokio/issues/4516
-    std::panic::set_hook(Box::new(|info| {
-        let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
-        std::process::abort();
-    }));
+    abort_process_on_panic();
     let load_params = LoadParameters {
         num_peers: 4,
         num_events: 1000,
@@ -479,13 +469,7 @@ fn test_small_load_test_without_purging() {
 /// Small load test with four nodes and no purging..
 #[test]
 fn test_small_load_test_with_non_overlap() {
-    // Abort process if a thread panics. This catches detached tokio tasks that panic.
-    // https://github.com/tokio-rs/tokio/issues/4516
-    std::panic::set_hook(Box::new(|info| {
-        let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
-        std::process::abort();
-    }));
+    abort_process_on_panic();
     let load_params = LoadParameters {
         num_peers: 4,
         num_events: 1000,
@@ -508,7 +492,7 @@ fn test_adverts_are_retransmitted_on_reconnection() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(60 * 60))
+            .simulation_duration(SIMULATION_DURATION)
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -604,7 +588,7 @@ fn test_new_adverts_are_transmitted_on_reconnection() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(60 * 60))
+            .simulation_duration(SIMULATION_DURATION)
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -697,7 +681,7 @@ fn test_large_msgs() {
         let mut sim = Builder::new()
             .max_message_latency(Duration::from_millis(0))
             .udp_capacity(1024 * 1024)
-            .simulation_duration(Duration::from_secs(20 * 60))
+            .simulation_duration(SIMULATION_DURATION)
             .build();
 
         let exit_notify = Arc::new(Notify::new());

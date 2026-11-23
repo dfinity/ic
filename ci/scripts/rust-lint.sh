@@ -32,6 +32,8 @@ clippy_args=(
 
     # Allow format!("{}", x) instead of format!("{x}").
     --allow clippy::uninlined_format_args
+
+    --allow clippy::redundant_field_names
 )
 if ! cargo clippy "${clippy_args[@]}"; then
     # Don't just explode: provide a solution. Our job is to provide

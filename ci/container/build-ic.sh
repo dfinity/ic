@@ -136,6 +136,7 @@ rm -rf "$DISK_DIR_FULL"
 if "$BUILD_BIN"; then BAZEL_TARGETS+=("//publish/binaries:bundle"); fi
 if "$BUILD_CAN"; then BAZEL_TARGETS+=("//publish/canisters:bundle"); fi
 if "$BUILD_IMG"; then BAZEL_TARGETS+=(
+    "//ic-os/guestos/envs/prod:bundle-disk"
     "//ic-os/guestos/envs/prod:bundle-update"
     "//ic-os/hostos/envs/prod:bundle-update"
     "//ic-os/setupos/envs/prod:bundle"
@@ -204,6 +205,9 @@ fi
 
 if "$BUILD_IMG"; then
     echo_green "##### GUESTOS SHA256SUMS #####"
+    pushd "$DISK_DIR_FULL/guestos/disk" >/dev/null
+    cat SHA256SUMS
+    popd >/dev/null
     pushd "$DISK_DIR_FULL/guestos/update" >/dev/null
     cat SHA256SUMS
     popd >/dev/null

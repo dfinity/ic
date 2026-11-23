@@ -2,6 +2,10 @@
 Description=IC Dogecoin Mainnet Adapter Service Provider
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
+# setup-permissions.service creates the cache directory and chowns it to ic-replica.
+# generate-ic-config.service pulls it in. Don't add a Wants=: it would re-run a failed
+# setup-permissions.service on every restart of this adapter.
+After=setup-permissions.service
 After=network-online.target
 Wants=network-online.target
 Requires=ic-doge-mainnet-adapter.socket

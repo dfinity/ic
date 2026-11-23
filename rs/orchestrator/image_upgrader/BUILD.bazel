@@ -15,7 +15,6 @@ rust_library(
         # Keep sorted.
         "//rs/http_utils",
         "//rs/monitoring/logger",
-        "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
 )
@@ -36,7 +35,6 @@ rust_test(
         # Keep sorted.
         "//rs/http_utils",
         "//rs/monitoring/logger",
-        "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
 )

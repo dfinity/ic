@@ -13,7 +13,7 @@ use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::tokens::CheckedSub;
 use ic_management_canister_types::{
-    CanisterStatusResult as ManagementCanisterStatusResult, EnvironmentVariable,
+    CanisterStatusResult as ManagementCanisterStatusResult, EnvironmentVariable, StatusVisibility,
 };
 use ic_management_canister_types_private::{CanisterIdRecord, CanisterInfoResponse};
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
@@ -411,6 +411,27 @@ fn test_cmc_notify_create_with_settings() {
     assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
     assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
     assert_eq!(status.settings.environment_variables, env_vars);
+
+    //specify minimum incoming canister call cycles and status visibility
+    let canister = notify_create_canister(
+        &state_machine,
+        Some(CanisterSettings {
+            minimum_incoming_canister_call_cycles: Some(Nat::from(1_000_000_u64)),
+            status_visibility: Some(StatusVisibility::Public),
+            ..Default::default()
+        }),
+    );
+    let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap();
+    assert_eq!(status.settings.controllers, vec![TEST_USER1_PRINCIPAL.0]);
+    assert_eq!(status.settings.compute_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
+    assert_eq!(status.settings.environment_variables, vec![]);
+    assert_eq!(
+        status.settings.minimum_incoming_canister_call_cycles,
+        Nat::from(1_000_000_u64)
+    );
+    assert_eq!(status.settings.status_visibility, StatusVisibility::Public);
 }
 
 fn canister_cycles_balance(
@@ -710,6 +731,32 @@ fn test_cmc_cycles_create_with_settings() {
     assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
     assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
     assert_eq!(status.settings.environment_variables, env_vars);
+
+    //specify minimum incoming canister call cycles and status visibility
+    let canister = cmc_create_canister_with_cycles(
+        &state_machine,
+        universal_canister,
+        Some(CanisterSettings {
+            controllers: Some(vec![TEST_USER1_PRINCIPAL.0]),
+            minimum_incoming_canister_call_cycles: Some(Nat::from(1_000_000_u64)),
+            status_visibility: Some(StatusVisibility::Public),
+            ..Default::default()
+        }),
+        None,
+        10_000_000_000_000,
+    )
+    .unwrap();
+    let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap();
+    assert_eq!(status.settings.controllers, vec![TEST_USER1_PRINCIPAL.0]);
+    assert_eq!(status.settings.compute_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
+    assert_eq!(status.settings.environment_variables, vec![]);
+    assert_eq!(
+        status.settings.minimum_incoming_canister_call_cycles,
+        Nat::from(1_000_000_u64)
+    );
+    assert_eq!(status.settings.status_visibility, StatusVisibility::Public);
 
     let universal_status = canister_status(
         &state_machine,

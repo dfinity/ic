@@ -17,7 +17,6 @@ use ic_types::consensus::dkg::DkgSummary;
 use ic_types::{
     Height, Time,
     artifact::{CertificationMessageId, ConsensusMessageId, IDkgMessageId},
-    batch::BatchPayload,
     consensus::{
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
         ConsensusMessageHash, ConsensusMessageHashable, DataPayload, EquivocationProof,
@@ -27,7 +26,6 @@ use ic_types::{
         certification::{
             Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
         },
-        dkg::DkgDataPayload,
         idkg::{
             EcdsaSigShare, IDkgArtifactId, IDkgArtifactIdData, IDkgArtifactIdDataOf, IDkgMessage,
             IDkgMessageType, IDkgPrefix, IDkgPrefixOf, IterationPattern, SchnorrSigShare, SigShare,
@@ -813,11 +811,13 @@ where
     }
 
     fn get_only_by_height(&self, h: Height) -> Result<Message, OnlyError> {
-        let mut as_vec: Vec<Message> = self.get_by_height(h).collect();
-        match as_vec.len() {
-            0 => Err(OnlyError::NoneAvailable),
-            1 => Ok(as_vec.remove(0)),
-            _ => Err(OnlyError::MultipleValues),
+        let mut iter = self.get_by_height(h);
+        match iter.next() {
+            None => Err(OnlyError::NoneAvailable),
+            Some(value) => match iter.next() {
+                None => Ok(value),
+                Some(_) => Err(OnlyError::MultipleValues),
+            },
         }
     }
 
@@ -839,11 +839,9 @@ where
     }
 
     fn get_highest(&self) -> Result<Message, OnlyError> {
-        let mut as_vec: Vec<Message> = self.get_highest_iter().collect();
-        match as_vec.len() {
-            0 => Err(OnlyError::NoneAvailable),
-            1 => Ok(as_vec.remove(0)),
-            _ => Err(OnlyError::MultipleValues),
+        match <dyn HeightIndexedPool<Message>>::max_height(self) {
+            Some(height) => self.get_only_by_height(height),
+            None => Err(OnlyError::NoneAvailable),
         }
     }
 
@@ -1038,11 +1036,7 @@ impl PoolArtifact for ConsensusMessage {
                         dkg: DkgSummary::default(),
                         idkg: None,
                     }),
-                    PayloadType::Data => BlockPayload::Data(DataPayload {
-                        batch: BatchPayload::default(),
-                        dkg: DkgDataPayload::new_empty(start_height),
-                        idkg: None,
-                    }),
+                    PayloadType::Data => BlockPayload::Data(DataPayload::new_empty(start_height)),
                 }),
             );
             value.msg = proposal.into_message();

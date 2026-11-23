@@ -2,7 +2,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use http::{Method, StatusCode};
 use rcgen::{CertificateParams, KeyPair};
 use reqwest::{Client, Request};
-use rsa::{RsaPrivateKey, pkcs1::DecodeRsaPrivateKey, pkcs8::EncodePrivateKey};
+use rsa::{PrivateKey, pkcs1::DecodeRsaPrivateKey, pkcs8::EncodePrivateKey};
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use std::{
@@ -60,14 +60,14 @@ const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 /// backend's variant of every system test by `_local_only_deps` in
 /// `rs/tests/system_tests.bzl`. Reading either on the Farm backend would panic,
 /// and must not happen: Farm uses a playnet certificate.
-struct DevRootCa {
+pub(crate) struct DevRootCa {
     /// PEM of the checked-in CA certificate, exactly as it sits in the images'
-    /// trust store. This is what the gateway serves as its chain and what a
-    /// driver-side client adds as a trust anchor.
-    cert_pem: String,
+    /// trust store. This is what the gateway and the local backend's time server
+    /// serve in their chains and what a driver-side client adds as a trust anchor.
+    pub(crate) cert_pem: String,
     /// The same CA as an `rcgen` issuer.
-    cert: rcgen::Certificate,
-    key: KeyPair,
+    pub(crate) cert: rcgen::Certificate,
+    pub(crate) key: KeyPair,
 }
 
 /// The PEM of the dev root CA certificate. See [`DevRootCa`].
@@ -82,7 +82,7 @@ fn dev_root_ca_cert_pem() -> Result<String> {
 }
 
 /// Loads the dev root CA so `rcgen` can issue certificates from it.
-fn dev_root_ca() -> Result<DevRootCa> {
+pub(crate) fn dev_root_ca() -> Result<DevRootCa> {
     let cert_pem = dev_root_ca_cert_pem()?;
     let key_path = get_dependency_path_from_env("ENV_DEPS__DEV_ROOT_CA_KEY_PATH");
     let key_pkcs1_pem = fs::read_to_string(&key_path)
@@ -97,7 +97,7 @@ fn dev_root_ca() -> Result<DevRootCa> {
     // backend, so it does not matter if that ever changes; relying on the feature
     // would turn an unrelated dependency edit into a runtime failure in every
     // local gateway test.
-    let key_pkcs8_pem = RsaPrivateKey::from_pkcs1_pem(&key_pkcs1_pem)
+    let key_pkcs8_pem = PrivateKey::from_pkcs1_pem(&key_pkcs1_pem)
         .context("parsing the dev root CA key as PKCS#1")?
         .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
         .context("re-encoding the dev root CA key as PKCS#8")?;

@@ -19,6 +19,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
+use ic_protobuf::registry::replica_version::SEV_SNP_MEASUREMENT_LENGTH;
 use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
 };
@@ -30,8 +31,8 @@ use ic_protobuf::registry::{
     replica_version::v1::ReplicaVersionRecord,
     routing_table::v1::RoutingTable as RoutingTablePB,
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig, InitialNiDkgTranscriptRecord, SubnetListRecord,
-        SubnetRecord,
+        CatchUpPackageContents, ChainKeyConfig, GenesisArgs, InitialNiDkgTranscriptRecord,
+        SubnetListRecord, SubnetRecord, catch_up_package_contents::CupType,
     },
 };
 use ic_registry_canister_api::{AddNodePayload, Chunk, GetChunkRequest};
@@ -348,9 +349,8 @@ pub fn invariant_compliant_mutation_with_subnet_id(
     };
     const MOCK_HASH: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
     let release_package_url = "http://release_package.tar.zst".to_string();
-    let replica_version_id = test_replica_version().to_string();
     let replica_version = ReplicaVersionRecord {
-        replica_version_id: Some(replica_version_id.clone()),
+        replica_version_id: test_replica_version().to_string(),
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],
         guest_launch_measurements: None,
@@ -362,7 +362,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
     let system_subnet = SubnetRecord {
         membership: vec![node_id.get().to_vec()],
         subnet_type: i32::from(SubnetType::System),
-        replica_version_id: replica_version_id.clone(),
+        replica_version_id: replica_version.replica_version_id.clone(),
         unit_delay_millis: 600,
         chain_key_config,
         ..Default::default()
@@ -381,7 +381,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
             system_subnet.encode_to_vec(),
         ),
         insert(
-            make_replica_version_key(replica_version_id).as_bytes(),
+            make_replica_version_key(&replica_version.replica_version_id).as_bytes(),
             replica_version.encode_to_vec(),
         ),
         insert(
@@ -574,6 +574,7 @@ fn dummy_cup_for_subnet(nodes: Vec<NodeId>) -> CatchUpPackageContents {
     CatchUpPackageContents {
         initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript_record),
         initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript_record),
+        cup_type: Some(CupType::Genesis(GenesisArgs {})),
         ..Default::default()
     }
 }
@@ -608,12 +609,11 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         add_node_mutations.append(&mut mutations);
     }
 
-    let replica_version_id = test_replica_version().to_string();
     const MOCK_HASH: &str = "abbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabba";
     let release_package_url = "http://release_package.tar.zst".to_string();
     let guest_launch_measurements = Some(GuestLaunchMeasurements {
         guest_launch_measurements: vec![GuestLaunchMeasurement {
-            measurement: vec![0x42; 48],
+            measurement: vec![0x42; SEV_SNP_MEASUREMENT_LENGTH],
             metadata: Some(GuestLaunchMeasurementMetadata {
                 kernel_cmdline: Some("foo=bar".to_string()),
                 vcpu_type: None,
@@ -621,7 +621,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         }],
     });
     let replica_version = ReplicaVersionRecord {
-        replica_version_id: Some(replica_version_id.clone()),
+        replica_version_id: test_replica_version().to_string(),
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],
         guest_launch_measurements,
@@ -632,7 +632,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
     let system_subnet = SubnetRecord {
         membership: node_id.iter().map(|id| id.get().to_vec()).collect(),
         subnet_type: i32::from(SubnetType::System),
-        replica_version_id: replica_version_id.clone(),
+        replica_version_id: replica_version.replica_version_id.clone(),
         unit_delay_millis: 600,
         ..Default::default()
     };
@@ -659,7 +659,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
             RoutingTablePB::from(routing_table).encode_to_vec(),
         ),
         insert(
-            make_replica_version_key(replica_version_id).as_bytes(),
+            make_replica_version_key(&replica_version.replica_version_id).as_bytes(),
             replica_version.encode_to_vec(),
         ),
     ];

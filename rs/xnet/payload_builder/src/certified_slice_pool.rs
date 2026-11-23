@@ -1,6 +1,7 @@
 //! A pool of incoming `CertifiedStreamSlices` used by `XNetPayloadBuilderImpl`
 //! to build `XNetPayloads` without the need for I/O on the critical path.
 
+use crate::exchange::PullIndices;
 use crate::{ExpectedIndices, max_message_index};
 use header::Header;
 use ic_canonical_state::LabelLike;
@@ -8,26 +9,28 @@ use ic_crypto_tree_hash::{
     Label, LabeledTree, TreeHashError, Witness, first_sub_witness, flat_map::FlatMap,
     prune_witness, sub_witness,
 };
+use ic_interfaces::messaging::XNetAdvertOutcome;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
-use ic_logger::{ReplicaLogger, info};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::{
     MetricsRegistry,
     buckets::{decimal_buckets, decimal_buckets_with_zero},
 };
 use ic_protobuf::messaging::xnet::v1;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
+use ic_replicated_state::{Stream, metadata_state::StreamMap};
 use ic_types::{
-    CountBytes, Height, RegistryVersion, SubnetId,
-    consensus::certification::Certification,
+    CountBytes, RegistryVersion, SubnetId,
+    consensus::certification::SignedCertificationContent,
     xnet::{CertifiedStreamSlice, StreamHeader, StreamIndex},
 };
 use messages::Messages;
-use prometheus::{Histogram, IntCounterVec, IntGauge};
+use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge};
 use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 use std::convert::{From, TryFrom, TryInto};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 const LABEL_STREAMS: &[u8] = b"streams";
 const LABEL_HEADER: &[u8] = b"header";
@@ -44,18 +47,23 @@ pub type CertifiedSliceResult<T> = Result<T, CertifiedSliceError>;
 struct CertifiedSlicePoolMetrics {
     pool_size_bytes: IntGauge,
     put_count: IntCounterVec,
+    lagging_put_and_append_count: IntCounter,
     take_count: IntCounterVec,
     take_messages: Histogram,
     take_gced_messages: Histogram,
     take_size_bytes: Histogram,
+    critical_error_incomparable_peer_header: IntCounter,
 }
 
 pub const METRIC_POOL_SIZE_BYTES: &str = "xnet_pool_size_bytes";
 pub const METRIC_PUT_COUNT: &str = "xnet_pool_put_count";
+pub const METRIC_LAGGING_PUT_AND_APPEND_COUNT: &str = "xnet_pool_lagging_put_and_append_count";
 pub const METRIC_TAKE_COUNT: &str = "xnet_pool_take_count";
 pub const METRIC_TAKE_MESSAGES: &str = "xnet_pool_take_messages";
 pub const METRIC_TAKE_SIZE_BYTES: &str = "xnet_pool_take_size_bytes";
 pub const METRIC_TAKE_GCED_MESSAGES: &str = "xnet_pool_take_gced_messages";
+
+pub const CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER: &str = "xnet_pool_incomparable_peer_header";
 
 pub const LABEL_STATUS: &str = "status";
 
@@ -72,8 +80,12 @@ impl CertifiedSlicePoolMetrics {
             ),
             put_count: metrics_registry.int_counter_vec(
                 METRIC_PUT_COUNT,
-                "Count of valid XNet slice pool puts and appends, by status. Errors are instrumented separately, as failed pull attempts.",
+                "Count of valid XNet slice pool puts (of pulled slices or adverts) and appends, by status. Errors are instrumented separately, as failed pull attempts or advert outcomes.",
                 &[LABEL_STATUS]
+            ),
+            lagging_put_and_append_count: metrics_registry.int_counter(
+                METRIC_LAGGING_PUT_AND_APPEND_COUNT,
+                "Count of XNet slice pool puts and appends whose stream header is behind the recorded one, i.e. of slices pulled from or advertised by a lagging node.",
             ),
             take_count: metrics_registry.int_counter_vec(
                 METRIC_TAKE_COUNT,
@@ -98,6 +110,8 @@ impl CertifiedSlicePoolMetrics {
                 // 100 B - 5 MB
                 decimal_buckets(2, 6)
             ),
+            critical_error_incomparable_peer_header: metrics_registry
+                .error_counter(CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER),
         }
     }
 
@@ -478,7 +492,7 @@ impl Payload {
             // `byte_size` (computed the same way) is below `byte_limit`.
             debug_assert!(
                 false,
-                "Invalid `messages_count_bytes`: was {}, expecting {}",
+                "Invalid `Messages::count_bytes()`: was {}, expecting {}",
                 messages.count_bytes(),
                 byte_size
             );
@@ -707,8 +721,7 @@ impl Payload {
         })
     }
 
-    /// Returns the `StreamIndex` of the first message, if any;
-    /// `Err(InvalidPayload)` if `self.messages` is malformed.
+    /// Returns the `StreamIndex` of the first message, if any.
     fn messages_begin(&self) -> Option<StreamIndex> {
         self.messages.as_ref().map(|m| m.begin())
     }
@@ -804,7 +817,7 @@ pub struct UnpackedStreamSlice {
     merkle_proof: Witness,
 
     /// The certification of the root hash.
-    certification: Certification,
+    certification: SignedCertificationContent,
 }
 
 impl UnpackedStreamSlice {
@@ -866,9 +879,9 @@ impl UnpackedStreamSlice {
 
     /// Garbage collects the slice: drops all messages before
     /// `cutoff.message_index` and updates the witness. If all messages were
-    /// dropped; and `cutoff.signal_index` is beyond `signals_end` (no new signals);
-    /// and `begin` is before `cutoff.min_useful_header_begin` or the latter is
-    /// `None` (no newly GC-ed messages); the slice is dropped altogether.
+    /// dropped; and `cutoff.signal_index` is at or beyond `signals_end` (no new
+    /// signals); and `begin` is at or below `cutoff.max_no_gc_header_begin` (would
+    /// not GC any reject signal); the slice is dropped altogether.
     ///
     /// Returns:
     ///  * `Ok(Some(pruned_self))` if the slice was partly pruned;
@@ -883,13 +896,9 @@ impl UnpackedStreamSlice {
         let pruned_tree = self.payload.garbage_collect(cutoff.message_index)?;
         if self.payload.messages.is_none()
             && cutoff.signal_index >= self.payload.header.signals_end()
-            && cutoff
-                .min_useful_header_begin
-                .is_none_or(|min_useful_header_begin| {
-                    self.payload.header.begin() < min_useful_header_begin
-                })
+            && self.payload.header.begin() <= cutoff.max_no_gc_header_begin
         {
-            // No messages, no new signals, and no newly GC-ed messages. Drop the slice.
+            // No messages, no new signals, would not GC any reject signal: drop the slice.
             return Ok(None);
         }
 
@@ -904,8 +913,8 @@ impl UnpackedStreamSlice {
     /// A partial slice is a slice with messages covering only a (possibly
     /// zero-length) suffix of the range covered by its witness.
     ///
-    /// Returns `Err(InvalidPayload)` if `self.payload` is malformed. Returns
-    /// `Err(InvalidWitness)` if `self.merkle_proof` is malformed. Returns
+    /// Returns `Err(InvalidPayload)` if `partial.payload` is malformed. Returns
+    /// `Err(InvalidWitness)` if `partial.merkle_proof` is malformed. Returns
     /// `Err(InvalidAppend)` if `partial`'s witness doesn't precisely cover the
     /// concatenation of `self`s and `partial`s messages; if `partial` has a
     /// different `subnet_id`; its messages do not extend `self`'s gap-free; or
@@ -950,7 +959,7 @@ impl UnpackedStreamSlice {
             .transpose()
     }
 
-    /// Packs a `Payload`, `Witness` and `Certification` into a
+    /// Packs a `Payload`, `Witness` and certification into a
     /// `CertifiedStreamSlice`.
     fn pack(self) -> CertifiedStreamSlice {
         CertifiedStreamSlice {
@@ -985,7 +994,7 @@ pub fn certified_slice_count_bytes(packed: &CertifiedStreamSlice) -> CertifiedSl
 /// `UnpackedStreamSlice`.
 ///
 /// Returns a deterministic byte size estimate of the provided certified slice.
-fn slice_count_bytes(payload: &Payload, certification: &Certification) -> usize {
+fn slice_count_bytes(payload: &Payload, certification: &SignedCertificationContent) -> usize {
     let stream_begin = payload.header.begin();
     let stream_end = payload.header.end();
     let slice_begin = payload.messages_begin();
@@ -1107,6 +1116,29 @@ fn to_stream_index(label: &Label) -> Result<StreamIndex, InvalidSlice> {
     StreamIndex::from_label(label.as_bytes()).ok_or(NotAStreamIndex)
 }
 
+/// Slice pool soft upper limit in bytes. Actual size may go over this limit, as
+/// we're polling multiple subnets in parallel and we don't want to discard
+/// slices that we've already pulled.
+pub const POOL_BYTE_SIZE_SOFT_CAP: usize = 128 << 20;
+
+/// Hard maximum slice size in bytes. We only pool up to 8 MB (two blocks' worth
+/// of payload) from any one stream.
+pub const POOLED_SLICE_BYTE_SIZE_MAX: usize = 8 << 20;
+
+/// Divisor applied to the space left in the pool to obtain the maximum size of
+/// a pooled slice, so that a few backlogged streams cannot take over the pool.
+/// Yields `POOLED_SLICE_BYTE_SIZE_MAX` while the pool is empty, less as it
+/// fills up.
+pub const POOLED_SLICE_BYTE_SIZE_DIVISOR: usize =
+    POOL_BYTE_SIZE_SOFT_CAP / POOLED_SLICE_BYTE_SIZE_MAX;
+
+/// Reduces `slice_byte_size` to account for overhead in the `XNetEndpoint`
+/// request, which only counts message bytes (measured: 350 bytes for
+/// certification plus base witness, 2% for large payloads).
+pub fn adjusted_byte_limit(slice_byte_size: usize) -> usize {
+    slice_byte_size.saturating_sub(350) * 98 / 100
+}
+
 /// A pool of `CertifiedStreamSlices` that provides support for taking out
 /// valid certified sub-slices of arbitrary size starting from arbitrary stream
 /// indices; and maintains cached stream positions, so an asynchronous process
@@ -1115,6 +1147,10 @@ fn to_stream_index(label: &Label) -> Result<StreamIndex, InvalidSlice> {
 /// It does not verify the validity of the slices it stores or returns, but
 /// operations will return `CertifiedSliceError` if the slices are obviously
 /// invalid (e.g. if payload structure is invalid or witness pruning fails).
+///
+/// Also maintains a collection of "recorded headers", the furthest-advanced
+/// certified header seen from each peer subnet, for deciding whether to post
+/// adverts, classifying incoming ones and deciding what is left to pull.
 pub struct CertifiedSlicePool {
     /// The actual slice pool contents.
     slices: BTreeMap<SubnetId, UnpackedStreamSlice>,
@@ -1124,34 +1160,30 @@ pub struct CertifiedSlicePool {
     /// of the pooled slice.
     ///
     /// Replaced with the positions provided to `garbage_collect()`; and
-    /// advanced to the end of the slice returned by a `take_slice()` call.
+    /// advanced by `garbage_collect_slice()` and `take_slice()`.
     stream_positions: BTreeMap<SubnetId, ExpectedIndices>,
 
-    /// The furthest-advanced certified header seen from each peer subnet. Unlike
-    /// a pooled slice, which is dropped once consumed, this is retained: it is
-    /// the only record of how far the peer has seen our signals (its `begin`)
-    /// and of what it has on offer (its `end` and `signals_end`).
-    peer_headers: BTreeMap<SubnetId, PeerHeader>,
+    /// The recorded header (furthest-advanced certified header seen) of each peer
+    /// subnet. Unlike a pooled slice, which is dropped once consumed, this is
+    /// retained: it is our record of how far the peer has seen our signals (its
+    /// `begin`) and of what it has on offer (its `end` and `signals_end`).
+    peer_headers: BTreeMap<SubnetId, Arc<StreamHeader>>,
 
     metrics: CertifiedSlicePoolMetrics,
-}
 
-/// A peer subnet's high-water-mark header, along with the height of the
-/// certification it was taken from, which orders the headers received.
-struct PeerHeader {
-    certification_height: Height,
-    header: StreamHeader,
+    log: ReplicaLogger,
 }
 
 impl CertifiedSlicePool {
     /// Creates a new pool instance using the given `MetricsRegistry` for
     /// instrumentation.
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry, log: ReplicaLogger) -> Self {
         Self {
             slices: Default::default(),
             stream_positions: Default::default(),
             peer_headers: Default::default(),
             metrics: CertifiedSlicePoolMetrics::new(metrics_registry),
+            log,
         }
     }
 
@@ -1206,8 +1238,8 @@ impl CertifiedSlicePool {
     ///
     /// On success, returns a prefix respecting the given limits.
     ///
-    /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
-    /// `self.payload` is malformed.
+    /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if the pooled
+    /// slice was malformed.
     fn take_slice_impl(
         &mut self,
         subnet_id: SubnetId,
@@ -1266,11 +1298,10 @@ impl CertifiedSlicePool {
                 stream_indices.message_index += StreamIndex::from(prefix_message_count as u64);
                 stream_indices.signal_index = stream_indices.signal_index.max(signals_end);
                 // Inducting the returned prefix GCs all reject signals before its
-                // `header.begin()`, so advance `min_useful_header_begin` just past it, as we
-                // don't know where the next reject signal is.
-                stream_indices.min_useful_header_begin = stream_indices
-                    .min_useful_header_begin
-                    .map(|b| b.max(header_begin.increment()));
+                // `header.begin()`, so advance `max_no_gc_header_begin` to it, as we don't
+                // know where the next reject signal is.
+                stream_indices.max_no_gc_header_begin =
+                    stream_indices.max_no_gc_header_begin.max(header_begin);
             }
             Ok(Some(prefix))
         } else {
@@ -1329,7 +1360,8 @@ impl CertifiedSlicePool {
     }
 
     /// Returns an iterator over the `SubnetIds` passed to the last
-    /// `garbage_collect()` call, i.e. the set of known peer subnets.
+    /// `garbage_collect()` call, i.e. subnets with streams in the certified state
+    /// or slices in past payloads.
     pub fn peers(&self) -> impl Iterator<Item = &SubnetId> {
         self.stream_positions.keys()
     }
@@ -1364,6 +1396,63 @@ impl CertifiedSlicePool {
         self.slices.values().map(|slice| slice.count_bytes()).sum()
     }
 
+    /// Computes `PullIndices` for every subnet with a cached stream position,
+    /// except `own_subnet_id`.
+    pub fn refill_stream_slice_indices(
+        &self,
+        own_subnet_id: SubnetId,
+    ) -> Vec<(SubnetId, PullIndices)> {
+        self.peers()
+            // Skip our own subnet, the loopback stream is routed separately.
+            .filter(|&&subnet_id| subnet_id != own_subnet_id)
+            .filter_map(|&subnet_id| Some((subnet_id, self.pull_indices(subnet_id)?)))
+            .collect()
+    }
+
+    /// Computes the `PullIndices` for pulling a slice from `subnet_id`;
+    /// or `None` if there is no cached stream position for it.
+    pub fn pull_indices(&self, subnet_id: SubnetId) -> Option<PullIndices> {
+        let (Some(stream_position), messages_begin, msg_count, byte_size) =
+            self.slice_stats(subnet_id)
+        else {
+            // No cached stream position, nothing to pull.
+            return None;
+        };
+
+        // Maximum byte size of any one pooled slice, applied uniformly across slices:
+        // as the pool fills up, we aim to fill what is left of it with (more, but)
+        // smaller slices.
+        let slice_byte_size_max = POOL_BYTE_SIZE_SOFT_CAP.saturating_sub(self.byte_size())
+            / POOLED_SLICE_BYTE_SIZE_DIVISOR;
+
+        let (witness_begin, msg_begin, slice_byte_limit) = match messages_begin {
+            // Existing pooled stream, pull partial slice and append.
+            Some(messages_begin) if messages_begin == stream_position.message_index => (
+                stream_position.message_index,
+                stream_position.message_index + (msg_count as u64).into(),
+                slice_byte_size_max.saturating_sub(byte_size),
+            ),
+
+            // No pooled stream, or pooled stream does not begin at cached stream position, pull
+            // complete slice from cached stream position.
+            _ => (
+                stream_position.message_index,
+                stream_position.message_index,
+                slice_byte_size_max,
+            ),
+        };
+
+        // Pull regardless of how low `slice_byte_limit` is:
+        //  * A header-only suffix may usefully replace the pooled slice's.
+        //  * A complete slice will always include the first message, if any. We rely on
+        //    this to avoid stalling streams indefinitely behind large messages.
+        Some(PullIndices {
+            witness_begin,
+            msg_begin,
+            byte_limit: adjusted_byte_limit(slice_byte_limit),
+        })
+    }
+
     /// Places the provided slice into the pool, after trimming off any prefix
     /// before the corresponding `stream_positions` entry.
     ///
@@ -1371,17 +1460,20 @@ impl CertifiedSlicePool {
     /// signature verification) is done without holding the pool lock. The lock is
     /// only taken to insert the slice.
     ///
-    /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
-    /// `slice` is malformed. Returns `Err(DecodeStreamError)` if the slice could
-    /// not be decoded or its certification was invalid.
+    /// Returns whether the slice was pooled, i.e. had anything left after trimming
+    /// and was more useful than the pooled slice. Returns `Err(DecodeFailed)` if
+    /// `slice` could not be deserialized. Returns `Err(InvalidPayload)` or
+    /// `Err(WitnessPruningFailed)` if `slice` is malformed. Returns
+    /// `Err(DecodeStreamError)` if the slice could not be decoded or its
+    /// certification was invalid.
     pub fn put(
         pool: &Mutex<Self>,
         subnet_id: SubnetId,
         slice: CertifiedStreamSlice,
         certified_stream_store: &dyn CertifiedStreamStore,
         registry_version: RegistryVersion,
-        log: ReplicaLogger,
-    ) -> CertifiedSliceResult<()> {
+        log: &ReplicaLogger,
+    ) -> CertifiedSliceResult<bool> {
         validate_slice(
             &slice,
             subnet_id,
@@ -1392,8 +1484,8 @@ impl CertifiedSlicePool {
         let unpacked = slice.try_into()?;
 
         let result = pool.lock().unwrap().pool_slice(subnet_id, unpacked);
-        // `pool_slice` returned any displaced slice. Drop it outside the pool lock.
-        result.map(|_| ())
+        // Drop any returned slice (displaced or rejected) outside the pool lock.
+        result.map(|(pooled, _maybe_slice)| pooled)
     }
 
     /// Appends a partial slice to the corresponding pool entry, trimming
@@ -1409,7 +1501,8 @@ impl CertifiedSlicePool {
     /// BLS signature verification) is done without holding the pool lock. The lock
     /// is only taken to clone the pooled slice and to install the merged one.
     ///
-    /// Returns `Err(DecodeFailed)` if `partial` could not be deserialized.
+    /// Returns whether the merged slice was pooled (see `put()`). Returns
+    /// `Err(DecodeFailed)` if `partial` could not be deserialized.
     /// Returns `Err(InvalidPayload)`,  `Err(InvalidWitness)` or
     /// `Err(WitnessPruningFailed)` if the pooled slice or `partial` are
     /// malformed. Returns `Err(InvalidAppend)` if the two slices do not match.
@@ -1421,8 +1514,8 @@ impl CertifiedSlicePool {
         partial: CertifiedStreamSlice,
         certified_stream_store: &dyn CertifiedStreamStore,
         registry_version: RegistryVersion,
-        log: ReplicaLogger,
-    ) -> CertifiedSliceResult<()> {
+        log: &ReplicaLogger,
+    ) -> CertifiedSliceResult<bool> {
         let partial: UnpackedStreamSlice = partial.try_into()?;
 
         // Clone the pooled slice, if any, instead of removing it: this way the
@@ -1454,22 +1547,33 @@ impl CertifiedSlicePool {
         )?;
 
         let result = pool.lock().unwrap().pool_slice(subnet_id, slice);
-        // `pool_slice` returned any displaced slice. Drop it outside the pool lock.
-        result.map(|_| ())
+        // Drop any returned slice (displaced or rejected) outside the pool lock.
+        result.map(|(pooled, _maybe_slice)| pooled)
     }
 
     /// Garbage collects the provided slice and pools the rest, iff more useful than
     /// the already pooled slice (see `compare_usefulness()`).
     ///
-    /// Returns the displaced slice if any, to be dropped outside the pool lock.
-    /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
-    /// `unpacked` is malformed.
+    /// Returns whether `unpacked` was pooled; and the displaced or rejected slice
+    /// if any, to be dropped outside the pool lock. Returns `Err(InvalidPayload)`
+    /// or `Err(WitnessPruningFailed)` if `unpacked` is malformed.
     fn pool_slice(
         &mut self,
         subnet_id: SubnetId,
         mut unpacked: UnpackedStreamSlice,
-    ) -> CertifiedSliceResult<Option<UnpackedStreamSlice>> {
-        self.maybe_set_peer_header(subnet_id, &unpacked);
+    ) -> CertifiedSliceResult<(bool, Option<UnpackedStreamSlice>)> {
+        // Count headers behind the recorded one, i.e. pulled from a lagging node.
+        let header = unpacked.payload.header.decoded();
+        if self
+            .peer_headers
+            .get(&subnet_id)
+            .is_some_and(|recorded| header_advances(recorded, header))
+        {
+            self.metrics.lagging_put_and_append_count.inc();
+        }
+
+        // Record every header, whether or not we end up pooling it.
+        self.record_peer_header(subnet_id, header);
 
         // Trim off everything before the cached stream position.
         let stream_position = self.stream_positions.get(&subnet_id);
@@ -1480,7 +1584,7 @@ impl CertifiedSlicePool {
                 // Bail out if nothing left.
                 None => {
                     self.metrics.observe_put(STATUS_NONE);
-                    return Ok(None);
+                    return Ok((false, None));
                 }
             };
         }
@@ -1491,47 +1595,159 @@ impl CertifiedSlicePool {
             && compare_usefulness(pooled, &unpacked, stream_position).is_ge()
         {
             self.metrics.observe_put(STATUS_LESS_USEFUL);
-            Ok(Some(unpacked))
+            Ok((false, Some(unpacked)))
         } else {
             self.metrics.observe_put(STATUS_SUCCESS);
-            Ok(self.slices.insert(subnet_id, unpacked))
+            Ok((true, self.slices.insert(subnet_id, unpacked)))
         }
     }
 
-    /// Returns the given peer subnet's high-water-mark header, if any.
-    pub fn peer_header(&self, subnet_id: SubnetId) -> Option<&StreamHeader> {
-        self.peer_headers
-            .get(&subnet_id)
-            .map(|peer_header| &peer_header.header)
+    /// Classifies an advertised header by how much of its content we already
+    /// have: accounted for by the cached stream position, i.e. included into
+    /// blocks as far as we know (`InPayload`); covered by the pooled slice
+    /// (`Pooled`); covered by the peer's recorded header (`Duplicate`); or none
+    /// of the above (`Actionable`).
+    ///
+    /// Content is messages or signals; or a `begin` far enough along to garbage
+    /// collect a reject signal in `own_stream` (our stream to `subnet_id`, if any)
+    /// that the reference header's `begin` would not.
+    ///
+    /// Never returns `NothingNew`, which would require comparison against the
+    /// certified state.
+    pub fn classify_advert(
+        &self,
+        subnet_id: SubnetId,
+        header: &StreamHeader,
+        own_stream: Option<&Stream>,
+    ) -> XNetAdvertOutcome {
+        let covered_by =
+            |messages_end: StreamIndex, signals_end: StreamIndex, header_begin: StreamIndex| {
+                header.end() <= messages_end
+                && header.signals_end() <= signals_end
+                // Plus no reject signal of ours left for the advertised `begin` to
+                // garbage collect.
+                && !own_stream.is_some_and(|stream| {
+                    stream.has_reject_signal_between(header_begin, header.begin())
+                })
+            };
+
+        // The peer's messages, signals and `header.begin()` accounted for so far. The
+        // reference points below are tested in increasing order of coverage, but none
+        // of them is guaranteed to subsume the previous ones, hence the accumulation.
+        let mut messages_end = StreamIndex::from(0);
+        let mut signals_end = StreamIndex::from(0);
+        let mut header_begin = StreamIndex::from(0);
+
+        if let Some(stream_position) = self.stream_positions.get(&subnet_id) {
+            messages_end = stream_position.message_index;
+            signals_end = stream_position.signal_index;
+            header_begin = stream_position.max_no_gc_header_begin;
+            if covered_by(messages_end, signals_end, header_begin) {
+                return XNetAdvertOutcome::InPayload;
+            }
+        }
+
+        if let Some(pooled) = self.slices.get(&subnet_id) {
+            // The pooled slice's `messages_end` only counts if it extends gap-free the
+            // messages already in payloads (cached stream position).
+            if let Some(messages_begin) = pooled.payload.messages_begin()
+                && messages_begin <= messages_end
+            {
+                messages_end = messages_end.max(pooled.payload.messages_end().unwrap_or_default());
+            }
+            // Its header counts regardless: a header-only slice can always be taken.
+            signals_end = signals_end.max(pooled.payload.header.signals_end());
+            header_begin = header_begin.max(pooled.payload.header.begin());
+            if covered_by(messages_end, signals_end, header_begin) {
+                return XNetAdvertOutcome::Pooled;
+            }
+        }
+
+        if let Some(recorded) = self.peer_headers.get(&subnet_id) {
+            messages_end = messages_end.max(recorded.end());
+            signals_end = signals_end.max(recorded.signals_end());
+            header_begin = header_begin.max(recorded.begin());
+            if covered_by(messages_end, signals_end, header_begin) {
+                return XNetAdvertOutcome::Duplicate;
+            }
+        }
+
+        XNetAdvertOutcome::Actionable
     }
 
-    /// Records the slice header as the peer's high-water-mark header, unless one
-    /// with a greater certified height is already on record.
-    fn maybe_set_peer_header(&mut self, subnet_id: SubnetId, slice: &UnpackedStreamSlice) {
-        let certification_height = slice.certification.height;
-        let header = slice.payload.header.decoded();
+    /// Returns the given peer subnet's recorded header, if any.
+    pub fn peer_header(&self, subnet_id: SubnetId) -> Option<&Arc<StreamHeader>> {
+        self.peer_headers.get(&subnet_id)
+    }
 
+    /// Records `header` as the peer's high-water-mark header, unless the already
+    /// recorded header is at or past it in all of `begin`, `end` and `signals_end`
+    /// (or incomparable).
+    ///
+    /// A stream's `begin`, `end` and `signals_end` always advance monotonically, so
+    /// a header that is ahead in one and behind in another comes from a peer that
+    /// is misbehaving. It is ignored rather than merged.
+    pub fn record_peer_header(&mut self, subnet_id: SubnetId, header: &StreamHeader) {
         match self.peer_headers.entry(subnet_id) {
             Entry::Vacant(vacant) => {
-                vacant.insert(PeerHeader {
-                    certification_height,
-                    header: header.clone(),
-                });
+                vacant.insert(Arc::new(header.clone()));
             }
 
-            Entry::Occupied(mut recorded) => {
-                if recorded.get().certification_height < certification_height {
-                    // Higher certified height implies >= header indices.
-                    debug_assert!(recorded.get().header.begin() <= header.begin());
-                    debug_assert!(recorded.get().header.end() <= header.end());
-                    debug_assert!(recorded.get().header.signals_end() <= header.signals_end());
-                    recorded.insert(PeerHeader {
-                        certification_height,
-                        header: header.clone(),
-                    });
+            Entry::Occupied(mut occupied) => {
+                let recorded = occupied.get();
+                // Nothing to do unless the header advances the recorded one.
+                if !header_advances(header, recorded) {
+                    return;
+                }
+
+                if !header_advances(recorded, header) {
+                    occupied.insert(Arc::new(header.clone()));
+                } else {
+                    error!(
+                        self.log,
+                        "{}: Header from subnet {subnet_id} ({header:?}) is inconsistent with the recorded header ({recorded:?})",
+                        CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER,
+                    );
+                    self.metrics.critical_error_incomparable_peer_header.inc();
                 }
             }
         }
+    }
+
+    /// Whether `header` is ahead of the peer's recorded header (if any) in any of
+    /// `begin`, `end` or `signals_end`, i.e. whether `record_peer_header()` would
+    /// do anything with it.
+    pub fn advances_recorded_peer_header(
+        &self,
+        subnet_id: SubnetId,
+        header: &StreamHeader,
+    ) -> bool {
+        self.peer_headers
+            .get(&subnet_id)
+            .is_none_or(|recorded| header_advances(header, recorded))
+    }
+
+    /// Returns every peer with something to pull (see `has_something_to_pull()`).
+    pub fn subnets_with_something_to_pull(&self, own_streams: &StreamMap) -> Vec<SubnetId> {
+        self.peer_headers
+            .iter()
+            .filter(|&(&subnet_id, header)| {
+                self.classify_advert(subnet_id, header, own_streams.get(&subnet_id))
+                    == XNetAdvertOutcome::Duplicate
+            })
+            .map(|(&subnet_id, _)| subnet_id)
+            .collect()
+    }
+
+    /// Whether the recorded header of `subnet_id` offers something that neither the
+    /// cached stream position nor the pooled slice cover (see `classify_advert()`),
+    /// given `own_streams` (to check for reject signals that would be garbage
+    /// collected).
+    pub fn has_something_to_pull(&self, subnet_id: SubnetId, own_streams: &StreamMap) -> bool {
+        self.peer_headers.get(&subnet_id).is_some_and(|header| {
+            self.classify_advert(subnet_id, header, own_streams.get(&subnet_id))
+                == XNetAdvertOutcome::Duplicate
+        })
     }
 
     /// Observes the total size of all pooled slices.
@@ -1595,9 +1811,9 @@ fn witness_count_bytes(
     // `Pruned` nodes from beginning of stream are all left children.
     //
     // After having subtracted `stream_begin`, the "normalized" leaf indices start
-    // at 0. Every `1` bit in `begin_pruned_leaves` is equivalent to following the
+    // at 0. Every `1` bit in `left_pruned_leaves` is equivalent to following the
     // right child and pruning the left. Thus, there is one `Pruned` node for every
-    // `1` bit in `begin_pruned_leaves`.
+    // `1` bit in `left_pruned_leaves`.
     let left_pruned_nodes = left_pruned_leaves.count_ones();
 
     // The minimal subtree containing all nodes pruned from stream end is not
@@ -1712,7 +1928,7 @@ fn validate_slice(
     subnet_id: SubnetId,
     certified_stream_store: &dyn CertifiedStreamStore,
     registry_version: RegistryVersion,
-    log: ReplicaLogger,
+    log: &ReplicaLogger,
 ) -> CertifiedSliceResult<()> {
     match certified_stream_store.decode_certified_stream_slice(subnet_id, registry_version, slice) {
         Ok(_) => Ok(()),
@@ -1724,6 +1940,20 @@ fn validate_slice(
             Err(err.into())
         }
     }
+}
+
+/// Whether `header` is ahead of `other` in any of `begin`, `end` or
+/// `signals_end`, i.e. has something `other` does not.
+fn header_advances(header: &StreamHeader, other: &StreamHeader) -> bool {
+    header.begin() > other.begin()
+        || header.end() > other.end()
+        || header.signals_end() > other.signals_end()
+}
+
+/// Decodes the payload of a `CertifiedStreamSlice`, without validating its
+/// certification, and returns the stream header.
+pub fn decode_slice_header(payload: &[u8]) -> CertifiedSliceResult<StreamHeader> {
+    Ok(Payload::try_from(payload)?.header.decoded().clone())
 }
 
 /// Internal functionality, exposed for use by integration tests.

@@ -1,7 +1,7 @@
 use crate::state;
 use askama::Template;
 use ic_btc_interface::Txid;
-use state::{Config, FetchTxStatus, Timestamp};
+use state::{Config, FetchTxStatus, FetchedTx, Timestamp};
 use std::fmt;
 
 #[cfg(test)]
@@ -19,9 +19,10 @@ mod filters {
             .map_err(|e| askama::Error::Custom(Box::new(e)))?;
         let dt_offset = time::OffsetDateTime::from_unix_timestamp_nanos(ts).unwrap();
         // 2020-12-09T17:25:40+00:00
-        let format =
-            time::format_description::parse("[year]-[month]-[day]T[hour]:[minute]:[second]+00:00")
-                .unwrap();
+        let format = time::format_description::parse_borrowed::<1>(
+            "[year]-[month]-[day]T[hour]:[minute]:[second]+00:00",
+        )
+        .unwrap();
         Ok(dt_offset.format(&format).unwrap())
     }
 }
@@ -49,7 +50,43 @@ pub enum Status {
 
 #[derive(Debug, Clone)]
 pub struct Fetched {
-    input_addresses: Vec<Option<bitcoin::Address>>,
+    input_addresses: Vec<InputAddress>,
+}
+
+/// An address of a transaction input, as shown on the dashboard.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InputAddress {
+    /// An address checked when the input is spent.
+    Address(bitcoin::Address),
+    /// The transaction spent by the input has not been fetched yet.
+    NotFetched,
+    /// The output spent by the input has no address to check.
+    NoAddress,
+}
+
+impl From<&FetchedTx> for Fetched {
+    /// Return an empty list if no input address is available yet. Otherwise, list
+    /// all addresses of each input.
+    fn from(fetched: &FetchedTx) -> Self {
+        let input_addresses = if fetched.input_addresses.iter().all(|x| x.is_none()) {
+            Vec::new()
+        } else {
+            fetched
+                .input_addresses
+                .iter()
+                .flat_map(|addresses| match addresses {
+                    None => vec![InputAddress::NotFetched],
+                    Some(addresses) if addresses.is_empty() => vec![InputAddress::NoAddress],
+                    Some(addresses) => addresses
+                        .iter()
+                        .cloned()
+                        .map(InputAddress::Address)
+                        .collect(),
+                })
+                .collect()
+        };
+        Self { input_addresses }
+    }
 }
 
 impl fmt::Display for Status {
@@ -119,14 +156,7 @@ pub fn dashboard(page_index: usize) -> DashboardTemplate {
                             FetchTxStatus::PendingRetry { .. } => Status::PendingRetry,
                             FetchTxStatus::Error(err) => Status::Error(format!("{:?}", err.error)),
                             FetchTxStatus::Fetched(fetched) => {
-                                // Return an empty list if no input address is available yet.
-                                let input_addresses =
-                                    if fetched.input_addresses.iter().all(|x| x.is_none()) {
-                                        Vec::new()
-                                    } else {
-                                        fetched.input_addresses.clone()
-                                    };
-                                Status::Fetched(Fetched { input_addresses })
+                                Status::Fetched(Fetched::from(fetched))
                             }
                         },
                     )

@@ -13,7 +13,6 @@ ic-crypto-internal-multi-sig-bls12381 = { path = "../crypto_lib/multi_sig/bls12_
 ic-crypto-internal-test-vectors = { path = "../test_vectors" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" } # Would like to get rid of this but as long as the CSP depends on ic-types we can't really.
-serde = { workspace = true }
 # No other ic-dependencies are allowed.
 
 serde_cbor = { workspace = true }

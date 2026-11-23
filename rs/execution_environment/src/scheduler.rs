@@ -11,7 +11,7 @@ use crate::execution_environment::{
 };
 use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::metrics::MeasurementScope;
-use crate::util::{debug_assert_or_critical_error, process_responses};
+use crate::util::process_responses;
 use ic_config::embedders::Config as HypervisorConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
@@ -47,6 +47,7 @@ use ic_types::{
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
+use num_traits::SaturatingSub;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::str::FromStr;
@@ -223,7 +224,7 @@ impl SchedulerImpl {
                 .is_some_and(|canister| canister.has_paused_install_code());
 
             let round_instructions_executed =
-                as_num_instructions(instructions_before - round_limits.instructions);
+                as_num_instructions(instructions_before.saturating_sub(&round_limits.instructions));
 
             let messages = match execute_subnet_message_result_type {
                 ExecuteSubnetMessageResultType::Finished => NumMessages::new(1),
@@ -334,7 +335,7 @@ impl SchedulerImpl {
             round_limits,
         );
         let round_instructions_executed =
-            as_num_instructions(instructions_before - round_limits.instructions);
+            as_num_instructions(instructions_before.saturating_sub(&round_limits.instructions));
         let messages = match execute_subnet_message_result_type {
             ExecuteSubnetMessageResultType::Finished => NumMessages::new(1),
             ExecuteSubnetMessageResultType::Processing => NumMessages::new(0),
@@ -547,7 +548,8 @@ impl SchedulerImpl {
                 state.resource_limits(),
                 &measurement_scope,
             );
-            let instructions_consumed = instructions_before - round_limits.instructions;
+            let instructions_consumed =
+                instructions_before.saturating_sub(&round_limits.instructions);
             drop(execution_timer);
 
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
@@ -585,11 +587,11 @@ impl SchedulerImpl {
                 current_round,
             );
 
-            round_limits.instructions -= as_round_instructions(
+            round_limits.deduct_instructions(as_round_instructions(
                 self.config
                     .instruction_overhead_per_canister_for_finalization
                     * state.num_canisters() as u64,
-            );
+            ));
             scheduler_round_limits.update_canister_round_limits(&round_limits);
             debug_assert_le!(
                 scheduler_round_limits.subnet_available_callbacks,
@@ -740,7 +742,9 @@ impl SchedulerImpl {
                 .extend(result.canisters_with_zero_instruction_executions);
             ingress_results.append(&mut result.ingress_results);
             let instructions_executed = as_num_instructions(
-                round_limits_per_thread.instructions - result.round_limits.instructions,
+                round_limits_per_thread
+                    .instructions
+                    .saturating_sub(&result.round_limits.instructions),
             );
             max_instructions_executed_per_thread =
                 max_instructions_executed_per_thread.max(instructions_executed);
@@ -771,7 +775,8 @@ impl SchedulerImpl {
 
         // Reduce the instruction limit by the maximum number of instructions executed
         // by any thread.
-        round_limits.instructions -= as_round_instructions(max_instructions_executed_per_thread);
+        round_limits
+            .deduct_instructions(as_round_instructions(max_instructions_executed_per_thread));
         // Deduct all created callbacks from the available callbacks limit. This is a
         // pessimistic estimate, as it ignores any closed callbacks.
         round_limits.subnet_available_callbacks -= callbacks_created;
@@ -1120,17 +1125,6 @@ impl SchedulerImpl {
     //
     // TODO(DSM-103): Consider only aborting actually scheduled canisters.
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
-        // Backfill the HTTP/ECDSA outcall cycles from the legacy scalar fields of
-        // `SubnetMetrics` into the corresponding entries of its by-use-case map.
-        // This must run regardless of subnet activity: the subnet-level use cases
-        // are only observed on outcalls, canister deletion and dropped messages,
-        // so tying the migration to an observation would leave the entries stale
-        // forever on a subnet that does none of these.
-        state
-            .metadata
-            .subnet_metrics
-            .migrate_outcalls_cycles_to_use_cases();
-
         let cost_schedule = state.get_own_cost_schedule();
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
@@ -1142,22 +1136,6 @@ impl SchedulerImpl {
 
                 // Abort all paused execution before the checkpoint.
                 abort_all_paused_executions(state, &self.exec_env, cost_schedule, &self.log);
-
-                // Backfill the `consumed_cycles_monotonic` of every canister from
-                // its `consumed_cycles` gauge, which predates it.
-                //
-                // Only done on checkpoint rounds, and only after the paused
-                // executions above have been aborted: a paused execution holds a
-                // prepayment that is not part of the replicated state, which would
-                // make the backfill overestimate the monotonic amount (see
-                // `SystemState::outstanding_prepayments`). Aborting materializes
-                // those prepayments into the canisters' task queues.
-                //
-                // Unconditional and idempotent, like
-                // `migrate_outcalls_cycles_to_use_cases` above: it is a no-op once a
-                // canister has been backfilled, and self-healing if a downgrade
-                // dropped the monotonic amount.
-                migrate_consumed_cycles_to_monotonic(state, &self.metrics, &self.log);
             }
             ExecutionRoundType::OrdinaryRound => {
                 self.abort_paused_executions_above_limit(state);
@@ -1380,6 +1358,11 @@ impl Scheduler for SchedulerImpl {
                 self.metrics
                     .round_skipped_due_to_current_heap_delta_above_limit
                     .inc();
+                // The nested scope propagates into the root only on drop, so the root
+                // total is short by whatever was drained above until it is gone — and
+                // would silently stay so if anything ever cloned it.
+                drop(measurement_scope);
+                accumulate_round_subnet_metrics(&mut state, &root_measurement_scope);
                 return state;
             }
         }
@@ -1561,12 +1544,7 @@ impl Scheduler for SchedulerImpl {
                 );
             }
 
-            final_state
-                .metadata
-                .subnet_metrics
-                .update_transactions_total += root_measurement_scope.messages().get();
-            final_state.metadata.subnet_metrics.num_canisters =
-                final_state.canister_states().len() as u64;
+            accumulate_round_subnet_metrics(&mut final_state, &root_measurement_scope);
         }
 
         final_state
@@ -1575,6 +1553,21 @@ impl Scheduler for SchedulerImpl {
     fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
         self.finish_round(state, ExecutionRoundType::CheckpointRound);
     }
+}
+
+/// Accumulates the round's totals into the subnet metrics. Both exits of
+/// `execute_round` go through here, so a round's work cannot be missed.
+fn accumulate_round_subnet_metrics(
+    state: &mut ReplicatedState,
+    root_measurement_scope: &MeasurementScope,
+) {
+    let num_canisters = state.canister_states().len() as u64;
+    let subnet_metrics = &mut state.metadata.subnet_metrics;
+    subnet_metrics.update_transactions_total += root_measurement_scope.messages().get();
+    subnet_metrics.round_instructions_total = subnet_metrics
+        .round_instructions_total
+        .saturating_add(root_measurement_scope.instructions().get());
+    subnet_metrics.num_canisters = num_canisters;
 }
 
 fn observe_instructions_consumed_per_message(
@@ -1731,7 +1724,7 @@ fn execute_canisters_on_thread(
             );
             ingress_results.extend(ingress_status);
             let round_instructions_executed =
-                as_num_instructions(instructions_before - round_limits.instructions);
+                as_num_instructions(instructions_before.saturating_sub(&round_limits.instructions));
 
             // A message was executed iff a non-zero number of instructions was consumed.
             // A paused execution outputs `instructions_used == None` and it also counts as
@@ -1774,8 +1767,9 @@ fn execute_canisters_on_thread(
             total_slices_executed += slices;
             if slices.get() > 0 {
                 // A slice was actually executed, count the execution overhead toward the round limit.
-                round_limits.instructions -=
-                    as_round_instructions(config.instruction_overhead_per_execution);
+                round_limits.deduct_instructions(as_round_instructions(
+                    config.instruction_overhead_per_execution,
+                ));
             }
 
             canister_arc = new_canister;
@@ -1817,8 +1811,9 @@ fn execute_canisters_on_thread(
         canisters.push(canister_arc);
         // Skip per-canister overhead for canisters with not enough cycles.
         if total_instructions_used > 0.into() {
-            round_limits.instructions -=
-                as_round_instructions(config.instruction_overhead_per_canister);
+            round_limits.deduct_instructions(as_round_instructions(
+                config.instruction_overhead_per_canister,
+            ));
         }
     }
 
@@ -2192,94 +2187,4 @@ pub fn abort_all_paused_executions(
     for canister in canister_states.hot_values_mut() {
         abort_canister(canister, subnet_schedule, exec_env, cost_schedule, log);
     }
-}
-
-/// Backfills `CanisterMetrics::consumed_cycles_monotonic` of every canister from
-/// its `consumed_cycles` gauge, which predates it and thus holds the full history.
-/// See `SystemState::migrate_consumed_cycles_to_monotonic`.
-///
-/// Must only be called with no paused executions left (i.e. on a checkpoint round,
-/// after `abort_all_paused_executions`); a canister that still has one is skipped,
-/// as its prepayment is not part of the replicated state.
-fn migrate_consumed_cycles_to_monotonic(
-    state: &mut ReplicatedState,
-    metrics: &SchedulerMetrics,
-    log: &ReplicaLogger,
-) {
-    state.canisters_for_each_mut(|_id, canister| {
-        let canister_metrics = canister.system_state.canister_metrics();
-        // The outstanding prepayments could not be derived from the replicated
-        // state, i.e. the canister has a paused execution, whose prepayment is only
-        // held in memory. Unreachable when called as documented.
-        let Some(outstanding) = canister.system_state.outstanding_prepayments() else {
-            // Describe the task without `Debug`-formatting it: a paused ingress
-            // execution embeds the whole method payload in its `Debug` output.
-            let task = match canister.system_state.task_queue.paused_or_aborted_task() {
-                Some(ExecutionTask::PausedExecution { input, .. }) => {
-                    format!("paused execution of {input}")
-                }
-                Some(ExecutionTask::PausedInstallCode(_)) => "paused install_code".to_string(),
-                // Unreachable: `outstanding_prepayments()` is `None` only for the two
-                // paused tasks above.
-                Some(_) | None => "no paused task".to_string(),
-            };
-            debug_assert_or_critical_error!(
-                false,
-                metrics.consumed_cycles_invariant_broken,
-                log,
-                "{}: Canister {}: cannot derive the monotonic consumed cycles, \
-                 unexpected {}",
-                CONSUMED_CYCLES_INVARIANT_BROKEN,
-                canister.canister_id(),
-                task,
-            );
-            return;
-        };
-        // Every outstanding prepayment was added to the gauge when it was made, so
-        // the gauge can never be below their sum. Checked before subtracting: the
-        // subtraction saturates at zero, which would mask the violation as a
-        // `derived` of zero -- and, for a canister whose monotonic value is zero
-        // too, hide it in the `Equal` arm below. Unreachable when the invariant on
-        // `SystemState::outstanding_prepayments` holds.
-        if outstanding > canister_metrics.consumed_cycles() {
-            debug_assert_or_critical_error!(
-                false,
-                metrics.consumed_cycles_invariant_broken,
-                log,
-                "{}: Canister {}: the {} outstanding prepayments exceed the consumed \
-                 cycles gauge {}",
-                CONSUMED_CYCLES_INVARIANT_BROKEN,
-                canister.canister_id(),
-                outstanding,
-                canister_metrics.consumed_cycles(),
-            );
-            return;
-        }
-        let derived = canister_metrics.consumed_cycles() - outstanding;
-        match derived.cmp(&canister_metrics.consumed_cycles_monotonic()) {
-            // Not backfilled yet, or a downgrade dropped it. Only take a
-            // mutable reference here, so that this stays a read-only pass once every
-            // canister has been backfilled (`Arc::make_mut` clones the canister).
-            std::cmp::Ordering::Greater => {
-                Arc::make_mut(canister)
-                    .system_state
-                    .migrate_consumed_cycles_to_monotonic();
-            }
-            // The invariant that makes the backfill exact; see
-            // `SystemState::outstanding_prepayments`.
-            std::cmp::Ordering::Equal => {}
-            std::cmp::Ordering::Less => debug_assert_or_critical_error!(
-                false,
-                metrics.consumed_cycles_invariant_broken,
-                log,
-                "{}: Canister {}: monotonic consumed cycles {} above the gauge {} net \
-                 of the {} outstanding prepayments",
-                CONSUMED_CYCLES_INVARIANT_BROKEN,
-                canister.canister_id(),
-                canister_metrics.consumed_cycles_monotonic(),
-                canister_metrics.consumed_cycles(),
-                outstanding,
-            ),
-        }
-    });
 }

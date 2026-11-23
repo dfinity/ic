@@ -13,6 +13,7 @@ use crate::execution::install_code::{
 use crate::execution_environment::{RoundContext, RoundLimits};
 use crate::hypervisor::MemorySource;
 use ic_base_types::PrincipalId;
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
     wasmtime_embedder::system_api::ApiType,
@@ -99,7 +100,7 @@ pub(crate) fn execute_install(
     let context_sender = context.sender();
     let instructions_to_assemble = context.wasm_source.instructions_to_assemble();
     helper.charge_for_large_wasm_assembly(instructions_to_assemble);
-    round_limits.instructions -= as_round_instructions(instructions_to_assemble);
+    round_limits.deduct_instructions(as_round_instructions(instructions_to_assemble));
     let wasm_module = match context.wasm_source.into_canister_module() {
         Ok(wasm_module) => wasm_module,
         Err(err) => {
@@ -140,7 +141,14 @@ pub(crate) fn execute_install(
     helper.clear_log();
     helper.deactivate_global_timer();
     helper.bump_canister_version();
-    helper.add_canister_change(round.time, context.origin, context.mode, module_hash.into());
+    let args_hash = ic_crypto_sha2::Sha256::hash(&context.arg);
+    helper.add_canister_change(
+        round.time,
+        context.origin,
+        context.mode,
+        module_hash.into(),
+        args_hash,
+    );
 
     // Stage 2: invoke the `start()` method of the Wasm module (if present).
     let method = WasmMethod::System(SystemMethod::CanisterStart);
@@ -380,6 +388,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
     ) -> DtsInstallCodeResult {
         info!(
             round.log,
@@ -391,6 +400,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
             self.paused_helper,
             &self.original,
             &round,
+            subnet_memory_saturation,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -489,6 +499,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
     ) -> DtsInstallCodeResult {
         info!(
             round.log,
@@ -500,6 +511,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
             self.paused_helper,
             &self.original,
             &round,
+            subnet_memory_saturation,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {

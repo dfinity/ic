@@ -5,7 +5,7 @@ repos:
     name: Auto format Bazel build files.
     stages: [commit]
     entry: bazel run //:buildifier
-    files: \.bazel|\.bzl$
+    files: \.bazel$|\.bzl$
     language: system
 
   - id: bazel_shfmt_format

@@ -1,4 +1,8 @@
-use crate::service::DiskEncryptionKeyExchangeServiceImpl;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+
+use crate::service::{DiskEncryptionKeyExchangeServiceImpl, ElectedGuestOsVersion};
 use attestation::attestation_package::SevRootCertificateVerification;
 use config_types::TrustedExecutionEnvironmentConfig;
 use ic_interfaces_registry::RegistryClient;
@@ -6,9 +10,6 @@ use ic_registry_client_helpers::replica_version::ReplicaVersionRegistry;
 use ic_types::ReplicaVersion;
 use server::DiskEncryptionKeyExchangeServer;
 use sev_guest::firmware::SevGuestFirmware;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
 use thiserror::Error;
 use tokio::runtime::Handle;
 use tokio::sync::watch;
@@ -101,6 +102,7 @@ impl DiskEncryptionKeyExchangeServerAgent {
             self.store_luks_header_path.clone(),
             status_sender,
             expected_measurements,
+            self.fetch_elected_guestos_versions(),
         ));
 
         // Start the server that the Upgrade VM can connect to for getting the keys.
@@ -166,5 +168,40 @@ impl DiskEncryptionKeyExchangeServerAgent {
             .map(|measurement| measurement.measurement)
             .collect();
         Ok(expected_measurements)
+    }
+
+    /// Returns the GuestOS versions elected in the local registry along with their launch
+    /// measurements. They tell the client which version we run, see
+    /// `GetDiskEncryptionKeyResponse::guestos_version`. That is only a hint, so a failure to read
+    /// them is logged and results in an empty list instead of failing the key exchange.
+    fn fetch_elected_guestos_versions(&self) -> Vec<ElectedGuestOsVersion> {
+        let registry_version = self.registry_client.get_latest_version();
+        let records = match self
+            .registry_client
+            .get_all_replica_version_records(registry_version)
+        {
+            Ok(records) => records.unwrap_or_default(),
+            Err(err) => {
+                eprintln!(
+                    "Failed to get elected GuestOS versions at registry version \
+                     {registry_version}: {err}"
+                );
+                vec![]
+            }
+        };
+
+        records
+            .into_iter()
+            .map(|record| ElectedGuestOsVersion {
+                guestos_version: record.replica_version_id,
+                launch_measurements: record
+                    .guest_launch_measurements
+                    .unwrap_or_default()
+                    .guest_launch_measurements
+                    .into_iter()
+                    .map(|measurement| measurement.measurement)
+                    .collect(),
+            })
+            .collect()
     }
 }

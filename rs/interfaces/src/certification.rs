@@ -2,7 +2,9 @@
 use crate::validation::{ValidationError, ValidationResult};
 use ic_types::{
     CryptoHashOfPartialState, Height, RegistryVersion, SubnetId,
-    consensus::certification::{Certification, CertificationMessage, CertificationShare},
+    consensus::certification::{
+        Certification, CertificationMessage, CertificationShare, SignedCertificationContent,
+    },
     crypto::CryptoError,
 };
 use std::collections::HashSet;
@@ -50,10 +52,6 @@ pub trait CertificationPool {
         &self,
         height: Height,
     ) -> Box<dyn Iterator<Item = &CertificationShare> + '_>;
-
-    /// Returns all heights (sorted, ascending), where at least a single
-    /// artifact is present. Intended to be used by the purger.
-    fn all_heights_with_artifacts(&self) -> Vec<Height>;
 
     /// Returns all heights which have a full validated certification.
     fn certified_heights(&self) -> HashSet<Height>;
@@ -115,7 +113,7 @@ pub trait Verifier: Send + Sync {
     fn validate(
         &self,
         subnet_id: SubnetId,
-        certification: &Certification,
+        certification: &SignedCertificationContent,
         registry_version: RegistryVersion,
     ) -> ValidationResult<VerifierError>;
 }
