@@ -11,6 +11,9 @@ on the process that this file is part of, see
 
 ## Changed
 
+* The invariant requiring that every subnet's `CatchUpPackageContents` record has a `cup_type` set
+  now also requires that `cup_type` is decodable.
+
 ## Deprecated
 
 ## Removed

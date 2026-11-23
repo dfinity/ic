@@ -1,5 +1,6 @@
 use super::*;
 use assert_matches::assert_matches;
+use ic_base_types::subnet_id_into_protobuf;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
@@ -9,18 +10,20 @@ use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
 use ic_nns_test_utils::registry::new_current_node_crypto_keys_mutations;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, GenesisArgs, InitialNiDkgTranscriptRecord, SubnetListRecord,
-    catch_up_package_contents::CupType,
+    CatchUpPackageContents, GenesisArgs, InitialNiDkgTranscriptRecord, RecoveryArgs,
+    SubnetListRecord, SubnetSplittingArgs, catch_up_package_contents::CupType,
 };
+use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_keys::make_catch_up_package_contents_key;
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key};
 use ic_registry_transport::insert;
 use ic_types::RegistryVersion;
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript};
-use ic_types_test_utils::ids::{SUBNET_1, SUBNET_2};
+use ic_types_test_utils::ids::{SUBNET_1, SUBNET_2, SUBNET_3};
 use prost::Message;
 use rand::RngCore;
+use rstest::rstest;
 use std::collections::BTreeSet;
 
 fn insert_node_crypto_keys(
@@ -450,17 +453,39 @@ fn high_threshold_public_key_invariant_unable_to_parse_initial_ni_dkg_transcript
     assert!(check_high_threshold_public_key_and_cup_contents(&snapshot).is_err());
 }
 
-#[test]
-fn high_threshold_public_key_invariant_missing_cup_type() {
+#[rstest]
+#[case::valid_genesis(Some(CupType::Genesis(GenesisArgs {})), true)]
+#[case::valid_recovery(Some(CupType::Recovery(RecoveryArgs {
+    height: 54321,
+    time: 1_000,
+    state_hash: vec![1; 32],
+})), true)]
+#[case::valid_splitting(Some(CupType::SubnetSplitting(SubnetSplittingArgs {
+    destination_subnet_id: Some(subnet_id_into_protobuf(SUBNET_3)),
+})), true)]
+#[case::missing_cup_type(None, false)]
+#[case::splitting_missing_destination_subnet_id(Some(CupType::SubnetSplitting(SubnetSplittingArgs {
+    destination_subnet_id: None,
+})), false)]
+#[case::splitting_missing_destination_principal_id(Some(CupType::SubnetSplitting(SubnetSplittingArgs {
+    destination_subnet_id: Some(SubnetIdProto { principal_id: None }),
+})), false)]
+fn high_threshold_public_key_invariant_decodable_cup_type(
+    #[case] cup_type: Option<CupType>,
+    #[case] is_valid: bool,
+) {
     let mut setup = HighThresholdPublicKeySetup::new();
-    setup.cup_contents.cup_type = None;
+    setup.cup_contents.cup_type = cup_type;
     let snapshot = registry_snapshot_from_threshold_sig_pk_and_cup(
         Some(setup.threshold_sig_pk),
         Some(setup.cup_contents),
         setup.receiver_subnet,
     );
 
-    assert!(check_high_threshold_public_key_and_cup_contents(&snapshot).is_err());
+    assert_eq!(
+        check_high_threshold_public_key_and_cup_contents(&snapshot).is_ok(),
+        is_valid,
+    );
 }
 
 struct HighThresholdPublicKeySetup {
