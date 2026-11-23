@@ -1,8 +1,8 @@
 use anyhow::{Context, Result, bail, ensure};
 use askama::Template;
 use config_types::{DeploymentEnvironment, GuestOSConfig, Ipv6Config};
+use ic_types::malicious_behavior::MaliciousBehavior;
 use ipnet::Ipv6Net;
-use serde_json;
 use std::fs::write;
 use std::net::Ipv6Addr;
 use std::path::Path;
@@ -11,30 +11,35 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use crate::guestos::network::{get_best_interface_name, get_interface_addresses};
+use crate::validation::{validate_domain_name, validate_node_reward_type};
 
 const TLS_KEY_PATH: &str = "/var/lib/ic/data/ic-boundary-tls.key";
 const TLS_CERT_PATH: &str = "/var/lib/ic/data/ic-boundary-tls.crt";
 
+/// The values substituted into `ic.json5.template`.
+///
+/// Most of them come from the GuestOS config, which the HostOS writes, and the
+/// template is rendered without escaping. So the template renders every field
+/// that can hold arbitrary text (strings, options, structs) through the `json`
+/// filter, which turns it into a single JSON5 value. The remaining fields are
+/// typed so that their `Display` output cannot contain quotes, comments or any
+/// other JSON5 syntax.
 #[derive(Template)]
 #[template(path = "ic.json5.template", escape = "none")]
 pub struct IcConfigTemplate {
-    pub ipv6_prefix: String,
+    pub ipv6_prefix: Ipv6Net,
     pub ipv4_address: String,
     pub ipv4_gateway: String,
     pub nns_urls: String,
-    pub backup_retention_time_secs: String,
-    pub backup_purging_interval_secs: String,
-    pub query_stats_epoch_length: String,
+    pub backup_retention_time_secs: u64,
+    pub backup_purging_interval_secs: u64,
+    pub query_stats_epoch_length: u64,
     pub jaeger_addr: String,
     pub domain_name: String,
     pub node_reward_type: String,
-    pub malicious_behavior: String,
-    /// Already JSON-encoded: either `null` or a quoted string.
-    pub extra_api_boundary_node_trust_anchors_pem: String,
-    /// Already JSON-encoded: either `null` or a quoted string. A bare
-    /// principal is not a JSON5 value, and an unparseable `ic.json5` takes
-    /// the replica down with it.
-    pub engine_management_canister_id: String,
+    pub malicious_behavior: Option<MaliciousBehavior>,
+    pub extra_api_boundary_node_trust_anchors_pem: Option<String>,
+    pub engine_management_canister_id: Option<String>,
     /// IPv6 address of the peer Guest VM (the Upgrade VM inside the Default VM
     /// and vice versa).
     pub peer_guest_vm_address: Option<Ipv6Addr>,
@@ -77,15 +82,15 @@ pub fn render_ic_config(template: IcConfigTemplate) -> Result<String> {
         .context("Failed to render config template")
 }
 
-fn generate_ipv6_prefix(ipv6_address: Ipv6Addr) -> String {
+fn generate_ipv6_prefix(ipv6_address: Ipv6Addr) -> Ipv6Net {
     if ipv6_address.is_loopback() {
-        return "::1/128".to_string();
+        return Ipv6Net::new_assert(ipv6_address, 128);
     }
 
-    Ipv6Net::new_assert(ipv6_address, 64).trunc().to_string()
+    Ipv6Net::new_assert(ipv6_address, 64).trunc()
 }
 
-fn configure_ipv6(guestos_config: &GuestOSConfig) -> Result<(String, String)> {
+fn configure_ipv6(guestos_config: &GuestOSConfig) -> Result<(String, Ipv6Net)> {
     match &guestos_config.network_settings.ipv6_config {
         Ipv6Config::Deterministic(_) => {
             bail!("GuestOS IPv6 configuration should not be 'Deterministic'.");
@@ -126,15 +131,6 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
     let (_, ipv6_prefix) = configure_ipv6(guestos_config)?;
     let (ipv4_address, ipv4_gateway) = configure_ipv4(guestos_config);
 
-    // Helper function to set default value if empty
-    fn with_default(value: String, default: &str) -> String {
-        if value.is_empty() {
-            default.to_string()
-        } else {
-            value
-        }
-    }
-
     let nns_urls = guestos_config
         .icos_settings
         .nns_urls
@@ -142,102 +138,79 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         .map(|url| url.to_string())
         .collect::<Vec<_>>()
         .join(",");
+    let nns_urls = if nns_urls.is_empty() {
+        "http://[::1]:8080".to_string()
+    } else {
+        nns_urls
+    };
 
-    let backup_retention_time_secs = guestos_config
-        .guestos_settings
-        .guestos_dev_settings
-        .backup_spool
-        .as_ref()
+    let dev_settings = &guestos_config.guestos_settings.guestos_dev_settings;
+    let backup_spool = dev_settings.backup_spool.as_ref();
+
+    let backup_retention_time_secs = backup_spool
         .and_then(|spool| spool.backup_retention_time_seconds)
-        .map(|secs| secs.to_string())
-        .unwrap_or_default();
+        .unwrap_or(86400); // 24h
 
-    let backup_purging_interval_secs = guestos_config
-        .guestos_settings
-        .guestos_dev_settings
-        .backup_spool
-        .as_ref()
+    let backup_purging_interval_secs = backup_spool
         .and_then(|spool| spool.backup_purging_interval_seconds)
-        .map(|secs| secs.to_string())
-        .unwrap_or_default();
+        .unwrap_or(3600); // 1h
 
-    let query_stats_epoch_length = guestos_config
-        .guestos_settings
-        .guestos_dev_settings
-        .query_stats_epoch_length
-        .map(|epoch| epoch.to_string())
-        .unwrap_or_default();
+    // Default is 600 blocks (around 10min)
+    let query_stats_epoch_length = dev_settings.query_stats_epoch_length.unwrap_or(600);
 
-    let jaeger_addr = guestos_config
-        .guestos_settings
-        .guestos_dev_settings
-        .jaeger_addr
-        .clone()
-        .unwrap_or_default();
+    let jaeger_addr = dev_settings.jaeger_addr.clone().unwrap_or_default();
 
+    // An empty value means the same as an unset one, so only non-empty values
+    // are validated.
     let domain_name = guestos_config
         .network_settings
         .domain_name
         .clone()
         .unwrap_or_default();
+    if !domain_name.is_empty() {
+        validate_domain_name(&domain_name)?;
+    }
 
     let node_reward_type = guestos_config
         .icos_settings
         .node_reward_type
         .clone()
         .unwrap_or_default();
+    if !node_reward_type.is_empty() {
+        validate_node_reward_type(&node_reward_type)?;
+    }
 
-    let malicious_behavior = guestos_config
-        .guestos_settings
-        .guestos_dev_settings
-        .malicious_behavior
-        .as_ref()
-        .map(|mb| serde_json::to_string(mb).unwrap_or_default())
-        .unwrap_or_default();
-
-    let extra_api_boundary_node_trust_anchors_pem = match &guestos_config
-        .guestos_settings
-        .guestos_dev_settings
-        .extra_api_boundary_node_trust_anchors_pem
-    {
-        // A PEM spans several lines, so it has to be JSON-encoded rather than
-        // interpolated verbatim.
-        Some(pem) => serde_json::to_string(pem)
-            .context("Failed to encode the extra API boundary node trust anchors")?,
-        None => "null".to_string(),
-    };
-
-    let engine_management_canister_id = serde_json::to_string(&match guestos_config
+    let engine_management_canister_id = match &guestos_config
         .guestos_settings
         .engine_management_canister_id
-        .as_deref()
     {
-        Some(id) => Some(id),
+        Some(id) => Some(id.clone()),
         // Mainnet's engine management canister is well-known, so mainnet
         // nodes do not have to configure it explicitly.
         None if guestos_config.icos_settings.deployment_environment
             == DeploymentEnvironment::Mainnet =>
         {
-            Some(ic_config::cloud_engine::MAINNET_ENGINE_MANAGEMENT_CANISTER_ID)
+            Some(ic_config::cloud_engine::MAINNET_ENGINE_MANAGEMENT_CANISTER_ID.to_string())
         }
         None => None,
-    })
-    .context("Failed to encode the engine management canister id")?;
+    };
 
     Ok(IcConfigTemplate {
         // TODO https://dfinity.atlassian.net/browse/NODE-1909
         ipv6_prefix,
         ipv4_address,
         ipv4_gateway,
-        nns_urls: with_default(nns_urls, "http://[::1]:8080"),
-        backup_retention_time_secs: with_default(backup_retention_time_secs, "86400"), // 24h
-        backup_purging_interval_secs: with_default(backup_purging_interval_secs, "3600"), // 1h
-        query_stats_epoch_length: with_default(query_stats_epoch_length, "600"), // Default is 600 blocks (around 10min)
+        nns_urls,
+        backup_retention_time_secs,
+        backup_purging_interval_secs,
+        query_stats_epoch_length,
         jaeger_addr,
         domain_name,
         node_reward_type,
-        malicious_behavior: with_default(malicious_behavior, "null"),
-        extra_api_boundary_node_trust_anchors_pem,
+        malicious_behavior: dev_settings.malicious_behavior.clone(),
+        extra_api_boundary_node_trust_anchors_pem: dev_settings
+            .extra_api_boundary_node_trust_anchors_pem
+            .clone(),
         engine_management_canister_id,
         peer_guest_vm_address: guestos_config.upgrade_config.peer_guest_vm_address,
     })
@@ -348,7 +321,127 @@ mod tests {
     fn test_generate_ipv6_prefix() {
         let result =
             generate_ipv6_prefix("2001:db8:1234:5678:9abc:def0:1234:5678".parse().unwrap());
-        assert_eq!(result, "2001:db8:1234:5678::/64");
+        assert_eq!(result.to_string(), "2001:db8:1234:5678::/64");
+
+        let result = generate_ipv6_prefix(Ipv6Addr::LOCALHOST);
+        assert_eq!(result.to_string(), "::1/128");
+    }
+
+    /// Renders the template without the validation in `get_config_vars`, so
+    /// that tests can check the template on its own.
+    fn render_and_parse(modify: impl FnOnce(&mut IcConfigTemplate)) -> ConfigOptional {
+        let mut template = get_config_vars(&create_test_guestos_config()).unwrap();
+        modify(&mut template);
+        let output_content = render_ic_config(template).unwrap();
+        ConfigSource::Literal(output_content.clone())
+            .load()
+            .unwrap_or_else(|e| panic!("Failed to parse generated config: {e}\n{output_content}"))
+    }
+
+    /// Strings from the GuestOS config must each end up as a single JSON5
+    /// string, so that they cannot override other parts of `ic.json5`, e.g.
+    /// redirect the registry local store to a HostOS-controlled directory.
+    #[test]
+    fn test_template_substitution_is_injection_safe() {
+        // If substituted verbatim between quotes, `domain_name` opens a block
+        // comment and `node_reward_type` closes it at the top level, adds its
+        // own `registry_client` section and reopens `registration` so that the
+        // rest of the document still parses.
+        let domain_name = r#"x", /*"#;
+        let node_reward_type = r#"*/ registry_client: { local_store: "/run/config/bootstrap/evil" }, registration: { node_reward_type: "type1"#;
+
+        let parsed_config = render_and_parse(|template| {
+            template.domain_name = domain_name.to_string();
+            template.node_reward_type = node_reward_type.to_string();
+        });
+
+        assert_eq!(parsed_config.domain.as_deref(), Some(domain_name));
+        assert_eq!(
+            parsed_config
+                .registration
+                .unwrap()
+                .node_reward_type
+                .as_deref(),
+            Some(node_reward_type)
+        );
+
+        // The paths that the replica keeps its trusted state in are unchanged.
+        assert_eq!(
+            parsed_config.registry_client.unwrap().local_store,
+            Path::new("/var/lib/ic/data/ic_registry_local_store/")
+        );
+        assert_eq!(
+            parsed_config.state_manager.unwrap().state_root,
+            Path::new("/var/lib/ic/data/ic_state")
+        );
+        assert_eq!(
+            parsed_config.crypto.unwrap().crypto_root,
+            Path::new("/var/lib/ic/crypto")
+        );
+    }
+
+    /// Every string field comes back exactly as it went in, whatever JSON5
+    /// syntax it contains.
+    #[test]
+    fn test_template_substitution_escapes_strings() {
+        let s = "a\"b\\c'd\ne */ f // g /* h <i>&j";
+
+        let parsed_config = render_and_parse(|template| {
+            template.ipv4_address = s.to_string();
+            template.ipv4_gateway = s.to_string();
+            template.nns_urls = s.to_string();
+            template.jaeger_addr = s.to_string();
+            template.domain_name = s.to_string();
+            template.node_reward_type = s.to_string();
+            template.extra_api_boundary_node_trust_anchors_pem = Some(s.to_string());
+        });
+
+        let ipv4_config = parsed_config.initial_ipv4_config.unwrap();
+        assert_eq!(ipv4_config.public_address, s);
+        assert_eq!(ipv4_config.public_gateway, s);
+        let registration = parsed_config.registration.unwrap();
+        assert_eq!(registration.nns_url.as_deref(), Some(s));
+        assert_eq!(registration.node_reward_type.as_deref(), Some(s));
+        assert_eq!(
+            parsed_config.tracing.unwrap().jaeger_addr.as_deref(),
+            Some(s)
+        );
+        assert_eq!(parsed_config.domain.as_deref(), Some(s));
+        assert_eq!(
+            parsed_config
+                .http_handler
+                .unwrap()
+                .extra_api_boundary_node_trust_anchors_pem
+                .as_deref(),
+            Some(s)
+        );
+    }
+
+    #[test]
+    fn test_get_config_vars_rejects_invalid_domain_name() {
+        let mut guestos_config = create_test_guestos_config();
+        guestos_config.network_settings.domain_name = Some(r#"x", /*"#.to_string());
+        assert!(get_config_vars(&guestos_config).is_err());
+
+        guestos_config.network_settings.domain_name = Some("node.example.com".to_string());
+        assert_eq!(
+            get_config_vars(&guestos_config).unwrap().domain_name,
+            "node.example.com"
+        );
+    }
+
+    #[test]
+    fn test_get_config_vars_rejects_invalid_node_reward_type() {
+        let mut guestos_config = create_test_guestos_config();
+        guestos_config.icos_settings.node_reward_type =
+            Some(r#"*/ registry_client: { local_store: "/tmp" }, z: ""#.to_string());
+        assert!(get_config_vars(&guestos_config).is_err());
+
+        guestos_config.icos_settings.node_reward_type = Some("type3.1".to_string());
+        assert_eq!(
+            get_config_vars(&guestos_config).unwrap().node_reward_type,
+            "type3.1"
+        );
     }
 
     #[test]
