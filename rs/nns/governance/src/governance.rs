@@ -4734,28 +4734,37 @@ impl Governance {
     /// Validates the proposal in the MakeProposal command of a ManageNeuron proposal (the "nested"
     /// proposal). Returns an InvalidProposal error unless all of the following hold:
     ///
-    ///     1. If the nested proposal is a ManageNeuron proposal, its command is not MakeProposal
-    ///        (i.e. there is at most one level of nesting).
-    ///     2. It is valid on its own (see validate_proposal).
+    ///     1. The nested proposal is a ManageNeuron proposal.
+    ///     2. Its command is not MakeProposal (i.e. there is at most one level of nesting).
+    ///     3. It is valid on its own (see validate_proposal).
     ///
     /// (The size of the nested proposal is limited by MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX,
-    /// which is checked by the caller.)
+    /// which is checked by the caller. That bounds memory usage only because the commands of a
+    /// ManageNeuron proposal cannot expand much when decoded; other proposal types can, e.g. a
+    /// long list of empty elements.)
     ///
-    /// If the nested proposal is a ManageNeuron proposal, this does NOT check whether the neuron
-    /// that would make it (the neuron targeted by the enclosing proposal) is a followee of the
-    /// neuron targeted by the nested proposal on the NeuronManagement topic: this validation
-    /// happens before the caller is authorized, so the result would disclose (private) followees
-    /// to anyone. Instead, that is checked (after authorization) when the nested proposal is
-    /// actually made, i.e. when the enclosing proposal is executed.
+    /// This does NOT check whether the neuron that would make the nested proposal (the neuron
+    /// targeted by the enclosing proposal) is a followee of the neuron targeted by the nested
+    /// proposal on the NeuronManagement topic: this validation happens before the caller is
+    /// authorized, so the result would disclose (private) followees to anyone. Instead, that is
+    /// checked (after authorization) when the nested proposal is actually made, i.e. when the
+    /// enclosing proposal is executed.
     fn validate_nested_make_proposal(
         &self,
         nested_proposal: &Proposal,
     ) -> Result<(), GovernanceError> {
-        if let Some(Action::ManageNeuron(nested_manage_neuron)) = &nested_proposal.action
-            && let Some(Command::MakeProposal(_)) = &nested_manage_neuron.command
-        {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
+        let invalid_proposal_error =
+            |message: &str| GovernanceError::new_with_message(ErrorType::InvalidProposal, message);
+
+        let Some(Action::ManageNeuron(nested_manage_neuron)) = &nested_proposal.action else {
+            return Err(invalid_proposal_error(
+                "When a ManageNeuron proposal is to make (another) proposal, \
+                 the second proposal must be (another) ManageNeuron proposal.",
+            ));
+        };
+
+        if let Some(Command::MakeProposal(_)) = &nested_manage_neuron.command {
+            return Err(invalid_proposal_error(
                 "A proposal made through a ManageNeuron proposal cannot itself \
                  make a third proposal.",
             ));

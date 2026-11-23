@@ -1,7 +1,6 @@
 use crate::{
     pb::v1::{
-        Empty, ManageNeuron, Proposal, SelfDescribingProposalAction, SelfDescribingValue, Topic,
-        Visibility, Vote,
+        Empty, ManageNeuron, Proposal, SelfDescribingValue, Topic, Visibility, Vote,
         manage_neuron::{
             ClaimOrRefresh, Command, Configure, Disburse, Follow, JoinCommunityFund,
             LeaveCommunityFund, NeuronIdOrSubaccount, RefreshVotingPower, RegisterVote,
@@ -10,11 +9,9 @@ use crate::{
             configure::Operation,
             set_following::FolloweesForTopic,
         },
+        proposal::Action,
     },
-    proposals::{
-        ValidProposalAction,
-        self_describing::{DocumentedAction, SelfDescribingProstEnum, ValueBuilder},
-    },
+    proposals::self_describing::{DocumentedAction, SelfDescribingProstEnum, ValueBuilder},
 };
 
 use ic_cdk::println;
@@ -117,8 +114,8 @@ impl From<Command> for SelfDescribingValue {
 }
 
 /// Describes a proposal that is nested in a ManageNeuron proposal (via the MakeProposal command).
-/// The action is described without calling other canisters (see
-/// `ValidProposalAction::to_self_describing_without_canister_calls`).
+/// Validation only allows the nested proposal to be a ManageNeuron proposal, so other actions are
+/// not described.
 fn describe_nested_proposal(nested_proposal: Proposal) -> SelfDescribingValue {
     let Proposal {
         title,
@@ -128,20 +125,14 @@ fn describe_nested_proposal(nested_proposal: Proposal) -> SelfDescribingValue {
         self_describing_action: _,
     } = nested_proposal;
 
-    let action = match ValidProposalAction::try_from(action) {
-        Ok(action) => {
-            let SelfDescribingProposalAction {
-                type_name, value, ..
-            } = action.to_self_describing_without_canister_calls();
-            SelfDescribingValue::singleton_map(
-                type_name,
-                value.unwrap_or(SelfDescribingValue::NULL),
-            )
+    let action = match action {
+        Some(Action::ManageNeuron(manage_neuron)) => {
+            SelfDescribingValue::singleton_map("ManageNeuron", *manage_neuron)
         }
-        Err(err) => {
+        Some(_) | None => {
             println!(
                 "A ManageNeuron proposal is created with a MakeProposal command whose action is \
-                 invalid ({err:?}). This should never happen."
+                 not ManageNeuron. This should never happen."
             );
             SelfDescribingValue::NULL
         }

@@ -149,18 +149,9 @@ impl ValidExecuteNnsFunction {
         };
 
         SelfDescribingProposalAction {
-            value,
-            ..self.to_self_describing_action_without_payload()
-        }
-    }
-
-    /// Like `to_self_describing_action`, but without describing the payload (which requires
-    /// calling another canister).
-    pub fn to_self_describing_action_without_payload(&self) -> SelfDescribingProposalAction {
-        SelfDescribingProposalAction {
             type_name: self.nns_function.type_name().to_string(),
             type_description: self.nns_function.type_description().to_string(),
-            value: None,
+            value,
         }
     }
 
