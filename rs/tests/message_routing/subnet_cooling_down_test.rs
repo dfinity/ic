@@ -339,7 +339,7 @@ const HALT_TIMEOUT: Duration = Duration::from_millis(TWO_DKG_INTERVALS * ROUND_M
 /// Timeout for the call loops of `UDS` and `UOS` to advance again once `D` is
 /// unhalted (step 25): the nodes of `D` have to pick up the registry version
 /// unhalting `D`, and `O` has to deliver the calls of `UOS` to `D`.
-const LOOPS_RESUMED_TIMEOUT: Duration = Duration::from_secs(300);
+const LOOPS_RESUMED_TIMEOUT: Duration = Duration::from_secs(180);
 
 /// How long the loops of `UDS` and `UOS` are observed to be stalled (step 11).
 const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
@@ -348,17 +348,19 @@ const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 /// stay at the height their subnet halts at (step 13).
 const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 
-/// Timeouts of the test itself, above the sum of the timeouts of its steps
-/// (dominated by `MERGE_READY_TIMEOUT`, `HALT_TIMEOUT`, the replica restart
-/// timeout and `LOOPS_RESUMED_TIMEOUT`, about 2000s together), so that a stuck step fails
-/// with its own error. `HALT_TIMEOUT` is counted once although it applies to
-/// each of the two subnets: both are scheduled to halt before either is waited
-/// for, so the two waits overlap. The overall timeout additionally covers the
-/// setup (booting the IC and installing the NNS) and has to stay well below the
-/// 3600s of the `eternal` timeout of the Bazel target, which also covers what
-/// runs outside of the test driver's own timeouts.
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2500);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(3100);
+/// Timeouts of the test itself, above the sum of the timeouts of its steps,
+/// so that a stuck step fails with its own error. The sum is dominated by
+/// `MERGE_READY_TIMEOUT`, `HALT_TIMEOUT`, the replica restart timeout (300s),
+/// the wait of `WaitForCupOnDestinationSubnet` for the recovery CUP (35 polls
+/// 15s apart, about 525s) and `LOOPS_RESUMED_TIMEOUT`, about 2425s together.
+/// `HALT_TIMEOUT` is counted once although it applies to each of the two
+/// subnets: both are scheduled to halt before either is waited for, so the two
+/// waits overlap. The overall timeout additionally covers the setup (booting
+/// the IC and installing the NNS) and has to stay below the 3600s of the
+/// `eternal` timeout of the Bazel target, which also covers what runs outside
+/// of the test driver's own timeouts.
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2900);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(3400);
 
 /// The conditions this scenario violates, i.e. the ones step 7 checks. This
 /// includes `CommonQuorum`, since the replicas do not satisfy the individual

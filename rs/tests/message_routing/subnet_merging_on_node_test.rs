@@ -112,15 +112,19 @@ const REGISTRY_TIMEOUT: Duration = Duration::from_secs(300);
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// How long the tool may run on the node. The tool retries a failing step
 /// forever when prompts are skipped, so this is what ends a run that fails.
-/// Above the sum of the timeouts of its steps.
-const TOOL_TIMEOUT: Duration = Duration::from_secs(1800);
+/// Above the sum of the timeouts of its steps, including the wait of
+/// `WaitForCupOnDestinationSubnet` for the recovery CUP (35 polls 15s apart,
+/// about 525s).
+const TOOL_TIMEOUT: Duration = Duration::from_secs(2400);
 
-/// Timeouts of the test itself, above the sum of `TOOL_TIMEOUT`,
-/// `REGISTRY_TIMEOUT` and the replica restart timeout.
+/// Timeouts of the test itself, above `TOOL_TIMEOUT` plus the checks after the
+/// tool. These find what they wait for (the recovery CUP contents of `D` in the
+/// registry and the replica running on the merged state) right away, as the
+/// tool has already waited until the node of `D` reports the recovery CUP.
 /// The overall timeout additionally covers the setup and has to stay below the
 /// 3600s of the `eternal` timeout of the Bazel target.
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2700);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(3300);
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2900);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(3400);
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
