@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail, ensure};
 use askama::Template;
-use config_types::{DeploymentEnvironment, GuestOSConfig, Ipv6Config, is_cloud_engine_node};
+use config_types::{DeploymentEnvironment, GuestOSConfig, Ipv6Config};
 use ic_types::malicious_behavior::MaliciousBehavior;
 use ipnet::Ipv6Net;
 use std::fs::write;
@@ -43,14 +43,6 @@ pub struct IcConfigTemplate {
     /// IPv6 address of the peer Guest VM (the Upgrade VM inside the Default VM
     /// and vice versa).
     pub peer_guest_vm_address: Option<Ipv6Addr>,
-}
-
-impl IcConfigTemplate {
-    /// Picks the GuestOS metrics firewall rule. Derived so it cannot
-    /// contradict `node_reward_type`.
-    fn cloud_engine_guest(&self) -> bool {
-        is_cloud_engine_node(&self.node_reward_type)
-    }
 }
 
 /// Generate IC configuration from template and guestos config

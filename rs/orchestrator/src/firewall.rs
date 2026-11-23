@@ -1334,22 +1334,6 @@ mod tests {
         }
     }
 
-    /// The GuestOS template keys its metrics rule off the reward-type string.
-    #[test]
-    fn cloud_engine_reward_types_agree_with_config_types() {
-        for reward_type in NodeRewardType::iter() {
-            let as_str = match reward_type {
-                NodeRewardType::Unspecified => String::new(),
-                other => String::from(other),
-            };
-            assert_eq!(
-                is_cloud_engine_reward_type(reward_type),
-                config_types::is_cloud_engine_node(&as_str),
-                "{reward_type:?} renders as {as_str:?}"
-            );
-        }
-    }
-
     fn is_cloud_engine_reward_type(reward_type: NodeRewardType) -> bool {
         match reward_type {
             NodeRewardType::Unspecified
