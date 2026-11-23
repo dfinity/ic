@@ -208,10 +208,10 @@ mod tests {
     // window, whose oldest state is the very first one.
     static AGGRESSIVE_POLICY: LazyLock<RetentionPolicy> = LazyLock::new(|| {
         policy(&[
-            (0, 30),        // 1 month
-            (16, 182),      // 6 months
-            (56, 365),      // 1 year
-            (120, 3650),    // 10 years
+            (0, 30),          // 1 month
+            (16, 182),        // 6 months
+            (56, 365),        // 1 year
+            (120, 3650),      // 10 years
             (365000, 365000), // 1000 years
         ])
     });
