@@ -619,6 +619,81 @@ mod tests {
         );
     }
 
+    /// The content hashes that the message carries, in the order of its response slots.
+    fn content_hashes(message: &mut pb::CanisterHttpResponseMessage) -> Vec<&mut Vec<u8>> {
+        use pb::canister_http_response_message::MessageType;
+        use pb::flexible_canister_http_error::ErrorDetails;
+
+        fn flexible(
+            responses: &mut [pb::FlexibleCanisterHttpResponseWithProof],
+        ) -> Vec<&mut Vec<u8>> {
+            responses
+                .iter_mut()
+                .map(|response| {
+                    let proof = response.proof.as_mut().unwrap();
+                    &mut proof.metadata.as_mut().unwrap().content_hash
+                })
+                .collect()
+        }
+        match message.message_type.as_mut() {
+            Some(MessageType::Response(response)) => vec![&mut response.hash],
+            Some(MessageType::FlexibleResponses(group)) => flexible(&mut group.responses),
+            Some(MessageType::FlexibleError(error)) => match error.error_details.as_mut() {
+                Some(ErrorDetails::TooManyRejects(rejects)) => {
+                    flexible(&mut rejects.reject_responses)
+                }
+                _ => vec![],
+            },
+            _ => vec![],
+        }
+    }
+
+    #[test]
+    fn content_hash_of_the_wrong_length_has_no_slot_test() {
+        let success = fake_canister_http_response(1, 1024);
+        let other_success = fake_canister_http_response(1, 2048);
+        let reject = fake_canister_http_reject_of_size(1, 1024);
+        let other_reject = fake_canister_http_reject_of_size(1, 2048);
+
+        // Whichever kind of message delivers responses, the one whose content hash
+        // has the wrong length gets no slot, while the others keep theirs.
+        for (message, responses) in [
+            (
+                fake_canister_http_response_message(&success, &[NODE_1]),
+                vec![&success],
+            ),
+            (
+                fake_flexible_canister_http_responses_message(
+                    1,
+                    &[(success.clone(), NODE_1), (other_success.clone(), NODE_2)],
+                ),
+                vec![&success, &other_success],
+            ),
+            (
+                fake_flexible_canister_http_too_many_rejects_message(
+                    1,
+                    &[(reject.clone(), NODE_1), (other_reject.clone(), NODE_2)],
+                ),
+                vec![&reject, &other_reject],
+            ),
+        ] {
+            for len in [0, CryptoHash::LEN - 1, CryptoHash::LEN + 1] {
+                let mut message = message.clone();
+                content_hashes(&mut message)[0].resize(len, 7);
+
+                let slot_hashes = response_slots(&mut message)
+                    .into_iter()
+                    .map(|(hash, _)| hash)
+                    .collect::<Vec<_>>();
+                let expected_hashes = responses[1..]
+                    .iter()
+                    .map(|response| hash_of(response))
+                    .collect::<Vec<_>>();
+                assert_eq!(slot_hashes, expected_hashes);
+            }
+        }
+    }
+
     #[test]
     fn find_response_test() {
         let other = fake_canister_http_response(2, 1024);

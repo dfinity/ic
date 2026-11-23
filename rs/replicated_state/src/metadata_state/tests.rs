@@ -622,6 +622,29 @@ fn system_metadata_split() {
 }
 
 #[test]
+fn system_metadata_with_prev_state_hash_of_wrong_length_fails_to_decode() {
+    let mut system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
+    system_metadata.prev_state_hash = Some(CryptoHash::for_test().into());
+    let mut proto = pb_metadata::SystemMetadata::from(&system_metadata);
+
+    for len in [0, CryptoHash::LEN - 1, CryptoHash::LEN + 1] {
+        proto.prev_state_hash = Some(vec![7; len]);
+
+        let result: Result<SystemMetadata, ProxyDecodeError> = (
+            proto.clone(),
+            &DummyMetrics as &dyn CheckpointLoadingMetrics,
+        )
+            .try_into();
+
+        assert_matches!(
+            result,
+            Err(ProxyDecodeError::InvalidDigestLength { expected, actual })
+                if expected == CryptoHash::LEN && actual == len
+        );
+    }
+}
+
+#[test]
 fn system_metadata_split_with_batch_time() {
     // We will be splitting subnet A into A' and B. C is a third-party subnet.
     const SUBNET_A: SubnetId = SUBNET_0;

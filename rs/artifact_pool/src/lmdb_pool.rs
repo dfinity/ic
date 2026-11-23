@@ -2243,6 +2243,36 @@ mod tests {
     }
 
     #[test]
+    fn test_decode_key_with_hash_of_wrong_length_fails() {
+        let height = Height::from(10);
+        for type_key in [TypeKey::RandomBeacon, TypeKey::Certification] {
+            let valid_key = IdKey::new(height, type_key, &CryptoHash::for_test());
+            for len in [0, CryptoHash::LEN - 1, CryptoHash::LEN + 1] {
+                let mut bytes = valid_key.as_ref()[..HASH_OFFSET].to_vec();
+                bytes.extend(vec![7; len]);
+                let id_key = IdKey::from(bytes.as_slice());
+                let expected_error = format!("Invalid hash length {len} in IdKey");
+
+                assert_eq!(id_key.hash(), Err(expected_error.clone()));
+                let artifact_key = ArtifactKey {
+                    type_key,
+                    height_key: HeightKey::from(height),
+                    id_key,
+                };
+                let error = match type_key {
+                    TypeKey::Certification => CertificationMessageId::try_from(artifact_key)
+                        .map(|_| ())
+                        .unwrap_err(),
+                    _ => ConsensusMessageId::try_from(artifact_key)
+                        .map(|_| ())
+                        .unwrap_err(),
+                };
+                assert_eq!(error, expected_error);
+            }
+        }
+    }
+
+    #[test]
     fn test_encode_decode_idkg_key() {
         let data = [1_u8; PrincipalId::MAX_LENGTH_IN_BYTES];
         let max_principal = PrincipalId::new(data.len(), data);

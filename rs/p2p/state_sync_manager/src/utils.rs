@@ -26,3 +26,57 @@ impl TryFrom<pb::Advert> for Advert {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_types::{Height, crypto::CryptoHash};
+
+    #[test]
+    fn advert_roundtrip() {
+        let advert = Advert {
+            id: StateSyncArtifactId {
+                height: Height::from(7),
+                hash: CryptoHash::for_test(),
+            },
+        };
+
+        assert_eq!(
+            Advert::try_from(pb::Advert::from(advert.clone())).unwrap(),
+            advert
+        );
+    }
+
+    #[test]
+    fn advert_without_id_is_rejected() {
+        let result = Advert::try_from(pb::Advert { id: None });
+
+        assert!(
+            matches!(result, Err(ProxyDecodeError::MissingField("id"))),
+            "{result:?}"
+        );
+    }
+
+    #[test]
+    fn advert_with_hash_of_wrong_length_is_rejected() {
+        for len in [0, CryptoHash::LEN - 1, CryptoHash::LEN + 1] {
+            let advert = pb::Advert {
+                id: Some(pb::StateSyncId {
+                    height: 7,
+                    hash: vec![7; len],
+                }),
+            };
+
+            let result = Advert::try_from(advert);
+
+            assert!(
+                matches!(
+                    result,
+                    Err(ProxyDecodeError::InvalidDigestLength { expected, actual })
+                        if expected == CryptoHash::LEN && actual == len
+                ),
+                "{result:?}"
+            );
+        }
+    }
+}
