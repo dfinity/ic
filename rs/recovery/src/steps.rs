@@ -6,7 +6,7 @@ use crate::{
     cli::consent_given,
     command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{clear_dir, create_dir, read_dir, rsync, rsync_includes},
+    file_sync_helper::{clear_dir, create_dir, path_exists, read_dir, rsync, rsync_includes},
     get_available_nodes_heights_from_metrics, get_member_node_ids_and_ips,
     registry_helper::RegistryHelper,
     replay_helper,
@@ -643,6 +643,22 @@ impl Step for ValidateReplayStep {
     }
 }
 
+/// The first of `old_ic_state`, `old_ic_state.1`, `old_ic_state.2`, ... in
+/// `work_dir` that doesn't exist yet.
+///
+/// A state moved there is neither nested in nor mixed with a backup that
+/// `work_dir` already holds, be it from an earlier run of the step, complete or
+/// not, or from an earlier recovery.
+fn unused_backup_path(work_dir: &Path) -> RecoveryResult<PathBuf> {
+    let mut backup_path = work_dir.join(OLD_IC_STATE);
+    let mut suffix = 0;
+    while path_exists(&backup_path)? {
+        suffix += 1;
+        backup_path = work_dir.join(format!("{OLD_IC_STATE}.{suffix}"));
+    }
+    Ok(backup_path)
+}
+
 pub struct UploadStateAndRestartStep {
     pub logger: Logger,
     pub ssh_user: SshUser,
@@ -777,43 +793,19 @@ impl Step for UploadStateAndRestartStep {
             info!(self.logger, "Stopping replica and crypto vault...");
             confirm_exec_cmd(Command::new("bash").arg("-c").arg(CMD_STOP_REPLICA), log)?;
 
-            // For local recoveries we first backup the original state, and
-            // then simply `mv` the new state to the upload directory. No
-            // rsync is needed, and thus no checkpoint copying.
-            let backup_path = self.work_dir.join(OLD_IC_STATE);
-            let exists = |path: &Path| {
-                path.try_exists()
-                    .map_err(|e| RecoveryError::file_error(path, e))
-            };
-            // An existing backup was made by an earlier run of this step, so it
-            // holds the original state and must be kept. A state found next to
-            // it was then installed by that earlier run and is replaced. This
-            // requires that `work_dir` is not reused across recoveries: a backup
-            // left there by another recovery would make this step delete the
-            // node's state without backing it up.
-            if exists(&backup_path)? {
-                if exists(&ic_state_path)? {
-                    info!(
-                        self.logger,
-                        "Original state already moved into {}, removing the state installed by an \
-                         earlier run from {}...",
-                        backup_path.display(),
-                        ic_state_path.display()
-                    );
-                    let mut cmd_remove_state = Command::new("sudo");
-                    cmd_remove_state.arg("rm").arg("-rf").arg(&ic_state_path);
-                    confirm_exec_cmd(&mut cmd_remove_state, log)?;
-                } else {
-                    info!(
-                        self.logger,
-                        "Original state already moved into {}",
-                        backup_path.display()
-                    );
-                }
-            } else if exists(&ic_state_path)? {
+            // For local recoveries we first move the state found in place to a
+            // backup, and then simply `mv` the new state to the upload
+            // directory. No rsync is needed, and thus no checkpoint copying.
+            //
+            // The step never deletes a state it finds in place, as it can't
+            // tell whose it is: when the step is run again, it may be the state
+            // an earlier run installed, or still the original one.
+            if path_exists(&ic_state_path)? {
+                let backup_path = unused_backup_path(&self.work_dir)?;
                 info!(
                     self.logger,
-                    "Moving original state into {}...",
+                    "Moving the state found in {} into {}...",
+                    ic_state_path.display(),
                     backup_path.display()
                 );
                 let mut cmd_backup_state = Command::new("sudo");
@@ -1500,5 +1492,25 @@ mod tests {
             .height_range()
             .expect("no height range");
         assert_eq!((range.min.get(), range.max.get()), (5, 6));
+    }
+
+    #[test]
+    fn backup_path_is_the_first_unused_one() {
+        let tmp = tempfile::tempdir().expect("Could not create a temp dir");
+        let work_dir = tmp.path();
+
+        let first = work_dir.join(OLD_IC_STATE);
+        assert_eq!(unused_backup_path(work_dir).unwrap(), first);
+
+        // A backup that exists is left alone, whether it is a directory or not.
+        std::fs::create_dir(&first).unwrap();
+        let second = work_dir.join(format!("{OLD_IC_STATE}.1"));
+        assert_eq!(unused_backup_path(work_dir).unwrap(), second);
+
+        std::fs::write(&second, "").unwrap();
+        assert_eq!(
+            unused_backup_path(work_dir).unwrap(),
+            work_dir.join(format!("{OLD_IC_STATE}.2"))
+        );
     }
 }
