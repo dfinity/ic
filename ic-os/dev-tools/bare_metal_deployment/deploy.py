@@ -627,6 +627,7 @@ def benchmark_node(
     invoke.run(
         f"{benchmark_driver_script} {benchmark_runner_script} {file_share_ssh_key} {ip_address} {benchmark_tools}",
         warn=True,
+        env={"HOSTOS_IP": str(bmc_info.hostos_ipv6_address)},
     )
     return OperationResult(bmc_info, success=True)
 
@@ -938,7 +939,8 @@ def main():
         wait_time_mins=wait_time_mins,
         idrac_script_dir=idrac_script_dir,
         file_share_ssh_key=args.file_share_ssh_key,
-        check_hsm=args.hsm,
+        # A TEE GuestOS takes no SSH keys, so the HSM check cannot log in.
+        check_hsm=args.hsm and not args.inject_enable_trusted_execution_environment,
         skip_checks=args.skip_checks,
     )
 
