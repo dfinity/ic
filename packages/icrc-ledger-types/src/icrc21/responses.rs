@@ -244,10 +244,15 @@ impl ConsentMessage {
                         };
 
                         // Apply the offset minutes
-                        let offset = time::UtcOffset::from_whole_seconds(
-                            (utc_offset_minutes.unwrap_or(0) * 60).into(),
-                        )
-                        .expect("Invalid offset");
+                        let offset_minutes = utc_offset_minutes.unwrap_or(0);
+                        let offset = match time::UtcOffset::from_whole_seconds(
+                            i32::from(offset_minutes) * 60,
+                        ) {
+                            Ok(offset) => offset,
+                            Err(_) => {
+                                return format!("Invalid UTC offset: {offset_minutes} minutes");
+                            }
+                        };
                         let offset_dt = utc_dt.to_offset(offset);
 
                         // Format as a string including the offset
@@ -284,18 +289,29 @@ impl ConsentMessage {
     pub fn add_memo(&mut self, memo: GenericMemo) {
         match memo {
             GenericMemo::Icrc1Memo(memo) => {
-                // Check if the memo is a valid UTF-8 string and display it as such if it is.
-                let memo_str = match std::str::from_utf8(memo.as_slice()) {
-                    Ok(valid_str) => valid_str.to_string(),
-                    Err(_) => hex::encode(memo.as_slice()),
+                // The memo is chosen by the caller, so it is shown as text only if it
+                // cannot alter how the rest of the consent message is displayed.
+                // Otherwise it is shown as hex, labeled as such so that it cannot be
+                // confused with a text memo that looks like hex.
+                let is_markdown = matches!(self, ConsentMessage::GenericDisplayMessage(_));
+                let text = std::str::from_utf8(memo.as_slice()).ok().filter(|text| {
+                    if is_markdown {
+                        is_markdown_safe_memo(text)
+                    } else {
+                        is_plain_text_safe_memo(text)
+                    }
+                });
+                let (label, content) = match text {
+                    Some(text) => ("Memo", text.to_string()),
+                    None => ("Memo (hex)", hex::encode(memo.as_slice())),
                 };
                 match self {
                     ConsentMessage::GenericDisplayMessage(message) => {
-                        message.push_str(&format!("\n\n**Memo:**\n`{memo_str}`"));
+                        message.push_str(&format!("\n\n**{label}:**\n`{content}`"));
                     }
                     ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display
                         .fields
-                        .push(("Memo".to_string(), Value::Text { content: memo_str })),
+                        .push((label.to_string(), Value::Text { content })),
                 }
             }
             GenericMemo::IntMemo(memo) => match self {
@@ -315,6 +331,34 @@ impl ConsentMessage {
     }
 }
 
+/// Whether `memo` can be shown verbatim inside a Markdown code span: printable
+/// ASCII without backticks, so it can neither end the code span nor start a new
+/// block.
+fn is_markdown_safe_memo(memo: &str) -> bool {
+    memo.bytes()
+        .all(|b| (b' '..=b'~').contains(&b) && b != b'`')
+}
+
+/// Whether `memo` can be shown verbatim as a plain-text field value: no control
+/// characters or line and paragraph separators, which could make the memo look
+/// like several fields, and no bidirectional formatting characters, which could
+/// reorder how the text is displayed.
+fn is_plain_text_safe_memo(memo: &str) -> bool {
+    !memo.chars().any(|c| {
+        c.is_control()
+            || matches!(
+                c,
+                '\u{2028}'
+                    | '\u{2029}'
+                    | '\u{061C}'
+                    | '\u{200E}'
+                    | '\u{200F}'
+                    | '\u{202A}'..='\u{202E}'
+                    | '\u{2066}'..='\u{2069}'
+            )
+    })
+}
+
 fn convert_tokens_to_string_representation(
     tokens: Nat,
     decimals: u8,
@@ -332,3 +376,7 @@ fn nat_to_u64(tokens: Nat) -> Result<u64, Icrc21Error> {
         description: "Failed to convert tokens to u64".to_owned(),
     })
 }
+
+#[cfg(test)]
+#[path = "responses_tests.rs"]
+mod tests;
