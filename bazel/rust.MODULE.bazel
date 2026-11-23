@@ -393,7 +393,7 @@ crate.spec(
 )
 crate.spec(
     package = "darling",
-    version = "^0.20.11",
+    version = "^0.24.1",
 )
 crate.spec(
     package = "dashmap",
@@ -438,10 +438,6 @@ crate.spec(
     ],
     package = "ed25519-dalek",
     version = "^2.2.0",
-)
-crate.spec(
-    package = "educe",
-    version = "^0.5",
 )
 crate.spec(
     package = "erased-serde",
@@ -896,7 +892,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "libfuzzer-sys",
-    version = "^0.4.7",
+    version = "^0.4.13",
 )
 crate.spec(
     package = "libnss",
@@ -1400,15 +1396,6 @@ crate.spec(
     version = "^0.11.0",
 )
 crate.spec(
-    features = [
-        "global-context",
-        "rand",
-        "std",
-    ],
-    package = "secp256k1",
-    version = "^0.29",
-)
-crate.spec(
     package = "security-framework",
     version = "^3",
 )
@@ -1575,7 +1562,7 @@ crate.spec(
         "full",
     ],
     package = "syn",
-    version = "^2.0.110",
+    version = "^3.0.10",
 )
 crate.spec(
     package = "syscalls",

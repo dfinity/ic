@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "c1864050f24d50a80b38cd535536a8b7f23d8321639d4bbd5c0330cf5cdf761d",
+  "checksum": "738dbbb44adb6b9b6772cfa0684d02b1e1d3d495f68400e49fbc28c70c781778",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -17730,7 +17730,7 @@
             "target": "curve25519_dalek"
           },
           {
-            "id": "darling 0.20.11",
+            "id": "darling 0.24.1",
             "target": "darling"
           },
           {
@@ -18079,7 +18079,7 @@
             "target": "libcryptsetup_rs"
           },
           {
-            "id": "libfuzzer-sys 0.4.7",
+            "id": "libfuzzer-sys 0.4.13",
             "target": "libfuzzer_sys"
           },
           {
@@ -18425,10 +18425,6 @@
             "target": "scrypt"
           },
           {
-            "id": "secp256k1 0.29.100",
-            "target": "secp256k1"
-          },
-          {
             "id": "security-framework 3.7.0",
             "target": "security_framework"
           },
@@ -18553,7 +18549,7 @@
             "target": "subtle"
           },
           {
-            "id": "syn 2.0.119",
+            "id": "syn 3.0.10",
             "target": "syn"
           },
           {
@@ -18802,10 +18798,6 @@
           {
             "id": "derive-new 0.7.0",
             "target": "derive_new"
-          },
-          {
-            "id": "educe 0.5.11",
-            "target": "educe"
           },
           {
             "id": "indoc 2.0.8",
@@ -19787,19 +19779,8 @@
     "educe 0.5.11": {
       "common_attrs": {
         "crate_features": [
-          "Clone",
-          "Copy",
           "Debug",
-          "Default",
-          "Deref",
-          "DerefMut",
-          "Eq",
-          "Hash",
-          "Into",
-          "Ord",
-          "PartialEq",
-          "PartialOrd",
-          "default"
+          "Default"
         ],
         "deps": [
           {
@@ -33135,7 +33116,7 @@
       ],
       "version": "2.3.0"
     },
-    "libfuzzer-sys 0.4.7": {
+    "libfuzzer-sys 0.4.13": {
       "build_script_attrs": {
         "deps": [
           {
@@ -33149,10 +33130,6 @@
           {
             "id": "arbitrary 1.5.0",
             "target": "arbitrary"
-          },
-          {
-            "id": "once_cell 1.21.4",
-            "target": "once_cell"
           }
         ],
         "edition": "2018",
@@ -33161,7 +33138,7 @@
         ]
       },
       "library_target_name": "libfuzzer_sys",
-      "license": "MIT/Apache-2.0/NCSA",
+      "license": "(MIT OR Apache-2.0) AND NCSA",
       "license_file": "LICENSE-APACHE",
       "license_ids": [
         "Apache-2.0",
@@ -33172,8 +33149,8 @@
       "package_url": "https://github.com/rust-fuzz/libfuzzer",
       "repository": {
         "Http": {
-          "sha256": "a96cfd5557eb82f2b83fed4955246c988d331975a002961b07c81584d107e7f7",
-          "url": "https://static.crates.io/crates/libfuzzer-sys/0.4.7/download"
+          "sha256": "a9fd2f41a1cba099f79a0b6b6c35656cf7c03351a7bae8ff0f28f25270f929d2",
+          "url": "https://static.crates.io/crates/libfuzzer-sys/0.4.13/download"
         }
       },
       "targets": [
@@ -33190,7 +33167,7 @@
           }
         }
       ],
-      "version": "0.4.7"
+      "version": "0.4.13"
     },
     "libloading 0.5.2": {
       "build_script_attrs": {
@@ -49590,8 +49567,6 @@
       "common_attrs": {
         "crate_features": [
           "alloc",
-          "default",
-          "global-context",
           "hashes",
           "rand",
           "recovery",
@@ -54654,8 +54629,6 @@
             "clone-impls",
             "default",
             "derive",
-            "extra-traits",
-            "fold",
             "full",
             "parsing",
             "printing",
@@ -54663,18 +54636,26 @@
           ],
           "selects": {
             "aarch64-apple-darwin": [
+              "extra-traits",
+              "fold",
               "visit",
               "visit-mut"
             ],
             "aarch64-unknown-linux-gnu": [
+              "extra-traits",
+              "fold",
               "visit",
               "visit-mut"
             ],
             "x86_64-apple-darwin": [
+              "extra-traits",
+              "fold",
               "visit",
               "visit-mut"
             ],
             "x86_64-unknown-linux-gnu": [
+              "extra-traits",
+              "fold",
               "visit",
               "visit-mut"
             ]
@@ -54728,6 +54709,8 @@
             "clone-impls",
             "default",
             "derive",
+            "extra-traits",
+            "fold",
             "full",
             "parsing",
             "printing",
@@ -54735,26 +54718,18 @@
           ],
           "selects": {
             "aarch64-apple-darwin": [
-              "extra-traits",
-              "fold",
               "visit",
               "visit-mut"
             ],
             "aarch64-unknown-linux-gnu": [
-              "extra-traits",
-              "fold",
               "visit",
               "visit-mut"
             ],
             "x86_64-apple-darwin": [
-              "extra-traits",
-              "fold",
               "visit",
               "visit-mut"
             ],
             "x86_64-unknown-linux-gnu": [
-              "extra-traits",
-              "fold",
               "visit",
               "visit-mut"
             ]
@@ -66791,7 +66766,7 @@
     "csv 1.4.0",
     "ctrlc 3.5.3",
     "curve25519-dalek 4.1.3",
-    "darling 0.20.11",
+    "darling 0.24.1",
     "dashmap 6.2.1",
     "der 0.7.10",
     "derive-new 0.7.0",
@@ -66800,7 +66775,6 @@
     "directories-next 2.0.0",
     "duration-string 0.5.3",
     "ed25519-dalek 2.2.0",
-    "educe 0.5.11",
     "erased-serde 0.3.31",
     "escargot 1.0.1",
     "ethnum 1.5.3",
@@ -66881,7 +66855,7 @@
     "leb128 0.2.7",
     "libc 0.2.191",
     "libcryptsetup-rs 0.16.1",
-    "libfuzzer-sys 0.4.7",
+    "libfuzzer-sys 0.4.13",
     "libnss 0.5.0",
     "libsystemd 0.7.2",
     "little-loadshedder 0.2.0",
@@ -66969,7 +66943,6 @@
     "scopeguard 1.2.0",
     "scraper 0.29.0",
     "scrypt 0.11.0",
-    "secp256k1 0.29.100",
     "security-framework 3.7.0",
     "semver 1.0.28",
     "serde 1.0.229",
@@ -67002,7 +66975,7 @@
     "strum_macros 0.26.4",
     "stubborn-io 0.3.6",
     "subtle 2.6.1",
-    "syn 2.0.119",
+    "syn 3.0.10",
     "sys-mount 3.1.1",
     "syscalls 0.8.1",
     "tar 0.4.46",

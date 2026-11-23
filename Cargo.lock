@@ -2616,10 +2616,10 @@ dependencies = [
 name = "canlog_derive"
 version = "0.1.0"
 dependencies = [
- "darling 0.20.11",
+ "darling 0.24.1",
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -5109,7 +5109,7 @@ dependencies = [
  "num-traits",
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -6524,7 +6524,7 @@ name = "ic-admin-derive"
 version = "0.9.0"
 dependencies = [
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -8524,7 +8524,6 @@ dependencies = [
  "base64 0.23.1",
  "bincode",
  "bytes",
- "educe 0.5.11",
  "futures",
  "hex",
  "ic-adapter-metrics-client",
@@ -8786,7 +8785,6 @@ dependencies = [
  "k256",
  "p256",
  "rand 0.8.8",
- "secp256k1 0.29.100",
 ]
 
 [[package]]
@@ -9730,7 +9728,7 @@ version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -9824,10 +9822,10 @@ dependencies = [
 name = "ic-heap-bytes-derive"
 version = "0.9.0"
 dependencies = [
- "darling 0.20.11",
+ "darling 0.24.1",
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -11627,7 +11625,7 @@ dependencies = [
  "candid",
  "ic-cdk",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -11779,7 +11777,7 @@ dependencies = [
  "candid",
  "ic-cdk",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -12220,7 +12218,7 @@ version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -12581,7 +12579,7 @@ name = "ic-nns-test-utils-macros"
 version = "0.9.0"
 dependencies = [
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -13804,7 +13802,6 @@ dependencies = [
  "pem 4.0.0",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
- "secp256k1 0.29.100",
  "sha2 0.10.9",
  "simple_asn1",
  "wycheproof",
@@ -15237,7 +15234,7 @@ version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -15667,7 +15664,7 @@ name = "ic-validate-eq-derive"
 version = "0.9.0"
 dependencies = [
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -23988,7 +23985,7 @@ version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
