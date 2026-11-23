@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "0f9ce88ad096e22fefe4f435ba61b8699b81b27879f5622586e6df2030a6834a",
+  "checksum": "a9179b9defc164b7b878e1b567ad607c74459e14cc8963a2a05920ed9f3be579",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -975,7 +975,7 @@
             "target": "tracing"
           },
           {
-            "id": "url 2.5.8",
+            "id": "url 2.5.9",
             "target": "url"
           }
         ],
@@ -6517,7 +6517,7 @@
             "target": "bytes"
           },
           {
-            "id": "form_urlencoded 1.2.2",
+            "id": "form_urlencoded 1.2.3",
             "target": "form_urlencoded"
           },
           {
@@ -17730,7 +17730,7 @@
             "target": "curve25519_dalek"
           },
           {
-            "id": "darling 0.20.11",
+            "id": "darling 0.24.1",
             "target": "darling"
           },
           {
@@ -18079,7 +18079,7 @@
             "target": "libcryptsetup_rs"
           },
           {
-            "id": "libfuzzer-sys 0.4.7",
+            "id": "libfuzzer-sys 0.4.13",
             "target": "libfuzzer_sys"
           },
           {
@@ -18295,6 +18295,11 @@
             "target": "rand"
           },
           {
+            "alias": "rand_0_10",
+            "id": "rand 0.10.4",
+            "target": "rand"
+          },
+          {
             "id": "rand_chacha 0.3.1",
             "target": "rand_chacha"
           },
@@ -18420,10 +18425,6 @@
             "target": "scrypt"
           },
           {
-            "id": "secp256k1 0.29.100",
-            "target": "secp256k1"
-          },
-          {
             "id": "security-framework 3.7.0",
             "target": "security_framework"
           },
@@ -18536,7 +18537,7 @@
             "target": "static_assertions"
           },
           {
-            "id": "strum 0.26.3",
+            "id": "strum 0.28.0",
             "target": "strum"
           },
           {
@@ -18548,7 +18549,7 @@
             "target": "subtle"
           },
           {
-            "id": "syn 2.0.119",
+            "id": "syn 3.0.10",
             "target": "syn"
           },
           {
@@ -18708,7 +18709,7 @@
             "target": "turmoil"
           },
           {
-            "id": "url 2.5.8",
+            "id": "url 2.5.9",
             "target": "url"
           },
           {
@@ -18764,7 +18765,7 @@
             "target": "webpki_roots"
           },
           {
-            "id": "wirm 4.0.4",
+            "id": "wirm 5.2.0",
             "target": "wirm"
           },
           {
@@ -18799,10 +18800,6 @@
             "target": "derive_new"
           },
           {
-            "id": "educe 0.5.11",
-            "target": "educe"
-          },
-          {
             "id": "indoc 2.0.8",
             "target": "indoc"
           },
@@ -18819,7 +18816,7 @@
             "target": "rust_decimal_macros"
           },
           {
-            "id": "strum_macros 0.26.4",
+            "id": "strum_macros 0.28.0",
             "target": "strum_macros"
           },
           {
@@ -19782,19 +19779,8 @@
     "educe 0.5.11": {
       "common_attrs": {
         "crate_features": [
-          "Clone",
-          "Copy",
           "Debug",
-          "Default",
-          "Deref",
-          "DerefMut",
-          "Eq",
-          "Hash",
-          "Into",
-          "Ord",
-          "PartialEq",
-          "PartialOrd",
-          "default"
+          "Default"
         ],
         "deps": [
           {
@@ -21024,7 +21010,7 @@
             "target": "thiserror"
           },
           {
-            "id": "url 2.5.8",
+            "id": "url 2.5.9",
             "target": "url"
           }
         ],
@@ -21919,7 +21905,7 @@
       ],
       "version": "0.1.1"
     },
-    "form_urlencoded 1.2.2": {
+    "form_urlencoded 1.2.3": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -21945,8 +21931,8 @@
       "package_url": "https://github.com/servo/rust-url",
       "repository": {
         "Http": {
-          "sha256": "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf",
-          "url": "https://static.crates.io/crates/form_urlencoded/1.2.2/download"
+          "sha256": "afa489199eaffb1211795df1c6236ce1ad0d41a6fa45250add73e3b02420f06e",
+          "url": "https://static.crates.io/crates/form_urlencoded/1.2.3/download"
         }
       },
       "targets": [
@@ -21957,7 +21943,7 @@
           }
         }
       ],
-      "version": "1.2.2"
+      "version": "1.2.3"
     },
     "forwarded-header-value 0.1.1": {
       "common_attrs": {
@@ -24554,7 +24540,7 @@
               "target": "tracing"
             },
             {
-              "id": "url 2.5.8",
+              "id": "url 2.5.9",
               "target": "url"
             },
             {
@@ -24668,7 +24654,7 @@
               "target": "tracing"
             },
             {
-              "id": "url 2.5.8",
+              "id": "url 2.5.9",
               "target": "url"
             }
           ],
@@ -26139,7 +26125,7 @@
               "target": "tower_service"
             },
             {
-              "id": "url 2.5.8",
+              "id": "url 2.5.9",
               "target": "url"
             }
           ],
@@ -26505,7 +26491,7 @@
             "target": "tracing_subscriber"
           },
           {
-            "id": "url 2.5.8",
+            "id": "url 2.5.9",
             "target": "url"
           },
           {
@@ -27728,7 +27714,7 @@
             "target": "tracing_subscriber"
           },
           {
-            "id": "url 2.5.8",
+            "id": "url 2.5.9",
             "target": "url"
           },
           {
@@ -33130,7 +33116,7 @@
       ],
       "version": "2.3.0"
     },
-    "libfuzzer-sys 0.4.7": {
+    "libfuzzer-sys 0.4.13": {
       "build_script_attrs": {
         "deps": [
           {
@@ -33144,10 +33130,6 @@
           {
             "id": "arbitrary 1.5.0",
             "target": "arbitrary"
-          },
-          {
-            "id": "once_cell 1.21.4",
-            "target": "once_cell"
           }
         ],
         "edition": "2018",
@@ -33156,7 +33138,7 @@
         ]
       },
       "library_target_name": "libfuzzer_sys",
-      "license": "MIT/Apache-2.0/NCSA",
+      "license": "(MIT OR Apache-2.0) AND NCSA",
       "license_file": "LICENSE-APACHE",
       "license_ids": [
         "Apache-2.0",
@@ -33167,8 +33149,8 @@
       "package_url": "https://github.com/rust-fuzz/libfuzzer",
       "repository": {
         "Http": {
-          "sha256": "a96cfd5557eb82f2b83fed4955246c988d331975a002961b07c81584d107e7f7",
-          "url": "https://static.crates.io/crates/libfuzzer-sys/0.4.7/download"
+          "sha256": "a9fd2f41a1cba099f79a0b6b6c35656cf7c03351a7bae8ff0f28f25270f929d2",
+          "url": "https://static.crates.io/crates/libfuzzer-sys/0.4.13/download"
         }
       },
       "targets": [
@@ -33185,7 +33167,7 @@
           }
         }
       ],
-      "version": "0.4.7"
+      "version": "0.4.13"
     },
     "libloading 0.5.2": {
       "build_script_attrs": {
@@ -46233,7 +46215,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "url 2.5.8",
+              "id": "url 2.5.9",
               "target": "url"
             }
           ],
@@ -49585,8 +49567,6 @@
       "common_attrs": {
         "crate_features": [
           "alloc",
-          "default",
-          "global-context",
           "hashes",
           "rand",
           "recovery",
@@ -50872,7 +50852,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "form_urlencoded 1.2.2",
+            "id": "form_urlencoded 1.2.3",
             "target": "form_urlencoded"
           },
           {
@@ -54649,8 +54629,6 @@
             "clone-impls",
             "default",
             "derive",
-            "extra-traits",
-            "fold",
             "full",
             "parsing",
             "printing",
@@ -54658,18 +54636,26 @@
           ],
           "selects": {
             "aarch64-apple-darwin": [
+              "extra-traits",
+              "fold",
               "visit",
               "visit-mut"
             ],
             "aarch64-unknown-linux-gnu": [
+              "extra-traits",
+              "fold",
               "visit",
               "visit-mut"
             ],
             "x86_64-apple-darwin": [
+              "extra-traits",
+              "fold",
               "visit",
               "visit-mut"
             ],
             "x86_64-unknown-linux-gnu": [
+              "extra-traits",
+              "fold",
               "visit",
               "visit-mut"
             ]
@@ -54723,6 +54709,8 @@
             "clone-impls",
             "default",
             "derive",
+            "extra-traits",
+            "fold",
             "full",
             "parsing",
             "printing",
@@ -54730,26 +54718,18 @@
           ],
           "selects": {
             "aarch64-apple-darwin": [
-              "extra-traits",
-              "fold",
               "visit",
               "visit-mut"
             ],
             "aarch64-unknown-linux-gnu": [
-              "extra-traits",
-              "fold",
               "visit",
               "visit-mut"
             ],
             "x86_64-apple-darwin": [
-              "extra-traits",
-              "fold",
               "visit",
               "visit-mut"
             ],
             "x86_64-unknown-linux-gnu": [
-              "extra-traits",
-              "fold",
               "visit",
               "visit-mut"
             ]
@@ -58465,7 +58445,7 @@
             "target": "tower_service"
           },
           {
-            "id": "url 2.5.8",
+            "id": "url 2.5.9",
             "target": "url"
           }
         ],
@@ -60278,7 +60258,7 @@
       ],
       "version": "0.9.0"
     },
-    "url 2.5.8": {
+    "url 2.5.9": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -60287,7 +60267,7 @@
         ],
         "deps": [
           {
-            "id": "form_urlencoded 1.2.2",
+            "id": "form_urlencoded 1.2.3",
             "target": "form_urlencoded"
           },
           {
@@ -60322,8 +60302,8 @@
       "package_url": "https://github.com/servo/rust-url",
       "repository": {
         "Http": {
-          "sha256": "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed",
-          "url": "https://static.crates.io/crates/url/2.5.8/download"
+          "sha256": "f00cd2407bb42c0ef17be88d4cf020f5cceffd121665bac9b8b9493a369b3b1a",
+          "url": "https://static.crates.io/crates/url/2.5.9/download"
         }
       },
       "targets": [
@@ -60334,7 +60314,7 @@
           }
         }
       ],
-      "version": "2.5.8"
+      "version": "2.5.9"
     },
     "urlencoding 2.1.3": {
       "common_attrs": {
@@ -61607,51 +61587,6 @@
       ],
       "version": "0.245.1"
     },
-    "wasm-encoder 0.247.0": {
-      "common_attrs": {
-        "crate_features": [
-          "component-model",
-          "default",
-          "std",
-          "wasmparser"
-        ],
-        "deps": [
-          {
-            "id": "leb128fmt 0.1.0",
-            "target": "leb128fmt"
-          },
-          {
-            "id": "wasmparser 0.247.0",
-            "target": "wasmparser"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "wasm_encoder",
-      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "wasm-encoder",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
-      "repository": {
-        "Http": {
-          "sha256": "30b6733b8b91d010a6ac5b0fb237dc46a19650bc4c67db66857e2e787d437204",
-          "url": "https://static.crates.io/crates/wasm-encoder/0.247.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasm_encoder",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.247.0"
-    },
     "wasm-encoder 0.254.2": {
       "common_attrs": {
         "crate_features": [
@@ -61696,6 +61631,51 @@
         }
       ],
       "version": "0.254.2"
+    },
+    "wasm-encoder 0.263.0": {
+      "common_attrs": {
+        "crate_features": [
+          "component-model",
+          "default",
+          "std",
+          "wasmparser"
+        ],
+        "deps": [
+          {
+            "id": "leb128fmt 0.1.0",
+            "target": "leb128fmt"
+          },
+          {
+            "id": "wasmparser 0.263.0",
+            "target": "wasmparser"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "wasm_encoder",
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "wasm-encoder",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
+      "repository": {
+        "Http": {
+          "sha256": "0b883a26aea02eaabe2d2c3fba7eb039ef5cdcb5d5201ae5551e73d5e251a81f",
+          "url": "https://static.crates.io/crates/wasm-encoder/0.263.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasm_encoder",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.263.0"
     },
     "wasm-smith 0.254.2": {
       "common_attrs": {
@@ -61862,67 +61842,6 @@
       ],
       "version": "0.245.1"
     },
-    "wasmparser 0.247.0": {
-      "common_attrs": {
-        "crate_features": [
-          "component-model",
-          "default",
-          "features",
-          "hash-collections",
-          "serde",
-          "simd",
-          "std",
-          "validate"
-        ],
-        "deps": [
-          {
-            "id": "bitflags 2.13.2",
-            "target": "bitflags"
-          },
-          {
-            "id": "hashbrown 0.17.1",
-            "target": "hashbrown"
-          },
-          {
-            "id": "indexmap 2.14.2",
-            "target": "indexmap"
-          },
-          {
-            "id": "semver 1.0.28",
-            "target": "semver"
-          },
-          {
-            "id": "serde 1.0.229",
-            "target": "serde"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "wasmparser",
-      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "wasmparser",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
-      "repository": {
-        "Http": {
-          "sha256": "8e6fb4c2bee46c5ea4d40f8cdb5c131725cd976718ec56f1c8e82fbde5fa2a80",
-          "url": "https://static.crates.io/crates/wasmparser/0.247.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmparser",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.247.0"
-    },
     "wasmparser 0.253.0": {
       "common_attrs": {
         "crate_features": [
@@ -62044,6 +61963,67 @@
         }
       ],
       "version": "0.254.2"
+    },
+    "wasmparser 0.263.0": {
+      "common_attrs": {
+        "crate_features": [
+          "component-model",
+          "default",
+          "features",
+          "hash-collections",
+          "serde",
+          "simd",
+          "std",
+          "validate"
+        ],
+        "deps": [
+          {
+            "id": "bitflags 2.13.2",
+            "target": "bitflags"
+          },
+          {
+            "id": "hashbrown 0.17.1",
+            "target": "hashbrown"
+          },
+          {
+            "id": "indexmap 2.14.2",
+            "target": "indexmap"
+          },
+          {
+            "id": "semver 1.0.28",
+            "target": "semver"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "wasmparser",
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "wasmparser",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
+      "repository": {
+        "Http": {
+          "sha256": "4f5fa0a054ae153606df820eb0a84213e28cda41bbe04ba2628e71b6ba100fcb",
+          "url": "https://static.crates.io/crates/wasmparser/0.263.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.263.0"
     },
     "wasmprinter 0.254.2": {
       "common_attrs": {
@@ -65210,7 +65190,7 @@
       ],
       "version": "1.0.5"
     },
-    "wirm 4.0.4": {
+    "wirm 5.2.0": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -65227,11 +65207,11 @@
             "target": "rayon"
           },
           {
-            "id": "wasm-encoder 0.247.0",
+            "id": "wasm-encoder 0.263.0",
             "target": "wasm_encoder"
           },
           {
-            "id": "wasmparser 0.247.0",
+            "id": "wasmparser 0.263.0",
             "target": "wasmparser"
           }
         ],
@@ -65252,8 +65232,8 @@
       "package_url": "https://github.com/composablesys/wirm",
       "repository": {
         "Http": {
-          "sha256": "4b545057c2fa3f2a83aa2d23f9010e372b880aa6973f04c0cb8400a2e813e8f0",
-          "url": "https://static.crates.io/crates/wirm/4.0.4/download"
+          "sha256": "120597258f67c24d250a5124fbfd7955280c35a47c9ea0ba9c3352df84b4e405",
+          "url": "https://static.crates.io/crates/wirm/5.2.0/download"
         }
       },
       "targets": [
@@ -65264,7 +65244,7 @@
           }
         }
       ],
-      "version": "4.0.4"
+      "version": "5.2.0"
     },
     "wit-bindgen 0.57.1": {
       "build_script_attrs": {},
@@ -66786,7 +66766,7 @@
     "csv 1.4.0",
     "ctrlc 3.5.3",
     "curve25519-dalek 4.1.3",
-    "darling 0.20.11",
+    "darling 0.24.1",
     "dashmap 6.2.1",
     "der 0.7.10",
     "derive-new 0.7.0",
@@ -66795,7 +66775,6 @@
     "directories-next 2.0.0",
     "duration-string 0.5.3",
     "ed25519-dalek 2.2.0",
-    "educe 0.5.11",
     "erased-serde 0.3.31",
     "escargot 1.0.1",
     "ethnum 1.5.3",
@@ -66876,7 +66855,7 @@
     "leb128 0.2.7",
     "libc 0.2.191",
     "libcryptsetup-rs 0.16.1",
-    "libfuzzer-sys 0.4.7",
+    "libfuzzer-sys 0.4.13",
     "libnss 0.5.0",
     "libsystemd 0.7.2",
     "little-loadshedder 0.2.0",
@@ -66931,6 +66910,7 @@
     "quote 1.0.47",
     "rand 0.8.8",
     "rand 0.9.5",
+    "rand 0.10.4",
     "rand_chacha 0.3.1",
     "rand_chacha 0.9.0",
     "rand_distr 0.4.3",
@@ -66963,7 +66943,6 @@
     "scopeguard 1.2.0",
     "scraper 0.29.0",
     "scrypt 0.11.0",
-    "secp256k1 0.29.100",
     "security-framework 3.7.0",
     "semver 1.0.28",
     "serde 1.0.229",
@@ -66992,11 +66971,11 @@
     "socks5-impl 0.6.2",
     "ssh2 0.9.7",
     "static_assertions 1.1.0",
-    "strum 0.26.3",
-    "strum_macros 0.26.4",
+    "strum 0.28.0",
+    "strum_macros 0.28.0",
     "stubborn-io 0.3.6",
     "subtle 2.6.1",
-    "syn 2.0.119",
+    "syn 3.0.10",
     "sys-mount 3.1.1",
     "syscalls 0.8.1",
     "tar 0.4.46",
@@ -67037,7 +67016,7 @@
     "tracing-subscriber 0.3.23",
     "tui-textarea 0.7.0",
     "turmoil 0.6.6",
-    "url 2.5.8",
+    "url 2.5.9",
     "uuid 1.12.1",
     "virt 0.4.3",
     "vsock 0.5.5",
@@ -67051,7 +67030,7 @@
     "wast 254.0.2",
     "wat 1.254.2",
     "webpki-roots 1.0.12",
-    "wirm 4.0.4",
+    "wirm 5.2.0",
     "wycheproof 0.7.0",
     "x509-cert 0.3.0",
     "x509-parser 0.18.1",

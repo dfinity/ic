@@ -32,6 +32,7 @@ ALL_BINARIES = {
     "sns": "//rs/sns/cli:sns",
     "sns-audit": "//rs/sns/audit:sns-audit",
     "state-tool": "//rs/state_tool:state-tool",
+    "subnet-merging-tool": "//rs/recovery/subnet_merging:subnet-merging-tool",
     "pocket-ic": "//rs/pocket_ic_server:pocket-ic-server",
     "types-test": "//rs/types/types:types_test",
     "replicated-state-test": "//rs/replicated_state:replicated_state_test_binary",
